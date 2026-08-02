@@ -42,10 +42,12 @@ export async function generateVariants(params: {
       : SOLAR_ANGLES
   ).slice(0, count);
 
-  return Promise.all(angles.map((angle) => generateOne(brand, brief, angle)));
+  return Promise.all(
+    angles.map((angle) => generateOneVariant(brand, brief, angle)),
+  );
 }
 
-async function generateOne(
+export async function generateOneVariant(
   brand: BrandContext,
   brief: string,
   angle: SolarAngle,

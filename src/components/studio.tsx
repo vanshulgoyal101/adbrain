@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Download,
   Loader2,
+  RefreshCw,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -197,7 +198,21 @@ function CreativeCard({
   onDelete: (id: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [regenerating, setRegenerating] = useState(false);
   const approved = creative.status === "approved";
+
+  async function regenerate() {
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/creatives/${creative.id}/regenerate`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as { creative?: Creative };
+      if (res.ok && data.creative) onChange(data.creative);
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   function toggleApprove() {
     startTransition(async () => {
@@ -262,6 +277,19 @@ function CreativeCard({
               <>
                 <CheckCircle2 className="h-4 w-4" /> Approve
               </>
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={regenerate}
+            disabled={pending || regenerating}
+            aria-label="Regenerate creative"
+          >
+            {regenerating ? (
+              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+            ) : (
+              <RefreshCw className="h-4 w-4 text-slate-400" />
             )}
           </Button>
           <Button

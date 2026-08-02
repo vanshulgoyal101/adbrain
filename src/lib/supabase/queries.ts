@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import type { BrandAsset, Business, Creative } from "@/lib/types";
+import type {
+  BrandAsset,
+  Business,
+  Campaign,
+  CampaignResult,
+  Creative,
+} from "@/lib/types";
 
 /** Current authenticated user, or null. */
 export async function getUser() {
@@ -58,4 +64,47 @@ export async function getBrandAssets(
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });
   return data ?? [];
+}
+
+/** Approved creatives for a business, newest first. */
+export async function getApprovedCreatives(
+  businessId: string,
+): Promise<Creative[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("creatives")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("status", "approved")
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+/** Campaigns for a business, newest first. */
+export async function getCampaigns(businessId: string): Promise<Campaign[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+/** Latest result row per campaign, keyed by campaign id. */
+export async function getLatestResults(
+  campaignIds: string[],
+): Promise<Record<string, CampaignResult>> {
+  if (!campaignIds.length) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("campaign_results")
+    .select("*")
+    .in("campaign_id", campaignIds)
+    .order("fetched_at", { ascending: false });
+  const map: Record<string, CampaignResult> = {};
+  for (const row of data ?? []) {
+    if (!map[row.campaign_id]) map[row.campaign_id] = row;
+  }
+  return map;
 }

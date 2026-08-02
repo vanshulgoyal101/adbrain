@@ -92,6 +92,33 @@ export default async function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {creatives.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-semibold text-slate-900">
+            Recent creatives
+          </h2>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+            {creatives.slice(0, 6).map((c) => (
+              <div
+                key={c.id}
+                className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+              >
+                <div className="aspect-square">
+                  {c.image_url && (
+                    <img
+                      src={c.image_url}
+                      alt={c.headline ?? ""}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,371 @@
+"use client";
+
+import { useState } from "react";
+import {
+  AlertTriangle,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  Rocket,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input, Label } from "@/components/ui/input";
+import type { LeadForm } from "@/lib/meta/client";
+import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
+import { cn, formatCurrency, formatNumber } from "@/lib/utils";
+
+const STATUS_STYLES: Record<string, string> = {
+  paused: "bg-amber-50 text-amber-700",
+  active: "bg-emerald-50 text-emerald-700",
+  draft: "bg-slate-100 text-slate-600",
+  completed: "bg-slate-100 text-slate-600",
+};
+
+export function Campaigns({
+  business,
+  approved,
+  initialCampaigns,
+  initialResults,
+  leadForms,
+  leadFormError,
+  metaReady,
+  adAccountId,
+}: {
+  business: Business;
+  approved: Creative[];
+  initialCampaigns: Campaign[];
+  initialResults: Record<string, CampaignResult>;
+  leadForms: LeadForm[];
+  leadFormError: string | null;
+  metaReady: boolean;
+  adAccountId: string;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [budget, setBudget] = useState(200);
+  const [leadFormId, setLeadFormId] = useState(leadForms[0]?.id ?? "");
+  const [name, setName] = useState(`${business.name} — leads`);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
+  const [results, setResults] =
+    useState<Record<string, CampaignResult>>(initialResults);
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function createCampaign() {
+    setError(null);
+    setNotice(null);
+    if (selected.size === 0) {
+      setError("Select at least one creative.");
+      return;
+    }
+    if (!leadFormId) {
+      setError("Choose a lead form.");
+      return;
+    }
+    if (budget <= 0) {
+      setError("Enter a daily budget.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await fetch("/api/campaigns/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessId: business.id,
+          creativeIds: [...selected],
+          dailyBudget: budget,
+          leadFormId,
+          name,
+        }),
+      });
+      const data = (await res.json()) as { campaign?: Campaign; error?: string };
+      if (!res.ok || !data.campaign) {
+        setError(data.error ?? "Could not create campaign.");
+        return;
+      }
+      setCampaigns((prev) => [data.campaign as Campaign, ...prev]);
+      setSelected(new Set());
+      setNotice(
+        "Campaign created — it's PAUSED. Review and activate it in Meta Ads Manager when you're ready to spend.",
+      );
+    } catch {
+      setError("Could not create campaign.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function refresh(id: string) {
+    setRefreshingId(id);
+    try {
+      const res = await fetch(`/api/campaigns/${id}/refresh`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as {
+        result?: CampaignResult;
+        summary?: string;
+      };
+      if (res.ok) {
+        if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
+        if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
+      }
+    } finally {
+      setRefreshingId(null);
+    }
+  }
+
+  function adsLink(metaId: string) {
+    const acct = adAccountId.replace("act_", "");
+    return `https://www.facebook.com/adsmanager/manage/campaigns?act=${acct}&selected_campaign_ids=${metaId}`;
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {!metaReady && (
+        <Card>
+          <CardContent className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+            <p className="text-sm text-slate-600">
+              Meta isn’t configured. Add <code>META_SYSTEM_USER_TOKEN</code>,{" "}
+              <code>META_AD_ACCOUNT_ID</code>, and <code>META_PAGE_ID</code> to
+              your environment to launch campaigns.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {metaReady && (
+        <Card>
+          <CardHeader>
+            <CardTitle>New campaign</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            {approved.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No approved creatives yet. Approve some in the Creative Studio
+                first, then come back to launch them.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label>Choose creatives</Label>
+                  <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                    {approved.map((c) => {
+                      const isSel = selected.has(c.id);
+                      return (
+                        <button
+                          type="button"
+                          key={c.id}
+                          onClick={() => toggle(c.id)}
+                          className={cn(
+                            "overflow-hidden rounded-lg border-2 text-left transition-colors",
+                            isSel
+                              ? "border-emerald-500"
+                              : "border-transparent hover:border-slate-200",
+                          )}
+                        >
+                          <div className="aspect-square bg-slate-100">
+                            {c.image_url && (
+                              <img
+                                src={c.image_url}
+                                alt={c.headline ?? ""}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            )}
+                          </div>
+                          <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700">
+                            {c.headline}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="name">Campaign name</Label>
+                    <Input
+                      id="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="budget">Daily budget (₹)</Label>
+                    <Input
+                      id="budget"
+                      type="number"
+                      min={50}
+                      value={budget}
+                      onChange={(e) => setBudget(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="leadform">Lead form</Label>
+                    <select
+                      id="leadform"
+                      value={leadFormId}
+                      onChange={(e) => setLeadFormId(e.target.value)}
+                      className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                    >
+                      {leadForms.length === 0 && (
+                        <option value="">No lead forms found</option>
+                      )}
+                      {leadForms.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {leadFormError && (
+                  <p className="text-sm text-amber-600">
+                    Couldn’t load lead forms: {leadFormError}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button onClick={createCampaign} disabled={creating}>
+                    {creating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Rocket className="h-4 w-4" />
+                    )}
+                    Create paused campaign
+                  </Button>
+                  <span className="text-xs text-slate-400">
+                    Created paused — no spend until you activate it in Meta.
+                  </span>
+                </div>
+                {error && <p className="text-sm text-red-600">{error}</p>}
+                {notice && (
+                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    {notice}
+                  </p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-slate-900">
+          Your campaigns{" "}
+          <span className="font-normal text-slate-400">
+            ({campaigns.length})
+          </span>
+        </h2>
+        {campaigns.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-slate-500">
+              No campaigns yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {campaigns.map((c) => {
+              const r = results[c.id];
+              return (
+                <Card key={c.id}>
+                  <CardContent className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-slate-900">
+                          {business.name} — {c.objective}
+                        </h3>
+                        <Badge
+                          className={
+                            STATUS_STYLES[c.status] ??
+                            "bg-slate-100 text-slate-600"
+                          }
+                        >
+                          {c.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-slate-500">
+                          {formatCurrency(c.daily_budget)}/day
+                        </span>
+                        {c.meta_campaign_id && (
+                          <a
+                            href={adsLink(c.meta_campaign_id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:underline"
+                          >
+                            Ads Manager <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => refresh(c.id)}
+                          disabled={refreshingId === c.id}
+                        >
+                          {refreshingId === c.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                          Refresh results
+                        </Button>
+                      </div>
+                    </div>
+
+                    {r && (
+                      <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">
+                        <Stat label="Impressions" value={formatNumber(r.impressions)} />
+                        <Stat label="Clicks" value={formatNumber(r.clicks)} />
+                        <Stat label="Leads" value={formatNumber(r.leads)} />
+                        <Stat
+                          label="Cost / lead"
+                          value={r.cpl != null ? formatCurrency(r.cpl) : "—"}
+                        />
+                      </div>
+                    )}
+                    {summaries[c.id] && (
+                      <p className="text-sm text-slate-600">{summaries[c.id]}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-lg font-bold text-slate-900">{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  );
+}

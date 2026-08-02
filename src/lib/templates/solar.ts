@@ -109,6 +109,10 @@ export function getAngle(id: string): SolarAngle | undefined {
   return SOLAR_ANGLES.find((a) => a.id === id);
 }
 
+export function getAngleByName(name: string): SolarAngle | undefined {
+  return SOLAR_ANGLES.find((a) => a.name === name);
+}
+
 function brandSummary(brand: BrandContext): string {
   const lines: string[] = [`Business name: ${brand.name}`];
   if (brand.description) lines.push(`About: ${brand.description}`);

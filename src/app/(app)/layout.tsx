@@ -14,7 +14,7 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   return (
-    <div className="flex min-h-full">
+    <div className="flex min-h-full flex-col md:flex-row">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-4 md:flex">
         <Link href="/dashboard" className="mb-6 flex items-center gap-2 px-2 py-1">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
@@ -35,9 +35,26 @@ export default async function AppLayout({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-6xl p-6 md:p-8">{children}</div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white p-3 md:hidden">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
+              <Sun className="h-5 w-5" />
+            </span>
+            <span className="font-bold tracking-tight text-slate-900">
+              AdBrain
+            </span>
+          </Link>
+          <SignOutButton />
+        </header>
+        <div className="border-b border-slate-200 bg-white px-3 py-2 md:hidden">
+          <Nav orientation="horizontal" />
+        </div>
+
+        <main className="flex-1">
+          <div className="mx-auto max-w-6xl p-6 md:p-8">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

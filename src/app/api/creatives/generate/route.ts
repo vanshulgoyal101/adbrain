@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateVariants } from "@/lib/creative/generate";
+import { persistCreativeImage } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
 
@@ -59,7 +60,19 @@ export async function POST(req: Request) {
   }
 
   const variantGroup = crypto.randomUUID();
-  const rows = variants.map((v) => ({
+  const persisted = await Promise.all(
+    variants.map(async (v) => ({
+      ...v,
+      imageUrl: await persistCreativeImage(
+        supabase,
+        businessId,
+        variantGroup,
+        v.angleId,
+        v.imageUrl,
+      ),
+    })),
+  );
+  const rows = persisted.map((v) => ({
     business_id: businessId,
     brief,
     angle: v.angleName,

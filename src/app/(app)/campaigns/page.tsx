@@ -1,52 +1,77 @@
-import { Megaphone, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { Building2 } from "lucide-react";
+import { Campaigns } from "@/components/campaigns";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/card";
-import { isMetaConfigured } from "@/lib/meta/client";
+import { isMetaConfigured, metaClientFromEnv, type LeadForm } from "@/lib/meta/client";
+import {
+  getApprovedCreatives,
+  getCampaigns,
+  getLatestResults,
+  getPrimaryBusiness,
+} from "@/lib/supabase/queries";
 
-export default function CampaignsPage() {
+export default async function CampaignsPage() {
+  const business = await getPrimaryBusiness();
   const metaReady = isMetaConfigured();
+
+  if (!business) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Campaigns</h1>
+        <Card className="mt-6">
+          <CardContent className="flex flex-col items-start gap-4 p-8">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <Building2 className="h-6 w-6" />
+            </span>
+            <p className="max-w-md text-slate-600">
+              Set up your Brand Brain and generate some creatives first.
+            </p>
+            <Link href="/brand">
+              <Button>Go to Brand Brain</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const [approved, campaigns] = await Promise.all([
+    getApprovedCreatives(business.id),
+    getCampaigns(business.id),
+  ]);
+  const results = await getLatestResults(campaigns.map((c) => c.id));
+
+  let leadForms: LeadForm[] = [];
+  let leadFormError: string | null = null;
+  if (metaReady) {
+    const meta = metaClientFromEnv();
+    try {
+      leadForms = (await meta?.listLeadForms()) ?? [];
+    } catch (err) {
+      leadFormError = (err as Error).message;
+    }
+  }
 
   return (
     <div>
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">Campaigns</h1>
-        <Badge
-          className={
-            metaReady
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-amber-50 text-amber-700"
-          }
-        >
-          {metaReady ? "Meta connected" : "Meta not connected"}
-        </Badge>
-      </div>
+      <h1 className="text-2xl font-bold text-slate-900">Campaigns</h1>
       <p className="mt-1 text-slate-600">
-        Launching approved creatives into Meta Advantage+ is a Phase 1 feature.
+        Launch approved creatives into Meta as an Advantage+ lead campaign —
+        created paused, so nothing spends until you activate it.
       </p>
-
-      <Card className="mt-6">
-        <CardContent className="flex flex-col items-start gap-4 p-8">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-            <Megaphone className="h-6 w-6" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">
-              Live Meta launch — coming in Phase 1
-            </h2>
-            <p className="mt-1 max-w-lg text-sm text-slate-600">
-              Once your Solaride system-user token is added to the environment,
-              this page will create an Advantage+ Leads campaign from your
-              approved creatives and report results in plain language.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            {metaReady
-              ? "Credentials detected — wiring the launch flow is the next step."
-              : "Add META_SYSTEM_USER_TOKEN, META_AD_ACCOUNT_ID, and META_PAGE_ID to enable."}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="mt-6">
+        <Campaigns
+          business={business}
+          approved={approved}
+          initialCampaigns={campaigns}
+          initialResults={results}
+          leadForms={leadForms}
+          leadFormError={leadFormError}
+          metaReady={metaReady}
+          adAccountId={process.env.META_AD_ACCOUNT_ID ?? ""}
+        />
+      </div>
     </div>
   );
 }

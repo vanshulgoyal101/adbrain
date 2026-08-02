@@ -12,10 +12,21 @@ const items = [
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
 ];
 
-export function Nav() {
+export function Nav({
+  orientation = "vertical",
+}: {
+  orientation?: "vertical" | "horizontal";
+}) {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-1">
+    <nav
+      className={cn(
+        "flex gap-1",
+        orientation === "vertical"
+          ? "flex-col"
+          : "flex-row overflow-x-auto",
+      )}
+    >
       {items.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
@@ -23,7 +34,7 @@ export function Nav() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               active
                 ? "bg-emerald-50 text-emerald-700"
                 : "text-slate-600 hover:bg-slate-100",
