@@ -195,6 +195,8 @@ export class MetaClient {
     leadFormId: string;
     link: string;
     creatives: CreativeInput[];
+    ageMin?: number;
+    ageMax?: number;
   }): Promise<CreateCampaignResult> {
     const acct = this.creds.adAccountId;
 
@@ -223,6 +225,8 @@ export class MetaClient {
         promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
         targeting: JSON.stringify({
           geo_locations: { countries: ["IN"] },
+          ...(params.ageMin ? { age_min: params.ageMin } : {}),
+          ...(params.ageMax ? { age_max: params.ageMax } : {}),
           targeting_automation: { advantage_audience: 1 },
         }),
       },
