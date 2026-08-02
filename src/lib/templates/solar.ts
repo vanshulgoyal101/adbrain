@@ -133,6 +133,7 @@ export function buildCopyMessages(
   brand: BrandContext,
   brief: string,
   angle: SolarAngle,
+  instructions?: string,
 ): ChatMessage[] {
   const langs = brand.languages?.length
     ? brand.languages.join(" and ")
@@ -144,20 +145,21 @@ export function buildCopyMessages(
         "You are an expert performance-marketing copywriter for a solar-energy " +
         "company running Meta (Facebook/Instagram) lead ads in India. You write " +
         "tight, high-converting, on-brand ad copy. You never invent facts, prices, " +
-        "or guarantees that were not provided. Output ONLY valid JSON.",
+        "or guarantees that were not provided. Customer instructions, when present, " +
+        "take priority over defaults. Output ONLY valid JSON.",
     },
     {
       role: "user",
       content: `BRAND BRAIN:
 ${brandSummary(brand)}
-
+${instructions ? `\nCUSTOMER INSTRUCTIONS (highest priority — follow exactly):\n${instructions.slice(0, 6000)}\n` : ""}
 CAMPAIGN BRIEF: ${brief}
 
 ANGLE: ${angle.name} — ${angle.description}
 
 Write ONE ad in ${langs}. Match the brand voice. Requirements:
 - "headline": <= 40 characters, punchy, benefit-led.
-- "primary_text": 2–4 short lines, scannable, at most one emoji, ends with a soft nudge to enquire. Do not fabricate specific prices, subsidy amounts, or guarantees unless present in the brand brain or brief.
+- "primary_text": 2–4 short lines, scannable, at most one emoji, ends with a soft nudge to enquire. Do not fabricate specific prices, subsidy amounts, or guarantees unless present in the brand brain, instructions, or brief.
 - "cta": choose exactly one of: ${META_CTAS.join(", ")}.
 
 Return strict JSON: {"headline": string, "primary_text": string, "cta": string}`,
@@ -170,6 +172,7 @@ export function buildImagePrompt(
   brand: BrandContext,
   brief: string,
   angle: SolarAngle,
+  instructions?: string,
 ): string {
   const colorHint = brand.primary_color
     ? `subtle ${brand.primary_color} color accents, `
@@ -180,6 +183,7 @@ export function buildImagePrompt(
     `photorealistic, high detail, natural warm sunlight, clean composition, ` +
     `shot on a DSLR, commercial quality, aspirational and trustworthy mood. ` +
     `Context: ${brief}. ` +
+    `${instructions ? `Follow these brand instructions: ${instructions.slice(0, 500)}. ` : ""}` +
     `Absolutely no text, no words, no logos, no watermarks in the image.`
   );
 }

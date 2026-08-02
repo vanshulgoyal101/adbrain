@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logEvent } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -53,11 +54,20 @@ export async function saveBusiness(
   };
 
   const query = id
-    ? supabase.from("businesses").update(payload).eq("id", id)
-    : supabase.from("businesses").insert(payload);
+    ? supabase.from("businesses").update(payload).eq("id", id).select("id").single()
+    : supabase.from("businesses").insert(payload).select("id").single();
 
-  const { error } = await query;
+  const { data: saved, error } = await query;
   if (error) return { ok: false, error: error.message };
+
+  if (saved) {
+    await logEvent({
+      businessId: saved.id,
+      action: id ? "business.update" : "business.create",
+      entityType: "business",
+      entityId: saved.id,
+    });
+  }
 
   revalidatePath("/brand");
   revalidatePath("/dashboard");

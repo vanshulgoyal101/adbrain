@@ -1,10 +1,20 @@
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
-import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { Instructions } from "@/components/instructions";
+import {
+  getAdInstructions,
+  getBrandAssets,
+  getPrimaryBusiness,
+} from "@/lib/supabase/queries";
 
 export default async function BrandPage() {
   const business = await getPrimaryBusiness();
-  const assets = business ? await getBrandAssets(business.id) : [];
+  const [assets, instructions] = business
+    ? await Promise.all([
+        getBrandAssets(business.id),
+        getAdInstructions(business.id),
+      ])
+    : [[], []];
 
   return (
     <div>
@@ -16,7 +26,13 @@ export default async function BrandPage() {
       <div className="mt-6 flex flex-col gap-6">
         <BrandForm business={business} />
         {business && (
-          <BrandAssets businessId={business.id} initialAssets={assets} />
+          <>
+            <Instructions
+              businessId={business.id}
+              instructions={instructions}
+            />
+            <BrandAssets businessId={business.id} initialAssets={assets} />
+          </>
         )}
       </div>
     </div>

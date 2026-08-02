@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
 import { metaClientFromEnv } from "@/lib/meta/client";
 import { createClient } from "@/lib/supabase/server";
@@ -60,5 +61,15 @@ export async function POST(
     .single();
 
   const summary = await summarizeInsights(campaign.objective, insights);
+
+  await logEvent({
+    businessId: campaign.business_id,
+    action: "campaign.refresh",
+    entityType: "campaign",
+    entityId: id,
+    metaObjectId: campaign.meta_campaign_id,
+    details: { ...insights },
+  });
+
   return NextResponse.json({ result, summary, insights });
 }

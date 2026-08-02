@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { logEvent } from "@/lib/audit";
 import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -91,13 +93,39 @@ export async function POST(req: Request) {
       daily_budget: dailyBudget,
       status: "paused",
       meta_campaign_id: result.campaignId,
+      meta_adset_id: result.adSetId,
+      meta_ad_ids: result.adIds,
       creative_ids: usable.map((c) => c.id),
+      raw: {
+        campaignId: result.campaignId,
+        adSetId: result.adSetId,
+        adIds: result.adIds,
+        leadFormId,
+        name,
+        dailyBudget,
+      } as unknown as Json,
     })
     .select("*")
     .single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logEvent({
+    businessId,
+    action: "campaign.create",
+    entityType: "campaign",
+    entityId: campaign.id,
+    metaObjectId: result.campaignId,
+    reason: `Created paused — ₹${dailyBudget}/day, ${usable.length} creative(s)`,
+    details: {
+      adSetId: result.adSetId,
+      adIds: result.adIds,
+      leadFormId,
+      creativeIds: usable.map((c) => c.id),
+      name,
+    },
+  });
 
   return NextResponse.json({ campaign, meta: result });
 }

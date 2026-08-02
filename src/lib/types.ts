@@ -12,6 +12,14 @@ export type MetaTokenType = "system_user" | "oauth";
 export type CreativeStatus = "draft" | "approved";
 export type CampaignStatus = "draft" | "active" | "paused" | "completed";
 
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json }
+  | Json[];
+
 export interface Database {
   public: {
     Tables: {
@@ -149,7 +157,10 @@ export interface Database {
           daily_budget: number;
           status: CampaignStatus;
           meta_campaign_id: string | null;
+          meta_adset_id: string | null;
+          meta_ad_ids: string[];
           creative_ids: string[];
+          raw: Json | null;
           launched_at: string | null;
           created_at: string;
         };
@@ -160,7 +171,10 @@ export interface Database {
           daily_budget: number;
           status?: CampaignStatus;
           meta_campaign_id?: string | null;
+          meta_adset_id?: string | null;
+          meta_ad_ids?: string[];
           creative_ids?: string[];
+          raw?: Json | null;
           launched_at?: string | null;
           created_at?: string;
         };
@@ -193,6 +207,60 @@ export interface Database {
         >;
         Relationships: [];
       };
+      ad_instructions: {
+        Row: {
+          id: string;
+          business_id: string;
+          title: string;
+          content: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          title: string;
+          content?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["ad_instructions"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      audit_log: {
+        Row: {
+          id: string;
+          business_id: string | null;
+          actor_id: string | null;
+          actor_label: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          meta_object_id: string | null;
+          reason: string | null;
+          details: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id?: string | null;
+          actor_id?: string | null;
+          actor_label?: string | null;
+          action: string;
+          entity_type: string;
+          entity_id?: string | null;
+          meta_object_id?: string | null;
+          reason?: string | null;
+          details?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -211,6 +279,9 @@ export type Creative = Database["public"]["Tables"]["creatives"]["Row"];
 export type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 export type CampaignResult =
   Database["public"]["Tables"]["campaign_results"]["Row"];
+export type AdInstruction =
+  Database["public"]["Tables"]["ad_instructions"]["Row"];
+export type AuditLog = Database["public"]["Tables"]["audit_log"]["Row"];
 
 export type BusinessInsert =
   Database["public"]["Tables"]["businesses"]["Insert"];

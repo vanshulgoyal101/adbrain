@@ -332,3 +332,76 @@ create policy "creatives: delete own"
     bucket_id = 'creatives'
     and public.owns_business(((storage.foldername(name))[1])::uuid)
   );
+
+-- ════════════════════════════════════════════════════════════════════════
+--  campaigns: extra Meta object references + raw snapshot (observability)
+-- ════════════════════════════════════════════════════════════════════════
+alter table public.campaigns
+  add column if not exists meta_adset_id text,
+  add column if not exists meta_ad_ids   text[] not null default '{}',
+  add column if not exists raw           jsonb;
+
+-- ════════════════════════════════════════════════════════════════════════
+--  ad_instructions: per-customer instruction files that guide ad creation
+-- ════════════════════════════════════════════════════════════════════════
+create table if not exists public.ad_instructions (
+  id          uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses (id) on delete cascade,
+  title       text not null,
+  content     text not null default '',
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+create index if not exists ad_instructions_business_id_idx
+  on public.ad_instructions (business_id);
+
+drop trigger if exists ad_instructions_set_updated_at on public.ad_instructions;
+create trigger ad_instructions_set_updated_at
+  before update on public.ad_instructions
+  for each row execute function public.set_updated_at();
+
+alter table public.ad_instructions enable row level security;
+
+drop policy if exists "ad_instructions: all own" on public.ad_instructions;
+create policy "ad_instructions: all own"
+  on public.ad_instructions for all
+  using (public.owns_business(business_id))
+  with check (public.owns_business(business_id));
+
+-- ════════════════════════════════════════════════════════════════════════
+--  audit_log: append-only observability of every change (who/what/when/why)
+-- ════════════════════════════════════════════════════════════════════════
+create table if not exists public.audit_log (
+  id             uuid primary key default gen_random_uuid(),
+  business_id    uuid references public.businesses (id) on delete cascade,
+  actor_id       uuid references auth.users (id) on delete set null,
+  actor_label    text,
+  action         text not null,
+  entity_type    text not null,
+  entity_id      text,
+  meta_object_id text,
+  reason         text,
+  details        jsonb not null default '{}',
+  created_at     timestamptz not null default now()
+);
+
+create index if not exists audit_log_business_id_idx
+  on public.audit_log (business_id, created_at desc);
+create index if not exists audit_log_entity_idx
+  on public.audit_log (entity_type, entity_id);
+
+alter table public.audit_log enable row level security;
+
+-- Append-only: owners can read and insert their own business's events; the
+-- absence of update/delete policies denies those for non-service roles.
+drop policy if exists "audit_log: select own" on public.audit_log;
+create policy "audit_log: select own"
+  on public.audit_log for select
+  using (public.owns_business(business_id));
+
+drop policy if exists "audit_log: insert own" on public.audit_log;
+create policy "audit_log: insert own"
+  on public.audit_log for insert
+  with check (business_id is not null and public.owns_business(business_id));

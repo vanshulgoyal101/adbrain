@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
 import { persistCreativeImage } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveInstructionsText } from "@/lib/supabase/queries";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,9 +45,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
+  const instructions = await getActiveInstructionsText(businessId);
   let variants;
   try {
-    variants = await generateVariants({ brand: business, brief, count });
+    variants = await generateVariants({ brand: business, brief, count, instructions });
   } catch (err) {
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json(
@@ -91,6 +94,18 @@ export async function POST(req: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logEvent({
+    businessId,
+    action: "creatives.generate",
+    entityType: "creative",
+    reason: brief,
+    details: {
+      count: rows.length,
+      variantGroup,
+      angles: variants.map((v) => v.angleName),
+    },
+  });
 
   return NextResponse.json({ variantGroup, creatives: inserted ?? [] });
 }

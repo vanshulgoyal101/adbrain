@@ -2,11 +2,12 @@ import Link from "next/link";
 import { ArrowRight, Building2, CheckCircle2, ImageIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getCreatives, getAuditLog, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export default async function DashboardPage() {
   const business = await getPrimaryBusiness();
   const creatives = business ? await getCreatives(business.id) : [];
+  const audit = business ? await getAuditLog(business.id, 8) : [];
   const drafts = creatives.filter((c) => c.status === "draft").length;
   const approved = creatives.filter((c) => c.status === "approved").length;
 
@@ -117,6 +118,32 @@ export default async function DashboardPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {audit.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-semibold text-slate-900">
+            Recent activity
+          </h2>
+          <Card>
+            <CardContent className="flex flex-col divide-y divide-slate-100 p-0">
+              {audit.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm"
+                >
+                  <span className="truncate text-slate-700">
+                    <span className="font-medium">{e.action}</span>
+                    {e.reason ? ` — ${e.reason}` : ""}
+                  </span>
+                  <span className="shrink-0 text-xs text-slate-400">
+                    {new Date(e.created_at).toLocaleString("en-IN")}
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

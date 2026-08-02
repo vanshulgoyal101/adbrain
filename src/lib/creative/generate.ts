@@ -30,8 +30,9 @@ export async function generateVariants(params: {
   brief: string;
   angleIds?: string[];
   count?: number;
+  instructions?: string;
 }): Promise<GeneratedVariant[]> {
-  const { brand, brief } = params;
+  const { brand, brief, instructions } = params;
   const count = Math.min(Math.max(params.count ?? 3, 1), SOLAR_ANGLES.length);
 
   const angles: SolarAngle[] = (
@@ -43,7 +44,7 @@ export async function generateVariants(params: {
   ).slice(0, count);
 
   return Promise.all(
-    angles.map((angle) => generateOneVariant(brand, brief, angle)),
+    angles.map((angle) => generateOneVariant(brand, brief, angle, instructions)),
   );
 }
 
@@ -51,14 +52,18 @@ export async function generateOneVariant(
   brand: BrandContext,
   brief: string,
   angle: SolarAngle,
+  instructions?: string,
 ): Promise<GeneratedVariant> {
   const [copy, image] = await Promise.all([
-    completeJSON<GeneratedCopy>(buildCopyMessages(brand, brief, angle), {
-      temperature: 0.8,
-      maxTokens: 400,
-    }),
+    completeJSON<GeneratedCopy>(
+      buildCopyMessages(brand, brief, angle, instructions),
+      {
+        temperature: 0.8,
+        maxTokens: 400,
+      },
+    ),
     generateImage({
-      prompt: buildImagePrompt(brand, brief, angle),
+      prompt: buildImagePrompt(brand, brief, angle, instructions),
       width: 1024,
       height: 1024,
     }),

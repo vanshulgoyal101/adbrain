@@ -75,9 +75,12 @@ src/
     supabase/              # browser/server/admin clients, proxy session, queries
     llm/                   # rotating orchestrator + provider adapters
     imageGen/              # provider-abstracted image generation
-    templates/solar.ts     # solar angles + prompt builders
+    templates/solar.ts     # solar angles + prompt builders (+ instruction injection)
     creative/generate.ts   # copy + image → complete variants
-    meta/client.ts         # Marketing API boundary (Phase 1)
+    creative/persist.ts    # store generated images in Supabase Storage
+    creative/summary.ts    # plain-language results summary (LLM)
+    meta/client.ts         # Marketing API wrapper (campaigns, insights)
+    audit.ts               # append-only audit logging (observability)
   proxy.ts                 # session refresh + route guard (Next 16 "proxy")
 db/schema.sql              # Postgres tables + RLS + storage policies
 ```
@@ -94,10 +97,30 @@ Default is Pollinations (free). To use a paid provider later, add a provider
 under `src/lib/imageGen/providers/`, wire it into `getProvider()` in
 `src/lib/imageGen/index.ts`, and set `IMAGE_PROVIDER` in `.env.local`.
 
+### Per-customer instructions
+
+Each business can have multiple markdown **instruction files** (`ad_instructions`
+table, managed on the Brand page). Active files are concatenated and injected
+into every copy + image prompt, so a customer's rules ("always mention the
+25-year warranty", "no discount claims") steer generation.
+
+### Observability (audit log)
+
+Every mutation — creatives generated/approved/deleted/regenerated, brand and
+instruction edits, campaign create/refresh — appends a row to the append-only
+`audit_log` table (who, what, when, why, Meta object id, JSON details). Recent
+events show on the dashboard. RLS scopes each business to its own log; there are
+no update/delete policies, so the log is tamper-resistant. Campaigns also store
+their Meta `campaign`/`adset`/`ad` ids plus a `raw` JSON snapshot.
+
 ## Status vs SPEC
 
-- **Phase 0 (Brand Brain + Creative Studio):** implemented — auth, brand CRUD,
-  website autofill, variant generation, approve/regenerate, ad-pack export.
-- **Phase 1 (Live Meta launch):** boundary in place (`lib/meta`), not wired.
+- **Phase 0 (Brand Brain + Creative Studio):** done — auth, brand CRUD + assets +
+  instructions, website autofill, variant generation, approve/regenerate,
+  ad-pack export.
+- **Phase 1 (Live Meta launch):** done — paused Advantage+ lead campaigns,
+  insights → plain-language summary, audit logging. (Ad-creative creation
+  requires the Meta app to be in **Live** mode.)
 - **Phase 2 (multi-customer, Google, WhatsApp):** not started.
+
 

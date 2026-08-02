@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type {
+  AdInstruction,
+  AuditLog,
   BrandAsset,
   Business,
   Campaign,
@@ -107,4 +109,44 @@ export async function getLatestResults(
     if (!map[row.campaign_id]) map[row.campaign_id] = row;
   }
   return map;
+}
+
+/** All instruction files for a business, oldest first. */
+export async function getAdInstructions(
+  businessId: string,
+): Promise<AdInstruction[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ad_instructions")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+/** Concatenated text of the active instruction files (for prompt injection). */
+export async function getActiveInstructionsText(
+  businessId: string,
+): Promise<string> {
+  const instructions = await getAdInstructions(businessId);
+  return instructions
+    .filter((i) => i.is_active)
+    .map((i) => `## ${i.title}\n${i.content}`)
+    .join("\n\n")
+    .slice(0, 6000);
+}
+
+/** Recent audit-log events for a business, newest first. */
+export async function getAuditLog(
+  businessId: string,
+  limit = 50,
+): Promise<AuditLog[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("audit_log")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return data ?? [];
 }

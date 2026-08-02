@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { logEvent } from "@/lib/audit";
 import { generateOneVariant } from "@/lib/creative/generate";
 import { persistCreativeImage } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { getAngleByName, SOLAR_ANGLES } from "@/lib/templates/solar";
 
 export const runtime = "nodejs";
@@ -40,10 +42,16 @@ export async function POST(
   }
 
   const angle = getAngleByName(creative.angle ?? "") ?? SOLAR_ANGLES[0];
+  const instructions = await getActiveInstructionsText(business.id);
 
   let variant;
   try {
-    variant = await generateOneVariant(business, creative.brief, angle);
+    variant = await generateOneVariant(
+      business,
+      creative.brief,
+      angle,
+      instructions,
+    );
   } catch (err) {
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
@@ -75,6 +83,15 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logEvent({
+    businessId: business.id,
+    action: "creative.regenerate",
+    entityType: "creative",
+    entityId: id,
+    reason: creative.brief,
+    details: { angle: variant.angleName },
+  });
 
   return NextResponse.json({ creative: updated });
 }
