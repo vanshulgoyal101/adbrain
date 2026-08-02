@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Business, Creative } from "@/lib/types";
+import type { BrandAsset, Business, Creative } from "@/lib/types";
 
 /** Current authenticated user, or null. */
 export async function getUser() {
@@ -41,6 +41,19 @@ export async function getCreatives(businessId: string): Promise<Creative[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("creatives")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+/** Brand assets for a business, newest first. */
+export async function getBrandAssets(
+  businessId: string,
+): Promise<BrandAsset[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("brand_assets")
     .select("*")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });

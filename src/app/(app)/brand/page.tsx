@@ -1,8 +1,10 @@
+import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
-import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export default async function BrandPage() {
   const business = await getPrimaryBusiness();
+  const assets = business ? await getBrandAssets(business.id) : [];
 
   return (
     <div>
@@ -11,8 +13,11 @@ export default async function BrandPage() {
         The context AdBrain uses to write on-brand ads. The more you fill in,
         the better the creatives.
       </p>
-      <div className="mt-6">
+      <div className="mt-6 flex flex-col gap-6">
         <BrandForm business={business} />
+        {business && (
+          <BrandAssets businessId={business.id} initialAssets={assets} />
+        )}
       </div>
     </div>
   );
