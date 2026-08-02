@@ -11,6 +11,8 @@ import {
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 
+export const metadata = { title: "Campaigns — AdBrain" };
+
 export default async function CampaignsPage() {
   const business = await getPrimaryBusiness();
   const metaReady = isMetaConfigured();

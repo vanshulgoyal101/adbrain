@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getAuditLog, getPrimaryBusiness } from "@/lib/supabase/queries";
 
+export const metadata = { title: "Dashboard — AdBrain" };
+
 export default async function DashboardPage() {
   const business = await getPrimaryBusiness();
   const creatives = business ? await getCreatives(business.id) : [];

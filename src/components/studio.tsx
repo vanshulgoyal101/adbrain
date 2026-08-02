@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import {
   CheckCircle2,
   Download,
-  Loader2,
+  ImageIcon,
   RefreshCw,
   RotateCcw,
   Sparkles,
@@ -14,10 +14,13 @@ import {
   deleteCreative,
   setCreativeStatus,
 } from "@/app/(app)/studio/actions";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { Business, Creative } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export function Studio({
   business,
@@ -32,6 +35,7 @@ export function Studio({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportOk, setExportOk] = useState(false);
 
   const approvedCount = items.filter((i) => i.status === "approved").length;
 
@@ -71,6 +75,8 @@ export function Studio({
       .map((i) => i.id);
     if (!ids.length) return;
     setExporting(true);
+    setExportOk(false);
+    setError(null);
     try {
       const res = await fetch("/api/creatives/export", {
         method: "POST",
@@ -88,6 +94,7 @@ export function Studio({
       a.download = "adbrain-ad-pack.zip";
       a.click();
       URL.revokeObjectURL(url);
+      setExportOk(true);
     } catch {
       setError("Export failed.");
     } finally {
@@ -127,15 +134,11 @@ export function Studio({
                 </select>
               </div>
               <Button type="submit" disabled={generating}>
-                {generating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
+                {generating ? <Spinner /> : <Sparkles className="h-4 w-4" />}
                 {generating ? "Generating…" : "Generate ads"}
               </Button>
             </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <Alert variant="error">{error}</Alert>}
           </form>
         </CardContent>
       </Card>
@@ -151,14 +154,12 @@ export function Studio({
           onClick={exportApproved}
           disabled={approvedCount === 0 || exporting}
         >
-          {exporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
+          {exporting ? <Spinner /> : <Download className="h-4 w-4" />}
           Export approved ({approvedCount})
         </Button>
       </div>
+
+      {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
       {items.length === 0 ? (
         <Card>
@@ -199,7 +200,11 @@ function CreativeCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [erroredUrl, setErroredUrl] = useState<string | null>(null);
   const approved = creative.status === "approved";
+  const imgLoaded = loadedUrl === creative.image_url;
+  const imgError = erroredUrl === creative.image_url;
 
   async function regenerate() {
     setRegenerating(true);
@@ -223,6 +228,7 @@ function CreativeCard({
   }
 
   function remove() {
+    if (!window.confirm("Delete this creative? This can't be undone.")) return;
     startTransition(async () => {
       const res = await deleteCreative(creative.id);
       if (res.ok) onDelete(creative.id);
@@ -232,13 +238,33 @@ function CreativeCard({
   return (
     <Card className="flex flex-col overflow-hidden">
       <div className="relative aspect-square bg-slate-100">
-        {creative.image_url && (
+        {creative.image_url && !imgError && (
           <img
+            key={creative.image_url}
             src={creative.image_url}
             alt={creative.headline ?? "Ad creative"}
-            className="h-full w-full object-cover"
+            className={cn(
+              "h-full w-full object-cover transition-opacity",
+              imgLoaded ? "opacity-100" : "opacity-0",
+            )}
             loading="lazy"
+            onLoad={() => setLoadedUrl(creative.image_url)}
+            onError={() => setErroredUrl(creative.image_url)}
           />
+        )}
+        {(!imgLoaded || imgError) && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            {imgError ? (
+              <ImageIcon className="h-8 w-8 text-slate-300" />
+            ) : (
+              <div className="h-full w-full animate-pulse bg-slate-200" />
+            )}
+          </div>
+        )}
+        {regenerating && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+            <Spinner className="h-6 w-6 text-emerald-600" />
+          </div>
         )}
         <div className="absolute left-2 top-2 flex gap-1.5">
           {creative.angle && (
@@ -287,7 +313,7 @@ function CreativeCard({
             aria-label="Regenerate creative"
           >
             {regenerating ? (
-              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+              <Spinner className="text-slate-400" />
             ) : (
               <RefreshCw className="h-4 w-4 text-slate-400" />
             )}

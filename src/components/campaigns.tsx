@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import {
-  AlertTriangle,
   ExternalLink,
   Loader2,
   RefreshCw,
   Rocket,
   Sparkles,
 } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Badge,
@@ -184,6 +184,7 @@ export function Campaigns({
 
   async function refresh(id: string) {
     setRefreshingId(id);
+    setError(null);
     try {
       const res = await fetch(`/api/campaigns/${id}/refresh`, {
         method: "POST",
@@ -191,11 +192,16 @@ export function Campaigns({
       const data = (await res.json()) as {
         result?: CampaignResult;
         summary?: string;
+        error?: string;
       };
       if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
+      } else {
+        setError(data.error ?? "Couldn't refresh results.");
       }
+    } catch {
+      setError("Couldn't refresh results — check your connection.");
     } finally {
       setRefreshingId(null);
     }
@@ -209,16 +215,11 @@ export function Campaigns({
   return (
     <div className="flex flex-col gap-6">
       {!metaReady && (
-        <Card>
-          <CardContent className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-            <p className="text-sm text-slate-600">
-              Meta isn’t configured. Add <code>META_SYSTEM_USER_TOKEN</code>,{" "}
-              <code>META_AD_ACCOUNT_ID</code>, and <code>META_PAGE_ID</code> to
-              your environment to launch campaigns.
-            </p>
-          </CardContent>
-        </Card>
+        <Alert variant="warning">
+          Meta isn’t configured. Add <code>META_SYSTEM_USER_TOKEN</code>,{" "}
+          <code>META_AD_ACCOUNT_ID</code>, and <code>META_PAGE_ID</code> to your
+          environment to launch campaigns.
+        </Alert>
       )}
 
       {metaReady && (
@@ -236,6 +237,7 @@ export function Campaigns({
               value={aiGoal}
               onChange={(e) => setAiGoal(e.target.value)}
               rows={2}
+              maxLength={1000}
               placeholder="e.g. Get more rooftop solar leads in Hisar this month, around ₹500/day, push the free site visit."
             />
             {aiQuestions && aiQuestions.length > 0 && (
@@ -252,6 +254,7 @@ export function Campaigns({
                   value={aiAnswers}
                   onChange={(e) => setAiAnswers(e.target.value)}
                   rows={2}
+                  maxLength={1000}
                   className="mt-2"
                   placeholder="Your answers…"
                 />
@@ -270,12 +273,8 @@ export function Campaigns({
                 Creates paused — no spend until you activate it.
               </span>
             </div>
-            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
-            {aiSummary && (
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                {aiSummary}
-              </p>
-            )}
+            {aiError && <Alert variant="error">{aiError}</Alert>}
+            {aiSummary && <Alert variant="success">{aiSummary}</Alert>}
           </CardContent>
         </Card>
       )}
@@ -369,9 +368,9 @@ export function Campaigns({
                 </div>
 
                 {leadFormError && (
-                  <p className="text-sm text-amber-600">
+                  <Alert variant="warning">
                     Couldn’t load lead forms: {leadFormError}
-                  </p>
+                  </Alert>
                 )}
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -387,12 +386,8 @@ export function Campaigns({
                     Created paused — no spend until you activate it in Meta.
                   </span>
                 </div>
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                {notice && (
-                  <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                    {notice}
-                  </p>
-                )}
+                {error && <Alert variant="error">{error}</Alert>}
+                {notice && <Alert variant="success">{notice}</Alert>}
               </>
             )}
           </CardContent>

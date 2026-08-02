@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import {
   deleteInstruction,
   saveInstruction,
@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { AdInstruction } from "@/lib/types";
 
 export function Instructions({
@@ -99,6 +100,7 @@ function InstructionEditor({
       onDone?.();
       return;
     }
+    if (!window.confirm(`Delete instruction “${instruction.title}”?`)) return;
     startTransition(async () => {
       const res = await deleteInstruction(instruction.id, businessId);
       if (res.ok) router.refresh();
@@ -134,11 +136,7 @@ function InstructionEditor({
         />
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={save} disabled={pending}>
-            {pending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
+            {pending ? <Spinner /> : <Save className="h-4 w-4" />}
             Save
           </Button>
           <Button

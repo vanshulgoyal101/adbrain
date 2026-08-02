@@ -1,39 +1,16 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { metaClientFromEnv } from "@/lib/meta/client";
+import {
+  mapCampaignObjective,
+  mapCampaignStatus,
+} from "@/lib/meta/mappers";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
-import type { CampaignStatus, Json } from "@/lib/types";
+import type { Json } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-function mapStatus(s: string): CampaignStatus {
-  switch ((s ?? "").toUpperCase()) {
-    case "ACTIVE":
-      return "active";
-    case "PAUSED":
-      return "paused";
-    case "ARCHIVED":
-    case "DELETED":
-    case "COMPLETED":
-      return "completed";
-    default:
-      return "draft";
-  }
-}
-
-function mapObjective(o: string): string {
-  const m = (o ?? "").toUpperCase();
-  if (!m) return "leads";
-  if (m.includes("LEAD")) return "leads";
-  if (m.includes("TRAFFIC")) return "traffic";
-  if (m.includes("SALES") || m.includes("CONVERSION")) return "sales";
-  if (m.includes("ENGAGEMENT")) return "engagement";
-  if (m.includes("AWARENESS")) return "awareness";
-  if (m.includes("APP")) return "app";
-  return m.replace(/^OUTCOME_/, "").toLowerCase();
-}
 
 export async function POST() {
   const supabase = await createClient();
@@ -66,9 +43,9 @@ export async function POST() {
     const row = {
       business_id: business.id,
       name: mc.name,
-      objective: mapObjective(mc.objective),
+      objective: mapCampaignObjective(mc.objective),
       daily_budget: mc.daily_budget ? Number(mc.daily_budget) / 100 : null,
-      status: mapStatus(mc.status),
+      status: mapCampaignStatus(mc.status),
       meta_campaign_id: mc.id,
       raw: mc as unknown as Json,
     };

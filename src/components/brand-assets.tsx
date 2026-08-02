@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Loader2, Trash2, Upload } from "lucide-react";
+import { Trash2, Upload } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Badge,
@@ -11,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { createClient } from "@/lib/supabase/client";
 import type { BrandAsset, BrandAssetType } from "@/lib/types";
 
@@ -43,6 +45,7 @@ export function BrandAssets({
   const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function onUpload(e: React.FormEvent) {
@@ -101,6 +104,7 @@ export function BrandAssets({
 
       setAssets((prev) => [row, ...prev]);
       setNotes("");
+      setFileName(null);
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
       setError((err as Error).message);
@@ -110,6 +114,7 @@ export function BrandAssets({
   }
 
   async function remove(asset: BrandAsset) {
+    if (!window.confirm("Delete this asset?")) return;
     setError(null);
     const path = decodeURIComponent(asset.url.split(`/${BUCKET}/`)[1] ?? "");
     try {
@@ -137,8 +142,9 @@ export function BrandAssets({
         <form onSubmit={onUpload} className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
-              <Label>Type</Label>
+              <Label htmlFor="asset-type">Type</Label>
               <select
+                id="asset-type"
                 value={type}
                 onChange={(e) => setType(e.target.value as BrandAssetType)}
                 className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500"
@@ -159,23 +165,27 @@ export function BrandAssets({
               />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
-            />
-            <Button type="submit" disabled={uploading}>
-              {uploading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              Upload
-            </Button>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="asset-file">Image file</Label>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                id="asset-file"
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+                className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
+              />
+              <Button type="submit" disabled={uploading}>
+                {uploading ? <Spinner /> : <Upload className="h-4 w-4" />}
+                Upload
+              </Button>
+            </div>
+            {fileName && (
+              <p className="text-xs text-slate-400">Selected: {fileName}</p>
+            )}
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <Alert variant="error">{error}</Alert>}
         </form>
 
         {assets.length === 0 ? (

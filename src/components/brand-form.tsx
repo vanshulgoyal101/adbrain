@@ -1,11 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { CheckCircle2, Loader2, Save, Wand2 } from "lucide-react";
+import { CheckCircle2, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
+import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import type { Business } from "@/lib/types";
 import type { BrandExtraction } from "@/lib/templates/solar";
 
@@ -64,6 +66,21 @@ export function BrandForm({ business }: { business: Business | null }) {
       setAutofillError("Enter your website URL first.");
       return;
     }
+    const hasContent = Boolean(
+      fields.description ||
+        fields.brand_voice ||
+        fields.target_audience ||
+        fields.usps ||
+        fields.offers,
+    );
+    if (
+      hasContent &&
+      !window.confirm(
+        "Autofill will replace some fields you've already filled. Continue?",
+      )
+    ) {
+      return;
+    }
     setAutofilling(true);
     try {
       const res = await fetch("/api/brand/autofill", {
@@ -112,11 +129,7 @@ export function BrandForm({ business }: { business: Business | null }) {
             onClick={autofill}
             disabled={autofilling}
           >
-            {autofilling ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Wand2 className="h-4 w-4" />
-            )}
+            {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" />}
             Autofill from website
           </Button>
         </CardHeader>
@@ -150,7 +163,9 @@ export function BrandForm({ business }: { business: Business | null }) {
             </Field>
           </div>
           {autofillError && (
-            <p className="text-sm text-red-600 sm:col-span-2">{autofillError}</p>
+            <div className="sm:col-span-2">
+              <Alert variant="error">{autofillError}</Alert>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -251,11 +266,7 @@ export function BrandForm({ business }: { business: Business | null }) {
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending}>
-          {pending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
+          {pending ? <Spinner /> : <Save className="h-4 w-4" />}
           Save Brand Brain
         </Button>
         {state.ok && (

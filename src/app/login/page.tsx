@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { Sun } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
 
+export const metadata = { title: "Sign in — AdBrain" };
+
 export default function LoginPage() {
   return (
     <div className="flex min-h-full items-center justify-center px-6 py-16">

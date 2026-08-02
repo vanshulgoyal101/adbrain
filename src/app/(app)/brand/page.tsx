@@ -7,6 +7,8 @@ import {
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 
+export const metadata = { title: "Brand Brain — AdBrain" };
+
 export default async function BrandPage() {
   const business = await getPrimaryBusiness();
   const [assets, instructions] = business
