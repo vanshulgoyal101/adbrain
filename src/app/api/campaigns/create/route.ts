@@ -89,6 +89,7 @@ export async function POST(req: Request) {
     .from("campaigns")
     .insert({
       business_id: businessId,
+      name,
       objective: "leads",
       daily_budget: dailyBudget,
       status: "paused",

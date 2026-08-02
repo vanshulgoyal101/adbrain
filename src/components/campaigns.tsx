@@ -59,6 +59,28 @@ export function Campaigns({
     useState<Record<string, CampaignResult>>(initialResults);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncFromMeta() {
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/campaigns/sync", { method: "POST" });
+      const data = (await res.json()) as {
+        campaigns?: Campaign[];
+        error?: string;
+      };
+      if (res.ok && Array.isArray(data.campaigns)) {
+        setCampaigns(data.campaigns);
+      } else if (!res.ok) {
+        setError(data.error ?? "Sync failed.");
+      }
+    } catch {
+      setError("Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -273,12 +295,29 @@ export function Campaigns({
       )}
 
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">
-          Your campaigns{" "}
-          <span className="font-normal text-slate-400">
-            ({campaigns.length})
-          </span>
-        </h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Your campaigns{" "}
+            <span className="font-normal text-slate-400">
+              ({campaigns.length})
+            </span>
+          </h2>
+          {metaReady && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={syncFromMeta}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Sync from Meta
+            </Button>
+          )}
+        </div>
         {campaigns.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-slate-500">
@@ -295,7 +334,7 @@ export function Campaigns({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-slate-900">
-                          {business.name} — {c.objective}
+                          {c.name ?? `${business.name} — ${c.objective}`}
                         </h3>
                         <Badge
                           className={
@@ -308,7 +347,9 @@ export function Campaigns({
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-slate-500">
-                          {formatCurrency(c.daily_budget)}/day
+                          {c.daily_budget != null
+                            ? `${formatCurrency(c.daily_budget)}/day`
+                            : c.objective}
                         </span>
                         {c.meta_campaign_id && (
                           <a

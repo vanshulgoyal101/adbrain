@@ -341,6 +341,10 @@ alter table public.campaigns
   add column if not exists meta_ad_ids   text[] not null default '{}',
   add column if not exists raw           jsonb;
 
+-- Imported (Meta-created) campaigns carry a name and may lack a campaign budget.
+alter table public.campaigns add column if not exists name text;
+alter table public.campaigns alter column daily_budget drop not null;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  ad_instructions: per-customer instruction files that guide ad creation
 -- ════════════════════════════════════════════════════════════════════════

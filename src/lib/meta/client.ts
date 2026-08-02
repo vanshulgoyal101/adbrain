@@ -35,6 +35,16 @@ export interface CampaignInsights {
   cpl: number | null;
 }
 
+export interface MetaCampaignSummary {
+  id: string;
+  name: string;
+  status: string;
+  objective: string;
+  daily_budget?: string;
+  effective_status?: string;
+  created_time?: string;
+}
+
 export class MetaError extends Error {
   constructor(
     message: string,
@@ -257,6 +267,13 @@ export class MetaClient {
     }
 
     return { campaignId: campaign.id, adSetId: adSet.id, adIds };
+  }
+
+  async listCampaigns(limit = 200): Promise<MetaCampaignSummary[]> {
+    const data = await this.graph<{ data: MetaCampaignSummary[] }>(
+      `${this.creds.adAccountId}/campaigns?fields=id,name,status,objective,daily_budget,effective_status,created_time&limit=${limit}`,
+    );
+    return data.data ?? [];
   }
 
   async getCampaignInsights(campaignId: string): Promise<CampaignInsights> {

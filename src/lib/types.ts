@@ -153,8 +153,9 @@ export interface Database {
         Row: {
           id: string;
           business_id: string;
+          name: string | null;
           objective: string;
-          daily_budget: number;
+          daily_budget: number | null;
           status: CampaignStatus;
           meta_campaign_id: string | null;
           meta_adset_id: string | null;
@@ -167,8 +168,9 @@ export interface Database {
         Insert: {
           id?: string;
           business_id: string;
+          name?: string | null;
           objective: string;
-          daily_budget: number;
+          daily_budget?: number | null;
           status?: CampaignStatus;
           meta_campaign_id?: string | null;
           meta_adset_id?: string | null;
