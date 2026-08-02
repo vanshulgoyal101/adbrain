@@ -33,6 +33,7 @@ const schema = z.object({
     .string()
     .optional()
     .default("google,groq,openrouter,cerebras"),
+  GEMINI_MODEL: z.string().optional().default("gemini-2.0-flash"),
 
   // Image generation
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),

@@ -33,7 +33,7 @@ function buildRegistry(): RegisteredProvider[] {
       ? {
           provider: createGeminiProvider(),
           keys: env.GOOGLE_AI_API_KEYS,
-          model: "gemini-2.0-flash",
+          model: env.GEMINI_MODEL,
         }
       : null,
     groq: env.GROQ_API_KEYS.length
