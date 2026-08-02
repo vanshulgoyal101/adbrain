@@ -24,6 +24,11 @@ const schema = z.object({
   // App
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
 
+  // Dev-only auth bypass (NEVER enable in production)
+  NEXT_PUBLIC_DEV_AUTH_BYPASS: z.string().optional().default(""),
+  DEV_LOGIN_EMAIL: z.string().optional().default(""),
+  DEV_LOGIN_PASSWORD: z.string().optional().default(""),
+
   // LLM providers (comma-separated key pools; empty disables the provider)
   GOOGLE_AI_API_KEYS: commaList,
   GROQ_API_KEYS: commaList,

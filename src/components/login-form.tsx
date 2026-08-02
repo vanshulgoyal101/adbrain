@@ -61,6 +61,22 @@ export function LoginForm() {
 
   return (
     <div className="flex flex-col gap-4">
+      {process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true" && (
+        <div className="flex flex-col gap-2">
+          <a
+            href="/auth/dev-login"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+          >
+            Continue in dev mode
+          </a>
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <div className="h-px flex-1 bg-slate-200" />
+            or sign in
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+        </div>
+      )}
+
       <form onSubmit={sendMagicLink} className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="email">Email</Label>

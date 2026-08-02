@@ -15,6 +15,9 @@ export function createGeminiProvider(config?: {
   defaultModel?: string;
 }): LLMProvider {
   const defaultModel = config?.defaultModel ?? "gemini-2.0-flash";
+  // Gemini 2.5 models spend output tokens on hidden "thinking"; give the
+  // requested output budget generous headroom so JSON isn't truncated.
+  const THINKING_HEADROOM = 3000;
   return {
     name: "google",
     defaultModel,
@@ -39,7 +42,9 @@ export function createGeminiProvider(config?: {
         contents,
         generationConfig: {
           temperature: options.temperature ?? 0.7,
-          ...(options.maxTokens ? { maxOutputTokens: options.maxTokens } : {}),
+          ...(options.maxTokens
+            ? { maxOutputTokens: options.maxTokens + THINKING_HEADROOM }
+            : {}),
           ...(options.json ? { responseMimeType: "application/json" } : {}),
         },
       };
