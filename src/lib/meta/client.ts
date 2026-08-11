@@ -21,6 +21,37 @@ export interface CreativeInput {
   cta?: string | null;
 }
 
+/** A resolved Meta geo-targeting spec (subset of the targeting `geo_locations`). */
+export interface GeoTargeting {
+  countries?: string[];
+  regions?: { key: string }[];
+  cities?: { key: string; radius?: number; distance_unit?: string }[];
+}
+
+/** One result from Meta's adgeolocation search. */
+export interface GeoSearchResult {
+  key: string;
+  name: string;
+  type: string; // "city" | "region" | "country" | "zip" | ...
+  country_code?: string;
+  country_name?: string;
+  region?: string;
+}
+
+/** A city/region name resolved to a Meta geo key. */
+export interface MatchedGeo {
+  name: string;
+  type: string;
+  key: string;
+  label: string;
+}
+
+export interface ResolvedGeo {
+  targeting: GeoTargeting;
+  matched: MatchedGeo[];
+  unresolved: string[];
+}
+
 export interface CreateCampaignResult {
   campaignId: string;
   adSetId: string;
@@ -68,6 +99,64 @@ const CTA_MAP: Record<string, string> = {
 
 function ctaType(label?: string | null): string {
   return (label && CTA_MAP[label]) || "LEARN_MORE";
+}
+
+/** Meta city-radius bounds (kilometers). */
+const RADIUS_MIN_KM = 5;
+const RADIUS_MAX_KM = 80;
+
+function clampRadiusKm(km: number): number {
+  if (!Number.isFinite(km)) return 25;
+  return Math.min(Math.max(Math.round(km), RADIUS_MIN_KM), RADIUS_MAX_KM);
+}
+
+/**
+ * Pick the best adgeolocation match for a typed place name. Meta returns
+ * results already ranked by relevance/audience size, so we preserve that order
+ * and only (1) prefer the requested country and (2) prefer a city, then a
+ * region, then a country. This keeps the canonical "Jaipur" (Rajasthan) ahead
+ * of same-named smaller towns.
+ */
+export function pickBestGeoMatch(
+  matches: GeoSearchResult[],
+  query: string,
+  preferCountry = "IN",
+): GeoSearchResult | null {
+  void query;
+  if (!matches.length) return null;
+  const inCountry = preferCountry
+    ? matches.filter((m) => !m.country_code || m.country_code === preferCountry)
+    : matches;
+  const pool = inCountry.length ? inCountry : matches;
+  for (const type of ["city", "region", "country"]) {
+    const hit = pool.find((m) => m.type === type);
+    if (hit) return hit;
+  }
+  return pool[0] ?? null;
+}
+
+/**
+ * Build the targeting `geo_locations` object, falling back to whole countries
+ * when no city/region/country resolved.
+ */
+export function buildGeoLocations(
+  geo: GeoTargeting | undefined,
+  fallbackCountries: string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (geo?.cities?.length) out.cities = geo.cities;
+  if (geo?.regions?.length) out.regions = geo.regions;
+  if (geo?.countries?.length) out.countries = geo.countries;
+  if (!out.cities && !out.regions && !out.countries) {
+    out.countries = fallbackCountries;
+  }
+  return out;
+}
+
+/** Short human label for a resolved geo match (e.g. "Jaipur (city)"). */
+function geoLabel(m: GeoSearchResult): string {
+  const region = m.region ? `, ${m.region}` : "";
+  return `${m.name}${region}`;
 }
 
 /** Read Solaride's single-tenant credentials from the environment. */
@@ -167,6 +256,86 @@ export class MetaClient {
     return (data.data ?? []).filter((f) => f.status === "ACTIVE");
   }
 
+  /** Search Meta's location database for a place name. */
+  async searchGeoLocations(
+    query: string,
+    opts: { types?: string[]; limit?: number } = {},
+  ): Promise<GeoSearchResult[]> {
+    const types = opts.types ?? ["city", "region", "country"];
+    const params = new URLSearchParams({
+      type: "adgeolocation",
+      q: query,
+      location_types: JSON.stringify(types),
+      limit: String(opts.limit ?? 10),
+    });
+    const data = await this.graph<{ data: GeoSearchResult[] }>(
+      `search?${params.toString()}`,
+    );
+    return data.data ?? [];
+  }
+
+  /**
+   * Resolve human place names (e.g. "Jaipur", "Rajasthan") into a Meta geo
+   * targeting spec. Cities get a search radius; regions/countries are exact.
+   * Names that don't resolve are reported in `unresolved` and skipped.
+   */
+  async resolveGeoTargeting(
+    names: string[],
+    opts: { radiusKm?: number; preferCountry?: string } = {},
+  ): Promise<ResolvedGeo> {
+    const radius = clampRadiusKm(opts.radiusKm ?? 25);
+    const preferCountry = opts.preferCountry ?? "IN";
+    const cities: NonNullable<GeoTargeting["cities"]> = [];
+    const regions: NonNullable<GeoTargeting["regions"]> = [];
+    const countries: string[] = [];
+    const matched: MatchedGeo[] = [];
+    const unresolved: string[] = [];
+    const seen = new Set<string>();
+
+    for (const raw of names) {
+      const name = (raw ?? "").trim();
+      if (!name) continue;
+      let results: GeoSearchResult[] = [];
+      try {
+        results = await this.searchGeoLocations(name);
+      } catch {
+        unresolved.push(name);
+        continue;
+      }
+      const best = pickBestGeoMatch(results, name, preferCountry);
+      if (!best) {
+        unresolved.push(name);
+        continue;
+      }
+      const dedupe = `${best.type}:${best.key}`;
+      if (seen.has(dedupe)) continue;
+      seen.add(dedupe);
+
+      if (best.type === "city") {
+        cities.push({ key: best.key, radius, distance_unit: "kilometer" });
+      } else if (best.type === "region") {
+        regions.push({ key: best.key });
+      } else if (best.type === "country" && best.country_code) {
+        countries.push(best.country_code);
+      } else {
+        unresolved.push(name);
+        continue;
+      }
+      matched.push({
+        name,
+        type: best.type,
+        key: best.key,
+        label: geoLabel(best),
+      });
+    }
+
+    const targeting: GeoTargeting = {};
+    if (cities.length) targeting.cities = cities;
+    if (regions.length) targeting.regions = regions;
+    if (countries.length) targeting.countries = countries;
+    return { targeting, matched, unresolved };
+  }
+
   /** Upload an image to the ad account and return its hash. */
   async uploadAdImage(imageUrl: string): Promise<string> {
     const imgRes = await fetch(imageUrl, {
@@ -197,6 +366,7 @@ export class MetaClient {
     creatives: CreativeInput[];
     ageMin?: number;
     ageMax?: number;
+    location?: GeoTargeting;
   }): Promise<CreateCampaignResult> {
     const acct = this.creds.adAccountId;
 
@@ -224,7 +394,7 @@ export class MetaClient {
         destination_type: "ON_AD",
         promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
         targeting: JSON.stringify({
-          geo_locations: { countries: ["IN"] },
+          geo_locations: buildGeoLocations(params.location, ["IN"]),
           ...(params.ageMin ? { age_min: params.ageMin } : {}),
           ...(params.ageMax ? { age_max: params.ageMax } : {}),
           targeting_automation: { advantage_audience: 1 },

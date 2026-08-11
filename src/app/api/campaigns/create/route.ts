@@ -66,6 +66,16 @@ export async function POST(req: Request) {
 
   let result;
   try {
+    // Target the brand's service areas when set; otherwise nationwide.
+    let location;
+    if (business.locations?.length) {
+      try {
+        location = (await meta.resolveGeoTargeting(business.locations)).targeting;
+      } catch {
+        // Fall back to nationwide on geo-resolution failure.
+      }
+    }
+
     result = await meta.createLeadCampaign({
       name,
       dailyBudgetRupees: dailyBudget,
@@ -77,6 +87,7 @@ export async function POST(req: Request) {
         message: c.primary_text ?? "",
         cta: c.cta,
       })),
+      location,
     });
   } catch (err) {
     return NextResponse.json(

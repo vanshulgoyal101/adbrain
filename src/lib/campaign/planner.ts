@@ -8,6 +8,7 @@ export interface CampaignPlan {
   creative_ids: string[];
   age_min: number;
   age_max: number;
+  locations: string[];
   rationale: string;
 }
 
@@ -54,7 +55,12 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "ready=false and ask concise clarifying questions instead of guessing. " +
         "(3) Never fabricate facts, prices, or guarantees. (4) Meta Advantage+ " +
         "handles fine audience optimization, so keep the audience simple: a " +
-        "sensible age range (18–65). Output ONLY valid JSON.",
+        "sensible age range (18–65). (5) LOCATION MATTERS for a local solar " +
+        "installer: target the specific cities/areas the business serves. Use the " +
+        "brand's listed Areas, or an area the user names in the goal, as " +
+        "`locations` (city or state names, e.g. [\"Jaipur\"]). If no area is " +
+        "known and it matters, ask instead of guessing. Leave `locations` empty " +
+        "ONLY for a deliberately nationwide campaign. Output ONLY valid JSON.",
     },
     {
       role: "user",
@@ -71,7 +77,7 @@ CURRENCY: INR. Minimum sensible daily budget is ₹150.
 USER GOAL: ${input.goal}
 ${input.answers ? `\nUSER ANSWERS TO YOUR QUESTIONS:\n${input.answers}\n` : ""}
 Decide the campaign. If you have enough info, return:
-{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string, "creative_ids": string[], "age_min": number, "age_max": number, "rationale": string}}
+{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string, "creative_ids": string[], "age_min": number, "age_max": number, "locations": string[], "rationale": string}}
 If you need more info, return:
 {"ready": false, "questions": string[]}`,
     },

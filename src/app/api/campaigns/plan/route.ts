@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { runPlanner } from "@/lib/campaign/planner";
-import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
+import {
+  MetaError,
+  metaClientFromEnv,
+  type GeoTargeting,
+} from "@/lib/meta/client";
 import { createClient } from "@/lib/supabase/server";
 import {
   getActiveInstructionsText,
@@ -125,6 +129,27 @@ export async function POST(req: Request) {
   const ageMax = clamp(Math.round(result.plan.age_max || 55), ageMin, 65);
   const name = (result.plan.name || `${business.name} — AI leads`).slice(0, 120);
 
+  // Resolve target areas: the planner's chosen locations, else the brand's areas.
+  const planLocations = Array.isArray(result.plan.locations)
+    ? result.plan.locations.filter((s): s is string => typeof s === "string")
+    : [];
+  const targetNames = planLocations.length
+    ? planLocations
+    : business.locations ?? [];
+  let location: GeoTargeting | undefined;
+  let areaLabel = "India (nationwide)";
+  if (targetNames.length) {
+    try {
+      const resolved = await meta.resolveGeoTargeting(targetNames);
+      if (resolved.matched.length) {
+        location = resolved.targeting;
+        areaLabel = resolved.matched.map((m) => m.label).join(", ");
+      }
+    } catch {
+      // Fall back to nationwide if geo resolution fails.
+    }
+  }
+
   let created;
   try {
     created = await meta.createLeadCampaign({
@@ -140,6 +165,7 @@ export async function POST(req: Request) {
       })),
       ageMin,
       ageMax,
+      location,
     });
   } catch (err) {
     return NextResponse.json(
@@ -178,6 +204,8 @@ export async function POST(req: Request) {
       creativeIds: usable.map((c) => c.id),
       ageMin,
       ageMax,
+      locations: targetNames,
+      area: areaLabel,
     },
   });
 
@@ -190,7 +218,7 @@ export async function POST(req: Request) {
         : ""
     }.`,
     `Lead form: “${leadForm.name}”.`,
-    `Audience: India, ages ${ageMin}–${ageMax}; Meta Advantage+ optimises delivery.`,
+    `Audience: ${areaLabel}, ages ${ageMin}–${ageMax}; Meta Advantage+ optimises delivery.`,
     result.plan.rationale ? `Why: ${result.plan.rationale}` : "",
     "It's paused — review and activate it in Meta Ads Manager when you're ready to spend.",
   ]
