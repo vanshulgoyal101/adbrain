@@ -56,7 +56,7 @@ See [docs/SPEC.md](docs/SPEC.md) for the full product spec and
 | `npm run start` | Serve the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | Vitest unit tests |
+| `npm run test` | Vitest unit tests (49 tests) |
 
 ## Architecture
 
@@ -67,11 +67,21 @@ src/
     api/
       brand/autofill/      # scrape website → LLM → brand fields (SSRF-guarded)
       creatives/generate/  # brief → 3–6 variants (copy + image) → saved drafts
+      creatives/[id]/regenerate/  # re-roll a single variant
       creatives/export/    # zip of approved images + copy.txt (ad pack)
+      campaigns/plan/      # goal → AI campaign plan (asks if unsure) → paused launch
+      campaigns/create/    # manual: pick creatives + budget + targeting → launch
+      campaigns/[id]/refresh/  # pull Meta insights → plain-language summary
+      campaigns/sync/      # import existing Meta campaigns
+      campaigns/lead-forms/  # list active Meta lead forms
+      meta/geo-search/     # location typeahead (Meta adgeolocation search)
     auth/callback/         # OAuth + magic-link completion
     login/                 # magic link + Google sign-in
+    sitemap.ts robots.ts manifest.ts opengraph-image.tsx  # SEO surfaces
   lib/
     env.ts                 # zod-validated env
+    site.ts                # central site config (name, url, keywords)
+    seo/jsonLd.ts          # schema.org @graph builders (pure, tested)
     supabase/              # browser/server/admin clients, proxy session, queries
     llm/                   # rotating orchestrator + provider adapters
     imageGen/              # provider-abstracted image generation
@@ -79,7 +89,10 @@ src/
     creative/generate.ts   # copy + image → complete variants
     creative/persist.ts    # store generated images in Supabase Storage
     creative/summary.ts    # plain-language results summary (LLM)
-    meta/client.ts         # Marketing API wrapper (campaigns, insights)
+    campaign/planner.ts    # goal → structured campaign plan (LLM strategist)
+    campaign/targeting.ts  # normalize UI targeting → Meta geo spec (pure, tested)
+    meta/client.ts         # Marketing API wrapper (campaigns, insights, geo search)
+    meta/mappers.ts        # Meta enum ↔ app enum converters
     audit.ts               # append-only audit logging (observability)
   proxy.ts                 # session refresh + route guard (Next 16 "proxy")
 db/schema.sql              # Postgres tables + RLS + storage policies
@@ -104,6 +117,26 @@ table, managed on the Brand page). Active files are concatenated and injected
 into every copy + image prompt, so a customer's rules ("always mention the
 25-year warranty", "no discount claims") steer generation.
 
+### Audience targeting
+
+Campaigns are built for people who don't know Meta Ads Manager. In the Campaigns
+form you can:
+
+- **Include** and **exclude** locations with a live typeahead (backed by Meta's
+  `adgeolocation` search) — cities get an adjustable radius; states/countries are
+  exact.
+- Set an **age range**, or leave any field on **“Let AdBrain decide”** so the AI
+  picks it from the brand's service areas and goal.
+- Read a one-line **plain-language explanation** under each control and a live
+  **audience summary** sentence describing who will see the ads.
+
+Under the hood, `src/lib/campaign/targeting.ts` normalizes the form into a Meta
+targeting spec, and `MetaClient.resolveGeoTargeting()` turns place names into
+geo keys (trusting Meta's relevance order, e.g. the canonical *Jaipur* over
+same-named towns). If nothing resolves, it falls back to nationwide. The AI
+planner (`src/lib/campaign/planner.ts`) can also choose locations itself and
+never invents IDs — it asks a clarifying question instead of guessing.
+
 ### Observability (audit log)
 
 Every mutation — creatives generated/approved/deleted/regenerated, brand and
@@ -112,6 +145,22 @@ instruction edits, campaign create/refresh — appends a row to the append-only
 events show on the dashboard. RLS scopes each business to its own log; there are
 no update/delete policies, so the log is tamper-resistant. Campaigns also store
 their Meta `campaign`/`adset`/`ad` ids plus a `raw` JSON snapshot.
+
+## SEO
+
+The public marketing surface (`/` and `/login`) ships full technical SEO:
+
+- `metadataBase` + templated titles, description, keywords, and canonical URLs
+  (`src/app/layout.tsx`, driven by `src/lib/site.ts`).
+- OpenGraph + Twitter cards with a build-time generated share image
+  (`src/app/opengraph-image.tsx`).
+- schema.org **@graph** (Organization + WebSite + SoftwareApplication) as JSON-LD
+  from pure, unit-tested builders (`src/lib/seo/jsonLd.ts`).
+- `sitemap.xml` (public routes only), `robots.txt` (app + API disallowed),
+  and a web app `manifest.webmanifest`.
+
+Set `NEXT_PUBLIC_SITE_URL` to the production origin so absolute URLs and the
+sitemap resolve correctly.
 
 ## Status vs SPEC
 
