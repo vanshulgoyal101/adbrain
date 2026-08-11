@@ -1,0 +1,17 @@
+import type { MetadataRoute } from "next";
+import { siteConfig } from "@/lib/site";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: `${siteConfig.name} — AI ads for solar businesses`,
+    short_name: siteConfig.name,
+    description: siteConfig.shortDescription,
+    start_url: "/",
+    display: "standalone",
+    background_color: "#ffffff",
+    theme_color: "#059669",
+    icons: [
+      { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+    ],
+  };
+}

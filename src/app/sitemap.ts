@@ -1,0 +1,24 @@
+import type { MetadataRoute } from "next";
+import { absoluteUrl } from "@/lib/site";
+
+/**
+ * Only public, indexable routes belong here. The app itself (dashboard, brand,
+ * studio, campaigns) is auth-gated and intentionally excluded.
+ */
+export default function sitemap(): MetadataRoute.Sitemap {
+  const now = new Date();
+  return [
+    {
+      url: absoluteUrl("/"),
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+    {
+      url: absoluteUrl("/login"),
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+  ];
+}
