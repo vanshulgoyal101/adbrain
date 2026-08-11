@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parse } from "node-html-parser";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
+import { parsePublicUrl } from "@/lib/security/ssrf";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildBrandExtractionMessages,
@@ -9,27 +10,6 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-/** Block requests to loopback / private / link-local hosts (SSRF guard). */
-function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) {
-    return true;
-  }
-  if (h === "0.0.0.0" || h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) {
-    return true;
-  }
-  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    if (a === 127 || a === 10 || a === 0) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-  }
-  return false;
-}
 
 function extractText(html: string): string {
   const root = parse(html);
@@ -54,22 +34,13 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as { url?: string } | null;
-  let url = (body?.url ?? "").trim();
-  if (!url) {
+  const rawUrl = (body?.url ?? "").trim();
+  if (!rawUrl) {
     return NextResponse.json({ error: "url is required" }, { status: 400 });
   }
-  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
 
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
-  }
-  if (
-    !["http:", "https:"].includes(parsed.protocol) ||
-    isBlockedHost(parsed.hostname)
-  ) {
+  const parsed = parsePublicUrl(rawUrl);
+  if (!parsed) {
     return NextResponse.json({ error: "That URL is not allowed" }, { status: 400 });
   }
 
@@ -104,7 +75,7 @@ export async function POST(req: Request) {
 
   try {
     const extraction = await completeJSON<BrandExtraction>(
-      buildBrandExtractionMessages(text, url),
+      buildBrandExtractionMessages(text, parsed.toString()),
       { temperature: 0.3, maxTokens: 800 },
     );
     return NextResponse.json({ extraction });
