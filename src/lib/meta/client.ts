@@ -38,6 +38,17 @@ export interface GeoSearchResult {
   region?: string;
 }
 
+/**
+ * A place the user picked from search (already carries a Meta key), optionally
+ * with a per-city radius. Used to build targeting without re-searching.
+ */
+export interface GeoItem {
+  key: string;
+  name: string;
+  type: string;
+  radiusKm?: number;
+}
+
 /** A city/region name resolved to a Meta geo key. */
 export interface MatchedGeo {
   name: string;
@@ -157,6 +168,49 @@ export function buildGeoLocations(
 function geoLabel(m: GeoSearchResult): string {
   const region = m.region ? `, ${m.region}` : "";
   return `${m.name}${region}`;
+}
+
+/**
+ * Convert user-picked places (each already carrying a Meta key) into a
+ * `GeoTargeting` spec. Cities get a radius (their own, else the default);
+ * regions and countries are exact. Duplicates are removed. Pure — no network.
+ */
+export function geoItemsToTargeting(
+  items: GeoItem[],
+  defaultRadiusKm = 25,
+): GeoTargeting {
+  const cities: NonNullable<GeoTargeting["cities"]> = [];
+  const regions: NonNullable<GeoTargeting["regions"]> = [];
+  const countries: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items ?? []) {
+    const key = (item?.key ?? "").trim();
+    if (!key) continue;
+    const dedupe = `${item.type}:${key}`;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    if (item.type === "city") {
+      cities.push({
+        key,
+        radius: clampRadiusKm(item.radiusKm ?? defaultRadiusKm),
+        distance_unit: "kilometer",
+      });
+    } else if (item.type === "region") {
+      regions.push({ key });
+    } else if (item.type === "country") {
+      countries.push(key);
+    }
+  }
+  const geo: GeoTargeting = {};
+  if (cities.length) geo.cities = cities;
+  if (regions.length) geo.regions = regions;
+  if (countries.length) geo.countries = countries;
+  return geo;
+}
+
+/** True when a targeting spec has at least one place. */
+export function hasGeo(geo: GeoTargeting | undefined): boolean {
+  return !!(geo?.cities?.length || geo?.regions?.length || geo?.countries?.length);
 }
 
 /** Read Solaride's single-tenant credentials from the environment. */
@@ -367,6 +421,7 @@ export class MetaClient {
     ageMin?: number;
     ageMax?: number;
     location?: GeoTargeting;
+    excludedLocation?: GeoTargeting;
   }): Promise<CreateCampaignResult> {
     const acct = this.creds.adAccountId;
 
@@ -395,6 +450,14 @@ export class MetaClient {
         promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
         targeting: JSON.stringify({
           geo_locations: buildGeoLocations(params.location, ["IN"]),
+          ...(hasGeo(params.excludedLocation)
+            ? {
+                excluded_geo_locations: buildGeoLocations(
+                  params.excludedLocation,
+                  [],
+                ),
+              }
+            : {}),
           ...(params.ageMin ? { age_min: params.ageMin } : {}),
           ...(params.ageMax ? { age_max: params.ageMax } : {}),
           targeting_automation: { advantage_audience: 1 },

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGeoLocations,
+  geoItemsToTargeting,
+  hasGeo,
   pickBestGeoMatch,
   type GeoSearchResult,
 } from "@/lib/meta/client";
@@ -94,5 +96,52 @@ describe("buildGeoLocations", () => {
       regions: [{ key: "3847" }],
       countries: ["IN"],
     });
+  });
+});
+
+describe("geoItemsToTargeting", () => {
+  it("groups picked places by type and applies a default city radius", () => {
+    const geo = geoItemsToTargeting(
+      [
+        { key: "1", name: "Jaipur", type: "city" },
+        { key: "raj", name: "Rajasthan", type: "region" },
+        { key: "IN", name: "India", type: "country" },
+      ],
+      30,
+    );
+    expect(geo).toEqual({
+      cities: [{ key: "1", radius: 30, distance_unit: "kilometer" }],
+      regions: [{ key: "raj" }],
+      countries: ["IN"],
+    });
+  });
+
+  it("honours a per-city radius over the default and clamps it", () => {
+    const geo = geoItemsToTargeting(
+      [{ key: "1", name: "Jaipur", type: "city", radiusKm: 999 }],
+      25,
+    );
+    expect(geo.cities?.[0].radius).toBe(80);
+  });
+
+  it("dedupes and ignores keyless items", () => {
+    const geo = geoItemsToTargeting(
+      [
+        { key: "1", name: "Jaipur", type: "city" },
+        { key: "1", name: "dup", type: "city" },
+        { key: "", name: "bad", type: "city" },
+      ],
+      25,
+    );
+    expect(geo.cities).toHaveLength(1);
+  });
+});
+
+describe("hasGeo", () => {
+  it("is false for empty/undefined and true when any place is present", () => {
+    expect(hasGeo(undefined)).toBe(false);
+    expect(hasGeo({})).toBe(false);
+    expect(hasGeo({ countries: ["IN"] })).toBe(true);
+    expect(hasGeo({ cities: [{ key: "1" }] })).toBe(true);
   });
 });

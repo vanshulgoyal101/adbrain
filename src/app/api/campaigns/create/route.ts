@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
-import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
+import {
+  MetaError,
+  geoItemsToTargeting,
+  metaClientFromEnv,
+  type GeoTargeting,
+} from "@/lib/meta/client";
+import {
+  describeAudience,
+  normalizeTargetingInput,
+  type TargetingInput,
+} from "@/lib/campaign/targeting";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 
@@ -22,6 +32,7 @@ export async function POST(req: Request) {
     dailyBudget?: number;
     leadFormId?: string;
     name?: string;
+    targeting?: TargetingInput;
   } | null;
 
   const businessId = (body?.businessId ?? "").trim();
@@ -29,6 +40,7 @@ export async function POST(req: Request) {
   const dailyBudget = Number(body?.dailyBudget ?? 0);
   const leadFormId = (body?.leadFormId ?? "").trim();
   const name = (body?.name ?? "").trim() || "AdBrain campaign";
+  const targeting = normalizeTargetingInput(body?.targeting);
 
   if (!businessId || !creativeIds.length || !leadFormId || dailyBudget <= 0) {
     return NextResponse.json(
@@ -65,15 +77,36 @@ export async function POST(req: Request) {
   }
 
   let result;
+  let areaLabel = "India (nationwide)";
   try {
-    // Target the brand's service areas when set; otherwise nationwide.
-    let location;
-    if (business.locations?.length) {
+    // Location: use the user's picks in manual mode; otherwise resolve the
+    // brand's service areas ("let AdBrain decide"). Excluded places always
+    // honoured when provided.
+    let location: GeoTargeting | undefined;
+    let excludedLocation: GeoTargeting | undefined;
+
+    if (targeting.locationMode === "manual" && targeting.included.length) {
+      location = geoItemsToTargeting(targeting.included, targeting.radiusKm);
+      areaLabel = targeting.included.map((i) => i.name).join(", ");
+    } else if (business.locations?.length) {
       try {
-        location = (await meta.resolveGeoTargeting(business.locations)).targeting;
+        const resolved = await meta.resolveGeoTargeting(business.locations, {
+          radiusKm: targeting.radiusKm,
+        });
+        if (resolved.matched.length) {
+          location = resolved.targeting;
+          areaLabel = resolved.matched.map((m) => m.label).join(", ");
+        }
       } catch {
         // Fall back to nationwide on geo-resolution failure.
       }
+    }
+
+    if (targeting.excluded.length) {
+      excludedLocation = geoItemsToTargeting(
+        targeting.excluded,
+        targeting.radiusKm,
+      );
     }
 
     result = await meta.createLeadCampaign({
@@ -88,6 +121,9 @@ export async function POST(req: Request) {
         cta: c.cta,
       })),
       location,
+      excludedLocation,
+      ageMin: targeting.ageMin,
+      ageMax: targeting.ageMax,
     });
   } catch (err) {
     return NextResponse.json(
@@ -95,6 +131,14 @@ export async function POST(req: Request) {
       { status: 502 },
     );
   }
+
+  const audienceLabel = describeAudience({
+    areaLabel,
+    excluded: targeting.excluded,
+    ageMode: targeting.ageMode,
+    ageMin: targeting.ageMin,
+    ageMax: targeting.ageMax,
+  });
 
   const { data: campaign, error } = await supabase
     .from("campaigns")
@@ -115,6 +159,15 @@ export async function POST(req: Request) {
         leadFormId,
         name,
         dailyBudget,
+        targeting: {
+          area: areaLabel,
+          included: targeting.included,
+          excluded: targeting.excluded,
+          radiusKm: targeting.radiusKm,
+          ageMode: targeting.ageMode,
+          ageMin: targeting.ageMin,
+          ageMax: targeting.ageMax,
+        },
       } as unknown as Json,
     })
     .select("*")
@@ -136,8 +189,10 @@ export async function POST(req: Request) {
       leadFormId,
       creativeIds: usable.map((c) => c.id),
       name,
+      area: areaLabel,
+      excluded: targeting.excluded.map((e) => e.name),
     },
   });
 
-  return NextResponse.json({ campaign, meta: result });
+  return NextResponse.json({ campaign, meta: result, audience: audienceLabel });
 }

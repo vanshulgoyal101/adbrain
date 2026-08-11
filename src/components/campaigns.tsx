@@ -18,6 +18,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import {
+  TargetingControls,
+  defaultTargeting,
+  type TargetingValue,
+} from "@/components/targeting-controls";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
@@ -52,6 +57,7 @@ export function Campaigns({
   const [budget, setBudget] = useState(200);
   const [leadFormId, setLeadFormId] = useState(leadForms[0]?.id ?? "");
   const [name, setName] = useState(`${business.name} — leads`);
+  const [targeting, setTargeting] = useState<TargetingValue>(defaultTargeting);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -163,9 +169,26 @@ export function Campaigns({
           dailyBudget: budget,
           leadFormId,
           name,
+          targeting: {
+            location: {
+              mode: targeting.locationMode,
+              included: targeting.included,
+              excluded: targeting.excluded,
+              radiusKm: targeting.radiusKm,
+            },
+            age: {
+              mode: targeting.ageMode,
+              min: targeting.ageMin,
+              max: targeting.ageMax,
+            },
+          },
         }),
       });
-      const data = (await res.json()) as { campaign?: Campaign; error?: string };
+      const data = (await res.json()) as {
+        campaign?: Campaign;
+        audience?: string;
+        error?: string;
+      };
       if (!res.ok || !data.campaign) {
         setError(data.error ?? "Could not create campaign.");
         return;
@@ -173,7 +196,9 @@ export function Campaigns({
       setCampaigns((prev) => [data.campaign as Campaign, ...prev]);
       setSelected(new Set());
       setNotice(
-        "Campaign created — it's PAUSED. Review and activate it in Meta Ads Manager when you're ready to spend.",
+        `Campaign created — it's PAUSED. ${
+          data.audience ? `Targeting: ${data.audience} ` : ""
+        }Review and activate it in Meta Ads Manager when you're ready to spend.`,
       );
     } catch {
       setError("Could not create campaign.");
@@ -372,6 +397,15 @@ export function Campaigns({
                     Couldn’t load lead forms: {leadFormError}
                   </Alert>
                 )}
+
+                <div className="flex flex-col gap-2">
+                  <Label>Audience &amp; location</Label>
+                  <TargetingControls
+                    value={targeting}
+                    onChange={setTargeting}
+                    brandAreas={business.locations ?? []}
+                  />
+                </div>
 
                 <div className="flex flex-wrap items-center gap-3">
                   <Button onClick={createCampaign} disabled={creating}>
