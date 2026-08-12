@@ -38,7 +38,7 @@
 | ✅ | Approve / unapprove / delete | draft ↔ approved workflow |
 | ✅ | Image persistence to Storage | `lib/creative/persist.ts` (creatives bucket) |
 | ✅ | Ad-pack export (ZIP) | images + copy.txt |
-| 🚧 | Assets library | browse/reuse/download all AI-generated images |
+| ✅ | Assets library | browse/reuse/download all AI-generated images (`/assets`) |
 | 📋 | Video creatives | when models are good/cheap enough |
 | 📋 | Creative winner detection | promote the best-performing variant |
 
@@ -61,7 +61,7 @@
 | 🔒 | True A/B split tests | Meta Experiments API |
 | 📋 | Scheduled activation | launch at a chosen date/time |
 | 📋 | Auto-optimisation | pause losers, scale winners on CPL |
-| 🚧 | Regular auto-sync | on page load now; scheduled cron when hosted |
+| ✅ | Auto-sync on page load | silent sync when Campaigns opens; scheduled cron 📋 when hosted |
 
 ## 5. Leads
 | Status | Feature | Notes |
