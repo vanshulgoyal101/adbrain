@@ -163,8 +163,14 @@ export function Studio({
 
       {items.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-slate-500">
-            No creatives yet. Write a brief above and generate your first batch.
+          <CardContent className="flex flex-col items-center gap-1 py-12 text-center">
+            <ImageIcon className="h-6 w-6 text-slate-300" />
+            <p className="font-medium text-slate-600">No creatives yet</p>
+            <p className="max-w-sm text-sm text-slate-400">
+              Write a short brief above — what you’re selling and to whom — and
+              generate your first batch of ads. You can approve, tweak, or
+              regenerate any of them.
+            </p>
           </CardContent>
         </Card>
       ) : (

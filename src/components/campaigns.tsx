@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   ExternalLink,
   Loader2,
@@ -25,6 +26,7 @@ import {
 } from "@/components/targeting-controls";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
+import { BUDGET_PRESETS, describeBudget } from "@/lib/campaign/budget";
 import { cn, formatCurrency, formatNumber } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -311,10 +313,18 @@ export function Campaigns({
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
             {approved.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No approved creatives yet. Approve some in the Creative Studio
-                first, then come back to launch them.
-              </p>
+              <div className="flex flex-col items-start gap-3 py-2">
+                <p className="text-sm text-slate-500">
+                  You need at least one approved creative before you can launch.
+                  Head to the Creative Studio, generate a few ads, and approve
+                  the ones you like.
+                </p>
+                <Link href="/studio">
+                  <Button variant="outline" size="sm">
+                    <Sparkles className="h-4 w-4" /> Go to Creative Studio
+                  </Button>
+                </Link>
+              </div>
             ) : (
               <>
                 <div>
@@ -392,6 +402,28 @@ export function Campaigns({
                   </div>
                 </div>
 
+                <div className="-mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-400">Quick pick:</span>
+                  {BUDGET_PRESETS.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setBudget(amount)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        budget === amount
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 text-slate-600 hover:border-slate-300",
+                      )}
+                    >
+                      ₹{amount}/day
+                    </button>
+                  ))}
+                  <span className="ml-auto text-xs font-medium text-emerald-700">
+                    {describeBudget(budget)}
+                  </span>
+                </div>
+
                 {leadFormError && (
                   <Alert variant="warning">
                     Couldn’t load lead forms: {leadFormError}
@@ -420,6 +452,7 @@ export function Campaigns({
                     Created paused — no spend until you activate it in Meta.
                   </span>
                 </div>
+                <HowItWorks />
                 {error && <Alert variant="error">{error}</Alert>}
                 {notice && <Alert variant="success">{notice}</Alert>}
               </>
@@ -454,8 +487,14 @@ export function Campaigns({
         </div>
         {campaigns.length === 0 ? (
           <Card>
-            <CardContent className="py-10 text-center text-slate-500">
-              No campaigns yet.
+            <CardContent className="flex flex-col items-center gap-1 py-10 text-center">
+              <Rocket className="h-6 w-6 text-slate-300" />
+              <p className="font-medium text-slate-600">No campaigns yet</p>
+              <p className="max-w-sm text-sm text-slate-400">
+                Launch your first one above — with AI, or by picking creatives
+                and a budget. It’s created paused, so nothing spends until you
+                say so.
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -541,6 +580,33 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-lg font-bold text-slate-900">{value}</p>
       <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+const HOW_IT_WORKS_STEPS = [
+  "We create the campaign paused — nothing spends yet.",
+  "Open it in Meta Ads Manager to review the ads and audience.",
+  "Flip it on when you're happy; leads start coming in.",
+  "Come back and hit “Refresh results” to see leads and cost per lead in plain English.",
+];
+
+function HowItWorks() {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        What happens next
+      </p>
+      <ol className="mt-2 flex flex-col gap-1.5">
+        {HOW_IT_WORKS_STEPS.map((step, i) => (
+          <li key={i} className="flex gap-2 text-sm text-slate-600">
+            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+              {i + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
