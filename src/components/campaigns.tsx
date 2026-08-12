@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ExternalLink,
@@ -28,7 +28,7 @@ import { CampaignChat } from "@/components/campaign-chat";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import { BUDGET_PRESETS, describeBudget } from "@/lib/campaign/budget";
-import { cn, formatCurrency, formatNumber } from "@/lib/utils";
+import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   paused: "bg-amber-50 text-amber-700",
@@ -70,10 +70,11 @@ export function Campaigns({
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
 
-  async function syncFromMeta() {
+  async function syncFromMeta(opts: { silent?: boolean } = {}) {
     setSyncing(true);
-    setError(null);
+    if (!opts.silent) setError(null);
     try {
       const res = await fetch("/api/campaigns/sync", { method: "POST" });
       const data = (await res.json()) as {
@@ -82,15 +83,25 @@ export function Campaigns({
       };
       if (res.ok && Array.isArray(data.campaigns)) {
         setCampaigns(data.campaigns);
-      } else if (!res.ok) {
+        setLastSynced(new Date());
+      } else if (!res.ok && !opts.silent) {
         setError(data.error ?? "Sync failed.");
       }
     } catch {
-      setError("Sync failed.");
+      if (!opts.silent) setError("Sync failed.");
     } finally {
       setSyncing(false);
     }
   }
+
+  // Auto-sync from Meta once when the page opens, so campaigns stay fresh.
+  const autoSynced = useRef(false);
+  useEffect(() => {
+    if (metaReady && !autoSynced.current) {
+      autoSynced.current = true;
+      void syncFromMeta({ silent: true });
+    }
+  }, [metaReady]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -375,19 +386,26 @@ export function Campaigns({
             </span>
           </h2>
           {metaReady && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={syncFromMeta}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              {lastSynced && !syncing && (
+                <span className="text-xs text-slate-400">
+                  Synced {timeAgo(lastSynced)}
+                </span>
               )}
-              Sync from Meta
-            </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => syncFromMeta()}
+                disabled={syncing}
+              >
+                {syncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {syncing ? "Syncing…" : "Sync from Meta"}
+              </Button>
+            </div>
           )}
         </div>
         {campaigns.length === 0 ? (
