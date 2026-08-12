@@ -9,6 +9,27 @@
 
 ---
 
+## North Star & principles
+
+**North Star:** a non-technical solar SMB owner gets **more leads at a lower cost**
+with **near-zero effort** — fill the brand once, type a goal, approve, done.
+Every feature must move that number.
+
+**What we deliberately DON'T build (so the product stays simple):**
+- A generic "any business" ad tool — stay **solar** until expansion is an obvious win.
+- Manual targeting micro-optimisation — **delegate to Meta Advantage+**, don't fight it.
+- A full CRM / analytics suite — keep lead tracking **lightweight**; integrate, don't rebuild.
+- New ad channels (Google, etc.) before Meta is nailed.
+- Dashboards a busy owner won't read — results are **one plain-language line** (and WhatsApp), not charts.
+
+## Roadmap focus
+
+| Horizon | Bets |
+| --- | --- |
+| **Now** | Guided onboarding · Spend guardrails & alerts · Weekly WhatsApp results digest · Instant new-lead alerts |
+| **Next** | AI-vs-baseline benchmark · Auto-optimisation · Lead → revenue (ROI) · Festival campaign suggestions |
+| **Later** | Self-serve multi-customer · Agency / white-label · Video creatives · Google Ads |
+
 ## 1. Auth & access
 | Status | Feature | Notes |
 | --- | --- | --- |
@@ -41,6 +62,8 @@
 | ✅ | Assets library | browse/reuse/download all AI-generated images (`/assets`) |
 | 📋 | Video creatives | when models are good/cheap enough |
 | 📋 | Creative winner detection | promote the best-performing variant |
+| 📋 | Festival / seasonal campaign suggestions | timely Diwali / Sankranti offers (India) |
+| 📋 | Language badge + regenerate-in-language | finish localisation (needs `creatives.language`) |
 
 ## 4. Campaigns & targeting
 | Status | Feature | Notes |
@@ -62,6 +85,8 @@
 | 🔒 | True A/B split tests | Meta Experiments API |
 | 📋 | Scheduled activation | launch at a chosen date/time |
 | 📋 | Auto-optimisation | pause losers, scale winners on CPL |
+| 📋 | Spend guardrails & alerts | weekly cap + "spent ₹X" — no runaway spend, builds trust |
+| 📋 | AI-vs-baseline benchmark | new AI ads vs the owner's previous ads (CPL lift) — the proof |
 | ✅ | Auto-sync on page load | silent sync when Campaigns opens; scheduled cron 📋 when hosted |
 
 ## 5. Leads
@@ -70,7 +95,9 @@
 | ✅ | Lead inbox | pulled from Meta instant forms, deduped |
 | ✅ | WhatsApp-style digest | copy-ready summary of recent leads |
 | 📋 | New-lead notifications | email / WhatsApp on arrival |
-| 📋 | CRM / follow-up automation | statuses, reminders |
+| 📋 | Speed-to-lead alert | ping the owner within seconds — solar conversion is a speed game |
+| 📋 | Lead → deal → revenue (ROI) | mark won + value; show return, not just cost per lead |
+| 📋 | CRM / follow-up automation | statuses, reminders (lightweight, not a full CRM) |
 
 ## 6. Results & optimisation
 | Status | Feature | Notes |
@@ -79,6 +106,7 @@
 | ✅ | Plain-language summaries | LLM, jargon-free |
 | ✅ | Performance context for planner | ranked past-campaign history |
 | ✅ | Markdown performance report export | download per business (`/api/campaigns/report`) |
+| 📋 | Weekly WhatsApp results digest | "14 leads at ₹19 each this week" — retention + the plain-language moat |
 | 📋 | Trends dashboard | CPL/leads over time |
 
 ## 7. Observability & security
@@ -118,3 +146,19 @@
 | 🚧 | Hosting on adbrain.vanshul.com | needs host (Vercel) + DNS + prod env |
 | 📋 | Billing / subscription | when multi-customer |
 | 🔒 | Google Ads integration | needs MCC/Basic Access — Phase 2 |
+
+## 11. Growth & business model
+| Status | Feature | Notes |
+| --- | --- | --- |
+| 📋 | Guided onboarding wizard | first brand → first creatives → first paused campaign in one flow (activation) |
+| 🔒 | Self-serve customer onboarding | needs multi-tenant OAuth (Phase 2) |
+| 📋 | Referrals | solar SMBs invite other SMBs |
+| 📋 | Agency / white-label | resellers manage many brands under one login |
+| 📋 | Pricing tiers + billing | monetisation once multi-customer |
+
+## 12. Solar vertical depth
+| Status | Feature | Notes |
+| --- | --- | --- |
+| 📋 | Savings calculator in the funnel | qualify + raise lead intent (Solaride already has one) |
+| 📋 | Subsidy eligibility helper | PM Surya Ghar guidance — India solar-specific |
+| 📋 | Bill-based lead qualification | ask the monthly bill in the form → prioritise hot leads |
