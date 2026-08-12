@@ -134,10 +134,11 @@ export function buildCopyMessages(
   brief: string,
   angle: SolarAngle,
   instructions?: string,
+  language?: string,
 ): ChatMessage[] {
-  const langs = brand.languages?.length
-    ? brand.languages.join(" and ")
-    : "English";
+  const langs =
+    language?.trim() ||
+    (brand.languages?.length ? brand.languages.join(" and ") : "English");
   return [
     {
       role: "system",

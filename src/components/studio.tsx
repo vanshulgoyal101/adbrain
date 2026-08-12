@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { AD_LANGUAGES } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ export function Studio({
   const [items, setItems] = useState<Creative[]>(initialCreatives);
   const [brief, setBrief] = useState("");
   const [count, setCount] = useState(3);
+  const [language, setLanguage] = useState("brand");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -51,7 +53,7 @@ export function Studio({
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: business.id, brief, count }),
+        body: JSON.stringify({ businessId: business.id, brief, count, language }),
       });
       const data = (await res.json()) as {
         creatives?: Creative[];
@@ -129,6 +131,21 @@ export function Studio({
                   {[3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
                       {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="language">Language</Label>
+                <select
+                  id="language"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                >
+                  {AD_LANGUAGES.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
                     </option>
                   ))}
                 </select>

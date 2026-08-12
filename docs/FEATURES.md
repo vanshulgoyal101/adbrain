@@ -27,7 +27,7 @@
 | ✅ | Autofill from website | scrape + LLM extract; SSRF-guarded (`lib/security/ssrf.ts`) |
 | ✅ | Per-customer instruction files | Markdown, injected into every prompt |
 | 📋 | Brand voice fine-tuning | learn tone from approved creatives |
-| 📋 | Multi-language brand (Hindi/Punjabi) | localise copy per region |
+| ✅ | Multi-language creatives (Hindi/Punjabi/Hinglish) | pick a language per generation in the Studio |
 
 ## 3. Creative Studio
 | Status | Feature | Notes |

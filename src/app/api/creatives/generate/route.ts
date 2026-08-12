@@ -3,6 +3,7 @@ import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
 import { persistCreativeImage } from "@/lib/creative/persist";
+import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
@@ -23,12 +24,14 @@ export async function POST(req: Request) {
     businessId?: string;
     brief?: string;
     count?: number;
+    language?: string;
   } | null;
 
   const businessId = (body?.businessId ?? "").trim();
   const brief = (body?.brief ?? "").trim();
   const rawCount = Number(body?.count ?? 3);
   const count = Number.isFinite(rawCount) ? rawCount : 3;
+  const language = languagePromptName(body?.language);
 
   if (!businessId || !brief) {
     return NextResponse.json(
@@ -50,7 +53,13 @@ export async function POST(req: Request) {
   const instructions = await getActiveInstructionsText(businessId);
   let variants;
   try {
-    variants = await generateVariants({ brand: business, brief, count, instructions });
+    variants = await generateVariants({
+      brand: business,
+      brief,
+      count,
+      instructions,
+      language,
+    });
   } catch (err) {
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json(

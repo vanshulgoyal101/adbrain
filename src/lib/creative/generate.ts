@@ -31,8 +31,9 @@ export async function generateVariants(params: {
   angleIds?: string[];
   count?: number;
   instructions?: string;
+  language?: string;
 }): Promise<GeneratedVariant[]> {
-  const { brand, brief, instructions } = params;
+  const { brand, brief, instructions, language } = params;
   const count = Math.min(Math.max(params.count ?? 3, 1), SOLAR_ANGLES.length);
 
   const angles: SolarAngle[] = (
@@ -44,7 +45,9 @@ export async function generateVariants(params: {
   ).slice(0, count);
 
   return Promise.all(
-    angles.map((angle) => generateOneVariant(brand, brief, angle, instructions)),
+    angles.map((angle) =>
+      generateOneVariant(brand, brief, angle, instructions, language),
+    ),
   );
 }
 
@@ -53,10 +56,11 @@ export async function generateOneVariant(
   brief: string,
   angle: SolarAngle,
   instructions?: string,
+  language?: string,
 ): Promise<GeneratedVariant> {
   const [copy, image] = await Promise.all([
     completeJSON<GeneratedCopy>(
-      buildCopyMessages(brand, brief, angle, instructions),
+      buildCopyMessages(brand, brief, angle, instructions, language),
       {
         temperature: 0.8,
         maxTokens: 400,
