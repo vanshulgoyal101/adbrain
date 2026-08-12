@@ -154,7 +154,7 @@ export function AssetsLibrary({
                 badges={[
                   ...(c.angle ? [{ label: c.angle }] : []),
                   ...(c.status === "approved"
-                    ? [{ label: "Approved", className: "bg-emerald-600" }]
+                    ? [{ label: "Approved", className: "bg-blue-600" }]
                     : []),
                 ]}
               />

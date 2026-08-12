@@ -112,7 +112,7 @@ export function LeadInbox({
         <Card>
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <MessageCircle className="h-4 w-4 text-emerald-600" />
+              <MessageCircle className="h-4 w-4 text-blue-600" />
               WhatsApp digest
             </div>
             <pre className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
@@ -121,7 +121,7 @@ export function LeadInbox({
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={copyDigest}>
                 {copied ? (
-                  <Check className="h-4 w-4 text-emerald-600" />
+                  <Check className="h-4 w-4 text-blue-600" />
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
@@ -170,7 +170,7 @@ export function LeadInbox({
                     {l.phone ? (
                       <a
                         href={`tel:${l.phone}`}
-                        className="text-emerald-700 hover:underline"
+                        className="text-blue-700 hover:underline"
                       >
                         {l.phone}
                       </a>

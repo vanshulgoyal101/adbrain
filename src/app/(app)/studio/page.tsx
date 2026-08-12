@@ -16,7 +16,7 @@ export default async function StudioPage() {
         <h1 className="text-2xl font-bold text-slate-900">Creative Studio</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">

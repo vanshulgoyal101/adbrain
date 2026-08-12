@@ -16,7 +16,7 @@ export default function Error({
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-      <p className="text-sm font-medium text-emerald-600">AdBrain</p>
+      <p className="text-sm font-medium text-blue-600">AdBrain</p>
       <h1 className="text-xl font-semibold text-slate-900">
         Something went wrong
       </h1>

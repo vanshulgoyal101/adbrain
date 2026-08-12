@@ -227,7 +227,7 @@ Extract what you can into strict JSON with these optional keys (omit a key if un
   "description": string,            // 1–2 sentence summary of what they do
   "vertical": string,              // the industry / business type, e.g. "solar energy", "dental clinic", "gym"
   "brand_voice": string,            // e.g. "friendly, trustworthy, no-jargon"
-  "primary_color": string,          // hex like #0A7E3D if evident, else omit
+  "primary_color": string,          // hex like #2563EB if evident, else omit
   "secondary_color": string,
   "target_audience": string,
   "usps": string[],                 // unique selling points / differentiators

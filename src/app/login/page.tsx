@@ -14,7 +14,7 @@ export default function LoginPage() {
     <div className="flex min-h-full items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white">
+          <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
             <Brain className="h-6 w-6" />
           </span>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">

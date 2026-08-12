@@ -51,7 +51,7 @@ function ModeToggle({
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-3 py-1 font-medium transition-colors",
           mode === "ai"
-            ? "bg-white text-emerald-700 shadow-sm"
+            ? "bg-white text-blue-700 shadow-sm"
             : "text-slate-500 hover:text-slate-700",
         )}
       >
@@ -135,7 +135,7 @@ function LocationPicker({
 
   const chip =
     tone === "include"
-      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+      ? "bg-blue-50 text-blue-800 border-blue-200"
       : "bg-rose-50 text-rose-800 border-rose-200";
 
   return (
@@ -258,7 +258,7 @@ export function TargetingControls({
         </div>
 
         {value.locationMode === "ai" ? (
-          <p className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">
+          <p className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-sm text-blue-800">
             {brandAreas.length ? (
               <>
                 AdBrain will target your service areas from your Brand Brain:{" "}
@@ -322,7 +322,7 @@ export function TargetingControls({
               step={5}
               value={value.radiusKm}
               onChange={(e) => set({ radiusKm: Number(e.target.value) })}
-              className="w-full accent-emerald-600"
+              className="w-full accent-blue-600"
             />
           </div>
         )}
@@ -351,7 +351,7 @@ export function TargetingControls({
               max={65}
               value={value.ageMin}
               onChange={(e) => set({ ageMin: Number(e.target.value) })}
-              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-emerald-500"
+              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-blue-500"
             />
             <span className="text-slate-400">to</span>
             <input
@@ -360,7 +360,7 @@ export function TargetingControls({
               max={65}
               value={value.ageMax}
               onChange={(e) => set({ ageMax: Number(e.target.value) })}
-              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-emerald-500"
+              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-blue-500"
             />
           </div>
         )}

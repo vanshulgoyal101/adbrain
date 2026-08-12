@@ -38,7 +38,7 @@ export function Nav({
             className={cn(
               "flex items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "bg-emerald-50 text-emerald-700"
+                ? "bg-blue-50 text-blue-700"
                 : "text-slate-600 hover:bg-slate-100",
             )}
           >

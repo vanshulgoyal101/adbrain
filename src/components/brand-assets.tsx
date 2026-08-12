@@ -147,7 +147,7 @@ export function BrandAssets({
                 id="asset-type"
                 value={type}
                 onChange={(e) => setType(e.target.value as BrandAssetType)}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
               >
                 {(Object.keys(TYPE_LABELS) as BrandAssetType[]).map((t) => (
                   <option key={t} value={t}>

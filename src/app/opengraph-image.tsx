@@ -16,7 +16,7 @@ export default function OpengraphImage() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: "linear-gradient(135deg, #ecfdf5 0%, #ffffff 55%, #d1fae5 100%)",
+          background: "linear-gradient(135deg, #eff6ff 0%, #ffffff 55%, #dbeafe 100%)",
           padding: "80px",
           fontFamily: "sans-serif",
         }}
@@ -27,14 +27,16 @@ export default function OpengraphImage() {
               width: 72,
               height: 72,
               borderRadius: 18,
-              background: "#059669",
+              background: "#2563eb",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: 40,
+              color: "#ffffff",
+              fontWeight: 800,
             }}
           >
-            ☀
+            A
           </div>
           <div style={{ fontSize: 40, fontWeight: 800, color: "#0f172a" }}>
             {siteConfig.name}
@@ -64,9 +66,9 @@ export default function OpengraphImage() {
               key={t}
               style={{
                 fontSize: 26,
-                color: "#047857",
+                color: "#1d4ed8",
                 background: "#ffffff",
-                border: "2px solid #a7f3d0",
+                border: "2px solid #bfdbfe",
                 borderRadius: 999,
                 padding: "10px 24px",
               }}

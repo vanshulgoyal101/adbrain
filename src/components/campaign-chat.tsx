@@ -171,7 +171,7 @@ export function CampaignChat({
               if (turn.role === "user") {
                 return (
                   <div key={i} className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-emerald-600 px-3.5 py-2 text-sm text-white">
+                    <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-blue-600 px-3.5 py-2 text-sm text-white">
                       {turn.text}
                     </div>
                   </div>
@@ -212,7 +212,7 @@ export function CampaignChat({
                                     className={cn(
                                       "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                                       picked
-                                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                                        ? "border-blue-500 bg-blue-50 text-blue-700"
                                         : "border-slate-300 text-slate-600 hover:border-slate-400",
                                     )}
                                   >

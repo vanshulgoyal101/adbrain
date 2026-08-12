@@ -50,9 +50,9 @@ export function LoginForm() {
 
   if (status === "sent") {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center">
-        <p className="font-medium text-emerald-800">Check your email</p>
-        <p className="mt-1 text-sm text-emerald-700">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 text-center">
+        <p className="font-medium text-blue-800">Check your email</p>
+        <p className="mt-1 text-sm text-blue-700">
           We sent a magic link to <span className="font-medium">{email}</span>.
         </p>
       </div>

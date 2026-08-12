@@ -36,7 +36,7 @@ import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
   paused: "bg-amber-50 text-amber-700",
-  active: "bg-emerald-50 text-emerald-700",
+  active: "bg-blue-50 text-blue-700",
   draft: "bg-slate-100 text-slate-600",
   completed: "bg-slate-100 text-slate-600",
 };
@@ -315,7 +315,7 @@ export function Campaigns({
                           className={cn(
                             "overflow-hidden rounded-lg border-2 text-left transition-colors",
                             isSel
-                              ? "border-emerald-500"
+                              ? "border-blue-500"
                               : "border-transparent hover:border-slate-200",
                           )}
                         >
@@ -363,7 +363,7 @@ export function Campaigns({
                       id="leadform"
                       value={leadFormId}
                       onChange={(e) => setLeadFormId(e.target.value)}
-                      className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500"
+                      className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                     >
                       {leadForms.length === 0 && (
                         <option value="">No lead forms found</option>
@@ -387,14 +387,14 @@ export function Campaigns({
                       className={cn(
                         "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                         budget === amount
-                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
                           : "border-slate-200 text-slate-600 hover:border-slate-300",
                       )}
                     >
                       ₹{amount}/day
                     </button>
                   ))}
-                  <span className="ml-auto text-xs font-medium text-emerald-700">
+                  <span className="ml-auto text-xs font-medium text-blue-700">
                     {describeBudget(budget)}
                   </span>
                 </div>
@@ -419,7 +419,7 @@ export function Campaigns({
                     type="checkbox"
                     checked={abTest}
                     onChange={(e) => setAbTest(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-emerald-600"
+                    className="mt-0.5 h-4 w-4 accent-blue-600"
                   />
                   <span className="text-sm">
                     <span className="font-medium text-slate-800">
@@ -540,7 +540,7 @@ export function Campaigns({
                             href={adsLink(c.meta_campaign_id)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:underline"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline"
                           >
                             Ads Manager <ExternalLink className="h-3.5 w-3.5" />
                           </a>
@@ -647,7 +647,7 @@ function HowItWorks() {
       <ol className="mt-2 flex flex-col gap-1.5">
         {HOW_IT_WORKS_STEPS.map((step, i) => (
           <li key={i} className="flex gap-2 text-sm text-slate-600">
-            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+            <span className="flex h-5 w-5 flex-none items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
               {i + 1}
             </span>
             <span>{step}</span>

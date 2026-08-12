@@ -207,7 +207,7 @@ export function BrandForm({ business }: { business: Business | null }) {
               name="primary_color"
               value={fields.primary_color}
               onChange={(e) => set("primary_color", e.target.value)}
-              placeholder="#0A7E3D"
+              placeholder="#2563EB"
             />
           </Field>
           <Field label="Secondary color">
@@ -281,7 +281,7 @@ export function BrandForm({ business }: { business: Business | null }) {
           Save Brand Brain
         </Button>
         {state.ok && (
-          <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700">
+          <span className="inline-flex items-center gap-1.5 text-sm text-blue-700">
             <CheckCircle2 className="h-4 w-4" /> Saved
           </span>
         )}

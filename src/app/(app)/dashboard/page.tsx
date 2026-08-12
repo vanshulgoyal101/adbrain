@@ -22,7 +22,7 @@ export default async function DashboardPage() {
         </p>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
             <div>
@@ -71,7 +71,7 @@ export default async function DashboardPage() {
         {stats.map(({ label, value, icon: Icon }) => (
           <Card key={label}>
             <CardContent className="flex items-center gap-4">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                 <Icon className="h-5 w-5" />
               </span>
               <div>
