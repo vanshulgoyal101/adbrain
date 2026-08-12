@@ -11,6 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JsonLd } from "@/components/json-ld";
 import { faqSchema, MARKETING_FAQS } from "@/lib/seo/jsonLd";
 import { getUser } from "@/lib/supabase/queries";
 
@@ -68,10 +69,7 @@ export default async function Home() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema()) }}
-      />
+      <JsonLd data={faqSchema()} />
 
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between p-6">
         <div className="flex items-center gap-2">
@@ -185,7 +183,15 @@ export default async function Home() {
             <ImageIcon className="h-4 w-4 text-emerald-600" />
             <span>AdBrain — AI ad creative for any local business</span>
           </div>
-          <p>© {new Date().getFullYear()} AdBrain. All rights reserved.</p>
+          <nav className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:underline">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:underline">
+              Terms
+            </Link>
+            <span>© {new Date().getFullYear()} AdBrain.</span>
+          </nav>
         </div>
       </footer>
     </div>

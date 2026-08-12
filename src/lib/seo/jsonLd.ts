@@ -45,6 +45,42 @@ export function webSiteSchema(): JsonLdObject {
   };
 }
 
+/** A single content page (privacy, terms, etc.), tied to the WebSite entity. */
+export function webPageSchema(opts: {
+  path: string;
+  name: string;
+  description: string;
+}): JsonLdObject {
+  const url = absoluteUrl(opts.path);
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": `${url}#webpage`,
+    url,
+    name: opts.name,
+    description: opts.description,
+    inLanguage: "en",
+    isPartOf: { "@id": WEBSITE_ID },
+    publisher: { "@id": ORG_ID },
+  };
+}
+
+/** Breadcrumb trail so Google shows the site hierarchy under the result. */
+export function breadcrumbSchema(
+  items: { name: string; path: string }[],
+): JsonLdObject {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: item.name,
+      item: absoluteUrl(item.path),
+    })),
+  };
+}
+
 /**
  * The product itself as a SoftwareApplication — the entity Google uses for
  * app/product rich results.
@@ -76,19 +112,43 @@ export function softwareApplicationSchema(): JsonLdObject {
   };
 }
 
+/** Drop the per-node @context so nodes can be embedded inside a single @graph. */
+function stripContext(o: JsonLdObject): JsonLdObject {
+  const { "@context": _omit, ...rest } = o;
+  void _omit;
+  return rest as JsonLdObject;
+}
+
+type Graph = { "@context": "https://schema.org"; "@graph": JsonLdObject[] };
+
 /** The full @graph embedded on the marketing pages. */
-export function marketingGraph(): { "@context": "https://schema.org"; "@graph": JsonLdObject[] } {
-  const strip = (o: JsonLdObject) => {
-    const { "@context": _omit, ...rest } = o;
-    void _omit;
-    return rest as JsonLdObject;
-  };
+export function marketingGraph(): Graph {
   return {
     "@context": "https://schema.org",
     "@graph": [
-      strip(organizationSchema()),
-      strip(webSiteSchema()),
-      strip(softwareApplicationSchema()),
+      stripContext(organizationSchema()),
+      stripContext(webSiteSchema()),
+      stripContext(softwareApplicationSchema()),
+    ],
+  };
+}
+
+/** @graph for a standalone content page (privacy, terms) with a breadcrumb. */
+export function contentPageGraph(opts: {
+  path: string;
+  name: string;
+  description: string;
+}): Graph {
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      stripContext(webPageSchema(opts)),
+      stripContext(
+        breadcrumbSchema([
+          { name: "Home", path: "/" },
+          { name: opts.name, path: opts.path },
+        ]),
+      ),
     ],
   };
 }

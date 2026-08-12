@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { JsonLd } from "@/components/json-ld";
 import { marketingGraph } from "@/lib/seo/jsonLd";
 import { siteConfig } from "@/lib/site";
 import "./globals.css";
@@ -61,12 +62,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
+      <head>
+        <link rel="preconnect" href="https://vanshul.com" />
+        <link rel="dns-prefetch" href="https://vanshul.com" />
+      </head>
       <body className="min-h-full flex flex-col">
-        <script
-          type="application/ld+json"
-          // Structured data for search engines (Organization, WebSite, App).
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(marketingGraph()) }}
-        />
+        <JsonLd data={marketingGraph()} />
         {children}
         {/* Unified usage analytics (privacy-friendly, no cookies) */}
         <Script src="https://vanshul.com/a.js" data-site="adbrain" strategy="afterInteractive" />

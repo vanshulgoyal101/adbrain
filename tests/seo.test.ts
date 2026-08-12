@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import {
+  breadcrumbSchema,
+  contentPageGraph,
   faqSchema,
   MARKETING_FAQS,
   marketingGraph,
   organizationSchema,
   softwareApplicationSchema,
+  webPageSchema,
   webSiteSchema,
 } from "@/lib/seo/jsonLd";
 
@@ -85,5 +88,58 @@ describe("faqSchema", () => {
     const questions = MARKETING_FAQS.map((f) => f.question);
     expect(new Set(questions).size).toBe(questions.length);
     expect(() => JSON.stringify(faqSchema())).not.toThrow();
+  });
+});
+
+describe("webPageSchema", () => {
+  it("builds a WebPage tied to the website and org", () => {
+    const page = webPageSchema({
+      path: "/privacy",
+      name: "Privacy Policy",
+      description: "How we handle data.",
+    });
+    expect(page["@type"]).toBe("WebPage");
+    expect(page.url).toBe(`${siteConfig.url}/privacy`);
+    expect(page["@id"]).toBe(`${siteConfig.url}/privacy#webpage`);
+    expect(page.isPartOf).toEqual({ "@id": `${siteConfig.url}/#website` });
+  });
+});
+
+describe("breadcrumbSchema", () => {
+  it("numbers items from 1 and resolves absolute urls", () => {
+    const crumb = breadcrumbSchema([
+      { name: "Home", path: "/" },
+      { name: "Terms", path: "/terms" },
+    ]);
+    expect(crumb["@type"]).toBe("BreadcrumbList");
+    const items = crumb.itemListElement as Array<{
+      position: number;
+      name: string;
+      item: string;
+    }>;
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ position: 1, name: "Home", item: siteConfig.url });
+    expect(items[1]).toMatchObject({
+      position: 2,
+      name: "Terms",
+      item: `${siteConfig.url}/terms`,
+    });
+  });
+});
+
+describe("contentPageGraph", () => {
+  it("bundles a WebPage + BreadcrumbList without repeating @context", () => {
+    const graph = contentPageGraph({
+      path: "/terms",
+      name: "Terms of Service",
+      description: "The rules.",
+    });
+    expect(graph["@context"]).toBe("https://schema.org");
+    const types = graph["@graph"].map((n) => n["@type"]);
+    expect(types).toEqual(["WebPage", "BreadcrumbList"]);
+    for (const node of graph["@graph"]) {
+      expect(node).not.toHaveProperty("@context");
+    }
+    expect(() => JSON.stringify(graph)).not.toThrow();
   });
 });
