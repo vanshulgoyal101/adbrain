@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 import {
+  faqSchema,
+  MARKETING_FAQS,
   marketingGraph,
   organizationSchema,
   softwareApplicationSchema,
@@ -58,5 +60,30 @@ describe("jsonLd builders", () => {
 
   it("produces valid serializable JSON", () => {
     expect(() => JSON.stringify(marketingGraph())).not.toThrow();
+  });
+});
+
+describe("faqSchema", () => {
+  it("is a FAQPage with a Question/Answer per FAQ", () => {
+    const schema = faqSchema();
+    expect(schema["@type"]).toBe("FAQPage");
+    const entities = schema.mainEntity as Array<{
+      "@type": string;
+      name: string;
+      acceptedAnswer: { "@type": string; text: string };
+    }>;
+    expect(entities).toHaveLength(MARKETING_FAQS.length);
+    for (const q of entities) {
+      expect(q["@type"]).toBe("Question");
+      expect(q.name.length).toBeGreaterThan(0);
+      expect(q.acceptedAnswer["@type"]).toBe("Answer");
+      expect(q.acceptedAnswer.text.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("has non-empty, unique questions and serializes", () => {
+    const questions = MARKETING_FAQS.map((f) => f.question);
+    expect(new Set(questions).size).toBe(questions.length);
+    expect(() => JSON.stringify(faqSchema())).not.toThrow();
   });
 });
