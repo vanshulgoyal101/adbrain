@@ -9,13 +9,32 @@ export interface CampaignPlan {
   age_min: number;
   age_max: number;
   locations: string[];
+  excluded_locations: string[];
   rationale: string;
+}
+
+export type PlannerQuestionType = "single" | "multi" | "text";
+
+/** A structured question the UI renders as selectable options (Copilot-style). */
+export interface PlannerQuestion {
+  id: string;
+  question: string;
+  help?: string;
+  type: PlannerQuestionType;
+  options?: string[];
+  allowText?: boolean;
 }
 
 export interface PlannerLLMResult {
   ready: boolean;
-  questions?: string[];
+  questions?: PlannerQuestion[];
   plan?: CampaignPlan;
+}
+
+/** One answered question, sent back to continue the interview. */
+export interface PlannerAnswer {
+  question: string;
+  answer: string;
 }
 
 export interface PlannerInput {
@@ -25,6 +44,14 @@ export interface PlannerInput {
   leadForms: { id: string; name: string }[];
   goal: string;
   answers?: string;
+}
+
+/** Format structured answers into the transcript the planner reads. */
+export function formatAnswers(answers: PlannerAnswer[]): string {
+  return answers
+    .filter((a) => a.answer.trim())
+    .map((a) => `Q: ${a.question}\nA: ${a.answer}`)
+    .join("\n\n");
 }
 
 function brandLine(brand: BrandContext): string {
@@ -48,19 +75,21 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
     {
       role: "system",
       content:
-        "You are a senior Meta ads strategist for a solar company, planning a " +
-        "lead-generation campaign. Rules: (1) Only use the creative IDs and lead " +
-        "form IDs provided — NEVER invent IDs. (2) If you lack information needed " +
-        "for a good decision (e.g. daily budget, which offer/area to push), set " +
-        "ready=false and ask concise clarifying questions instead of guessing. " +
-        "(3) Never fabricate facts, prices, or guarantees. (4) Meta Advantage+ " +
-        "handles fine audience optimization, so keep the audience simple: a " +
-        "sensible age range (18–65). (5) LOCATION MATTERS for a local solar " +
-        "installer: target the specific cities/areas the business serves. Use the " +
-        "brand's listed Areas, or an area the user names in the goal, as " +
-        "`locations` (city or state names, e.g. [\"Jaipur\"]). If no area is " +
-        "known and it matters, ask instead of guessing. Leave `locations` empty " +
-        "ONLY for a deliberately nationwide campaign. Output ONLY valid JSON.",
+        "You are a senior Meta ads strategist for a solar company, interviewing a " +
+        "non-technical business owner to plan a lead-generation campaign. Think like " +
+        "a helpful assistant that asks ONE screen of clear multiple-choice questions " +
+        "at a time. Rules: (1) Only use the creative IDs and lead form IDs provided — " +
+        "NEVER invent IDs. (2) If you lack information for a good decision, set " +
+        "ready=false and ask concise, CONCRETE questions with sensible options the " +
+        "user can click — do not ask open-ended essays. Prefer 2–5 options each; add " +
+        "\"allowText\": true when the user may want to type their own. Cover, when " +
+        "unknown: which area(s) to TARGET, which nearby areas to EXCLUDE (so they " +
+        "don't get out-of-area calls), daily budget, and which offer/angle to push. " +
+        "(3) Never fabricate facts, prices, or guarantees. (4) Keep the audience " +
+        "simple (a sensible age range). (5) LOCATION MATTERS for a local installer: " +
+        "use the brand's Areas or an area named in the goal for `locations`, and put " +
+        "nearby unwanted towns in `excluded_locations`. Ask instead of guessing when " +
+        "it matters. Output ONLY valid JSON.",
     },
     {
       role: "user",
@@ -75,11 +104,11 @@ ${forms}
 CURRENCY: INR. Minimum sensible daily budget is ₹150.
 
 USER GOAL: ${input.goal}
-${input.answers ? `\nUSER ANSWERS TO YOUR QUESTIONS:\n${input.answers}\n` : ""}
-Decide the campaign. If you have enough info, return:
-{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string, "creative_ids": string[], "age_min": number, "age_max": number, "locations": string[], "rationale": string}}
+${input.answers ? `\nANSWERS SO FAR:\n${input.answers}\n` : ""}
+If you have enough info, return:
+{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string, "creative_ids": string[], "age_min": number, "age_max": number, "locations": string[], "excluded_locations": string[], "rationale": string}}
 If you need more info, return:
-{"ready": false, "questions": string[]}`,
+{"ready": false, "questions": [{"id": string, "question": string, "help": string, "type": "single"|"multi"|"text", "options": string[], "allowText": boolean}]}`,
     },
   ];
 }
@@ -89,6 +118,6 @@ export async function runPlanner(
 ): Promise<PlannerLLMResult> {
   return completeJSON<PlannerLLMResult>(buildPlannerMessages(input), {
     temperature: 0.4,
-    maxTokens: 1200,
+    maxTokens: 1500,
   });
 }

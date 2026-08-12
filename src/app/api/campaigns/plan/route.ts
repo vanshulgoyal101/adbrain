@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
-import { runPlanner } from "@/lib/campaign/planner";
+import {
+  formatAnswers,
+  runPlanner,
+  type PlannerAnswer,
+  type PlannerQuestion,
+} from "@/lib/campaign/planner";
 import {
   MetaError,
   metaClientFromEnv,
@@ -21,6 +26,13 @@ export const maxDuration = 60;
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(Math.max(n, lo), hi);
 
+/** A non-answerable informational message rendered in the chat. */
+const note = (text: string): PlannerQuestion => ({
+  id: "note",
+  question: text,
+  type: "text",
+});
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -32,10 +44,15 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => null)) as {
     goal?: string;
-    answers?: string;
+    answers?: PlannerAnswer[] | string;
   } | null;
   const goal = (body?.goal ?? "").trim();
-  const answers = (body?.answers ?? "").trim() || undefined;
+  const rawAnswers = body?.answers;
+  const answers = Array.isArray(rawAnswers)
+    ? formatAnswers(rawAnswers) || undefined
+    : typeof rawAnswers === "string"
+      ? rawAnswers.trim() || undefined
+      : undefined;
   if (!goal) {
     return NextResponse.json({ error: "goal is required" }, { status: 400 });
   }
@@ -55,7 +72,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ready: false,
       questions: [
-        "You don't have any approved creatives yet. Generate a batch in the Creative Studio and approve the ones you like, then come back.",
+        note(
+          "You don't have any approved creatives yet. Generate a batch in the Creative Studio and approve the ones you like, then come back.",
+        ),
       ],
     });
   }
@@ -70,7 +89,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ready: false,
       questions: [
-        "I couldn't find an active lead form on your Facebook Page. Create one in Meta (or make sure the app has access), then try again.",
+        note(
+          "I couldn't find an active lead form on your Facebook Page. Create one in Meta (or make sure the app has access), then try again.",
+        ),
       ],
     });
   }
@@ -100,7 +121,11 @@ export async function POST(req: Request) {
       ready: false,
       questions: result.questions?.length
         ? result.questions
-        : ["Could you tell me your daily budget and which area or offer to focus on?"],
+        : [
+            note(
+              "Could you tell me your daily budget and which area or offer to focus on?",
+            ),
+          ],
     });
   }
 
@@ -117,7 +142,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ready: false,
       questions: [
-        "The chosen creatives are missing images. Regenerate them in the Studio, then try again.",
+        note(
+          "The chosen creatives are missing images. Regenerate them in the Studio, then try again.",
+        ),
       ],
     });
   }
@@ -150,6 +177,24 @@ export async function POST(req: Request) {
     }
   }
 
+  // Resolve nearby areas to exclude (so the business avoids out-of-area calls).
+  const excludeNames = Array.isArray(result.plan.excluded_locations)
+    ? result.plan.excluded_locations.filter((s): s is string => typeof s === "string")
+    : [];
+  let excludedLocation: GeoTargeting | undefined;
+  let excludeLabel = "";
+  if (excludeNames.length) {
+    try {
+      const resolved = await meta.resolveGeoTargeting(excludeNames);
+      if (resolved.matched.length) {
+        excludedLocation = resolved.targeting;
+        excludeLabel = resolved.matched.map((m) => m.label).join(", ");
+      }
+    } catch {
+      // Exclusions are best-effort.
+    }
+  }
+
   let created;
   try {
     created = await meta.createLeadCampaign({
@@ -166,6 +211,7 @@ export async function POST(req: Request) {
       ageMin,
       ageMax,
       location,
+      excludedLocation,
     });
   } catch (err) {
     return NextResponse.json(
@@ -206,6 +252,7 @@ export async function POST(req: Request) {
       ageMax,
       locations: targetNames,
       area: areaLabel,
+      excluded: excludeNames,
     },
   });
 
@@ -218,7 +265,8 @@ export async function POST(req: Request) {
         : ""
     }.`,
     `Lead form: “${leadForm.name}”.`,
-    `Audience: ${areaLabel}, ages ${ageMin}–${ageMax}; Meta Advantage+ optimises delivery.`,
+    `Audience: ${areaLabel} (residents only), ages ${ageMin}–${ageMax}.`,
+    excludeLabel ? `Excluded: ${excludeLabel}.` : "",
     result.plan.rationale ? `Why: ${result.plan.rationale}` : "",
     "It's paused — review and activate it in Meta Ads Manager when you're ready to spend.",
   ]

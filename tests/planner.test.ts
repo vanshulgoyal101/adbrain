@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPlannerMessages } from "@/lib/campaign/planner";
+import { buildPlannerMessages, formatAnswers } from "@/lib/campaign/planner";
 
 describe("campaign planner prompt", () => {
   it("includes creative ids, lead form ids, goal, and the no-invent rule", () => {
@@ -25,5 +25,38 @@ describe("campaign planner prompt", () => {
       answers: "budget is 500",
     });
     expect(msgs[1].content).toContain("budget is 500");
+  });
+
+  it("asks for structured questions with options and an exclude field", () => {
+    const msgs = buildPlannerMessages({
+      brand: { name: "Solaride" },
+      approved: [{ id: "c", angle: null, headline: null }],
+      leadForms: [{ id: "f", name: "F" }],
+      goal: "g",
+    });
+    const sys = msgs[0].content;
+    const user = msgs[1].content;
+    expect(sys).toMatch(/exclude/i);
+    expect(sys).toMatch(/options/i);
+    expect(user).toContain("excluded_locations");
+    expect(user).toContain('"type": "single"|"multi"|"text"');
+  });
+});
+
+describe("formatAnswers", () => {
+  it("formats answered questions into a Q/A transcript", () => {
+    const out = formatAnswers([
+      { question: "Budget?", answer: "₹300/day" },
+      { question: "Exclude?", answer: "Zirakpur, Kharar" },
+    ]);
+    expect(out).toBe("Q: Budget?\nA: ₹300/day\n\nQ: Exclude?\nA: Zirakpur, Kharar");
+  });
+
+  it("skips questions with empty answers", () => {
+    const out = formatAnswers([
+      { question: "A?", answer: "" },
+      { question: "B?", answer: "yes" },
+    ]);
+    expect(out).toBe("Q: B?\nA: yes");
   });
 });

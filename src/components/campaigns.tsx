@@ -18,12 +18,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input, Label, Textarea } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
 import {
   TargetingControls,
   defaultTargeting,
   type TargetingValue,
 } from "@/components/targeting-controls";
+import { CampaignChat } from "@/components/campaign-chat";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import { BUDGET_PRESETS, describeBudget } from "@/lib/campaign/budget";
@@ -88,51 +89,6 @@ export function Campaigns({
       setError("Sync failed.");
     } finally {
       setSyncing(false);
-    }
-  }
-
-  const [aiGoal, setAiGoal] = useState("");
-  const [aiAnswers, setAiAnswers] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiQuestions, setAiQuestions] = useState<string[] | null>(null);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  async function planWithAI() {
-    setAiLoading(true);
-    setAiError(null);
-    setAiQuestions(null);
-    setAiSummary(null);
-    try {
-      const res = await fetch("/api/campaigns/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: aiGoal, answers: aiAnswers || undefined }),
-      });
-      const data = (await res.json()) as {
-        ready?: boolean;
-        questions?: string[];
-        summary?: string;
-        campaign?: Campaign;
-        error?: string;
-      };
-      if (!res.ok) {
-        setAiError(data.error ?? "Planning failed.");
-        return;
-      }
-      if (data.ready === false) {
-        setAiQuestions(data.questions ?? []);
-        return;
-      }
-      if (data.summary) setAiSummary(data.summary);
-      if (data.campaign)
-        setCampaigns((prev) => [data.campaign as Campaign, ...prev]);
-      setAiAnswers("");
-      setAiGoal("");
-    } catch {
-      setAiError("Planning failed.");
-    } finally {
-      setAiLoading(false);
     }
   }
 
@@ -250,60 +206,9 @@ export function Campaigns({
       )}
 
       {metaReady && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Launch with AI</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <p className="text-sm text-slate-500">
-              Describe your goal. The AI picks creatives, budget, lead form and
-              audience — and asks if it needs more — then creates a paused
-              campaign.
-            </p>
-            <Textarea
-              value={aiGoal}
-              onChange={(e) => setAiGoal(e.target.value)}
-              rows={2}
-              maxLength={1000}
-              placeholder="e.g. Get more rooftop solar leads in Hisar this month, around ₹500/day, push the free site visit."
-            />
-            {aiQuestions && aiQuestions.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p className="text-sm font-medium text-amber-800">
-                  A few questions first:
-                </p>
-                <ul className="mt-1 list-disc pl-5 text-sm text-amber-700">
-                  {aiQuestions.map((q, i) => (
-                    <li key={i}>{q}</li>
-                  ))}
-                </ul>
-                <Textarea
-                  value={aiAnswers}
-                  onChange={(e) => setAiAnswers(e.target.value)}
-                  rows={2}
-                  maxLength={1000}
-                  className="mt-2"
-                  placeholder="Your answers…"
-                />
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={planWithAI} disabled={aiLoading || !aiGoal.trim()}>
-                {aiLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                {aiQuestions ? "Submit answers" : "Plan & create with AI"}
-              </Button>
-              <span className="text-xs text-slate-400">
-                Creates paused — no spend until you activate it.
-              </span>
-            </div>
-            {aiError && <Alert variant="error">{aiError}</Alert>}
-            {aiSummary && <Alert variant="success">{aiSummary}</Alert>}
-          </CardContent>
-        </Card>
+        <CampaignChat
+          onCreated={(c) => setCampaigns((prev) => [c, ...prev])}
+        />
       )}
 
       {metaReady && (
