@@ -1,11 +1,77 @@
 import { NextResponse } from "next/server";
-import { serverError } from "@/lib/api";
+import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/**
+ * Pause or resume a campaign. Updates the status on Meta, then mirrors it
+ * locally so the dashboard reflects reality immediately.
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return apiError("Unauthorized", 401);
+
+  const body = await readJson<{ status?: string }>(req);
+  const action = (body?.status ?? "").toLowerCase();
+  if (action !== "active" && action !== "paused") {
+    return apiError('status must be "active" or "paused"', 400);
+  }
+
+  // RLS scopes this to the user's own campaigns.
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (!campaign) return apiError("Campaign not found", 404);
+
+  const meta = metaClientFromEnv();
+  if (!meta || !campaign.meta_campaign_id) {
+    return apiError("This campaign isn't linked to Meta yet.", 400);
+  }
+
+  try {
+    await meta.updateCampaignStatus(
+      campaign.meta_campaign_id,
+      action === "active" ? "ACTIVE" : "PAUSED",
+    );
+  } catch (err) {
+    if (err instanceof MetaError) {
+      return apiError(err.message, err.status && err.status >= 500 ? 502 : 400);
+    }
+    return serverError("campaign.status", err, "Could not update the campaign.");
+  }
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ status: action })
+    .eq("id", id);
+  if (error) {
+    return serverError("campaign.status", error, "Could not update the campaign.");
+  }
+
+  await logEvent({
+    businessId: campaign.business_id,
+    action: action === "active" ? "campaign.resume" : "campaign.pause",
+    entityType: "campaign",
+    entityId: id,
+    metaObjectId: campaign.meta_campaign_id,
+    reason: `${action === "active" ? "Resumed" : "Paused"} campaign "${campaign.name ?? id}"`,
+  });
+
+  return NextResponse.json({ ok: true, status: action });
+}
 
 /** Delete a campaign from Meta (best-effort) and remove it from AdBrain. */
 export async function DELETE(

@@ -6,6 +6,8 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  Pause,
+  Play,
   RefreshCw,
   Rocket,
   Sparkles,
@@ -211,6 +213,33 @@ export function Campaigns({
   }
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
+
+  async function setCampaignStatus(c: Campaign, next: "active" | "paused") {
+    setStatusChangingId(c.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      if (res.ok) {
+        setCampaigns((prev) =>
+          prev.map((x) => (x.id === c.id ? { ...x, status: next } : x)),
+        );
+        setNotice(next === "active" ? "Campaign resumed." : "Campaign paused.");
+      } else {
+        const data = (await res.json()) as { error?: string };
+        setError(data.error ?? "Couldn't update the campaign.");
+      }
+    } catch {
+      setError("Couldn't update the campaign — check your connection.");
+    } finally {
+      setStatusChangingId(null);
+    }
+  }
+
   async function deleteCampaign(c: Campaign) {
     if (
       !window.confirm(
@@ -529,6 +558,29 @@ export function Campaigns({
                           )}
                           Refresh results
                         </Button>
+                        {c.meta_campaign_id &&
+                          (c.status === "active" || c.status === "paused") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setCampaignStatus(
+                                  c,
+                                  c.status === "active" ? "paused" : "active",
+                                )
+                              }
+                              disabled={statusChangingId === c.id}
+                            >
+                              {statusChangingId === c.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : c.status === "active" ? (
+                                <Pause className="h-4 w-4" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                              {c.status === "active" ? "Pause" : "Resume"}
+                            </Button>
+                          )}
                         <Button
                           size="sm"
                           variant="ghost"

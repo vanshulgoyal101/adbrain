@@ -701,4 +701,15 @@ export class MetaClient {
   async deleteObject(id: string): Promise<void> {
     await this.graph(`${id}`, { method: "DELETE" });
   }
+
+  /** Pause or resume a campaign (or any adset/ad) by updating its status. */
+  async updateCampaignStatus(
+    campaignId: string,
+    status: "ACTIVE" | "PAUSED",
+  ): Promise<void> {
+    await this.graph(`${campaignId}`, {
+      method: "POST",
+      form: { status },
+    });
+  }
 }
