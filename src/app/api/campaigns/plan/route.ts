@@ -198,6 +198,11 @@ export async function POST(req: Request) {
     }
   }
 
+  const destination =
+    result.plan.destination === "whatsapp" || result.plan.destination === "call"
+      ? result.plan.destination
+      : "instant_form";
+
   let created;
   try {
     created = await meta.createLeadCampaign({
@@ -215,6 +220,7 @@ export async function POST(req: Request) {
       ageMax,
       location,
       excludedLocation,
+      destination,
     });
   } catch (err) {
     return NextResponse.json(
@@ -259,6 +265,13 @@ export async function POST(req: Request) {
     },
   });
 
+  const destLabel: Record<string, string> = {
+    instant_form: "an instant lead form",
+    whatsapp: "WhatsApp chat",
+    call: "a phone call",
+  };
+  const fellBack = destination !== "instant_form" && created.destination === "instant_form";
+
   const summary = [
     `Created a paused Leads campaign “${name}”.`,
     `Budget: ${formatCurrency(budget)}/day.`,
@@ -267,7 +280,12 @@ export async function POST(req: Request) {
         ? ` (${usable.map((c) => c.angle).filter(Boolean).join(", ")})`
         : ""
     }.`,
-    `Lead form: “${leadForm.name}”.`,
+    `Leads reach you via ${destLabel[created.destination]}${
+      created.destination === "instant_form" && leadForm ? ` (“${leadForm.name}”)` : ""
+    }.`,
+    fellBack
+      ? `Note: ${destLabel[destination]} isn't set up on your account yet, so I used an instant form instead.`
+      : "",
     `Audience: ${areaLabel} (residents only), ages ${ageMin}–${ageMax}.`,
     excludeLabel ? `Excluded: ${excludeLabel}.` : "",
     result.plan.rationale ? `Why: ${result.plan.rationale}` : "",

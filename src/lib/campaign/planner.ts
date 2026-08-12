@@ -10,6 +10,7 @@ export interface CampaignPlan {
   age_max: number;
   locations: string[];
   excluded_locations: string[];
+  destination: "instant_form" | "whatsapp" | "call";
   rationale: string;
 }
 
@@ -90,7 +91,12 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "simple (a sensible age range). (5) LOCATION MATTERS for a local installer: " +
         "use the brand's Areas or an area named in the goal for `locations`, and put " +
         "nearby unwanted towns in `excluded_locations`. Ask instead of guessing when " +
-        "it matters. Output ONLY valid JSON.",
+        "it matters. (6) Choose how leads should reach the business as " +
+        "`destination`: \"instant_form\" (a form inside the ad — the safe default), " +
+        "\"call\" (click-to-call, good when they prefer phone enquiries), or " +
+        "\"whatsapp\" (chat — only if they have a WhatsApp number connected to the " +
+        "page). Default to instant_form unless the goal clearly favours calls or " +
+        "chat; you may ask. Output ONLY valid JSON.",
     },
     {
       role: "user",
@@ -107,7 +113,7 @@ ${input.performance ? `\nPAST CAMPAIGNS & RESULTS (learn from these to improve �
 USER GOAL: ${input.goal}
 ${input.answers ? `\nANSWERS SO FAR:\n${input.answers}\n` : ""}
 If you have enough info, return:
-{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string, "creative_ids": string[], "age_min": number, "age_max": number, "locations": string[], "excluded_locations": string[], "rationale": string}}
+{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string, "creative_ids": string[], "age_min": number, "age_max": number, "locations": string[], "excluded_locations": string[], "destination": "instant_form"|"whatsapp"|"call", "rationale": string}}
 If you need more info, return:
 {"ready": false, "questions": [{"id": string, "question": string, "help": string, "type": "single"|"multi"|"text", "options": string[], "allowText": boolean}]}`,
     },

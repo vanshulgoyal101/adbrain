@@ -74,6 +74,7 @@ export interface CreateCampaignResult {
   campaignId: string;
   adSetId: string;
   adIds: string[];
+  destination: AdDestination;
 }
 
 export interface CampaignInsights {
@@ -117,6 +118,43 @@ const CTA_MAP: Record<string, string> = {
 
 function ctaType(label?: string | null): string {
   return (label && CTA_MAP[label]) || "LEARN_MORE";
+}
+
+/** Where leads land: an in-ad instant form, a WhatsApp chat, or a phone call. */
+export type AdDestination = "instant_form" | "whatsapp" | "call";
+
+export interface DestinationPlan {
+  optimizationGoal: string;
+  destinationType: string;
+}
+
+/** Ad-set optimisation goal + destination type for a lead destination. */
+export function destinationPlan(dest: AdDestination): DestinationPlan {
+  switch (dest) {
+    case "call":
+      return { optimizationGoal: "QUALITY_CALL", destinationType: "PHONE_CALL" };
+    case "whatsapp":
+      return { optimizationGoal: "CONVERSATIONS", destinationType: "WHATSAPP" };
+    default:
+      return { optimizationGoal: "LEAD_GENERATION", destinationType: "ON_AD" };
+  }
+}
+
+/** The creative call-to-action for a lead destination. */
+export function destinationCTA(
+  dest: AdDestination,
+  opts: { leadFormId?: string; phone?: string; ctaLabel?: string | null },
+): { type: string; value: Record<string, unknown> } {
+  if (dest === "call" && opts.phone) {
+    return { type: "CALL_NOW", value: { link: `tel:${opts.phone}` } };
+  }
+  if (dest === "whatsapp") {
+    return { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } };
+  }
+  return {
+    type: ctaType(opts.ctaLabel),
+    value: { lead_gen_form_id: opts.leadFormId },
+  };
 }
 
 /** Meta city-radius bounds (kilometers). */
@@ -442,8 +480,24 @@ export class MetaClient {
     ageMax?: number;
     location?: GeoTargeting;
     excludedLocation?: GeoTargeting;
+    destination?: AdDestination;
+    phone?: string;
   }): Promise<CreateCampaignResult> {
     const acct = this.creds.adAccountId;
+    const requested = params.destination ?? "instant_form";
+
+    // Call ads need a phone number — fetch the page's if none was passed.
+    let phone = params.phone;
+    if (requested === "call" && !phone) {
+      try {
+        const p = await this.graph<{ phone?: string }>(
+          `${this.creds.pageId}?fields=phone`,
+        );
+        phone = p.phone;
+      } catch {
+        // Ignore — fallback logic handles a missing phone.
+      }
+    }
 
     const campaign = await this.graph<{ id: string }>(`${acct}/campaigns`, {
       method: "POST",
@@ -456,38 +510,55 @@ export class MetaClient {
       },
     });
 
-    const adSet = await this.graph<{ id: string }>(`${acct}/adsets`, {
-      method: "POST",
-      form: {
-        name: `${params.name} — Ad set`,
-        campaign_id: campaign.id,
-        status: "PAUSED",
-        daily_budget: String(Math.round(params.dailyBudgetRupees * 100)),
-        billing_event: "IMPRESSIONS",
-        optimization_goal: "LEAD_GENERATION",
-        bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-        destination_type: "ON_AD",
-        promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
-        targeting: JSON.stringify({
-          geo_locations: {
-            ...buildGeoLocations(params.location, ["IN"]),
-            // Residents only — not travellers/visitors — to avoid out-of-area leads.
-            location_types: ["home"],
-          },
-          ...(hasGeo(params.excludedLocation)
-            ? {
-                excluded_geo_locations: buildGeoLocations(
-                  params.excludedLocation,
-                  [],
-                ),
-              }
-            : {}),
-          ...(params.ageMin ? { age_min: params.ageMin } : {}),
-          ...(params.ageMax ? { age_max: params.ageMax } : {}),
-          targeting_automation: { advantage_audience: 1 },
-        }),
+    const targeting = JSON.stringify({
+      geo_locations: {
+        ...buildGeoLocations(params.location, ["IN"]),
+        // Residents only — not travellers/visitors — to avoid out-of-area leads.
+        location_types: ["home"],
       },
+      ...(hasGeo(params.excludedLocation)
+        ? {
+            excluded_geo_locations: buildGeoLocations(
+              params.excludedLocation,
+              [],
+            ),
+          }
+        : {}),
+      ...(params.ageMin ? { age_min: params.ageMin } : {}),
+      ...(params.ageMax ? { age_max: params.ageMax } : {}),
+      targeting_automation: { advantage_audience: 1 },
     });
+
+    const makeAdSet = (dest: AdDestination) => {
+      const dp = destinationPlan(dest);
+      return this.graph<{ id: string }>(`${acct}/adsets`, {
+        method: "POST",
+        form: {
+          name: `${params.name} — Ad set`,
+          campaign_id: campaign.id,
+          status: "PAUSED",
+          daily_budget: String(Math.round(params.dailyBudgetRupees * 100)),
+          billing_event: "IMPRESSIONS",
+          optimization_goal: dp.optimizationGoal,
+          bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+          destination_type: dp.destinationType,
+          promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
+          targeting,
+        },
+      });
+    };
+
+    // Try the requested destination; fall back to an instant form if Meta
+    // rejects it (e.g. WhatsApp not connected, or call ads not enabled).
+    let destination = requested;
+    let adSet: { id: string };
+    try {
+      adSet = await makeAdSet(requested);
+    } catch (err) {
+      if (requested === "instant_form") throw err;
+      destination = "instant_form";
+      adSet = await makeAdSet("instant_form");
+    }
 
     const adIds: string[] = [];
     for (const c of params.creatives) {
@@ -505,10 +576,11 @@ export class MetaClient {
                 message: c.message,
                 name: c.headline,
                 link: params.link,
-                call_to_action: {
-                  type: ctaType(c.cta),
-                  value: { lead_gen_form_id: params.leadFormId },
-                },
+                call_to_action: destinationCTA(destination, {
+                  leadFormId: params.leadFormId,
+                  phone,
+                  ctaLabel: c.cta,
+                }),
               },
             }),
           },
@@ -527,7 +599,7 @@ export class MetaClient {
       adIds.push(ad.id);
     }
 
-    return { campaignId: campaign.id, adSetId: adSet.id, adIds };
+    return { campaignId: campaign.id, adSetId: adSet.id, adIds, destination };
   }
 
   async listCampaigns(limit = 200): Promise<MetaCampaignSummary[]> {
