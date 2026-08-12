@@ -469,7 +469,11 @@ export class MetaClient {
         destination_type: "ON_AD",
         promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
         targeting: JSON.stringify({
-          geo_locations: buildGeoLocations(params.location, ["IN"]),
+          geo_locations: {
+            ...buildGeoLocations(params.location, ["IN"]),
+            // Residents only — not travellers/visitors — to avoid out-of-area leads.
+            location_types: ["home"],
+          },
           ...(hasGeo(params.excludedLocation)
             ? {
                 excluded_geo_locations: buildGeoLocations(
