@@ -8,6 +8,8 @@ copy, multiple variants) → approve → (Phase 1) launch into Meta Advantage+.
 
 See [docs/SPEC.md](docs/SPEC.md) for the full product spec and
 [docs/how-we-got-here.md](docs/how-we-got-here.md) for the rationale.
+See [docs/FEATURES.md](docs/FEATURES.md) for the living list of built and
+proposed features.
 
 ## Stack
 
