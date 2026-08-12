@@ -206,6 +206,7 @@ function CreativeCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [erroredUrl, setErroredUrl] = useState<string | null>(null);
   const approved = creative.status === "approved";
@@ -214,12 +215,16 @@ function CreativeCard({
 
   async function regenerate() {
     setRegenerating(true);
+    setRegenError(null);
     try {
       const res = await fetch(`/api/creatives/${creative.id}/regenerate`, {
         method: "POST",
       });
-      const data = (await res.json()) as { creative?: Creative };
+      const data = (await res.json()) as { creative?: Creative; error?: string };
       if (res.ok && data.creative) onChange(data.creative);
+      else setRegenError(data.error ?? "Couldn't regenerate — try again.");
+    } catch {
+      setRegenError("Couldn't regenerate — check your connection.");
     } finally {
       setRegenerating(false);
     }
@@ -334,6 +339,11 @@ function CreativeCard({
             <Trash2 className="h-4 w-4 text-slate-400" />
           </Button>
         </div>
+        {regenError && (
+          <p className="text-xs text-red-600" role="alert">
+            {regenError}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

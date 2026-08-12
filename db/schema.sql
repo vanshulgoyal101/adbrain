@@ -185,6 +185,9 @@ create index if not exists creatives_business_id_idx
   on public.creatives (business_id);
 create index if not exists creatives_variant_group_idx
   on public.creatives (variant_group);
+-- Speeds up the common "approved creatives for a business" filter.
+create index if not exists creatives_business_status_idx
+  on public.creatives (business_id, status);
 
 drop trigger if exists creatives_set_updated_at on public.creatives;
 create trigger creatives_set_updated_at
@@ -217,6 +220,10 @@ create table if not exists public.campaigns (
 
 create index if not exists campaigns_business_id_idx
   on public.campaigns (business_id);
+-- One row per Meta campaign per business, so "Sync from Meta" can't duplicate.
+create unique index if not exists campaigns_meta_campaign_id_uidx
+  on public.campaigns (business_id, meta_campaign_id)
+  where meta_campaign_id is not null;
 
 alter table public.campaigns enable row level security;
 
@@ -242,6 +249,9 @@ create table if not exists public.campaign_results (
 
 create index if not exists campaign_results_campaign_id_idx
   on public.campaign_results (campaign_id);
+-- Matches the "latest result per campaign" ordering (campaign_id, fetched_at desc).
+create index if not exists campaign_results_campaign_fetched_idx
+  on public.campaign_results (campaign_id, fetched_at desc);
 
 alter table public.campaign_results enable row level security;
 
