@@ -18,7 +18,10 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as {
     creativeIds?: string[];
   } | null;
-  const ids = Array.isArray(body?.creativeIds) ? body.creativeIds : [];
+  const ids = (Array.isArray(body?.creativeIds) ? body.creativeIds : []).slice(
+    0,
+    50,
+  );
   if (!ids.length) {
     return NextResponse.json(
       { error: "creativeIds is required" },

@@ -39,12 +39,14 @@ export async function POST() {
   }
 
   let synced = 0;
+  const failed: string[] = [];
   for (const mc of metaCampaigns) {
     const row = {
       business_id: business.id,
       name: mc.name,
       objective: mapCampaignObjective(mc.objective),
-      daily_budget: mc.daily_budget ? Number(mc.daily_budget) / 100 : null,
+      // daily_budget is NOT NULL; Meta omits it for adset-budget campaigns.
+      daily_budget: mc.daily_budget ? Number(mc.daily_budget) / 100 : 0,
       status: mapCampaignStatus(mc.status),
       meta_campaign_id: mc.id,
       raw: mc as unknown as Json,
@@ -54,12 +56,15 @@ export async function POST() {
       .select("id")
       .eq("meta_campaign_id", mc.id)
       .maybeSingle();
-    if (existing) {
-      await supabase.from("campaigns").update(row).eq("id", existing.id);
+    const { error } = existing
+      ? await supabase.from("campaigns").update(row).eq("id", existing.id)
+      : await supabase.from("campaigns").insert(row);
+    if (error) {
+      console.error("[campaigns.sync] upsert failed", mc.id, error);
+      failed.push(mc.name || mc.id);
     } else {
-      await supabase.from("campaigns").insert(row);
+      synced++;
     }
-    synced++;
   }
 
   await logEvent({
@@ -67,7 +72,7 @@ export async function POST() {
     action: "campaigns.sync",
     entityType: "campaign",
     reason: `Synced ${synced} campaign(s) from Meta`,
-    details: { count: synced },
+    details: { count: synced, failed: failed.length },
   });
 
   const { data: campaigns } = await supabase
@@ -76,5 +81,5 @@ export async function POST() {
     .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
-  return NextResponse.json({ synced, campaigns: campaigns ?? [] });
+  return NextResponse.json({ synced, failed, campaigns: campaigns ?? [] });
 }

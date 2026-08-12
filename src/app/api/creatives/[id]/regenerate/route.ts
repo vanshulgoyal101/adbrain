@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { generateOneVariant } from "@/lib/creative/generate";
 import { persistCreativeImage } from "@/lib/creative/persist";
@@ -81,7 +82,7 @@ export async function POST(
     .select("*")
     .single();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError("creative.regenerate", error, "Could not update creative.");
   }
 
   await logEvent({

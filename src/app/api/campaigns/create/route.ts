@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import {
   MetaError,
@@ -36,7 +37,9 @@ export async function POST(req: Request) {
   } | null;
 
   const businessId = (body?.businessId ?? "").trim();
-  const creativeIds = Array.isArray(body?.creativeIds) ? body.creativeIds : [];
+  const creativeIds = (
+    Array.isArray(body?.creativeIds) ? body.creativeIds : []
+  ).slice(0, 50);
   const dailyBudget = Number(body?.dailyBudget ?? 0);
   const leadFormId = (body?.leadFormId ?? "").trim();
   const name = (body?.name ?? "").trim() || "AdBrain campaign";
@@ -173,7 +176,7 @@ export async function POST(req: Request) {
     .select("*")
     .single();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError("campaigns.create", error, "Could not save the campaign.");
   }
 
   await logEvent({

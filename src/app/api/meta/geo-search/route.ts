@@ -17,7 +17,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
+  const raw = new URL(req.url).searchParams.get("q")?.trim() ?? "";
+  const q = raw.slice(0, 100);
   if (q.length < 2) {
     return NextResponse.json({ results: [] });
   }

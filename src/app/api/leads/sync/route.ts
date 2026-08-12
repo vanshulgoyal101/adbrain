@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { parseLeadFields } from "@/lib/leads/parse";
 import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
@@ -78,7 +79,7 @@ export async function POST() {
     .from("leads")
     .upsert(rows, { onConflict: "business_id,meta_lead_id", ignoreDuplicates: true });
   if (upsertError) {
-    return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    return serverError("leads.sync", upsertError, "Could not save leads.");
   }
 
   const { data: fresh } = await supabase

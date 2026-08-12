@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
 import { persistCreativeImage } from "@/lib/creative/persist";
@@ -26,7 +27,8 @@ export async function POST(req: Request) {
 
   const businessId = (body?.businessId ?? "").trim();
   const brief = (body?.brief ?? "").trim();
-  const count = Number(body?.count ?? 3);
+  const rawCount = Number(body?.count ?? 3);
+  const count = Number.isFinite(rawCount) ? rawCount : 3;
 
   if (!businessId || !brief) {
     return NextResponse.json(
@@ -92,7 +94,7 @@ export async function POST(req: Request) {
     .insert(rows)
     .select("*");
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return serverError("creatives.generate", error, "Could not save creatives.");
   }
 
   await logEvent({
