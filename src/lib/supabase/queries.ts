@@ -5,6 +5,10 @@ import {
   isDevAuthEnabled,
   type AppUser,
 } from "@/lib/dev-auth";
+import {
+  buildPerformanceContext,
+  type CampaignPerf,
+} from "@/lib/campaign/performance";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AdInstruction,
@@ -178,4 +182,55 @@ export async function getLeads(
     .order("created_time", { ascending: false, nullsFirst: false })
     .limit(limit);
   return data ?? [];
+}
+
+/**
+ * A compact, ranked summary of past campaigns and their results, for the planner
+ * to learn from. Returns "" when there's nothing meaningful yet.
+ */
+export async function getPerformanceContext(businessId: string): Promise<string> {
+  const campaigns = await getCampaigns(businessId);
+  if (!campaigns.length) return "";
+
+  const results = await getLatestResults(campaigns.map((c) => c.id));
+
+  const creativeIds = [
+    ...new Set(campaigns.flatMap((c) => c.creative_ids ?? [])),
+  ];
+  const angleById = new Map<string, string | null>();
+  if (creativeIds.length) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("creatives")
+      .select("id, angle")
+      .in("id", creativeIds);
+    for (const c of data ?? []) angleById.set(c.id, c.angle);
+  }
+
+  const rows: CampaignPerf[] = campaigns.map((c) => {
+    const r = results[c.id];
+    const raw = (c.raw ?? {}) as {
+      plan?: { area?: string };
+      area?: string;
+    };
+    const angles = [
+      ...new Set(
+        (c.creative_ids ?? [])
+          .map((id) => angleById.get(id))
+          .filter((a): a is string => !!a),
+      ),
+    ];
+    return {
+      name: c.name ?? `${c.objective} campaign`,
+      angles,
+      area: raw.plan?.area ?? raw.area ?? null,
+      dailyBudget: c.daily_budget ?? null,
+      leads: r?.leads ?? 0,
+      spend: r?.spend ?? 0,
+      cpl: r?.cpl ?? null,
+      status: c.status,
+    };
+  });
+
+  return buildPerformanceContext(rows);
 }

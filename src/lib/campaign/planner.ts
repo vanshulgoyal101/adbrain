@@ -44,6 +44,7 @@ export interface PlannerInput {
   leadForms: { id: string; name: string }[];
   goal: string;
   answers?: string;
+  performance?: string;
 }
 
 /** Format structured answers into the transcript the planner reads. */
@@ -102,7 +103,7 @@ LEAD FORMS (choose one by ID):
 ${forms}
 
 CURRENCY: INR. Minimum sensible daily budget is ₹150.
-
+${input.performance ? `\nPAST CAMPAIGNS & RESULTS (learn from these to improve — favour angles/areas that produced cheaper leads; you may adapt them, you don't have to reuse):\n${input.performance}\n` : ""}
 USER GOAL: ${input.goal}
 ${input.answers ? `\nANSWERS SO FAR:\n${input.answers}\n` : ""}
 If you have enough info, return:

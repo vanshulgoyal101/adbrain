@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   getActiveInstructionsText,
   getApprovedCreatives,
+  getPerformanceContext,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 import type { Creative, Json } from "@/lib/types";
@@ -97,12 +98,14 @@ export async function POST(req: Request) {
   }
 
   const instructions = await getActiveInstructionsText(business.id);
+  const performance = await getPerformanceContext(business.id);
 
   let result;
   try {
     result = await runPlanner({
       brand: business,
       instructions,
+      performance,
       approved: approved.map((c) => ({
         id: c.id,
         angle: c.angle,
