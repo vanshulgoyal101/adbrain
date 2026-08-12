@@ -113,7 +113,7 @@
 | --- | --- | --- |
 | ✅ | Next 16 App Router + TS + Tailwind v4 | |
 | ✅ | zod-validated env | `lib/env.ts` |
-| ✅ | Vitest suite (106 tests) | pure logic, API contracts |
+| ✅ | Vitest suite (128 tests) | pure logic, API contracts, + jsdom component tests |
 | ✅ | Lint + typecheck + build gating | every push |
 | 🚧 | Hosting on adbrain.vanshul.com | needs host (Vercel) + DNS + prod env |
 | 📋 | Billing / subscription | when multi-customer |
