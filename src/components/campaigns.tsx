@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Rocket,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -207,6 +208,32 @@ export function Campaigns({
   function adsLink(metaId: string) {
     const acct = adAccountId.replace("act_", "");
     return `https://www.facebook.com/adsmanager/manage/campaigns?act=${acct}&selected_campaign_ids=${metaId}`;
+  }
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  async function deleteCampaign(c: Campaign) {
+    if (
+      !window.confirm(
+        `Delete "${c.name ?? "this campaign"}"? This removes it from Meta and can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingId(c.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/campaigns/${c.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setCampaigns((prev) => prev.filter((x) => x.id !== c.id));
+      } else {
+        const data = (await res.json()) as { error?: string };
+        setError(data.error ?? "Couldn't delete the campaign.");
+      }
+    } catch {
+      setError("Couldn't delete the campaign — check your connection.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -414,12 +441,15 @@ export function Campaigns({
                 </span>
               )}
               {campaigns.length > 0 && (
-                <a
-                  href="/api/campaigns/report"
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = "/api/campaigns/report";
+                  }}
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400"
                 >
                   <FileText className="h-4 w-4" /> Export report
-                </a>
+                </button>
               )}
               <Button
                 size="sm"
@@ -498,6 +528,19 @@ export function Campaigns({
                             <RefreshCw className="h-4 w-4" />
                           )}
                           Refresh results
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteCampaign(c)}
+                          disabled={deletingId === c.id}
+                          aria-label="Delete campaign"
+                        >
+                          {deletingId === c.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 text-slate-400" />
+                          )}
                         </Button>
                       </div>
                     </div>

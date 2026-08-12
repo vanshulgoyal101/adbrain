@@ -54,6 +54,7 @@
 | ✅ | Budget helper | daily ₹ → "~X leads/week" + presets |
 | ✅ | Meta launch (Advantage+ leads, PAUSED) | zero spend until activated |
 | ✅ | Sync existing campaigns from Meta | manual button + auto-sync on page load |
+| ✅ | Delete a campaign | removes it from Meta + AdBrain (with confirm) |
 | ✅ | Results refresh + plain-language summary | insights → friendly sentence |
 | ✅ | Learning loop | past results (angle/area/CPL) feed the planner |
 | ✅ | AI picks ad type | instant form / Click-to-WhatsApp / Call, with fallback |

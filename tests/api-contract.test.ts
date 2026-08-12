@@ -65,3 +65,16 @@ describe("POST /api/leads/sync", () => {
     await expect(res.json()).resolves.toMatchObject({ error: expect.any(String) });
   });
 });
+
+describe("DELETE /api/campaigns/[id]", () => {
+  it("returns 401 when unauthenticated", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+    const { DELETE } = await import("@/app/api/campaigns/[id]/route");
+    const res = await DELETE(
+      new Request("http://localhost/api/campaigns/x", { method: "DELETE" }),
+      { params: Promise.resolve({ id: "x" }) },
+    );
+    expect(res.status).toBe(401);
+    await expect(res.json()).resolves.toMatchObject({ error: expect.any(String) });
+  });
+});
