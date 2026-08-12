@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { DEV_AUTH_COOKIE, isDevAuthEnabled } from "@/lib/dev-auth";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/brand", "/studio", "/campaigns"];
+const PROTECTED_PREFIXES = ["/dashboard", "/brand", "/studio", "/campaigns", "/leads"];
 
 /**
  * Refreshes the Supabase auth session on every request and guards protected
@@ -40,7 +41,11 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
 
-  if (!user && isProtected) {
+  const devAuthed =
+    isDevAuthEnabled() &&
+    request.cookies.get(DEV_AUTH_COOKIE)?.value === "1";
+
+  if (!user && !devAuthed && isProtected) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("redirect", path);

@@ -11,6 +11,11 @@ export function SignOutButton() {
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
+    // Also clear the offline dev cookie (httpOnly — must be cleared server-side).
+    if (process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true") {
+      window.location.href = "/auth/dev-logout";
+      return;
+    }
     router.push("/login");
     router.refresh();
   }

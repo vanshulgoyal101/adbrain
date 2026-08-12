@@ -1,3 +1,10 @@
+import { cookies } from "next/headers";
+import {
+  DEV_AUTH_COOKIE,
+  DEV_USER,
+  isDevAuthEnabled,
+  type AppUser,
+} from "@/lib/dev-auth";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AdInstruction,
@@ -10,13 +17,19 @@ import type {
   Lead,
 } from "@/lib/types";
 
-/** Current authenticated user, or null. */
-export async function getUser() {
+/** Current authenticated user, or null. When the dev bypass is enabled and its
+ * cookie is set, returns the dev identity immediately (no Supabase round-trip). */
+export async function getUser(): Promise<AppUser | null> {
+  if (isDevAuthEnabled()) {
+    const store = await cookies();
+    if (store.get(DEV_AUTH_COOKIE)?.value === "1") return DEV_USER;
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return user;
+  return user ? { id: user.id, email: user.email ?? null } : null;
 }
 
 /** All businesses owned by the current user (RLS-scoped). */
