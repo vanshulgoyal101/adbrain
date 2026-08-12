@@ -323,7 +323,7 @@ export function Campaigns({
                             {c.image_url && (
                               <img
                                 src={c.image_url}
-                                alt={c.headline ?? ""}
+                                alt={c.headline || "Ad creative preview"}
                                 className="h-full w-full object-cover"
                                 loading="lazy"
                               />

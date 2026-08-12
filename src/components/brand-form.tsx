@@ -303,13 +303,13 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label>
+    <Label className="flex flex-col gap-1.5">
+      <span>
         {label}
         {required && <span className="text-red-500"> *</span>}
         {hint && <span className="ml-1 font-normal text-slate-400">({hint})</span>}
-      </Label>
+      </span>
       {children}
-    </div>
+    </Label>
   );
 }
