@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isBlockedHost, parsePublicUrl } from "@/lib/security/ssrf";
+import {
+  isBlockedHost,
+  parsePublicUrl,
+  resolveRedirectTarget,
+} from "@/lib/security/ssrf";
 
 describe("isBlockedHost", () => {
   it("blocks loopback and named internal hosts", () => {
@@ -86,5 +90,33 @@ describe("parsePublicUrl", () => {
     expect(parsePublicUrl("")).toBeNull();
     expect(parsePublicUrl("   ")).toBeNull();
     expect(parsePublicUrl("http://")).toBeNull();
+  });
+});
+
+describe("resolveRedirectTarget", () => {
+  const base = new URL("https://example.com/page");
+
+  it("resolves and allows a public absolute redirect", () => {
+    expect(resolveRedirectTarget("https://other.com/x", base)?.toString()).toBe(
+      "https://other.com/x",
+    );
+  });
+
+  it("resolves relative redirects against the base", () => {
+    expect(resolveRedirectTarget("/next", base)?.toString()).toBe(
+      "https://example.com/next",
+    );
+  });
+
+  it("blocks a redirect to an internal IP (the SSRF bypass)", () => {
+    expect(
+      resolveRedirectTarget("http://169.254.169.254/latest/meta-data", base),
+    ).toBeNull();
+    expect(resolveRedirectTarget("http://localhost/admin", base)).toBeNull();
+    expect(resolveRedirectTarget("http://10.0.0.5/", base)).toBeNull();
+  });
+
+  it("blocks a redirect to a non-http(s) scheme", () => {
+    expect(resolveRedirectTarget("file:///etc/passwd", base)).toBeNull();
   });
 });

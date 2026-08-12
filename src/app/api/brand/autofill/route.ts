@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { parse } from "node-html-parser";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
-import { parsePublicUrl } from "@/lib/security/ssrf";
+import { fetchPublicUrlText, parsePublicUrl, SafeFetchError } from "@/lib/security/ssrf";
+import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildBrandExtractionMessages,
@@ -33,6 +34,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const limited = rateLimitResponse(`autofill:${user.id}`, {
+    limit: 15,
+    windowMs: 5 * 60_000,
+  });
+  if (limited) return limited;
+
   const body = (await req.json().catch(() => null)) as { url?: string } | null;
   const rawUrl = (body?.url ?? "").trim();
   if (!rawUrl) {
@@ -46,19 +53,22 @@ export async function POST(req: Request) {
 
   let html: string;
   try {
-    const res = await fetch(parsed.toString(), {
+    html = await fetchPublicUrlText(parsed.toString(), {
       headers: { "User-Agent": "AdBrainBot/1.0 (+https://adbrain.app)" },
-      signal: AbortSignal.timeout(10_000),
-      redirect: "follow",
+      timeoutMs: 10_000,
     });
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: `Site returned ${res.status}` },
-        { status: 502 },
-      );
+  } catch (err) {
+    if (err instanceof SafeFetchError) {
+      if (err.code === "blocked") {
+        return NextResponse.json({ error: "That URL is not allowed" }, { status: 400 });
+      }
+      if (err.code === "status") {
+        return NextResponse.json(
+          { error: `Site returned ${err.status}` },
+          { status: 502 },
+        );
+      }
     }
-    html = await res.text();
-  } catch {
     return NextResponse.json(
       { error: "Could not fetch the site" },
       { status: 502 },

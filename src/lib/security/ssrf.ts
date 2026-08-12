@@ -4,8 +4,8 @@
  * server can't be pointed at internal infrastructure or cloud metadata.
  *
  * Note: this is a hostname/literal-IP check. DNS rebinding (a public name that
- * resolves to a private IP) is out of scope here; the fetch also uses a short
- * timeout and follows redirects at the platform level.
+ * resolves to a private IP) is out of scope here. Use fetchPublicUrlText to
+ * fetch, which re-validates every redirect hop with a short timeout.
  */
 
 function isBlockedIPv4(host: string): boolean {
@@ -82,3 +82,96 @@ export function parsePublicUrl(input: string): URL | null {
   if (isBlockedHost(parsed.hostname)) return null;
   return parsed;
 }
+
+/** Resolve a redirect Location against its base and re-validate it (SSRF). */
+export function resolveRedirectTarget(
+  location: string,
+  base: URL,
+): URL | null {
+  let absolute: string;
+  try {
+    absolute = new URL(location, base).toString();
+  } catch {
+    return null;
+  }
+  return parsePublicUrl(absolute);
+}
+
+export type SafeFetchErrorCode =
+  | "blocked" // initial or redirect target is a non-public host
+  | "redirect" // malformed redirect (missing/looping Location)
+  | "too_big" // response exceeded the byte cap
+  | "status" // upstream returned a non-2xx status
+  | "fetch"; // network/timeout error
+
+export class SafeFetchError extends Error {
+  constructor(
+    readonly code: SafeFetchErrorCode,
+    readonly status?: number,
+  ) {
+    super(code);
+    this.name = "SafeFetchError";
+  }
+}
+
+/**
+ * Fetch a user-supplied URL with SSRF protection on EVERY hop. Redirects are
+ * followed manually so each new Location is re-validated against isBlockedHost
+ * — closing the redirect-to-internal-IP bypass that `redirect: "follow"` has.
+ * Returns the response body text (capped), or throws a SafeFetchError.
+ */
+export async function fetchPublicUrlText(
+  input: string,
+  opts: {
+    maxRedirects?: number;
+    timeoutMs?: number;
+    maxBytes?: number;
+    headers?: Record<string, string>;
+  } = {},
+): Promise<string> {
+  const {
+    maxRedirects = 5,
+    timeoutMs = 10_000,
+    maxBytes = 2_000_000,
+    headers,
+  } = opts;
+
+  let current = parsePublicUrl(input);
+  if (!current) throw new SafeFetchError("blocked");
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    let res: Response;
+    try {
+      res = await fetch(current.toString(), {
+        headers,
+        redirect: "manual",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch {
+      throw new SafeFetchError("fetch");
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (!location) throw new SafeFetchError("redirect");
+      const next = resolveRedirectTarget(location, current);
+      if (!next) throw new SafeFetchError("blocked");
+      current = next;
+      continue;
+    }
+
+    if (!res.ok) throw new SafeFetchError("status", res.status);
+
+    const declared = Number(res.headers.get("content-length") ?? "");
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      throw new SafeFetchError("too_big");
+    }
+
+    const text = await res.text();
+    if (text.length > maxBytes) throw new SafeFetchError("too_big");
+    return text;
+  }
+
+  throw new SafeFetchError("redirect");
+}
+

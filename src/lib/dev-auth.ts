@@ -20,7 +20,10 @@ export const DEV_USER: AppUser = {
   email: "dev@adbrain.local",
 };
 
-/** Dev bypass is only ever active when explicitly enabled via env. */
+/** Dev bypass is only ever active outside production, and only when opted in. */
 export function isDevAuthEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true";
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true"
+  );
 }

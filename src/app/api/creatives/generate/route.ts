@@ -5,6 +5,7 @@ import { generateVariants } from "@/lib/creative/generate";
 import { persistCreativeImage } from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
+import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 
@@ -19,6 +20,13 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Generation costs money (LLM + image). Cap per-user request rate.
+  const limited = rateLimitResponse(`generate:${user.id}`, {
+    limit: 20,
+    windowMs: 5 * 60_000,
+  });
+  if (limited) return limited;
 
   const body = (await req.json().catch(() => null)) as {
     businessId?: string;

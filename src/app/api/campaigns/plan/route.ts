@@ -11,6 +11,7 @@ import {
   metaClientFromEnv,
   type GeoTargeting,
 } from "@/lib/meta/client";
+import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import {
   getActiveInstructionsText,
@@ -42,6 +43,12 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const limited = rateLimitResponse(`plan:${user.id}`, {
+    limit: 40,
+    windowMs: 5 * 60_000,
+  });
+  if (limited) return limited;
 
   const body = (await req.json().catch(() => null)) as {
     goal?: string;
