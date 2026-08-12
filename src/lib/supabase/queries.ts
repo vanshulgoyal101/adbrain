@@ -7,6 +7,7 @@ import type {
   Campaign,
   CampaignResult,
   Creative,
+  Lead,
 } from "@/lib/types";
 
 /** Current authenticated user, or null. */
@@ -147,6 +148,20 @@ export async function getAuditLog(
     .select("*")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false })
+    .limit(limit);
+  return data ?? [];
+}
+
+export async function getLeads(
+  businessId: string,
+  limit = 200,
+): Promise<Lead[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("business_id", businessId)
+    .order("created_time", { ascending: false, nullsFirst: false })
     .limit(limit);
   return data ?? [];
 }

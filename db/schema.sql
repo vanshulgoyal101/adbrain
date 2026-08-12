@@ -409,3 +409,37 @@ drop policy if exists "audit_log: insert own" on public.audit_log;
 create policy "audit_log: insert own"
   on public.audit_log for insert
   with check (business_id is not null and public.owns_business(business_id));
+
+-- ════════════════════════════════════════════════════════════════════════
+--  leads: instant-form leads pulled from Meta into one inbox
+-- ════════════════════════════════════════════════════════════════════════
+create table if not exists public.leads (
+  id           uuid primary key default gen_random_uuid(),
+  business_id  uuid not null references public.businesses (id) on delete cascade,
+  campaign_id  uuid references public.campaigns (id) on delete set null,
+  meta_lead_id text not null,
+  form_id      text,
+  form_name    text,
+  full_name    text,
+  phone        text,
+  email        text,
+  city         text,
+  field_data   jsonb not null default '{}',
+  created_time timestamptz,
+  created_at   timestamptz not null default now(),
+  unique (business_id, meta_lead_id)
+);
+
+create index if not exists leads_business_id_idx
+  on public.leads (business_id, created_time desc);
+create index if not exists leads_campaign_id_idx
+  on public.leads (campaign_id);
+
+alter table public.leads enable row level security;
+
+drop policy if exists "leads: all own" on public.leads;
+create policy "leads: all own"
+  on public.leads for all
+  using (public.owns_business(business_id))
+  with check (public.owns_business(business_id));
+

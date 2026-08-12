@@ -14,6 +14,13 @@ export interface LeadForm {
   status: string;
 }
 
+/** A raw instant-form lead as returned by the Graph API. */
+export interface MetaLead {
+  id: string;
+  created_time: string;
+  field_data: { name: string; values: string[] }[];
+}
+
 export interface CreativeInput {
   imageUrl: string;
   headline: string;
@@ -308,6 +315,19 @@ export class MetaClient {
       { token: pageToken },
     );
     return (data.data ?? []).filter((f) => f.status === "ACTIVE");
+  }
+
+  /** Instant-form leads for a given lead form (newest first). */
+  async listLeadsForForm(
+    formId: string,
+    opts: { limit?: number } = {},
+  ): Promise<MetaLead[]> {
+    const pageToken = await this.getPageAccessToken();
+    const data = await this.graph<{ data: MetaLead[] }>(
+      `${formId}/leads?fields=id,created_time,field_data&limit=${opts.limit ?? 200}`,
+      { token: pageToken },
+    );
+    return data.data ?? [];
   }
 
   /** Search Meta's location database for a place name. */

@@ -8,7 +8,8 @@ export type AuditEntityType =
   | "adset"
   | "ad"
   | "instruction"
-  | "asset";
+  | "asset"
+  | "lead";
 
 export interface AuditEvent {
   businessId: string;

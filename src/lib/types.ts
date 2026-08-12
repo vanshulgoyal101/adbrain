@@ -263,6 +263,40 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
         Relationships: [];
       };
+      leads: {
+        Row: {
+          id: string;
+          business_id: string;
+          campaign_id: string | null;
+          meta_lead_id: string;
+          form_id: string | null;
+          form_name: string | null;
+          full_name: string | null;
+          phone: string | null;
+          email: string | null;
+          city: string | null;
+          field_data: Json;
+          created_time: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          campaign_id?: string | null;
+          meta_lead_id: string;
+          form_id?: string | null;
+          form_name?: string | null;
+          full_name?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          city?: string | null;
+          field_data?: Json;
+          created_time?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -284,6 +318,8 @@ export type CampaignResult =
 export type AdInstruction =
   Database["public"]["Tables"]["ad_instructions"]["Row"];
 export type AuditLog = Database["public"]["Tables"]["audit_log"]["Row"];
+export type Lead = Database["public"]["Tables"]["leads"]["Row"];
+export type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
 
 export type BusinessInsert =
   Database["public"]["Tables"]["businesses"]["Insert"];
