@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from "@/lib/dev-auth";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/brand", "/studio", "/campaigns", "/leads"];
+const PROTECTED_PREFIXES = ["/dashboard", "/brand", "/studio", "/campaigns", "/leads", "/assets"];
 
 /**
  * Refreshes the Supabase auth session on every request and guards protected
