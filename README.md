@@ -56,14 +56,14 @@ See [docs/SPEC.md](docs/SPEC.md) for the full product spec and
 | `npm run start` | Serve the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | Vitest unit tests (49 tests) |
+| `npm run test` | Vitest unit tests (92 tests) |
 
 ## Architecture
 
 ```
 src/
   app/
-    (app)/                 # auth-protected shell: dashboard, brand, studio, campaigns
+    (app)/                 # auth-protected shell: dashboard, brand, studio, campaigns, leads
     api/
       brand/autofill/      # scrape website → LLM → brand fields (SSRF-guarded)
       creatives/generate/  # brief → 3–6 variants (copy + image) → saved drafts
@@ -74,6 +74,7 @@ src/
       campaigns/[id]/refresh/  # pull Meta insights → plain-language summary
       campaigns/sync/      # import existing Meta campaigns
       campaigns/lead-forms/  # list active Meta lead forms
+      leads/sync/          # pull instant-form leads into the inbox
       meta/geo-search/     # location typeahead (Meta adgeolocation search)
     auth/callback/         # OAuth + magic-link completion
     login/                 # magic link + Google sign-in
@@ -91,7 +92,10 @@ src/
     creative/summary.ts    # plain-language results summary (LLM)
     campaign/planner.ts    # goal → structured campaign plan (LLM strategist)
     campaign/targeting.ts  # normalize UI targeting → Meta geo spec (pure, tested)
-    meta/client.ts         # Marketing API wrapper (campaigns, insights, geo search)
+    campaign/budget.ts     # daily budget → "~X leads/week" estimate (pure, tested)
+    leads/parse.ts         # Meta field_data → normalized lead (pure, tested)
+    leads/digest.ts        # leads → WhatsApp-style digest text (pure, tested)
+    meta/client.ts         # Marketing API wrapper (campaigns, insights, geo, leads)
     meta/mappers.ts        # Meta enum ↔ app enum converters
     audit.ts               # append-only audit logging (observability)
   proxy.ts                 # session refresh + route guard (Next 16 "proxy")
@@ -136,6 +140,20 @@ geo keys (trusting Meta's relevance order, e.g. the canonical *Jaipur* over
 same-named towns). If nothing resolves, it falls back to nationwide. The AI
 planner (`src/lib/campaign/planner.ts`) can also choose locations itself and
 never invents IDs — it asks a clarifying question instead of guessing.
+
+A **budget helper** (`src/lib/campaign/budget.ts`) turns the daily rupee budget
+into a plain "~X leads/week" estimate with one-tap presets, and a short "what
+happens next" panel explains the paused → review → activate flow.
+
+### Lead inbox + digest
+
+The **Leads** page pulls instant-form submissions from Meta into a `leads` table
+(deduped by Meta lead id) so the owner sees every enquiry in one place, sortable
+and searchable. One click produces a copy-ready, WhatsApp-style **digest** of
+recent leads. Pure modules: `src/lib/leads/parse.ts` (Meta `field_data` → a
+normalized lead) and `src/lib/leads/digest.ts` (leads → plain text); the sync
+route is `POST /api/leads/sync`. Reading leads needs the Meta token to have
+`leads_retrieval`; forms it can't read are skipped.
 
 ### Observability (audit log)
 
