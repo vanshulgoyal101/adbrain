@@ -5,10 +5,8 @@ import {
   isDevAuthEnabled,
   type AppUser,
 } from "@/lib/dev-auth";
-import {
-  buildPerformanceContext,
-  type CampaignPerf,
-} from "@/lib/campaign/performance";
+import { buildPerformanceContext } from "@/lib/campaign/performance";
+import type { ReportRow } from "@/lib/campaign/report";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AdInstruction,
@@ -185,12 +183,14 @@ export async function getLeads(
 }
 
 /**
- * A compact, ranked summary of past campaigns and their results, for the planner
- * to learn from. Returns "" when there's nothing meaningful yet.
+ * Rich per-campaign performance rows (targeting + full metrics) for the report
+ * export and the planner's learning context.
  */
-export async function getPerformanceContext(businessId: string): Promise<string> {
+export async function getPerformanceRows(
+  businessId: string,
+): Promise<ReportRow[]> {
   const campaigns = await getCampaigns(businessId);
-  if (!campaigns.length) return "";
+  if (!campaigns.length) return [];
 
   const results = await getLatestResults(campaigns.map((c) => c.id));
 
@@ -207,12 +207,9 @@ export async function getPerformanceContext(businessId: string): Promise<string>
     for (const c of data ?? []) angleById.set(c.id, c.angle);
   }
 
-  const rows: CampaignPerf[] = campaigns.map((c) => {
+  return campaigns.map((c) => {
     const r = results[c.id];
-    const raw = (c.raw ?? {}) as {
-      plan?: { area?: string };
-      area?: string;
-    };
+    const raw = (c.raw ?? {}) as { plan?: { area?: string }; area?: string };
     const angles = [
       ...new Set(
         (c.creative_ids ?? [])
@@ -225,12 +222,21 @@ export async function getPerformanceContext(businessId: string): Promise<string>
       angles,
       area: raw.plan?.area ?? raw.area ?? null,
       dailyBudget: c.daily_budget ?? null,
+      status: c.status,
+      impressions: r?.impressions ?? 0,
+      clicks: r?.clicks ?? 0,
       leads: r?.leads ?? 0,
       spend: r?.spend ?? 0,
       cpl: r?.cpl ?? null,
-      status: c.status,
     };
   });
+}
 
+/**
+ * A compact, ranked summary of past campaigns and their results, for the planner
+ * to learn from. Returns "" when there's nothing meaningful yet.
+ */
+export async function getPerformanceContext(businessId: string): Promise<string> {
+  const rows = await getPerformanceRows(businessId);
   return buildPerformanceContext(rows);
 }

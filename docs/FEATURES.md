@@ -77,7 +77,7 @@
 | ✅ | Campaign insights | impressions/clicks/leads/spend/CPL |
 | ✅ | Plain-language summaries | LLM, jargon-free |
 | ✅ | Performance context for planner | ranked past-campaign history |
-| 📋 | Markdown performance report export | per campaign / business |
+| ✅ | Markdown performance report export | download per business (`/api/campaigns/report`) |
 | 📋 | Trends dashboard | CPL/leads over time |
 
 ## 7. Observability & security

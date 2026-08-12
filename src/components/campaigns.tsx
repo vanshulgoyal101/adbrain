@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ExternalLink,
+  FileText,
   Loader2,
   RefreshCw,
   Rocket,
@@ -391,6 +392,14 @@ export function Campaigns({
                 <span className="text-xs text-slate-400">
                   Synced {timeAgo(lastSynced)}
                 </span>
+              )}
+              {campaigns.length > 0 && (
+                <a
+                  href="/api/campaigns/report"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400"
+                >
+                  <FileText className="h-4 w-4" /> Export report
+                </a>
               )}
               <Button
                 size="sm"
