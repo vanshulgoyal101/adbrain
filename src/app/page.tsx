@@ -2,12 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
+  Brain,
   Image as ImageIcon,
   Inbox,
   MapPin,
   Rocket,
   Sparkles,
-  Sun,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { getUser } from "@/lib/supabase/queries";
 
 const FEATURES = [
   {
-    icon: Sun,
+    icon: Brain,
     title: "Brand Brain",
     body: "Your voice, USPs, colours, and offers in one place — every ad is generated from it.",
   },
@@ -54,7 +54,7 @@ const STEPS = [
   },
   {
     title: "Type a goal",
-    body: "“More rooftop solar leads in Jaipur this month.” AdBrain writes the ads.",
+    body: "“More leads in Jaipur this month.” AdBrain writes the ads.",
   },
   {
     title: "Approve & launch",
@@ -76,7 +76,7 @@ export default async function Home() {
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between p-6">
         <div className="flex items-center gap-2">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
-            <Sun className="h-5 w-5" />
+            <Brain className="h-5 w-5" />
           </span>
           <span className="text-lg font-bold tracking-tight">AdBrain</span>
         </div>
@@ -91,7 +91,7 @@ export default async function Home() {
         {/* Hero */}
         <section className="mx-auto flex w-full max-w-3xl flex-col items-center px-6 py-16 text-center">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
-            <Sparkles className="h-4 w-4" /> AI ad creative for solar businesses
+            <Sparkles className="h-4 w-4" /> AI ad creative for any local business
           </span>
           <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
             Fill your brand brain. Type a goal.
@@ -99,7 +99,7 @@ export default async function Home() {
             Get ads ready to launch.
           </h1>
           <p className="mt-5 max-w-xl text-lg text-slate-600">
-            AdBrain turns your brand into on-brand solar ad creatives — image,
+            AdBrain turns your brand into on-brand ad creatives — image,
             headline, and copy — in seconds. You approve; Meta Advantage+ does
             the targeting.
           </p>
@@ -138,7 +138,7 @@ export default async function Home() {
         {/* Features */}
         <section className="mx-auto w-full max-w-5xl px-6 py-12">
           <h2 className="text-center text-2xl font-bold tracking-tight text-slate-900">
-            Everything a solar business needs to run ads
+            Everything a local business needs to run ads
           </h2>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map(({ icon: Icon, title, body }) => (
@@ -183,7 +183,7 @@ export default async function Home() {
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-500 sm:flex-row">
           <div className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4 text-emerald-600" />
-            <span>AdBrain — AI ads for solar businesses</span>
+            <span>AdBrain — AI ad creative for any local business</span>
           </div>
           <p>© {new Date().getFullYear()} AdBrain. All rights reserved.</p>
         </div>

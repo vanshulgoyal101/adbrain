@@ -7,7 +7,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: `${siteConfig.name} — AI ads for solar businesses`,
+    default: `${siteConfig.name} — ${siteConfig.tagline}`,
     template: `%s — ${siteConfig.name}`,
   },
   description: siteConfig.description,
@@ -21,14 +21,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: siteConfig.name,
-    title: `${siteConfig.name} — AI ads for solar businesses`,
+    title: `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.description,
     url: siteConfig.url,
     locale: siteConfig.locale,
   },
   twitter: {
     card: "summary_large_image",
-    title: `${siteConfig.name} — AI ads for solar businesses`,
+    title: `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.shortDescription,
     creator: siteConfig.twitter,
   },

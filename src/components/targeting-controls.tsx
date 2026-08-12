@@ -334,7 +334,7 @@ export function TargetingControls({
           <Label className="flex items-center gap-1.5">
             Age range
             <InfoHint>
-              Homeowners who buy solar skew 30–60. Leaving this to AdBrain lets
+              Most local-business buyers skew 30–60. Leaving this to AdBrain lets
               Meta Advantage+ find the best ages automatically.
             </InfoHint>
           </Label>

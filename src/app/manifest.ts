@@ -3,7 +3,7 @@ import { siteConfig } from "@/lib/site";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `${siteConfig.name} — AI ads for solar businesses`,
+    name: `${siteConfig.name} — ${siteConfig.tagline}`,
     short_name: siteConfig.name,
     description: siteConfig.shortDescription,
     start_url: "/",

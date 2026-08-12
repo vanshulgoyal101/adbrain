@@ -62,7 +62,7 @@ export function softwareApplicationSchema(): JsonLdObject {
     inLanguage: "en",
     publisher: { "@id": ORG_ID },
     featureList: [
-      "AI-generated solar ad creative (image + copy)",
+      "AI-generated ad creative (image + copy)",
       "Brand Brain: reusable brand voice, USPs, and offers",
       "One-click Meta lead campaigns with AI-picked targeting",
       "Plain-language results and campaign summaries",
@@ -103,12 +103,12 @@ export const MARKETING_FAQS: FaqItem[] = [
   {
     question: "What is AdBrain?",
     answer:
-      "AdBrain is an AI tool that creates ready-to-launch ad creatives (image, headline, and copy) for solar businesses and launches them as Meta lead campaigns. You fill in your brand once, type a goal, and get on-brand ads in seconds.",
+      "AdBrain is an AI tool that creates ready-to-launch ad creatives (image, headline, and copy) for any local business and launches them as Meta lead campaigns. You fill in your brand once, type a goal, and get on-brand ads in seconds.",
   },
   {
     question: "Do I need to know how to use Meta Ads Manager?",
     answer:
-      "No. AdBrain is built for solar business owners, not marketers. It writes the ads, picks the audience and location, and creates a paused campaign for you. Nothing spends until you review and activate it.",
+      "No. AdBrain is built for business owners, not marketers. It writes the ads, picks the audience and location, and creates a paused campaign for you. Nothing spends until you review and activate it.",
   },
   {
     question: "How does AdBrain decide who sees my ads?",

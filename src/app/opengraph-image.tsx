@@ -51,7 +51,7 @@ export default function OpengraphImage() {
               maxWidth: 900,
             }}
           >
-            AI ad creative for solar businesses
+            AI ad creative for any local business
           </div>
           <div style={{ fontSize: 32, color: "#475569", maxWidth: 880 }}>
             Fill your brand brain, type a goal, and get on-brand ads ready to launch.
