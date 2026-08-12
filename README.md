@@ -10,6 +10,7 @@ See [docs/SPEC.md](docs/SPEC.md) for the full product spec and
 [docs/how-we-got-here.md](docs/how-we-got-here.md) for the rationale.
 See [docs/FEATURES.md](docs/FEATURES.md) for the living list of built and
 proposed features.
+See [docs/DEPLOY.md](docs/DEPLOY.md) to deploy to adbrain.vanshul.com.
 
 ## Stack
 
