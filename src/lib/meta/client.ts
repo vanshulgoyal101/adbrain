@@ -73,6 +73,7 @@ export interface ResolvedGeo {
 export interface CreateCampaignResult {
   campaignId: string;
   adSetId: string;
+  adSetIds: string[];
   adIds: string[];
   destination: AdDestination;
 }
@@ -155,6 +156,33 @@ export function destinationCTA(
     type: ctaType(opts.ctaLabel),
     value: { lead_gen_form_id: opts.leadFormId },
   };
+}
+
+/** One ad set in a campaign — its own audience, for an audience A/B test. */
+export interface AdSetVariant {
+  label?: string;
+  ageMin?: number;
+  ageMax?: number;
+  location?: GeoTargeting;
+  excludedLocation?: GeoTargeting;
+}
+
+/**
+ * Split an age range into two contiguous bands for an A/B test. Returns a single
+ * band when the range is too narrow to split meaningfully.
+ */
+export function splitAgeRange(
+  min: number,
+  max: number,
+): { ageMin: number; ageMax: number; label: string }[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max - min < 6) {
+    return [{ ageMin: min, ageMax: max, label: `Age ${min}–${max}` }];
+  }
+  const mid = Math.floor((min + max) / 2);
+  return [
+    { ageMin: min, ageMax: mid, label: `Age ${min}–${mid}` },
+    { ageMin: mid + 1, ageMax: max, label: `Age ${mid + 1}–${max}` },
+  ];
 }
 
 /** Meta city-radius bounds (kilometers). */
@@ -482,6 +510,7 @@ export class MetaClient {
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
     phone?: string;
+    variants?: AdSetVariant[];
   }): Promise<CreateCampaignResult> {
     const acct = this.creds.adAccountId;
     const requested = params.destination ?? "instant_form";
@@ -510,31 +539,55 @@ export class MetaClient {
       },
     });
 
-    const targeting = JSON.stringify({
-      geo_locations: {
-        ...buildGeoLocations(params.location, ["IN"]),
-        // Residents only — not travellers/visitors — to avoid out-of-area leads.
-        location_types: ["home"],
-      },
-      ...(hasGeo(params.excludedLocation)
-        ? {
-            excluded_geo_locations: buildGeoLocations(
-              params.excludedLocation,
-              [],
-            ),
-          }
-        : {}),
-      ...(params.ageMin ? { age_min: params.ageMin } : {}),
-      ...(params.ageMax ? { age_max: params.ageMax } : {}),
-      targeting_automation: { advantage_audience: 1 },
-    });
+    // Upload each creative image once and reuse the hash across all ad sets.
+    const prepared: { input: CreativeInput; imageHash: string }[] = [];
+    for (const c of params.creatives) {
+      prepared.push({
+        input: c,
+        imageHash: await this.uploadAdImage(c.imageUrl),
+      });
+    }
 
-    const makeAdSet = (dest: AdDestination) => {
+    // One ad set per variant; the default is a single ad set from the params.
+    const variants: AdSetVariant[] = params.variants?.length
+      ? params.variants
+      : [
+          {
+            ageMin: params.ageMin,
+            ageMax: params.ageMax,
+            location: params.location,
+            excludedLocation: params.excludedLocation,
+          },
+        ];
+
+    const targetingFor = (v: AdSetVariant) => {
+      const loc = v.location ?? params.location;
+      const excl = v.excludedLocation ?? params.excludedLocation;
+      const ageMin = v.ageMin ?? params.ageMin;
+      const ageMax = v.ageMax ?? params.ageMax;
+      return JSON.stringify({
+        geo_locations: {
+          ...buildGeoLocations(loc, ["IN"]),
+          // Residents only — not travellers/visitors — to avoid out-of-area leads.
+          location_types: ["home"],
+        },
+        ...(hasGeo(excl)
+          ? { excluded_geo_locations: buildGeoLocations(excl, []) }
+          : {}),
+        ...(ageMin ? { age_min: ageMin } : {}),
+        ...(ageMax ? { age_max: ageMax } : {}),
+        targeting_automation: { advantage_audience: 1 },
+      });
+    };
+
+    const makeAdSet = (dest: AdDestination, v: AdSetVariant, i: number) => {
       const dp = destinationPlan(dest);
+      const suffix =
+        v.label ?? (variants.length > 1 ? `Ad set ${i + 1}` : "Ad set");
       return this.graph<{ id: string }>(`${acct}/adsets`, {
         method: "POST",
         form: {
-          name: `${params.name} — Ad set`,
+          name: `${params.name} — ${suffix}`,
           campaign_id: campaign.id,
           status: "PAUSED",
           daily_budget: String(Math.round(params.dailyBudgetRupees * 100)),
@@ -543,63 +596,77 @@ export class MetaClient {
           bid_strategy: "LOWEST_COST_WITHOUT_CAP",
           destination_type: dp.destinationType,
           promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
-          targeting,
+          targeting: targetingFor(v),
         },
       });
     };
 
-    // Try the requested destination; fall back to an instant form if Meta
-    // rejects it (e.g. WhatsApp not connected, or call ads not enabled).
     let destination = requested;
-    let adSet: { id: string };
-    try {
-      adSet = await makeAdSet(requested);
-    } catch (err) {
-      if (requested === "instant_form") throw err;
-      destination = "instant_form";
-      adSet = await makeAdSet("instant_form");
-    }
-
+    const adSetIds: string[] = [];
     const adIds: string[] = [];
-    for (const c of params.creatives) {
-      const imageHash = await this.uploadAdImage(c.imageUrl);
-      const creative = await this.graph<{ id: string }>(
-        `${acct}/adcreatives`,
-        {
+
+    for (let i = 0; i < variants.length; i++) {
+      let adSet: { id: string };
+      if (i === 0) {
+        // First ad set resolves the destination, falling back to instant form
+        // if Meta rejects the chosen one (e.g. WhatsApp not connected).
+        try {
+          adSet = await makeAdSet(requested, variants[i], i);
+        } catch (err) {
+          if (requested === "instant_form") throw err;
+          destination = "instant_form";
+          adSet = await makeAdSet("instant_form", variants[i], i);
+        }
+      } else {
+        adSet = await makeAdSet(destination, variants[i], i);
+      }
+      adSetIds.push(adSet.id);
+
+      for (const { input: c, imageHash } of prepared) {
+        const creative = await this.graph<{ id: string }>(
+          `${acct}/adcreatives`,
+          {
+            method: "POST",
+            form: {
+              name: c.headline.slice(0, 90) || "AdBrain creative",
+              object_story_spec: JSON.stringify({
+                page_id: this.creds.pageId,
+                link_data: {
+                  image_hash: imageHash,
+                  message: c.message,
+                  name: c.headline,
+                  link: params.link,
+                  call_to_action: destinationCTA(destination, {
+                    leadFormId: params.leadFormId,
+                    phone,
+                    ctaLabel: c.cta,
+                  }),
+                },
+              }),
+            },
+          },
+        );
+
+        const ad = await this.graph<{ id: string }>(`${acct}/ads`, {
           method: "POST",
           form: {
-            name: c.headline.slice(0, 90) || "AdBrain creative",
-            object_story_spec: JSON.stringify({
-              page_id: this.creds.pageId,
-              link_data: {
-                image_hash: imageHash,
-                message: c.message,
-                name: c.headline,
-                link: params.link,
-                call_to_action: destinationCTA(destination, {
-                  leadFormId: params.leadFormId,
-                  phone,
-                  ctaLabel: c.cta,
-                }),
-              },
-            }),
+            name: c.headline.slice(0, 90) || "AdBrain ad",
+            adset_id: adSet.id,
+            status: "PAUSED",
+            creative: JSON.stringify({ creative_id: creative.id }),
           },
-        },
-      );
-
-      const ad = await this.graph<{ id: string }>(`${acct}/ads`, {
-        method: "POST",
-        form: {
-          name: c.headline.slice(0, 90) || "AdBrain ad",
-          adset_id: adSet.id,
-          status: "PAUSED",
-          creative: JSON.stringify({ creative_id: creative.id }),
-        },
-      });
-      adIds.push(ad.id);
+        });
+        adIds.push(ad.id);
+      }
     }
 
-    return { campaignId: campaign.id, adSetId: adSet.id, adIds, destination };
+    return {
+      campaignId: campaign.id,
+      adSetId: adSetIds[0],
+      adSetIds,
+      adIds,
+      destination,
+    };
   }
 
   async listCampaigns(limit = 200): Promise<MetaCampaignSummary[]> {

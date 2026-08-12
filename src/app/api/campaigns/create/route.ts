@@ -5,6 +5,7 @@ import {
   MetaError,
   geoItemsToTargeting,
   metaClientFromEnv,
+  splitAgeRange,
   type GeoTargeting,
 } from "@/lib/meta/client";
 import {
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
     leadFormId?: string;
     name?: string;
     targeting?: TargetingInput;
+    abTest?: boolean;
   } | null;
 
   const businessId = (body?.businessId ?? "").trim();
@@ -44,6 +46,7 @@ export async function POST(req: Request) {
   const leadFormId = (body?.leadFormId ?? "").trim();
   const name = (body?.name ?? "").trim() || "AdBrain campaign";
   const targeting = normalizeTargetingInput(body?.targeting);
+  const abTest = body?.abTest === true;
 
   if (!businessId || !creativeIds.length || !leadFormId || dailyBudget <= 0) {
     return NextResponse.json(
@@ -127,6 +130,18 @@ export async function POST(req: Request) {
       excludedLocation,
       ageMin: targeting.ageMin,
       ageMax: targeting.ageMax,
+      // Opt-in audience A/B: split the age range into two ad sets.
+      variants: abTest
+        ? splitAgeRange(targeting.ageMin ?? 25, targeting.ageMax ?? 60).map(
+            (band) => ({
+              label: band.label,
+              ageMin: band.ageMin,
+              ageMax: band.ageMax,
+              location,
+              excludedLocation,
+            }),
+          )
+        : undefined,
     });
   } catch (err) {
     return NextResponse.json(

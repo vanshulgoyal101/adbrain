@@ -62,6 +62,7 @@ export function Campaigns({
   const [leadFormId, setLeadFormId] = useState(leadForms[0]?.id ?? "");
   const [name, setName] = useState(`${business.name} — leads`);
   const [targeting, setTargeting] = useState<TargetingValue>(defaultTargeting);
+  const [abTest, setAbTest] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -152,6 +153,7 @@ export function Campaigns({
               max: targeting.ageMax,
             },
           },
+          abTest,
         }),
       });
       const data = (await res.json()) as {
@@ -355,6 +357,24 @@ export function Campaigns({
                     brandAreas={business.locations ?? []}
                   />
                 </div>
+
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 p-3">
+                  <input
+                    type="checkbox"
+                    checked={abTest}
+                    onChange={(e) => setAbTest(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-emerald-600"
+                  />
+                  <span className="text-sm">
+                    <span className="font-medium text-slate-800">
+                      A/B test the audience by age
+                    </span>
+                    <span className="block text-xs text-slate-500">
+                      Advanced: splits your age range into two ad sets so Meta can
+                      find the cheaper audience for you.
+                    </span>
+                  </span>
+                </label>
 
                 <div className="flex flex-wrap items-center gap-3">
                   <Button onClick={createCampaign} disabled={creating}>

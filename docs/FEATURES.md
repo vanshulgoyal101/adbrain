@@ -56,8 +56,8 @@
 | ✅ | Sync existing campaigns from Meta | manual button + auto-sync on page load |
 | ✅ | Results refresh + plain-language summary | insights → friendly sentence |
 | ✅ | Learning loop | past results (angle/area/CPL) feed the planner |
-| 📋 | AI picks ad type | lead form vs Click-to-WhatsApp vs Call (destination_type) |
-| 📋 | Multiple ad sets/ads per campaign | audience-level A/B ("Advanced" mode) |
+| ✅ | AI picks ad type | instant form / Click-to-WhatsApp / Call, with fallback |
+| ✅ | Audience A/B (multiple ad sets) | opt-in age split into 2 ad sets ("Advanced") |
 | 🔒 | True A/B split tests | Meta Experiments API |
 | 📋 | Scheduled activation | launch at a chosen date/time |
 | 📋 | Auto-optimisation | pause losers, scale winners on CPL |
