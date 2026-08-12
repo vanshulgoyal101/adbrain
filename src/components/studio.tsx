@@ -116,7 +116,7 @@ export function Studio({
                 rows={3}
                 value={brief}
                 onChange={(e) => setBrief(e.target.value)}
-                placeholder="e.g. Festive-season offer on rooftop solar for homeowners in Pune. Emphasise bill savings and free site survey."
+                placeholder="e.g. Festive-season offer for customers in Pune. Emphasise the savings and a free consultation."
               />
             </div>
             <div className="flex flex-wrap items-end gap-4">

@@ -89,7 +89,7 @@ src/
     supabase/              # browser/server/admin clients, proxy session, queries
     llm/                   # rotating orchestrator + provider adapters
     imageGen/              # provider-abstracted image generation
-    templates/solar.ts     # solar angles + prompt builders (+ instruction injection)
+    templates/ads.ts       # universal ad angles + industry-driven prompt builders (+ instruction injection)
     creative/generate.ts   # copy + image → complete variants
     creative/persist.ts    # store generated images in Supabase Storage
     creative/summary.ts    # plain-language results summary (LLM)

@@ -246,9 +246,9 @@ export function TargetingControls({
           <Label className="flex items-center gap-1.5">
             Where should ads show?
             <InfoHint>
-              The area your ads run in. Solar is local — targeting the towns you
-              actually serve means cheaper, better leads than showing to the
-              whole country.
+              The area your ads run in. Most local businesses do best targeting
+              only the towns they actually serve — cheaper, better leads than
+              showing to the whole country.
             </InfoHint>
           </Label>
           <ModeToggle
@@ -312,7 +312,7 @@ export function TargetingControls({
               Radius around each city: {value.radiusKm} km
               <InfoHint>
                 How far out from a city centre to reach. Wider = more people but
-                less local. 25 km suits most solar installers.
+                less local. 25 km suits most local businesses.
               </InfoHint>
             </Label>
             <input

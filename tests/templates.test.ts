@@ -1,37 +1,40 @@
 import { describe, expect, it } from "vitest";
 import {
+  AD_ANGLES,
   buildCopyMessages,
   buildImagePrompt,
   getAngle,
   META_CTAS,
-  SOLAR_ANGLES,
   type BrandContext,
-} from "@/lib/templates/solar";
+} from "@/lib/templates/ads";
 
 const brand: BrandContext = {
   name: "Solaride",
+  vertical: "solar energy",
   brand_voice: "friendly, trustworthy",
   usps: ["25-year warranty", "subsidy handled"],
   languages: ["English", "Hindi"],
   locations: ["Pune"],
 };
 
-describe("solar templates", () => {
+describe("ad templates", () => {
   it("exposes a non-empty angle library with unique ids", () => {
-    expect(SOLAR_ANGLES.length).toBeGreaterThanOrEqual(5);
-    const ids = SOLAR_ANGLES.map((a) => a.id);
+    expect(AD_ANGLES.length).toBeGreaterThanOrEqual(5);
+    const ids = AD_ANGLES.map((a) => a.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("looks up an angle by id", () => {
-    expect(getAngle("savings")?.name).toBeTruthy();
+    expect(getAngle("value")?.name).toBeTruthy();
     expect(getAngle("nope")).toBeUndefined();
   });
 
   it("builds copy messages that include brand, brief, angle, and CTA list", () => {
-    const angle = SOLAR_ANGLES[0];
+    const angle = AD_ANGLES[0];
     const messages = buildCopyMessages(brand, "Festive offer", angle);
     expect(messages[0].role).toBe("system");
+    // industry drives the system prompt
+    expect(messages[0].content).toContain("solar energy");
     const user = messages[1].content;
     expect(user).toContain("Solaride");
     expect(user).toContain("Festive offer");
@@ -41,9 +44,16 @@ describe("solar templates", () => {
     expect(user).toContain("English and Hindi");
   });
 
-  it("builds an image prompt that forbids text and embeds context", () => {
-    const prompt = buildImagePrompt(brand, "rooftop solar", SOLAR_ANGLES[0]);
+  it("falls back to a neutral industry when vertical is absent", () => {
+    const generic: BrandContext = { name: "Acme" };
+    const messages = buildCopyMessages(generic, "brief", AD_ANGLES[0]);
+    expect(messages[0].content).toContain("local business");
+  });
+
+  it("builds an image prompt that forbids text and embeds industry + brief", () => {
+    const prompt = buildImagePrompt(brand, "rooftop solar", AD_ANGLES[0]);
     expect(prompt.toLowerCase()).toContain("no text");
     expect(prompt).toContain("rooftop solar");
+    expect(prompt).toContain("solar energy");
   });
 });

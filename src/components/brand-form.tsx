@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { Business } from "@/lib/types";
-import type { BrandExtraction } from "@/lib/templates/solar";
+import type { BrandExtraction } from "@/lib/templates/ads";
 
 interface FieldsState {
   name: string;
+  vertical: string;
   website: string;
   description: string;
   brand_voice: string;
@@ -30,6 +31,7 @@ interface FieldsState {
 function fromBusiness(b: Business | null): FieldsState {
   return {
     name: b?.name ?? "",
+    vertical: b?.vertical ?? "",
     website: b?.website ?? "",
     description: b?.description ?? "",
     brand_voice: b?.brand_voice ?? "",
@@ -100,6 +102,7 @@ export function BrandForm({ business }: { business: Business | null }) {
       setFields((f) => ({
         ...f,
         description: e.description ?? f.description,
+        vertical: e.vertical ?? f.vertical,
         brand_voice: e.brand_voice ?? f.brand_voice,
         primary_color: e.primary_color ?? f.primary_color,
         secondary_color: e.secondary_color ?? f.secondary_color,
@@ -151,6 +154,14 @@ export function BrandForm({ business }: { business: Business | null }) {
               placeholder="solaride.in"
             />
           </Field>
+          <Field label="Industry / business type">
+            <Input
+              name="vertical"
+              value={fields.vertical}
+              onChange={(e) => set("vertical", e.target.value)}
+              placeholder="solar energy, dental clinic, gym…"
+            />
+          </Field>
           <div className="sm:col-span-2">
             <Field label="Description">
               <Textarea
@@ -188,7 +199,7 @@ export function BrandForm({ business }: { business: Business | null }) {
               name="target_audience"
               value={fields.target_audience}
               onChange={(e) => set("target_audience", e.target.value)}
-              placeholder="homeowners paying high electricity bills"
+              placeholder="the customers you most want to reach"
             />
           </Field>
           <Field label="Primary color">

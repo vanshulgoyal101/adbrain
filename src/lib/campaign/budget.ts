@@ -9,7 +9,7 @@
 export const BUDGET_PRESETS = [200, 500, 1000] as const;
 
 /**
- * Rough solar lead-gen cost-per-lead band (INR), used ONLY for the pre-launch
+ * Rough local lead-gen cost-per-lead band (INR), used ONLY for the pre-launch
  * estimate. Deliberately wide and clearly labelled an estimate; the real CPL
  * from the first results refresh supersedes it.
  */

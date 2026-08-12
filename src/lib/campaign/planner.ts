@@ -1,5 +1,5 @@
 import { completeJSON, type ChatMessage } from "@/lib/llm";
-import type { BrandContext } from "@/lib/templates/solar";
+import type { BrandContext } from "@/lib/templates/ads";
 
 export interface CampaignPlan {
   name: string;
@@ -73,11 +73,13 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
     .map((f) => `- ${f.id}: "${f.name}"`)
     .join("\n");
 
+  const industry = input.brand.vertical?.trim() || "local business";
+
   return [
     {
       role: "system",
       content:
-        "You are a senior Meta ads strategist for a solar company, interviewing a " +
+        `You are a senior Meta ads strategist for a ${industry}, interviewing a ` +
         "non-technical business owner to plan a lead-generation campaign. Think like " +
         "a helpful assistant that asks ONE screen of clear multiple-choice questions " +
         "at a time. Rules: (1) Only use the creative IDs and lead form IDs provided — " +
@@ -88,7 +90,7 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "unknown: which area(s) to TARGET, which nearby areas to EXCLUDE (so they " +
         "don't get out-of-area calls), daily budget, and which offer/angle to push. " +
         "(3) Never fabricate facts, prices, or guarantees. (4) Keep the audience " +
-        "simple (a sensible age range). (5) LOCATION MATTERS for a local installer: " +
+        "simple (a sensible age range). (5) LOCATION MATTERS for a local business: " +
         "use the brand's Areas or an area named in the goal for `locations`, and put " +
         "nearby unwanted towns in `excluded_locations`. Ask instead of guessing when " +
         "it matters. (6) Choose how leads should reach the business as " +

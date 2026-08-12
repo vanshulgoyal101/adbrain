@@ -157,7 +157,7 @@ export function CampaignChat({
               onChange={(e) => setGoal(e.target.value)}
               rows={2}
               maxLength={1000}
-              placeholder="e.g. Get more rooftop solar leads near Mohali, around ₹300/day, push the free site visit."
+              placeholder="e.g. Get more leads near Mohali, around ₹300/day, push the free consultation."
             />
             <div>
               <Button onClick={start} disabled={!goal.trim()}>

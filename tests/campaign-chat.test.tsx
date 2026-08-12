@@ -22,7 +22,7 @@ describe("<CampaignChat>", () => {
     const start = screen.getByRole("button", { name: /start/i });
     expect(start).toBeDisabled();
 
-    const box = screen.getByPlaceholderText(/get more rooftop solar leads/i);
+    const box = screen.getByPlaceholderText(/get more leads/i);
     fireEvent.change(box, { target: { value: "more solar leads" } });
     expect(start).toBeEnabled();
   });
@@ -51,7 +51,7 @@ describe("<CampaignChat>", () => {
     render(<CampaignChat onCreated={onCreated} />);
 
     fireEvent.change(
-      screen.getByPlaceholderText(/get more rooftop solar leads/i),
+      screen.getByPlaceholderText(/get more leads/i),
       { target: { value: "more solar leads" } },
     );
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
@@ -89,7 +89,7 @@ describe("<CampaignChat>", () => {
 
     render(<CampaignChat onCreated={vi.fn()} />);
     fireEvent.change(
-      screen.getByPlaceholderText(/get more rooftop solar leads/i),
+      screen.getByPlaceholderText(/get more leads/i),
       { target: { value: "x" } },
     );
     fireEvent.click(screen.getByRole("button", { name: /start/i }));

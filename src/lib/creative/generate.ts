@@ -1,14 +1,14 @@
 import { generateImage } from "@/lib/imageGen";
 import { completeJSON } from "@/lib/llm";
 import {
+  AD_ANGLES,
   buildCopyMessages,
   buildImagePrompt,
   getAngle,
-  SOLAR_ANGLES,
+  type AdAngle,
   type BrandContext,
   type GeneratedCopy,
-  type SolarAngle,
-} from "@/lib/templates/solar";
+} from "@/lib/templates/ads";
 
 export interface GeneratedVariant {
   angleId: string;
@@ -22,7 +22,7 @@ export interface GeneratedVariant {
 
 /**
  * Generate N complete ad variants (copy + image) for a brand + brief, one per
- * solar angle. Runs angles in parallel so a 3–5 variant batch stays well under
+ * ad angle. Runs angles in parallel so a 3–5 variant batch stays well under
  * the 60s acceptance target.
  */
 export async function generateVariants(params: {
@@ -34,14 +34,14 @@ export async function generateVariants(params: {
   language?: string;
 }): Promise<GeneratedVariant[]> {
   const { brand, brief, instructions, language } = params;
-  const count = Math.min(Math.max(params.count ?? 3, 1), SOLAR_ANGLES.length);
+  const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
 
-  const angles: SolarAngle[] = (
+  const angles: AdAngle[] = (
     params.angleIds?.length
       ? params.angleIds
           .map(getAngle)
-          .filter((a): a is SolarAngle => a !== undefined)
-      : SOLAR_ANGLES
+          .filter((a): a is AdAngle => a !== undefined)
+      : AD_ANGLES
   ).slice(0, count);
 
   return Promise.all(
@@ -54,7 +54,7 @@ export async function generateVariants(params: {
 export async function generateOneVariant(
   brand: BrandContext,
   brief: string,
-  angle: SolarAngle,
+  angle: AdAngle,
   instructions?: string,
   language?: string,
 ): Promise<GeneratedVariant> {

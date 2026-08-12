@@ -85,6 +85,6 @@ export function buildLeadDigest(leads: DigestLead[], opts: DigestOptions): strin
     ...lines,
     ...overflow,
     "",
-    "Reply fast — solar leads go cold within minutes.",
+    "Reply fast — leads go cold within minutes.",
   ].join("\n");
 }

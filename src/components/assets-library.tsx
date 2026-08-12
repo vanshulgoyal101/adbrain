@@ -150,7 +150,7 @@ export function AssetsLibrary({
                 key={c.id}
                 url={c.image_url as string}
                 title={c.headline ?? "Ad creative"}
-                filename={`solaride-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
+                filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
                 badges={[
                   ...(c.angle ? [{ label: c.angle }] : []),
                   ...(c.status === "approved"
@@ -184,7 +184,7 @@ export function AssetsLibrary({
                 key={a.id}
                 url={a.url}
                 title={a.notes || ASSET_TYPE_LABEL[a.type] || "Asset"}
-                filename={`solaride-${slugify(a.type, a.id.slice(0, 6))}.png`}
+                filename={`adbrain-${slugify(a.type, a.id.slice(0, 6))}.png`}
                 badges={[{ label: ASSET_TYPE_LABEL[a.type] ?? a.type }]}
               />
             ))}

@@ -3,6 +3,7 @@ import type { ChatMessage } from "@/lib/llm";
 /** Minimal brand context the prompt builders need. `Business` satisfies this. */
 export interface BrandContext {
   name: string;
+  vertical?: string | null;
   description?: string | null;
   brand_voice?: string | null;
   primary_color?: string | null;
@@ -14,12 +15,12 @@ export interface BrandContext {
   locations?: string[];
 }
 
-export interface SolarAngle {
+export interface AdAngle {
   id: string;
   name: string;
   /** What this angle emphasises in the copy. */
   description: string;
-  /** Visual direction for the image prompt. */
+  /** Visual mood/direction for the image (the subject comes from the industry + brief). */
   imageHint: string;
 }
 
@@ -40,6 +41,7 @@ export interface BrandExtraction {
   usps?: string[];
   offers?: string[];
   languages?: string[];
+  vertical?: string;
 }
 
 /** Meta's supported call-to-action buttons for Leads/Traffic objectives. */
@@ -53,68 +55,76 @@ export const META_CTAS = [
   "Call Now",
 ] as const;
 
-/** The core library of solar ad angles. */
-export const SOLAR_ANGLES: SolarAngle[] = [
+/**
+ * Universal ad angles that work for any business. The specifics (product,
+ * imagery, offer) come from the brand's industry, USPs, and the brief — so the
+ * same six angles suit a solar installer, a dental clinic, or a gym.
+ */
+export const AD_ANGLES: AdAngle[] = [
   {
-    id: "savings",
-    name: "Bill savings",
+    id: "value",
+    name: "Save money / value",
     description:
-      "Slash monthly electricity bills; frame solar as money saved every month.",
+      "Emphasise the money saved or the clear value the customer gains.",
     imageHint:
-      "a happy homeowner looking at a low electricity bill, bright rooftop solar panels behind, sunny day",
+      "a happy customer clearly enjoying the value or benefit, bright and aspirational, warm natural light",
   },
   {
-    id: "independence",
-    name: "Beat rising tariffs",
+    id: "problem",
+    name: "Solve a pain point",
     description:
-      "Escape rising grid tariffs and power cuts with your own energy source.",
+      "Lead with the customer's problem, then the relief the business provides.",
     imageHint:
-      "a modern Indian home fully powered by rooftop solar at golden hour, self-reliant and bright",
+      "a relieved, satisfied customer after their problem is solved, clean modern composition",
   },
   {
-    id: "subsidy",
-    name: "Government subsidy",
+    id: "offer",
+    name: "Special offer / incentive",
     description:
-      "Highlight government subsidy / net-metering making solar more affordable now.",
+      "Highlight a current offer, discount, deal, or incentive to act.",
     imageHint:
-      "clean rooftop solar installation on a middle-class Indian home, official and trustworthy tone",
-  },
-  {
-    id: "eco",
-    name: "Clean energy for family",
-    description:
-      "Clean, green energy and a better future for the family and community.",
-    imageHint:
-      "a family on a rooftop with solar panels, greenery around, warm optimistic sunlight",
+      "energetic, celebratory advertising mood, vibrant and inviting",
   },
   {
     id: "trust",
-    name: "Trusted local installer",
+    name: "Trusted & local",
     description:
-      "Emphasise experience, quality installation, warranty, and local track record.",
+      "Emphasise experience, quality, reviews, guarantees, and local track record.",
     imageHint:
-      "professional installers in uniform fitting solar panels on a rooftop, clean and precise work",
+      "a professional team delivering quality work, trustworthy, precise and clean",
+  },
+  {
+    id: "aspiration",
+    name: "Lifestyle / aspiration",
+    description: "Sell the better outcome or lifestyle the customer wants.",
+    imageHint:
+      "an aspirational lifestyle scene, warm optimistic sunlight, people enjoying the outcome",
   },
   {
     id: "urgency",
-    name: "Limited-time offer",
-    description:
-      "Seasonal/festive limited-time offer to prompt immediate enquiry.",
+    name: "Limited-time urgency",
+    description: "Give a limited-time reason to enquire now.",
     imageHint:
-      "vibrant rooftop solar panels under a bright sky, energetic and celebratory advertising mood",
+      "a dynamic, high-energy advertising mood, bold and attention-grabbing",
   },
 ];
 
-export function getAngle(id: string): SolarAngle | undefined {
-  return SOLAR_ANGLES.find((a) => a.id === id);
+export function getAngle(id: string): AdAngle | undefined {
+  return AD_ANGLES.find((a) => a.id === id);
 }
 
-export function getAngleByName(name: string): SolarAngle | undefined {
-  return SOLAR_ANGLES.find((a) => a.name === name);
+export function getAngleByName(name: string): AdAngle | undefined {
+  return AD_ANGLES.find((a) => a.name === name);
+}
+
+/** The customer's industry, or a neutral fallback. */
+export function brandIndustry(brand: BrandContext): string {
+  return brand.vertical?.trim() || "local business";
 }
 
 function brandSummary(brand: BrandContext): string {
   const lines: string[] = [`Business name: ${brand.name}`];
+  lines.push(`Industry: ${brandIndustry(brand)}`);
   if (brand.description) lines.push(`About: ${brand.description}`);
   if (brand.brand_voice) lines.push(`Brand voice: ${brand.brand_voice}`);
   if (brand.target_audience)
@@ -132,10 +142,11 @@ function brandSummary(brand: BrandContext): string {
 export function buildCopyMessages(
   brand: BrandContext,
   brief: string,
-  angle: SolarAngle,
+  angle: AdAngle,
   instructions?: string,
   language?: string,
 ): ChatMessage[] {
+  const industry = brandIndustry(brand);
   const langs =
     language?.trim() ||
     (brand.languages?.length ? brand.languages.join(" and ") : "English");
@@ -143,10 +154,10 @@ export function buildCopyMessages(
     {
       role: "system",
       content:
-        "You are an expert performance-marketing copywriter for a solar-energy " +
-        "company running Meta (Facebook/Instagram) lead ads in India. You write " +
-        "tight, high-converting, on-brand ad copy. You never invent facts, prices, " +
-        "or guarantees that were not provided. Customer instructions, when present, " +
+        `You are an expert performance-marketing copywriter for a ${industry} ` +
+        "running Meta (Facebook/Instagram) lead ads in India. You write tight, " +
+        "high-converting, on-brand ad copy. You never invent facts, prices, or " +
+        "guarantees that were not provided. Customer instructions, when present, " +
         "take priority over defaults. Output ONLY valid JSON.",
     },
     {
@@ -160,7 +171,7 @@ ANGLE: ${angle.name} — ${angle.description}
 
 Write ONE ad in ${langs}. Match the brand voice. Requirements:
 - "headline": <= 40 characters, punchy, benefit-led.
-- "primary_text": 2–4 short lines, scannable, at most one emoji, ends with a soft nudge to enquire. Do not fabricate specific prices, subsidy amounts, or guarantees unless present in the brand brain, instructions, or brief.
+- "primary_text": 2–4 short lines, scannable, at most one emoji, ends with a soft nudge to enquire. Do not fabricate specific prices, discounts, or guarantees unless present in the brand brain, instructions, or brief.
 - "cta": choose exactly one of: ${META_CTAS.join(", ")}.
 
 Return strict JSON: {"headline": string, "primary_text": string, "cta": string}`,
@@ -172,18 +183,19 @@ Return strict JSON: {"headline": string, "primary_text": string, "cta": string}`
 export function buildImagePrompt(
   brand: BrandContext,
   brief: string,
-  angle: SolarAngle,
+  angle: AdAngle,
   instructions?: string,
 ): string {
+  const industry = brandIndustry(brand);
   const colorHint = brand.primary_color
     ? `subtle ${brand.primary_color} color accents, `
     : "";
   return (
-    `Professional advertising photograph for a solar energy brand. ` +
+    `Professional advertising photograph for a ${industry}. ` +
+    `Subject and context: ${brief}. ` +
     `${angle.imageHint}. ${colorHint}` +
-    `photorealistic, high detail, natural warm sunlight, clean composition, ` +
+    `photorealistic, high detail, natural light, clean composition, ` +
     `shot on a DSLR, commercial quality, aspirational and trustworthy mood. ` +
-    `Context: ${brief}. ` +
     `${instructions ? `Follow these brand instructions: ${instructions.slice(0, 500)}. ` : ""}` +
     `Absolutely no text, no words, no logos, no watermarks in the image.`
   );
@@ -213,6 +225,7 @@ ${websiteText.slice(0, 8000)}
 Extract what you can into strict JSON with these optional keys (omit a key if unknown):
 {
   "description": string,            // 1–2 sentence summary of what they do
+  "vertical": string,              // the industry / business type, e.g. "solar energy", "dental clinic", "gym"
   "brand_voice": string,            // e.g. "friendly, trustworthy, no-jargon"
   "primary_color": string,          // hex like #0A7E3D if evident, else omit
   "secondary_color": string,

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   buildBrandExtractionMessages,
   type BrandExtraction,
-} from "@/lib/templates/solar";
+} from "@/lib/templates/ads";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;

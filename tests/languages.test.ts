@@ -5,7 +5,7 @@ import {
   languageLabel,
   languagePromptName,
 } from "@/lib/languages";
-import { buildCopyMessages, SOLAR_ANGLES } from "@/lib/templates/solar";
+import { buildCopyMessages, AD_ANGLES } from "@/lib/templates/ads";
 
 describe("ad languages", () => {
   it("offers the Indian-market set including Hinglish", () => {
@@ -38,7 +38,7 @@ describe("ad languages", () => {
 
 describe("buildCopyMessages language override", () => {
   const brand = { name: "Solaride", languages: ["English"] };
-  const angle = SOLAR_ANGLES[0];
+  const angle = AD_ANGLES[0];
 
   it("uses the explicit language when provided", () => {
     const msgs = buildCopyMessages(

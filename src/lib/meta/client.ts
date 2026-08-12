@@ -286,8 +286,8 @@ export function hasGeo(geo: GeoTargeting | undefined): boolean {
   return !!(geo?.cities?.length || geo?.regions?.length || geo?.countries?.length);
 }
 
-/** Read Solaride's single-tenant credentials from the environment. */
-export function getSolarideCredentialsFromEnv(): MetaCredentials | null {
+/** Read the single-tenant Meta credentials from the environment. */
+export function getMetaCredentialsFromEnv(): MetaCredentials | null {
   const env = getEnv();
   if (
     !env.META_SYSTEM_USER_TOKEN ||
@@ -304,11 +304,11 @@ export function getSolarideCredentialsFromEnv(): MetaCredentials | null {
 }
 
 export function isMetaConfigured(): boolean {
-  return getSolarideCredentialsFromEnv() !== null;
+  return getMetaCredentialsFromEnv() !== null;
 }
 
 export function metaClientFromEnv(): MetaClient | null {
-  const creds = getSolarideCredentialsFromEnv();
+  const creds = getMetaCredentialsFromEnv();
   return creds ? new MetaClient(creds) : null;
 }
 

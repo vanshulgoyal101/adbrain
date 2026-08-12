@@ -39,6 +39,7 @@ export async function saveBusiness(
   const payload: BusinessInsert = {
     owner_id: user.id,
     name,
+    vertical: str(formData, "vertical") ?? undefined,
     website: str(formData, "website"),
     description: str(formData, "description"),
     brand_voice: str(formData, "brand_voice"),

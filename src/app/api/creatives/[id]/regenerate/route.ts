@@ -6,7 +6,7 @@ import { persistCreativeImage } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
-import { getAngleByName, SOLAR_ANGLES } from "@/lib/templates/solar";
+import { getAngleByName, AD_ANGLES } from "@/lib/templates/ads";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,7 +42,7 @@ export async function POST(
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
-  const angle = getAngleByName(creative.angle ?? "") ?? SOLAR_ANGLES[0];
+  const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
   const instructions = await getActiveInstructionsText(business.id);
 
   let variant;

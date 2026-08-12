@@ -6,7 +6,8 @@
  * generated output — the app only imports `Database` and the aliases below.
  */
 
-export type Vertical = "solar";
+/** The customer's industry / business type, e.g. "solar energy", "dental clinic". Free text. */
+export type Vertical = string;
 export type BrandAssetType = "logo" | "product_photo" | "past_ad";
 export type MetaTokenType = "system_user" | "oauth";
 export type CreativeStatus = "draft" | "approved";

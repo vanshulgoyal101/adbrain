@@ -57,7 +57,7 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{business.name}</h1>
           <p className="mt-1 text-slate-600">
-            {business.description ?? "Your solar business dashboard."}
+            {business.description ?? "Your business dashboard."}
           </p>
         </div>
         <Link href="/studio">

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildCopyMessages,
   buildImagePrompt,
-  SOLAR_ANGLES,
+  AD_ANGLES,
   type BrandContext,
-} from "@/lib/templates/solar";
+} from "@/lib/templates/ads";
 
 const brand: BrandContext = { name: "Solaride" };
 
@@ -13,7 +13,7 @@ describe("instruction injection", () => {
     const msgs = buildCopyMessages(
       brand,
       "brief",
-      SOLAR_ANGLES[0],
+      AD_ANGLES[0],
       "Always mention 25-year warranty",
     );
     expect(msgs[1].content).toContain("CUSTOMER INSTRUCTIONS");
@@ -21,7 +21,7 @@ describe("instruction injection", () => {
   });
 
   it("omits the instructions block when none provided", () => {
-    const msgs = buildCopyMessages(brand, "brief", SOLAR_ANGLES[0]);
+    const msgs = buildCopyMessages(brand, "brief", AD_ANGLES[0]);
     expect(msgs[1].content).not.toContain("CUSTOMER INSTRUCTIONS");
   });
 
@@ -29,7 +29,7 @@ describe("instruction injection", () => {
     const prompt = buildImagePrompt(
       brand,
       "brief",
-      SOLAR_ANGLES[0],
+      AD_ANGLES[0],
       "use warm tones",
     );
     expect(prompt).toContain("use warm tones");
