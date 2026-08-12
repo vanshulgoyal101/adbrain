@@ -17,19 +17,20 @@ import type {
   Lead,
 } from "@/lib/types";
 
-/** Current authenticated user, or null. When the dev bypass is enabled and its
- * cookie is set, returns the dev identity immediately (no Supabase round-trip). */
+/** Current authenticated user, or null. A real Supabase session always wins;
+ * the dev bypass cookie is only a fallback when there's no real session. */
 export async function getUser(): Promise<AppUser | null> {
-  if (isDevAuthEnabled()) {
-    const store = await cookies();
-    if (store.get(DEV_AUTH_COOKIE)?.value === "1") return DEV_USER;
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return user ? { id: user.id, email: user.email ?? null } : null;
+  if (user) return { id: user.id, email: user.email ?? null };
+
+  if (isDevAuthEnabled()) {
+    const store = await cookies();
+    if (store.get(DEV_AUTH_COOKIE)?.value === "1") return DEV_USER;
+  }
+  return null;
 }
 
 /** All businesses owned by the current user (RLS-scoped). */

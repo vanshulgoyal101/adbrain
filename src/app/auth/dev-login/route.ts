@@ -26,7 +26,10 @@ export async function GET(request: Request) {
         password,
       });
       if (!error) {
-        return NextResponse.redirect(`${origin}/dashboard`);
+        // Real session wins — drop any stale offline dev cookie.
+        const res = NextResponse.redirect(`${origin}/dashboard`);
+        res.cookies.set(DEV_AUTH_COOKIE, "", { path: "/", maxAge: 0 });
+        return res;
       }
     } catch {
       // Backend unreachable — fall through to the offline dev cookie.
