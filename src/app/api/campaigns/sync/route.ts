@@ -56,9 +56,22 @@ export async function POST() {
       .select("id")
       .eq("meta_campaign_id", mc.id)
       .maybeSingle();
-    const { error } = existing
+    const { error: writeErr } = existing
       ? await supabase.from("campaigns").update(row).eq("id", existing.id)
       : await supabase.from("campaigns").insert(row);
+    // A concurrent sync may have inserted the same campaign between our select
+    // and insert. The unique index (business_id, meta_campaign_id) rejects the
+    // duplicate with 23505 — fall back to an update so the sync stays idempotent.
+    const error =
+      writeErr?.code === "23505"
+        ? (
+            await supabase
+              .from("campaigns")
+              .update(row)
+              .eq("business_id", business.id)
+              .eq("meta_campaign_id", mc.id)
+          ).error
+        : writeErr;
     if (error) {
       console.error("[campaigns.sync] upsert failed", mc.id, error);
       failed.push(mc.name || mc.id);

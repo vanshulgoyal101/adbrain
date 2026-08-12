@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
+import { apiError, MAX_BATCH_IDS, readJson } from "@/lib/api";
 import { downloadImage } from "@/lib/imageGen";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,21 +13,16 @@ export async function POST(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiError("Unauthorized", 401);
   }
 
-  const body = (await req.json().catch(() => null)) as {
-    creativeIds?: string[];
-  } | null;
+  const body = await readJson<{ creativeIds?: string[] }>(req);
   const ids = (Array.isArray(body?.creativeIds) ? body.creativeIds : []).slice(
     0,
-    50,
+    MAX_BATCH_IDS,
   );
   if (!ids.length) {
-    return NextResponse.json(
-      { error: "creativeIds is required" },
-      { status: 400 },
-    );
+    return apiError("creativeIds is required", 400);
   }
 
   // RLS scopes this to the user's own creatives.
@@ -35,14 +31,17 @@ export async function POST(req: Request) {
     .select("*")
     .in("id", ids);
   if (!creatives?.length) {
-    return NextResponse.json({ error: "No creatives found" }, { status: 404 });
+    return apiError("No creatives found", 404);
   }
 
   const zip = new JSZip();
+  let withImage = 0;
+  let skipped = 0;
 
   await Promise.all(
     creatives.map(async (c, i) => {
       if (!c.image_url) return;
+      withImage++;
       const label = `ad-${i + 1}-${(c.angle ?? "ad")
         .replace(/\W+/g, "-")
         .toLowerCase()}`;
@@ -50,8 +49,10 @@ export async function POST(req: Request) {
         const { bytes, contentType } = await downloadImage(c.image_url);
         const ext = contentType.includes("png") ? "png" : "jpg";
         zip.file(`${label}.${ext}`, bytes);
-      } catch {
-        // Skip an image that failed to download; copy still exported.
+      } catch (err) {
+        // Skip an image that failed to download; copy is still exported.
+        skipped++;
+        console.warn("[creatives.export] image download failed", c.id, err);
       }
     }),
   );
@@ -65,13 +66,18 @@ export async function POST(req: Request) {
         `CTA: ${c.cta ?? ""}\n`,
     )
     .join("\n----------------------------------------\n\n");
-  zip.file("copy.txt", copy);
+  const note =
+    skipped > 0
+      ? `Note: ${skipped} of ${withImage} image(s) could not be downloaded and are not included.\n\n`
+      : "";
+  zip.file("copy.txt", note + copy);
 
   const buffer = await zip.generateAsync({ type: "arraybuffer" });
   return new NextResponse(new Blob([buffer], { type: "application/zip" }), {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": 'attachment; filename="adbrain-ad-pack.zip"',
+      "X-Images-Skipped": String(skipped),
     },
   });
 }
