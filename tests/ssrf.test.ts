@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchPublicUrlText,
   isBlockedHost,
   parsePublicUrl,
   resolveRedirectTarget,
+  SafeFetchError,
 } from "@/lib/security/ssrf";
 
 describe("isBlockedHost", () => {
@@ -118,5 +120,67 @@ describe("resolveRedirectTarget", () => {
 
   it("blocks a redirect to a non-http(s) scheme", () => {
     expect(resolveRedirectTarget("file:///etc/passwd", base)).toBeNull();
+  });
+});
+
+describe("fetchPublicUrlText", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const redirect = (location: string) =>
+    new Response(null, { status: 302, headers: { location } });
+
+  it("returns the body for a direct 200", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("<html>hi</html>", { status: 200 }),
+    );
+    await expect(fetchPublicUrlText("https://example.com")).resolves.toBe(
+      "<html>hi</html>",
+    );
+  });
+
+  it("rejects the initial URL when it is a blocked host", async () => {
+    const spy = vi.spyOn(globalThis, "fetch");
+    await expect(fetchPublicUrlText("http://169.254.169.254")).rejects.toThrow(
+      SafeFetchError,
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("blocks a redirect that points at cloud metadata (SSRF bypass)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      redirect("http://169.254.169.254/latest/meta-data"),
+    );
+    await expect(
+      fetchPublicUrlText("https://evil.example.com"),
+    ).rejects.toMatchObject({ code: "blocked" });
+  });
+
+  it("follows a safe redirect to another public host", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(redirect("https://other.example.com/x"))
+      .mockResolvedValueOnce(new Response("final", { status: 200 }));
+    await expect(fetchPublicUrlText("https://start.example.com")).resolves.toBe(
+      "final",
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after too many redirects", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      redirect("https://a.example.com/loop"),
+    );
+    await expect(
+      fetchPublicUrlText("https://a.example.com", { maxRedirects: 2 }),
+    ).rejects.toBeInstanceOf(SafeFetchError);
+  });
+
+  it("throws a status error for a non-2xx response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("nope", { status: 404 }),
+    );
+    await expect(
+      fetchPublicUrlText("https://example.com"),
+    ).rejects.toMatchObject({ code: "status", status: 404 });
   });
 });

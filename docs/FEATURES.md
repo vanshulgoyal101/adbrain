@@ -5,18 +5,18 @@
 >
 > **Legend:** ✅ Built · 🚧 In progress · 📋 Proposed · 🔒 Blocked (needs access/prereq)
 >
-> _Last updated: 2026-08-12_
+> _Last updated: 2026-08-13_
 
 ---
 
 ## North Star & principles
 
-**North Star:** a non-technical solar SMB owner gets **more leads at a lower cost**
-with **near-zero effort** — fill the brand once, type a goal, approve, done.
-Every feature must move that number.
+**North Star:** a non-technical local-business owner gets **more leads at a lower
+cost** with **near-zero effort** — fill the brand once, type a goal, approve,
+done. Every feature must move that number. The engine is **industry-agnostic**
+(each business sets its own `vertical`); Solaride (solar) is just one customer.
 
 **What we deliberately DON'T build (so the product stays simple):**
-- A generic "any business" ad tool — stay **solar** until expansion is an obvious win.
 - Manual targeting micro-optimisation — **delegate to Meta Advantage+**, don't fight it.
 - A full CRM / analytics suite — keep lead tracking **lightweight**; integrate, don't rebuild.
 - New ad channels (Google, etc.) before Meta is nailed.
@@ -29,6 +29,17 @@ Every feature must move that number.
 | **Now** | Guided onboarding · Spend guardrails & alerts · Weekly WhatsApp results digest · Instant new-lead alerts |
 | **Next** | AI-vs-baseline benchmark · Auto-optimisation · Lead → revenue (ROI) · Festival campaign suggestions |
 | **Later** | Self-serve multi-customer · Agency / white-label · Video creatives · Google Ads |
+
+## Recently shipped (2026-08-13)
+| Status | Feature | Notes |
+| --- | --- | --- |
+| ✅ | Industry-agnostic engine | universal `AD_ANGLES` + prompts driven by `brand.vertical`; Brand Brain has an Industry field |
+| ✅ | General marketing/SEO | rebranded to "AI ad creative for any local business" |
+| ✅ | Pause / resume campaigns | from the dashboard — `PATCH /api/campaigns/[id]` → Meta + local mirror + audit |
+| ✅ | Privacy & Terms pages | `/privacy`, `/terms` with metadata + WebPage/Breadcrumb JSON-LD |
+| ✅ | Per-user rate limiting | on generate/regenerate/plan/autofill (429 + Retry-After) |
+| ✅ | SSRF redirect hardening | autofill re-validates every redirect hop (`fetchPublicUrlText`) |
+| ✅ | Dev-bypass prod guard | disabled unless `NODE_ENV !== production` |
 
 ## 1. Auth & access
 | Status | Feature | Notes |

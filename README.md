@@ -59,7 +59,7 @@ See [docs/DEPLOY.md](docs/DEPLOY.md) to deploy to adbrain.vanshul.com.
 | `npm run start` | Serve the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run test` | Vitest unit tests (92 tests) |
+| `npm run test` | Vitest unit + component tests |
 
 ## Architecture
 
