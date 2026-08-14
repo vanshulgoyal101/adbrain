@@ -13,6 +13,8 @@ export interface BrandContext {
   offers?: string[];
   languages?: string[];
   locations?: string[];
+  website?: string | null;
+  logo_url?: string | null;
 }
 
 export interface AdAngle {
@@ -196,6 +198,8 @@ export function buildImagePrompt(
     `${angle.imageHint}. ${colorHint}` +
     `photorealistic, high detail, natural light, clean composition, ` +
     `shot on a DSLR, commercial quality, aspirational and trustworthy mood. ` +
+    `Keep the hero subject in the upper two-thirds and leave the lower area ` +
+    `simple and uncluttered so a headline and contact bar can be overlaid. ` +
     `${instructions ? `Follow these brand instructions: ${instructions.slice(0, 500)}. ` : ""}` +
     `Absolutely no text, no words, no logos, no watermarks in the image.`
   );

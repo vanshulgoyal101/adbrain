@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
-import { persistCreativeImage } from "@/lib/creative/persist";
+import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -83,16 +83,24 @@ export async function POST(req: Request) {
 
   const variantGroup = crypto.randomUUID();
   const persisted = await Promise.all(
-    variants.map(async (v) => ({
-      ...v,
-      imageUrl: await persistCreativeImage(
+    variants.map(async (v) => {
+      const photoUrl = await persistCreativeImage(
         supabase,
         businessId,
         variantGroup,
         v.angleId,
         v.imageUrl,
-      ),
-    })),
+      );
+      const imageUrl = await renderAndPersistDesign(
+        supabase,
+        businessId,
+        variantGroup,
+        v.angleId,
+        v.design,
+        photoUrl,
+      );
+      return { ...v, imageUrl };
+    }),
   );
   const rows = persisted.map((v) => ({
     business_id: businessId,

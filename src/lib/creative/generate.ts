@@ -1,3 +1,4 @@
+import { buildAdDesign, formatDimensions, type AdDesignSpec, type AdFormat } from "@/lib/creative/design";
 import { generateImage } from "@/lib/imageGen";
 import { completeJSON } from "@/lib/llm";
 import {
@@ -18,6 +19,8 @@ export interface GeneratedVariant {
   cta: string;
   imageUrl: string;
   imagePrompt: string;
+  /** Design spec used to composite the finished poster over `imageUrl`. */
+  design: AdDesignSpec;
 }
 
 /**
@@ -32,8 +35,9 @@ export async function generateVariants(params: {
   count?: number;
   instructions?: string;
   language?: string;
+  format?: AdFormat;
 }): Promise<GeneratedVariant[]> {
-  const { brand, brief, instructions, language } = params;
+  const { brand, brief, instructions, language, format } = params;
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
 
   const angles: AdAngle[] = (
@@ -46,7 +50,7 @@ export async function generateVariants(params: {
 
   return Promise.all(
     angles.map((angle) =>
-      generateOneVariant(brand, brief, angle, instructions, language),
+      generateOneVariant(brand, brief, angle, instructions, language, format),
     ),
   );
 }
@@ -57,7 +61,9 @@ export async function generateOneVariant(
   angle: AdAngle,
   instructions?: string,
   language?: string,
+  format?: AdFormat,
 ): Promise<GeneratedVariant> {
+  const dims = formatDimensions(format ?? "portrait");
   const [copy, image] = await Promise.all([
     completeJSON<GeneratedCopy>(
       buildCopyMessages(brand, brief, angle, instructions, language),
@@ -68,18 +74,31 @@ export async function generateOneVariant(
     ),
     generateImage({
       prompt: buildImagePrompt(brand, brief, angle, instructions),
-      width: 1024,
-      height: 1024,
+      width: dims.width,
+      height: dims.height,
     }),
   ]);
+
+  const normalizedCopy: GeneratedCopy = {
+    headline: copy.headline?.trim() ?? "",
+    primary_text: copy.primary_text?.trim() ?? "",
+    cta: copy.cta?.trim() || "Learn More",
+  };
 
   return {
     angleId: angle.id,
     angleName: angle.name,
-    headline: copy.headline?.trim() ?? "",
-    primaryText: copy.primary_text?.trim() ?? "",
-    cta: copy.cta?.trim() || "Learn More",
+    headline: normalizedCopy.headline,
+    primaryText: normalizedCopy.primary_text,
+    cta: normalizedCopy.cta,
     imageUrl: image.url,
     imagePrompt: image.prompt,
+    design: buildAdDesign({
+      brand,
+      copy: normalizedCopy,
+      angle,
+      backgroundUrl: image.url,
+      format,
+    }),
   };
 }

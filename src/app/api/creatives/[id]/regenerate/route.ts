@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { generateOneVariant } from "@/lib/creative/generate";
-import { persistCreativeImage } from "@/lib/creative/persist";
+import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -67,12 +67,20 @@ export async function POST(
     return NextResponse.json({ error: (err as Error).message }, { status: 502 });
   }
 
-  const imageUrl = await persistCreativeImage(
+  const photoUrl = await persistCreativeImage(
     supabase,
     business.id,
     creative.variant_group ?? id,
     angle.id,
     variant.imageUrl,
+  );
+  const imageUrl = await renderAndPersistDesign(
+    supabase,
+    business.id,
+    creative.variant_group ?? id,
+    angle.id,
+    variant.design,
+    photoUrl,
   );
 
   const { data: updated, error } = await supabase

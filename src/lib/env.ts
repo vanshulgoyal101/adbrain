@@ -48,6 +48,13 @@ const schema = z.object({
   POLLINATIONS_MODEL: z.string().optional().default("flux"),
   FALAI_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),
+  // Composite the designed poster (logo + headline + benefits + CTA) over the
+  // AI photo. Set to "false" to fall back to the bare photo.
+  AD_DESIGN_OVERLAY: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((v) => v !== "false" && v !== "0"),
 
   // Meta Marketing API (Phase 1)
   META_APP_ID: z.string().optional().default(""),
