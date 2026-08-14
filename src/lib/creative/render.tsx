@@ -186,15 +186,24 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
                     height: Math.round(26 * s),
                     borderRadius: 999,
                     background: spec.primaryColor,
-                    color: spec.ctaTextColor,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: Math.round(18 * s),
-                    fontWeight: 800,
                   }}
                 >
-                  ✓
+                  {/* Drawn checkmark — avoids a runtime web-font fetch for the ✓ glyph. */}
+                  <svg
+                    width={Math.round(15 * s)}
+                    height={Math.round(15 * s)}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={spec.ctaTextColor}
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="5 13 10 18 19 6" />
+                  </svg>
                 </div>
                 <div
                   style={{ fontSize: benefitSize, color: "#ffffff", fontWeight: 600 }}
