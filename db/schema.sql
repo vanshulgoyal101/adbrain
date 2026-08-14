@@ -171,6 +171,8 @@ alter table public.meta_credentials
 -- One Meta connection per business (upsert target for the connect flow).
 create unique index if not exists meta_credentials_business_id_key
   on public.meta_credentials (business_id);
+-- Drop the old non-unique index superseded by the unique one above.
+drop index if exists public.meta_credentials_business_id_idx;
 
 alter table public.meta_credentials enable row level security;
 
