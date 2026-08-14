@@ -69,7 +69,7 @@ export const AD_ANGLES: AdAngle[] = [
     description:
       "Emphasise the money saved or the clear value the customer gains.",
     imageHint:
-      "a happy customer clearly enjoying the value or benefit, bright and aspirational, warm natural light",
+      "bright, aspirational mood with warm natural light and a clean, premium look",
   },
   {
     id: "problem",
@@ -77,7 +77,7 @@ export const AD_ANGLES: AdAngle[] = [
     description:
       "Lead with the customer's problem, then the relief the business provides.",
     imageHint:
-      "a relieved, satisfied customer after their problem is solved, clean modern composition",
+      "reassuring, solution-focused mood, crisp and modern composition",
   },
   {
     id: "offer",
@@ -93,21 +93,21 @@ export const AD_ANGLES: AdAngle[] = [
     description:
       "Emphasise experience, quality, reviews, guarantees, and local track record.",
     imageHint:
-      "a professional team delivering quality work, trustworthy, precise and clean",
+      "trustworthy, precise and professional mood; skilled workers delivering the product/service in a real setting",
   },
   {
     id: "aspiration",
     name: "Lifestyle / aspiration",
     description: "Sell the better outcome or lifestyle the customer wants.",
     imageHint:
-      "an aspirational lifestyle scene, warm optimistic sunlight, people enjoying the outcome",
+      "warm, optimistic, aspirational mood with soft golden light",
   },
   {
     id: "urgency",
     name: "Limited-time urgency",
     description: "Give a limited-time reason to enquire now.",
     imageHint:
-      "a dynamic, high-energy advertising mood, bold and attention-grabbing",
+      "dynamic, high-energy, bold and attention-grabbing mood",
   },
 ];
 
@@ -193,15 +193,17 @@ export function buildImagePrompt(
     ? `subtle ${brand.primary_color} color accents, `
     : "";
   return (
-    `Professional advertising photograph for a ${industry}. ` +
-    `Subject and context: ${brief}. ` +
+    // Keep it short and subject-dominant: weak free models (flux/Pollinations)
+    // drift to empty skies or stock portraits when the subject isn't the loud,
+    // first thing in the prompt.
+    `Photorealistic advertising photograph of ${brief}. ` +
+    `The ${industry} product or work is the main subject, in sharp focus and ` +
+    `filling most of the frame. ` +
     `${angle.imageHint}. ${colorHint}` +
-    `photorealistic, high detail, natural light, clean composition, ` +
-    `shot on a DSLR, commercial quality, aspirational and trustworthy mood. ` +
-    `Keep the hero subject in the upper two-thirds and leave the lower area ` +
-    `simple and uncluttered so a headline and contact bar can be overlaid. ` +
+    `natural daylight, high detail, realistic, shot on a DSLR, commercial quality. ` +
+    `Avoid close-up portraits or headshots as the main subject. ` +
     `${instructions ? `Follow these brand instructions: ${instructions.slice(0, 500)}. ` : ""}` +
-    `Absolutely no text, no words, no logos, no watermarks in the image.`
+    `No text, no words, no logos, no watermarks.`
   );
 }
 

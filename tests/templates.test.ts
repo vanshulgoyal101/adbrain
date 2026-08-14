@@ -56,4 +56,14 @@ describe("ad templates", () => {
     expect(prompt).toContain("rooftop solar");
     expect(prompt).toContain("solar energy");
   });
+
+  it("anchors the image on the product, not a generic person", () => {
+    const prompt = buildImagePrompt(brand, "rooftop solar", AD_ANGLES[0]);
+    expect(prompt.toLowerCase()).toContain("main subject");
+    expect(prompt.toLowerCase()).toContain("portraits");
+    // angle hints set mood only — they must not name a person as the subject.
+    for (const angle of AD_ANGLES) {
+      expect(angle.imageHint.toLowerCase()).not.toContain("customer");
+    }
+  });
 });
