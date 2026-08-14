@@ -3,7 +3,11 @@ import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { isMetaConfigured, metaClientFromEnv, type LeadForm } from "@/lib/meta/client";
+import { type LeadForm } from "@/lib/meta/client";
+import {
+  getMetaConnection,
+  metaClientForBusiness,
+} from "@/lib/meta/credentials";
 import {
   getApprovedCreatives,
   getCampaigns,
@@ -15,7 +19,6 @@ export const metadata = { title: "Campaigns — AdBrain" };
 
 export default async function CampaignsPage() {
   const business = await getPrimaryBusiness();
-  const metaReady = isMetaConfigured();
 
   if (!business) {
     return (
@@ -44,10 +47,13 @@ export default async function CampaignsPage() {
   ]);
   const results = await getLatestResults(campaigns.map((c) => c.id));
 
+  const connection = await getMetaConnection(business.id);
+  const metaReady = connection.ready;
+
   let leadForms: LeadForm[] = [];
   let leadFormError: string | null = null;
   if (metaReady) {
-    const meta = metaClientFromEnv();
+    const meta = await metaClientForBusiness(business.id);
     try {
       leadForms = (await meta?.listLeadForms()) ?? [];
     } catch (err) {
@@ -71,7 +77,7 @@ export default async function CampaignsPage() {
           leadForms={leadForms}
           leadFormError={leadFormError}
           metaReady={metaReady}
-          adAccountId={process.env.META_AD_ACCOUNT_ID ?? ""}
+          adAccountId={connection.adAccountId ?? ""}
         />
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
-import { metaClientFromEnv } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -35,7 +35,7 @@ export async function POST(
     );
   }
 
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(campaign.business_id);
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
   }

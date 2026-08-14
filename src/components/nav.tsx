@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Image as ImageIcon, Inbox, LayoutDashboard, Megaphone, Sparkles, Wand2 } from "lucide-react";
+import { Building2, Image as ImageIcon, Inbox, LayoutDashboard, Megaphone, Settings, Sparkles, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -13,6 +13,7 @@ const items = [
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/leads", label: "Leads", icon: Inbox },
   { href: "/assets", label: "Assets", icon: ImageIcon },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Nav({

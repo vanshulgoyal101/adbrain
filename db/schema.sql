@@ -139,19 +139,37 @@ create policy "brand_assets: all own"
 
 -- ════════════════════════════════════════════════════════════════════════
 --  meta_credentials  (sensitive: contains access tokens)
+--  One row per business. `token_type='oauth'` rows are created by the
+--  Facebook-Login connect flow; `ad_account_id`/`page_id` are null while a
+--  connection is pending account/page selection.
 -- ════════════════════════════════════════════════════════════════════════
 create table if not exists public.meta_credentials (
-  id            uuid primary key default gen_random_uuid(),
-  business_id   uuid not null references public.businesses (id) on delete cascade,
-  ad_account_id text not null,
-  page_id       text not null,
-  access_token  text not null,
-  token_type    text not null default 'system_user'
-                  check (token_type in ('system_user', 'oauth')),
-  created_at    timestamptz not null default now()
+  id               uuid primary key default gen_random_uuid(),
+  business_id      uuid not null references public.businesses (id) on delete cascade,
+  ad_account_id    text,
+  page_id          text,
+  access_token     text not null,
+  token_type       text not null default 'system_user'
+                     check (token_type in ('system_user', 'oauth')),
+  token_expires_at timestamptz,
+  meta_user_id     text,
+  scopes           text,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
 );
 
-create index if not exists meta_credentials_business_id_idx
+-- Idempotent upgrades for databases created before the OAuth connect flow.
+alter table public.meta_credentials alter column ad_account_id drop not null;
+alter table public.meta_credentials alter column page_id drop not null;
+alter table public.meta_credentials
+  add column if not exists token_expires_at timestamptz;
+alter table public.meta_credentials add column if not exists meta_user_id text;
+alter table public.meta_credentials add column if not exists scopes text;
+alter table public.meta_credentials
+  add column if not exists updated_at timestamptz not null default now();
+
+-- One Meta connection per business (upsert target for the connect flow).
+create unique index if not exists meta_credentials_business_id_key
   on public.meta_credentials (business_id);
 
 alter table public.meta_credentials enable row level security;

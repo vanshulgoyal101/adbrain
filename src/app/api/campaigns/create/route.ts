@@ -4,10 +4,10 @@ import { logEvent } from "@/lib/audit";
 import {
   MetaError,
   geoItemsToTargeting,
-  metaClientFromEnv,
   splitAgeRange,
   type GeoTargeting,
 } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import {
   describeAudience,
   normalizeTargetingInput,
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(businessId);
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
   }

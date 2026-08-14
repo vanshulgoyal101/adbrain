@@ -269,9 +269,11 @@ export function Campaigns({
     <div className="flex flex-col gap-6">
       {!metaReady && (
         <Alert variant="warning">
-          Meta isn’t configured. Add <code>META_SYSTEM_USER_TOKEN</code>,{" "}
-          <code>META_AD_ACCOUNT_ID</code>, and <code>META_PAGE_ID</code> to your
-          environment to launch campaigns.
+          Meta isn’t connected yet.{" "}
+          <Link href="/settings" className="font-medium underline">
+            Connect your ad account in Settings
+          </Link>{" "}
+          to launch campaigns.
         </Alert>
       )}
 

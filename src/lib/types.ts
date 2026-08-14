@@ -98,20 +98,28 @@ export interface Database {
         Row: {
           id: string;
           business_id: string;
-          ad_account_id: string;
-          page_id: string;
+          ad_account_id: string | null;
+          page_id: string | null;
           access_token: string;
           token_type: MetaTokenType;
+          token_expires_at: string | null;
+          meta_user_id: string | null;
+          scopes: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           business_id: string;
-          ad_account_id: string;
-          page_id: string;
+          ad_account_id?: string | null;
+          page_id?: string | null;
           access_token: string;
           token_type?: MetaTokenType;
+          token_expires_at?: string | null;
+          meta_user_id?: string | null;
+          scopes?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["meta_credentials"]["Insert"]

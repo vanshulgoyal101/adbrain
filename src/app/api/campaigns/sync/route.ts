@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
-import { metaClientFromEnv } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import {
   mapCampaignObjective,
   mapCampaignStatus,
@@ -26,7 +26,7 @@ export async function POST() {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(business.id);
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
   }

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
-import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
+import { MetaError } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export async function PATCH(
     .maybeSingle();
   if (!campaign) return apiError("Campaign not found", 404);
 
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(campaign.business_id);
   if (!meta || !campaign.meta_campaign_id) {
     return apiError("This campaign isn't linked to Meta yet.", 400);
   }
@@ -99,7 +100,7 @@ export async function DELETE(
 
   // Remove it from Meta first (best-effort — it may already be gone there).
   let metaDeleted = false;
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(campaign.business_id);
   if (meta && campaign.meta_campaign_id) {
     try {
       await meta.deleteObject(campaign.meta_campaign_id);

@@ -50,7 +50,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | Route guard | `src/proxy.ts` + `updateSession`; protects app routes |
 | ✅ | Offline developer login | `NEXT_PUBLIC_DEV_AUTH_BYPASS`; real session when backend up, cookie fallback offline |
 | 📋 | Team / multi-user per business | roles (owner/editor/viewer) |
-| 🔒 | Multi-tenant OAuth (Facebook Login for Business) | needs Meta App Review — Phase 2 |
+| ✅ | Connect Meta ad account (Facebook Login) | `/settings` → OAuth → pick account+page; DB-first creds. **Live use needs Meta App Review** |
 
 ## 2. Brand Brain
 | Status | Feature | Notes |

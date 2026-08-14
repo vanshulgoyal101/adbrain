@@ -8,9 +8,9 @@ import {
 } from "@/lib/campaign/planner";
 import {
   MetaError,
-  metaClientFromEnv,
   type GeoTargeting,
 } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(business.id);
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
   }

@@ -91,7 +91,7 @@ current auth user owns that business. Storage buckets (`brand-assets`,
 | `profiles` | 1:1 with `auth.users` | created by a trigger on signup |
 | `businesses` | the Brand Brain | `vertical` (industry, free text), voice, colours, USPs, offers, `languages[]`, `locations[]` |
 | `brand_assets` | logos / product photos / past ads | stored in the `brand-assets` bucket |
-| `meta_credentials` | per-business Meta tokens | (single-tenant env creds also supported) |
+| `meta_credentials` | per-business Meta creds (one row/business): OAuth **or** single-tenant env fallback; `token_type`, `token_expires_at`, `scopes`, nullable account/page while pending |
 | `creatives` | generated ads | `angle`, `headline`, `primary_text`, `cta`, `image_url`, `status` (draft/approved), `variant_group` |
 | `campaigns` | launched campaigns | `meta_campaign_id`, `status`, `daily_budget`, `creative_ids[]`, `raw jsonb`; **unique (business_id, meta_campaign_id)** |
 | `campaign_results` | insight snapshots | impressions/clicks/leads/spend/cpl, `fetched_at` |
@@ -144,6 +144,11 @@ leaked).
 | `campaigns/report` | GET | Markdown performance report |
 | `leads/sync` | POST | Pull instant-form leads into the inbox (deduped) |
 | `meta/geo-search` | GET | Location typeahead (Meta adgeolocation) |
+| `meta/oauth/start` | GET | Begin Facebook-Login connect (signed `state` → dialog) |
+| `meta/oauth/callback` | GET | Exchange code → long-lived token → store connection |
+| `meta/accounts` | GET | List the connected user's ad accounts + pages |
+| `meta/connect` | POST | Save the chosen ad account + page |
+| `meta/disconnect` | POST | Remove the stored Meta connection |
 
 Cost-incurring routes (`assistant`, `generate`, `regenerate`, `plan`,
 `autofill`) are **rate-limited per user** (see §9).
@@ -241,6 +246,41 @@ A thin, typed wrapper over Graph v21. Highlights:
   **`getCampaignInsights`**, **`listLeadForms`**.
 - Single-tenant env credentials via `getMetaCredentialsFromEnv` /
   `metaClientFromEnv`.
+
+### 8a. Connecting an ad account (Facebook Login) — `lib/meta/oauth.ts`
+
+Business owners connect their own Meta account from **Settings** instead of
+relying on server env vars. The flow is stateless (no server-side session store):
+
+1. **`/api/meta/oauth/start`** builds an HMAC-signed `state` (payload =
+   `businessId` + `userId` + timestamp, signed with `META_APP_SECRET`, 10-min
+   TTL) and redirects to Facebook's login dialog with the required scopes
+   (`ads_management`, `leads_retrieval`, `pages_show_list`, `pages_manage_ads`,
+   `business_management`, …).
+2. **`/api/meta/oauth/callback`** verifies the `state` (signature + freshness +
+   that the current user started it), exchanges the `code` for a **short-lived**
+   token, then upgrades it to a **long-lived (~60-day)** user token
+   (`exchangeForLongLivedToken`). It upserts a `meta_credentials` row
+   (`token_type='oauth'`, `token_expires_at`, `scopes`) with the account/page
+   left null → **pending selection**.
+3. **`/api/meta/accounts`** lists the user's ad accounts + pages
+   (`fetchAdAccounts` / `fetchPages`); **`/api/meta/connect`** saves the chosen
+   pair after re-validating them against the token; **`/api/meta/disconnect`**
+   deletes the row.
+
+**Credential resolution** (`lib/meta/credentials.ts`) is now **DB-first,
+env-fallback**: `resolveMetaCredentials(businessId)` returns a complete,
+non-expired stored OAuth connection if present, otherwise the single-tenant env
+creds. `metaClientForBusiness(businessId)` is used by every campaign/lead route,
+and `getMetaConnection(businessId)` powers the Settings UI (`source`:
+`oauth` | `env` | `none`, plus `pending` / `ready` / `expired` — never exposes
+the token).
+
+> **Going live:** the OAuth scopes require **Meta App Review**, and the exact
+> `${NEXT_PUBLIC_SITE_URL}/api/meta/oauth/callback` redirect URI must be
+> whitelisted in the Meta app. Until approved it works only for the app's
+> configured test users. Tokens are stored in the RLS-protected
+> `meta_credentials` table and never returned to the browser.
 
 ---
 

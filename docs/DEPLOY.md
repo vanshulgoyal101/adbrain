@@ -43,10 +43,16 @@ Set these for **Production** (and Preview if you want previews to work):
 | `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini 2.5 thinking (default `3000`; `0` for a paid non-thinking model) |
 | `IMAGE_PROVIDER` | `pollinations` |
 | `AD_DESIGN_OVERLAY` | composite the designed poster over the AI photo (default `true`; `false` = bare photo) |
-| `META_APP_ID` / `META_APP_SECRET` | Meta app creds |
-| `META_SYSTEM_USER_TOKEN` | long-lived system-user token |
-| `META_AD_ACCOUNT_ID` | `act_...` |
-| `META_PAGE_ID` | page id |
+| `META_APP_ID` / `META_APP_SECRET` | Meta app creds (also required for the Facebook-Login connect flow) |
+| `META_SYSTEM_USER_TOKEN` | long-lived system-user token (single-tenant fallback) |
+| `META_AD_ACCOUNT_ID` | `act_...` (single-tenant fallback) |
+| `META_PAGE_ID` | page id (single-tenant fallback) |
+
+> **Connecting ad accounts from the UI (Facebook Login):** whitelist
+> `https://<your-domain>/api/meta/oauth/callback` as a Valid OAuth Redirect URI
+> in the Meta app, and submit the ad scopes for **App Review** before non-test
+> users can connect. Owners then connect at `/settings`; stored OAuth creds take
+> priority over the single-tenant `META_*` env vars per business.
 
 > **Do NOT set `NEXT_PUBLIC_DEV_AUTH_BYPASS` in production.** Leaving it unset
 > keeps the dev-login routes inert.

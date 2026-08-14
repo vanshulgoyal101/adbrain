@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { parseLeadFields } from "@/lib/leads/parse";
-import { MetaError, metaClientFromEnv } from "@/lib/meta/client";
+import { MetaError } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import type { Json, Lead, LeadInsert } from "@/lib/types";
@@ -25,7 +26,7 @@ export async function POST() {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const meta = metaClientFromEnv();
+  const meta = await metaClientForBusiness(business.id);
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { metaClientFromEnv } from "@/lib/meta/client";
+import { metaClientForBusiness } from "@/lib/meta/credentials";
+import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -23,7 +24,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ results: [] });
   }
 
-  const meta = metaClientFromEnv();
+  const business = await getPrimaryBusiness();
+  const meta = business ? await metaClientForBusiness(business.id) : null;
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
   }
