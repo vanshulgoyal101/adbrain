@@ -75,6 +75,15 @@ describe("pickBenefits", () => {
     expect(only.length).toBeLessThanOrEqual(24);
     expect(only.endsWith(" ")).toBe(false);
   });
+
+  it("strips punctuation left dangling by the clamp", () => {
+    const [only] = pickBenefits(
+      { name: "Acme", usps: ["Serves residential, commercial and industrial sites"] },
+      1,
+      24,
+    );
+    expect(only).not.toMatch(/[.,;]$/);
+  });
 });
 
 describe("deriveContactLine", () => {

@@ -35,8 +35,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-end",
-        background: `linear-gradient(135deg, ${spec.primaryColor} 0%, #0f172a 100%)`,
+        justifyContent: "flex-end",        alignItems: "flex-start",        background: `linear-gradient(135deg, ${spec.primaryColor} 0%, #0f172a 100%)`,
         fontFamily: "sans-serif",
         overflow: "hidden",
       }}
@@ -120,14 +119,19 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
         </div>
       </div>
 
-      {/* Headline + subhead + benefits + contact/CTA, bottom-aligned. */}
+      {/* Headline + subhead + benefits + contact/CTA, bottom-aligned.
+          Absolutely positioned with an explicit width so the box never exceeds
+          the canvas — Satori ignores `right` when `left` is set and stretches a
+          flex child to full width, which pushes the CTA off the right edge. */}
       <div
         style={{
-          position: "relative",
+          position: "absolute",
+          left: pad,
+          bottom: pad,
+          width: spec.width - pad * 2,
           display: "flex",
           flexDirection: "column",
           gap: Math.round(20 * s),
-          padding: pad,
         }}
       >
         <div
@@ -210,12 +214,13 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
             marginTop: Math.round(12 * s),
           }}
         >
-          <div style={{ fontSize: ctaSize, color: "#cbd5e1", display: "flex" }}>
+          <div style={{ fontSize: ctaSize, color: "#cbd5e1", display: "flex", overflow: "hidden" }}>
             {spec.contactLine ?? ""}
           </div>
           <div
             style={{
               display: "flex",
+              flexShrink: 0,
               fontSize: ctaSize,
               fontWeight: 700,
               color: spec.ctaTextColor,

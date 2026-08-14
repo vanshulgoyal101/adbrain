@@ -98,7 +98,7 @@ function clampWords(s: string, maxLen: number): string {
 function tidyBenefit(raw: string, maxLen: number): string {
   const s = stripEmoji(raw).replace(/[.;,]+$/, "").trim();
   if (!s) return "";
-  const capped = clampWords(s, maxLen);
+  const capped = clampWords(s, maxLen).replace(/[.;,]+$/, "").trim();
   return capped.charAt(0).toUpperCase() + capped.slice(1);
 }
 
