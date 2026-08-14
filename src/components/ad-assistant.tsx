@@ -19,6 +19,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
+import { seasonalSuggestions } from "@/lib/seasonal";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -171,6 +172,7 @@ export function AdAssistant({ business }: { business: Business }) {
   }
 
   if (!started) {
+    const suggestions = seasonalSuggestions();
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-5 p-8 text-center">
@@ -190,7 +192,7 @@ export function AdAssistant({ business }: { business: Business }) {
               onChange={(e) => setGoal(e.target.value)}
               rows={2}
               maxLength={500}
-              placeholder="e.g. A Diwali ad for my business"
+              placeholder={`e.g. ${suggestions[0]?.prompt ?? "A weekend offer for my business"}`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -199,18 +201,16 @@ export function AdAssistant({ business }: { business: Business }) {
               }}
             />
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              {["A Diwali ad for my business", "Weekend discount offer", "New customer offer"].map(
-                (s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setGoal(s)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-700"
-                  >
-                    {s}
-                  </button>
-                ),
-              )}
+              {suggestions.map((s) => (
+                <button
+                  key={s.label}
+                  type="button"
+                  onClick={() => setGoal(s.prompt)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-700"
+                >
+                  {s.label}
+                </button>
+              ))}
             </div>
             <Button onClick={start} disabled={!goal.trim()} className="mt-4">
               <Sparkles className="h-4 w-4" /> Start

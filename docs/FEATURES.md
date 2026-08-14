@@ -33,6 +33,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 ## Recently shipped (2026-08-13)
 | Status | Feature | Notes |
 | --- | --- | --- |
+| ✅ | Seasonal campaign suggestions | date-aware Ad Assistant chips (festivals/national days/shopping seasons for India) — `lib/seasonal.ts` |
 | ✅ | Onboarding checklist | dashboard "Get set up" steps (brand → create → approve → launch) from real state; hides when complete — `lib/onboarding.ts` |
 | ✅ | Spend-health signal | plain-language badge per campaign ("No leads yet" / "Cheap leads" / "On track" / "Pricey leads") from real results — `spendHealth()` in `lib/campaign/budget.ts` |
 | ✅ | Self-contained posters | poster overlay uses a drawn SVG checkmark (no runtime web-font fetch); Meta parsers are array-safe |
@@ -78,7 +79,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | Assets library | browse/reuse/download all AI-generated images (`/assets`) |
 | 📋 | Video creatives | when models are good/cheap enough |
 | 📋 | Creative winner detection | promote the best-performing variant |
-| 📋 | Festival / seasonal campaign suggestions | timely Diwali / Sankranti offers (India) |
+| 📋 | Festival / seasonal campaign suggestions | ✅ shipped as date-aware Ad Assistant chips (`lib/seasonal.ts`); deeper in-planner suggestions still open |
 | 📋 | Language badge + regenerate-in-language | finish localisation (needs `creatives.language`) |
 
 ## 4. Campaigns & targeting
