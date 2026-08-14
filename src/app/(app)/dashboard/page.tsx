@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CheckCircle2, ImageIcon, Sparkles } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, ImageIcon, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getAuditLog, getPrimaryBusiness } from "@/lib/supabase/queries";
@@ -66,6 +66,24 @@ export default async function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      <Link href="/create" className="mt-6 block">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-5 transition-colors hover:bg-blue-100">
+          <div className="flex items-center gap-4">
+            <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-blue-600 text-white">
+              <Wand2 className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="font-semibold text-slate-900">Make an ad in a few taps</p>
+              <p className="text-sm text-slate-600">
+                Just tell the Ad Assistant what you want — it asks a couple of easy
+                questions and hands you a finished ad.
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="h-5 w-5 flex-none text-blue-700" />
+        </div>
+      </Link>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         {stats.map(({ label, value, icon: Icon }) => (

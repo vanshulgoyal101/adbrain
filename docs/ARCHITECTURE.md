@@ -131,6 +131,7 @@ leaked).
 | Route | Method | Purpose |
 | --- | --- | --- |
 | `brand/autofill` | POST | Scrape a website (SSRF-guarded) → LLM → brand fields |
+| `creatives/assistant` | POST | Guided interview (one question at a time) → creative brief |
 | `creatives/generate` | POST | Brief → 3–6 variants (copy + image) → saved drafts |
 | `creatives/[id]/regenerate` | POST | Re-roll a single variant |
 | `creatives/export` | POST | Zip of images + `copy.txt` (skips failed images, reports count) |
@@ -144,8 +145,8 @@ leaked).
 | `leads/sync` | POST | Pull instant-form leads into the inbox (deduped) |
 | `meta/geo-search` | GET | Location typeahead (Meta adgeolocation) |
 
-Cost-incurring routes (`generate`, `regenerate`, `plan`, `autofill`) are
-**rate-limited per user** (see §9).
+Cost-incurring routes (`assistant`, `generate`, `regenerate`, `plan`,
+`autofill`) are **rate-limited per user** (see §9).
 
 ---
 

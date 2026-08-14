@@ -33,6 +33,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 ## Recently shipped (2026-08-13)
 | Status | Feature | Notes |
 | --- | --- | --- |
+| ✅ | Ad Assistant (guided chat) | `/create` tab: type a request → one-tap Q&A (options · "Surprise me" · "Let AI decide") → finished ad. `lib/creative/interview.ts` + `api/creatives/assistant` + `components/ad-assistant.tsx` |
 | ✅ | Industry-agnostic engine | universal `AD_ANGLES` + prompts driven by `brand.vertical`; Brand Brain has an Industry field |
 | ✅ | General marketing/SEO | rebranded to "AI ad creative for any local business" |
 | ✅ | Pause / resume campaigns | from the dashboard — `PATCH /api/campaigns/[id]` → Meta + local mirror + audit |

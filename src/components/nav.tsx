@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Image as ImageIcon, Inbox, LayoutDashboard, Megaphone, Sparkles } from "lucide-react";
+import { Building2, Image as ImageIcon, Inbox, LayoutDashboard, Megaphone, Sparkles, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/create", label: "Ad Assistant", icon: Wand2 },
   { href: "/brand", label: "Brand Brain", icon: Building2 },
   { href: "/studio", label: "Creative Studio", icon: Sparkles },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
