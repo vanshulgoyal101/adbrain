@@ -50,6 +50,10 @@ export function AdAssistant({ business }: { business: Business }) {
   const [loading, setLoading] = useState(false);
   const [phase, setPhase] = useState<"chat" | "generating" | "done">("chat");
   const [error, setError] = useState<string | null>(null);
+  // Remembers the last network action so an error can be retried in place.
+  const [lastAction, setLastAction] = useState<
+    { type: "step"; answers: Answer[] } | { type: "generate"; brief: string; language?: string } | null
+  >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,8 +67,10 @@ export function AdAssistant({ business }: { business: Business }) {
       : null;
 
   async function step(nextAnswers: Answer[]) {
+    if (loading) return;
     setLoading(true);
     setError(null);
+    setLastAction({ type: "step", answers: nextAnswers });
     try {
       const res = await fetch("/api/creatives/assistant", {
         method: "POST",
@@ -98,6 +104,8 @@ export function AdAssistant({ business }: { business: Business }) {
 
   async function generate(brief: string, language?: string) {
     setPhase("generating");
+    setError(null);
+    setLastAction({ type: "generate", brief, language });
     setTurns((t) => [
       ...t,
       { role: "assistant", text: "Perfect — creating your ad now. This takes a few seconds…" },
@@ -122,7 +130,14 @@ export function AdAssistant({ business }: { business: Business }) {
     }
   }
 
+  function retry() {
+    if (!lastAction || loading) return;
+    if (lastAction.type === "step") step(lastAction.answers);
+    else generate(lastAction.brief, lastAction.language);
+  }
+
   function answer(q: Question, text: string, displayText?: string) {
+    if (loading) return;
     const next = [...answers, { question: q.question, answer: text }];
     setAnswers(next);
     setCustom("");
@@ -131,6 +146,7 @@ export function AdAssistant({ business }: { business: Business }) {
   }
 
   function start() {
+    if (loading) return;
     const g = goal.trim();
     if (!g) return;
     setStarted(true);
@@ -146,6 +162,7 @@ export function AdAssistant({ business }: { business: Business }) {
     setCustom("");
     setPhase("chat");
     setError(null);
+    setLastAction(null);
     setGoal("");
   }
 
@@ -223,7 +240,18 @@ export function AdAssistant({ business }: { business: Business }) {
           )}
         </div>
 
-        {error && <Alert variant="error">{error}</Alert>}
+        {error && (
+          <Alert variant="error">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>{error}</span>
+              {lastAction && (
+                <Button size="sm" variant="outline" onClick={retry} disabled={loading}>
+                  <RotateCcw className="h-4 w-4" /> Try again
+                </Button>
+              )}
+            </div>
+          </Alert>
+        )}
 
         {phase === "done" && (
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
