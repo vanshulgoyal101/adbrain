@@ -7,6 +7,8 @@ export const metadata = {
   description:
     "Sign in to AdBrain to generate on-brand ad creatives and launch Meta lead campaigns.",
   alternates: { canonical: "/login" },
+  // A thin auth page shouldn't compete with the landing in search.
+  robots: { index: false, follow: true },
 };
 
 export default function LoginPage() {

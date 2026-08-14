@@ -1,8 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CheckCircle2, ImageIcon, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, Circle, ImageIcon, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCreatives, getAuditLog, getPrimaryBusiness } from "@/lib/supabase/queries";
+import {
+  getCampaigns,
+  getCreatives,
+  getAuditLog,
+  getPrimaryBusiness,
+} from "@/lib/supabase/queries";
+import { onboardingProgress, onboardingSteps } from "@/lib/onboarding";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard — AdBrain" };
 
@@ -10,6 +17,7 @@ export default async function DashboardPage() {
   const business = await getPrimaryBusiness();
   const creatives = business ? await getCreatives(business.id) : [];
   const audit = business ? await getAuditLog(business.id, 8) : [];
+  const campaigns = business ? await getCampaigns(business.id) : [];
   const drafts = creatives.filter((c) => c.status === "draft").length;
   const approved = creatives.filter((c) => c.status === "approved").length;
 
@@ -51,6 +59,14 @@ export default async function DashboardPage() {
     { label: "Approved", value: approved, icon: CheckCircle2 },
   ];
 
+  const steps = onboardingSteps({
+    hasBrand: true,
+    creativeCount: creatives.length,
+    approvedCount: approved,
+    campaignCount: campaigns.length,
+  });
+  const progress = onboardingProgress(steps);
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -84,6 +100,55 @@ export default async function DashboardPage() {
           <ArrowRight className="h-5 w-5 flex-none text-blue-700" />
         </div>
       </Link>
+
+      {!progress.complete && (
+        <Card className="mt-6">
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-slate-900">Get set up</h2>
+              <span className="text-sm text-slate-500">
+                {progress.done} of {progress.total} done
+              </span>
+            </div>
+            <ol className="flex flex-col gap-2">
+              {steps.map((step) => (
+                <li key={step.id}>
+                  <Link
+                    href={step.href}
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border p-3 transition-colors",
+                      step.done
+                        ? "border-slate-100 bg-slate-50"
+                        : progress.next?.id === step.id
+                          ? "border-blue-300 bg-blue-50 hover:bg-blue-100"
+                          : "border-slate-200 hover:bg-slate-50",
+                    )}
+                  >
+                    {step.done ? (
+                      <CheckCircle2 className="h-5 w-5 flex-none text-blue-600" />
+                    ) : (
+                      <Circle className="h-5 w-5 flex-none text-slate-300" />
+                    )}
+                    <div>
+                      <p
+                        className={cn(
+                          "text-sm font-medium",
+                          step.done ? "text-slate-400 line-through" : "text-slate-900",
+                        )}
+                      >
+                        {step.title}
+                      </p>
+                      {!step.done && (
+                        <p className="text-sm text-slate-500">{step.hint}</p>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         {stats.map(({ label, value, icon: Icon }) => (
