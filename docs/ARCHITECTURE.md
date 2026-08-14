@@ -164,6 +164,32 @@ Cost-incurring routes (`assistant`, `generate`, `regenerate`, `plan`,
   image via the image provider), then `persistCreativeImage` stores the image in
   the `creatives` bucket and rows are inserted as drafts.
 
+### Designed-poster compositing (`lib/creative/design.ts` + `render.tsx`)
+
+The raw image provider returns a **bare, text-free, logo-free photo** (the
+prompt explicitly forbids text/logos, since diffusion models render text
+poorly). A finished ad — like the human-designed Solaride creatives — is a
+*poster*: brand lockup, headline, a benefit checklist and a contact/CTA bar laid
+over that photo. Two modules bridge the gap:
+
+- **`design.ts`** (pure, unit-tested) — `buildAdDesign({ brand, copy, format })`
+  produces an `AdDesignSpec`: canvas size per `AdFormat` (portrait 4:5 default,
+  plus square, story, landscape), brand-colour theming (`normalizeHex` +
+  contrast-aware `readableTextOn`), up to four benefit chips distilled from the
+  brand's USPs/offers (`pickBenefits`), a contact line from website + locality
+  (`deriveContactLine`), a supporting line from the copy (`deriveSubhead`), and a
+  length-clamped headline (`shortenHeadline`).
+- **`render.tsx`** — `renderCompositeAd(spec)` rasterises the spec with `next/og`
+  (Satori + resvg — the same engine as the OG image, so **no new dependency and
+  no custom font**). The AI photo is composited under a legibility scrim; the
+  lockup, headline, benefit chips (✓) and CTA button are drawn on top.
+
+`generate` and `regenerate` persist the bare photo first, then
+`renderAndPersistDesign` composites the poster over that stable URL and stores it
+as the creative image. It is **best-effort**: any failure — or
+`AD_DESIGN_OVERLAY=false` — falls back to the bare photo so generation never
+breaks.
+
 ---
 
 ## 7a. LLM subsystem & token efficiency (`lib/llm`)

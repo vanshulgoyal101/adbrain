@@ -65,7 +65,8 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 ## 3. Creative Studio
 | Status | Feature | Notes |
 | --- | --- | --- |
-| ✅ | Generate 3–6 ad variants | copy + image per solar angle |
+| ✅ | Generate 3–6 ad variants | copy + image per marketing angle |
+| ✅ | Designed-poster compositing | logo lockup + headline + benefit checklist (✓) + contact/CTA bar drawn over the AI photo via `next/og` (Satori). `lib/creative/design.ts` (pure spec) + `render.tsx`. Brand-colour themed, 4:5 portrait default (square/story/landscape supported). `AD_DESIGN_OVERLAY` toggles it |
 | ✅ | Solar angle library | savings, subsidy, trust, urgency, etc. |
 | ✅ | Regenerate a single variant | with inline error surfacing |
 | ✅ | Approve / unapprove / delete | draft ↔ approved workflow |
