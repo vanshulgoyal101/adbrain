@@ -33,6 +33,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 ## Recently shipped (2026-08-13)
 | Status | Feature | Notes |
 | --- | --- | --- |
+| ✅ | Onboarding checklist | dashboard "Get set up" steps (brand → create → approve → launch) from real state; hides when complete — `lib/onboarding.ts` |
 | ✅ | Spend-health signal | plain-language badge per campaign ("No leads yet" / "Cheap leads" / "On track" / "Pricey leads") from real results — `spendHealth()` in `lib/campaign/budget.ts` |
 | ✅ | Self-contained posters | poster overlay uses a drawn SVG checkmark (no runtime web-font fetch); Meta parsers are array-safe |
 | ✅ | Ad Assistant (guided chat) | `/create` tab: type a request → one-tap Q&A (options · "Surprise me" · "Let AI decide") → finished ad. `lib/creative/interview.ts` + `api/creatives/assistant` + `components/ad-assistant.tsx` |
