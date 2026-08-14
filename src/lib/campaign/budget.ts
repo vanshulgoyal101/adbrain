@@ -55,3 +55,49 @@ export function describeBudget(dailyBudget: number, cpl?: number | null): string
   }
   return `Roughly ${est.low}–${est.high} leads/week (rough estimate).`;
 }
+
+export type SpendTone = "idle" | "good" | "ok" | "warn";
+
+export interface SpendHealth {
+  tone: SpendTone;
+  /** Short badge label. */
+  label: string;
+  /** One plain-language line for the owner. */
+  detail: string;
+}
+
+/**
+ * Turn a campaign's real results into a plain-language spend-health signal —
+ * the thing a non-technical owner actually worries about: am I spending money
+ * with nothing to show? Pure; formats money with the given formatter.
+ */
+export function spendHealth(
+  input: { spend: number; leads: number; cpl?: number | null },
+  money: (n: number) => string = (n) => `₹${Math.round(n)}`,
+): SpendHealth {
+  const spend = Number.isFinite(input.spend) ? input.spend : 0;
+  const leads = Number.isFinite(input.leads) ? Math.max(0, Math.floor(input.leads)) : 0;
+
+  if (spend <= 0) {
+    return { tone: "idle", label: "No spend yet", detail: "This campaign hasn't spent anything yet." };
+  }
+  if (leads <= 0) {
+    return {
+      tone: "warn",
+      label: "No leads yet",
+      detail: `Spent ${money(spend)} with no leads yet — review the offer, creative, or targeting before spending more.`,
+    };
+  }
+  const cpl = input.cpl && input.cpl > 0 ? input.cpl : spend / leads;
+  if (cpl <= ASSUMED_CPL_LOW) {
+    return { tone: "good", label: "Cheap leads", detail: `About ${money(cpl)} per lead — great value.` };
+  }
+  if (cpl <= ASSUMED_CPL_HIGH) {
+    return { tone: "ok", label: "On track", detail: `About ${money(cpl)} per lead.` };
+  }
+  return {
+    tone: "warn",
+    label: "Pricey leads",
+    detail: `About ${money(cpl)} per lead — consider adjusting the audience or offer.`,
+  };
+}

@@ -31,7 +31,7 @@ import {
 import { CampaignChat } from "@/components/campaign-chat";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
-import { BUDGET_PRESETS, describeBudget } from "@/lib/campaign/budget";
+import { BUDGET_PRESETS, describeBudget, spendHealth } from "@/lib/campaign/budget";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -610,6 +610,30 @@ export function Campaigns({
                         />
                       </div>
                     )}
+                    {r &&
+                      (() => {
+                        const h = spendHealth(
+                          { spend: r.spend, leads: r.leads, cpl: r.cpl },
+                          formatCurrency,
+                        );
+                        if (h.tone === "idle") return null;
+                        const tones = {
+                          good: "border-green-200 bg-green-50 text-green-800",
+                          ok: "border-blue-200 bg-blue-50 text-blue-800",
+                          warn: "border-amber-200 bg-amber-50 text-amber-800",
+                        } as const;
+                        return (
+                          <div
+                            className={cn(
+                              "flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border px-3 py-2 text-sm",
+                              tones[h.tone],
+                            )}
+                          >
+                            <span className="font-semibold">{h.label}.</span>
+                            <span>{h.detail}</span>
+                          </div>
+                        );
+                      })()}
                     {summaries[c.id] && (
                       <p className="text-sm text-slate-600">{summaries[c.id]}</p>
                     )}
