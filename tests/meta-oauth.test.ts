@@ -133,4 +133,14 @@ describe("account + page listing", () => {
     const pages = await fetchPages("tok");
     expect(pages).toEqual([{ id: "p1", name: "Solaride" }]);
   });
+
+  it("returns [] when Meta omits or malforms the data field", async () => {
+    const { fetchAdAccounts, fetchPages } = await import("@/lib/meta/oauth");
+    for (const body of [{}, { data: null }, { data: "oops" }, { data: {} }]) {
+      mockFetch(body);
+      expect(await fetchAdAccounts("tok")).toEqual([]);
+      mockFetch(body);
+      expect(await fetchPages("tok")).toEqual([]);
+    }
+  });
 });

@@ -207,7 +207,7 @@ export async function fetchAdAccounts(
     "me/adaccounts?fields=account_id,name,currency,account_status&limit=200",
     userToken,
   );
-  return (data.data ?? [])
+  return (Array.isArray(data.data) ? data.data : [])
     .filter((a) => a.account_id)
     .map((a) => ({
       id: a.id ?? `act_${a.account_id}`,
@@ -224,7 +224,7 @@ export async function fetchPages(userToken: string): Promise<MetaPageOption[]> {
   const data = await graphGet<{
     data?: { id?: string; name?: string }[];
   }>("me/accounts?fields=id,name&limit=200", userToken);
-  return (data.data ?? [])
+  return (Array.isArray(data.data) ? data.data : [])
     .filter((p) => p.id)
     .map((p) => ({ id: p.id!, name: p.name ?? `Page ${p.id}` }));
 }
