@@ -86,7 +86,7 @@ export async function POST(req: Request) {
   try {
     const extraction = await completeJSON<BrandExtraction>(
       buildBrandExtractionMessages(text, parsed.toString()),
-      { temperature: 0.3, maxTokens: 800 },
+      { temperature: 0.3, maxTokens: 800, cache: true },
     );
     return NextResponse.json({ extraction });
   } catch (err) {

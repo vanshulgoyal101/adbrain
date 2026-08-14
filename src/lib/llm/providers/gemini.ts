@@ -4,6 +4,7 @@ import {
   type CompletionOptions,
   type LLMProvider,
   type ProviderCallContext,
+  type ProviderCompletion,
 } from "../types";
 
 /**
@@ -13,11 +14,15 @@ import {
  */
 export function createGeminiProvider(config?: {
   defaultModel?: string;
+  /**
+   * Gemini 2.5 models spend output tokens on hidden "thinking"; add headroom to
+   * the requested output budget so JSON isn't truncated. Set to 0 for a paid
+   * non-thinking model to stop paying for unused output tokens.
+   */
+  thinkingHeadroom?: number;
 }): LLMProvider {
   const defaultModel = config?.defaultModel ?? "gemini-2.0-flash";
-  // Gemini 2.5 models spend output tokens on hidden "thinking"; give the
-  // requested output budget generous headroom so JSON isn't truncated.
-  const THINKING_HEADROOM = 3000;
+  const THINKING_HEADROOM = config?.thinkingHeadroom ?? 3000;
   return {
     name: "google",
     defaultModel,
@@ -25,7 +30,7 @@ export function createGeminiProvider(config?: {
       messages: ChatMessage[],
       options: CompletionOptions,
       ctx: ProviderCallContext,
-    ): Promise<string> {
+    ): Promise<ProviderCompletion> {
       const system = messages
         .filter((m) => m.role === "system")
         .map((m) => m.content)
@@ -79,6 +84,11 @@ export function createGeminiProvider(config?: {
 
       const data = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
+        usageMetadata?: {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+          totalTokenCount?: number;
+        };
       };
       const content =
         data.candidates?.[0]?.content?.parts
@@ -90,7 +100,17 @@ export function createGeminiProvider(config?: {
           retryable: true,
         });
       }
-      return content;
+      const u = data.usageMetadata;
+      const usage = u
+        ? {
+            promptTokens: u.promptTokenCount ?? 0,
+            completionTokens: u.candidatesTokenCount ?? 0,
+            totalTokens:
+              u.totalTokenCount ??
+              (u.promptTokenCount ?? 0) + (u.candidatesTokenCount ?? 0),
+          }
+        : undefined;
+      return { text: content, usage };
     },
   };
 }

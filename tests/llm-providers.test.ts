@@ -25,7 +25,10 @@ describe("openai-compatible provider", () => {
   it("returns message content on success", async () => {
     mockFetch({
       ok: true,
-      json: { choices: [{ message: { content: "hello" } }] },
+      json: {
+        choices: [{ message: { content: "hello" } }],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+      },
     });
     const provider = createOpenAICompatibleProvider({
       name: "groq",
@@ -36,7 +39,12 @@ describe("openai-compatible provider", () => {
       apiKey: "k",
       model: "llama-3.3-70b-versatile",
     });
-    expect(out).toBe("hello");
+    expect(out.text).toBe("hello");
+    expect(out.usage).toEqual({
+      promptTokens: 12,
+      completionTokens: 3,
+      totalTokens: 15,
+    });
   });
 
   it("throws a retryable LLMError on HTTP 429", async () => {
@@ -61,6 +69,11 @@ describe("gemini provider", () => {
       ok: true,
       json: {
         candidates: [{ content: { parts: [{ text: "solar" }, { text: "!" }] } }],
+        usageMetadata: {
+          promptTokenCount: 8,
+          candidatesTokenCount: 2,
+          totalTokenCount: 10,
+        },
       },
     });
     const provider = createGeminiProvider();
@@ -72,7 +85,12 @@ describe("gemini provider", () => {
       {},
       { apiKey: "k", model: "gemini-2.0-flash" },
     );
-    expect(out).toBe("solar!");
+    expect(out.text).toBe("solar!");
+    expect(out.usage).toEqual({
+      promptTokens: 8,
+      completionTokens: 2,
+      totalTokens: 10,
+    });
   });
 
   it("throws LLMError on non-ok response", async () => {

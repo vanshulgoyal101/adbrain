@@ -39,6 +39,9 @@ const schema = z.object({
     .optional()
     .default("google,groq,openrouter,cerebras"),
   GEMINI_MODEL: z.string().optional().default("gemini-2.0-flash"),
+  // Output-token headroom for Gemini 2.5 "thinking" models. Set to 0 for a paid
+  // non-thinking model to avoid paying for unused output tokens.
+  GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
 
   // Image generation
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),

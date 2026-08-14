@@ -40,6 +40,7 @@ Set these for **Production** (and Preview if you want previews to work):
 | `NEXT_PUBLIC_SITE_URL` | `https://adbrain.vanshul.com` |
 | `GOOGLE_AI_API_KEYS` | comma-separated keys (or another provider's) |
 | `GEMINI_MODEL` | e.g. `gemini-flash-latest` |
+| `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini 2.5 thinking (default `3000`; `0` for a paid non-thinking model) |
 | `IMAGE_PROVIDER` | `pollinations` |
 | `META_APP_ID` / `META_APP_SECRET` | Meta app creds |
 | `META_SYSTEM_USER_TOKEN` | long-lived system-user token |

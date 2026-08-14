@@ -62,7 +62,7 @@ src/
   components/               # client components + ui/ primitives
   lib/
     supabase/               # client, server, admin, middleware, queries
-    llm/                    # provider-agnostic completion + rotation
+    llm/                    # provider-agnostic completion + rotation + cache/usage
     imageGen/               # image provider abstraction
     meta/                   # Graph API client + mappers
     creative/               # generate, persist, summary
@@ -166,6 +166,41 @@ Cost-incurring routes (`assistant`, `generate`, `regenerate`, `plan`,
 
 ---
 
+## 7a. LLM subsystem & token efficiency (`lib/llm`)
+
+Every AI call goes through `complete()` / `completeJSON()`. The subsystem is
+built to keep a **paid** key's spend low and predictable:
+
+- **Provider rotation** — `LLM_PROVIDER_ORDER` picks providers; each has a
+  comma-separated key pool. Keys that return HTTP 429 are parked for a 60s
+  cooldown; a round-robin cursor spreads load. First success wins.
+- **Token usage capture** — providers parse the real counts they report
+  (Gemini `usageMetadata`, OpenAI `usage`) into `CompletionResult.usage`
+  (`promptTokens` / `completionTokens` / `totalTokens`). `lib/llm/usage.ts`
+  aggregates them process-locally (`usageSnapshot()` / `resetUsage()`), split
+  overall and per provider, so spend is observable and testable without an
+  external service.
+- **Response cache + single-flight** (`lib/llm/cache.ts`) — opt-in per call via
+  `{ cache: true }` (or `{ cache: { ttlMs } }`). Identical requests (hashed over
+  messages + temperature + maxTokens + json, **not** the API key) are served
+  from an in-process TTL/LRU cache at **zero token cost**, and concurrent
+  identical requests share one in-flight promise. A cache hit sets
+  `result.cached === true` and is counted as *saved* tokens. Enabled on the
+  low-variance call-sites (insight summaries, website→brand extraction); left
+  off where fresh variety is expected (copy generation, planner, interview).
+- **Gemini thinking headroom** — 2.5 models spend output tokens on hidden
+  "thinking", so the provider pads `maxOutputTokens` by
+  `GEMINI_THINKING_HEADROOM` (default 3000) to avoid truncated JSON. For a paid
+  **non-thinking** model set it to `0` to stop paying for unused output tokens.
+- **Robust JSON parsing** — `parseJSON` strips ```json fences and prose and
+  falls back to the first `{...}`/`[...]` block before throwing.
+
+Guidance for adding a call-site: pass an explicit `maxTokens`, add `cache: true`
+only when a stale-but-identical answer is acceptable, and prefer low temperature
+for extraction/summaries so cache hit-rates stay high.
+
+---
+
 ## 8. Meta integration (`lib/meta/client.ts`)
 
 A thin, typed wrapper over Graph v21. Highlights:
@@ -226,7 +261,8 @@ A thin, typed wrapper over Graph v21. Highlights:
   formatting, report, SSRF incl. redirect safety, rate limiter, SEO schema,
   languages, utils) and **mock `fetch`** for external I/O (Meta client, image
   gen). Component tests cover the interactive surfaces (campaign chat, assets
-  library).
+  library). The LLM efficiency layer (cache/single-flight/TTL, usage
+  accounting, provider token parsing) is unit-tested end-to-end.
 - Run: `npm run test` · `npm run typecheck` · `npm run lint` · `npm run build`.
 
 ---
@@ -239,6 +275,7 @@ A thin, typed wrapper over Graph v21. Highlights:
 | `SUPABASE_SERVICE_ROLE_KEY` | server/admin ops (optional) |
 | `GOOGLE_AI_API_KEYS` / `GROQ_API_KEYS` / `OPENROUTER_API_KEYS` / `CEREBRAS_API_KEYS` | LLM key pools (comma-separated) |
 | `GEMINI_MODEL` | LLM model override (default `gemini-flash-latest`) |
+| `GEMINI_THINKING_HEADROOM` | extra output-token budget for Gemini 2.5 thinking (default `3000`; set `0` for a paid non-thinking model) |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | single-tenant Meta creds |
 | `NEXT_PUBLIC_SITE_URL` | canonical site origin (SEO) |
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS`, `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | local dev bypass (non-prod only) |

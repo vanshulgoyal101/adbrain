@@ -53,4 +53,35 @@ describe("LLM rotation", () => {
     );
     process.env.GROQ_API_KEYS = "key-a,key-b";
   });
+
+  it("surfaces token usage and serves an identical cached call for free", async () => {
+    vi.resetModules();
+    const { complete, clearLLMCache } = await import("@/lib/llm");
+    clearLLMCache();
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: "cached-ok" } }],
+        usage: { prompt_tokens: 20, completion_tokens: 6, total_tokens: 26 },
+      }),
+      text: async () => "",
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const msgs = [{ role: "user" as const, content: "cache me" }];
+    const first = await complete(msgs, { cache: true });
+    const second = await complete(msgs, { cache: true });
+
+    expect(first.usage).toEqual({
+      promptTokens: 20,
+      completionTokens: 6,
+      totalTokens: 26,
+    });
+    expect(first.cached).toBeUndefined();
+    expect(second.cached).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    clearLLMCache();
+  });
 });

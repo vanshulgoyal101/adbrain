@@ -10,12 +10,35 @@ export interface CompletionOptions {
   maxTokens?: number;
   /** Ask the provider to return strict JSON. */
   json?: boolean;
+  /**
+   * Reuse a cached response for an identical request instead of calling the
+   * provider. Pass `true` for the default TTL, or an object to override it.
+   * Only safe for low-variance calls (summaries, extraction) — leave off where
+   * fresh variety is expected.
+   */
+  cache?: boolean | { ttlMs: number };
+}
+
+/** Prompt/completion token counts reported by a provider, when available. */
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+/** What a provider returns from a single completion call. */
+export interface ProviderCompletion {
+  text: string;
+  usage?: TokenUsage;
 }
 
 export interface CompletionResult {
   text: string;
   provider: string;
   model: string;
+  usage?: TokenUsage;
+  /** True when served from the response cache (zero token cost). */
+  cached?: boolean;
 }
 
 export interface ProviderCallContext {
@@ -30,7 +53,7 @@ export interface LLMProvider {
     messages: ChatMessage[],
     options: CompletionOptions,
     ctx: ProviderCallContext,
-  ): Promise<string>;
+  ): Promise<ProviderCompletion>;
 }
 
 /** Thrown by a provider on an HTTP/transport failure. */

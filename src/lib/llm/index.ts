@@ -1,6 +1,8 @@
 import { getEnv } from "@/lib/env";
 import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
+import { cacheKey, withCache } from "./cache";
+import { recordUsage } from "./usage";
 import {
   LLMError,
   NoLLMKeysError,
@@ -10,8 +12,15 @@ import {
   type LLMProvider,
 } from "./types";
 
-export type { ChatMessage, CompletionOptions, CompletionResult } from "./types";
+export type {
+  ChatMessage,
+  CompletionOptions,
+  CompletionResult,
+  TokenUsage,
+} from "./types";
 export { LLMError, NoLLMKeysError } from "./types";
+export { clearLLMCache, llmCacheSize } from "./cache";
+export { usageSnapshot, resetUsage, type UsageTotals } from "./usage";
 
 interface RegisteredProvider {
   provider: LLMProvider;
@@ -31,7 +40,9 @@ function buildRegistry(): RegisteredProvider[] {
   const registry: Record<string, RegisteredProvider | null> = {
     google: env.GOOGLE_AI_API_KEYS.length
       ? {
-          provider: createGeminiProvider(),
+          provider: createGeminiProvider({
+            thinkingHeadroom: env.GEMINI_THINKING_HEADROOM,
+          }),
           keys: env.GOOGLE_AI_API_KEYS,
           model: env.GEMINI_MODEL,
         }
@@ -102,6 +113,21 @@ export async function complete(
   const registry = buildRegistry();
   if (registry.length === 0) throw new NoLLMKeysError();
 
+  const result = await withCache(
+    cacheKey(messages, options),
+    options.cache,
+    () => callProviders(messages, options, registry),
+  );
+  recordUsage(result);
+  return result;
+}
+
+/** Rotate across providers/keys, returning the first success. */
+async function callProviders(
+  messages: ChatMessage[],
+  options: CompletionOptions,
+  registry: RegisteredProvider[],
+): Promise<CompletionResult> {
   const errors: string[] = [];
   const now = Date.now();
 
@@ -113,11 +139,11 @@ export async function complete(
       if ((cooldownUntil.get(coolKey) ?? 0) > now) continue;
 
       try {
-        const text = await provider.complete(messages, options, {
+        const { text, usage } = await provider.complete(messages, options, {
           apiKey: keys[idx],
           model,
         });
-        return { text, provider: provider.name, model };
+        return { text, provider: provider.name, model, usage };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         errors.push(`${provider.name}[key ${idx}]: ${message}`);

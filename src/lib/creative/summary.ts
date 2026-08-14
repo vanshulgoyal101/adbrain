@@ -30,7 +30,7 @@ export async function summarizeInsights(
             "Summarize how it's doing in 1–2 sentences.",
         },
       ],
-      { temperature: 0.4, maxTokens: 120 },
+      { temperature: 0.4, maxTokens: 120, cache: true },
     );
     return res.text.trim();
   } catch {

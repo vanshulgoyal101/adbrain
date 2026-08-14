@@ -137,6 +137,9 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | Provider-agnostic LLM rotation | Gemini / Groq / OpenRouter / Cerebras |
 | ✅ | Multi-key rotation + cooldown | parks 429'd keys |
 | ✅ | JSON mode + robust parsing | fences/prose salvage |
+| ✅ | Token usage capture + accounting | per-provider spend, `usageSnapshot()` |
+| ✅ | Response cache + single-flight | opt-in `{cache}`, zero-cost identical calls |
+| ✅ | Configurable Gemini thinking headroom | `GEMINI_THINKING_HEADROOM` (0 for paid non-thinking) |
 | ✅ | Provider-abstracted image gen | Pollinations default (free, no key) |
 | 📋 | Paid image providers | fal.ai / OpenAI images for quality |
 

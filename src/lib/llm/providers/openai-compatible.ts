@@ -4,6 +4,7 @@ import {
   type CompletionOptions,
   type LLMProvider,
   type ProviderCallContext,
+  type ProviderCompletion,
 } from "../types";
 
 /**
@@ -23,7 +24,7 @@ export function createOpenAICompatibleProvider(config: {
       messages: ChatMessage[],
       options: CompletionOptions,
       ctx: ProviderCallContext,
-    ): Promise<string> {
+    ): Promise<ProviderCompletion> {
       const body: Record<string, unknown> = {
         model: ctx.model,
         messages,
@@ -68,6 +69,11 @@ export function createOpenAICompatibleProvider(config: {
 
       const data = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+        };
       };
       const content = data.choices?.[0]?.message?.content;
       if (!content) {
@@ -76,7 +82,17 @@ export function createOpenAICompatibleProvider(config: {
           retryable: true,
         });
       }
-      return content;
+      const u = data.usage;
+      const usage = u
+        ? {
+            promptTokens: u.prompt_tokens ?? 0,
+            completionTokens: u.completion_tokens ?? 0,
+            totalTokens:
+              u.total_tokens ??
+              (u.prompt_tokens ?? 0) + (u.completion_tokens ?? 0),
+          }
+        : undefined;
+      return { text: content, usage };
     },
   };
 }
