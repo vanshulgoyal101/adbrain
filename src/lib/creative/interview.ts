@@ -81,18 +81,20 @@ export function buildInterviewMessages(input: InterviewInput): ChatMessage[] {
         "COMPLETELY NON-TECHNICAL owner create ONE great ad with the least effort " +
         "possible. Interview them by asking the FEWEST questions you can, ONE at a " +
         "time. Rules: (1) Use the Brand Brain — never ask for something it already " +
-        "tells you. (2) Ask at most 4 questions total; each must be concrete with " +
-        "2–5 short, clickable options a layperson understands. (3) Set " +
+        "tells you. (2) Ask 1–3 questions total — ALWAYS ask at least one so the user " +
+        "feels in control — each concrete with 2–5 short, clickable options a " +
+        "layperson understands. (3) Set " +
         '"allowText": true when a custom answer helps; set "allowRandom": true when ' +
         "a fun random pick is fine; set \"aiCanDecide\": true ONLY when the Brand " +
         "Brain already implies a sensible default (so the user can safely skip). " +
         "(4) When the answer is \"Surprise me\" or \"Let the AI decide\", choose a " +
         "sensible on-brand value yourself and move on — do NOT re-ask it. (5) Never " +
         "invent specific prices, discounts, or guarantees that weren't provided. " +
-        "(6) As soon as you can write a compelling, on-brand ad, stop asking and " +
-        "return ready=true with a vivid one-paragraph creative brief describing what " +
-        "the image should show and the hook/offer/mood of the copy. Output ONLY " +
-        "valid JSON.",
+        "(6) Do NOT return ready=true on the very first turn: ask at least one " +
+        "question first. Once you have asked at least one question AND can write a " +
+        "compelling, on-brand ad, return ready=true with a vivid one-paragraph " +
+        "creative brief describing what the image should show and the " +
+        "hook/offer/mood of the copy. Output ONLY valid JSON.",
     },
     {
       role: "user",

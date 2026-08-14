@@ -1,22 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
   Bot,
+  CheckCircle2,
   Loader2,
+  Pencil,
   RotateCcw,
   Send,
   Shuffle,
   Sparkles,
   Wand2,
 } from "lucide-react";
+import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import type { Business, Creative } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** A single interview question (mirrors the server's InterviewQuestion). */
 interface Question {
@@ -318,7 +322,9 @@ function TurnView({
           ))}
         </div>
         <p className="text-xs text-slate-500">
-          All three are saved as drafts. Open the Creative Studio to approve, tweak, or launch them.
+          Tap <span className="font-medium">Use this ad</span> on the ones you like — that
+          approves them for launch. Use <span className="font-medium">Edit</span> to tweak or
+          regenerate in the Creative Studio.
         </p>
       </div>
     );
@@ -407,8 +413,30 @@ function TurnView({
 
 function ResultCard({ creative }: { creative: Creative }) {
   const [errored, setErrored] = useState(false);
+  const [approved, setApproved] = useState(creative.status === "approved");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function toggle() {
+    const next = !approved;
+    setApproved(next); // optimistic
+    setSaveError(null);
+    startTransition(async () => {
+      const res = await setCreativeStatus(creative.id, next ? "approved" : "draft");
+      if (!res.ok) {
+        setApproved(!next);
+        setSaveError("Couldn't save — try again.");
+      }
+    });
+  }
+
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden rounded-xl border bg-white transition-colors",
+        approved ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-200",
+      )}
+    >
       <div className="relative aspect-square bg-slate-100">
         {creative.image_url && !errored ? (
           <img
@@ -426,8 +454,13 @@ function ResultCard({ creative }: { creative: Creative }) {
             {creative.angle}
           </Badge>
         )}
+        {approved && (
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Selected
+          </span>
+        )}
       </div>
-      <div className="flex flex-col gap-1.5 p-3">
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
         <h3 className="text-sm font-semibold text-slate-900">{creative.headline}</h3>
         <p className="line-clamp-4 whitespace-pre-line text-xs text-slate-600">
           {creative.primary_text}
@@ -437,6 +470,29 @@ function ResultCard({ creative }: { creative: Creative }) {
             {creative.cta}
           </span>
         )}
+        <div className="mt-auto flex items-center gap-2 pt-2">
+          <Button
+            size="sm"
+            variant={approved ? "outline" : "primary"}
+            onClick={toggle}
+            disabled={pending}
+            className="flex-1"
+          >
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : approved ? (
+              <CheckCircle2 className="h-4 w-4" />
+            ) : null}
+            {approved ? "Selected" : "Use this ad"}
+          </Button>
+          <Link
+            href="/studio"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700"
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </Link>
+        </div>
+        {saveError && <p className="text-xs text-red-600">{saveError}</p>}
       </div>
     </div>
   );
