@@ -69,7 +69,7 @@ create table if not exists public.businesses (
   id              uuid primary key default gen_random_uuid(),
   owner_id        uuid not null references auth.users (id) on delete cascade,
   name            text not null,
-  vertical        text not null default 'solar' check (vertical in ('solar')),
+  vertical        text not null default 'local business',
   website         text,
   description     text,
   brand_voice     text,
@@ -87,6 +87,11 @@ create table if not exists public.businesses (
 );
 
 create index if not exists businesses_owner_id_idx on public.businesses (owner_id);
+
+-- Industry-agnostic: vertical is free text (was solar-only). Idempotent upgrades
+-- for databases created before the pivot.
+alter table public.businesses drop constraint if exists businesses_vertical_check;
+alter table public.businesses alter column vertical set default 'local business';
 
 drop trigger if exists businesses_set_updated_at on public.businesses;
 create trigger businesses_set_updated_at
