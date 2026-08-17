@@ -5,7 +5,7 @@
 >
 > **Legend:** ✅ Built · 🚧 In progress · 📋 Proposed · 🔒 Blocked (needs access/prereq)
 >
-> _Last updated: 2026-08-13_
+> _Last updated: 2026-08-17_
 
 ---
 
@@ -33,6 +33,9 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 ## Recently shipped (2026-08-13)
 | Status | Feature | Notes |
 | --- | --- | --- |
+| ✅ | Ad-copy slop scanner (quality gate) | deterministic check (clichés, shouting, em-dash/exclaim overuse, word cap, banned claims) — `lib/creative/slopScan.ts`; wired into generation with a single auto-retry (`generateGuardedCopy`) |
+| ✅ | Creative-quality eval (LLM-as-judge) | offline harness scoring hand-labeled ad creatives vs gold (MAE ≤ 0.15) — `evals/creative/fixtures.jsonl` + `scripts/eval-creative.mjs` (`npm run eval:creative`) |
+| ✅ | CI pipeline + secret scanning | `.github/workflows/ci.yml` (lint · typecheck · test · build) + gitleaks (`.gitleaks.toml`) on every push/PR |
 | ✅ | Seasonal campaign suggestions | date-aware Ad Assistant chips (festivals/national days/shopping seasons for India) — `lib/seasonal.ts` |
 | ✅ | Onboarding checklist | dashboard "Get set up" steps (brand → create → approve → launch) from real state; hides when complete — `lib/onboarding.ts` |
 | ✅ | Spend-health signal | plain-language badge per campaign ("No leads yet" / "Cheap leads" / "On track" / "Pricey leads") from real results — `spendHealth()` in `lib/campaign/budget.ts` |
@@ -45,6 +48,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | Per-user rate limiting | on generate/regenerate/plan/autofill (429 + Retry-After); Postgres-backed, cross-instance, in-memory fallback |
 | ✅ | SSRF redirect hardening | autofill re-validates every redirect hop (`fetchPublicUrlText`) |
 | ✅ | Dev-bypass prod guard | disabled unless `NODE_ENV !== production` |
+| 📋 | Token-column hardening (migration) | `db/migrations/001_harden_meta_credentials.sql` revokes client SELECT on `meta_credentials` + adds `meta_connection_status` RPC. **Precheck: switch `credentials.ts` reads to the admin client before applying** |
 
 ## 1. Auth & access
 | Status | Feature | Notes |
@@ -161,8 +165,8 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | --- | --- | --- |
 | ✅ | Next 16 App Router + TS + Tailwind v4 | |
 | ✅ | zod-validated env | `lib/env.ts` |
-| ✅ | Vitest suite (128 tests) | pure logic, API contracts, + jsdom component tests |
-| ✅ | Lint + typecheck + build gating | every push |
+| ✅ | Vitest suite (248 tests) | pure logic, API contracts, + jsdom component tests |
+| ✅ | CI: lint + typecheck + test + build + gitleaks | `.github/workflows/ci.yml` on every push/PR |
 | 🚧 | Hosting on adbrain.vanshul.com | needs host (Vercel) + DNS + prod env |
 | 📋 | Billing / subscription | when multi-customer |
 | 🔒 | Google Ads integration | needs MCC/Basic Access — Phase 2 |
