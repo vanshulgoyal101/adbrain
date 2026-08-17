@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimitResponse(`autofill:${user.id}`, {
+  const limited = await rateLimitResponse(`autofill:${user.id}`, {
     limit: 15,
     windowMs: 5 * 60_000,
   });

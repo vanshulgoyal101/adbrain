@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return apiError("Unauthorized", 401);
 
-  const limited = rateLimitResponse(`assistant:${user.id}`, {
+  const limited = await rateLimitResponse(`assistant:${user.id}`, {
     limit: 40,
     windowMs: 5 * 60_000,
   });

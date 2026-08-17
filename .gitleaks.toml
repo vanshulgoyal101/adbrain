@@ -1,0 +1,16 @@
+title = "adbrain gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret placeholders and generated output"
+paths = [
+  '''\.env\.example''',
+  '''\.next/''',
+  '''.*\.tsbuildinfo''',
+]
+regexes = [
+  '''your-.*-key''',
+  '''https://placeholder\.supabase\.co''',
+]

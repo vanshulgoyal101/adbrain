@@ -42,13 +42,15 @@ describe("rateLimit", () => {
 });
 
 describe("rateLimitResponse", () => {
-  it("returns null while under the limit", () => {
-    expect(rateLimitResponse("x", { limit: 2, windowMs: 1000 })).toBeNull();
+  // Outside a request context the shared RPC is unavailable, so these exercise
+  // the in-memory fallback path.
+  it("returns null while under the limit", async () => {
+    expect(await rateLimitResponse("x", { limit: 2, windowMs: 1000 })).toBeNull();
   });
 
-  it("returns a 429 with a Retry-After header when over the limit", () => {
-    rateLimitResponse("y", { limit: 1, windowMs: 60_000 });
-    const res = rateLimitResponse("y", { limit: 1, windowMs: 60_000 });
+  it("returns a 429 with a Retry-After header when over the limit", async () => {
+    await rateLimitResponse("y", { limit: 1, windowMs: 60_000 });
+    const res = await rateLimitResponse("y", { limit: 1, windowMs: 60_000 });
     expect(res).not.toBeNull();
     expect(res!.status).toBe(429);
     expect(res!.headers.get("Retry-After")).toBeTruthy();

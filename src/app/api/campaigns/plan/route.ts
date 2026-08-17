@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimitResponse(`plan:${user.id}`, {
+  const limited = await rateLimitResponse(`plan:${user.id}`, {
     limit: 40,
     windowMs: 5 * 60_000,
   });

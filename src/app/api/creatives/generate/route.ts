@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   }
 
   // Generation costs money (LLM + image). Cap per-user request rate.
-  const limited = rateLimitResponse(`generate:${user.id}`, {
+  const limited = await rateLimitResponse(`generate:${user.id}`, {
     limit: 20,
     windowMs: 5 * 60_000,
   });

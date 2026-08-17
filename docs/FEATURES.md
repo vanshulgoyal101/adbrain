@@ -42,7 +42,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | General marketing/SEO | rebranded to "AI ad creative for any local business" |
 | ✅ | Pause / resume campaigns | from the dashboard — `PATCH /api/campaigns/[id]` → Meta + local mirror + audit |
 | ✅ | Privacy & Terms pages | `/privacy`, `/terms` with metadata + WebPage/Breadcrumb JSON-LD |
-| ✅ | Per-user rate limiting | on generate/regenerate/plan/autofill (429 + Retry-After) |
+| ✅ | Per-user rate limiting | on generate/regenerate/plan/autofill (429 + Retry-After); Postgres-backed, cross-instance, in-memory fallback |
 | ✅ | SSRF redirect hardening | autofill re-validates every redirect hop (`fetchPublicUrlText`) |
 | ✅ | Dev-bypass prod guard | disabled unless `NODE_ENV !== production` |
 

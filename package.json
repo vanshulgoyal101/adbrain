@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:push": "node scripts/apply-schema.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:creative": "node scripts/eval-creative.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

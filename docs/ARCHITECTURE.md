@@ -292,10 +292,12 @@ the token).
   uses **`fetchPublicUrlText`**, which follows redirects **manually and
   re-validates every hop** — closing the "redirect to `169.254.169.254`" bypass
   — plus a byte cap and short timeout.
-- **Rate limiting** (`lib/security/rate-limit.ts`) — an in-memory sliding-window
-  limiter guards the cost-incurring routes per user (429 + `Retry-After`).
-  Per-instance/best-effort by design; back it with a shared store for hard
-  global limits.
+- **Rate limiting** (`lib/security/rate-limit.ts`) — a sliding-window limiter
+  guards the cost-incurring routes per user (429 + `Retry-After`). The shared
+  path is a Postgres `SECURITY DEFINER` function (`check_rate_limit` over
+  `rate_limit_hits`) so limits hold **across serverless instances**; it falls
+  back to an in-memory per-instance limiter if the RPC is unavailable, so a DB
+  hiccup never blocks legitimate use.
 - **RLS everywhere** — the real access-control boundary; API routes add auth
   checks and safe error messages on top.
 - **Dev bypass** is gated by `NODE_ENV` (see §5).

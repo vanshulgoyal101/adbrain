@@ -25,7 +25,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limited = rateLimitResponse(`regenerate:${user.id}`, {
+  const limited = await rateLimitResponse(`regenerate:${user.id}`, {
     limit: 30,
     windowMs: 5 * 60_000,
   });

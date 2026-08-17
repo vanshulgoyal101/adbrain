@@ -478,3 +478,62 @@ create policy "leads: all own"
   using (public.owns_business(business_id))
   with check (public.owns_business(business_id));
 
+-- ════════════════════════════════════════════════════════════════════════
+--  rate_limit_hits: shared (cross-instance) sliding-window rate limiting
+--  Only the SECURITY DEFINER function below touches this table (RLS on, no
+--  policies), so counts can't be read or tampered with by clients.
+-- ════════════════════════════════════════════════════════════════════════
+create table if not exists public.rate_limit_hits (
+  key    text        not null,
+  hit_at timestamptz not null default now()
+);
+
+create index if not exists rate_limit_hits_key_time_idx
+  on public.rate_limit_hits (key, hit_at);
+
+alter table public.rate_limit_hits enable row level security;
+
+-- Atomically check a sliding-window limit and record the hit when allowed.
+-- Runs as owner (bypasses RLS); callable by signed-in users via RPC.
+create or replace function public.check_rate_limit(
+  p_key text,
+  p_limit integer,
+  p_window_ms integer
+)
+returns table(allowed boolean, retry_after_ms integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_window interval := make_interval(secs => p_window_ms / 1000.0);
+  v_count integer;
+  v_oldest timestamptz;
+begin
+  -- Opportunistic cleanup of anything well outside any active window.
+  delete from public.rate_limit_hits where hit_at < now() - interval '1 hour';
+
+  select count(*), min(hit_at)
+    into v_count, v_oldest
+    from public.rate_limit_hits
+   where key = p_key and hit_at > now() - v_window;
+
+  if v_count >= p_limit then
+    return query
+      select false,
+             greatest(
+               0,
+               extract(epoch from (v_oldest + v_window - now())) * 1000
+             )::integer;
+  else
+    insert into public.rate_limit_hits(key) values (p_key);
+    return query select true, 0;
+  end if;
+end;
+$$;
+
+revoke all on function public.check_rate_limit(text, integer, integer) from public;
+grant execute on function public.check_rate_limit(text, integer, integer)
+  to authenticated, anon;
+
+

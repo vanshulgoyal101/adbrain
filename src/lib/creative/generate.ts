@@ -1,4 +1,5 @@
 import { buildAdDesign, formatDimensions, type AdDesignSpec, type AdFormat } from "@/lib/creative/design";
+import { scanAdCopy } from "@/lib/creative/slopScan";
 import { generateImage } from "@/lib/imageGen";
 import { completeJSON } from "@/lib/llm";
 import {
@@ -55,6 +56,35 @@ export async function generateVariants(params: {
   );
 }
 
+// Generate copy, retrying once if the first draft trips the deterministic slop
+// scanner (clichés, shouting, over-length). Image generates in parallel, so the
+// happy path costs nothing extra.
+async function generateGuardedCopy(
+  brand: BrandContext,
+  brief: string,
+  angle: AdAngle,
+  instructions?: string,
+  language?: string,
+): Promise<GeneratedCopy> {
+  let normalized: GeneratedCopy = { headline: "", primary_text: "", cta: "Learn More" };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const copy = await completeJSON<GeneratedCopy>(
+      buildCopyMessages(brand, brief, angle, instructions, language),
+      { temperature: attempt === 0 ? 0.8 : 0.6, maxTokens: 400 },
+    );
+    normalized = {
+      headline: copy.headline?.trim() ?? "",
+      primary_text: copy.primary_text?.trim() ?? "",
+      cta: copy.cta?.trim() || "Learn More",
+    };
+    const findings = scanAdCopy([normalized.headline, normalized.primary_text].join(" "), {
+      maxWords: 60,
+    });
+    if (findings.length === 0) break;
+  }
+  return normalized;
+}
+
 export async function generateOneVariant(
   brand: BrandContext,
   brief: string,
@@ -64,26 +94,14 @@ export async function generateOneVariant(
   format?: AdFormat,
 ): Promise<GeneratedVariant> {
   const dims = formatDimensions(format ?? "portrait");
-  const [copy, image] = await Promise.all([
-    completeJSON<GeneratedCopy>(
-      buildCopyMessages(brand, brief, angle, instructions, language),
-      {
-        temperature: 0.8,
-        maxTokens: 400,
-      },
-    ),
+  const [normalizedCopy, image] = await Promise.all([
+    generateGuardedCopy(brand, brief, angle, instructions, language),
     generateImage({
       prompt: buildImagePrompt(brand, brief, angle, instructions),
       width: dims.width,
       height: dims.height,
     }),
   ]);
-
-  const normalizedCopy: GeneratedCopy = {
-    headline: copy.headline?.trim() ?? "",
-    primary_text: copy.primary_text?.trim() ?? "",
-    cta: copy.cta?.trim() || "Learn More",
-  };
 
   return {
     angleId: angle.id,
