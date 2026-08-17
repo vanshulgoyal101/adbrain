@@ -536,4 +536,24 @@ revoke all on function public.check_rate_limit(text, integer, integer) from publ
 grant execute on function public.check_rate_limit(text, integer, integer)
   to authenticated, anon;
 
+-- ════════════════════════════════════════════════════════════════════════
+--  spend_limits: per-business ad-spend guardrails (weekly cap + auto-pause)
+-- ════════════════════════════════════════════════════════════════════════
+create table if not exists public.spend_limits (
+  business_id       uuid primary key references public.businesses (id) on delete cascade,
+  weekly_cap_rupees integer,  -- null = no cap
+  alert_pct         integer not null default 80 check (alert_pct between 1 and 100),
+  auto_pause        boolean not null default false,
+  updated_at        timestamptz not null default now()
+);
+
+alter table public.spend_limits enable row level security;
+
+drop policy if exists "spend_limits: all own" on public.spend_limits;
+create policy "spend_limits: all own"
+  on public.spend_limits for all
+  using (public.owns_business(business_id))
+  with check (public.owns_business(business_id));
+
+
 

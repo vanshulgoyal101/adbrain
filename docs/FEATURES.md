@@ -2,6 +2,7 @@
 
 > The single source of truth for **what exists** and **what's proposed** in AdBrain.
 > Update this whenever a feature ships or a new idea is worth tracking.
+> For the **prioritized "what next, and why"** backlog, see [ROADMAP.md](./ROADMAP.md).
 >
 > **Legend:** ✅ Built · 🚧 In progress · 📋 Proposed · 🔒 Blocked (needs access/prereq)
 >
@@ -26,7 +27,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 
 | Horizon | Bets |
 | --- | --- |
-| **Now** | Guided onboarding · Spend guardrails & alerts · Weekly WhatsApp results digest · Instant new-lead alerts |
+| **Now** | Guided onboarding · Weekly WhatsApp results digest · Instant new-lead alerts |
 | **Next** | AI-vs-baseline benchmark · Auto-optimisation · Lead → revenue (ROI) · Festival campaign suggestions |
 | **Later** | Self-serve multi-customer · Agency / white-label · Video creatives · Google Ads |
 
@@ -106,7 +107,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | 🔒 | True A/B split tests | Meta Experiments API |
 | 📋 | Scheduled activation | launch at a chosen date/time |
 | 📋 | Auto-optimisation | pause losers, scale winners on CPL |
-| 📋 | Spend guardrails & alerts | weekly cap + "spent ₹X" — no runaway spend, builds trust |
+| ✅ | Spend guardrails & alerts | weekly cap + block activation over cap + approaching/over banner + optional auto-pause at the cap (`lib/campaign/spend.ts`, `/settings`, `spend_limits`) |
 | 📋 | AI-vs-baseline benchmark | new AI ads vs the owner's previous ads (CPL lift) — the proof |
 | ✅ | Auto-sync on page load | silent sync when Campaigns opens; scheduled cron 📋 when hosted |
 

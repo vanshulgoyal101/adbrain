@@ -2,11 +2,13 @@ import Link from "next/link";
 import { ArrowRight, Building2, CheckCircle2, Circle, ImageIcon, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SpendStatusBanner } from "@/components/spend-status";
 import {
   getCampaigns,
   getCreatives,
   getAuditLog,
   getPrimaryBusiness,
+  getSpendEvaluation,
 } from "@/lib/supabase/queries";
 import { onboardingProgress, onboardingSteps } from "@/lib/onboarding";
 import { cn } from "@/lib/utils";
@@ -18,6 +20,7 @@ export default async function DashboardPage() {
   const creatives = business ? await getCreatives(business.id) : [];
   const audit = business ? await getAuditLog(business.id, 8) : [];
   const campaigns = business ? await getCampaigns(business.id) : [];
+  const spend = business ? await getSpendEvaluation(business.id) : null;
   const drafts = creatives.filter((c) => c.status === "draft").length;
   const approved = creatives.filter((c) => c.status === "approved").length;
 
@@ -82,6 +85,14 @@ export default async function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {spend &&
+        (spend.evaluation.status === "approaching" ||
+          spend.evaluation.status === "over") && (
+          <div className="mt-6">
+            <SpendStatusBanner evaluation={spend.evaluation} />
+          </div>
+        )}
 
       <Link href="/create" className="mt-6 block">
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-5 transition-colors hover:bg-blue-100">

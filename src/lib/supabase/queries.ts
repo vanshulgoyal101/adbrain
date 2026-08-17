@@ -7,6 +7,13 @@ import {
 } from "@/lib/dev-auth";
 import { buildPerformanceContext } from "@/lib/campaign/performance";
 import type { ReportRow } from "@/lib/campaign/report";
+import {
+  DEFAULT_SPEND_LIMITS,
+  evaluateSpend,
+  type CampaignSpend,
+  type SpendEvaluation,
+  type SpendLimits,
+} from "@/lib/campaign/spend";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AdInstruction,
@@ -126,6 +133,48 @@ export async function getLatestResults(
     if (!map[row.campaign_id]) map[row.campaign_id] = row;
   }
   return map;
+}
+
+/** A business's spend guardrail settings (defaults when none saved). */
+export async function getSpendLimits(businessId: string): Promise<SpendLimits> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("spend_limits")
+    .select("weekly_cap_rupees, alert_pct, auto_pause")
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!data) return { ...DEFAULT_SPEND_LIMITS };
+  return {
+    weeklyCapRupees: data.weekly_cap_rupees,
+    alertPct: data.alert_pct,
+    autoPause: data.auto_pause,
+  };
+}
+
+/** Campaigns mapped to the minimal shape the spend guardrails need. */
+export async function getCampaignSpend(
+  businessId: string,
+): Promise<CampaignSpend[]> {
+  const campaigns = await getCampaigns(businessId);
+  if (!campaigns.length) return [];
+  const results = await getLatestResults(campaigns.map((c) => c.id));
+  return campaigns.map((c) => ({
+    id: c.id,
+    status: c.status,
+    dailyBudget: c.daily_budget,
+    spend: results[c.id]?.spend ?? 0,
+  }));
+}
+
+/** Evaluate a business's spend guardrail status. */
+export async function getSpendEvaluation(
+  businessId: string,
+): Promise<{ limits: SpendLimits; evaluation: SpendEvaluation }> {
+  const [limits, campaigns] = await Promise.all([
+    getSpendLimits(businessId),
+    getCampaignSpend(businessId),
+  ]);
+  return { limits, evaluation: evaluateSpend(campaigns, limits) };
 }
 
 /** All instruction files for a business, oldest first. */

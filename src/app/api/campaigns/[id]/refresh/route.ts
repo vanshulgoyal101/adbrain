@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
+import { enforceAutoPause } from "@/lib/campaign/spend-enforce";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { createClient } from "@/lib/supabase/server";
 
@@ -71,5 +72,8 @@ export async function POST(
     details: { ...insights },
   });
 
-  return NextResponse.json({ result, summary, insights });
+  // Fresh spend arrived — enforce the weekly cap if auto-pause is on.
+  const autoPaused = await enforceAutoPause(campaign.business_id);
+
+  return NextResponse.json({ result, summary, insights, autoPaused });
 }

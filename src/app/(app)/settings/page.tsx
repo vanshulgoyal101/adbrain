@@ -3,9 +3,10 @@ import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MetaConnectionPanel } from "@/components/meta-connection";
+import { SpendGuardrails } from "@/components/spend-guardrails";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
-import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Settings — AdBrain" };
 
@@ -68,6 +69,7 @@ export default async function SettingsPage({
     getMetaConnection(business.id),
     searchParams,
   ]);
+  const { limits, evaluation } = await getSpendEvaluation(business.id);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -82,6 +84,7 @@ export default async function SettingsPage({
         oauthConfigured={metaOAuthConfigured()}
         notice={noticeFrom(params)}
       />
+      <SpendGuardrails limits={limits} evaluation={evaluation} />
     </div>
   );
 }

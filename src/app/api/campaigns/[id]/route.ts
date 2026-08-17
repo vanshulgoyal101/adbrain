@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
+import { wouldExceedCap } from "@/lib/campaign/spend";
 import { MetaError } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
+import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -36,6 +38,28 @@ export async function PATCH(
     .eq("id", id)
     .maybeSingle();
   if (!campaign) return apiError("Campaign not found", 404);
+
+  // Spend guardrail: block turning a campaign on if it would push the weekly
+  // commitment past the business's cap.
+  if (action === "active") {
+    const [limits, spend] = await Promise.all([
+      getSpendLimits(campaign.business_id),
+      getCampaignSpend(campaign.business_id),
+    ]);
+    const otherActive = spend.filter((c) => c.status === "active" && c.id !== id);
+    const { exceeds, projectedAfter } = wouldExceedCap(
+      otherActive,
+      campaign.daily_budget ?? 0,
+      limits.weeklyCapRupees,
+    );
+    if (exceeds) {
+      const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+      return apiError(
+        `Activating this would commit about ${fmt(projectedAfter)}/week, over your ${fmt(limits.weeklyCapRupees!)}/week cap. Raise the cap in Settings or pause another campaign first.`,
+        422,
+      );
+    }
+  }
 
   const meta = await metaClientForBusiness(campaign.business_id);
   if (!meta || !campaign.meta_campaign_id) {

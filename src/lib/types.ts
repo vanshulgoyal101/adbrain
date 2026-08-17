@@ -306,6 +306,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: [];
       };
+      spend_limits: {
+        Row: {
+          business_id: string;
+          weekly_cap_rupees: number | null;
+          alert_pct: number;
+          auto_pause: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          business_id: string;
+          weekly_cap_rupees?: number | null;
+          alert_pct?: number;
+          auto_pause?: boolean;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["spend_limits"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -334,6 +354,8 @@ export type AdInstruction =
 export type AuditLog = Database["public"]["Tables"]["audit_log"]["Row"];
 export type Lead = Database["public"]["Tables"]["leads"]["Row"];
 export type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
+export type SpendLimitRow =
+  Database["public"]["Tables"]["spend_limits"]["Row"];
 
 export type BusinessInsert =
   Database["public"]["Tables"]["businesses"]["Insert"];

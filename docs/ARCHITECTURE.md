@@ -92,6 +92,7 @@ current auth user owns that business. Storage buckets (`brand-assets`,
 | `businesses` | the Brand Brain | `vertical` (industry, free text), voice, colours, USPs, offers, `languages[]`, `locations[]` |
 | `brand_assets` | logos / product photos / past ads | stored in the `brand-assets` bucket |
 | `meta_credentials` | per-business Meta creds (one row/business): OAuth **or** single-tenant env fallback; `token_type`, `token_expires_at`, `scopes`, nullable account/page while pending |
+| `spend_limits` | per-business ad-spend guardrails: `weekly_cap_rupees` (null = none), `alert_pct`, `auto_pause` |
 | `creatives` | generated ads | `angle`, `headline`, `primary_text`, `cta`, `image_url`, `status` (draft/approved), `variant_group` |
 | `campaigns` | launched campaigns | `meta_campaign_id`, `status`, `daily_budget`, `creative_ids[]`, `raw jsonb`; **unique (business_id, meta_campaign_id)** |
 | `campaign_results` | insight snapshots | impressions/clicks/leads/spend/cpl, `fetched_at` |
@@ -149,6 +150,7 @@ leaked).
 | `meta/accounts` | GET | List the connected user's ad accounts + pages |
 | `meta/connect` | POST | Save the chosen ad account + page |
 | `meta/disconnect` | POST | Remove the stored Meta connection |
+| `spend-limits` | POST | Save the weekly spend cap + alert % + auto-pause |
 
 Cost-incurring routes (`assistant`, `generate`, `regenerate`, `plan`,
 `autofill`) are **rate-limited per user** (see §9).
@@ -281,6 +283,26 @@ the token).
 > whitelisted in the Meta app. Until approved it works only for the app's
 > configured test users. Tokens are stored in the RLS-protected
 > `meta_credentials` table and never returned to the browser.
+
+---
+
+## 8b. Spend guardrails (`lib/campaign/spend.ts`)
+
+Non-technical owners are letting software spend on ads, so spend is capped and
+monitored. Pure, unit-tested logic drives three enforcement points:
+
+- **Config** — `spend_limits` (one row/business): `weekly_cap_rupees`,
+  `alert_pct`, `auto_pause`, editable in **Settings** (`POST /api/spend-limits`).
+- **Forward-looking guard** — `wouldExceedCap()` blocks **activating** a campaign
+  (`PATCH /api/campaigns/[id]` → active) when the projected weekly commitment
+  (active campaigns' daily budget × 7) would exceed the cap. Campaigns are
+  created paused, so activation is the moment money is committed.
+- **Signal** — `evaluateSpend()` gauges `max(projected weekly, tracked spend)`
+  against the cap → `off | ok | approaching | over`, surfaced as a dashboard/
+  settings banner + meter.
+- **Runaway protection** — on results refresh, `enforceAutoPause()` pauses every
+  active campaign (Meta + local + audit) once tracked spend reaches the cap and
+  `auto_pause` is on. Best-effort: it never throws, so it can't break the refresh.
 
 ---
 
