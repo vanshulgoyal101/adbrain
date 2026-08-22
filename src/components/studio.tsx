@@ -269,6 +269,13 @@ function CreativeCard({
         {creative.image_url && !imgError && (
           <img
             key={creative.image_url}
+            ref={(node) => {
+              // Already-cached images may finish before React attaches onLoad;
+              // detect that in the commit phase so we skip the placeholder flash.
+              if (node?.complete && node.naturalWidth > 0) {
+                setLoadedUrl(creative.image_url);
+              }
+            }}
             src={creative.image_url}
             alt={creative.headline ?? "Ad creative"}
             className={cn(

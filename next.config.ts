@@ -23,7 +23,6 @@ const nextConfig: NextConfig = {
     // back to a tab always refetches instead of showing a stale snapshot.
     staleTimes: {
       dynamic: 0,
-      static: 0,
     },
   },
 };

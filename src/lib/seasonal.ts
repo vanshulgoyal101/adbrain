@@ -23,6 +23,22 @@ interface Occasion {
 
 const md = (month: number, day: number) => month * 100 + day;
 
+/**
+ * Month/day of an instant in India (Asia/Kolkata), independent of the host
+ * timezone. This keeps the result identical on a UTC server and an IST client,
+ * so the rendered suggestions never mismatch during hydration.
+ */
+function istMonthDay(now: Date): { month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(now);
+  const get = (t: string) =>
+    Number(parts.find((p) => p.type === t)?.value ?? "1");
+  return { month: get("month"), day: get("day") };
+}
+
 /** Timely occasions, ordered by the calendar. */
 const OCCASIONS: Occasion[] = [
   { label: "New Year offer", prompt: "A New Year offer for my business", startMd: md(12, 26), endMd: md(1, 5) },
@@ -55,7 +71,8 @@ function inWindow(todayMd: number, startMd: number, endMd: number): boolean {
  * topped up with evergreen ideas. Labels are unique.
  */
 export function seasonalSuggestions(now: Date = new Date(), max = 3): Suggestion[] {
-  const today = md(now.getMonth() + 1, now.getDate());
+  const { month, day } = istMonthDay(now);
+  const today = md(month, day);
   const timely: Suggestion[] = OCCASIONS.filter((o) =>
     inWindow(today, o.startMd, o.endMd),
   ).map(({ label, prompt }) => ({ label, prompt }));
