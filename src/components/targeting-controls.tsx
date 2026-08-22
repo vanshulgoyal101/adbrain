@@ -89,6 +89,19 @@ function LocationPicker({
   const [results, setResults] = React.useState<GeoPick[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement>(null);
+
+  // Close the results dropdown when focus/clicks move outside the picker.
+  React.useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   React.useEffect(() => {
     const q = query.trim();
@@ -139,7 +152,7 @@ function LocationPicker({
       : "bg-rose-50 text-rose-800 border-rose-200";
 
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={rootRef} className="flex flex-col gap-2">
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
           {loading ? (
@@ -152,6 +165,9 @@ function LocationPicker({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length && setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+          }}
           placeholder={placeholder}
           className="pl-9"
         />
