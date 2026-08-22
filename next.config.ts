@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
         : []),
     ],
   },
+  experimental: {
+    // Every page in the app renders live, per-user data (campaigns, leads,
+    // spend). Disable the client Router Cache for dynamic routes so navigating
+    // back to a tab always refetches instead of showing a stale snapshot.
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
+  },
 };
 
 export default nextConfig;

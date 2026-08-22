@@ -6,6 +6,8 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { buildLeadDigest, relativeAge } from "@/lib/leads/digest";
+import { formatDateShort } from "@/lib/utils";
+import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
 
 export function LeadInbox({
@@ -22,6 +24,7 @@ export function LeadInbox({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const mounted = useMounted();
 
   const digest = useMemo(
     () =>
@@ -78,6 +81,15 @@ export function LeadInbox({
 
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(digest)}`;
   const now = new Date();
+
+  // Render a deterministic absolute date on the server and first client render
+  // (same string on both sides = no hydration mismatch), then upgrade to the
+  // friendlier relative "2h ago" once mounted on the client.
+  function whenLabel(createdTime: string | null): string {
+    if (!createdTime) return "—";
+    if (mounted) return relativeAge(createdTime, now) || formatDateShort(createdTime);
+    return formatDateShort(createdTime) || "—";
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -181,7 +193,7 @@ export function LeadInbox({
                   <td className="px-4 py-2.5 text-slate-600">{l.city ?? "—"}</td>
                   <td className="px-4 py-2.5 text-slate-500">{l.form_name ?? "—"}</td>
                   <td className="px-4 py-2.5 text-slate-500">
-                    {relativeAge(l.created_time, now) || "—"}
+                    {whenLabel(l.created_time) || "—"}
                   </td>
                 </tr>
               ))}
