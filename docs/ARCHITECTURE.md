@@ -108,6 +108,9 @@ and the unique campaign index that makes sync idempotent.
 
 ## 5. Auth & session flow
 
+- **Sign-in options** (`components/login-form.tsx`): passwordless **magic link**
+  (primary), **email + password** (used for the Meta app-review account), and
+  **Google OAuth** — all via Supabase Auth.
 - **`proxy.ts`** runs on every request and calls `updateSession` to refresh the
   Supabase auth cookie (keeps SSR and the client in sync).
 - **`getUser()`** (`lib/supabase/queries.ts`) resolves the current user: it
@@ -338,6 +341,9 @@ monitored. Pure, unit-tested logic drives three enforcement points:
 - `sitemap.ts` (public routes), `robots.ts` (app/api disallowed), dynamic
   `opengraph-image.tsx` (with `alt`), `preconnect`/`dns-prefetch` for the
   analytics host, system-font stack (no render-blocking web fonts).
+- **Compliance pages** (indexable, in the sitemap): `/privacy`, `/terms`, and
+  `/data-deletion` (the data-deletion URL Meta app review requires). Covered by
+  `tests/sitemap-robots.test.ts`.
 
 ---
 
