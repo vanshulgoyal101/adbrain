@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Download, ExternalLink, ImageIcon, Link2 } from "lucide-react";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import type { BrandAsset, Creative } from "@/lib/types";
+import { downloadBlob } from "@/lib/download";
 import { cn } from "@/lib/utils";
 
 const ASSET_TYPE_LABEL: Record<string, string> = {
@@ -17,12 +18,7 @@ async function downloadImage(url: string, filename: string) {
     const res = await fetch(url);
     if (!res.ok) throw new Error();
     const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = objectUrl;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(objectUrl);
+    downloadBlob(blob, filename);
   } catch {
     // Fallback: open in a new tab if the fetch is blocked by CORS.
     window.open(url, "_blank", "noopener");

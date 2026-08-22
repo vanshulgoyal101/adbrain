@@ -21,6 +21,7 @@ import { Label, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { AD_LANGUAGES } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
+import { downloadBlob } from "@/lib/download";
 import { cn } from "@/lib/utils";
 
 export function Studio({
@@ -90,12 +91,7 @@ export function Studio({
         return;
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "adbrain-ad-pack.zip";
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, "adbrain-ad-pack.zip");
       setExportOk(true);
     } catch {
       setError("Export failed.");
