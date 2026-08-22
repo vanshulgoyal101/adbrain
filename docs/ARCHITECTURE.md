@@ -341,6 +341,34 @@ monitored. Pure, unit-tested logic drives three enforcement points:
 
 ---
 
+## 10a. Client rendering, hydration & caching
+
+Rules that keep the UI stable (no flicker, no stale data):
+
+- **No non-deterministic values at render in client components.** Computing
+  `new Date()`, `timeAgo(...)`, `Math.random()`, or `seasonalSuggestions()`
+  during a Client Component's render makes the server HTML differ from the first
+  client render → React discards and re-renders the subtree → visible flicker.
+  Instead: (a) render a deterministic value (`formatDateShort()` pins locale +
+  `Asia/Kolkata` so server and client agree), (b) gate client-only content
+  behind `useMounted()` (`lib/use-mounted.ts`, backed by `useSyncExternalStore`),
+  or (c) compute on the server and pass as props. Example: the leads table shows
+  a deterministic date on first paint, then upgrades to "2h ago" after mount.
+- **Timezone-stable dates.** Anything date-derived that renders on both sides
+  (seasonal chips, timestamps) resolves the calendar day in `Asia/Kolkata`, not
+  the host timezone, so a UTC server and an IST client never disagree.
+- **Router Cache.** `next.config.ts` sets `experimental.staleTimes.dynamic = 0`
+  so navigating back to a tab always refetches live per-user data instead of
+  serving a cached RSC snapshot. (`static` must stay ≥ 30 in Next 16.)
+- **Image loading.** Card images detect an already-cached load via a ref
+  `.complete`/`naturalWidth` check in the commit phase, skipping the grey
+  placeholder → real image flash on revisits.
+- **Mutations.** Client-fetch mutations update local state; server-rendered
+  aggregates stay fresh because dynamic routes are uncached (above) and server
+  actions call `revalidatePath`.
+
+---
+
 ## 11. Testing
 
 - **Vitest**, node environment by default; component tests opt into jsdom via a
