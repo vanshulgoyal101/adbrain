@@ -2,24 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
+import { fieldList, fieldStr } from "@/lib/brand/fields";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
 export type SaveState = { ok: boolean; error?: string };
 
 function str(fd: FormData, key: string): string | null {
-  const v = fd.get(key);
-  const s = typeof v === "string" ? v.trim() : "";
-  return s.length ? s : null;
+  return fieldStr(fd.get(key));
 }
 
+/** Comma-or-newline separated fields (languages, locations). */
 function list(fd: FormData, key: string): string[] {
-  const v = fd.get(key);
-  if (typeof v !== "string") return [];
-  return v
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return fieldList(fd.get(key));
+}
+
+/** One-per-line fields (USPs, offers) where commas are legitimate content. */
+function lines(fd: FormData, key: string): string[] {
+  return fieldList(fd.get(key), /\n/);
 }
 
 export async function saveBusiness(
@@ -49,8 +49,8 @@ export async function saveBusiness(
     target_audience: str(formData, "target_audience"),
     languages: list(formData, "languages"),
     locations: list(formData, "locations"),
-    usps: list(formData, "usps"),
-    offers: list(formData, "offers"),
+    usps: lines(formData, "usps"),
+    offers: lines(formData, "offers"),
     logo_url: str(formData, "logo_url"),
   };
 
