@@ -33,4 +33,16 @@ describe("seasonalSuggestions", () => {
     expect(s).toHaveLength(2);
     expect(new Set(s.map((x) => x.label)).size).toBe(2);
   });
+
+  it("resolves the calendar day in IST, not the host timezone", () => {
+    // 20:00 UTC on 14 Aug = 01:30 IST on 15 Aug -> still inside the
+    // Independence Day window (8-15 Aug). This guards against the SSR/client
+    // hydration mismatch a UTC server would otherwise cause.
+    const stillInWindow = seasonalSuggestions(new Date("2026-08-14T20:00:00Z"));
+    expect(stillInWindow.some((x) => /Independence Day/.test(x.label))).toBe(true);
+
+    // 19:00 UTC on 15 Aug = 00:30 IST on 16 Aug -> past the window.
+    const pastWindow = seasonalSuggestions(new Date("2026-08-15T19:00:00Z"));
+    expect(pastWindow.some((x) => /Independence Day/.test(x.label))).toBe(false);
+  });
 });
