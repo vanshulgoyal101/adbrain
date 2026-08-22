@@ -12,6 +12,7 @@ export function LoginForm() {
   const authError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(
     authError ? "Sign-in failed. Please try again." : null,
@@ -46,6 +47,21 @@ export function LoginForm() {
       options: { redirectTo: callbackUrl() },
     });
     if (error) setError(error.message);
+  }
+
+  async function signInWithPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    window.location.href = redirect;
   }
 
   if (status === "sent") {
@@ -92,6 +108,30 @@ export function LoginForm() {
         </div>
         <Button type="submit" disabled={status === "sending"}>
           {status === "sending" ? "Sending…" : "Send magic link"}
+        </Button>
+      </form>
+
+      <div className="flex items-center gap-3 text-xs text-slate-400">
+        <div className="h-px flex-1 bg-slate-200" />
+        or use password
+        <div className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      <form onSubmit={signInWithPassword} className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <Button type="submit" variant="outline" disabled={!email || !password}>
+          Sign in with password
         </Button>
       </form>
 

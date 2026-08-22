@@ -104,6 +104,10 @@ export default function PrivacyPolicyPage() {
           data (your leads), you are the controller of that data and are
           responsible for having a lawful basis to collect and contact them.
         </p>
+        <p>
+          For formal deletion requests, see our {" "}
+          <a href="/data-deletion">Data Deletion Instructions</a> page.
+        </p>
 
         <h2>Children</h2>
         <p>AdBrain is a business tool and is not directed to children under 16.</p>

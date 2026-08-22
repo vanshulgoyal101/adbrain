@@ -42,6 +42,9 @@ export function LegalPage({
             <Link href="/privacy" className="hover:underline">
               Privacy
             </Link>
+            <Link href="/data-deletion" className="hover:underline">
+              Data deletion
+            </Link>
             <Link href="/terms" className="hover:underline">
               Terms
             </Link>

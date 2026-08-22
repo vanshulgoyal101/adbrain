@@ -23,7 +23,7 @@ export default function LoginPage() {
             Sign in to AdBrain
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Use a magic link or continue with Google.
+            Use a magic link, password, or continue with Google.
           </p>
         </div>
         <Suspense>
