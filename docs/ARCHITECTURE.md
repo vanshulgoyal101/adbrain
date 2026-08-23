@@ -341,9 +341,6 @@ monitored. Pure, unit-tested logic drives three enforcement points:
 - `sitemap.ts` (public routes), `robots.ts` (app/api disallowed), dynamic
   `opengraph-image.tsx` (with `alt`), `preconnect`/`dns-prefetch` for the
   analytics host, system-font stack (no render-blocking web fonts).
-- **Compliance pages** (indexable, in the sitemap): `/privacy`, `/terms`, and
-  `/data-deletion` (the data-deletion URL Meta app review requires). Covered by
-  `tests/sitemap-robots.test.ts`.
 
 ---
 
