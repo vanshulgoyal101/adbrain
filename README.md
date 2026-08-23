@@ -1,16 +1,20 @@
 # AdBrain
 
-AI ad-creative + ad manager for local SMBs. Beachhead vertical: **solar**.
-First tenant: **Solaride** (own account — dogfood + proof case).
+**Live in production at [adbrain.vanshul.com](https://adbrain.vanshul.com).**
+
+AI ad-creative + ad manager for local SMBs — **industry-agnostic** (each business
+sets its own vertical). First customer: **Solaride** (solar) — the dogfood + proof
+case.
 
 Fill a "brand brain" → type a goal → AI generates on-brand ad creatives (image +
-copy, multiple variants) → approve → (Phase 1) launch into Meta Advantage+.
+copy, multiple variants) → approve → launch into Meta Advantage+ lead campaigns
+(created **paused** — nothing spends until you activate).
 
 See [docs/SPEC.md](docs/SPEC.md) for the full product spec and
 [docs/how-we-got-here.md](docs/how-we-got-here.md) for the rationale.
-See [docs/FEATURES.md](docs/FEATURES.md) for the living list of built and
-proposed features.
-See [docs/DEPLOY.md](docs/DEPLOY.md) to deploy to adbrain.vanshul.com.
+See [docs/FEATURES.md](docs/FEATURES.md) for the living feature list,
+[docs/ROADMAP.md](docs/ROADMAP.md) for what's next, and
+[docs/DEPLOY.md](docs/DEPLOY.md) for the deploy runbook.
 
 ## Stack
 

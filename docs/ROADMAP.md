@@ -8,9 +8,9 @@ inventory live in [FEATURES.md](./FEATURES.md); architecture in
 > **Legend:** effort is a rough T-shirt size (S ≈ hours, M ≈ a day or two,
 > L ≈ several days / needs external process).
 
-_Last reviewed: 2026-08-17. Recently shipped: industry-agnostic `vertical` fix,
-cross-instance rate limiting, Facebook-Login ad-account connect, Google sign-in,
-**spend guardrails**._
+_Last reviewed: 2026-08-23. **Live in production at adbrain.vanshul.com.** Recently
+shipped: industry-agnostic `vertical` fix, cross-instance rate limiting,
+Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 
 ---
 
@@ -19,7 +19,6 @@ cross-instance rate limiting, Facebook-Login ad-account connect, Google sign-in,
 | Task | Why it matters | Depends on | Effort |
 | --- | --- | --- | --- |
 | **Billing / subscriptions** | There is no way to take money today — every "plan" in the code is a *campaign* plan. Razorpay/Stripe + a `subscriptions` table + plan-gating + a usage meter (LLM/image cost). Without it, "product" isn't true. | pricing decision (Razorpay vs Stripe, tiers) | L |
-| **Deploy to production** | Hosting is still pending on `adbrain.vanshul.com`. Nothing below reaches a customer until this is live (see DEPLOY.md). | Vercel project + prod env | M |
 | **Meta App Review** | Until approved, only test users can connect their own ad accounts via Facebook Login. This is the gate between "works for Solaride" and "sellable to others". Weeks of lead time — **start now, in parallel**. | live app + privacy/data-deletion URLs | L |
 | **AI-vs-baseline benchmark** | The proof the whole pitch rests on — "our AI ads beat your old ads" (CPL lift vs the owner's previous campaigns). Currently a claim we can't show. | historical insights import | M |
 | **Instant new-lead alerts** | Local lead-gen is a speed game; leads that sit in the inbox are wasted spend. Push email/WhatsApp within seconds of arrival. | lead webhook or cron; a send channel | M |
@@ -54,7 +53,7 @@ cross-instance rate limiting, Facebook-Login ad-account connect, Google sign-in,
 
 ## Suggested near-term sequence
 
-1. **Deploy** + **start Meta App Review** (parallel; App Review is the long pole).
+1. **Start Meta App Review** (the long pole — weeks of lead time; the app is already live for it).
 2. **Error monitoring** (S) + **scheduled sync** (M) — the hardening that everything else leans on.
 3. **Instant new-lead alerts** (M) — highest-trust, speed-to-lead win.
 4. **Billing foundation** (L) — once pricing is decided.

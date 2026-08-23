@@ -168,7 +168,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | zod-validated env | `lib/env.ts` |
 | ✅ | Vitest suite (248 tests) | pure logic, API contracts, + jsdom component tests |
 | ✅ | CI: lint + typecheck + test + build + gitleaks | `.github/workflows/ci.yml` on every push/PR |
-| 🚧 | Hosting on adbrain.vanshul.com | needs host (Vercel) + DNS + prod env |
+| ✅ | Live in production on `adbrain.vanshul.com` | Vercel + custom domain + prod env |
 | 📋 | Billing / subscription | when multi-customer |
 | 🔒 | Google Ads integration | needs MCC/Basic Access — Phase 2 |
 

@@ -1,5 +1,8 @@
 # Deploying AdBrain to adbrain.vanshul.com
 
+> **Status:** live in production at <https://adbrain.vanshul.com> (Vercel +
+> custom domain). This is the runbook for reproducing or updating that setup.
+
 AdBrain is a **dynamic** Next.js app (auth, API routes, server rendering), so it
 needs a Node/serverless host — it can't be a static export. This guide uses
 **Vercel** (native Next.js support, free tier is enough to start).
