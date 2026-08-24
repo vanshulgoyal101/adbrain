@@ -42,7 +42,8 @@ function isAllowed(email: string | null | undefined): boolean {
   const allowlist = env.TRAFFIC_GENERATOR_ALLOWED_EMAILS.map((v) =>
     v.toLowerCase(),
   );
-  if (!allowlist.length) return false;
+  // No allowlist configured means "allow any authenticated user".
+  if (!allowlist.length) return true;
   if (!email) return false;
   return allowlist.includes(email.toLowerCase());
 }
