@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { getEnv } from "@/lib/env";
 import {
-  MetaError,
   type CreativeInput,
   type LeadForm,
 } from "@/lib/meta/client";
@@ -35,17 +34,6 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(n)));
-}
-
-function isAllowed(email: string | null | undefined): boolean {
-  const env = getEnv();
-  const allowlist = env.TRAFFIC_GENERATOR_ALLOWED_EMAILS.map((v) =>
-    v.toLowerCase(),
-  );
-  // No allowlist configured means "allow any authenticated user".
-  if (!allowlist.length) return true;
-  if (!email) return false;
-  return allowlist.includes(email.toLowerCase());
 }
 
 async function createProbeCampaign(args: {
@@ -149,16 +137,6 @@ export async function POST(req: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!isAllowed(user.email)) {
-    return NextResponse.json(
-      {
-        error:
-          "Forbidden. Add your email to TRAFFIC_GENERATOR_ALLOWED_EMAILS to enable this endpoint.",
-      },
-      { status: 403 },
-    );
   }
 
   const body = (await req.json().catch(() => ({}))) as RunBody;
