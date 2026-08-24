@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Link2, Link2Off, RefreshCw } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Link2,
+  Link2Off,
+  Play,
+  RefreshCw,
+} from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +48,11 @@ export function MetaConnectionPanel({
   const [loading, setLoading] = useState(autoLoad);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trafficRunning, setTrafficRunning] = useState(false);
+  const [trafficRounds, setTrafficRounds] = useState(5);
+  const [trafficCreateCampaigns, setTrafficCreateCampaigns] = useState(false);
+  const [trafficCampaignsPerRound, setTrafficCampaignsPerRound] = useState(1);
+  const [trafficResult, setTrafficResult] = useState<string | null>(null);
 
   const showSelector =
     connection.source === "oauth" && (connection.pending || connection.expired === false);
@@ -117,6 +129,35 @@ export function MetaConnectionPanel({
       setError((err as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function runTrafficGenerator() {
+    setTrafficRunning(true);
+    setTrafficResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/internal/meta-traffic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rounds: trafficRounds,
+          createDraftCampaigns: trafficCreateCampaigns,
+          campaignsPerRound: trafficCampaignsPerRound,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not run traffic generator.");
+      }
+      setTrafficResult(
+        `Calls: ${data.totalCalls}, created campaigns: ${data.totalCreated}, rounds: ${data.rounds}`,
+      );
+      router.refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setTrafficRunning(false);
     }
   }
 
@@ -265,6 +306,64 @@ export function MetaConnectionPanel({
             </Button>
           </div>
         )}
+
+        <div className="space-y-3 border-t border-slate-100 pt-4">
+          <p className="text-sm font-medium text-slate-800">
+            Internal Meta traffic runner
+          </p>
+          <p className="text-sm text-slate-600">
+            Generates repeat Marketing API activity to help with Meta access-tier
+            review. Endpoint access is restricted by an email allowlist.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm text-slate-700">
+              Rounds
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={trafficRounds}
+                onChange={(e) => setTrafficRounds(Number(e.target.value || 1))}
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              Campaigns / round
+              <input
+                type="number"
+                min={1}
+                max={3}
+                value={trafficCampaignsPerRound}
+                onChange={(e) =>
+                  setTrafficCampaignsPerRound(Number(e.target.value || 1))
+                }
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                disabled={!trafficCreateCampaigns}
+              />
+            </label>
+            <label className="flex items-center gap-2 self-end rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={trafficCreateCampaigns}
+                onChange={(e) => setTrafficCreateCampaigns(e.target.checked)}
+              />
+              Create paused campaigns
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={runTrafficGenerator} disabled={trafficRunning}>
+              {trafficRunning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              Run traffic generator
+            </Button>
+            {trafficResult && (
+              <p className="text-sm text-emerald-700">{trafficResult}</p>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

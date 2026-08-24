@@ -62,6 +62,16 @@ const schema = z.object({
   META_SYSTEM_USER_TOKEN: z.string().optional().default(""),
   META_AD_ACCOUNT_ID: z.string().optional().default(""),
   META_PAGE_ID: z.string().optional().default(""),
+
+  // Internal traffic runner (for Meta review call-volume generation)
+  TRAFFIC_GENERATOR_ALLOWED_EMAILS: commaList,
+  TRAFFIC_GENERATOR_MAX_ROUNDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .default(20),
 });
 
 export type Env = z.infer<typeof schema>;
