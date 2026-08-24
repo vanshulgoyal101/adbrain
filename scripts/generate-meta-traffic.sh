@@ -12,6 +12,13 @@ REVIEWER_PASSWORD="${ADBRAIN_REVIEWER_PASSWORD:-}"
 SUPABASE_URL="${SUPABASE_URL:-}"
 SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}"
 
+if [ -z "$SUPABASE_URL" ]; then
+  SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-}"
+fi
+if [ -z "$SUPABASE_ANON_KEY" ]; then
+  SUPABASE_ANON_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}"
+fi
+
 echo "🚀 AdBrain Meta API Traffic Generator"
 echo "════════════════════════════════════════════════════════════════"
 echo ""

@@ -13,6 +13,13 @@ SUPABASE_URL="${SUPABASE_URL:-}"
 SUPABASE_API_KEY="${SUPABASE_ANON_KEY:-}"
 LOG_FILE="/tmp/adbrain-meta-daily.log"
 
+if [ -z "$SUPABASE_URL" ]; then
+  SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-}"
+fi
+if [ -z "$SUPABASE_API_KEY" ]; then
+  SUPABASE_API_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}"
+fi
+
 # Color codes
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
