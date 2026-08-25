@@ -313,7 +313,7 @@ export function MetaConnectionPanel({
           </p>
           <p className="text-sm text-slate-600">
             Generates repeat Marketing API activity to help with Meta access-tier
-            review. Endpoint access is restricted by an email allowlist.
+            review. Requires a signed-in account.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm text-slate-700">
