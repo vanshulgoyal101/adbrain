@@ -166,7 +166,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | --- | --- | --- |
 | ✅ | Next 16 App Router + TS + Tailwind v4 | |
 | ✅ | zod-validated env | `lib/env.ts` |
-| ✅ | Vitest suite (411 tests / 51 files) | pure core, API route contracts, DB schema invariants, jsdom component + a11y tests |
+| ✅ | Vitest suite (513 tests / 58 files) | pure core, API + server-action contracts, DB schema invariants, jsdom component + a11y tests; CI coverage ratchet |
 | ✅ | CI: lint + typecheck + test + build + gitleaks | `.github/workflows/ci.yml` on every push/PR |
 | ✅ | Live in production on `adbrain.vanshul.com` | Vercel + custom domain + prod env |
 | 📋 | Billing / subscription | when multi-customer |

@@ -374,19 +374,24 @@ Rules that keep the UI stable (no flicker, no stale data):
 
 ## 11. Testing
 
-**411 tests / 51 files.** Vitest, node environment by default; component tests
+**513 tests / 58 files.** Vitest, node environment by default; component tests
 opt into jsdom via a `// @vitest-environment jsdom` docblock (`tests/setup.ts`
 wires `@testing-library/jest-dom`). Interaction uses
 `@testing-library/user-event` for real focus/hover/typing sequences.
+
+Coverage is gated in CI (`npm run test:coverage`) with a **ratchet** — the
+thresholds sit just under the current numbers so coverage can only go up. Raise
+them as suites land. The threads pool is pinned there because the forks pool
+starves workers under v8 instrumentation and produces spurious timeouts.
 
 Four layers, so a regression fails fast at the cheapest one:
 
 | Layer | What it covers |
 | --- | --- |
 | **Pure core** | Prompt builders, angle library, LLM parse/rotation/cache/usage, geo + destination mappers, budget, planner, report, spend guardrails, SSRF (incl. redirect safety), rate limiter, SEO schema, seasonal, languages, utils. |
-| **Backend** | Route-handler contracts (`api-contract`, `api-routes`): every endpoint rejects anonymous callers *before* doing work, validates input, honours the rate limiter, and maps upstream failures to the right status. `fetch` is mocked for Meta/LLM/image I/O. |
+| **Backend** | Route-handler contracts (`api-contract`, `api-routes`): every endpoint rejects anonymous callers *before* doing work, validates input, honours the rate limiter, and maps upstream failures to the right status. Server actions (brand save, instructions, studio approve/delete) and the edge **route guard** are covered too — one test walks `src/app/(app)` on disk so a new page can't silently miss the guard. `fetch` is mocked for Meta/LLM/image I/O. |
 | **Database** | `db-schema.test.ts` asserts the DDL's security properties — RLS on every table, ownership-scoped policies via `owns_business()`, append-only `audit_log`, `check_rate_limit` as `SECURITY DEFINER` with a pinned `search_path` and revoked from `public`, cascade deletes, unique indexes, storage-folder scoping, and idempotency. |
-| **Frontend (jsdom)** | The interactive surfaces — ad assistant chat, assets library, nav, spend banner + guardrails form, lead inbox, Meta connection panel, and the UI primitives. Failure paths (server rejection, dropped connection, in-flight disabling) and a11y affordances (alert roles, label association, keyboard focus, `noopener`) are asserted, not just happy paths. |
+| **Frontend (jsdom)** | The interactive surfaces — ad assistant chat, assets library, nav, spend banner + guardrails form, lead inbox, Meta connection panel, login/sign-out, Brand Brain form + instructions, Creative Studio, targeting picker, and the UI primitives. Failure paths (server rejection, dropped connection, in-flight disabling) and a11y affordances (alert roles, label association, keyboard focus, `noopener`) are asserted, not just happy paths. |
 
 Also pinned: env validation (required/optional, coercion, defaults),
 audit logging never throwing, auto-pause firing only under its exact
@@ -394,7 +399,7 @@ conditions, generation clamping what it asks paid providers for, image
 persistence degrading to the source URL, and `useMounted` returning `false`
 during SSR (the hydration-flicker guard) via `renderToString`.
 
-- Run: `npm run test` · `npm run typecheck` · `npm run lint` · `npm run build`.
+- Run: `npm run test` · `npm run test:coverage` · `npm run typecheck` · `npm run lint` · `npm run build`.
 
 ---
 
