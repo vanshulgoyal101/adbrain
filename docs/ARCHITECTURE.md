@@ -374,16 +374,26 @@ Rules that keep the UI stable (no flicker, no stale data):
 
 ## 11. Testing
 
-- **Vitest**, node environment by default; component tests opt into jsdom via a
-  `// @vitest-environment jsdom` docblock (`tests/setup.ts` wires
-  `@testing-library/jest-dom`).
-- Strategy: **exhaustively unit-test the pure core** (prompt builders, angle
-  library, LLM parse/rotation, geo/destination/mappers, budget, planner
-  formatting, report, SSRF incl. redirect safety, rate limiter, SEO schema,
-  languages, utils) and **mock `fetch`** for external I/O (Meta client, image
-  gen). Component tests cover the interactive surfaces (campaign chat, assets
-  library). The LLM efficiency layer (cache/single-flight/TTL, usage
-  accounting, provider token parsing) is unit-tested end-to-end.
+**411 tests / 51 files.** Vitest, node environment by default; component tests
+opt into jsdom via a `// @vitest-environment jsdom` docblock (`tests/setup.ts`
+wires `@testing-library/jest-dom`). Interaction uses
+`@testing-library/user-event` for real focus/hover/typing sequences.
+
+Four layers, so a regression fails fast at the cheapest one:
+
+| Layer | What it covers |
+| --- | --- |
+| **Pure core** | Prompt builders, angle library, LLM parse/rotation/cache/usage, geo + destination mappers, budget, planner, report, spend guardrails, SSRF (incl. redirect safety), rate limiter, SEO schema, seasonal, languages, utils. |
+| **Backend** | Route-handler contracts (`api-contract`, `api-routes`): every endpoint rejects anonymous callers *before* doing work, validates input, honours the rate limiter, and maps upstream failures to the right status. `fetch` is mocked for Meta/LLM/image I/O. |
+| **Database** | `db-schema.test.ts` asserts the DDL's security properties — RLS on every table, ownership-scoped policies via `owns_business()`, append-only `audit_log`, `check_rate_limit` as `SECURITY DEFINER` with a pinned `search_path` and revoked from `public`, cascade deletes, unique indexes, storage-folder scoping, and idempotency. |
+| **Frontend (jsdom)** | The interactive surfaces — ad assistant chat, assets library, nav, spend banner + guardrails form, lead inbox, Meta connection panel, and the UI primitives. Failure paths (server rejection, dropped connection, in-flight disabling) and a11y affordances (alert roles, label association, keyboard focus, `noopener`) are asserted, not just happy paths. |
+
+Also pinned: env validation (required/optional, coercion, defaults),
+audit logging never throwing, auto-pause firing only under its exact
+conditions, generation clamping what it asks paid providers for, image
+persistence degrading to the source URL, and `useMounted` returning `false`
+during SSR (the hydration-flicker guard) via `renderToString`.
+
 - Run: `npm run test` · `npm run typecheck` · `npm run lint` · `npm run build`.
 
 ---
@@ -398,6 +408,8 @@ Rules that keep the UI stable (no flicker, no stale data):
 | `GEMINI_MODEL` | LLM model override (default `gemini-flash-latest`) |
 | `GEMINI_THINKING_HEADROOM` | extra output-token budget for Gemini 2.5 thinking (default `3000`; set `0` for a paid non-thinking model) |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | single-tenant Meta creds |
+| `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | who may run the internal Meta traffic runner (comma-separated). **Empty in production disables the endpoint (404).** |
+| `TRAFFIC_GENERATOR_MAX_ROUNDS` | upper bound on runner rounds (default `20`) |
 | `NEXT_PUBLIC_SITE_URL` | canonical site origin (SEO) |
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS`, `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | local dev bypass (non-prod only) |
 
