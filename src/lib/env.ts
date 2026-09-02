@@ -71,6 +71,8 @@ const schema = z.object({
     .max(100)
     .optional()
     .default(20),
+  // Who may run it. Empty in production disables the endpoint entirely.
+  TRAFFIC_GENERATOR_ALLOWED_EMAILS: commaList,
 });
 
 export type Env = z.infer<typeof schema>;

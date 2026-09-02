@@ -140,6 +140,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Internal tool: it burns Meta quota and creates real (paused) campaigns, so
+  // it is allowlisted by email. With no allowlist it stays off in production.
+  const allowed = getEnv().TRAFFIC_GENERATOR_ALLOWED_EMAILS;
+  if (!allowed.length) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+  } else {
+    const email = user.email?.toLowerCase() ?? "";
+    if (!allowed.some((e) => e.toLowerCase() === email)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   // Heaviest endpoint in the app (loops of Meta calls + campaign creation) —
   // rate-limit per user like the other expensive routes.
   const limited = await rateLimitResponse(`meta-traffic:${user.id}`, {
