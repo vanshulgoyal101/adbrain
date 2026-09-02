@@ -48,35 +48,6 @@ async function makeRequest(endpoint, options = {}) {
   }
 }
 
-async function login() {
-  console.log('🔐 Logging in...\n');
-  
-  const response = await fetch(`${ADBRAIN_URL}/auth/callback`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: REVIEWER_EMAIL,
-      password: REVIEWER_PASSWORD,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error('❌ Login failed');
-    return false;
-  }
-
-  const data = await response.json();
-  sessionToken = data.session?.access_token;
-  
-  if (!sessionToken) {
-    console.error('❌ No session token returned');
-    return false;
-  }
-
-  console.log('✅ Login successful!\n');
-  return true;
-}
-
 async function generateTraffic() {
   console.log('🚀 Starting AdBrain API traffic generation...\n');
 
@@ -85,9 +56,9 @@ async function generateTraffic() {
     console.warn('Continuing without login; authenticated endpoints may return 401.\n');
   }
 
-  // Try to login (though this might not work via this approach)
-  // Instead, we'll make unauthenticated requests that trigger the business's
-  // server-side Meta credentials (pre-connected mode)
+  // Unauthenticated requests that exercise the business's server-side Meta
+  // credentials (pre-connected mode). See generate-meta-traffic-app.mjs for the
+  // direct Graph API variant.
 
   console.log('Step 1: Fetch Meta accounts/connections');
   console.log('────────────────────────────────────────────────');

@@ -109,13 +109,13 @@ async function generateTraffic() {
 
   // Step 2: Make API calls
   console.log('Step 1: List Ad Accounts (ads_read)\n');
-  const accounts = await callMetaAPI('/me/adaccounts', token, {
+  await callMetaAPI('/me/adaccounts', token, {
     fields: 'id,name,account_status,business_name',
   });
   console.log('');
 
   console.log('Step 2: List Campaigns (ads_read)\n');
-  const campaigns = await callMetaAPI(
+  await callMetaAPI(
     `/${META_AD_ACCOUNT_ID}/campaigns`,
     token,
     { fields: 'id,name,status,objective,daily_budget,created_time' }
@@ -123,7 +123,7 @@ async function generateTraffic() {
   console.log('');
 
   console.log('Step 3: List Ad Sets (ads_read)\n');
-  const adsets = await callMetaAPI(
+  await callMetaAPI(
     `/${META_AD_ACCOUNT_ID}/adsets`,
     token,
     { fields: 'id,name,status,daily_budget,lifetime_budget' }
@@ -131,7 +131,7 @@ async function generateTraffic() {
   console.log('');
 
   console.log('Step 4: List Ads (ads_read)\n');
-  const ads = await callMetaAPI(
+  await callMetaAPI(
     `/${META_AD_ACCOUNT_ID}/ads`,
     token,
     { fields: 'id,name,status,created_time' }
@@ -139,7 +139,7 @@ async function generateTraffic() {
   console.log('');
 
   console.log('Step 5: List Leads (leads_retrieval)\n');
-  const leads = await callMetaAPI(
+  await callMetaAPI(
     `/${META_AD_ACCOUNT_ID}/leads`,
     token,
     { fields: 'id,created_time,ad_name,form_id', limit: 10 }
