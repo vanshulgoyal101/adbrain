@@ -31,10 +31,10 @@ export default defineConfig({
       thresholds: {
         // A ratchet, not a target: set just under the current numbers so coverage
         // can only go up. Raise these as suites land.
-        lines: 51,
-        functions: 51,
-        statements: 51,
-        branches: 47,
+        lines: 54,
+        functions: 55,
+        statements: 54,
+        branches: 50,
       },
     },
   },

@@ -12,7 +12,7 @@ const h = vi.hoisted(() => ({
   deleteInstruction: vi.fn(),
   refresh: vi.fn(),
 }));
-const { saveBusiness, saveInstruction, deleteInstruction, refresh } = h;
+const { saveBusiness, saveInstruction, deleteInstruction } = h;
 
 vi.mock("@/app/(app)/brand/actions", () => ({ saveBusiness: h.saveBusiness }));
 vi.mock("@/app/(app)/brand/instruction-actions", () => ({
