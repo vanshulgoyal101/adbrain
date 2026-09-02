@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { SECURITY_HEADERS } from "./src/lib/security/headers";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 let supabaseHost: string | undefined;
@@ -24,6 +25,9 @@ const nextConfig: NextConfig = {
     staleTimes: {
       dynamic: 0,
     },
+  },
+  async headers() {
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
 };
 
