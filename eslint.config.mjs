@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
   globalIgnores([
     "node_modules/**",
     "db/**",
+    "coverage/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
