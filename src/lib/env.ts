@@ -64,7 +64,6 @@ const schema = z.object({
   META_PAGE_ID: z.string().optional().default(""),
 
   // Internal traffic runner (for Meta review call-volume generation)
-  TRAFFIC_GENERATOR_ALLOWED_EMAILS: commaList,
   TRAFFIC_GENERATOR_MAX_ROUNDS: z.coerce
     .number()
     .int()

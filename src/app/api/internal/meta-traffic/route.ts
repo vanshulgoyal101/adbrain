@@ -6,6 +6,7 @@ import {
   type LeadForm,
 } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
+import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
@@ -138,6 +139,14 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Heaviest endpoint in the app (loops of Meta calls + campaign creation) —
+  // rate-limit per user like the other expensive routes.
+  const limited = await rateLimitResponse(`meta-traffic:${user.id}`, {
+    limit: 10,
+    windowMs: 10 * 60_000,
+  });
+  if (limited) return limited;
 
   const body = (await req.json().catch(() => ({}))) as RunBody;
   const env = getEnv();
