@@ -18,6 +18,7 @@
     "env:doctor:strict": "bash scripts/env-doctor.sh --strict",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage --pool=threads --maxWorkers=2",
     "eval:creative": "node scripts/eval-creative.mjs"
   },
   "dependencies": {
@@ -42,6 +43,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "jsdom": "^28.1.0",

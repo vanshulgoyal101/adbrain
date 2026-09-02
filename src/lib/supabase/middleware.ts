@@ -2,7 +2,19 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from "@/lib/dev-auth";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/brand", "/studio", "/campaigns", "/leads", "/assets"];
+// Every route under src/app/(app). Keep in sync with that folder — the layout
+// also redirects, but guarding at the edge avoids a wasted render and keeps the
+// post-login ?redirect= target.
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/brand",
+  "/studio",
+  "/campaigns",
+  "/leads",
+  "/assets",
+  "/create",
+  "/settings",
+];
 
 /**
  * Refreshes the Supabase auth session on every request and guards protected

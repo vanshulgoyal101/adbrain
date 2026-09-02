@@ -16,6 +16,27 @@ export default defineConfig({
     // while still catching genuinely hung tests.
     testTimeout: 15000,
     hookTimeout: 15000,
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "lcov"],
+      // Measure the logic we own. Pages/layouts are thin composition over the
+      // libraries below and are covered by the build + route-guard tests.
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.d.ts",
+        "src/lib/types.ts",
+        "src/app/**/{page,layout,loading,error,not-found}.tsx",
+        "src/app/{manifest,sitemap,robots,opengraph-image}.{ts,tsx}",
+      ],
+      thresholds: {
+        // A ratchet, not a target: set just under the current numbers so coverage
+        // can only go up. Raise these as suites land.
+        lines: 48,
+        functions: 48,
+        statements: 48,
+        branches: 43,
+      },
+    },
   },
   resolve: {
     alias: {
