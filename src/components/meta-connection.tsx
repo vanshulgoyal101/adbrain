@@ -220,7 +220,7 @@ export function MetaConnectionPanel({
         )}
 
         {connection.source === "oauth" && connection.ready && (
-          <div className="flex items-center gap-2 text-sm text-emerald-700">
+          <div className="flex items-center gap-2 text-sm text-blue-700">
             <CheckCircle2 className="h-4 w-4" />
             Connected — ad account{" "}
             <code className="rounded bg-slate-100 px-1">
@@ -360,7 +360,7 @@ export function MetaConnectionPanel({
               Run traffic generator
             </Button>
             {trafficResult && (
-              <p className="text-sm text-emerald-700">{trafficResult}</p>
+              <p className="text-sm text-blue-700">{trafficResult}</p>
             )}
           </div>
         </div>
