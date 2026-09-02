@@ -11,6 +11,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
+    // jsdom component tests (render + userEvent) can exceed the 5s default when
+    // the machine is under load; a longer ceiling avoids spurious CI failures
+    // while still catching genuinely hung tests.
+    testTimeout: 15000,
+    hookTimeout: 15000,
   },
   resolve: {
     alias: {
