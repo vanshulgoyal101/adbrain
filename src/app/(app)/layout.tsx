@@ -15,7 +15,7 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   return (
-    <div className="flex min-h-full flex-col md:flex-row">
+    <div className="flex flex-1 flex-col md:flex-row">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-4 md:flex">
         <Link href="/dashboard" className="mb-6 flex items-center gap-2 px-2 py-1">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">

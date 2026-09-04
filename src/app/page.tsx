@@ -69,7 +69,7 @@ export default async function Home() {
   if (user) redirect("/dashboard");
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex flex-1 flex-col">
       <JsonLd data={faqSchema()} />
 
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between p-6">

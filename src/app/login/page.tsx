@@ -13,7 +13,7 @@ export const metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-full items-center justify-center px-6 py-16">
+    <div className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">

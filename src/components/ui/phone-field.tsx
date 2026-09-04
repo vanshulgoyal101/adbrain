@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   COUNTRIES,
@@ -37,21 +38,28 @@ export function PhoneField({
           aria-label="Country calling code"
           value={country.code}
           onChange={(e) => onChange(formatPhone(e.target.value, national))}
-          className="h-10 w-40 appearance-none truncate rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          // The closed control shows only the flag + code (below); the native
+          // text is hidden so a long country name can't spill out of it.
+          className="h-10 w-[6.75rem] appearance-none rounded-lg border border-slate-300 bg-white pl-9 pr-6 text-sm text-transparent outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
         >
           {COUNTRIES.map((c) => (
             // Name first so the browser's type-ahead still finds a country.
-            <option key={c.code} value={c.code}>
+            <option key={c.code} value={c.code} className="text-slate-900">
               {c.name} (+{c.dial})
             </option>
           ))}
         </select>
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-base leading-none"
+          className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-1.5 pl-2.5 text-sm text-slate-900"
         >
-          {flagEmoji(country.code)}
+          <span className="text-base leading-none">{flagEmoji(country.code)}</span>
+          +{country.dial}
         </span>
+        <ChevronDown
+          aria-hidden="true"
+          className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+        />
       </div>
 
       <Input

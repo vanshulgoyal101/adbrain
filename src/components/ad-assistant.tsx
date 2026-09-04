@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { seasonalSuggestions } from "@/lib/seasonal";
+import { useMounted } from "@/lib/use-mounted";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,55 @@ type Turn =
 const RANDOM_ANSWER = "Surprise me — pick a fun, on-brand option.";
 const AI_ANSWER = "Let the AI decide the best option based on the brand.";
 
+interface Draft {
+  goal: string;
+  started: boolean;
+  turns: Turn[];
+  answers: Answer[];
+  phase: "chat" | "done";
+}
+
+const draftKey = (businessId: string) => `adbrain:assistant:${businessId}`;
+
+/**
+ * Session-scoped draft so navigating to another tab and back doesn't throw away
+ * a half-finished conversation. Only settled phases are kept — a request that
+ * was in flight when the page unmounted can't be resumed.
+ */
+function readDraft(businessId: string): Draft | null {
+  try {
+    const raw = sessionStorage.getItem(draftKey(businessId));
+    if (!raw) return null;
+    const d = JSON.parse(raw) as Partial<Draft>;
+    if (typeof d.goal !== "string" || !Array.isArray(d.turns)) return null;
+    return {
+      goal: d.goal,
+      started: d.started === true,
+      turns: d.turns as Turn[],
+      answers: Array.isArray(d.answers) ? (d.answers as Answer[]) : [],
+      phase: d.phase === "done" ? "done" : "chat",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(businessId: string, draft: Draft): void {
+  try {
+    sessionStorage.setItem(draftKey(businessId), JSON.stringify(draft));
+  } catch {
+    // Private mode or a full quota — losing the draft is not worth throwing.
+  }
+}
+
+function clearDraft(businessId: string): void {
+  try {
+    sessionStorage.removeItem(draftKey(businessId));
+  } catch {
+    // Ignore — see writeDraft.
+  }
+}
+
 export function AdAssistant({ business }: { business: Business }) {
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
@@ -60,6 +110,36 @@ export function AdAssistant({ business }: { business: Business }) {
     { type: "step"; answers: Answer[] } | { type: "generate"; brief: string; language?: string } | null
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Restore after mount (never during SSR) so server and client markup agree.
+  const mounted = useMounted();
+  const [restored, setRestored] = useState(false);
+  if (mounted && !restored) {
+    setRestored(true);
+    const saved = readDraft(business.id);
+    if (saved) {
+      setGoal(saved.goal);
+      setStarted(saved.started);
+      setTurns(saved.turns);
+      setAnswers(saved.answers);
+      setPhase(saved.phase);
+    }
+  }
+
+  useEffect(() => {
+    if (!restored) return;
+    if (!goal && !started && turns.length === 0) {
+      clearDraft(business.id);
+      return;
+    }
+    writeDraft(business.id, {
+      goal,
+      started,
+      turns,
+      answers,
+      phase: phase === "done" ? "done" : "chat",
+    });
+  }, [restored, business.id, goal, started, turns, answers, phase]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -161,6 +241,7 @@ export function AdAssistant({ business }: { business: Business }) {
   }
 
   function reset() {
+    clearDraft(business.id);
     setStarted(false);
     setTurns([]);
     setAnswers([]);
