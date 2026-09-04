@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
+import { LEGAL_LINKS } from "@/lib/legal-links";
 import { absoluteUrl, siteConfig } from "@/lib/site";
+
+describe("LEGAL_LINKS", () => {
+  it("covers the compliance pages Meta app review requires", () => {
+    expect(LEGAL_LINKS.map((l) => l.href)).toEqual([
+      "/privacy",
+      "/terms",
+      "/data-deletion",
+    ]);
+  });
+
+  it("only points at public routes that are in the sitemap", () => {
+    const urls = new Set(sitemap().map((e) => e.url));
+    for (const link of LEGAL_LINKS) {
+      expect(urls.has(absoluteUrl(link.href))).toBe(true);
+    }
+  });
+
+  it("is never blocked from crawling by robots", () => {
+    const rules = robots();
+    const rule = Array.isArray(rules.rules) ? rules.rules[0] : rules.rules;
+    const disallow = ([] as string[]).concat(rule?.disallow ?? []);
+    for (const link of LEGAL_LINKS) {
+      expect(disallow).not.toContain(link.href);
+    }
+  });
+
+  it("labels every link", () => {
+    for (const l of LEGAL_LINKS) expect(l.label.trim().length).toBeGreaterThan(0);
+  });
+});
 
 describe("sitemap", () => {
   const entries = sitemap();

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Brain } from "lucide-react";
+import { LEGAL_LINKS } from "@/lib/legal-links";
 
 /** Shared shell for public legal/content pages (privacy, terms). */
 export function LegalPage({
@@ -39,15 +40,11 @@ export function LegalPage({
         <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-500 sm:flex-row">
           <span>© {new Date().getFullYear()} AdBrain. All rights reserved.</span>
           <nav className="flex gap-4">
-            <Link href="/privacy" className="hover:underline">
-              Privacy
-            </Link>
-            <Link href="/data-deletion" className="hover:underline">
-              Data deletion
-            </Link>
-            <Link href="/terms" className="hover:underline">
-              Terms
-            </Link>
+            {LEGAL_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className="hover:underline">
+                {l.label}
+              </Link>
+            ))}
           </nav>
         </div>
       </footer>

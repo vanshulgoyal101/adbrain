@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Brain } from "lucide-react";
 import { Nav } from "@/components/nav";
 import { SignOutButton } from "@/components/sign-out-button";
+import { LEGAL_LINKS } from "@/lib/legal-links";
 import { getUser } from "@/lib/supabase/queries";
 
 export default async function AppLayout({
@@ -54,6 +55,16 @@ export default async function AppLayout({
         <main className="flex-1">
           <div className="mx-auto max-w-6xl p-6 md:p-8">{children}</div>
         </main>
+
+        <footer className="border-t border-slate-200 px-6 py-4 md:px-8">
+          <nav className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+            {LEGAL_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className="hover:text-slate-600 hover:underline">
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+        </footer>
       </div>
     </div>
   );

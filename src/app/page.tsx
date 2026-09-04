@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { JsonLd } from "@/components/json-ld";
 import { faqSchema, MARKETING_FAQS } from "@/lib/seo/jsonLd";
+import { LEGAL_LINKS } from "@/lib/legal-links";
 import { getUser } from "@/lib/supabase/queries";
 
 const FEATURES = [
@@ -184,12 +185,11 @@ export default async function Home() {
             <span>AdBrain — AI ad creative for any local business</span>
           </div>
           <nav className="flex items-center gap-4">
-            <Link href="/privacy" className="hover:underline">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:underline">
-              Terms
-            </Link>
+            {LEGAL_LINKS.map((l) => (
+              <Link key={l.href} href={l.href} className="hover:underline">
+                {l.label}
+              </Link>
+            ))}
             <span>© {new Date().getFullYear()} AdBrain.</span>
           </nav>
         </div>
