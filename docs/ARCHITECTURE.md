@@ -341,6 +341,17 @@ monitored. Pure, unit-tested logic drives three enforcement points:
 - `sitemap.ts` (public routes), `robots.ts` (app/api disallowed), dynamic
   `opengraph-image.tsx` (with `alt`), `preconnect`/`dns-prefetch` for the
   analytics host, system-font stack (no render-blocking web fonts).
+- **Compliance pages** — `/privacy`, `/terms` and `/data-deletion` (the
+  data-deletion URL Meta app review requires). `lib/legal-links.ts` is the single
+  source for these links and is rendered by all three footers (marketing, legal,
+  and the signed-in app shell) so they're reachable from anywhere.
+  `tests/sitemap-robots.test.ts` asserts each one is in the sitemap and never
+  disallowed by robots.
+- **Security headers** (`lib/security/headers.ts`, applied in `next.config.ts`):
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+  and a restrictive `Permissions-Policy`. A full CSP is deliberately omitted —
+  the app loads from Supabase/Pollinations/analytics/Google and a mis-scoped CSP
+  breaks those flows silently.
 
 ---
 
