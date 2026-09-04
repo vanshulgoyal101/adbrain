@@ -44,6 +44,22 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(Math.max(Math.round(n), lo), hi);
 }
 
+/** Age bounds Meta accepts. */
+export const AGE_BOUNDS = { min: AGE_MIN, max: AGE_MAX } as const;
+
+/**
+ * Settle an age range. Shared with the campaign form so the audience preview
+ * can't promise a range the server would silently correct — an inverted range
+ * collapses to the lower bound, matching what Meta is actually sent.
+ */
+export function normalizeAgeRange(
+  min: number,
+  max: number,
+): { min: number; max: number } {
+  const lo = clamp(min, AGE_MIN, AGE_MAX);
+  return { min: lo, max: clamp(max, lo, AGE_MAX) };
+}
+
 function cleanItems(items: TargetingInputItem[] | undefined): GeoItem[] {
   const out: GeoItem[] = [];
   const seen = new Set<string>();
@@ -87,8 +103,9 @@ export function normalizeTargetingInput(
   let ageMin: number | undefined;
   let ageMax: number | undefined;
   if (ageMode === "manual") {
-    ageMin = clamp(Number(age.min ?? 25), AGE_MIN, AGE_MAX);
-    ageMax = clamp(Number(age.max ?? 55), ageMin, AGE_MAX);
+    const settled = normalizeAgeRange(Number(age.min ?? 25), Number(age.max ?? 55));
+    ageMin = settled.min;
+    ageMax = settled.max;
   }
 
   return { locationMode, included, excluded, radiusKm, ageMode, ageMin, ageMax };

@@ -4,7 +4,7 @@ import * as React from "react";
 import { Loader2, MapPin, Search, Sparkles, X } from "lucide-react";
 import { Input, Label } from "@/components/ui/input";
 import { InfoHint } from "@/components/ui/info-hint";
-import { describeAudience } from "@/lib/campaign/targeting";
+import { AGE_BOUNDS, describeAudience, normalizeAgeRange } from "@/lib/campaign/targeting";
 import { cn } from "@/lib/utils";
 
 export interface GeoPick {
@@ -246,6 +246,20 @@ export function TargetingControls({
 }) {
   const set = (patch: Partial<TargetingValue>) => onChange({ ...value, ...patch });
 
+  // Ignore unparseable input so a cleared box can't put NaN in the field.
+  const setAge = (key: "ageMin" | "ageMax", raw: string) => {
+    const n = Number(raw);
+    if (Number.isFinite(n)) set({ [key]: n } as Partial<TargetingValue>);
+  };
+
+  // Apply the same rule the server does, so the preview matches the campaign.
+  const settleAges = () => {
+    const settled = normalizeAgeRange(value.ageMin, value.ageMax);
+    if (settled.min !== value.ageMin || settled.max !== value.ageMax) {
+      set({ ageMin: settled.min, ageMax: settled.max });
+    }
+  };
+
   const hasCities = value.included.some((i) => i.type === "city");
   const areaLabel =
     value.locationMode === "manual" && value.included.length
@@ -375,19 +389,25 @@ export function TargetingControls({
           <div className="flex items-center gap-3 text-sm">
             <input
               type="number"
-              min={18}
-              max={65}
+              min={AGE_BOUNDS.min}
+              max={AGE_BOUNDS.max}
+              aria-label="Minimum age"
               value={value.ageMin}
-              onChange={(e) => set({ ageMin: Number(e.target.value) })}
+              // Settle on blur, not per keystroke, so typing "3" toward "30"
+              // isn't fought by the clamp.
+              onChange={(e) => setAge("ageMin", e.target.value)}
+              onBlur={() => settleAges()}
               className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-blue-500"
             />
             <span className="text-slate-400">to</span>
             <input
               type="number"
-              min={18}
-              max={65}
+              min={AGE_BOUNDS.min}
+              max={AGE_BOUNDS.max}
+              aria-label="Maximum age"
               value={value.ageMax}
-              onChange={(e) => set({ ageMax: Number(e.target.value) })}
+              onChange={(e) => setAge("ageMax", e.target.value)}
+              onBlur={() => settleAges()}
               className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-blue-500"
             />
           </div>
