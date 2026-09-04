@@ -90,12 +90,21 @@ function LocationPicker({
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
+  // Set when the user dismisses the list, so a slow in-flight search can't pop
+  // it back open underneath them. Cleared as soon as they type again.
+  const dismissed = React.useRef(false);
+
+  const dismiss = React.useCallback(() => {
+    dismissed.current = true;
+    setOpen(false);
+  }, []);
 
   // Close the results dropdown when focus/clicks move outside the picker.
   React.useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        dismissed.current = true;
         setOpen(false);
       }
     }
@@ -119,7 +128,7 @@ function LocationPicker({
         const data = (await res.json()) as { results?: GeoPick[] };
         if (!cancelled) {
           setResults(data.results ?? []);
-          setOpen(true);
+          if (!dismissed.current) setOpen(true);
         }
       } catch {
         if (!cancelled) setResults([]);
@@ -163,10 +172,13 @@ function LocationPicker({
         </span>
         <Input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length && setOpen(true)}
+          onChange={(e) => {
+            dismissed.current = false;
+            setQuery(e.target.value);
+          }}
+          onFocus={() => results.length && !dismissed.current && setOpen(true)}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
+            if (e.key === "Escape") dismiss();
           }}
           placeholder={placeholder}
           className="pl-9"

@@ -52,10 +52,10 @@ function buildRegistry(): RegisteredProvider[] {
           provider: createOpenAICompatibleProvider({
             name: "groq",
             baseUrl: "https://api.groq.com/openai/v1/chat/completions",
-            defaultModel: "llama-3.3-70b-versatile",
+            defaultModel: env.GROQ_MODEL,
           }),
           keys: env.GROQ_API_KEYS,
-          model: "llama-3.3-70b-versatile",
+          model: env.GROQ_MODEL,
         }
       : null,
     openrouter: env.OPENROUTER_API_KEYS.length

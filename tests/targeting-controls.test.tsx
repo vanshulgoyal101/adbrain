@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TargetingControls,
@@ -153,10 +153,11 @@ describe("<TargetingControls> location search", () => {
     await search("jai");
     expect(await screen.findByText("Jaipur")).toBeInTheDocument();
 
+    // fireEvent flushes React synchronously, so no waitFor race with fake timers.
     fireEvent.keyDown(screen.getByPlaceholderText(INCLUDE_PLACEHOLDER), {
       key: "Escape",
     });
-    await waitFor(() => expect(screen.queryByText("Jaipur")).toBeNull());
+    expect(screen.queryByText("Jaipur")).toBeNull();
   });
 
   it("closes the dropdown when clicking away", async () => {
@@ -164,6 +165,9 @@ describe("<TargetingControls> location search", () => {
     await search("jai");
     expect(await screen.findByText("Jaipur")).toBeInTheDocument();
 
+    // The outside-click listener is attached in an effect keyed on `open`;
+    // let it flush before dispatching, otherwise nothing is listening yet.
+    await act(async () => {});
     fireEvent.pointerDown(document.body);
     await waitFor(() => expect(screen.queryByText("Jaipur")).toBeNull());
   });
