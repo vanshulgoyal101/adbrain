@@ -279,6 +279,7 @@ export function Campaigns({
 
       {metaReady && (
         <CampaignChat
+          businessId={business.id}
           onCreated={(c) => setCampaigns((prev) => [c, ...prev])}
         />
       )}

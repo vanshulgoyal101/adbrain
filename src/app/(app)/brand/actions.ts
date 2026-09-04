@@ -13,12 +13,7 @@ function str(fd: FormData, key: string): string | null {
   return fieldStr(fd.get(key));
 }
 
-/** Comma-or-newline separated fields (languages, locations). */
-function list(fd: FormData, key: string): string[] {
-  return fieldList(fd.get(key));
-}
-
-/** One-per-line fields (USPs, offers) where commas are legitimate content. */
+/** One-per-line fields. Commas are legitimate content ("Austin, Texas"). */
 function lines(fd: FormData, key: string): string[] {
   return fieldList(fd.get(key), /\n/);
 }
@@ -51,8 +46,8 @@ export async function saveBusiness(
     phone: str(formData, "phone"),
     email: str(formData, "email"),
     address: str(formData, "address"),
-    languages: list(formData, "languages"),
-    locations: list(formData, "locations"),
+    languages: lines(formData, "languages"),
+    locations: lines(formData, "locations"),
     usps: lines(formData, "usps"),
     offers: lines(formData, "offers"),
     logo_url: str(formData, "logo_url"),

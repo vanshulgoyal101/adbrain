@@ -65,11 +65,12 @@ export default async function SettingsPage({
     );
   }
 
-  const [connection, params] = await Promise.all([
+  const [connection, params, spend] = await Promise.all([
     getMetaConnection(business.id),
     searchParams,
+    getSpendEvaluation(business.id),
   ]);
-  const { limits, evaluation } = await getSpendEvaluation(business.id);
+  const { limits, evaluation } = spend;
 
   return (
     <div className="max-w-2xl space-y-6">

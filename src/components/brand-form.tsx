@@ -63,8 +63,8 @@ function fromBusiness(b: Business | null): FieldsState {
     secondary_color: b?.secondary_color ?? "",
     font: b?.font ?? "",
     target_audience: b?.target_audience ?? "",
-    languages: (b?.languages ?? []).join(", "),
-    locations: (b?.locations ?? []).join(", "),
+    languages: (b?.languages ?? []).join("\n"),
+    locations: (b?.locations ?? []).join("\n"),
     usps: (b?.usps ?? []).join("\n"),
     offers: (b?.offers ?? []).join("\n"),
     logo_url: b?.logo_url ?? "",
@@ -141,7 +141,7 @@ export function BrandForm({ business }: { business: Business | null }) {
         target_audience: e.target_audience ?? f.target_audience,
         usps: e.usps?.length ? e.usps.join("\n") : f.usps,
         offers: e.offers?.length ? e.offers.join("\n") : f.offers,
-        languages: e.languages?.length ? e.languages.join(", ") : f.languages,
+        languages: e.languages?.length ? e.languages.join("\n") : f.languages,
       }));
     } catch {
       setAutofillError("Autofill failed — could not reach the site.");

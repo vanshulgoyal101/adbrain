@@ -26,8 +26,10 @@ export function TokenField({
   const listId = useId();
   const [draft, setDraft] = useState("");
 
+  // Tokens are newline-separated: a token may legitimately contain a comma
+  // ("Austin, Texas"), so a comma cannot be the separator.
   const tokens = value
-    .split(",")
+    .split("\n")
     .map((t) => t.trim())
     .filter(Boolean);
 
@@ -35,12 +37,12 @@ export function TokenField({
     const next = raw.trim().replace(/,+$/, "").trim();
     if (!next) return;
     const exists = tokens.some((t) => t.toLowerCase() === next.toLowerCase());
-    if (!exists) onChange([...tokens, next].join(", "));
+    if (!exists) onChange([...tokens, next].join("\n"));
     setDraft("");
   }
 
   function remove(token: string) {
-    onChange(tokens.filter((t) => t !== token).join(", "));
+    onChange(tokens.filter((t) => t !== token).join("\n"));
   }
 
   const unused = suggestions.filter(
@@ -87,7 +89,7 @@ export function TokenField({
             e.preventDefault();
             commit(draft);
           } else if (e.key === "Backspace" && !draft && tokens.length) {
-            onChange(tokens.slice(0, -1).join(", "));
+            onChange(tokens.slice(0, -1).join("\n"));
           }
         }}
         onBlur={() => commit(draft)}

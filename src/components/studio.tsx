@@ -22,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { AD_LANGUAGES } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
+import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
 
 export function Studio({
@@ -32,7 +33,13 @@ export function Studio({
   initialCreatives: Creative[];
 }) {
   const [items, setItems] = useState<Creative[]>(initialCreatives);
-  const [brief, setBrief] = useState("");
+  // Survives a tab change so a long brief isn't retyped. Kept after generating,
+  // since tweaking the brief and regenerating is the normal flow.
+  const [brief, setBrief] = useSessionDraft<string>(
+    `adbrain:studio-brief:${business.id}`,
+    "",
+    (raw) => (typeof raw === "string" ? raw : null),
+  );
   const [count, setCount] = useState(3);
   const [language, setLanguage] = useState("brand");
   const [generating, setGenerating] = useState(false);

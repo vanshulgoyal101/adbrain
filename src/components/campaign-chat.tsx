@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import type { Campaign } from "@/lib/types";
+import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
 
 type QuestionType = "single" | "multi" | "text";
@@ -32,16 +33,41 @@ type Turn =
   | { role: "questions"; questions: PlannerQuestion[] }
   | { role: "summary"; text: string };
 
+/** The part of the interview worth keeping when the tab changes. */
+interface ChatSession {
+  goal: string;
+  started: boolean;
+  turns: Turn[];
+  collected: Answer[];
+}
+
+function reviveSession(raw: unknown): ChatSession | null {
+  const s = raw as Partial<ChatSession> | null;
+  if (!s || typeof s.goal !== "string" || !Array.isArray(s.turns)) return null;
+  return {
+    goal: s.goal,
+    started: s.started === true,
+    turns: s.turns,
+    collected: Array.isArray(s.collected) ? s.collected : [],
+  };
+}
+
 /** A Copilot-style guided interview that plans + creates a paused campaign. */
 export function CampaignChat({
+  businessId,
   onCreated,
 }: {
+  businessId: string;
   onCreated: (campaign: Campaign) => void;
 }) {
-  const [goal, setGoal] = useState("");
-  const [started, setStarted] = useState(false);
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [collected, setCollected] = useState<Answer[]>([]);
+  // Keeps the interview alive across tab changes; a finished one is discarded.
+  const [session, setSession, clearSession] = useSessionDraft<ChatSession>(
+    `adbrain:campaign-chat:${businessId}`,
+    { goal: "", started: false, turns: [], collected: [] },
+    reviveSession,
+  );
+  const { goal, started, turns, collected } = session;
+  const setGoal = (v: string) => setSession((s) => ({ ...s, goal: v }));
   const [draft, setDraft] = useState<Record<string, { picked: string[]; text: string }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,11 +100,17 @@ export function CampaignChat({
         setError(data.error ?? "Planning failed.");
         return;
       }
-      setCollected(merged);
+      setSession((s) => ({ ...s, collected: merged }));
       if (data.ready === false) {
-        setTurns((t) => [...t, { role: "questions", questions: data.questions ?? [] }]);
+        setSession((s) => ({
+          ...s,
+          turns: [...s.turns, { role: "questions", questions: data.questions ?? [] }],
+        }));
       } else if (data.ready) {
-        setTurns((t) => [...t, { role: "summary", text: data.summary ?? "Campaign created." }]);
+        setSession((s) => ({
+          ...s,
+          turns: [...s.turns, { role: "summary", text: data.summary ?? "Campaign created." }],
+        }));
         if (data.campaign) onCreated(data.campaign);
         setDone(true);
       }
@@ -92,8 +124,11 @@ export function CampaignChat({
   function start() {
     const g = goal.trim();
     if (!g) return;
-    setStarted(true);
-    setTurns([{ role: "user", text: g }]);
+    setSession((s) => ({
+      ...s,
+      started: true,
+      turns: [{ role: "user", text: g }],
+    }));
     send(g, []);
   }
 
@@ -125,19 +160,17 @@ export function CampaignChat({
     }
     const readable =
       answers.map((a) => a.answer).join(" • ") || "(let AdBrain decide)";
-    setTurns((t) => [...t, { role: "user", text: readable }]);
+    setSession((s) => ({ ...s, turns: [...s.turns, { role: "user", text: readable }] }));
     setDraft({});
     send(goal.trim(), answers);
   }
 
   function reset() {
-    setStarted(false);
-    setTurns([]);
-    setCollected([]);
+    clearSession();
+    setSession({ goal: "", started: false, turns: [], collected: [] });
     setDraft({});
     setDone(false);
     setError(null);
-    setGoal("");
   }
 
   return (

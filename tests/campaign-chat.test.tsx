@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CampaignChat } from "@/components/campaign-chat";
+
+// The interview is now persisted per business, so drafts must not leak between tests.
+beforeEach(() => {
+  sessionStorage.clear();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.clear();
 });
 
 function mockPlan(...responses: unknown[]) {
@@ -18,7 +24,7 @@ function mockPlan(...responses: unknown[]) {
 
 describe("<CampaignChat>", () => {
   it("disables Start until a goal is typed", () => {
-    render(<CampaignChat onCreated={vi.fn()} />);
+    render(<CampaignChat businessId="biz-1" onCreated={vi.fn()} />);
     const start = screen.getByRole("button", { name: /start/i });
     expect(start).toBeDisabled();
 
@@ -48,7 +54,7 @@ describe("<CampaignChat>", () => {
       },
     );
 
-    render(<CampaignChat onCreated={onCreated} />);
+    render(<CampaignChat businessId="biz-1" onCreated={onCreated} />);
 
     fireEvent.change(
       screen.getByPlaceholderText(/get more leads/i),
@@ -87,7 +93,7 @@ describe("<CampaignChat>", () => {
       json: async () => ({ error: "Planning failed." }),
     }) as unknown as typeof fetch;
 
-    render(<CampaignChat onCreated={vi.fn()} />);
+    render(<CampaignChat businessId="biz-1" onCreated={vi.fn()} />);
     fireEvent.change(
       screen.getByPlaceholderText(/get more leads/i),
       { target: { value: "x" } },
@@ -95,5 +101,35 @@ describe("<CampaignChat>", () => {
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
     expect(await screen.findByText(/Planning failed/i)).toBeInTheDocument();
+  });
+});
+
+describe("<CampaignChat> draft persistence", () => {
+  it("keeps a typed goal when the tab changes and comes back", () => {
+    const first = render(<CampaignChat businessId="biz-1" onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "More leads in Austin" },
+    });
+    first.unmount();
+
+    render(<CampaignChat businessId="biz-1" onCreated={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveValue("More leads in Austin");
+  });
+
+  it("keeps drafts separate per business", () => {
+    const first = render(<CampaignChat businessId="biz-1" onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Austin plan" },
+    });
+    first.unmount();
+
+    render(<CampaignChat businessId="biz-2" onCreated={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("ignores a corrupted draft rather than crashing", () => {
+    sessionStorage.setItem("adbrain:campaign-chat:biz-1", "{not json");
+    render(<CampaignChat businessId="biz-1" onCreated={vi.fn()} />);
+    expect(screen.getByRole("textbox")).toHaveValue("");
   });
 });

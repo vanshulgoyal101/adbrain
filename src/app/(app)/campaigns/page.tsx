@@ -17,6 +17,18 @@ import {
 
 export const metadata = { title: "Campaigns — AdBrain" };
 
+/** Meta can be slow or down; a failure here must not take the page with it. */
+async function loadLeadForms(
+  businessId: string,
+): Promise<{ forms: LeadForm[]; error: string | null }> {
+  try {
+    const meta = await metaClientForBusiness(businessId);
+    return { forms: (await meta?.listLeadForms()) ?? [], error: null };
+  } catch (err) {
+    return { forms: [], error: (err as Error).message };
+  }
+}
+
 export default async function CampaignsPage() {
   const business = await getPrimaryBusiness();
 
@@ -41,25 +53,22 @@ export default async function CampaignsPage() {
     );
   }
 
-  const [approved, campaigns] = await Promise.all([
+  // Nothing here depends on anything else, so pay for one round-trip, not three.
+  const [approved, campaigns, connection] = await Promise.all([
     getApprovedCreatives(business.id),
     getCampaigns(business.id),
+    getMetaConnection(business.id),
   ]);
-  const results = await getLatestResults(campaigns.map((c) => c.id));
-
-  const connection = await getMetaConnection(business.id);
   const metaReady = connection.ready;
 
-  let leadForms: LeadForm[] = [];
-  let leadFormError: string | null = null;
-  if (metaReady) {
-    const meta = await metaClientForBusiness(business.id);
-    try {
-      leadForms = (await meta?.listLeadForms()) ?? [];
-    } catch (err) {
-      leadFormError = (err as Error).message;
-    }
-  }
+  // Results need the campaign ids; lead forms need the connection. Independent.
+  const [results, leadFormData] = await Promise.all([
+    getLatestResults(campaigns.map((c) => c.id)),
+    metaReady
+      ? loadLeadForms(business.id)
+      : Promise.resolve({ forms: [] as LeadForm[], error: null }),
+  ]);
+  const { forms: leadForms, error: leadFormError } = leadFormData;
 
   return (
     <div>
