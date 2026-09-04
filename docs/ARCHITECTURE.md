@@ -385,7 +385,7 @@ Rules that keep the UI stable (no flicker, no stale data):
 
 ## 11. Testing
 
-**513 tests / 58 files.** Vitest, node environment by default; component tests
+**526 tests / 60 files.** Vitest, node environment by default; component tests
 opt into jsdom via a `// @vitest-environment jsdom` docblock (`tests/setup.ts`
 wires `@testing-library/jest-dom`). Interaction uses
 `@testing-library/user-event` for real focus/hover/typing sequences.
@@ -409,6 +409,16 @@ audit logging never throwing, auto-pause firing only under its exact
 conditions, generation clamping what it asks paid providers for, image
 persistence degrading to the source URL, and `useMounted` returning `false`
 during SSR (the hydration-flicker guard) via `renderToString`.
+
+**Reference integrity** (`reference-integrity.test.ts`) closes the
+"looks fine in source, 404s in production" class: every static asset referenced
+in `src/` must resolve to a file in `public/` or to the Next metadata route that
+generates it, and every internal `href` must map to a real app route (route
+groups stripped). Both lists are derived from the source tree, so new references
+are covered without touching the test. `icons.test.ts` pins the icon set itself —
+the PNG sizes Chrome's install prompt requires, a maskable variant, and a real
+multi-frame `favicon.ico` (an SVG-only icon set is why browsers fell back to a
+generic placeholder).
 
 - Run: `npm run test` · `npm run test:coverage` · `npm run typecheck` · `npm run lint` · `npm run build`.
 
