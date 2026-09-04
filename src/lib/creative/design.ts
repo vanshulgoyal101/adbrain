@@ -143,10 +143,13 @@ function hostFromUrl(url: string | null | undefined): string | null {
 /** Build the footer contact line from the brand's website and locality. */
 export function deriveContactLine(brand: BrandContext): string | null {
   const site = hostFromUrl(brand.website);
+  const phone = brand.phone?.trim() || null;
   const locality =
     (brand.locations ?? []).map((l) => l?.trim()).filter(Boolean)[0] ?? null;
-  if (site && locality) return `${site} · ${locality}`;
-  return site ?? locality ?? null;
+  // A phone number is the most actionable thing on a local ad, so it leads.
+  const parts = [phone, site, locality].filter(Boolean) as string[];
+  if (!parts.length) return null;
+  return parts.slice(0, 2).join(" · ");
 }
 
 /** Derive a short supporting line from the ad's primary text. */

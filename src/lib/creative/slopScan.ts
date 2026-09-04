@@ -69,3 +69,37 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
 export function isClean(text: string, opts?: SlopScanOptions): boolean {
   return scanAdCopy(text, opts).length === 0;
 }
+
+/**
+ * Claims that get healthcare ads rejected (and are unsafe to make anyway).
+ * Meta's health & wellness policy disallows implied outcomes and cures, so a
+ * clinic's copy must never promise them — the LLM is told this in the brand's
+ * instructions, and this list enforces it deterministically.
+ */
+export const MEDICAL_BANNED_CLAIMS = [
+  "cure",
+  "cures",
+  "heal",
+  "heals",
+  "healed",
+  "guaranteed",
+  "guarantee",
+  "pain-free",
+  "pain free",
+  "miracle",
+  "permanent fix",
+  "permanently fix",
+  "risk-free",
+] as const;
+
+/** Verticals whose ads are held to the healthcare claim rules. */
+const HEALTH_VERTICAL = /chiro|dental|dentist|clinic|medical|doctor|physio|health|wellness|therapy|hospital|ayurved|derma/i;
+
+/**
+ * Banned claims for a business's industry. Non-health verticals get none, so
+ * existing customers' copy is unaffected.
+ */
+export function bannedClaimsForVertical(vertical?: string | null): string[] {
+  return HEALTH_VERTICAL.test(vertical ?? "") ? [...MEDICAL_BANNED_CLAIMS] : [];
+}
+

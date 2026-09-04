@@ -93,6 +93,11 @@ create index if not exists businesses_owner_id_idx on public.businesses (owner_i
 alter table public.businesses drop constraint if exists businesses_vertical_check;
 alter table public.businesses alter column vertical set default 'local business';
 
+-- Contact details shown on generated ads (and offered to the copywriter).
+alter table public.businesses add column if not exists phone   text;
+alter table public.businesses add column if not exists email   text;
+alter table public.businesses add column if not exists address text;
+
 drop trigger if exists businesses_set_updated_at on public.businesses;
 create trigger businesses_set_updated_at
   before update on public.businesses

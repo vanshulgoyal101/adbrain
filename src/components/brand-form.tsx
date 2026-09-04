@@ -26,6 +26,9 @@ interface FieldsState {
   usps: string;
   offers: string;
   logo_url: string;
+  phone: string;
+  email: string;
+  address: string;
 }
 
 function fromBusiness(b: Business | null): FieldsState {
@@ -44,6 +47,9 @@ function fromBusiness(b: Business | null): FieldsState {
     usps: (b?.usps ?? []).join("\n"),
     offers: (b?.offers ?? []).join("\n"),
     logo_url: b?.logo_url ?? "",
+    phone: b?.phone ?? "",
+    email: b?.email ?? "",
+    address: b?.address ?? "",
   };
 }
 
@@ -178,6 +184,46 @@ export function BrandForm({ business }: { business: Business | null }) {
               <Alert variant="error">{autofillError}</Alert>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Contact details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <p className="text-sm text-slate-500 sm:col-span-2">
+            Shown on your ads so people can reach you. The phone number appears
+            on the generated poster.
+          </p>
+          <Field label="Phone">
+            <Input
+              name="phone"
+              type="tel"
+              value={fields.phone}
+              onChange={(e) => set("phone", e.target.value)}
+              placeholder="+91 98765 43210"
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              name="email"
+              type="email"
+              value={fields.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="hello@yourbusiness.com"
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Address">
+              <Input
+                name="address"
+                value={fields.address}
+                onChange={(e) => set("address", e.target.value)}
+                placeholder="Shop 4, MI Road, Jaipur 302001"
+              />
+            </Field>
+          </div>
         </CardContent>
       </Card>
 

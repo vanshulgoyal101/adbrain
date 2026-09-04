@@ -1,5 +1,5 @@
 import { buildAdDesign, formatDimensions, type AdDesignSpec, type AdFormat } from "@/lib/creative/design";
-import { scanAdCopy } from "@/lib/creative/slopScan";
+import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
 import { generateImage } from "@/lib/imageGen";
 import { completeJSON } from "@/lib/llm";
 import {
@@ -79,6 +79,7 @@ async function generateGuardedCopy(
     };
     const findings = scanAdCopy([normalized.headline, normalized.primary_text].join(" "), {
       maxWords: 60,
+      bannedClaims: bannedClaimsForVertical(brand.vertical),
     });
     if (findings.length === 0) break;
   }

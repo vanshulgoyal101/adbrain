@@ -15,6 +15,9 @@ export interface BrandContext {
   locations?: string[];
   website?: string | null;
   logo_url?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
 }
 
 export interface AdAngle {
@@ -137,6 +140,13 @@ function brandSummary(brand: BrandContext): string {
     lines.push(`Locations served: ${brand.locations.join(", ")}`);
   if (brand.languages?.length)
     lines.push(`Languages: ${brand.languages.join(", ")}`);
+  // Real contact details, so the copy can point people somewhere concrete.
+  const contact = [
+    brand.address ? `address ${brand.address}` : null,
+    brand.phone ? `phone ${brand.phone}` : null,
+    brand.email ? `email ${brand.email}` : null,
+  ].filter(Boolean);
+  if (contact.length) lines.push(`Contact: ${contact.join(", ")}`);
   return lines.join("\n");
 }
 
