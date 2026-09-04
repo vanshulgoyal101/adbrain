@@ -56,6 +56,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | --- | --- | --- |
 | ✅ | Email magic-link sign-in | Supabase Auth |
 | ✅ | Google OAuth sign-in | via `/auth/callback` |
+| 📋 | Branded auth domain | keep sign-in on `adbrain.vanshul.com` instead of bouncing through `<ref>.supabase.co` (Pro custom domain, or self-hosted Google OAuth + `signInWithIdToken`) — see ROADMAP |
 | ✅ | Route guard | `src/proxy.ts` + `updateSession`; protects app routes |
 | ✅ | Offline developer login | `NEXT_PUBLIC_DEV_AUTH_BYPASS`; real session when backend up, cookie fallback offline |
 | 📋 | Team / multi-user per business | roles (owner/editor/viewer) |
