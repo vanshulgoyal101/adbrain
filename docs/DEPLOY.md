@@ -80,11 +80,40 @@ Trigger a deploy (push to `main` or click Deploy). Then check:
 - Sign in works (magic link / Google).
 - Campaigns page loads and can sync from Meta.
 
-## 7. (Optional) Scheduled campaign auto-sync
-The Campaigns page auto-syncs on open. For syncing even when nobody's looking,
-add a **Vercel Cron** hitting a small authenticated sync endpoint (guarded by a
-`CRON_SECRET`). This needs the service-role key to run without a user session —
-planned, not yet built (see `docs/FEATURES.md`).
+## 7. Scheduled jobs (Vercel Cron)
+
+`vercel.json` registers a **daily keep-alive** at `/api/cron/keepalive`.
+
+> **This is not optional in production.** Free-tier Supabase projects auto-pause
+> after ~7 days of inactivity, and a paused project **stops resolving in DNS** —
+> so auth and every query fail, and browsers show a security warning instead of
+> your login page rather than anything that looks like an app bug. The daily
+> read counts as activity and prevents that. (Upgrading to Pro also removes
+> auto-pausing, and unlocks the custom domain that would keep `*.supabase.co`
+> out of the sign-in flow entirely.)
+
+Set `CRON_SECRET` in Vercel → Project → Settings → Environment Variables.
+Generate one with:
+
+```bash
+openssl rand -hex 32
+```
+
+Vercel sends it as `Authorization: Bearer <secret>`; the endpoint 404s when the
+secret is unset and 401s on a bad one. Verify after deploying:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  https://adbrain.vanshul.com/api/cron/keepalive   # expect 200
+```
+
+**If the project ever does pause**, restore it from the Supabase dashboard (or
+`POST /v1/projects/<ref>/restore` via the Management API); it takes a few
+minutes to come back and DNS returns first.
+
+Campaign auto-sync on a schedule can reuse the same pattern — it additionally
+needs the service-role key to run without a user session (see `docs/ROADMAP.md`).
 
 ## Rollback
 Vercel keeps every deployment — use **Instant Rollback** to revert to a previous

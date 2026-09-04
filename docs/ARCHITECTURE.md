@@ -154,6 +154,7 @@ leaked).
 | `meta/connect` | POST | Save the chosen ad account + page |
 | `meta/disconnect` | POST | Remove the stored Meta connection |
 | `spend-limits` | POST | Save the weekly spend cap + alert % + auto-pause |
+| `cron/keepalive` | GET | Daily Vercel Cron ping that stops the Supabase project auto-pausing (`CRON_SECRET`-gated) |
 
 Cost-incurring routes (`assistant`, `generate`, `regenerate`, `plan`,
 `autofill`) are **rate-limited per user** (see §9).
@@ -436,6 +437,7 @@ generic placeholder).
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | single-tenant Meta creds |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | who may run the internal Meta traffic runner (comma-separated). **Empty in production disables the endpoint (404).** |
 | `TRAFFIC_GENERATOR_MAX_ROUNDS` | upper bound on runner rounds (default `20`) |
+| `CRON_SECRET` | shared secret Vercel Cron sends as `Authorization: Bearer …`. **Required in production** — without it the keep-alive 404s and the free-tier project will auto-pause |
 | `NEXT_PUBLIC_SITE_URL` | canonical site origin (SEO) |
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS`, `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | local dev bypass (non-prod only) |
 

@@ -73,6 +73,10 @@ const schema = z.object({
     .default(20),
   // Who may run it. Empty in production disables the endpoint entirely.
   TRAFFIC_GENERATOR_ALLOWED_EMAILS: commaList,
+
+  // Shared secret Vercel Cron sends as `Authorization: Bearer <secret>`.
+  // Empty disables the cron endpoints (they 404).
+  CRON_SECRET: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof schema>;
