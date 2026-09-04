@@ -14,6 +14,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:push": "node scripts/apply-schema.mjs",
+    "generate:icons": "node scripts/generate-icons.mjs",
     "env:doctor": "bash scripts/env-doctor.sh",
     "env:doctor:strict": "bash scripts/env-doctor.sh --strict",
     "test": "vitest run",
