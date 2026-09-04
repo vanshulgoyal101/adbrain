@@ -87,21 +87,21 @@ describe("<ColorField>", () => {
 });
 
 describe("<TokenField>", () => {
-  it("adds a value on Enter and keeps the comma-separated contract", async () => {
+  it("adds a value on Enter and keeps the newline-separated contract", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
       <TokenField name="languages" value="English" onChange={onChange} placeholder="Add" />,
     );
     await user.type(screen.getByPlaceholderText("Add"), "Hindi{Enter}");
-    expect(onChange).toHaveBeenCalledWith("English, Hindi");
+    expect(onChange).toHaveBeenCalledWith("English\nHindi");
   });
 
   it("renders existing values as removable chips", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <TokenField name="languages" value="English, Hindi" onChange={onChange} />,
+      <TokenField name="languages" value={"English\nHindi"} onChange={onChange} />,
     );
     await user.click(screen.getByRole("button", { name: /remove english/i }));
     expect(onChange).toHaveBeenCalledWith("Hindi");
@@ -117,13 +117,13 @@ describe("<TokenField>", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("submits the raw comma-separated value for the server action", () => {
+  it("submits the raw newline-separated value for the server action", () => {
     const { container } = render(
-      <TokenField name="languages" value="English, Hindi" onChange={vi.fn()} />,
+      <TokenField name="languages" value={"English\nHindi"} onChange={vi.fn()} />,
     );
     const hidden = container.querySelector<HTMLInputElement>(
       'input[type="hidden"][name="languages"]',
     );
-    expect(hidden?.value).toBe("English, Hindi");
+    expect(hidden?.value).toBe("English\nHindi");
   });
 });

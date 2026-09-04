@@ -100,19 +100,21 @@ describe("saveBusiness", () => {
     );
   });
 
-  it("splits languages and locations on commas or newlines", async () => {
+  it("splits languages and locations on newlines only", async () => {
     const { saveBusiness } = await import("@/app/(app)/brand/actions");
     await saveBusiness(
       { ok: false },
       form({
         name: "Acme",
-        languages: "English, Hindi\nMarathi",
-        locations: "Jaipur,Ajmer",
+        languages: "English\nHindi\nMarathi",
+        // A US service area is "City, State" — the comma is content, not a
+        // separator. Splitting it would target the whole state.
+        locations: "Austin, Texas\nRound Rock",
       }),
     );
     expect(insert.mock.calls[0][0]).toMatchObject({
       languages: ["English", "Hindi", "Marathi"],
-      locations: ["Jaipur", "Ajmer"],
+      locations: ["Austin, Texas", "Round Rock"],
     });
   });
 

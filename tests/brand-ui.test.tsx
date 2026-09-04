@@ -74,10 +74,10 @@ describe("<BrandForm> prefill", () => {
     const value = (name: string) =>
       (container.querySelector(`[name="${name}"]`) as HTMLTextAreaElement | HTMLInputElement)
         ?.value;
-    // Comma-joined: languages/locations split on comma OR newline.
-    expect(value("languages")).toBe("English, Hindi");
-    expect(value("locations")).toBe("Jaipur, Ajmer");
-    // Newline-joined: a USP may itself contain a comma.
+    // Every list field is newline-joined: an entry may itself contain a comma
+    // ("Austin, Texas"), so a comma can never act as the separator.
+    expect(value("languages")).toBe("English\nHindi");
+    expect(value("locations")).toBe("Jaipur\nAjmer");
     expect(value("usps")).toBe(
       "Affordable, transparent pricing\n25-year warranty",
     );
@@ -140,7 +140,7 @@ describe("<BrandForm> autofill", () => {
     );
     expect(
       (container.querySelector('[name="languages"]') as HTMLInputElement).value,
-    ).toBe("English, Hindi");
+    ).toBe("English\nHindi");
   });
 
   it("keeps existing values for fields the extractor didn't return", async () => {
