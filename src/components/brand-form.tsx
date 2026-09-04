@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ColorField } from "@/components/ui/color-field";
+import { PhoneField } from "@/components/ui/phone-field";
 import { TokenField } from "@/components/ui/token-field";
 import { Spinner } from "@/components/ui/spinner";
 import { BRAND_FONTS, brandFontId } from "@/lib/brand/fonts";
@@ -223,13 +224,11 @@ export function BrandForm({ business }: { business: Business | null }) {
             on the generated poster.
           </p>
           <Field label="Phone" error={errors.phone}>
-            <Input
+            <PhoneField
               name="phone"
-              type="tel"
               value={fields.phone}
-              onChange={(e) => set("phone", e.target.value)}
-              placeholder="+91 98765 43210"
-              aria-invalid={errors.phone ? true : undefined}
+              onChange={(v) => set("phone", v)}
+              invalid={Boolean(errors.phone)}
             />
           </Field>
           <Field label="Email" error={errors.email}>
