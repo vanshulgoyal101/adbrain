@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
+import { validateBrandFields } from "@/lib/brand/validation";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -56,6 +57,12 @@ export async function saveBusiness(
     offers: lines(formData, "offers"),
     logo_url: str(formData, "logo_url"),
   };
+
+  // The browser's native validation is a convenience, not a guarantee.
+  const issues = validateBrandFields(payload);
+  if (issues.length) {
+    return { ok: false, error: issues.map((i) => i.message).join(" ") };
+  }
 
   const query = id
     ? supabase.from("businesses").update(payload).eq("id", id).select("id").single()

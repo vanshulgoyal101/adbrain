@@ -36,7 +36,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
         display: "flex",
         flexDirection: "column",
         justifyContent: "flex-end",        alignItems: "flex-start",        background: `linear-gradient(135deg, ${spec.primaryColor} 0%, #0f172a 100%)`,
-        fontFamily: "sans-serif",
+        fontFamily: spec.fontFamily,
         overflow: "hidden",
       }}
     >

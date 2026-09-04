@@ -7,9 +7,29 @@ import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { ColorField } from "@/components/ui/color-field";
+import { TokenField } from "@/components/ui/token-field";
 import { Spinner } from "@/components/ui/spinner";
+import { BRAND_FONTS, brandFontId } from "@/lib/brand/fonts";
+import { validateBrandFields } from "@/lib/brand/validation";
 import type { Business } from "@/lib/types";
 import type { BrandExtraction } from "@/lib/templates/ads";
+
+/** Common ad languages — a shortcut, not a limit; any value is allowed. */
+const LANGUAGE_SUGGESTIONS = [
+  "English",
+  "Hindi",
+  "Hinglish",
+  "Marathi",
+  "Gujarati",
+  "Tamil",
+  "Telugu",
+  "Kannada",
+  "Bengali",
+  "Punjabi",
+  "Malayalam",
+];
 
 interface FieldsState {
   name: string;
@@ -63,6 +83,11 @@ export function BrandForm({ business }: { business: Business | null }) {
   );
   const [autofilling, setAutofilling] = useState(false);
   const [autofillError, setAutofillError] = useState<string | null>(null);
+
+  // Mirrors the server action's checks so problems surface before submitting.
+  const errors = Object.fromEntries(
+    validateBrandFields(fields).map((i) => [i.field, i.message]),
+  ) as Partial<Record<string, string>>;
 
   function set<K extends keyof FieldsState>(key: K, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
@@ -152,12 +177,13 @@ export function BrandForm({ business }: { business: Business | null }) {
               placeholder="Solaride"
             />
           </Field>
-          <Field label="Website">
+          <Field label="Website" error={errors.website}>
             <Input
               name="website"
               value={fields.website}
               onChange={(e) => set("website", e.target.value)}
               placeholder="solaride.in"
+              aria-invalid={errors.website ? true : undefined}
             />
           </Field>
           <Field label="Industry / business type">
@@ -196,22 +222,24 @@ export function BrandForm({ business }: { business: Business | null }) {
             Shown on your ads so people can reach you. The phone number appears
             on the generated poster.
           </p>
-          <Field label="Phone">
+          <Field label="Phone" error={errors.phone}>
             <Input
               name="phone"
               type="tel"
               value={fields.phone}
               onChange={(e) => set("phone", e.target.value)}
               placeholder="+91 98765 43210"
+              aria-invalid={errors.phone ? true : undefined}
             />
           </Field>
-          <Field label="Email">
+          <Field label="Email" error={errors.email}>
             <Input
               name="email"
               type="email"
               value={fields.email}
               onChange={(e) => set("email", e.target.value)}
               placeholder="hello@yourbusiness.com"
+              aria-invalid={errors.email ? true : undefined}
             />
           </Field>
           <div className="sm:col-span-2">
@@ -249,51 +277,59 @@ export function BrandForm({ business }: { business: Business | null }) {
             />
           </Field>
           <Field label="Primary color">
-            <Input
+            <ColorField
               name="primary_color"
               value={fields.primary_color}
-              onChange={(e) => set("primary_color", e.target.value)}
+              onChange={(v) => set("primary_color", v)}
               placeholder="#2563EB"
             />
           </Field>
           <Field label="Secondary color">
-            <Input
+            <ColorField
               name="secondary_color"
               value={fields.secondary_color}
-              onChange={(e) => set("secondary_color", e.target.value)}
+              onChange={(v) => set("secondary_color", v)}
               placeholder="#F59E0B"
             />
           </Field>
-          <Field label="Font">
-            <Input
+          <Field label="Font" hint="used on generated posters">
+            <Select
               name="font"
-              value={fields.font}
+              value={brandFontId(fields.font)}
               onChange={(e) => set("font", e.target.value)}
-              placeholder="Inter"
-            />
+            >
+              {BRAND_FONTS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <Field label="Logo URL">
+          <Field label="Logo URL" error={errors.logo_url}>
             <Input
               name="logo_url"
+              type="url"
               value={fields.logo_url}
               onChange={(e) => set("logo_url", e.target.value)}
               placeholder="https://…/logo.png"
+              aria-invalid={errors.logo_url ? true : undefined}
             />
           </Field>
-          <Field label="Languages" hint="comma-separated">
-            <Input
+          <Field label="Languages">
+            <TokenField
               name="languages"
               value={fields.languages}
-              onChange={(e) => set("languages", e.target.value)}
-              placeholder="English, Hindi"
+              onChange={(v) => set("languages", v)}
+              suggestions={LANGUAGE_SUGGESTIONS}
+              placeholder="Type a language and press Enter"
             />
           </Field>
-          <Field label="Locations served" hint="comma-separated">
-            <Input
+          <Field label="Locations served">
+            <TokenField
               name="locations"
               value={fields.locations}
-              onChange={(e) => set("locations", e.target.value)}
-              placeholder="Pune, Mumbai"
+              onChange={(v) => set("locations", v)}
+              placeholder="Type a city and press Enter"
             />
           </Field>
           <div className="sm:col-span-2">
@@ -341,11 +377,13 @@ function Field({
   label,
   hint,
   required,
+  error,
   children,
 }: {
   label: string;
   hint?: string;
   required?: boolean;
+  error?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -356,6 +394,7 @@ function Field({
         {hint && <span className="ml-1 font-normal text-slate-400">({hint})</span>}
       </span>
       {children}
+      {error && <span className="text-xs font-normal text-red-600">{error}</span>}
     </Label>
   );
 }

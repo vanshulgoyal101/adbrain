@@ -1,4 +1,5 @@
 import type { AdAngle, BrandContext, GeneratedCopy } from "@/lib/templates/ads";
+import { fontFamilyFor } from "@/lib/brand/fonts";
 
 /**
  * Ad "design spec" — the structured layout that turns a bare AI photo into a
@@ -29,6 +30,8 @@ export interface AdDesignSpec {
   primaryColor: string;
   /** Readable text colour to sit on top of `primaryColor`. */
   ctaTextColor: string;
+  /** CSS family the renderer can resolve, derived from the brand's font choice. */
+  fontFamily: string;
 }
 
 export const DEFAULT_BRAND_COLOR = "#2563eb";
@@ -204,5 +207,6 @@ export function buildAdDesign(params: {
     ctaLabel: (copy.cta ?? "").trim() || "Learn More",
     primaryColor,
     ctaTextColor: readableTextOn(primaryColor),
+    fontFamily: fontFamilyFor(brand.font),
   };
 }

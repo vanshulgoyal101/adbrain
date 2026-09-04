@@ -8,6 +8,7 @@ export interface BrandContext {
   brand_voice?: string | null;
   primary_color?: string | null;
   secondary_color?: string | null;
+  font?: string | null;
   target_audience?: string | null;
   usps?: string[];
   offers?: string[];

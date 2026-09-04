@@ -146,6 +146,18 @@ describe("buildAdDesign", () => {
     expect(spec.ctaTextColor).toBe("#ffffff");
   });
 
+  it("threads the brand's font choice through to the renderer", () => {
+    // The font used to be stored and then ignored; the renderer now uses it.
+    expect(buildAdDesign({ brand: { ...brand, font: "serif" }, copy }).fontFamily).toBe(
+      "serif",
+    );
+    // Free text saved before the picker existed must still render.
+    expect(buildAdDesign({ brand: { ...brand, font: "Inter" }, copy }).fontFamily).toBe(
+      "sans-serif",
+    );
+    expect(buildAdDesign({ brand, copy }).fontFamily).toBe("sans-serif");
+  });
+
   it("falls back sensibly for a bare brand", () => {
     const spec = buildAdDesign({
       brand: { name: "Acme" },
