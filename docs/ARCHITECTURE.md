@@ -303,10 +303,19 @@ monitored. Pure, unit-tested logic drives three enforcement points:
   created paused, so activation is the moment money is committed.
 - **Signal** — `evaluateSpend()` gauges `max(projected weekly, tracked spend)`
   against the cap → `off | ok | approaching | over`, surfaced as a dashboard/
-  settings banner + meter.
-- **Runaway protection** — on results refresh, `enforceAutoPause()` pauses every
-  active campaign (Meta + local + audit) once tracked spend reaches the cap and
-  `auto_pause` is on. Best-effort: it never throws, so it can't break the refresh.
+  settings banner + meter. When no cap is set, Settings shows a warning so the
+  “no protection” state is never silent.
+- **Honest budgets** — Meta ad-set budgets are per ad set, so an A/B campaign
+  with N ad sets spends `perAdSet × N`/day. Campaign creation persists that
+  `effectiveDailyBudget()` as `daily_budget`, so every guardrail figure reflects
+  real spend instead of the per-ad-set input.
+- **Runaway protection** — two layers, both driven by the pure
+  `campaignsToAutoPause()`: (1) on results refresh, `enforceAutoPause()` pauses
+  every active campaign (Meta + local + audit) once tracked spend reaches the cap
+  and `auto_pause` is on; (2) a **cron backstop** (`/api/cron/enforce-spend`,
+  every 6h) sweeps all opted-in businesses under the service-role client, so the
+  cap holds even when nobody opens the app (Meta spends 24/7). Both are
+  best-effort and never throw.
 
 ---
 

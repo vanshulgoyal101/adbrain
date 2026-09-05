@@ -82,7 +82,14 @@ Trigger a deploy (push to `main` or click Deploy). Then check:
 
 ## 7. Scheduled jobs (Vercel Cron)
 
-`vercel.json` registers a **daily keep-alive** at `/api/cron/keepalive`.
+`vercel.json` registers two cron jobs, both authorised by `CRON_SECRET`:
+
+- **`/api/cron/keepalive`** (daily) — keeps the Supabase project awake.
+- **`/api/cron/enforce-spend`** (every 6h) — runaway-spend backstop: pauses
+  active campaigns whose tracked spend has reached the weekly cap for any
+  business with `auto_pause` on, even when nobody opens the app (Meta spends
+  24/7). Runs under the service-role client. (Sub-daily schedules need a Vercel
+  plan that supports them; Hobby runs crons about once a day.)
 
 > **This is not optional in production.** Free-tier Supabase projects auto-pause
 > after ~7 days of inactivity, and a paused project **stops resolving in DNS** —
@@ -106,6 +113,10 @@ secret is unset and 401s on a bad one. Verify after deploying:
 curl -s -o /dev/null -w '%{http_code}\n' \
   -H "Authorization: Bearer $CRON_SECRET" \
   https://adbrain.vanshul.com/api/cron/keepalive   # expect 200
+
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  https://adbrain.vanshul.com/api/cron/enforce-spend   # expect 200
 ```
 
 **If the project ever does pause**, restore it from the Supabase dashboard (or
