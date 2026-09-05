@@ -1,4 +1,4 @@
-# AdBrain Product Design Plan
+# AdBrain Product Transformation Plan
 
 > This is the execution plan for turning AdBrain from a functional internal
 > tool into a customer-ready advertising workspace. It is stricter than a
@@ -9,296 +9,219 @@
 
 _Last reviewed: 2026-09-05_
 
-## Honest assessment
-
-The previous plan overstated progress. The code has a reasonable backend,
-strong safety work, and the beginnings of lifecycle navigation, but the visual
-product is still too close to a starter dashboard:
-
-- The shell is a pale page with a narrow sidebar, generic-looking type, one blue
-  accent, and repeated white bordered cards.
-- Home still spends valuable space on counts and implementation status instead
-  of showing the customer's campaign work and next decision.
-- Create, Review, Launch, and Results are named as a lifecycle, but they do not
-  yet feel like one connected workflow with shared context.
-- Creative Studio is still a brief form followed by a grid of cards, not a
-  production review surface where a customer compares, edits, approves, and
-  prepares an ad.
-- Brand Brain remains primarily data entry. It does not yet visibly prove how
-  the saved brand changes the output.
-- Empty states are technically polite but visually empty and operationally
-  passive. They do not provide a meaningful preview, example, or next step.
-- “In progress” and “delivered” described code structure, not a measurable
-  improvement in customer experience.
-
-This plan resets the baseline. Until Phase 1 is complete, do not claim that the
-UI has had a major redesign.
-
-## Product target
-
-AdBrain should feel like a focused campaign workspace for a busy local-business
-owner or a small agency operator:
-
-1. The user sees what needs attention immediately.
-2. The user can create a campaign brief without understanding AI terminology.
-3. The user can compare real ad outputs in a serious review surface.
-4. The user understands exactly what will happen before money or a Meta account
-   is involved.
-5. The user can return later and understand what changed, what worked, and what
-   to do next.
-
-The product should feel composed, useful, and commercially credible. It should
-not feel playful, neon, gamified, oversized, or like a collection of AI demos.
-
-## Visual direction
-
-Use an editorial operations aesthetic: warm mineral workspace background, deep
-ink typography, crisp white work surfaces, a confident cobalt action color, and
-one restrained coral signal color for attention. Use color to communicate
-workflow state, not decoration.
-
-Required characteristics:
-
-- Use a distinctive display face for page titles and a highly legible interface
-  face for controls and data. Avoid default-looking system typography.
-- Establish a strong type scale: compact navigation, quiet metadata, clear page
-  titles, and larger outcome numbers only where they help a decision.
-- Reduce the number of floating cards. Use full-width bands, dividers, tables,
-  split panes, and framed tools where those structures fit the job.
-- Keep radii restrained, generally 6-8px. Avoid pill-shaped UI except for
-  statuses and filters.
-- Make the creative image, campaign state, lead state, and next action the
-  visual anchors. Empty background is not a substitute for hierarchy.
-- Use motion sparingly: page-load reveal, generation progress, and state changes.
-  No decorative bouncing, floating, or generic shimmer everywhere.
-- Design at 1440px, 1024px, 768px, and 390px widths. Nothing is accepted from a
-  desktop screenshot alone.
-
-## Navigation model
-
-The primary workflow is:
-
-```text
-Home -> Create -> Review -> Launch -> Results
-```
-
-Workspace configuration is secondary:
-
-```text
-Brand Brain | Assets | Connections | Settings
-```
-
-Use persistent workspace context in the shell: business name, current campaign
-or draft, connection state, and account menu. Do not make the user rediscover
-which business or campaign they are viewing on every route.
-
-## Non-negotiable acceptance rules
-
-Every redesigned screen must satisfy all of these before being marked complete:
-
-- A first-time user can identify the primary action in five seconds.
-- A returning user can identify what needs attention in five seconds.
-- The screen has a deliberate populated state, empty state, loading state,
-  error state, and success state.
-- The primary content is visible without a wall of explanatory copy.
-- The screen has one dominant action, not a row of equally weighted buttons.
-- Important actions have clear pending, disabled, confirmation, and failure
-  behavior.
-- Desktop and mobile screenshots show no clipped text, accidental horizontal
-  scrolling, or collapsed hierarchy.
-- The page is tested with realistic seeded data, not only an empty database.
-- Someone unfamiliar with the code can complete the core task without
-  narration.
-
-## Phased execution
+## Honest baseline
+
+The backend has meaningful capability and the safety work is strong, but the
+customer experience is not yet a sellable product. The live public page is a
+large pale canvas with a centered headline, one CTA, and generic feature cards.
+It does not show the product's strongest proof: a real ad, brand transformation,
+campaign control, lead outcomes, or a credible customer example.
+
+The signed-in workspace has better navigation and safety copy, but still uses
+the visual grammar of an internal tool: form-first screens, repeated cards,
+sparse populated states, weak cross-page context, and no convincing review
+workspace for the actual creative work.
 
-### Phase 0 — Establish the visual contract
+Therefore:
 
-**Goal:** stop design drift before touching individual pages.
+- Incremental styling changes must not be described as a major redesign.
+- Tokens, shadows, labels, and route names are not progress unless they change
+	a customer task or visible hierarchy.
+- SEO metadata is not a substitute for useful indexable content.
+- More AI features, metrics, and billing UI are paused until the core workflow
+	is coherent.
 
-Deliver:
+## Product promise
 
-- Finalize color, typography, spacing, radius, elevation, control-height, focus,
-  and motion tokens in `globals.css`.
-- Create shared primitives for `PageFrame`, `PageHeader`, `StatusBadge`,
-  `EmptyState`, `Notice`, `Metric`, `StepProgress`, `DataTable`, `Drawer`, and
-  `ConfirmDialog`.
-- Define shared status semantics: draft, needs review, approved, scheduled,
-  paused, active, attention, failed, and complete.
-- Create realistic demo fixtures: one complete Brand Brain, six creatives in
-  mixed states, one paused campaign, leads, and an empty first-run workspace.
+AdBrain helps a local business turn its real brand and offer into ads it can
+understand, approve, launch safely, and improve from results.
 
-**Gate:** a before/after screenshot board demonstrates a materially different
-visual system. Do not proceed if the result still reads as white cards on a
-pale blue page.
+| Screen | Customer question |
+|---|---|
+| Public site | Is this for my business, and can I see what it produces? |
+| Home | What needs my attention today? |
+| Brand Brain | What does AdBrain know, and how does it affect the ad? |
+| Create | What am I trying to achieve? |
+| Review | Which ad should I use, and why? |
+| Launch | What exactly will happen, and what is protected? |
+| Results | Did it work, and what should I do next? |
 
-### Phase 1 — Rebuild the application shell
+## Two experiences, one product
 
-**Goal:** make the whole product feel like one deliberate application.
+### Public acquisition experience
 
-Deliver:
+The public site must sell understanding and proof, not list capabilities.
 
-- Replace the oversized sidebar treatment with a compact, purposeful shell that
-  gives the work area more room.
-- Add workspace context, account menu, connection health, and a compact mobile
-  navigation pattern.
-- Give every page the same header rhythm, content width, action placement, and
-  context treatment where needed.
-- Remove duplicate page labels and implementation-oriented wording.
-- Add global toast, error boundary, loading skeleton, and unsaved-change
-  patterns.
+Required first viewport:
 
-**Gate:** dashboard, brand, studio, campaigns, leads, assets, and settings look
-like the same product in a four-viewport screenshot review.
+- A specific promise for local businesses.
+- A real, readable ad example or product workflow visual.
+- A labelled business context such as a clearly marked demo workspace.
+- One primary CTA and one lower-friction secondary action.
+- A hint of the next section without a large unexplained gap.
 
-### Phase 2 — Make Home a command center
+Required sections: hero with creative proof; brand-input-to-ad before/after;
+review and paused-launch safety; results and lead follow-up; honest demo or
+customer context; FAQ, trust, legal, and final CTA.
 
-**Goal:** replace dashboard reporting with a useful work queue.
+### Authenticated operating workspace
 
-Deliver:
+The app must feel like a focused campaign room, not a collection of forms.
+It needs persistent business/campaign context, one clear current action,
+realistic populated fixtures, and deliberate empty, loading, error, paused,
+success, and offline states. Mobile is a workflow design, not a collapsed
+desktop sidebar.
 
-- A compact greeting and workspace context, followed by one dominant next-best
-  action with a real reason: finish brand, review ads, connect Meta, or respond
-  to a lead.
-- A campaign pipeline showing Brand ready -> Ads ready -> Review -> Paused
-  launch -> Learning, with counts and state.
-- A work queue for ads needing review, unanswered leads, connection issues, and
-  spend warnings.
-- A visible weekly outcome strip: leads, spend, cost per lead, and change versus
-  the previous period when data exists.
-- A strong populated demo state and a useful first-run state with a guided
-  checklist, example creative, and clear next action.
+## Visual contract
 
-**Gate:** a customer can decide what to do next without opening the sidebar.
+Use a restrained editorial operations language: warm mineral background, deep
+ink, white work surfaces, cobalt primary action, amber/coral attention, and
+green only for verified success. The work supplies the visual drama: creative
+previews, lead status, campaign state, and performance change.
 
-### Phase 3 — Turn Brand Brain into a product asset
+- Use a distinctive display face and a separate interface face.
+- Use a 12-column desktop grid and deliberate mobile rhythm.
+- Prefer split panes, tables, timelines, dividers, and work queues over nested
+	card grids.
+- Keep radii generally 6-8px; reserve pills for status and filters.
+- Use stable dimensions for creative previews and controls.
+- Use motion only for entry, generation progress, and meaningful state change.
+- Do not use decorative blobs, fake activity, oversized empty hero spacing, or
+	gradients without a job.
 
-**Goal:** make the differentiator feel valuable rather than like a long form.
+## Shared foundations
 
-Deliver:
+Build these before polishing individual routes:
 
-- A section navigator with completion state and a short reason each section
-  matters.
-- Sections for identity, audience/service areas, voice, offers/proof, contact,
-  visual identity, and advertising rules.
-- A live Brand signal preview showing how saved inputs change a headline, primary
-  text, CTA, and contact line.
-- Strong save/autofill feedback, dirty-state protection, field-level errors, and
-  completion/readiness scoring.
-- Asset handling as part of brand setup, not a disconnected storage page.
+- `PageFrame`, `PageHeader`, `StatusBadge`, `EmptyState`, `LoadingState`,
+	`ErrorState`, `Notice`, and `ConfirmDialog`.
+- `Metric`, `ChangeIndicator`, `WorkQueue`, `StepProgress`, `DataTable`,
+	`Drawer`, and `CreativePreview`.
+- One state vocabulary: draft, needs review, approved, paused, active,
+	learning, attention, failed, complete.
+- Demo fixtures for a complete business, mixed creatives, a paused campaign,
+	leads, results, and a true first-run account.
 
-**Gate:** a user can explain why Brand Brain exists and can see its effect before
-generating anything.
+Fixtures power screenshots, browser tests, and demos; they must never appear as
+real customer activity.
 
-### Phase 4 — Make Create and Review one production workflow
+## Delivery phases
 
-**Goal:** make ad creation feel like a serious creative tool.
+### Phase A — Public proof reset
 
-Deliver:
+**Outcome:** a stranger understands the product and sees its output in five
+seconds.
 
-- Make Ad Assistant the friendly entry point for a new user, with a visible
-  brief summary and progress through the conversation.
-- Make Studio a split workspace: creative board on the left, selected-creative
-  inspector on the right, and persistent brief/context above.
-- Show real platform formats: feed, square, and story previews with safe areas.
-- Add compare mode for 2-3 variants, keyboard navigation, approve/reject/edit
-  actions, and clear status transitions.
-- Make generation progress specific: writing copy, creating imagery,
-  composing poster, saving variants. Preserve completed work if one variant
-  fails.
-- Replace generic empty cards with example output, a useful brief template, and
-  one primary Create first batch action.
+Replace the text-only hero with a real labelled creative/workflow composition;
+show brand inputs becoming a finished ad; demonstrate review-before-launch and
+paused safety; reduce the generic feature grid; add vertical pages only when
+each has unique useful copy and a real example.
 
-**Gate:** a customer can generate, compare, approve, and export without moving
-mentally between separate tools.
+**Gate:** first viewport proof at 1440px and 390px; no large unexplained empty
+region; every claim has an owning feature or honest evidence.
 
-### Phase 5 — Make Launch safe and legible
+### Phase B — Workspace shell and density reset
 
-**Goal:** make the first campaign feel trustworthy.
+**Outcome:** every authenticated route feels like one commercial product.
 
-Deliver:
+Add business context, connection health, account control, shared page framing,
+consistent action placement, global recovery states, and realistic populated
+fixtures. Test 1440, 1024, 768, and 390px.
 
-- A launch review with creative, objective, location, audience, lead form,
-  budget, schedule, and connection state in one summary.
-- A clear “Paused: nothing will spend yet” safety treatment adjacent to the
-  final action, not buried in helper text.
-- Editable review sections with a final confirmation dialog that states exactly
-  what will be created.
-- Campaign list with lifecycle states, last sync, spend, leads, and next action.
-- Recoverable errors for expired Meta connections, missing lead forms, rejected
-  creatives, and budget guardrail blocks.
+**Gate:** dashboard, Brand Brain, Create, Studio, Campaigns, Leads, Assets, and
+Settings pass a four-viewport screenshot review.
 
-**Gate:** a non-expert can describe what will happen after clicking the final
-button and can find the campaign again afterward.
+### Phase C — Home command center
 
-### Phase 6 — Make Results retain customers
+**Outcome:** a returning customer knows what to do next without opening the nav.
 
-**Goal:** turn delivery into an ongoing reason to return.
+Build one reasoned next-best action, a campaign pipeline, a work queue for
+review/leads/connections/spend, an outcome strip, and a useful first-run path.
 
-Deliver:
+**Gate:** the five-second test identifies the next action in populated and
+first-run states.
 
-- Results home with leads, spend, CPL, response time, and trend context.
-- Lead inbox grouped by new, contacted, qualified, won, and archived.
-- Lead detail with campaign, creative, timestamp, notes, and one-tap status
-  change.
-- Plain-language interpretation: what changed, what is working, and what to do
-  next. Avoid charts without a decision attached.
-- Empty, delayed-sync, and no-results states that explain the next useful step.
+### Phase D — Brand Brain asset
 
-**Gate:** after a campaign launches, the user knows what happened and what to
-do next without needing a support call.
+**Outcome:** the user sees why Brand Brain matters before generating an ad.
 
-### Phase 7 — Commercial polish and evidence
+Add section completion, live headline/copy/CTA/contact/visual previews, visible
+before/after changes, coherent assets and rules, dirty-state protection, and
+field-level recovery.
 
-**Goal:** earn trust before asking for money.
+**Gate:** changing one field visibly changes the preview; the page reads as a
+brand system, not a database form.
 
-Deliver:
+### Phase E — Create and Review workspace
 
-- Activity history for generation, approvals, exports, campaign changes, and
-  connection events.
-- Support/help entry point, changelog, privacy/data controls, and account
-  management.
-- Billing and usage surfaces only after pricing and payment flow are validated.
-- Product analytics for activation, first creative, approval, launch review,
-  first lead, and repeat session.
-- Accessibility, keyboard, reduced-motion, responsive, and error-recovery audit.
+**Outcome:** a customer can generate, compare, approve, and export without
+mentally switching tools.
 
-**Gate:** five people unfamiliar with the implementation can complete the
-primary journey; all critical failures are observable and recoverable.
+Add persistent brief context, a split creative board/inspector, feed/square/
+story placements, compare mode, keyboard navigation, approve/reject/edit/
+regenerate/export states, named generation progress, and partial-failure
+preservation.
 
-## Delivery order
+**Gate:** a customer can choose a winner and explain why in desktop and mobile
+flows.
 
-1. Phase 0 visual contract and realistic fixtures.
-2. Phase 1 shell and shared states.
-3. Phase 2 Home command center.
-4. Phase 3 Brand Brain asset.
-5. Phase 4 Create/Review workspace.
-6. Phase 5 Launch review.
-7. Phase 6 Results and lead workflow.
-8. Phase 7 commercial polish, analytics, and billing readiness.
+### Phase F — Launch and Results retention loop
 
-Do not add more AI features, more dashboard metrics, or billing UI ahead of
-these phases. The product needs a coherent customer workflow before it needs
-more capability.
+**Outcome:** customers trust the launch and know what to do after delivery.
 
-## Definition of “improved”
+Connect approved work to a single launch preflight covering creative, objective,
+audience, budget, lead form, schedule, and connection. Then connect campaigns to
+results with leads, spend, CPL, response time, trend context, lead states, and
+one recommended next action. Handle delayed sync, empty data, provider errors,
+and expired connections explicitly.
 
-The redesign is successful only when all of the following are true:
+**Gate:** a non-expert can describe the final action and find the next action
+after launch without support.
 
-- The populated Home screen has a clear work queue and outcome hierarchy.
-- The first-run workspace is useful rather than blank.
-- Brand Brain visibly changes the creative output.
-- Studio feels like a review tool, not a card grid.
-- Launch explains safety and consequences before confirmation.
-- Results explains performance in plain language.
-- The visual system is recognizable without seeing the logo.
-- Before/after screenshots show an unmistakable improvement at every core route.
-- Core task measurements improve: first creative time, approval rate, launch
-  review completion, and return visits.
+### Phase G — Evidence and commercial readiness
+
+**Outcome:** the product can be trusted by customers and operated by the team.
+
+Add browser tests for the primary journey, accessibility checks, error and
+provider monitoring, sync health, SEO validation, Meta App Review, pricing,
+usage limits, support, and account controls only when their contracts are
+verified.
+
+**Gate:** five people unfamiliar with the implementation complete the primary
+journey; critical failures are observable and recoverable.
+
+## Evidence gates
+
+Every phase requires:
+
+1. Before/after screenshots at 1440px and 390px.
+2. A populated fixture and a first-run fixture.
+3. Focused behavior tests plus accessibility/keyboard checks.
+4. Full lint, typecheck, test, build, and deployment checks.
+5. A short note naming what became easier for the customer.
+6. No “complete” label while an acceptance rule is unverified.
+
+## Measurement
+
+Track time to saved Brand Brain, time to first creative, approval rate,
+launch-review completion, time to first lead follow-up, return-session next
+actions, and support questions caused by unclear state or copy.
 
 ## Explicit non-goals
 
-Do not add decorative gradients, random illustrations, excessive charts,
-gamification, fake activity, or more cards to make the product look busy. Do not
-call a page “premium” because it has shadows or rounded corners. The goal is
-useful density, clear hierarchy, and confidence around real advertising work.
+Do not add decorative UI, fake customer proof, generic doorway pages, random AI
+chat surfaces, more dashboard metrics, or billing screens without a pricing
+decision. Do not promise first-place search rankings. Build useful content,
+technical correctness, performance, trustworthy claims, and measurement;
+ranking is an outcome to earn.
+
+## Delivery order
+
+1. Public proof reset.
+2. Workspace shell and density reset.
+3. Home command center and fixtures.
+4. Brand Brain asset.
+5. Create and Review workspace.
+6. Launch and Results loop.
+7. Browser evidence, operations, SEO content, App Review, and billing.
+

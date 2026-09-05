@@ -15,10 +15,16 @@ _Last reviewed: 2026-09-05. **Live in production at adbrain.vanshul.com.** Recen
 shipped: industry-agnostic `vertical` fix, cross-instance rate limiting,
 Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 
-> **Current product-design priority:** Phase 0 of the reset in
+> **Current product-design priority:** Phase A, Public proof reset, followed by
+> Phase B, Workspace shell and density reset, in
 > [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). The prior plan
 > overstated UI progress; visual work is not considered delivered until the
 > populated and empty states pass desktop/mobile screenshot review.
+
+> **Product truth:** backend capability is ahead of customer experience. Do not
+> prioritize billing, more AI features, or more dashboard metrics until the
+> public proof, workspace density, creative review, launch, and results loop
+> pass the evidence gates in the design plan.
 
 ---
 
@@ -65,13 +71,13 @@ Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 
 ## Suggested near-term sequence
 
-1. **Reset the visual contract and fixtures** — establish a direction that is visibly different and test it on real populated states.
-2. **Rebuild the shell** — navigation, workspace context, headers, states, and mobile behavior.
-3. **Rebuild Home and onboarding** — make the next action and activation progress obvious.
-4. **Rebuild Brand Brain** — turn the strongest differentiator into a visible product asset.
-5. **Rebuild Create and Review** — make comparison, approval, and export one workflow.
-6. **Rebuild Launch and Results** — make spend safe and performance understandable.
-7. **Start Meta App Review** in parallel with the UI work; it remains an external lead time.
-8. **Add error monitoring and scheduled sync** — the operational base for customer trust.
-9. **Run controlled demos** using [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md), measuring activation and objections rather than only provider cost.
-10. **Add paid image reliability, durable usage limits, and billing** only after the core experience earns repeat use.
+1. **Public proof reset** — show real creative output, brand transformation, paused-launch safety, and honest customer context in the first viewport.
+2. **Workspace shell and density reset** — make all signed-in routes feel like one product at desktop and mobile sizes.
+3. **Home command center and fixtures** — replace sparse reporting with work queue, pipeline, and realistic populated/first-run states.
+4. **Brand Brain asset** — prove that brand inputs visibly change the resulting ad.
+5. **Create and Review workspace** — make comparison, approval, editing, and export one serious creative workflow.
+6. **Launch and Results loop** — connect approved work to safe launch, leads, performance, and a next decision.
+7. **Browser evidence and accessibility** — validate the primary journey with screenshots, keyboard, responsive, and recovery checks.
+8. **Start Meta App Review** in parallel; it remains an external lead-time item.
+9. **Add monitoring and scheduled sync** after the customer workflow is understandable and testable.
+10. **Validate pricing, usage, paid image reliability, and billing** only after repeatable customer value is demonstrated.
