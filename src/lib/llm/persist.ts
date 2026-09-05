@@ -15,6 +15,7 @@ export interface LLMUsageEvent {
 const RATES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
+  "gemini-3.6-flash": { input: 0.75, output: 3.75 },
 };
 
 function estimatedCost(model: string, usage: TokenUsage): number {

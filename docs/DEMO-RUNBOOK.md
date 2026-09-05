@@ -4,6 +4,22 @@ This is the operating guide for showing AdBrain to a prospective customer. It
 covers the demo flow, provider-cost planning, failure fallbacks, and what must
 be true before accepting payment.
 
+## Immediate Execution Tracker
+
+- [ ] Verify the latest Vercel deployment and complete the live smoke test.
+- [x] Migrate the demo key from unavailable Gemini 2.5 Flash to the stable
+   `gemini-3.6-flash` model and verify a live API response.
+- [ ] **Deferred:** enable paid Gemini after demo demand justifies this account's
+   current ₹3,000 minimum prepayment.
+- [ ] Benchmark 30 ads across three industries; record quality, latency,
+   retries, tokens, and actual cost.
+- [ ] Prepare one polished demo account with 3-6 generated variants.
+- [ ] Keep pre-generated creatives and screenshots ready as the demo fallback.
+- [ ] Run 5-10 customer demos and record objections and willingness to pay.
+- [ ] Evaluate and add a reliable paid image provider once demand is validated.
+- [ ] Add billing only when the first customer is ready to pay: Razorpay for an
+   India-first launch or Stripe for an international-first launch.
+
 ## Demo Positioning
 
 Show AdBrain as a workflow for a non-technical local-business owner:
@@ -59,15 +75,31 @@ For the first customer demos, use:
 
 ```env
 LLM_PROVIDER_ORDER=google,groq,openrouter,cerebras
-GEMINI_MODEL=gemini-2.5-flash
-GEMINI_THINKING_HEADROOM=0
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_THINKING_HEADROOM=3000
+LLM_MONTHLY_TOKEN_LIMIT=2000000
 ```
 
-Gemini 2.5 Flash is the recommended primary copy model because it is strong at
-structured JSON, instruction following, and short-form copy without the cost of
-a Pro model. Use a cheaper Flash-Lite-class model for low-stakes summaries,
+Gemini 3.6 Flash is the validated primary copy model because it is a stable
+endpoint with free-tier access and supports the existing structured-output
+request path. Use a cheaper Flash-Lite-class model for low-stakes summaries,
 classification, or retries only after evaluating quality. Keep the existing
 provider rotation enabled as a reliability fallback.
+
+Use a dedicated Google AI project for AdBrain. Prefer Gemini Prepay with the
+minimum initial credit, leave auto-reload off, and set the project-level monthly
+spend cap in AI Studio. The provider cap can lag by about ten minutes, so retain
+the application's token ceiling and request rate limits as a second guardrail.
+API keys inherit billing and caps from their project; keys do not have separate
+budgets.
+
+For the current account, Google raised the regional/security minimum prepayment
+to ₹3,000. Do not fund it for early demos: prepaid Gemini credit is normally
+non-refundable, expires after 12 months, and cannot pay for other Google Cloud
+services. Continue on the free tier until measured usage or customer demand
+justifies that commitment, then re-check the minimum before purchasing. While
+using the free tier, send only synthetic or non-confidential demo data because
+Google may use free-tier prompts and responses to improve its products.
 
 The exact model name and price change over time. Verify the current provider
 pricing and model availability before funding production. Do not leave a

@@ -59,8 +59,8 @@ Set these for **Production** (and Preview if you want previews to work):
 | `SUPABASE_SERVICE_ROLE_KEY` | service-role key |
 | `NEXT_PUBLIC_SITE_URL` | `https://adbrain.vanshul.com` |
 | `GOOGLE_AI_API_KEYS` | comma-separated keys (or another provider's) |
-| `GEMINI_MODEL` | e.g. `gemini-2.5-flash` (current default) |
-| `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini 2.5 thinking (default `3000`; `0` for a paid non-thinking model) |
+| `GEMINI_MODEL` | e.g. `gemini-3.6-flash` (current default) |
+| `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini thinking (default `3000`; `0` for a paid non-thinking model) |
 | `IMAGE_PROVIDER` | `pollinations` |
 | `AD_DESIGN_OVERLAY` | composite the designed poster over the AI photo (default `true`; `false` = bare photo) |
 | `META_APP_ID` / `META_APP_SECRET` | Meta app creds (also required for the Facebook-Login connect flow) |

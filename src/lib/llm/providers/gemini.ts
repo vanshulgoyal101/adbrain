@@ -15,13 +15,13 @@ import {
 export function createGeminiProvider(config?: {
   defaultModel?: string;
   /**
-   * Gemini 2.5 models spend output tokens on hidden "thinking"; add headroom to
+  * Gemini thinking models spend output tokens on hidden reasoning; add headroom to
    * the requested output budget so JSON isn't truncated. Set to 0 for a paid
    * non-thinking model to stop paying for unused output tokens.
    */
   thinkingHeadroom?: number;
 }): LLMProvider {
-  const defaultModel = config?.defaultModel ?? "gemini-2.0-flash";
+  const defaultModel = config?.defaultModel ?? "gemini-3.6-flash";
   const THINKING_HEADROOM = config?.thinkingHeadroom ?? 3000;
   return {
     name: "google",

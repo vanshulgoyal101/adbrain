@@ -44,4 +44,17 @@ describe("<CampaignLaunchReview>", () => {
     expect(screen.getByText(/creates this campaign paused/i)).toBeInTheDocument();
     expect(screen.getByText(/nothing spends until you activate it/i)).toBeInTheDocument();
   });
+
+  it("shows exactly when the campaign is ready to launch", () => {
+    render(
+      <CampaignLaunchReview
+        selectedCount={2}
+        budget={500}
+        leadFormName="Book a consultation"
+        audience="Jaipur"
+      />,
+    );
+    expect(screen.getByText(/ready to launch/i)).toBeInTheDocument();
+    expect(screen.getByText(/launch checklist is complete/i)).toBeInTheDocument();
+  });
 });

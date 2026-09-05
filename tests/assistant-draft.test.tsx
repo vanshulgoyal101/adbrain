@@ -16,6 +16,7 @@ describe("<AdAssistant> draft persistence", () => {
     render(<AdAssistant business={business} />);
 
     expect(screen.getByText("Grounded in Cedar Ridge Chiro")).toBeInTheDocument();
+    expect(screen.getByText("Brief preview")).toBeInTheDocument();
     expect(screen.getByText("Describe the goal")).toBeInTheDocument();
     expect(screen.getByText("Answer what matters")).toBeInTheDocument();
     expect(screen.getByText("Review three ads")).toBeInTheDocument();
@@ -25,6 +26,8 @@ describe("<AdAssistant> draft persistence", () => {
     expect(start).toBeDisabled();
 
     await user.type(goal, "Bring local families in for a spring checkup");
+    expect(screen.getByText("Local families")).toBeInTheDocument();
+    expect(screen.getByText("Spring checkup")).toBeInTheDocument();
     expect(start).toBeEnabled();
   });
 

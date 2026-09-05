@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { CheckCircle2, Save, Wand2 } from "lucide-react";
+import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,6 +104,27 @@ export function BrandForm({ business }: { business: Business | null }) {
   const previewAudience = fields.target_audience.trim() || "your ideal customer";
   const previewLocation = firstLine(fields.locations) || "your service area";
   const previewContact = fields.phone.trim() || fields.website.trim();
+  const readinessChecks = [
+    {
+      label: "Business identity",
+      ready: Boolean(fields.name.trim() && (fields.description.trim() || fields.vertical.trim())),
+    },
+    {
+      label: "Audience and area",
+      ready: Boolean(fields.target_audience.trim() && firstLine(fields.locations)),
+    },
+    {
+      label: "Creative direction",
+      ready: Boolean(
+        fields.brand_voice.trim() && (firstLine(fields.usps) || firstLine(fields.offers)),
+      ),
+    },
+    {
+      label: "Customer contact",
+      ready: Boolean(fields.phone.trim() || fields.email.trim() || fields.website.trim()),
+    },
+  ];
+  const readinessCount = readinessChecks.filter((check) => check.ready).length;
 
   function set<K extends keyof FieldsState>(key: K, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
@@ -184,16 +205,45 @@ export function BrandForm({ business }: { business: Business | null }) {
             This updates as you edit. It is the foundation for copy, visuals,
             targeting, and contact details.
           </p>
+          <div className="mt-4" aria-label={`${readinessCount} of 4 brand signals ready`}>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-700">Brand readiness</span>
+              <span className="text-slate-500">{readinessCount} of 4 ready</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-[width]"
+                style={{ width: `${readinessCount * 25}%` }}
+              />
+            </div>
+          </div>
         </div>
-        <div className="border-l-2 border-blue-500 pl-4">
-          <p className="font-semibold text-slate-950">{previewMessage}</p>
-          <p className="mt-1 text-sm text-slate-600">
-            For {previewAudience} in {previewLocation}
-            {fields.brand_voice.trim() ? ` · ${fields.brand_voice.trim()} voice` : ""}
-          </p>
-          {previewContact && (
-            <p className="mt-2 text-xs font-medium text-blue-700">{previewContact}</p>
-          )}
+        <div>
+          <div className="border-l-2 border-blue-500 pl-4">
+            <p className="font-semibold text-slate-950">{previewMessage}</p>
+            <p className="mt-1 text-sm text-slate-600">
+              For {previewAudience} in {previewLocation}
+              {fields.brand_voice.trim() ? ` · ${fields.brand_voice.trim()} voice` : ""}
+            </p>
+            {previewContact && (
+              <p className="mt-2 text-xs font-medium text-blue-700">{previewContact}</p>
+            )}
+          </div>
+          <ul className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+            {readinessChecks.map((check) => (
+              <li
+                key={check.label}
+                className={check.ready ? "flex items-center gap-2 text-slate-700" : "flex items-center gap-2 text-slate-400"}
+              >
+                {check.ready ? (
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                ) : (
+                  <Circle className="h-4 w-4" />
+                )}
+                {check.label}
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

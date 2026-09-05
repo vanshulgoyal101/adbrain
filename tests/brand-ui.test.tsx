@@ -101,6 +101,18 @@ describe("<BrandForm> prefill", () => {
     });
     expect(preview).toHaveTextContent("For apartment owners in Jaipur");
   });
+
+  it("updates brand readiness as missing context is supplied", () => {
+    render(<BrandForm business={business({ target_audience: "" })} />);
+    const preview = screen.getByRole("region", { name: "Live brand context" });
+    expect(preview).toHaveTextContent("3 of 4 ready");
+
+    fireEvent.change(screen.getByLabelText("Target audience"), {
+      target: { value: "apartment owners" },
+    });
+
+    expect(preview).toHaveTextContent("4 of 4 ready");
+  });
 });
 
 describe("<BrandForm> autofill", () => {

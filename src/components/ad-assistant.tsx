@@ -57,6 +57,29 @@ interface Draft {
 
 const draftKey = (businessId: string) => `adbrain:assistant:${businessId}`;
 
+function getBriefPreview(goal: string) {
+  const input = goal.trim().toLowerCase();
+
+  const audienceLabels = [
+    { label: "Local families", match: /local families|families|parents|family|community|neighborhood|nearby/ },
+    { label: "New patients", match: /new patient|new patients|new customers|first-time|new client/ },
+    { label: "High-intent buyers", match: /buyers|shoppers|customers|prospects|service seekers|local shoppers/ },
+    { label: "Business owners", match: /business owners|owners|teams|companies|brands/ },
+  ];
+
+  const offerLabels = [
+    { label: "Spring checkup", match: /spring checkup|spring|seasonal|special offer|limited time/ },
+    { label: "Weekend offer", match: /weekend|weekends|weeknight|sale|promotion/ },
+    { label: "Free consult", match: /free consult|free quote|free estimate|trial|demo/ },
+    { label: "Limited-time conversion", match: /offer|discount|launch|conversion|appointment|book now/ },
+  ];
+
+  const audience = audienceLabels.find((entry) => entry.match.test(input))?.label ?? "Local audience";
+  const offer = offerLabels.find((entry) => entry.match.test(input))?.label ?? "Offer-focused campaign";
+
+  return { audience, offer };
+}
+
 /**
  * Session-scoped draft so navigating to another tab and back doesn't throw away
  * a half-finished conversation. Only settled phases are kept — a request that
@@ -280,33 +303,53 @@ export function AdAssistant({ business }: { business: Business }) {
               <p className="mt-1 text-xs text-slate-500">
                 Include an offer, audience, location, or occasion if it matters.
               </p>
-            <Textarea
-              id="assistant-goal"
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              rows={4}
-              maxLength={500}
-              className="mt-3"
-              placeholder={`e.g. ${suggestions[0]?.prompt ?? "A weekend offer for my business"}`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  start();
-                }
-              }}
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              {suggestions.map((s) => (
-                <button
-                  key={s.label}
-                  type="button"
-                  onClick={() => setGoal(s.prompt)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-700"
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+              <Textarea
+                id="assistant-goal"
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                rows={4}
+                maxLength={500}
+                className="mt-3"
+                placeholder={`e.g. ${suggestions[0]?.prompt ?? "A weekend offer for my business"}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    start();
+                  }
+                }}
+              />
+              <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700">
+                  Brief preview
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {getBriefPreview(goal).audience && (
+                    <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-700">
+                      {getBriefPreview(goal).audience}
+                    </span>
+                  )}
+                  {getBriefPreview(goal).offer && (
+                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+                      {getBriefPreview(goal).offer}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  AdBrain will lean into {getBriefPreview(goal).audience.toLowerCase()} and {getBriefPreview(goal).offer.toLowerCase()} when it builds the first ad brief.
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => setGoal(s.prompt)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-700"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
               <div className="mt-5 flex justify-end">
                 <Button onClick={start} disabled={!goal.trim()}>
                   Start creating <ArrowRight className="h-4 w-4" />

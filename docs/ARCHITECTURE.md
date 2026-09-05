@@ -253,7 +253,7 @@ for extraction/summaries so cache hit-rates stay high.
 The Creative Studio currently generates 3-6 variants per batch. Each variant
 uses one copy completion and one image request; the copy path may make one
 additional completion when the deterministic scanner rejects the first draft.
-Copy and image requests run in parallel. For private demos, Gemini 2.5 Flash is
+Copy and image requests run in parallel. For private demos, Gemini 3.6 Flash is
 the recommended primary text model, with a cheaper Flash-Lite-class model for
 low-stakes work and the existing provider rotation as fallback. Pollinations is
 the current free image default; evaluate a paid image provider before recurring
@@ -474,8 +474,8 @@ generic placeholder).
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client |
 | `SUPABASE_SERVICE_ROLE_KEY` | server/admin ops (optional) |
 | `GOOGLE_AI_API_KEYS` / `GROQ_API_KEYS` / `OPENROUTER_API_KEYS` / `CEREBRAS_API_KEYS` | LLM key pools (comma-separated) |
-| `GEMINI_MODEL` | LLM model override (default `gemini-2.5-flash`) |
-| `GEMINI_THINKING_HEADROOM` | extra output-token budget for Gemini 2.5 thinking (default `3000`; set `0` for a paid non-thinking model) |
+| `GEMINI_MODEL` | LLM model override (default `gemini-3.6-flash`) |
+| `GEMINI_THINKING_HEADROOM` | extra output-token budget for Gemini thinking (default `3000`; set `0` for a paid non-thinking model) |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | single-tenant Meta creds |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | who may run the internal Meta traffic runner (comma-separated). **Empty in production disables the endpoint (404).** |
 | `TRAFFIC_GENERATOR_MAX_ROUNDS` | upper bound on runner rounds (default `20`) |

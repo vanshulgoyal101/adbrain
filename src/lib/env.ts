@@ -38,11 +38,11 @@ const schema = z.object({
     .string()
     .optional()
     .default("google,groq,openrouter,cerebras"),
-  GEMINI_MODEL: z.string().optional().default("gemini-2.0-flash"),
+  GEMINI_MODEL: z.string().optional().default("gemini-3.6-flash"),
   // Groq retires models with little notice (llama-3.3-70b-versatile now 404s),
   // so the model is configurable rather than hardcoded.
   GROQ_MODEL: z.string().optional().default("qwen/qwen3.8-27b"),
-  // Output-token headroom for Gemini 2.5 "thinking" models. Set to 0 for a paid
+  // Output-token headroom for Gemini "thinking" models. Set to 0 for a paid
   // non-thinking model to avoid paying for unused output tokens.
   GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
   LLM_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().min(0).optional().default(2_000_000),

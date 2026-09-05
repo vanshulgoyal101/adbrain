@@ -91,14 +91,18 @@ describe("getEnv: optional values and defaults", () => {
 
   it("coerces numeric settings and applies defaults", async () => {
     const withDefaults = await loadEnv();
+    expect(withDefaults.GEMINI_MODEL).toBe("gemini-3.6-flash");
     expect(withDefaults.GEMINI_THINKING_HEADROOM).toBe(3000);
+    expect(withDefaults.LLM_MONTHLY_TOKEN_LIMIT).toBe(2_000_000);
     expect(withDefaults.TRAFFIC_GENERATOR_MAX_ROUNDS).toBe(20);
 
     const overridden = await loadEnv({
       GEMINI_THINKING_HEADROOM: "0",
+      LLM_MONTHLY_TOKEN_LIMIT: "500000",
       TRAFFIC_GENERATOR_MAX_ROUNDS: "7",
     });
     expect(overridden.GEMINI_THINKING_HEADROOM).toBe(0);
+    expect(overridden.LLM_MONTHLY_TOKEN_LIMIT).toBe(500_000);
     expect(overridden.TRAFFIC_GENERATOR_MAX_ROUNDS).toBe(7);
   });
 

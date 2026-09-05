@@ -12,18 +12,32 @@ export function CampaignLaunchReview({
   leadFormName?: string;
   audience: string;
 }) {
+  const isReady =
+    selectedCount > 0 &&
+    budget > 0 &&
+    !!leadFormName &&
+    audience.trim().length > 0 &&
+    audience !== "Choose an area";
+
   return (
     <section aria-labelledby="launch-review-title" className="flex flex-col gap-4 rounded-xl bg-slate-50 p-4 sm:p-5">
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+        <span
+          className={cn(
+            "flex h-9 w-9 flex-none items-center justify-center rounded-lg",
+            isReady ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700",
+          )}
+        >
           <LockKeyhole className="h-4 w-4" />
         </span>
         <div>
           <p id="launch-review-title" className="font-semibold text-slate-950">
-            Review before launch
+            {isReady ? "Ready to launch" : "Review before launch"}
           </p>
           <p className="mt-0.5 text-sm text-slate-600">
-            AdBrain creates this campaign paused. Nothing spends until you activate it.
+            {isReady
+              ? "Launch checklist is complete. AdBrain creates this campaign paused and nothing spends until you activate it."
+              : "AdBrain creates this campaign paused. Nothing spends until you activate it."}
           </p>
         </div>
       </div>
