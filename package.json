@@ -38,9 +38,6 @@
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },
-  "overrides": {
-    "sharp": "$sharp"
-  },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
