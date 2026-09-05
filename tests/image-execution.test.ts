@@ -76,7 +76,6 @@ describe("image execution", () => {
         .body as string,
     );
     expect(request).toMatchObject({
-      quality: "high",
       aspect_ratio: "3:4",
       input_references: [
         {
@@ -87,6 +86,7 @@ describe("image execution", () => {
     });
     expect(request).not.toHaveProperty("resolution");
     expect(request).not.toHaveProperty("output_format");
+    expect(request).not.toHaveProperty("quality");
   });
 
   it("does not substitute a free model on errors", async () => {
