@@ -11,6 +11,23 @@ describe("<AdAssistant> draft persistence", () => {
   beforeEach(() => sessionStorage.clear());
   afterEach(() => sessionStorage.clear());
 
+  it("frames creation as a brand-grounded campaign brief", async () => {
+    const user = userEvent.setup();
+    render(<AdAssistant business={business} />);
+
+    expect(screen.getByText("Grounded in Cedar Ridge Chiro")).toBeInTheDocument();
+    expect(screen.getByText("Describe the goal")).toBeInTheDocument();
+    expect(screen.getByText("Answer what matters")).toBeInTheDocument();
+    expect(screen.getByText("Review three ads")).toBeInTheDocument();
+
+    const goal = screen.getByRole("textbox", { name: "Campaign goal" });
+    const start = screen.getByRole("button", { name: /start creating/i });
+    expect(start).toBeDisabled();
+
+    await user.type(goal, "Bring local families in for a spring checkup");
+    expect(start).toBeEnabled();
+  });
+
   it("restores a typed goal after navigating away and back", async () => {
     const user = userEvent.setup();
     const first = render(<AdAssistant business={business} />);

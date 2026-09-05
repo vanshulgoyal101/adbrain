@@ -255,24 +255,38 @@ export function AdAssistant({ business }: { business: Business }) {
   if (!started) {
     const suggestions = seasonalSuggestions();
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-5 p-8 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-            <Wand2 className="h-7 w-7" />
-          </span>
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Make an ad in a few taps</h2>
-            <p className="mt-1 max-w-md text-slate-600">
-              Just tell me what you want — I&apos;ll ask a couple of easy questions
-              and hand you a finished ad.
-            </p>
-          </div>
-          <div className="w-full max-w-lg">
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.7fr_1.3fr] lg:gap-8">
+            <div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <Wand2 className="h-5 w-5" />
+              </span>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+                Grounded in {business.name}
+              </p>
+              <h2 className="mt-1 text-xl font-semibold tracking-[-0.02em] text-slate-950">
+                Start with the outcome
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Describe what you want this ad to achieve. AdBrain already has
+                your brand context and will ask only what is still missing.
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="assistant-goal" className="text-sm font-medium text-slate-800">
+                Campaign goal
+              </label>
+              <p className="mt-1 text-xs text-slate-500">
+                Include an offer, audience, location, or occasion if it matters.
+              </p>
             <Textarea
+              id="assistant-goal"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              rows={2}
+              rows={4}
               maxLength={500}
+              className="mt-3"
               placeholder={`e.g. ${suggestions[0]?.prompt ?? "A weekend offer for my business"}`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -281,7 +295,7 @@ export function AdAssistant({ business }: { business: Business }) {
                 }
               }}
             />
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               {suggestions.map((s) => (
                 <button
                   key={s.label}
@@ -293,10 +307,27 @@ export function AdAssistant({ business }: { business: Business }) {
                 </button>
               ))}
             </div>
-            <Button onClick={start} disabled={!goal.trim()} className="mt-4">
-              <Sparkles className="h-4 w-4" /> Start
-            </Button>
+              <div className="mt-5 flex justify-end">
+                <Button onClick={start} disabled={!goal.trim()}>
+                  Start creating <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
+          <ol className="grid border-t border-slate-200 bg-slate-50/70 text-sm sm:grid-cols-3">
+            {[
+              ["1", "Describe the goal"],
+              ["2", "Answer what matters"],
+              ["3", "Review three ads"],
+            ].map(([number, label]) => (
+              <li key={number} className="flex items-center gap-2 px-5 py-3 sm:border-r sm:border-slate-200 sm:last:border-r-0">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-semibold text-blue-700 ring-1 ring-slate-200">
+                  {number}
+                </span>
+                <span className="text-slate-600">{label}</span>
+              </li>
+            ))}
+          </ol>
         </CardContent>
       </Card>
     );
