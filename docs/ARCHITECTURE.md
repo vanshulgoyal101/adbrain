@@ -346,9 +346,11 @@ monitored. Pure, unit-tested logic drives three enforcement points:
   `campaignsToAutoPause()`: (1) on results refresh, `enforceAutoPause()` pauses
   every active campaign (Meta + local + audit) once tracked spend reaches the cap
   and `auto_pause` is on; (2) a **cron backstop** (`/api/cron/enforce-spend`,
-  every 6h) sweeps all opted-in businesses under the service-role client, so the
-  cap holds even when nobody opens the app (Meta spends 24/7). Both are
-  best-effort and never throw.
+  daily at 06:00 UTC, with Hobby invocation possible through 06:59) sweeps all
+  opted-in businesses under the service-role client even when nobody opens the
+  app. Spend can exceed the cap between checks; this is not a hard spending
+  limit. Both layers are best-effort and never throw. Sub-daily Vercel cron
+  schedules require a paid plan and fail deployment on Hobby.
 
 ---
 

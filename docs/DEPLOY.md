@@ -117,11 +117,17 @@ request must not be the only path through a customer call.
 `vercel.json` registers two cron jobs, both authorised by `CRON_SECRET`:
 
 - **`/api/cron/keepalive`** (daily) — keeps the Supabase project awake.
-- **`/api/cron/enforce-spend`** (every 6h) — runaway-spend backstop: pauses
+- **`/api/cron/enforce-spend`** (daily, scheduled for 06:00 UTC) — spend backstop: pauses
   active campaigns whose tracked spend has reached the weekly cap for any
   business with `auto_pause` on, even when nobody opens the app (Meta spends
-  24/7). Runs under the service-role client. (Sub-daily schedules need a Vercel
-  plan that supports them; Hobby runs crons about once a day.)
+  24/7). Runs under the service-role client. On Hobby, invocation can occur
+  anywhere between 06:00 and 06:59 UTC. More frequent cron expressions are
+  rejected at deployment, not automatically reduced to daily execution.
+
+Both schedules intentionally support Vercel Hobby. Daily enforcement is weaker
+than the previous six-hour schedule: spend can exceed the configured cap between
+checks, and failed invocations can delay enforcement further. Refresh-time
+enforcement remains enabled, but neither layer guarantees a hard spending limit.
 
 > **This is not optional in production.** Free-tier Supabase projects auto-pause
 > after ~7 days of inactivity, and a paused project **stops resolving in DNS** —
