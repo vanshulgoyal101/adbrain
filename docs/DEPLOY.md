@@ -7,6 +7,9 @@ AdBrain is a **dynamic** Next.js app (auth, API routes, server rendering), so it
 needs a Node/serverless host — it can't be a static export. This guide uses
 **Vercel** (native Next.js support, free tier is enough to start).
 
+For the customer-facing demo sequence, provider choice, cost planning, payment
+timing, and launch gates, see [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md).
+
 ---
 
 ## 0. Prerequisites
@@ -56,7 +59,7 @@ Set these for **Production** (and Preview if you want previews to work):
 | `SUPABASE_SERVICE_ROLE_KEY` | service-role key |
 | `NEXT_PUBLIC_SITE_URL` | `https://adbrain.vanshul.com` |
 | `GOOGLE_AI_API_KEYS` | comma-separated keys (or another provider's) |
-| `GEMINI_MODEL` | e.g. `gemini-flash-latest` |
+| `GEMINI_MODEL` | e.g. `gemini-2.5-flash` (current default) |
 | `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini 2.5 thinking (default `3000`; `0` for a paid non-thinking model) |
 | `IMAGE_PROVIDER` | `pollinations` |
 | `AD_DESIGN_OVERLAY` | composite the designed poster over the AI photo (default `true`; `false` = bare photo) |
@@ -93,6 +96,10 @@ Trigger a deploy (push to `main` or click Deploy). Then check:
 - `/robots.txt`, `/sitemap.xml`, `/manifest.webmanifest`, `/opengraph-image` — 200.
 - Sign in works (magic link / Google).
 - Campaigns page loads and can sync from Meta.
+
+For a prospect demo, also complete the [demo acceptance checklist](./DEMO-RUNBOOK.md#demo-acceptance-checklist)
+and keep a pre-generated creative fallback available. A live provider or Meta
+request must not be the only path through a customer call.
 
 ## 7. Scheduled jobs (Vercel Cron)
 

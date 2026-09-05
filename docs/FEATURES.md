@@ -6,7 +6,23 @@
 >
 > **Legend:** ✅ Built · 🚧 In progress · 📋 Proposed · 🔒 Blocked (needs access/prereq)
 >
-> _Last updated: 2026-08-17_
+> _Last updated: 2026-09-05_
+
+## Product experience program
+
+The product-design plan is tracked in
+[PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). The current focus is
+making AdBrain feel like a coherent, trustworthy marketing workspace rather
+than a collection of AI features.
+
+| Status | Workstream | Outcome |
+| --- | --- | --- |
+| 🚧 | Product shell and visual foundation | Shared tokens, typography, lifecycle navigation, page hierarchy, responsive grid, and mature feedback states |
+| 📋 | Home command center | Next-best-action, workflow statuses, activation progress, and business-oriented reporting |
+| 📋 | Brand Brain as a product asset | Sectioned editing, readiness, saved previews, and visible impact on generated ads |
+| 📋 | Creative review workspace | Canvas, inspector, platform previews, generation states, and explicit approval lifecycle |
+| 📋 | Launch confidence | Final campaign review, budget/targeting summary, paused-by-default safety, and plain-language results |
+| 📋 | Commercial maturity | Billing, support, activity history, accessibility, responsive polish, and product analytics |
 
 ---
 
@@ -148,11 +164,11 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | Provider-agnostic LLM rotation | Gemini / Groq / OpenRouter / Cerebras |
 | ✅ | Multi-key rotation + cooldown | parks 429'd keys |
 | ✅ | JSON mode + robust parsing | fences/prose salvage |
-| ✅ | Token usage capture + accounting | per-provider spend, `usageSnapshot()` |
+| ✅ | Token usage capture + accounting | per-provider spend, `usageSnapshot()`; creative generation also persists `llm_usage_events` per business |
 | ✅ | Response cache + single-flight | opt-in `{cache}`, zero-cost identical calls |
 | ✅ | Configurable Gemini thinking headroom | `GEMINI_THINKING_HEADROOM` (0 for paid non-thinking) |
-| ✅ | Provider-abstracted image gen | Pollinations default (free, no key) |
-| 📋 | Paid image providers | fal.ai / OpenAI images for quality |
+| ✅ | Provider-abstracted image gen | Pollinations default (free, no key); suitable for private demos, variable for production |
+| 📋 | Paid image provider | Evaluate fal.ai / OpenAI Images before charging customers; preserve timeout/fallback behaviour |
 
 ## 9. Marketing & SEO
 | Status | Feature | Notes |
@@ -167,10 +183,10 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | --- | --- | --- |
 | ✅ | Next 16 App Router + TS + Tailwind v4 | |
 | ✅ | zod-validated env | `lib/env.ts` |
-| ✅ | Vitest suite (513 tests / 58 files) | pure core, API + server-action contracts, DB schema invariants, jsdom component + a11y tests; CI coverage ratchet |
+| ✅ | Vitest suite (611 tests / 69 files) | pure core, API + server-action contracts, DB schema invariants, jsdom component + a11y tests; CI coverage ratchet |
 | ✅ | CI: lint + typecheck + test + build + gitleaks | `.github/workflows/ci.yml` on every push/PR |
 | ✅ | Live in production on `adbrain.vanshul.com` | Vercel + custom domain + prod env |
-| 📋 | Billing / subscription | when multi-customer |
+| 📋 | Billing / subscription | Not required for the first validation demos; choose Razorpay for India-first INR/UPI or Stripe for international-first sales. Requires verified webhooks, entitlements, usage limits, cancellation, refunds, and support workflow. See [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md). |
 | 🔒 | Google Ads integration | needs MCC/Basic Access — Phase 2 |
 
 ## 11. Growth & business model

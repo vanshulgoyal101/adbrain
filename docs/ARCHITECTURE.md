@@ -4,7 +4,13 @@
 > [SPEC.md](SPEC.md) (what & why), [FEATURES.md](FEATURES.md) (what exists /
 > what's proposed), and [DEPLOY.md](DEPLOY.md) (hosting).
 >
-> _Last updated: 2026-08-13_
+> _Last updated: 2026-09-05_
+
+The product experience architecture and delivery contract are documented in
+[PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). It is intentionally
+treated as an engineering concern: shared visual tokens, navigation hierarchy,
+workflow states, responsive behavior, and recovery states are cross-cutting
+interfaces, not page-specific decoration.
 
 ---
 
@@ -242,6 +248,27 @@ Guidance for adding a call-site: pass an explicit `maxTokens`, add `cache: true`
 only when a stale-but-identical answer is acceptable, and prefer low temperature
 for extraction/summaries so cache hit-rates stay high.
 
+### Demo and commercial cost guidance
+
+The Creative Studio currently generates 3-6 variants per batch. Each variant
+uses one copy completion and one image request; the copy path may make one
+additional completion when the deterministic scanner rejects the first draft.
+Copy and image requests run in parallel. For private demos, Gemini 2.5 Flash is
+the recommended primary text model, with a cheaper Flash-Lite-class model for
+low-stakes work and the existing provider rotation as fallback. Pollinations is
+the current free image default; evaluate a paid image provider before recurring
+billing because image reliability and quality dominate the cost and customer
+experience.
+
+Do not price from request counts alone. Use persisted `llm_usage_events` plus
+image-provider accounting to measure ten representative ads across several
+businesses, then multiply by planned volume and add a 2x retry/failure buffer.
+The operational demo reserve and payment sequencing are documented in
+[`DEMO-RUNBOOK.md`](./DEMO-RUNBOOK.md). Payments are not a prerequisite for the
+first validation demos; recurring billing requires verified webhooks,
+idempotent subscription state, entitlements, cancellation/refund handling, and
+durable usage limits.
+
 ---
 
 ## 8. Meta integration (`lib/meta/client.ts`)
@@ -401,7 +428,7 @@ Rules that keep the UI stable (no flicker, no stale data):
 
 ## 11. Testing
 
-**526 tests / 60 files.** Vitest, node environment by default; component tests
+**611 tests / 69 files.** Vitest, node environment by default; component tests
 opt into jsdom via a `// @vitest-environment jsdom` docblock (`tests/setup.ts`
 wires `@testing-library/jest-dom`). Interaction uses
 `@testing-library/user-event` for real focus/hover/typing sequences.
@@ -447,7 +474,7 @@ generic placeholder).
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client |
 | `SUPABASE_SERVICE_ROLE_KEY` | server/admin ops (optional) |
 | `GOOGLE_AI_API_KEYS` / `GROQ_API_KEYS` / `OPENROUTER_API_KEYS` / `CEREBRAS_API_KEYS` | LLM key pools (comma-separated) |
-| `GEMINI_MODEL` | LLM model override (default `gemini-flash-latest`) |
+| `GEMINI_MODEL` | LLM model override (default `gemini-2.5-flash`) |
 | `GEMINI_THINKING_HEADROOM` | extra output-token budget for Gemini 2.5 thinking (default `3000`; set `0` for a paid non-thinking model) |
 | `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | single-tenant Meta creds |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | who may run the internal Meta traffic runner (comma-separated). **Empty in production disables the endpoint (404).** |
