@@ -44,6 +44,8 @@ const schema = z.object({
   // so the model is configurable rather than hardcoded.
   GROQ_MODEL: z.string().optional().default("qwen/qwen3.8-27b"),
   OPENROUTER_MODEL: z.string().optional().default("qwen/qwen3.8-max-0902"),
+  CREATIVE_MAX_TOKENS: z.coerce.number().int().min(1800).max(16000).default(6000),
+  CREATIVE_REASONING_EFFORT: z.enum(["minimal", "low", "medium", "high"]).default("medium"),
   // Output-token headroom for Gemini "thinking" models. Set to 0 for a paid
   // non-thinking model to avoid paying for unused output tokens.
   GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
@@ -51,7 +53,7 @@ const schema = z.object({
 
   // Image generation
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),
-  IMAGE_PROVIDER_FALLBACK: z.string().optional().default("pollinations"),
+  IMAGE_PROVIDER_FALLBACK: z.string().optional().default("none"),
   POLLINATIONS_MODEL: z.string().optional().default("flux"),
   OPENROUTER_IMAGE_MODEL: z.string().optional().default("openai/gpt-image-2"),
   FALAI_API_KEY: z.string().optional().default(""),

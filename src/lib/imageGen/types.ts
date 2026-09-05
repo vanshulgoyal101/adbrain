@@ -1,4 +1,5 @@
 export interface ImageRequest {
+  signal?: AbortSignal;
   prompt: string;
   width?: number;
   height?: number;
@@ -16,6 +17,9 @@ export interface GeneratedImage {
   model?: string;
   estimatedCostUsd?: number;
   latencyMs?: number;
+  width?: number;
+  height?: number;
+  fallbackFrom?: string;
 }
 
 export interface ImageProvider {

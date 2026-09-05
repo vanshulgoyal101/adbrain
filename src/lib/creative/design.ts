@@ -1,5 +1,6 @@
 import type { AdAngle, BrandContext, GeneratedCopy } from "@/lib/templates/ads";
 import { fontFamilyFor } from "@/lib/brand/fonts";
+import type { CreativeConcept } from "./concept";
 
 /**
  * Ad "design spec" — the structured layout that turns a bare AI photo into a
@@ -185,6 +186,7 @@ export function shortenHeadline(headline: string, maxLen = 36): string {
 export function buildAdDesign(params: {
   brand: BrandContext;
   copy: GeneratedCopy;
+  concept?: CreativeConcept;
   angle?: AdAngle;
   backgroundUrl?: string | null;
   format?: AdFormat;
@@ -193,8 +195,8 @@ export function buildAdDesign(params: {
   const format = params.format ?? "portrait";
   const dims = formatDimensions(format);
   const primaryColor = normalizeHex(brand.primary_color);
-  const headline = shortenHeadline(copy.headline) || brand.name;
-  const layout = layoutForAngle(params.angle?.id);
+  const headline = params.concept?.headline ?? (shortenHeadline(copy.headline) || brand.name);
+  const layout = params.concept?.visual.textPlacement ?? layoutForAngle(params.angle?.id);
 
   return {
     format,
@@ -204,8 +206,8 @@ export function buildAdDesign(params: {
     brandName: brand.name,
     logoUrl: brand.logo_url ?? null,
     headline,
-    subhead: deriveSubhead(copy.primary_text),
-    benefits: pickBenefits(brand),
+    subhead: params.concept ? params.concept.supportingText : deriveSubhead(copy.primary_text),
+    benefits: params.concept ? [] : pickBenefits(brand),
     contactLine: deriveContactLine(brand),
     ctaLabel: (copy.cta ?? "").trim() || "Learn More",
     primaryColor,

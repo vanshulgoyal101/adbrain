@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
-import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
+import {
+  persistCreativeImage,
+  renderAndPersistDesign,
+} from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
 import {
@@ -13,9 +15,17 @@ import {
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
+import { z } from "zod";
+import {
+  generationReceipt,
+  variantUsageEvents,
+  failedVariantUsage,
+} from "@/lib/creative/receipt";
+import type { Creative } from "@/lib/types";
+import { creativeReferences } from "@/lib/creative/references";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -33,18 +43,32 @@ export async function POST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = (await req.json().catch(() => null)) as {
-    businessId?: string;
-    brief?: string;
-    count?: number;
-    language?: string;
-  } | null;
+  const parsed = z
+    .object({
+      businessId: z.string().trim().min(1),
+      brief: z.string().trim().min(1).max(2000),
+      count: z.number().int().min(1).max(6).default(3),
+      language: z.string().optional(),
+      format: z
+        .enum(["portrait", "square", "story", "landscape"])
+        .default("portrait"),
+    })
+    .safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json(
+      {
+        error:
+          "A businessId, brief (up to 2000 characters), count (1-6), and valid format are required.",
+      },
+      { status: 400 },
+    );
+  const body = parsed.data;
 
   const businessId = (body?.businessId ?? "").trim();
   const brief = (body?.brief ?? "").trim();
   const rawCount = Number(body?.count ?? 3);
   const count = Number.isFinite(rawCount)
-    ? Math.min(Math.max(Math.floor(rawCount), 1), 5)
+    ? Math.min(Math.max(Math.floor(rawCount), 1), 6)
     : 3;
   const language = languagePromptName(body?.language);
 
@@ -68,8 +92,14 @@ export async function POST(req: Request) {
   const monthlyLimit = configuredMonthlyTokenLimit();
   if (monthlyLimit > 0) {
     const used = await monthlyTokenUsage(businessId);
-    // A missing ledger table returns null and is treated as a migration grace
-    // period; once present, the quota is enforced before paid calls begin.
+    if (used === null)
+      return NextResponse.json(
+        {
+          error:
+            "AI usage limits could not be verified. No generation was started.",
+        },
+        { status: 503 },
+      );
     if (used != null && used >= monthlyLimit) {
       return NextResponse.json(
         {
@@ -81,23 +111,93 @@ export async function POST(req: Request) {
     }
   }
 
-  const instructions = await getActiveInstructionsText(businessId);
-  const { data: brandAssets } = await supabase
-    .from("brand_assets")
-    .select("url, type")
-    .eq("business_id", businessId)
-    .in("type", ["product_photo", "past_ad"])
-    .order("created_at", { ascending: false })
-    .limit(3);
-  let variants;
+  const { error: schemaError } = await supabase
+    .from("creatives")
+    .select("generation")
+    .limit(0);
+  if (schemaError)
+    return NextResponse.json(
+      {
+        error:
+          "Creative generation needs its database migration. No generation was started.",
+      },
+      { status: 503 },
+    );
+  const requestId = crypto.randomUUID();
+  const variantGroup = crypto.randomUUID();
+  const inserted: Creative[] = [];
+  const failures: { angle: string; error: string }[] = [];
   try {
-    variants = await generateVariants({
+    const instructions = await getActiveInstructionsText(businessId);
+    const referenceImages = await creativeReferences(supabase, businessId);
+    await generateVariants({
       brand: business,
       brief,
       count,
       instructions,
       language,
-      referenceImages: (brandAssets ?? []).map((asset) => asset.url),
+      format: body.format,
+      referenceImages,
+      onVariant: async (variant) => {
+        await persistLLMUsage(
+          variantUsageEvents(variant, {
+            businessId,
+            userId: user.id,
+            route: "creatives.generate",
+            requestId,
+          }),
+        );
+        const photoUrl = await persistCreativeImage(
+          supabase,
+          businessId,
+          variantGroup,
+          variant.angleId,
+          variant.imageUrl,
+        );
+        const imageUrl = await renderAndPersistDesign(
+          supabase,
+          businessId,
+          variantGroup,
+          variant.angleId,
+          variant.design,
+          photoUrl,
+        );
+        const { data, error } = await supabase
+          .from("creatives")
+          .insert({
+            business_id: businessId,
+            brief,
+            angle: variant.angleName,
+            image_url: imageUrl,
+            headline: variant.headline,
+            primary_text: variant.primaryText,
+            cta: variant.cta,
+            variant_group: variantGroup,
+            status: "draft",
+            generation: generationReceipt(variant, language, referenceImages),
+          })
+          .select("*")
+          .single();
+        if (error || !data)
+          throw new Error(
+            "Could not save the creative. Check the generation schema migration.",
+          );
+        inserted.push(data);
+      },
+      onFailure: async (angle, error) => {
+        await persistLLMUsage(
+          failedVariantUsage(error, {
+            businessId,
+            userId: user.id,
+            route: "creatives.generate",
+            requestId,
+          }),
+        );
+        failures.push({
+          angle: angle.name,
+          error: error instanceof Error ? error.message : "Generation failed.",
+        });
+      },
     });
   } catch (err) {
     if (err instanceof NoLLMKeysError) {
@@ -112,83 +212,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const requestId = crypto.randomUUID();
-  await persistLLMUsage(
-    variants.flatMap((variant) =>
-      [
-        ...variant.llmUsage.map((entry) => ({
-          businessId,
-          userId: user.id,
-          route: "creatives.generate",
-          provider: entry.provider,
-          model: entry.model,
-          usage: entry.usage,
-          requestId,
-          inputChars: entry.inputChars,
-          outputChars: entry.outputChars,
-          latencyMs: entry.latencyMs,
-          cacheHit: entry.cacheHit,
-          metadata: { angle: variant.angleId },
-        })),
-        {
-          businessId,
-          userId: user.id,
-          route: "creatives.generate",
-          provider: variant.imageUsage.provider,
-          model: variant.imageUsage.model,
-          usageKind: "image" as const,
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-          estimatedCostUsd: variant.imageUsage.estimatedCostUsd,
-          latencyMs: variant.imageUsage.latencyMs,
-          imageWidth: variant.imageUsage.width,
-          imageHeight: variant.imageUsage.height,
-          requestId,
-          metadata: { angle: variant.angleId },
-        },
-      ],
-    ),
-  );
-
-  const variantGroup = crypto.randomUUID();
-  const persisted = await Promise.all(
-    variants.map(async (v) => {
-      const photoUrl = await persistCreativeImage(
-        supabase,
-        businessId,
-        variantGroup,
-        v.angleId,
-        v.imageUrl,
-      );
-      const imageUrl = await renderAndPersistDesign(
-        supabase,
-        businessId,
-        variantGroup,
-        v.angleId,
-        v.design,
-        photoUrl,
-      );
-      return { ...v, imageUrl };
-    }),
-  );
-  const rows = persisted.map((v) => ({
-    business_id: businessId,
-    brief,
-    angle: v.angleName,
-    image_url: v.imageUrl,
-    headline: v.headline,
-    primary_text: v.primaryText,
-    cta: v.cta,
-    variant_group: variantGroup,
-    status: "draft" as const,
-  }));
-
-  const { data: inserted, error } = await supabase
-    .from("creatives")
-    .insert(rows)
-    .select("*");
-  if (error) {
-    return serverError("creatives.generate", error, "Could not save creatives.");
-  }
+  if (!inserted.length)
+    return NextResponse.json(
+      { error: failures[0]?.error ?? "No creatives were generated.", failures },
+      { status: 502 },
+    );
 
   await logEvent({
     businessId,
@@ -196,14 +224,14 @@ export async function POST(req: Request) {
     entityType: "creative",
     // The brief can be an LLM-written paragraph, so it belongs in details —
     // `reason` is shown to the owner in the activity feed.
-    reason: `Generated ${rows.length} creative${rows.length === 1 ? "" : "s"}`,
+    reason: `Generated ${inserted.length} creative${inserted.length === 1 ? "" : "s"}`,
     details: {
-      count: rows.length,
+      count: inserted.length,
       variantGroup,
       brief,
-      angles: variants.map((v) => v.angleName),
+      failures,
     },
   });
 
-  return NextResponse.json({ variantGroup, creatives: inserted ?? [] });
+  return NextResponse.json({ variantGroup, creatives: inserted, failures });
 }

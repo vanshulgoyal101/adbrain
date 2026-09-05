@@ -32,6 +32,7 @@ export function createOpenAICompatibleProvider(config: {
       };
       if (options.maxTokens) body.max_tokens = options.maxTokens;
       if (options.json) body.response_format = { type: "json_object" };
+      if (config.name === "openrouter" && options.reasoningEffort) body.reasoning = { effort: options.reasoningEffort, exclude: true };
 
       let res: Response;
       try {
@@ -43,6 +44,7 @@ export function createOpenAICompatibleProvider(config: {
             ...config.extraHeaders,
           },
           body: JSON.stringify(body),
+          signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
         });
       } catch (err) {
         throw new LLMError(
@@ -68,7 +70,7 @@ export function createOpenAICompatibleProvider(config: {
       }
 
       const data = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
+        choices?: { finish_reason?: string; message?: { content?: string | null } }[];
         usage?: {
           prompt_tokens?: number;
           completion_tokens?: number;
@@ -76,8 +78,12 @@ export function createOpenAICompatibleProvider(config: {
         };
       };
       const content = data.choices?.[0]?.message?.content;
+      const finishReason = data.choices?.[0]?.finish_reason;
+      if (finishReason === "length") {
+        throw new LLMError(`${config.name}: output token budget exhausted before completion. Increase CREATIVE_MAX_TOKENS or reduce CREATIVE_REASONING_EFFORT.`, { provider: config.name, retryable: false });
+      }
       if (!content) {
-        throw new LLMError(`${config.name}: empty response`, {
+        throw new LLMError(`${config.name}: empty response (finish reason: ${finishReason ?? "unknown"})`, {
           provider: config.name,
           retryable: true,
         });

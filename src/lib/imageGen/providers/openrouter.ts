@@ -1,13 +1,90 @@
 import { getEnv } from "@/lib/env";
 import type { GeneratedImage, ImageProvider, ImageRequest } from "../types";
+import { MAX_IMAGE_BYTES, readBoundedResponse } from "../raster";
 
-function aspectRatio(width: number, height: number): string {
-  const ratio = width / height;
-  if (ratio >= 1.7) return "16:9";
-  if (ratio >= 1.25) return "4:3";
-  if (ratio <= 0.7) return "9:16";
-  if (ratio <= 0.85) return "4:5";
-  return "1:1";
+type Capability = {
+  type: string;
+  values?: string[];
+  min?: number;
+  max?: number;
+};
+type Endpoint = {
+  provider_tag?: string | null;
+  supported_parameters: Record<string, Capability>;
+};
+const capabilityCache = new Map<
+  string,
+  { expires: number; endpoints: Endpoint[] }
+>();
+
+async function imageOptions(
+  model: string,
+  req: ImageRequest,
+): Promise<Record<string, unknown>> {
+  let cached = capabilityCache.get(model);
+  if (!cached || cached.expires <= Date.now()) {
+    const response = await fetch(
+      `https://openrouter.ai/api/v1/images/models/${model}/endpoints`,
+      {
+        signal: req.signal
+          ? AbortSignal.any([req.signal, AbortSignal.timeout(10_000)])
+          : AbortSignal.timeout(10_000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(
+        `Image capability discovery failed (${response.status}).`,
+      );
+    const payload = (await response.json()) as { endpoints?: Endpoint[] };
+    if (!payload.endpoints?.length)
+      throw new Error("No endpoints available for the configured image model.");
+    cached = { endpoints: payload.endpoints, expires: Date.now() + 600_000 };
+    capabilityCache.set(model, cached);
+  }
+  const references = req.referenceImages?.slice(0, 3) ?? [];
+  const endpoint = cached.endpoints.find(
+    (candidate) =>
+      !references.length ||
+      (candidate.supported_parameters.input_references?.max ?? 0) >=
+        references.length,
+  );
+  if (!endpoint)
+    throw new Error(
+      "Configured image model cannot accept the supplied references.",
+    );
+  const capabilities = endpoint.supported_parameters;
+  const options: Record<string, unknown> = {};
+  if (endpoint.provider_tag)
+    options.provider = {
+      only: [endpoint.provider_tag],
+      allow_fallbacks: false,
+    };
+  const ratios = (capabilities.aspect_ratio?.values ?? []).filter((value) =>
+    /^\d+:\d+$/.test(value),
+  );
+  const target = (req.width ?? 1024) / (req.height ?? 1024);
+  const distance = (value: string) => {
+    const [width, height] = value.split(":").map(Number);
+    return Math.abs(Math.log(width / height / target));
+  };
+  if (ratios.length)
+    options.aspect_ratio = [...ratios].sort(
+      (left, right) => distance(left) - distance(right),
+    )[0];
+  if (capabilities.quality?.values?.includes("high")) options.quality = "high";
+  if (capabilities.resolution?.values?.includes("2K"))
+    options.resolution = "2K";
+  else if (capabilities.resolution?.values?.includes("1K"))
+    options.resolution = "1K";
+  if (capabilities.output_format?.values?.includes("png"))
+    options.output_format = "png";
+  if (req.seed !== undefined && capabilities.seed) options.seed = req.seed;
+  if (references.length)
+    options.input_references = references.map((url) => ({
+      type: "image_url",
+      image_url: { url },
+    }));
+  return options;
 }
 
 /** Returns a temporary data URL; the generation route uploads it to storage. */
@@ -17,7 +94,9 @@ export function createOpenRouterProvider(): ImageProvider {
     async generate(req: ImageRequest): Promise<GeneratedImage> {
       const env = getEnv();
       const key = env.OPENROUTER_API_KEYS[0];
-      if (!key) throw new Error("OpenRouter image generation is not configured.");
+      if (!key)
+        throw new Error("OpenRouter image generation is not configured.");
+      const options = await imageOptions(env.OPENROUTER_IMAGE_MODEL, req);
 
       const response = await fetch("https://openrouter.ai/api/v1/images", {
         method: "POST",
@@ -30,23 +109,17 @@ export function createOpenRouterProvider(): ImageProvider {
         body: JSON.stringify({
           model: env.OPENROUTER_IMAGE_MODEL,
           prompt: req.prompt,
-          aspect_ratio: aspectRatio(req.width ?? 1024, req.height ?? 1024),
-          resolution: "1K",
-          quality: "high",
-          output_format: "png",
-          n: 1,
-          ...(req.referenceImages?.length
-            ? {
-                input_references: req.referenceImages.slice(0, 3).map((url) => ({
-                  type: "image_url",
-                  image_url: { url },
-                })),
-              }
-            : {}),
+          ...options,
         }),
-        signal: AbortSignal.timeout(45_000),
+        signal: req.signal
+          ? AbortSignal.any([req.signal, AbortSignal.timeout(180_000)])
+          : AbortSignal.timeout(180_000),
       });
-      const payload = (await response.json().catch(() => ({}))) as {
+      const payload = JSON.parse(
+        Buffer.from(
+          await readBoundedResponse(response, MAX_IMAGE_BYTES * 1.4),
+        ).toString("utf8"),
+      ) as {
         data?: { b64_json?: string; media_type?: string }[];
         usage?: { cost?: number };
         error?: { message?: string };
@@ -62,9 +135,9 @@ export function createOpenRouterProvider(): ImageProvider {
         url: `data:${image.media_type ?? "image/png"};base64,${image.b64_json}`,
         provider: "openrouter-image",
         model: env.OPENROUTER_IMAGE_MODEL,
-        estimatedCostUsd: payload.usage?.cost ?? 0,
+        estimatedCostUsd: payload.usage?.cost,
         prompt: req.prompt,
-        seed: req.seed,
+        seed: typeof options.seed === "number" ? options.seed : undefined,
       };
     },
   };

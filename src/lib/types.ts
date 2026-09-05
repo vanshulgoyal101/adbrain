@@ -194,6 +194,7 @@ export interface Database {
       };
       creatives: {
         Row: {
+          generation?: Json | null;
           id: string;
           business_id: string;
           brief: string;
@@ -211,6 +212,7 @@ export interface Database {
           id?: string;
           business_id: string;
           brief: string;
+          generation?: Json | null;
           angle?: string | null;
           image_url?: string | null;
           headline?: string | null;

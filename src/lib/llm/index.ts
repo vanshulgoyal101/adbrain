@@ -141,6 +141,7 @@ async function callProviders(
   for (const { provider, keys, model } of registry) {
     const start = nextKeyStart(provider.name, keys.length);
     for (let i = 0; i < keys.length; i++) {
+      options.signal?.throwIfAborted();
       const idx = (start + i) % keys.length;
       const coolKey = `${provider.name}:${idx}`;
       if ((cooldownUntil.get(coolKey) ?? 0) > now) continue;
@@ -152,6 +153,8 @@ async function callProviders(
         });
         return { text, provider: provider.name, model, usage };
       } catch (err) {
+        options.signal?.throwIfAborted();
+        if (err instanceof LLMError && !err.retryable && err.status === undefined) throw err;
         const message = err instanceof Error ? err.message : String(err);
         errors.push(`${provider.name}[key ${idx}]: ${message}`);
         if (err instanceof LLMError && err.status === 429) {

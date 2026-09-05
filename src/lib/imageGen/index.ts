@@ -2,32 +2,34 @@ import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
 import type { GeneratedImage, ImageProvider, ImageRequest } from "./types";
+import { readBoundedResponse, validateRaster } from "./raster";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
-function getProvider(): ImageProvider {
+function getProvider(name = getEnv().IMAGE_PROVIDER): ImageProvider {
   const env = getEnv();
-  switch (env.IMAGE_PROVIDER) {
+  switch (name) {
     case "pollinations":
       return createPollinationsProvider();
     case "openrouter":
-      return getEnv().OPENROUTER_API_KEYS.length
-        ? createOpenRouterProvider()
-        : createPollinationsProvider();
+      if (!env.OPENROUTER_API_KEYS.length) throw new Error("OpenRouter image generation is selected but no key is configured.");
+      return createOpenRouterProvider();
     default:
-      return createPollinationsProvider();
+      throw new Error(`Unknown image provider: ${name}`);
   }
 }
 
 function getFallbackProvider(): ImageProvider | null {
   const env = getEnv();
-  if (env.IMAGE_PROVIDER_FALLBACK === "pollinations") {
-    return createPollinationsProvider();
-  }
-  if (env.IMAGE_PROVIDER_FALLBACK === "openrouter" && env.OPENROUTER_API_KEYS.length) {
-    return createOpenRouterProvider();
-  }
-  return null;
+  return !env.IMAGE_PROVIDER_FALLBACK || env.IMAGE_PROVIDER_FALLBACK === "none"
+    ? null : getProvider(env.IMAGE_PROVIDER_FALLBACK);
+}
+
+async function executeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
+  if (provider.name === "pollinations" && req.referenceImages?.length) throw new Error("Pollinations does not support product references. Select a reference-capable image provider.");
+  const generated = await provider.generate(req);
+  const raster = await downloadImage(generated.url, req.signal);
+  return { ...generated, url: `data:image/png;base64,${Buffer.from(raster.bytes).toString("base64")}`, width: raster.width, height: raster.height };
 }
 
 /** Generate a single image with the configured provider. */
@@ -35,18 +37,22 @@ export async function generateImage(
   req: ImageRequest,
 ): Promise<GeneratedImage> {
   const startedAt = Date.now();
+  req.signal?.throwIfAborted();
   const provider = getProvider();
   try {
     return {
-      ...(await provider.generate(req)),
+      ...(await executeImage(provider, req)),
       latencyMs: Date.now() - startedAt,
     };
   } catch (error) {
+    req.signal?.throwIfAborted();
+    if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) throw error;
     const fallback = getFallbackProvider();
     if (!fallback || fallback.name === provider.name) throw error;
     return {
-      ...(await fallback.generate(req)),
+      ...(await executeImage(fallback, req)),
       latencyMs: Date.now() - startedAt,
+      fallbackFrom: provider.name,
     };
   }
 }
@@ -59,12 +65,11 @@ export function imageProviderName(): string {
 /** Download image bytes (used when persisting/exporting a creative). */
 export async function downloadImage(
   url: string,
-): Promise<{ bytes: ArrayBuffer; contentType: string }> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  signal?: AbortSignal,
+): Promise<{ bytes: Uint8Array; contentType: string; width: number; height: number }> {
+  const res = await fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
   if (!res.ok) {
-    throw new Error(`Failed to download image (${res.status}) from ${url}`);
+    throw new Error(`Failed to download image (${res.status}).`);
   }
-  const contentType = res.headers.get("content-type") ?? "image/jpeg";
-  const bytes = await res.arrayBuffer();
-  return { bytes, contentType };
+  return validateRaster(await readBoundedResponse(res));
 }

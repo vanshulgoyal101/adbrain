@@ -8,6 +8,8 @@ export interface ChatMessage {
 export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  signal?: AbortSignal;
   /** Stable cache identity for the selected routing policy/model. */
   provider?: string;
   model?: string;

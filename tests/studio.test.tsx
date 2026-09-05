@@ -47,6 +47,8 @@ const okJson = (body: unknown) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  sessionStorage.clear();
   h.setCreativeStatus.mockResolvedValue({ ok: true });
   h.deleteCreative.mockResolvedValue({ ok: true });
   global.fetch = vi
@@ -56,6 +58,14 @@ beforeEach(() => {
 });
 
 describe("<Studio> generation", () => {
+  it("keeps successful creatives visible and reports a partial batch failure", async () => {
+    global.fetch = vi.fn().mockResolvedValue(okJson({ creatives: [creative()], failures: [{ angle: "Trust", error: "Image unavailable" }] }));
+    render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("1 ads saved; 1 failed");
+    expect(screen.getByRole("heading", { name: "Cut your power bill" })).toBeInTheDocument();
+  });
   it("refuses to generate without a brief", async () => {
     render(<Studio business={business} initialCreatives={[]} />);
     fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));

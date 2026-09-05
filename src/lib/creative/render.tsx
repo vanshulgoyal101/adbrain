@@ -20,15 +20,15 @@ export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array>
 function AdComposite({ spec }: { spec: AdDesignSpec }) {
   // Scale every dimension to the canvas so all formats stay balanced.
   const s = spec.width / 1080;
-  const pad = Math.round(64 * s);
+  const pad = Math.round(Math.min(64 * s, spec.height * 0.06));
   const headlineSize = Math.round((spec.format === "landscape" ? 58 : 76) * s);
   const subheadSize = Math.round(34 * s);
   const benefitSize = Math.round(30 * s);
-  const brandSize = Math.round(38 * s);
+  const brandSize = Math.round(Math.min(38, Math.max(20, 1500 / Math.max(spec.brandName.length, 1))) * s);
   const ctaSize = Math.round(30 * s);
   const contentTop =
     spec.layout === "top"
-      ? pad * 4
+      ? pad + Math.round(96 * s)
       : spec.layout === "center"
         ? Math.round(spec.height * 0.28)
         : undefined;
@@ -48,7 +48,9 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-end",        alignItems: "flex-start",        background: `linear-gradient(135deg, ${spec.primaryColor} 0%, #0f172a 100%)`,
+        justifyContent: "flex-end",
+        alignItems: "flex-start",
+        background: spec.primaryColor,
         fontFamily: spec.fontFamily,
         overflow: "hidden",
       }}
@@ -92,6 +94,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
           display: "flex",
           alignItems: "center",
           gap: Math.round(18 * s),
+          width: spec.width - pad * 2,
         }}
       >
         {spec.logoUrl ? (
@@ -126,7 +129,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
             {spec.brandName.charAt(0).toUpperCase()}
           </div>
         )}
-        <div style={{ fontSize: brandSize, fontWeight: 800, color: "#ffffff" }}>
+        <div style={{ fontSize: brandSize, fontWeight: 800, color: "#ffffff", flex: 1, wordBreak: "break-word" }}>
           {spec.brandName}
         </div>
       </div>
@@ -139,8 +142,8 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
         style={{
           position: "absolute",
           left: pad,
-          top: contentTop,
-          bottom: contentBottom,
+          ...(contentTop !== undefined ? { top: contentTop } : {}),
+          ...(contentBottom !== undefined ? { bottom: contentBottom } : {}),
           width: spec.width - pad * 2,
           display: "flex",
           flexDirection: "column",
@@ -154,6 +157,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
             color: "#ffffff",
             lineHeight: 1.05,
             maxWidth: spec.width - pad * 2,
+            wordBreak: "break-word",
           }}
         >
           {spec.headline}
@@ -234,9 +238,10 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
             alignItems: "center",
             justifyContent: "space-between",
             marginTop: Math.round(12 * s),
+            gap: Math.round(20 * s),
           }}
         >
-          <div style={{ fontSize: ctaSize, color: "#cbd5e1", display: "flex", overflow: "hidden" }}>
+          <div style={{ fontSize: Math.min(ctaSize, Math.max(18 * s, 850 * s / Math.max(spec.contactLine?.length ?? 1, 1))), color: "#cbd5e1", display: "flex", flex: 1, wordBreak: "break-word" }}>
             {spec.contactLine ?? ""}
           </div>
           <div

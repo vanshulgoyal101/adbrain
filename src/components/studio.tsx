@@ -23,6 +23,7 @@ import type { Business, Creative } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
+import { GenerationDetails } from "@/components/generation-details";
 
 export function Studio({
   business,
@@ -45,6 +46,7 @@ export function Studio({
   );
   const [count, setCount] = useState(3);
   const [language, setLanguage] = useState("brand");
+  const [format, setFormat] = useState("portrait");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -102,17 +104,20 @@ export function Studio({
           brief,
           count,
           language,
+          format,
         }),
       });
       const data = (await res.json()) as {
         creatives?: Creative[];
         error?: string;
+        failures?: { angle: string; error: string }[];
       };
       if (!res.ok) {
         setError(data.error ?? "Generation failed.");
         return;
       }
       setItems((prev) => [...(data.creatives ?? []), ...prev]);
+      if (data.failures?.length) setError(`${data.creatives?.length ?? 0} ads saved; ${data.failures.length} failed. ${data.failures.map((failure) => `${failure.angle}: ${failure.error}`).join(" ")}`);
       if (data.creatives?.length) {
         setFilter("all");
         setSearch("");
@@ -231,7 +236,7 @@ export function Studio({
                   onChange={(e) => setCount(Number(e.target.value))}
                   className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                 >
-                  {[3, 4, 5, 6].map((n) => (
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -251,6 +256,15 @@ export function Studio({
                       {l.label}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="format">Placement</Label>
+                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500">
+                  <option value="portrait">Feed 4:5</option>
+                  <option value="square">Square 1:1</option>
+                  <option value="story">Story 9:16</option>
+                  <option value="landscape">Landscape 1.91:1</option>
                 </select>
               </div>
               <Button type="submit" disabled={generating}>
@@ -600,6 +614,7 @@ function CreativeCard({
             {creative.cta}
           </span>
         )}
+        <GenerationDetails value={creative.generation} />
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button
             size="sm"

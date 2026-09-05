@@ -1,19 +1,29 @@
-import { buildAdDesign, formatDimensions, type AdDesignSpec, type AdFormat } from "@/lib/creative/design";
-import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
+import {
+  buildAdDesign,
+  formatDimensions,
+  type AdDesignSpec,
+  type AdFormat,
+} from "@/lib/creative/design";
+import {
+  buildConceptMessages,
+  conceptImagePrompt,
+  validateConcept,
+  type CreativeConcept,
+  type ConceptInput,
+} from "@/lib/creative/concept";
 import { generateImage } from "@/lib/imageGen";
-import { completeJSON } from "@/lib/llm";
+import { complete, parseJSON } from "@/lib/llm";
 import type { TokenUsage } from "@/lib/llm";
+import { getEnv } from "@/lib/env";
 import {
   AD_ANGLES,
-  buildCopyMessages,
-  buildImagePrompt,
   getAngle,
   type AdAngle,
   type BrandContext,
-  type GeneratedCopy,
 } from "@/lib/templates/ads";
 
 export interface GeneratedVariant {
+  concept: CreativeConcept;
   angleId: string;
   angleName: string;
   headline: string;
@@ -35,10 +45,11 @@ export interface GeneratedVariant {
   imageUsage: {
     provider: string;
     model: string;
-    estimatedCostUsd: number;
+    estimatedCostUsd?: number;
     latencyMs?: number;
     width: number;
     height: number;
+    fallbackFrom?: string;
   };
 }
 
@@ -48,7 +59,9 @@ const MAX_LIST_ITEMS = 10;
 
 function boundedBrand(brand: BrandContext): BrandContext {
   const boundedList = (items?: string[]) =>
-    items?.slice(0, MAX_LIST_ITEMS).map((item) => item.slice(0, MAX_FIELD_CHARS));
+    items
+      ?.slice(0, MAX_LIST_ITEMS)
+      .map((item) => item.slice(0, MAX_FIELD_CHARS));
   return {
     ...brand,
     name: brand.name.slice(0, MAX_FIELD_CHARS),
@@ -62,11 +75,6 @@ function boundedBrand(brand: BrandContext): BrandContext {
   };
 }
 
-/**
- * Generate N complete ad variants (copy + image) for a brand + brief, one per
- * ad angle. Runs angles in parallel so a 3–5 variant batch stays well under
- * the 60s acceptance target.
- */
 export async function generateVariants(params: {
   brand: BrandContext;
   brief: string;
@@ -76,6 +84,8 @@ export async function generateVariants(params: {
   language?: string;
   format?: AdFormat;
   referenceImages?: string[];
+  onVariant?: (variant: GeneratedVariant) => Promise<void>;
+  onFailure?: (angle: AdAngle, error: unknown) => Promise<void>;
 }): Promise<GeneratedVariant[]> {
   const {
     brand: rawBrand,
@@ -89,6 +99,7 @@ export async function generateVariants(params: {
   const brief = rawBrief.slice(0, MAX_BRIEF_CHARS);
   const instructions = rawInstructions?.slice(0, 3_000);
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
+  const signal = AbortSignal.timeout(240_000);
 
   const angles: AdAngle[] = (
     params.angleIds?.length
@@ -98,71 +109,111 @@ export async function generateVariants(params: {
       : AD_ANGLES
   ).slice(0, count);
 
-  return Promise.all(
-    angles.map((angle) =>
-      generateOneVariant(
-        brand,
-        brief,
-        angle,
-        instructions,
-        language,
-        format,
-        referenceImages,
-      ),
-    ),
+  const outcomes = await Promise.allSettled(
+    angles.map(async (angle) => {
+      try {
+        const variant = await generateOneVariant(
+          brand,
+          brief,
+          angle,
+          instructions,
+          language,
+          format,
+          referenceImages,
+          signal,
+        );
+        await params.onVariant?.(variant);
+        return variant;
+      } catch (error) {
+        await params.onFailure?.(angle, error);
+        throw error;
+      }
+    }),
   );
+  const variants = outcomes.flatMap((outcome) =>
+    outcome.status === "fulfilled" ? [outcome.value] : [],
+  );
+  if (
+    !params.onFailure &&
+    outcomes.some((outcome) => outcome.status === "rejected")
+  ) {
+    throw outcomes.find((outcome) => outcome.status === "rejected")!.reason;
+  }
+  return variants;
 }
 
-// Generate copy, retrying once if the first draft trips the deterministic slop
-// scanner (clichés, shouting, over-length). Image generates in parallel, so the
-// happy path costs nothing extra.
-async function generateGuardedCopy(
-  brand: BrandContext,
-  brief: string,
-  angle: AdAngle,
-  instructions?: string,
-  language?: string,
-): Promise<{ copy: GeneratedCopy; usage: GeneratedVariant["llmUsage"] }> {
-  let normalized: GeneratedCopy = { headline: "", primary_text: "", cta: "Learn More" };
+export class CreativeValidationError extends Error {
+  constructor(
+    public issues: string[],
+    public usage: GeneratedVariant["llmUsage"],
+  ) {
+    super(`Creative concept failed validation: ${issues.join("; ")}`);
+    this.name = "CreativeValidationError";
+  }
+}
+
+export class CreativeImageError extends Error {
+  constructor(
+    cause: unknown,
+    public usage: GeneratedVariant["llmUsage"],
+  ) {
+    super(cause instanceof Error ? cause.message : "Image generation failed.", {
+      cause,
+    });
+    this.name = "CreativeImageError";
+  }
+}
+
+async function generateConcept(
+  input: ConceptInput,
+  signal: AbortSignal,
+): Promise<{ concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] }> {
+  const messages = buildConceptMessages(input);
   const usage: GeneratedVariant["llmUsage"] = [];
+  let issues: string[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const copy = await completeJSON<GeneratedCopy & {
-      __completion?: {
-        provider: string;
-        model: string;
-        usage?: TokenUsage;
-        inputChars?: number;
-        outputChars?: number;
-        latencyMs?: number;
-        cached?: boolean;
-      };
-    }>(
-      buildCopyMessages(brand, brief, angle, instructions, language),
-      { temperature: attempt === 0 ? 0.8 : 0.6, maxTokens: 400 },
-    );
-    if (copy.__completion?.usage) {
+    const env = getEnv();
+    const completion = await complete(messages, {
+      json: true,
+      temperature: attempt === 0 ? 0.8 : 0.4,
+      maxTokens: env.CREATIVE_MAX_TOKENS,
+      reasoningEffort: env.CREATIVE_REASONING_EFFORT,
+      cache: false,
+      signal,
+    });
+    if (completion.usage) {
       usage.push({
-        provider: copy.__completion.provider,
-        model: copy.__completion.model,
-        usage: copy.__completion.usage,
-        inputChars: copy.__completion.inputChars,
-        outputChars: copy.__completion.outputChars,
-        latencyMs: copy.__completion.latencyMs,
-        cacheHit: copy.__completion.cached,
+        provider: completion.provider,
+        model: completion.model,
+        usage: completion.usage,
+        inputChars: completion.inputChars,
+        outputChars: completion.outputChars,
+        latencyMs: completion.latencyMs,
+        cacheHit: completion.cached,
       });
     }
-    normalized = {
-      headline: copy.headline?.trim() ?? "",
-      primary_text: copy.primary_text?.trim() ?? "",
-      cta: copy.cta?.trim() || "Learn More",
-    };
-    const findings = scanAdCopy([normalized.headline, normalized.primary_text].join(" "), {
-      maxWords: 60,
-      bannedClaims: bannedClaimsForVertical(brand.vertical),
-    });
-    if (findings.length === 0) break;
+    let value: unknown;
+    try {
+      value = parseJSON<unknown>(completion.text);
+    } catch {
+      issues = [
+        "Output must be valid JSON matching the requested concept shape.",
+      ];
+    }
+    if (value !== undefined) {
+      const result = validateConcept(value, input);
+      if (result.success) return { concept: result.concept, usage };
+      issues = result.issues;
+    }
+    messages.push(
+      { role: "assistant", content: completion.text.slice(0, 12_000) },
+      {
+        role: "user",
+        content: `Repair this concept. Return the complete JSON object. Fix these validation failures without inventing facts:\n${issues.join("\n")}`,
+      },
+    );
   }
-  return { copy: normalized, usage };
+  throw new CreativeValidationError(issues, usage);
 }
 
 export async function generateOneVariant(
@@ -173,42 +224,58 @@ export async function generateOneVariant(
   language?: string,
   format?: AdFormat,
   referenceImages?: string[],
+  signal: AbortSignal = AbortSignal.timeout(240_000),
 ): Promise<GeneratedVariant> {
+  brand = boundedBrand(brand);
+  brief = brief.slice(0, MAX_BRIEF_CHARS);
+  instructions = instructions?.slice(0, 3_000);
+  const input = {
+    brand,
+    brief,
+    angle,
+    instructions,
+    language,
+    format,
+    referenceImages,
+  };
   const dims = formatDimensions(format ?? "portrait");
-  const [copyResult, image] = await Promise.all([
-    generateGuardedCopy(brand, brief, angle, instructions, language),
-    generateImage({
-      prompt: buildImagePrompt(brand, brief, angle, instructions, format),
-      width: dims.width,
-      height: dims.height,
-      referenceImages: referenceImages?.slice(0, 3),
-    }),
-  ]);
-  const normalizedCopy = copyResult.copy;
+  const { concept, usage } = await generateConcept(input, signal);
+  const image = await generateImage({
+    prompt: conceptImagePrompt(concept, input),
+    width: dims.width,
+    height: dims.height,
+    referenceImages: referenceImages?.slice(0, 3),
+    signal,
+  }).catch((error) => {
+    throw new CreativeImageError(error, usage);
+  });
 
   return {
+    concept,
     angleId: angle.id,
     angleName: angle.name,
-    headline: normalizedCopy.headline,
-    primaryText: normalizedCopy.primary_text,
-    cta: normalizedCopy.cta,
+    headline: concept.headline,
+    primaryText: concept.primary_text,
+    cta: concept.cta,
     imageUrl: image.url,
     imagePrompt: image.prompt,
     design: buildAdDesign({
       brand,
-      copy: normalizedCopy,
+      copy: concept,
+      concept,
       angle,
       backgroundUrl: image.url,
       format,
     }),
-    llmUsage: copyResult.usage,
+    llmUsage: usage,
     imageUsage: {
       provider: image.provider,
       model: image.model ?? image.provider,
-      estimatedCostUsd: image.estimatedCostUsd ?? 0,
+      estimatedCostUsd: image.estimatedCostUsd,
       latencyMs: image.latencyMs,
-      width: dims.width,
-      height: dims.height,
+      width: image.width ?? dims.width,
+      height: image.height ?? dims.height,
+      fallbackFrom: image.fallbackFrom,
     },
   };
 }

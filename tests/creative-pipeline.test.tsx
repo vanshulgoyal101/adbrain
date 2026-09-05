@@ -4,25 +4,33 @@ import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMounted } from "@/lib/use-mounted";
 
-const completeJSON = vi.fn();
+const complete = vi.fn();
 const generateImage = vi.fn();
 const downloadImage = vi.fn();
 
 vi.mock("@/lib/llm", () => ({
-  completeJSON,
+  complete,
+  parseJSON: JSON.parse,
   NoLLMKeysError: class NoLLMKeysError extends Error {},
 }));
 vi.mock("@/lib/imageGen", () => ({ generateImage, downloadImage }));
+
+const concept = {
+  headline: "  Cut your power bill  ",
+  primary_text: "  Two lines of copy.  ",
+  cta: "Get Quote",
+  rationale: "Show the practical value of rooftop solar.",
+  visual: { medium: "Illustration", direction: "A rooftop array on a home occupies the lower half, leaving open space above.", textPlacement: "top" },
+  supportingText: null,
+  sourceQuotes: ["Solaride"],
+};
+const completion = (value: unknown) => ({ text: JSON.stringify(value), provider: "test", model: "capable-model" });
 
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
-  completeJSON.mockResolvedValue({
-    headline: "  Cut your power bill  ",
-    primary_text: "  Two lines of copy.  ",
-    cta: "Get Quote",
-  });
+  complete.mockResolvedValue(completion(concept));
   generateImage.mockResolvedValue({
     url: "https://img.example/a.jpg",
     prompt: "a photo",
@@ -32,6 +40,17 @@ beforeEach(() => {
 const brand = { name: "Solaride", vertical: "solar energy" } as never;
 
 describe("generateVariants", () => {
+  it("preserves each completed variant when a sibling fails", async () => {
+    generateImage.mockRejectedValueOnce(new Error("Image unavailable"));
+    const onVariant = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn().mockResolvedValue(undefined);
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const variants = await generateVariants({ brand, brief: "x", count: 3, onVariant, onFailure });
+    expect(variants).toHaveLength(2);
+    expect(onVariant).toHaveBeenCalledTimes(2);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+  });
+
   it("produces one variant per angle and trims the copy", async () => {
     const { generateVariants } = await import("@/lib/creative/generate");
     const variants = await generateVariants({ brand, brief: "monsoon offer", count: 2 });
@@ -57,7 +76,7 @@ describe("generateVariants", () => {
     const { generateVariants } = await import("@/lib/creative/generate");
     const variants = await generateVariants({ brand, brief: "x", count: 999 });
     expect(variants).toHaveLength(AD_ANGLES.length);
-    expect(completeJSON).toHaveBeenCalledTimes(AD_ANGLES.length);
+    expect(complete).toHaveBeenCalledTimes(AD_ANGLES.length);
   });
 
   it("honours explicitly requested angles and ignores unknown ids", async () => {
@@ -74,19 +93,39 @@ describe("generateVariants", () => {
     expect(variants[0].angleId).toBe(wanted);
   });
 
-  it("falls back to a safe CTA when the model omits one", async () => {
-    completeJSON.mockResolvedValue({ headline: "H", primary_text: "P", cta: "" });
+  it("repairs an invalid CTA with explicit feedback before generating an image", async () => {
+    complete.mockResolvedValueOnce(completion({ ...concept, cta: "" }));
     const { generateVariants } = await import("@/lib/creative/generate");
     const [variant] = await generateVariants({ brand, brief: "x", count: 1 });
-    expect(variant.cta).toBe("Learn More");
+    expect(variant.cta).toBe("Get Quote");
+    expect(complete.mock.calls[1][0].at(-1).content).toContain("cta");
+    expect(generateImage).toHaveBeenCalledTimes(1);
   });
 
-  it("generates copy and image concurrently per variant", async () => {
+  it("uses one concept call per successful variant and executes its visual direction", async () => {
     const { generateVariants } = await import("@/lib/creative/generate");
     await generateVariants({ brand, brief: "x", count: 3 });
-    // 3 angles → 3 copy calls and 3 image calls, not sequential round-trips.
-    expect(completeJSON).toHaveBeenCalledTimes(3);
+    expect(complete).toHaveBeenCalledTimes(3);
     expect(generateImage).toHaveBeenCalledTimes(3);
+    expect(generateImage.mock.calls[0][0].prompt).toContain(concept.visual.direction);
+  });
+
+  it("never spends on images after two invalid concepts", async () => {
+    complete.mockResolvedValue(completion({ ...concept, headline: 12 }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    await expect(generateVariants({ brand, brief: "x", count: 1 })).rejects.toThrow("failed validation");
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+
+  it("repairs broken JSON and preserves exact copy and chosen layout", async () => {
+    complete.mockResolvedValueOnce({ text: "not json" });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const [variant] = await generateVariants({ brand, brief: "x", count: 1 });
+    expect(variant.design.headline).toBe(variant.headline);
+    expect(variant.design.layout).toBe("top");
+    expect(variant.design.benefits).toEqual([]);
+    expect(variant.design.subhead).toBeNull();
   });
 });
 
@@ -118,33 +157,31 @@ describe("persistCreativeImage", () => {
     expect(url).toBe("https://cdn.example/stored.jpg");
   });
 
-  it("keeps the original URL when the upload fails", async () => {
+  it("reports failed uploads instead of returning an unpersisted URL", async () => {
     downloadImage.mockResolvedValue({
       bytes: new Uint8Array([1]),
       contentType: "image/png",
     });
     const { persistCreativeImage } = await import("@/lib/creative/persist");
-    const url = await persistCreativeImage(
+    await expect(persistCreativeImage(
       storage({ error: { message: "no bucket" } }) as never,
       "b1",
       "grp",
       "value",
       "https://src.example/a.jpg",
-    );
-    expect(url).toBe("https://src.example/a.jpg");
+    )).rejects.toThrow("Could not store");
   });
 
-  it("keeps the original URL when the download throws", async () => {
+  it("reports failed downloads instead of saving a broken creative", async () => {
     downloadImage.mockRejectedValue(new Error("404"));
     const { persistCreativeImage } = await import("@/lib/creative/persist");
-    const url = await persistCreativeImage(
+    await expect(persistCreativeImage(
       storage({ error: null }) as never,
       "b1",
       "grp",
       "value",
       "https://src.example/a.jpg",
-    );
-    expect(url).toBe("https://src.example/a.jpg");
+    )).rejects.toThrow("404");
   });
 });
 

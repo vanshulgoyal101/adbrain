@@ -213,6 +213,8 @@ create table if not exists public.creatives (
 
 create index if not exists creatives_business_id_idx
   on public.creatives (business_id);
+
+alter table public.creatives add column if not exists generation jsonb;
 create index if not exists creatives_variant_group_idx
   on public.creatives (variant_group);
 -- Speeds up the common "approved creatives for a business" filter.

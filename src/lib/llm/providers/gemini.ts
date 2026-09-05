@@ -62,6 +62,7 @@ export function createGeminiProvider(config?: {
       let res: Response;
       try {
         res = await fetch(url, {
+          signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
