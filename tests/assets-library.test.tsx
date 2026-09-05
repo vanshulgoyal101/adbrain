@@ -37,6 +37,9 @@ describe("<AssetsLibrary>", () => {
     expect(screen.getByText("(2)")).toBeInTheDocument();
     expect(screen.getByText("Uploaded brand assets")).toBeInTheDocument();
     expect(screen.getByText("(1)")).toBeInTheDocument();
+    expect(screen.getByText("Generated").nextSibling).toHaveTextContent("2");
+    expect(screen.getByText("Ready to launch").nextSibling).toHaveTextContent("1");
+    expect(screen.getByText("Brand uploads").nextSibling).toHaveTextContent("1");
   });
 
   it("shows a generated creative with its headline and reuse actions", () => {

@@ -122,9 +122,27 @@ export function AssetsLibrary({
   brandAssets: BrandAsset[];
 }) {
   const generated = creatives.filter((c) => c.image_url);
+  const approved = generated.filter((creative) => creative.status === "approved").length;
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="grid gap-2 border-y border-slate-200/80 py-3 sm:grid-cols-3 sm:gap-0">
+        {[
+          { label: "Generated", value: generated.length },
+          { label: "Ready to launch", value: approved },
+          { label: "Brand uploads", value: brandAssets.length },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-lg px-3 py-2 sm:border-r sm:border-slate-200/80 sm:last:border-r-0"
+          >
+            <p className="text-xs text-slate-500">{item.label}</p>
+            <p className="mt-1 text-xl font-semibold tracking-[-0.02em] text-slate-950">
+              {item.value}
+            </p>
+          </div>
+        ))}
+      </div>
       <section>
         <div className="mb-3 flex items-baseline gap-2">
           <h2 className="text-lg font-semibold text-slate-900">

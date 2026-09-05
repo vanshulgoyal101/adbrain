@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Building2, Circle, ImageIcon, Megaphone, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Building2, Circle, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SpendStatusBanner } from "@/components/spend-status";
@@ -59,12 +59,6 @@ export default async function DashboardPage() {
     );
   }
 
-  const stats = [
-    { label: "Ads created", value: creatives.length, icon: ImageIcon },
-    { label: "Ready to review", value: drafts, icon: Sparkles },
-    { label: "Campaigns", value: campaigns.length, icon: Megaphone },
-  ];
-
   const steps = onboardingSteps({
     hasBrand: true,
     creativeCount: creatives.length,
@@ -88,9 +82,9 @@ export default async function DashboardPage() {
             {business.description ?? "Your business dashboard."}
           </p>
         </div>
-        <Link href="/studio">
+        <Link href="/create">
           <Button>
-            <Sparkles className="h-4 w-4" /> New creatives
+            <Wand2 className="h-4 w-4" /> Create an ad
           </Button>
         </Link>
       </div>
@@ -173,22 +167,6 @@ export default async function DashboardPage() {
           </div>
         </Card>
       )}
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        {stats.map(({ label, value, icon: Icon }) => (
-          <Card key={label}>
-            <CardContent className="flex items-center gap-4">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <Icon className="h-5 w-5" />
-              </span>
-              <div>
-                <p className="text-2xl font-bold text-slate-900">{value}</p>
-                <p className="text-sm text-slate-500">{label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
       <div className="mt-8 flex flex-wrap gap-3">
         <Link href="/brand">
