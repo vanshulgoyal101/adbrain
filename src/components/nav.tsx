@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Image as ImageIcon, Inbox, LayoutDashboard, Megaphone, Settings, Sparkles, Wand2 } from "lucide-react";
+import {
+  Building2,
+  Image as ImageIcon,
+  Inbox,
+  LayoutDashboard,
+  Megaphone,
+  Settings,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const primaryItems = [
@@ -21,10 +30,10 @@ const workspaceItems = [
 
 const navClass = (active: boolean) =>
   cn(
-    "flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+    "flex min-h-11 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
     active
-      ? "bg-blue-50 text-blue-700 md:bg-white/14 md:text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
-      : "text-slate-300 hover:bg-white/6 hover:text-white md:text-slate-300",
+      ? "bg-blue-50 text-blue-700"
+      : "text-slate-700 hover:bg-slate-100 hover:text-slate-950",
   );
 
 export function Nav({
@@ -35,6 +44,7 @@ export function Nav({
   const pathname = usePathname();
   return (
     <nav
+      aria-label="Workspace navigation"
       className={cn(
         "flex gap-1",
         orientation === "vertical"
@@ -50,8 +60,13 @@ export function Nav({
       {primaryItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <Link key={href} href={href} className={navClass(active)}>
-            <Icon className="h-4 w-4" />
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={navClass(active)}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
             {label}
           </Link>
         );
@@ -64,8 +79,13 @@ export function Nav({
       {workspaceItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <Link key={href} href={href} className={navClass(active)}>
-            <Icon className="h-4 w-4" />
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={navClass(active)}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
             {label}
           </Link>
         );

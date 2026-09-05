@@ -15,21 +15,22 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   return (
-    <div className="flex flex-1 flex-col md:flex-row">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200/80 bg-[radial-gradient(circle_at_top,#243758_0%,#101a2b_48%,#0a1220_100%)] p-5 text-slate-200 md:flex">
-        <Link href="/dashboard" className="mb-8 flex items-center gap-3 px-2 py-1">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-900 shadow-sm">
+    <div className="flex min-h-screen flex-1 flex-col bg-white font-['Trebuchet_MS',sans-serif] tracking-normal text-slate-900 md:flex-row">
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50 p-4 md:flex">
+        <Link
+          href="/dashboard"
+          className="mb-8 flex items-center gap-3 px-2 py-1"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-700 text-white">
             <Brain className="h-5 w-5" />
           </span>
-          <span className="font-display text-[17px] font-semibold tracking-[-0.02em] text-white">
-            AdBrain
-          </span>
+          <span className="text-lg font-semibold text-slate-950">AdBrain</span>
         </Link>
 
         <Nav />
 
-        <div className="mt-auto rounded-2xl border border-white/10 bg-white/4 p-3">
-          <p className="truncate text-xs text-slate-400">{user.email}</p>
+        <div className="mt-auto border-t border-slate-200 pt-4">
+          <p className="break-all text-xs text-slate-600">{user.email}</p>
           <div className="mt-3">
             <SignOutButton />
           </div>
@@ -37,7 +38,7 @@ export default async function AppLayout({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200/80 bg-[rgba(255,255,255,0.72)] p-3 backdrop-blur md:hidden">
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white p-3 md:hidden">
           <Link href="/dashboard" className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-950 text-white">
               <Brain className="h-5 w-5" />
@@ -48,18 +49,22 @@ export default async function AppLayout({
           </Link>
           <SignOutButton />
         </header>
-        <div className="border-b border-slate-200/80 bg-white/70 px-3 py-2 backdrop-blur md:hidden">
+        <div className="border-b border-slate-200 bg-white px-3 py-2 md:hidden">
           <Nav orientation="horizontal" />
         </div>
 
         <main className="flex-1">
-          <div className="mx-auto max-w-7xl p-5 md:p-8 xl:p-10">{children}</div>
+          <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
 
         <footer className="border-t border-slate-200 px-6 py-4 md:px-8">
           <nav className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
             {LEGAL_LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className="hover:text-slate-600 hover:underline">
+              <Link
+                key={l.href}
+                href={l.href}
+                className="hover:text-slate-600 hover:underline"
+              >
                 {l.label}
               </Link>
             ))}

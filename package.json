@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --pool=threads --maxWorkers=2",
+    "test:workspace-browser": "node --env-file-if-exists=.env.local ./node_modules/@playwright/test/cli.js test",
     "eval:creative": "node scripts/eval-creative.mjs"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",

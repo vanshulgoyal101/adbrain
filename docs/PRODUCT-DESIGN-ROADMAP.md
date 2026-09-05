@@ -145,6 +145,13 @@ Settings pass a four-viewport screenshot review.
 
 ### Phase C — Home command center
 
+**Progress (2026-09-05):** Home now derives a work queue from brand context,
+drafts, unused approved creatives, Meta readiness, and paused/draft campaigns.
+Repeated shortcut panels were replaced with task rows, campaign state, brand
+context, linked creative previews, and activity. Independent reads start in
+parallel. First-run behavior is unit-tested; real populated Home-to-Review flows
+are browser-tested at four widths. User-task evaluation remains open.
+
 **Outcome:** a returning customer knows what to do next without opening the nav.
 
 Build one reasoned next-best action, a campaign pipeline, a work queue for
@@ -165,6 +172,14 @@ field-level recovery.
 brand system, not a database form.
 
 ### Phase E — Create and Review workspace
+
+**Progress (2026-09-05):** Review now has a selectable board and inspector,
+status/search filters, Home deep links, collapsed brief entry for returning
+users, visible approval/deletion failures, and keyboard-contained enlargement.
+Mobile uses a horizontal thumbnail strip. Existing generate/regenerate/export
+paths remain covered. Explicit compare mode, editing, rejection, additional
+placements, and generation-progress redesign are not delivered yet. See
+[workspace validation](qa/workspace-refresh.md).
 
 **Outcome:** a customer can generate, compare, approve, and export without
 mentally switching tools.

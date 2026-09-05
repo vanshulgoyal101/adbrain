@@ -24,7 +24,10 @@ describe("<Nav>", () => {
       ["Settings", "/settings"],
     ];
     for (const [label, href] of expected) {
-      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute(
+        "href",
+        href,
+      );
     }
   });
 
@@ -32,6 +35,13 @@ describe("<Nav>", () => {
     pathname.mockReturnValue("/campaigns");
     render(<Nav />);
     expect(screen.getByRole("link", { name: "Launch" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Launch" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute(
+      "aria-current",
+    );
     expect(screen.getByRole("link", { name: "Home" })).not.toHaveClass(ACTIVE);
   });
 
@@ -46,11 +56,20 @@ describe("<Nav>", () => {
     pathname.mockReturnValue("/create");
     render(<Nav />);
     expect(screen.getByRole("link", { name: "Create" })).toHaveClass(ACTIVE);
-    expect(screen.getByRole("link", { name: "Launch" })).not.toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Launch" })).not.toHaveClass(
+      ACTIVE,
+    );
   });
 
   it("switches to a horizontal layout for the mobile header", () => {
     const { container } = render(<Nav orientation="horizontal" />);
     expect(container.querySelector("nav")).toHaveClass("flex-row");
+    expect(screen.getByRole("link", { name: "Create" })).toHaveClass(
+      "text-slate-700",
+    );
+    expect(screen.getByRole("navigation")).toHaveAttribute(
+      "aria-label",
+      "Workspace navigation",
+    );
   });
 });
