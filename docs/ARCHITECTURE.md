@@ -391,10 +391,12 @@ monitored. Pure, unit-tested logic drives three enforcement points:
   `tests/sitemap-robots.test.ts` asserts each one is in the sitemap and never
   disallowed by robots.
 - **Security headers** (`lib/security/headers.ts`, applied in `next.config.ts`):
-  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
-  and a restrictive `Permissions-Policy`. A full CSP is deliberately omitted —
-  the app loads from Supabase/Pollinations/analytics/Google and a mis-scoped CSP
-  breaks those flows silently.
+  `Content-Security-Policy`, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy`, and a restrictive
+  `Permissions-Policy`. The CSP is built with the configured Supabase origin
+  and explicitly permits only the analytics, OAuth, image, and API boundaries
+  the app uses. It retains `'unsafe-inline'` for Next's current hydration
+  runtime; removing that allowance requires a nonce-based document strategy.
 
 ---
 

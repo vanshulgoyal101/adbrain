@@ -19,6 +19,14 @@ const workspaceItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
+const navClass = (active: boolean) =>
+  cn(
+    "flex items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+    active
+      ? "bg-blue-50 text-blue-700 md:bg-white/14 md:text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+      : "text-slate-300 hover:bg-white/6 hover:text-white md:text-slate-300",
+  );
+
 export function Nav({
   orientation = "vertical",
 }: {
@@ -35,46 +43,28 @@ export function Nav({
       )}
     >
       {orientation === "vertical" && (
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           Workbench
         </p>
       )}
       {primaryItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-blue-50 text-blue-700"
-                : "text-slate-600 hover:bg-slate-100",
-            )}
-          >
+          <Link key={href} href={href} className={navClass(active)}>
             <Icon className="h-4 w-4" />
             {label}
           </Link>
         );
       })}
       {orientation === "vertical" && (
-        <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+        <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           Workspace
         </p>
       )}
       {workspaceItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-blue-50 text-blue-700"
-                : "text-slate-600 hover:bg-slate-100",
-            )}
-          >
+          <Link key={href} href={href} className={navClass(active)}>
             <Icon className="h-4 w-4" />
             {label}
           </Link>

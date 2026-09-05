@@ -97,6 +97,17 @@ Trigger a deploy (push to `main` or click Deploy). Then check:
 - Sign in works (magic link / Google).
 - Campaigns page loads and can sync from Meta.
 
+Verify the response security contract after deployment:
+
+```bash
+curl -sI https://adbrain.vanshul.com/ | grep -Ei \
+  'content-security-policy|x-content-type-options|x-frame-options|referrer-policy'
+```
+
+The CSP is generated from `NEXT_PUBLIC_SUPABASE_URL`. If the Supabase project
+uses a custom origin, confirm that origin appears in `connect-src`; do not
+replace the policy with `*` to work around a missing allowlist entry.
+
 For a prospect demo, also complete the [demo acceptance checklist](./DEMO-RUNBOOK.md#demo-acceptance-checklist)
 and keep a pre-generated creative fallback available. A live provider or Meta
 request must not be the only path through a customer call.

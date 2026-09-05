@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  CheckCircle2,
   ExternalLink,
   FileText,
   Loader2,
@@ -32,7 +33,13 @@ import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
-import { BUDGET_PRESETS, describeBudget, spendHealth } from "@/lib/campaign/budget";
+import {
+  BUDGET_PRESETS,
+  campaignNarrative,
+  campaignNextAction,
+  describeBudget,
+  spendHealth,
+} from "@/lib/campaign/budget";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -288,16 +295,42 @@ export function Campaigns({
       )}
 
       {metaReady && (
-        <CampaignChat
-          businessId={business.id}
-          onCreated={(c) => setCampaigns((prev) => [c, ...prev])}
-        />
+        <>
+          <section
+            aria-label="Launch preflight"
+            className="grid gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)] sm:grid-cols-3 sm:p-5"
+          >
+            {[
+              ["Creative", approved.length ? `${approved.length} approved` : "Needs approval", Boolean(approved.length)],
+              ["Meta connection", "Ready to create", true],
+              ["Safety", "Created paused", true],
+            ].map(([label, value, ready]) => (
+              <div key={label as string} className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+                <CheckCircle2 className={cn("mt-0.5 h-4 w-4 flex-none", ready ? "text-emerald-600" : "text-amber-600")} />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</p>
+                </div>
+              </div>
+            ))}
+          </section>
+          <CampaignChat
+            businessId={business.id}
+            onCreated={(c) => setCampaigns((prev) => [c, ...prev])}
+          />
+        </>
       )}
 
       {metaReady && (
-        <Card>
-          <CardHeader>
-            <CardTitle>New campaign</CardTitle>
+        <Card className="overflow-hidden border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f5f0e9_100%)] shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
+          <CardHeader className="border-b border-slate-200/80 bg-white/60">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>New campaign</CardTitle>
+                <p className="mt-1 text-sm text-slate-500">Choose the approved work, audience, and budget to prepare a paused campaign.</p>
+              </div>
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Paused by default</span>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
             {approved.length === 0 ? (
@@ -325,11 +358,12 @@ export function Campaigns({
                           type="button"
                           key={c.id}
                           onClick={() => toggle(c.id)}
+                          aria-pressed={isSel}
                           className={cn(
-                            "overflow-hidden rounded-lg border-2 text-left transition-colors",
+                            "group relative overflow-hidden rounded-xl border-2 text-left transition-all",
                             isSel
-                              ? "border-blue-500"
-                              : "border-transparent hover:border-slate-200",
+                              ? "border-slate-950 shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
+                              : "border-transparent hover:border-slate-300",
                           )}
                         >
                           <div className="aspect-square bg-slate-100">
@@ -342,6 +376,11 @@ export function Campaigns({
                               />
                             )}
                           </div>
+                          {isSel && (
+                            <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950 text-white">
+                              <CheckCircle2 className="h-4 w-4" />
+                            </span>
+                          )}
                           <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700">
                             {c.headline}
                           </p>
@@ -633,21 +672,29 @@ export function Campaigns({
                           { spend: r.spend, leads: r.leads, cpl: r.cpl },
                           formatCurrency,
                         );
-                        if (h.tone === "idle") return null;
+                        const narrative = campaignNarrative(
+                          { spend: r.spend, leads: r.leads, cpl: r.cpl },
+                          formatCurrency,
+                        );
+                        const nextAction = campaignNextAction({
+                          spend: r.spend,
+                          leads: r.leads,
+                          cpl: r.cpl,
+                        });
                         const tones = {
+                          idle: "border-slate-200 bg-slate-50 text-slate-700",
                           good: "border-green-200 bg-green-50 text-green-800",
                           ok: "border-blue-200 bg-blue-50 text-blue-800",
                           warn: "border-amber-200 bg-amber-50 text-amber-800",
                         } as const;
                         return (
-                          <div
-                            className={cn(
-                              "flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border px-3 py-2 text-sm",
-                              tones[h.tone],
-                            )}
-                          >
-                            <span className="font-semibold">{h.label}.</span>
-                            <span>{h.detail}</span>
+                          <div className={cn("rounded-lg border px-3 py-2.5 text-sm", tones[h.tone])}>
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                              <span className="font-semibold">{h.label}.</span>
+                              <span>{h.detail}</span>
+                            </div>
+                            <p className="mt-1.5 text-xs/5 text-current/80">{narrative}</p>
+                            <p className="mt-1 text-xs font-medium text-current/80">Next step: {nextAction}</p>
                           </div>
                         );
                       })()}

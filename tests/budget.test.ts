@@ -3,6 +3,8 @@ import {
   ASSUMED_CPL_HIGH,
   ASSUMED_CPL_LOW,
   BUDGET_PRESETS,
+  campaignNarrative,
+  campaignNextAction,
   describeBudget,
   estimateLeadsPerWeek,
   spendHealth,
@@ -89,5 +91,17 @@ describe("spendHealth", () => {
     const h = spendHealth({ spend: 1000, leads: 5 }, (n) => `$${n}`);
     expect(h.tone).toBe("ok"); // 200/lead is within the band
     expect(h.detail).toContain("$200");
+  });
+
+  it("turns performance data into a simple owner-facing narrative", () => {
+    expect(campaignNarrative({ spend: 0, leads: 0 }, "₹")).toMatch(/no spend yet/i);
+    expect(campaignNarrative({ spend: 900, leads: 0 }, "₹")).toMatch(/no leads yet/i);
+    expect(campaignNarrative({ spend: 600, leads: 12, cpl: 50 }, "₹")).toMatch(/healthy/i);
+  });
+
+  it("recommends the next move for each performance state", () => {
+    expect(campaignNextAction({ spend: 0, leads: 0 })).toMatch(/waiting for its first delivery/i);
+    expect(campaignNextAction({ spend: 900, leads: 0 })).toMatch(/review your offer|creative|audience/i);
+    expect(campaignNextAction({ spend: 600, leads: 12, cpl: 50 })).toMatch(/keep it running|scale/i);
   });
 });

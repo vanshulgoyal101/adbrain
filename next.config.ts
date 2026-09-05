@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { SECURITY_HEADERS } from "./src/lib/security/headers";
+import { getSecurityHeaders } from "./src/lib/security/headers";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 let supabaseHost: string | undefined;
@@ -10,6 +10,11 @@ try {
 }
 
 const nextConfig: NextConfig = {
+  // This workspace contains several sibling package-lock files. Pinning the
+  // root keeps Turbopack from treating the parent workspace as this app.
+  turbopack: {
+    root: __dirname,
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "image.pollinations.ai" },
@@ -27,7 +32,7 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [{ source: "/:path*", headers: getSecurityHeaders(supabaseUrl) }];
   },
 };
 

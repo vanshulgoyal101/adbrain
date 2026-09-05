@@ -15,9 +15,10 @@ _Last reviewed: 2026-09-05. **Live in production at adbrain.vanshul.com.** Recen
 shipped: industry-agnostic `vertical` fix, cross-instance rate limiting,
 Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 
-> **Current product-design priority:** Sprint 1, shell and visual foundation.
-> Establish the shared design system, lifecycle navigation, page-header rhythm,
-> and Home foundation before adding more AI features.
+> **Current product-design priority:** Phase 0 of the reset in
+> [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). The prior plan
+> overstated UI progress; visual work is not considered delivered until the
+> populated and empty states pass desktop/mobile screenshot review.
 
 ---
 
@@ -31,8 +32,8 @@ Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 | **AI-vs-baseline benchmark** | The proof the whole pitch rests on — "our AI ads beat your old ads" (CPL lift vs the owner's previous campaigns). Currently a claim we can't show. | historical insights import | M |
 | **Instant new-lead alerts** | Local lead-gen is a speed game; leads that sit in the inbox are wasted spend. Push email/WhatsApp within seconds of arrival. | lead webhook or cron; a send channel | M |
 | **Guided onboarding wizard** | A single guided flow (brand → first creatives → first paused campaign) is where SMB activation lives or dies. There's a checklist today, not a wizard. | — | M |
-| **Product shell and visual foundation** | The current UI exposes implementation areas as equal navigation items and uses generic repeated cards. A coherent shell is required before page-level redesign can be evaluated. | design direction | M |
-| **Home command center** | Replace record-count reporting with next-best-action, workflow status, and clear activation progress. | shell foundation | M |
+| **Product shell and visual foundation reset** | The current UI still reads as a sparse internal dashboard. Establish the visual contract, realistic fixtures, shared states, and screenshot gates before claiming a redesign. | design direction | L |
+| **Home command center** | Replace record-count reporting with a useful work queue, outcome hierarchy, and clear activation progress. | shell reset | M |
 
 ## 🟠 Moderate value — production hardening & retention
 
@@ -64,13 +65,13 @@ Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 
 ## Suggested near-term sequence
 
-1. **Product shell and visual foundation** — make the product coherent before layering on more surface area.
-2. **Home command center + guided onboarding** — make activation and the next action obvious.
-3. **Brand Brain redesign** — turn the strongest differentiator into a visible product asset.
-4. **Creative Studio review workspace** — make creation, approval, and export feel like one workflow.
-5. **Start Meta App Review** (the long pole — weeks of lead time; the app is already live for it).
-6. **Error monitoring** (S) + **scheduled sync** (M) — the hardening that everything else leans on.
-7. **Instant new-lead alerts** (M) — highest-trust, speed-to-lead win.
-8. **Run controlled customer demos** using [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md); measure quality, latency, retries, and real provider cost before quoting pricing.
-9. **Paid image provider + durable usage limits** (S/M) — quality and predictable commercial cost.
-10. **Billing foundation** (L), then the AI-vs-baseline benchmark (M) — monetization and proof.
+1. **Reset the visual contract and fixtures** — establish a direction that is visibly different and test it on real populated states.
+2. **Rebuild the shell** — navigation, workspace context, headers, states, and mobile behavior.
+3. **Rebuild Home and onboarding** — make the next action and activation progress obvious.
+4. **Rebuild Brand Brain** — turn the strongest differentiator into a visible product asset.
+5. **Rebuild Create and Review** — make comparison, approval, and export one workflow.
+6. **Rebuild Launch and Results** — make spend safe and performance understandable.
+7. **Start Meta App Review** in parallel with the UI work; it remains an external lead time.
+8. **Add error monitoring and scheduled sync** — the operational base for customer trust.
+9. **Run controlled demos** using [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md), measuring activation and objections rather than only provider cost.
+10. **Add paid image reliability, durable usage limits, and billing** only after the core experience earns repeat use.

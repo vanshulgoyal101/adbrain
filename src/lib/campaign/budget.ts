@@ -71,10 +71,18 @@ export interface SpendHealth {
  * the thing a non-technical owner actually worries about: am I spending money
  * with nothing to show? Pure; formats money with the given formatter.
  */
+function asMoneyFormatter(
+  money: ((n: number) => string) | string = (n) => `₹${Math.round(n)}`,
+): (n: number) => string {
+  if (typeof money === "function") return money;
+  return (n: number) => `${money}${Math.round(n)}`;
+}
+
 export function spendHealth(
   input: { spend: number; leads: number; cpl?: number | null },
-  money: (n: number) => string = (n) => `₹${Math.round(n)}`,
+  money: ((n: number) => string) | string = (n) => `₹${Math.round(n)}`,
 ): SpendHealth {
+  const formatMoney = asMoneyFormatter(money);
   const spend = Number.isFinite(input.spend) ? input.spend : 0;
   const leads = Number.isFinite(input.leads) ? Math.max(0, Math.floor(input.leads)) : 0;
 
@@ -85,19 +93,71 @@ export function spendHealth(
     return {
       tone: "warn",
       label: "No leads yet",
-      detail: `Spent ${money(spend)} with no leads yet — review the offer, creative, or targeting before spending more.`,
+      detail: `Spent ${formatMoney(spend)} with no leads yet — review the offer, creative, or targeting before spending more.`,
     };
   }
   const cpl = input.cpl && input.cpl > 0 ? input.cpl : spend / leads;
   if (cpl <= ASSUMED_CPL_LOW) {
-    return { tone: "good", label: "Cheap leads", detail: `About ${money(cpl)} per lead — great value.` };
+    return { tone: "good", label: "Cheap leads", detail: `About ${formatMoney(cpl)} per lead — great value.` };
   }
   if (cpl <= ASSUMED_CPL_HIGH) {
-    return { tone: "ok", label: "On track", detail: `About ${money(cpl)} per lead.` };
+    return { tone: "ok", label: "On track", detail: `About ${formatMoney(cpl)} per lead.` };
   }
   return {
     tone: "warn",
     label: "Pricey leads",
-    detail: `About ${money(cpl)} per lead — consider adjusting the audience or offer.`,
+    detail: `About ${formatMoney(cpl)} per lead — consider adjusting the audience or offer.`,
   };
+}
+
+/**
+ * Plain-language owner narrative for a campaign's early results. This is meant
+ * to read like a confident operator summary, not costly metric jargon.
+ */
+export function campaignNarrative(
+  input: { spend: number; leads: number; cpl?: number | null },
+  money: ((n: number) => string) | string = (n) => `₹${Math.round(n)}`,
+): string {
+  const formatMoney = asMoneyFormatter(money);
+  const spend = Number.isFinite(input.spend) ? input.spend : 0;
+  const leads = Number.isFinite(input.leads) ? Math.max(0, Math.floor(input.leads)) : 0;
+
+  if (spend <= 0) {
+    return "No spend yet — this campaign is waiting for its first delivery.";
+  }
+  if (leads <= 0) {
+    return `No leads yet — ${formatMoney(spend)} has been spent and the campaign is still learning.`;
+  }
+
+  const cpl = input.cpl && input.cpl > 0 ? input.cpl : spend / leads;
+  if (cpl <= ASSUMED_CPL_LOW) {
+    return `Healthy signal: ${leads} leads from ${formatMoney(spend)} with about ${formatMoney(cpl)} per lead.`;
+  }
+  if (cpl <= ASSUMED_CPL_HIGH) {
+    return `Steady performance: ${leads} leads from ${formatMoney(spend)} and roughly ${formatMoney(cpl)} per lead.`;
+  }
+  return `Needs attention: ${leads} leads from ${formatMoney(spend)} with about ${formatMoney(cpl)} per lead.`;
+}
+
+export function campaignNextAction(
+  input: { spend: number; leads: number; cpl?: number | null },
+): string {
+  const spend = Number.isFinite(input.spend) ? input.spend : 0;
+  const leads = Number.isFinite(input.leads) ? Math.max(0, Math.floor(input.leads)) : 0;
+
+  if (spend <= 0) {
+    return "Waiting for its first delivery — keep the campaign paused until you're happy with the creative and audience.";
+  }
+  if (leads <= 0) {
+    return "Review your offer, creative, or audience — the campaign is spending money but not converting yet.";
+  }
+
+  const cpl = input.cpl && input.cpl > 0 ? input.cpl : spend / leads;
+  if (cpl <= ASSUMED_CPL_LOW) {
+    return "Keep it running and scale the budget if the lead quality keeps holding up.";
+  }
+  if (cpl <= ASSUMED_CPL_HIGH) {
+    return "Keep it running and monitor the lead quality before changing the offer or audience.";
+  }
+  return "Tighten the audience or offer — the current CPL is higher than the target range.";
 }

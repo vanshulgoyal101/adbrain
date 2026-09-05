@@ -247,6 +247,7 @@ export function BrandForm({ business }: { business: Business | null }) {
         </div>
       </section>
 
+      <div id="brand-identity" className="scroll-mt-6">
       <Card>
         <CardHeader className="flex items-center justify-between gap-4">
           <CardTitle>Basics</CardTitle>
@@ -306,7 +307,9 @@ export function BrandForm({ business }: { business: Business | null }) {
           )}
         </CardContent>
       </Card>
+      </div>
 
+      <div id="brand-contact" className="scroll-mt-6">
       <Card>
         <CardHeader>
           <CardTitle>Contact details</CardTitle>
@@ -346,7 +349,9 @@ export function BrandForm({ business }: { business: Business | null }) {
           </div>
         </CardContent>
       </Card>
+      </div>
 
+      <div id="brand-creative" className="scroll-mt-6">
       <Card>
         <CardHeader>
           <CardTitle>Brand details</CardTitle>
@@ -448,6 +453,7 @@ export function BrandForm({ business }: { business: Business | null }) {
           </div>
         </CardContent>
       </Card>
+      </div>
 
       <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
         <Button type="submit" disabled={pending}>

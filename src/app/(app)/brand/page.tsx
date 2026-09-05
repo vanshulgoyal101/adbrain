@@ -69,15 +69,39 @@ export default async function BrandPage() {
           </CardContent>
         </Card>
       )}
+      <nav
+        aria-label="Brand Brain sections"
+        className="mt-5 flex gap-2 overflow-x-auto border-y border-slate-200/80 py-2 text-sm"
+      >
+        {[
+          ["Identity", "brand-identity"],
+          ["Contact", "brand-contact"],
+          ["Creative direction", "brand-creative"],
+          ["Guidance", "brand-guidance"],
+          ["Assets", "brand-assets"],
+        ].map(([label, href]) => (
+          <a
+            key={href}
+            href={`#${href}`}
+            className="whitespace-nowrap rounded-lg px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
       <div className="mt-6 flex flex-col gap-6">
         <BrandForm business={business} />
         {business && (
           <>
-            <Instructions
-              businessId={business.id}
-              instructions={instructions}
-            />
-            <BrandAssets businessId={business.id} initialAssets={assets} />
+            <section id="brand-guidance" className="scroll-mt-6">
+              <Instructions
+                businessId={business.id}
+                instructions={instructions}
+              />
+            </section>
+            <section id="brand-assets" className="scroll-mt-6">
+              <BrandAssets businessId={business.id} initialAssets={assets} />
+            </section>
           </>
         )}
       </div>

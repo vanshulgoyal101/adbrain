@@ -1,16 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f7fb;
-  --foreground: #172033;
-  --card: #ffffff;
-  --border: #dce3ee;
-  --muted: #667085;
-  --primary: #155eef;
-  --primary-foreground: #ffffff;
-  --accent: #f79009;
-  --surface-subtle: #eef3f9;
-  --focus-ring: #84adff;
+  --background: #f5f1ea;
+  --foreground: #141b2d;
+  --card: #fffdf9;
+  --border: #e7dfd4;
+  --muted: #5f6777;
+  --primary: #1f3a5f;
+  --primary-foreground: #f9fbff;
+  --accent: #d97706;
+  --accent-soft: #fff1dc;
+  --surface-subtle: #f0eadf;
+  --surface-strong: #e8e3da;
+  --focus-ring: #7ca0ff;
+  --shadow-soft: 0 18px 38px rgba(15, 23, 42, 0.08);
 }
 
 @theme inline {
@@ -23,8 +26,8 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-surface-subtle: var(--surface-subtle);
-  --font-sans: "Avenir Next", Avenir, "Segoe UI", sans-serif;
-  --font-display: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-sans: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -36,7 +39,8 @@ html {
 
 body {
   background:
-    linear-gradient(180deg, #f9fbfd 0%, var(--background) 280px),
+    radial-gradient(circle at top left, rgba(217, 119, 6, 0.08), transparent 24%),
+    linear-gradient(180deg, #f9f7f3 0%, var(--background) 220px),
     var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);

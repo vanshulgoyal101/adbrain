@@ -53,6 +53,15 @@ export function Studio({
   const approvedCount = items.filter((i) => i.status === "approved").length;
   const reviewCount = items.length - approvedCount;
   const previewCreative = items.find((item) => item.id === previewId) ?? null;
+  const workflowStep = generating
+    ? 2
+    : items.length === 0
+      ? 1
+      : approvedCount === items.length
+        ? 4
+        : approvedCount
+          ? 3
+          : 2;
 
   useEffect(() => {
     if (!previewCreative) return;
@@ -141,7 +150,36 @@ export function Studio({
           </span>
         </div>
       </div>
-      <Card>
+      <ol
+        aria-label="Creative workflow"
+        className="grid grid-cols-4 overflow-hidden rounded-2xl border border-slate-200 bg-white/80 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
+      >
+        {[
+          ["01", "Brief", "Set the campaign goal"],
+          ["02", "Generate", "Create on-brand variants"],
+          ["03", "Review", `${reviewCount} awaiting approval`],
+          ["04", "Export", `${approvedCount} ready for launch`],
+        ].map(([number, label, detail], index) => (
+          <li
+            key={label}
+            className={cn(
+              "min-w-0 border-r border-slate-200 px-3 py-3 last:border-r-0 sm:px-4",
+              workflowStep === index + 1 ? "bg-slate-950 text-white" : "text-slate-600",
+            )}
+          >
+            <span className={cn(
+              "text-[10px] font-semibold tracking-[0.14em]",
+              workflowStep === index + 1 ? "text-amber-300" : "text-slate-400",
+            )}>{number}</span>
+            <p className="mt-1 truncate text-sm font-semibold">{label}</p>
+            <p className={cn(
+              "mt-0.5 hidden truncate text-xs sm:block",
+              workflowStep === index + 1 ? "text-slate-300" : "text-slate-500",
+            )}>{detail}</p>
+          </li>
+        ))}
+      </ol>
+      <Card className="overflow-hidden border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f5f0e9_100%)] shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
         <CardContent className="p-5 sm:p-6">
           <form onSubmit={generate} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -219,15 +257,22 @@ export function Studio({
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
       {items.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-1 py-12 text-center">
-            <ImageIcon className="h-6 w-6 text-slate-300" />
-            <p className="font-medium text-slate-600">No creatives yet</p>
-            <p className="max-w-sm text-sm text-slate-400">
+        <Card className="border-dashed border-slate-300 bg-white/60">
+          <CardContent className="flex flex-col items-center gap-1 px-5 py-12 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
+              <ImageIcon className="h-5 w-5" />
+            </span>
+            <p className="mt-3 text-lg font-semibold text-slate-900">Your review board is ready</p>
+            <p className="max-w-md text-sm text-slate-500">
               Write a short brief above — what you’re selling and to whom — and
-              generate your first batch of ads. You can approve, tweak, or
-              regenerate any of them.
+              generate your first batch. You’ll compare, approve, and export the
+              strongest variants here.
             </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs text-slate-500">
+              {["Compare concepts", "Approve winners", "Export an ad pack"].map((item) => (
+                <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{item}</span>
+              ))}
+            </div>
           </CardContent>
         </Card>
       ) : (
