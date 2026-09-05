@@ -493,6 +493,39 @@ create table if not exists public.rate_limit_hits (
   hit_at timestamptz not null default now()
 );
 
+-- ════════════════════════════════════════════════════════════════════════
+--  llm_usage_events  (persistent paid-model usage and quota accounting)
+-- ════════════════════════════════════════════════════════════════════════
+create table if not exists public.llm_usage_events (
+  id                uuid primary key default gen_random_uuid(),
+  business_id       uuid not null references public.businesses (id) on delete cascade,
+  user_id           uuid references auth.users (id) on delete set null,
+  route             text not null,
+  provider          text not null,
+  model             text not null,
+  prompt_tokens     integer not null default 0,
+  completion_tokens integer not null default 0,
+  total_tokens      integer not null default 0,
+  estimated_cost_usd numeric(12, 8) not null default 0,
+  request_id        text,
+  created_at        timestamptz not null default now()
+);
+
+create index if not exists llm_usage_events_business_month_idx
+  on public.llm_usage_events (business_id, created_at);
+
+alter table public.llm_usage_events enable row level security;
+
+drop policy if exists "llm_usage_events: own business" on public.llm_usage_events;
+create policy "llm_usage_events: own business"
+  on public.llm_usage_events for select
+  using (public.owns_business(business_id));
+
+drop policy if exists "llm_usage_events: insert own business" on public.llm_usage_events;
+create policy "llm_usage_events: insert own business"
+  on public.llm_usage_events for insert
+  with check (public.owns_business(business_id));
+
 create index if not exists rate_limit_hits_key_time_idx
   on public.rate_limit_hits (key, hit_at);
 

@@ -45,6 +45,7 @@ const schema = z.object({
   // Output-token headroom for Gemini 2.5 "thinking" models. Set to 0 for a paid
   // non-thinking model to avoid paying for unused output tokens.
   GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
+  LLM_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().min(0).optional().default(2_000_000),
 
   // Image generation
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),

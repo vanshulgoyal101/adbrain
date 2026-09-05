@@ -5,6 +5,11 @@ import { generateVariants } from "@/lib/creative/generate";
 import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
+import {
+  configuredMonthlyTokenLimit,
+  monthlyTokenUsage,
+  persistLLMUsage,
+} from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
@@ -38,7 +43,9 @@ export async function POST(req: Request) {
   const businessId = (body?.businessId ?? "").trim();
   const brief = (body?.brief ?? "").trim();
   const rawCount = Number(body?.count ?? 3);
-  const count = Number.isFinite(rawCount) ? rawCount : 3;
+  const count = Number.isFinite(rawCount)
+    ? Math.min(Math.max(Math.floor(rawCount), 1), 5)
+    : 3;
   const language = languagePromptName(body?.language);
 
   if (!businessId || !brief) {
@@ -56,6 +63,22 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!business) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
+  }
+
+  const monthlyLimit = configuredMonthlyTokenLimit();
+  if (monthlyLimit > 0) {
+    const used = await monthlyTokenUsage(businessId);
+    // A missing ledger table returns null and is treated as a migration grace
+    // period; once present, the quota is enforced before paid calls begin.
+    if (used != null && used >= monthlyLimit) {
+      return NextResponse.json(
+        {
+          error: "This business has reached its monthly AI generation limit.",
+          code: "LLM_MONTHLY_QUOTA_EXCEEDED",
+        },
+        { status: 429 },
+      );
+    }
   }
 
   const instructions = await getActiveInstructionsText(businessId);
@@ -80,6 +103,21 @@ export async function POST(req: Request) {
       { status: 502 },
     );
   }
+
+  const requestId = crypto.randomUUID();
+  await persistLLMUsage(
+    variants.flatMap((variant) =>
+      variant.llmUsage.map((entry) => ({
+        businessId,
+        userId: user.id,
+        route: "creatives.generate",
+        provider: entry.provider,
+        model: entry.model,
+        usage: entry.usage,
+        requestId,
+      })),
+    ),
+  );
 
   const variantGroup = crypto.randomUUID();
   const persisted = await Promise.all(

@@ -33,8 +33,14 @@ describe("cacheKey", () => {
     );
   });
 
-  it("differs when messages, temperature, maxTokens or json change", () => {
+  it("differs when messages, routing, temperature, maxTokens or json change", () => {
     const base = cacheKey(MESSAGES, { temperature: 0.3 });
+    expect(cacheKey(MESSAGES, { temperature: 0.3, model: "other" })).not.toBe(
+      base,
+    );
+    expect(
+      cacheKey(MESSAGES, { temperature: 0.3, promptVersion: "next" }),
+    ).not.toBe(base);
     expect(cacheKey(MESSAGES, { temperature: 0.4 })).not.toBe(base);
     expect(cacheKey(MESSAGES, { temperature: 0.3, maxTokens: 100 })).not.toBe(
       base,

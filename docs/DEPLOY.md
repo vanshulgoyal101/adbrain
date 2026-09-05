@@ -27,6 +27,20 @@ PGHOST=db.<ref>.supabase.co PGPORT=5432 PGUSER=postgres \
 
 Or paste `db/schema.sql` into the Supabase **SQL editor** and run it.
 
+The paid-LLM controls add the `llm_usage_events` table. Apply the schema before
+relying on monthly quotas; until that table exists, generation remains available
+and usage persistence is best-effort for migration compatibility.
+
+Set these Vercel environment variables for production:
+
+```env
+LLM_MONTHLY_TOKEN_LIMIT=2000000
+SUPABASE_SERVICE_ROLE_KEY=<server-only-service-role-key>
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` is required by the spend cron and must never be
+exposed as a `NEXT_PUBLIC_*` variable.
+
 ## 2. Import the project into Vercel
 1. vercel.com → **Add New → Project** → import `vanshulgoyal101/adbrain`.
 2. Framework preset: **Next.js** (auto-detected). Leave build/output defaults.

@@ -30,6 +30,38 @@ export interface Database {
         Update: { id?: string; email?: string | null; created_at?: string };
         Relationships: [];
       };
+      llm_usage_events: {
+        Row: {
+          id: string;
+          business_id: string;
+          user_id: string | null;
+          route: string;
+          provider: string;
+          model: string;
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+          estimated_cost_usd: number;
+          request_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          user_id?: string | null;
+          route: string;
+          provider: string;
+          model: string;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          estimated_cost_usd?: number;
+          request_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["llm_usage_events"]["Insert"]>;
+        Relationships: [];
+      };
       businesses: {
         Row: {
           id: string;

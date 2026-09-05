@@ -2,6 +2,7 @@ import { buildAdDesign, formatDimensions, type AdDesignSpec, type AdFormat } fro
 import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
 import { generateImage } from "@/lib/imageGen";
 import { completeJSON } from "@/lib/llm";
+import type { TokenUsage } from "@/lib/llm";
 import {
   AD_ANGLES,
   buildCopyMessages,
@@ -22,6 +23,31 @@ export interface GeneratedVariant {
   imagePrompt: string;
   /** Design spec used to composite the finished poster over `imageUrl`. */
   design: AdDesignSpec;
+  llmUsage: {
+    provider: string;
+    model: string;
+    usage: TokenUsage;
+  }[];
+}
+
+const MAX_BRIEF_CHARS = 2_000;
+const MAX_FIELD_CHARS = 1_000;
+const MAX_LIST_ITEMS = 10;
+
+function boundedBrand(brand: BrandContext): BrandContext {
+  const boundedList = (items?: string[]) =>
+    items?.slice(0, MAX_LIST_ITEMS).map((item) => item.slice(0, MAX_FIELD_CHARS));
+  return {
+    ...brand,
+    name: brand.name.slice(0, MAX_FIELD_CHARS),
+    description: brand.description?.slice(0, MAX_FIELD_CHARS),
+    brand_voice: brand.brand_voice?.slice(0, MAX_FIELD_CHARS),
+    target_audience: brand.target_audience?.slice(0, MAX_FIELD_CHARS),
+    usps: boundedList(brand.usps),
+    offers: boundedList(brand.offers),
+    languages: boundedList(brand.languages),
+    locations: boundedList(brand.locations),
+  };
 }
 
 /**
@@ -38,7 +64,16 @@ export async function generateVariants(params: {
   language?: string;
   format?: AdFormat;
 }): Promise<GeneratedVariant[]> {
-  const { brand, brief, instructions, language, format } = params;
+  const {
+    brand: rawBrand,
+    brief: rawBrief,
+    instructions: rawInstructions,
+    language,
+    format,
+  } = params;
+  const brand = boundedBrand(rawBrand);
+  const brief = rawBrief.slice(0, MAX_BRIEF_CHARS);
+  const instructions = rawInstructions?.slice(0, 3_000);
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
 
   const angles: AdAngle[] = (
@@ -65,13 +100,27 @@ async function generateGuardedCopy(
   angle: AdAngle,
   instructions?: string,
   language?: string,
-): Promise<GeneratedCopy> {
+): Promise<{ copy: GeneratedCopy; usage: GeneratedVariant["llmUsage"] }> {
   let normalized: GeneratedCopy = { headline: "", primary_text: "", cta: "Learn More" };
+  const usage: GeneratedVariant["llmUsage"] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
-    const copy = await completeJSON<GeneratedCopy>(
+    const copy = await completeJSON<GeneratedCopy & {
+      __completion?: {
+        provider: string;
+        model: string;
+        usage?: TokenUsage;
+      };
+    }>(
       buildCopyMessages(brand, brief, angle, instructions, language),
       { temperature: attempt === 0 ? 0.8 : 0.6, maxTokens: 400 },
     );
+    if (copy.__completion?.usage) {
+      usage.push({
+        provider: copy.__completion.provider,
+        model: copy.__completion.model,
+        usage: copy.__completion.usage,
+      });
+    }
     normalized = {
       headline: copy.headline?.trim() ?? "",
       primary_text: copy.primary_text?.trim() ?? "",
@@ -83,7 +132,7 @@ async function generateGuardedCopy(
     });
     if (findings.length === 0) break;
   }
-  return normalized;
+  return { copy: normalized, usage };
 }
 
 export async function generateOneVariant(
@@ -95,7 +144,7 @@ export async function generateOneVariant(
   format?: AdFormat,
 ): Promise<GeneratedVariant> {
   const dims = formatDimensions(format ?? "portrait");
-  const [normalizedCopy, image] = await Promise.all([
+  const [copyResult, image] = await Promise.all([
     generateGuardedCopy(brand, brief, angle, instructions, language),
     generateImage({
       prompt: buildImagePrompt(brand, brief, angle, instructions),
@@ -103,6 +152,7 @@ export async function generateOneVariant(
       height: dims.height,
     }),
   ]);
+  const normalizedCopy = copyResult.copy;
 
   return {
     angleId: angle.id,
@@ -119,5 +169,6 @@ export async function generateOneVariant(
       backgroundUrl: image.url,
       format,
     }),
+    llmUsage: copyResult.usage,
   };
 }

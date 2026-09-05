@@ -8,6 +8,11 @@ export interface ChatMessage {
 export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
+  /** Stable cache identity for the selected routing policy/model. */
+  provider?: string;
+  model?: string;
+  /** Bump when the prompt contract changes. */
+  promptVersion?: string;
   /** Ask the provider to return strict JSON. */
   json?: boolean;
   /**

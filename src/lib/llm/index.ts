@@ -165,7 +165,15 @@ export async function completeJSON<T>(
   options: CompletionOptions = {},
 ): Promise<T> {
   const result = await complete(messages, { ...options, json: true });
-  return parseJSON<T>(result.text);
+  const parsed = parseJSON<T>(result.text);
+  if (parsed && typeof parsed === "object") {
+    Object.defineProperty(parsed, "__completion", {
+      value: result,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return parsed;
 }
 
 /** Robustly parse JSON that may be wrapped in prose or ```json fences. */

@@ -20,6 +20,7 @@ import type {
 
 const DEFAULT_TTL_MS = 10 * 60_000; // 10 minutes
 const MAX_ENTRIES = 500;
+const DEFAULT_PROMPT_VERSION = "2026-09-05-v2";
 
 interface CacheEntry {
   result: CompletionResult;
@@ -35,7 +36,10 @@ export function cacheKey(
   options: CompletionOptions,
 ): string {
   const payload = JSON.stringify({
+    promptVersion: options.promptVersion ?? DEFAULT_PROMPT_VERSION,
     messages: messages.map((m) => [m.role, m.content]),
+    provider: options.provider ?? null,
+    model: options.model ?? null,
     temperature: options.temperature ?? null,
     maxTokens: options.maxTokens ?? null,
     json: options.json ?? false,

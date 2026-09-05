@@ -215,11 +215,13 @@ built to keep a **paid** key's spend low and predictable:
   (Gemini `usageMetadata`, OpenAI `usage`) into `CompletionResult.usage`
   (`promptTokens` / `completionTokens` / `totalTokens`). `lib/llm/usage.ts`
   aggregates them process-locally (`usageSnapshot()` / `resetUsage()`), split
-  overall and per provider, so spend is observable and testable without an
-  external service.
+  overall and per provider. Creative generation also persists provider/model/
+  token events to `llm_usage_events`, the durable per-business billing and
+  quota ledger.
 - **Response cache + single-flight** (`lib/llm/cache.ts`) — opt-in per call via
   `{ cache: true }` (or `{ cache: { ttlMs } }`). Identical requests (hashed over
-  messages + temperature + maxTokens + json, **not** the API key) are served
+  messages + prompt version + routing/model identity + temperature + maxTokens + json)
+  are served
   from an in-process TTL/LRU cache at **zero token cost**, and concurrent
   identical requests share one in-flight promise. A cache hit sets
   `result.cached === true` and is counted as *saved* tokens. Enabled on the
@@ -231,6 +233,10 @@ built to keep a **paid** key's spend low and predictable:
   **non-thinking** model set it to `0` to stop paying for unused output tokens.
 - **Robust JSON parsing** — `parseJSON` strips ```json fences and prose and
   falls back to the first `{...}`/`[...]` block before throwing.
+- **Paid-call bounds** — creative generation clamps requests to five variants,
+  truncates briefs/instructions, bounds list fields, and checks
+  `LLM_MONTHLY_TOKEN_LIMIT` before calling a provider. The default is two
+  million tokens per business per month; set it to `0` to disable the quota.
 
 Guidance for adding a call-site: pass an explicit `maxTokens`, add `cache: true`
 only when a stale-but-identical answer is acceptable, and prefer low temperature
