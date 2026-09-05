@@ -9,7 +9,7 @@ const capabilities = {
       provider_tag: "openai",
       supported_parameters: {
         aspect_ratio: { type: "enum", values: ["1:1", "3:4", "9:16"] },
-        quality: { type: "enum", values: ["high"] },
+        quality: { type: "enum", values: ["medium"] },
         input_references: { type: "range", min: 0, max: 3 },
       },
     },
@@ -77,6 +77,7 @@ describe("image execution", () => {
     );
     expect(request).toMatchObject({
       aspect_ratio: "3:4",
+      quality: "medium",
       input_references: [
         {
           type: "image_url",
@@ -86,7 +87,6 @@ describe("image execution", () => {
     });
     expect(request).not.toHaveProperty("resolution");
     expect(request).not.toHaveProperty("output_format");
-    expect(request).not.toHaveProperty("quality");
   });
 
   it("does not substitute a free model on errors", async () => {

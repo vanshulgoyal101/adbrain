@@ -71,11 +71,16 @@ async function imageOptions(
     options.aspect_ratio = [...ratios].sort(
       (left, right) => distance(left) - distance(right),
     )[0];
-  if (capabilities.quality?.values?.includes("high")) options.quality = "high";
-  if (capabilities.resolution?.values?.includes("2K"))
-    options.resolution = "2K";
-  else if (capabilities.resolution?.values?.includes("1K"))
+  // AdBrain composites the final poster after generation; 1K is enough for
+  // the source photo and avoids the latency/cost jump from 2K high quality.
+  if (capabilities.quality?.values?.includes("medium"))
+    options.quality = "medium";
+  else if (capabilities.quality?.values?.includes("standard"))
+    options.quality = "standard";
+  if (capabilities.resolution?.values?.includes("1K"))
     options.resolution = "1K";
+  else if (capabilities.resolution?.values?.includes("2K"))
+    options.resolution = "2K";
   if (capabilities.output_format?.values?.includes("png"))
     options.output_format = "png";
   if (req.seed !== undefined && capabilities.seed) options.seed = req.seed;
