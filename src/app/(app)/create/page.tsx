@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = {
-  title: "Ad Assistant — AdBrain",
+  title: "Ad Assistant",
   description:
     "Make an ad in a few taps. Tell AdBrain what you want and answer a couple of easy questions.",
 };

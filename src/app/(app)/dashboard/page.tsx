@@ -11,9 +11,10 @@ import {
   getSpendEvaluation,
 } from "@/lib/supabase/queries";
 import { onboardingProgress, onboardingSteps } from "@/lib/onboarding";
-import { cn } from "@/lib/utils";
+import { describeAuditEvent } from "@/lib/audit-labels";
+import { cn, formatDateShort } from "@/lib/utils";
 
-export const metadata = { title: "Dashboard — AdBrain" };
+export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
   const business = await getPrimaryBusiness();
@@ -230,11 +231,10 @@ export default async function DashboardPage() {
                   className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm"
                 >
                   <span className="truncate text-slate-700">
-                    <span className="font-medium">{e.action}</span>
-                    {e.reason ? ` — ${e.reason}` : ""}
+                    {describeAuditEvent(e.action, e.reason)}
                   </span>
                   <span className="shrink-0 text-xs text-slate-400">
-                    {new Date(e.created_at).toLocaleString("en-IN")}
+                    {formatDateShort(e.created_at)}
                   </span>
                 </div>
               ))}

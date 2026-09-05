@@ -120,6 +120,19 @@ export function wouldExceedCap(
 }
 
 /**
+ * A campaign's true daily spend ceiling. Meta ad-set budgets are per ad set,
+ * not shared across the campaign, so an A/B campaign with N ad sets spends
+ * `perAdSet × N` per day — not `perAdSet`. Persisting this effective figure as
+ * the campaign's `daily_budget` keeps every guardrail calculation honest.
+ */
+export function effectiveDailyBudget(
+  perAdSetRupees: number,
+  adSetCount: number,
+): number {
+  return num(perAdSetRupees) * Math.max(1, Math.floor(adSetCount));
+}
+
+/**
  * Active campaign ids that should be auto-paused: only when auto-pause is on and
  * tracked spend has reached the cap. Returns [] otherwise.
  */

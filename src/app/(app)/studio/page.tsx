@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 
-export const metadata = { title: "Creative Studio — AdBrain" };
+export const metadata = { title: "Creative Studio" };
 
 export default async function StudioPage() {
   const business = await getPrimaryBusiness();

@@ -126,10 +126,13 @@ export async function POST(req: Request) {
     businessId,
     action: "creatives.generate",
     entityType: "creative",
-    reason: brief,
+    // The brief can be an LLM-written paragraph, so it belongs in details —
+    // `reason` is shown to the owner in the activity feed.
+    reason: `Generated ${rows.length} creative${rows.length === 1 ? "" : "s"}`,
     details: {
       count: rows.length,
       variantGroup,
+      brief,
       angles: variants.map((v) => v.angleName),
     },
   });

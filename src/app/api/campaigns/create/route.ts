@@ -13,6 +13,7 @@ import {
   normalizeTargetingInput,
   type TargetingInput,
 } from "@/lib/campaign/targeting";
+import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 
@@ -158,13 +159,19 @@ export async function POST(req: Request) {
     ageMax: targeting.ageMax,
   });
 
+  // Each ad set carries the full daily budget (Meta ad-set budgets aren't
+  // shared), so an A/B campaign's real daily spend is budget × ad-set count.
+  // Persist that effective figure so the spend guardrails stay honest.
+  const adSetCount = result.adSetIds.length || 1;
+  const effectiveDaily = effectiveDailyBudget(dailyBudget, adSetCount);
+
   const { data: campaign, error } = await supabase
     .from("campaigns")
     .insert({
       business_id: businessId,
       name,
       objective: "leads",
-      daily_budget: dailyBudget,
+      daily_budget: effectiveDaily,
       status: "paused",
       meta_campaign_id: result.campaignId,
       meta_adset_id: result.adSetId,
@@ -177,6 +184,9 @@ export async function POST(req: Request) {
         leadFormId,
         name,
         dailyBudget,
+        perAdSetDailyBudget: dailyBudget,
+        adSetCount,
+        effectiveDailyBudget: effectiveDaily,
         targeting: {
           area: areaLabel,
           included: targeting.included,
@@ -200,7 +210,7 @@ export async function POST(req: Request) {
     entityType: "campaign",
     entityId: campaign.id,
     metaObjectId: result.campaignId,
-    reason: `Created paused — ₹${dailyBudget}/day, ${usable.length} creative(s)`,
+    reason: `Created paused — ₹${effectiveDaily}/day${adSetCount > 1 ? ` (₹${dailyBudget} × ${adSetCount} ad sets)` : ""}, ${usable.length} creative(s)`,
     details: {
       adSetId: result.adSetId,
       adIds: result.adIds,

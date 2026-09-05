@@ -66,6 +66,13 @@ export function SpendGuardrails({
           won’t let you turn on campaigns that would commit more than your cap.
         </p>
 
+        {limits.weeklyCapRupees == null && (
+          <Alert variant="warning">
+            No spend cap is set — active campaigns can spend without any limit.
+            Set a weekly cap below to turn on overspend protection.
+          </Alert>
+        )}
+
         {evaluation.capRupees != null && (
           <SpendMeter evaluation={evaluation} />
         )}

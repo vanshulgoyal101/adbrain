@@ -8,7 +8,7 @@ import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
 
-export const metadata = { title: "Settings — AdBrain" };
+export const metadata = { title: "Settings" };
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_configured: "Facebook Login isn't configured on this server yet.",

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { isMetaConfigured } from "@/lib/meta/client";
 import { getLeads, getPrimaryBusiness } from "@/lib/supabase/queries";
 
-export const metadata = { title: "Leads — AdBrain" };
+export const metadata = { title: "Leads" };
 
 export default async function LeadsPage() {
   const business = await getPrimaryBusiness();

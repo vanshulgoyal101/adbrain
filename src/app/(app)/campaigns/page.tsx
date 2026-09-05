@@ -15,7 +15,7 @@ import {
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 
-export const metadata = { title: "Campaigns — AdBrain" };
+export const metadata = { title: "Campaigns" };
 
 /** Meta can be slow or down; a failure here must not take the page with it. */
 async function loadLeadForms(

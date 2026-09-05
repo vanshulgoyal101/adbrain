@@ -4,6 +4,8 @@ import {
   getMetaCredentialsFromEnv,
   type MetaCredentials,
 } from "./client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/types";
 
 /** Non-sensitive view of a business's Meta connection, safe to send to the UI. */
 export interface MetaConnection {
@@ -28,8 +30,11 @@ interface StoredRow {
   scopes: string | null;
 }
 
-async function getStoredRow(businessId: string): Promise<StoredRow | null> {
-  const supabase = await createClient();
+async function getStoredRow(
+  businessId: string,
+  db?: SupabaseClient<Database>,
+): Promise<StoredRow | null> {
+  const supabase = db ?? (await createClient());
   const { data } = await supabase
     .from("meta_credentials")
     .select(
@@ -51,8 +56,9 @@ function isExpired(expiresAt: string | null): boolean {
  */
 export async function resolveMetaCredentials(
   businessId: string,
+  db?: SupabaseClient<Database>,
 ): Promise<MetaCredentials | null> {
-  const row = await getStoredRow(businessId);
+  const row = await getStoredRow(businessId, db);
   if (
     row?.access_token &&
     row.ad_account_id &&
@@ -71,8 +77,9 @@ export async function resolveMetaCredentials(
 /** A MetaClient bound to a business's resolved credentials, or null if none. */
 export async function metaClientForBusiness(
   businessId: string,
+  db?: SupabaseClient<Database>,
 ): Promise<MetaClient | null> {
-  const creds = await resolveMetaCredentials(businessId);
+  const creds = await resolveMetaCredentials(businessId, db);
   return creds ? new MetaClient(creds) : null;
 }
 

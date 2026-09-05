@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   campaignsToAutoPause,
+  effectiveDailyBudget,
   evaluateSpend,
   projectedWeeklySpend,
   trackedSpend,
@@ -43,6 +44,21 @@ describe("trackedSpend", () => {
     expect(
       trackedSpend([c("a", "paused", 200, 1200), c("b", "active", 300, 800)]),
     ).toBe(2000);
+  });
+});
+
+describe("effectiveDailyBudget", () => {
+  it("returns the per-ad-set budget for a single ad set", () => {
+    expect(effectiveDailyBudget(100, 1)).toBe(100);
+  });
+
+  it("multiplies by ad-set count (each A/B ad set carries the full budget)", () => {
+    expect(effectiveDailyBudget(100, 2)).toBe(200);
+    expect(effectiveDailyBudget(250, 3)).toBe(750);
+  });
+
+  it("treats a zero or missing ad-set count as one", () => {
+    expect(effectiveDailyBudget(100, 0)).toBe(100);
   });
 });
 
