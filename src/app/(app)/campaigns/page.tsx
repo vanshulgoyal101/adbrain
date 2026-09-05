@@ -3,6 +3,7 @@ import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { type LeadForm } from "@/lib/meta/client";
 import {
   getMetaConnection,
@@ -72,11 +73,11 @@ export default async function CampaignsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Campaigns</h1>
-      <p className="mt-1 text-slate-600">
-        Launch approved creatives into Meta as an Advantage+ lead campaign —
-        created paused, so nothing spends until you activate it.
-      </p>
+      <PageHeader
+        eyebrow="Launch"
+        title="Campaigns"
+        description="Turn approved ads into Meta lead campaigns with the audience, budget, and destination reviewed before anything can spend."
+      />
       <div className="mt-6">
         <Campaigns
           business={business}

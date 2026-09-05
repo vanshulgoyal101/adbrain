@@ -48,6 +48,7 @@ export function Studio({
   const [exportOk, setExportOk] = useState(false);
 
   const approvedCount = items.filter((i) => i.status === "approved").length;
+  const reviewCount = items.length - approvedCount;
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
@@ -109,11 +110,34 @@ export function Studio({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
+            Production workspace
+          </p>
+          <h2 className="mt-1 font-display text-xl font-semibold tracking-[-0.02em] text-slate-950">
+            Create, review, and prepare your ads
+          </h2>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <span className="text-slate-500">
+            <strong className="font-semibold text-slate-900">{reviewCount}</strong> to review
+          </span>
+          <span className="text-slate-500">
+            <strong className="font-semibold text-blue-700">{approvedCount}</strong> ready
+          </span>
+        </div>
+      </div>
       <Card>
-        <CardContent>
+        <CardContent className="p-5 sm:p-6">
           <form onSubmit={generate} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="brief">What are we advertising?</Label>
+              <div>
+                <Label htmlFor="brief">What are we advertising?</Label>
+                <p className="mt-1 text-sm text-slate-500">
+                  Give the campaign a goal, offer, audience, or moment to build around.
+                </p>
+              </div>
               <Textarea
                 id="brief"
                 rows={3}
@@ -310,12 +334,23 @@ function CreativeCard({
               {creative.angle}
             </Badge>
           )}
-          {approved && (
-            <Badge className="bg-blue-600 text-white">Approved</Badge>
-          )}
         </div>
       </div>
       <CardContent className="flex flex-1 flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <Badge
+            className={
+              approved
+                ? "bg-blue-50 text-blue-700"
+                : "bg-amber-50 text-amber-700"
+            }
+          >
+            {approved ? "Approved" : "Needs review"}
+          </Badge>
+          {creative.angle && (
+            <span className="truncate text-xs text-slate-400">{creative.angle}</span>
+          )}
+        </div>
         <h3 className="font-semibold text-slate-900">{creative.headline}</h3>
         <p className="whitespace-pre-line text-sm text-slate-600">
           {creative.primary_text}

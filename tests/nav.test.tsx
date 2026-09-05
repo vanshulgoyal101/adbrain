@@ -14,12 +14,12 @@ describe("<Nav>", () => {
   it("links to every section of the app", () => {
     render(<Nav />);
     const expected: [string, string][] = [
-      ["Dashboard", "/dashboard"],
-      ["Ad Assistant", "/create"],
+      ["Home", "/dashboard"],
+      ["Create", "/create"],
       ["Brand Brain", "/brand"],
-      ["Creative Studio", "/studio"],
-      ["Campaigns", "/campaigns"],
-      ["Leads", "/leads"],
+      ["Review", "/studio"],
+      ["Launch", "/campaigns"],
+      ["Results", "/leads"],
       ["Assets", "/assets"],
       ["Settings", "/settings"],
     ];
@@ -31,22 +31,22 @@ describe("<Nav>", () => {
   it("highlights only the current section", () => {
     pathname.mockReturnValue("/campaigns");
     render(<Nav />);
-    expect(screen.getByRole("link", { name: "Campaigns" })).toHaveClass(ACTIVE);
-    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Launch" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveClass(ACTIVE);
   });
 
   it("keeps the section highlighted on nested routes", () => {
     pathname.mockReturnValue("/campaigns/abc123");
     render(<Nav />);
-    expect(screen.getByRole("link", { name: "Campaigns" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Launch" })).toHaveClass(ACTIVE);
   });
 
   it("does not highlight a section that merely shares a prefix", () => {
     // "/create" must not light up "/campaigns" (or vice versa).
     pathname.mockReturnValue("/create");
     render(<Nav />);
-    expect(screen.getByRole("link", { name: "Ad Assistant" })).toHaveClass(ACTIVE);
-    expect(screen.getByRole("link", { name: "Campaigns" })).not.toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Create" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Launch" })).not.toHaveClass(ACTIVE);
   });
 
   it("switches to a horizontal layout for the mobile header", () => {

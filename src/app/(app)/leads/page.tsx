@@ -3,14 +3,14 @@ import Link from "next/link";
 import { LeadInbox } from "@/components/lead-inbox";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { isMetaConfigured } from "@/lib/meta/client";
+import { PageHeader } from "@/components/ui/page-header";
+import { getMetaConnection } from "@/lib/meta/credentials";
 import { getLeads, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Leads" };
 
 export default async function LeadsPage() {
   const business = await getPrimaryBusiness();
-  const metaReady = isMetaConfigured();
 
   if (!business) {
     return (
@@ -34,20 +34,23 @@ export default async function LeadsPage() {
     );
   }
 
-  const leads = await getLeads(business.id);
+  const [leads, metaConnection] = await Promise.all([
+    getLeads(business.id),
+    getMetaConnection(business.id),
+  ]);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Leads</h1>
-      <p className="mt-1 text-slate-600">
-        Everyone who filled your Meta lead forms, in one inbox — with a
-        ready-to-send WhatsApp digest.
-      </p>
+      <PageHeader
+        eyebrow="Results"
+        title="Leads"
+        description="See who responded, reach them quickly, and share a concise follow-up digest with your team."
+      />
       <div className="mt-6">
         <LeadInbox
           businessName={business.name}
           initialLeads={leads}
-          metaReady={metaReady}
+          metaReady={metaConnection.ready}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import { Building2 } from "lucide-react";
 import { Studio } from "@/components/studio";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Creative Studio" };
@@ -36,11 +37,16 @@ export default async function StudioPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Creative Studio</h1>
-      <p className="mt-1 text-slate-600">
-        Describe your goal and generate on-brand ad variants for{" "}
-        <span className="font-medium">{business.name}</span>.
-      </p>
+      <PageHeader
+        eyebrow="Workbench"
+        title="Creative Studio"
+        description={
+          <p>
+            Turn a business goal into on-brand ads for <span className="font-medium">{business.name}</span>,
+            then review the variants worth taking to launch.
+          </p>
+        }
+      />
       <div className="mt-6">
         <Studio business={business} initialCreatives={creatives} />
       </div>

@@ -3,6 +3,7 @@ import { Building2 } from "lucide-react";
 import { AdAssistant } from "@/components/ad-assistant";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = {
@@ -38,10 +39,11 @@ export default async function CreatePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Ad Assistant</h1>
-      <p className="mt-1 text-slate-600">
-        The easy way to make an ad — just tell me what you want.
-      </p>
+      <PageHeader
+        eyebrow="Create"
+        title="Ad Assistant"
+        description="Start with the outcome you want. AdBrain will ask only the questions needed to make a launch-ready ad."
+      />
       <div className="mt-6 max-w-3xl">
         <AdAssistant business={business} />
       </div>

@@ -60,6 +60,23 @@ describe("<LeadInbox> Meta readiness", () => {
 });
 
 describe("<LeadInbox> table", () => {
+  it("summarises responses, contactability, and represented areas", () => {
+    render(
+      <LeadInbox
+        businessName="Solaride"
+        initialLeads={[
+          lead(),
+          lead({ id: "l2", meta_lead_id: "m2", phone: null, email: null }),
+          lead({ id: "l3", meta_lead_id: "m3", city: "Ajmer" }),
+        ]}
+        metaReady
+      />,
+    );
+    expect(screen.getByText("Total responses").nextSibling).toHaveTextContent("3");
+    expect(screen.getByText("Ready to contact").nextSibling).toHaveTextContent("2");
+    expect(screen.getByText("Areas represented").nextSibling).toHaveTextContent("2");
+  });
+
   it("lists each lead's contact details", () => {
     render(
       <LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />,

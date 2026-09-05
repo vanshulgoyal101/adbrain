@@ -1,14 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f4f7fb;
+  --foreground: #172033;
   --card: #ffffff;
-  --border: #e2e8f0;
-  --muted: #64748b;
-  --primary: #2563eb;
+  --border: #dce3ee;
+  --muted: #667085;
+  --primary: #155eef;
   --primary-foreground: #ffffff;
-  --accent: #f59e0b;
+  --accent: #f79009;
+  --surface-subtle: #eef3f9;
+  --focus-ring: #84adff;
 }
 
 @theme inline {
@@ -20,8 +22,9 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  --color-surface-subtle: var(--surface-subtle);
+  --font-sans: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-display: "Avenir Next", Avenir, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -32,7 +35,30 @@ html {
 }
 
 body {
-  background: var(--background);
+  background:
+    linear-gradient(180deg, #f9fbfd 0%, var(--background) 280px),
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus-ring) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { getMetaConnection } from "@/lib/meta/credentials";
@@ -74,12 +75,11 @@ export default async function SettingsPage({
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-        <p className="mt-1 text-slate-600">
-          Connect the accounts AdBrain uses to publish and manage your ads.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Workspace controls"
+        title="Settings"
+        description="Manage publishing connections and the safety limits that protect your advertising budget."
+      />
       <MetaConnectionPanel
         connection={connection}
         oauthConfigured={metaOAuthConfigured()}

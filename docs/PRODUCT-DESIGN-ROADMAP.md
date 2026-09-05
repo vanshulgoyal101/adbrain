@@ -10,6 +10,21 @@
 >
 _Last reviewed: 2026-09-05_
 
+## Implementation status
+
+| Workstream | Status | Delivered |
+| --- | --- | --- |
+| Product shell and visual foundation | In progress | Shared visual tokens, lifecycle navigation, Workbench/Workspace grouping, responsive shell, mobile scrollbar treatment, and shared `PageHeader` |
+| Home and onboarding | In progress | Workflow status strip and a single next-best-action panel driven by real onboarding state |
+| Brand Brain | In progress | Product framing and foundation summary for business, service areas, and creative guidance |
+| Creation and review | In progress | Studio production framing, review/ready counts, and explicit Needs review/Approved states |
+| Launch and results | In progress | Live pre-launch review, paused-by-default safety, Results summary, DB-first Meta readiness, and mobile-safe lead table |
+| Trust and commercial maturity | Planned | Billing, support, activity history, product analytics, and complete accessibility review |
+
+The current implementation deliberately preserves routes and backend behavior
+while the workflow and visual system are consolidated. Remaining work is listed
+under each workstream below.
+
 ## Product thesis
 
 AdBrain should feel like a calm operating system for creating, approving,

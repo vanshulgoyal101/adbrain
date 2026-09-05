@@ -29,6 +29,7 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
+import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import type { LeadForm } from "@/lib/meta/client";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import { BUDGET_PRESETS, describeBudget, spendHealth } from "@/lib/campaign/budget";
@@ -76,6 +77,15 @@ export function Campaigns({
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const selectedLeadForm = leadForms.find((form) => form.id === leadFormId);
+  const audiencePreview =
+    targeting.locationMode === "manual"
+      ? targeting.included.length
+        ? targeting.included.map((place) => place.name).join(", ")
+        : "Choose an area"
+      : business.locations.length
+        ? `AdBrain decides from ${business.locations.join(", ")}`
+        : "AdBrain decides from your Brand Brain";
 
   async function syncFromMeta(opts: { silent?: boolean } = {}) {
     setSyncing(true);
@@ -435,8 +445,17 @@ export function Campaigns({
                   </span>
                 </label>
 
+                <div className="border-t border-slate-200 pt-5">
+                  <CampaignLaunchReview
+                    selectedCount={selected.size}
+                    budget={budget}
+                    leadFormName={selectedLeadForm?.name}
+                    audience={audiencePreview}
+                  />
+                </div>
+
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button onClick={createCampaign} disabled={creating}>
+                  <Button onClick={createCampaign} disabled={creating || selected.size === 0 || !leadFormId || budget <= 0}>
                     {creating ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -444,9 +463,6 @@ export function Campaigns({
                     )}
                     Create paused campaign
                   </Button>
-                  <span className="text-xs text-slate-400">
-                    Created paused — no spend until you activate it in Meta.
-                  </span>
                 </div>
                 <HowItWorks />
                 {error && <Alert variant="error">{error}</Alert>}

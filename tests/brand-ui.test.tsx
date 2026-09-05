@@ -88,6 +88,19 @@ describe("<BrandForm> prefill", () => {
     const hidden = container.querySelector('input[name="id"]');
     expect(hidden).toHaveValue("b1");
   });
+
+  it("previews the context AdBrain will use and updates as fields change", () => {
+    render(<BrandForm business={business()} />);
+    const preview = screen.getByRole("region", { name: "Live brand context" });
+    expect(preview).toHaveTextContent("Free survey");
+    expect(preview).toHaveTextContent("For homeowners in Jaipur");
+    expect(preview).toHaveTextContent("warm voice");
+
+    fireEvent.change(screen.getByLabelText("Target audience"), {
+      target: { value: "apartment owners" },
+    });
+    expect(preview).toHaveTextContent("For apartment owners in Jaipur");
+  });
 });
 
 describe("<BrandForm> autofill", () => {

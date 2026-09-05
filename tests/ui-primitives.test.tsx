@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoHint } from "@/components/ui/info-hint";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
 
 describe("<Button>", () => {
@@ -83,6 +84,23 @@ describe("<Card>", () => {
       screen.getByRole("heading", { name: "Spend guardrails" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Body copy")).toBeInTheDocument();
+  });
+});
+
+describe("<PageHeader>", () => {
+  it("renders product context, title, description, and actions", () => {
+    render(
+      <PageHeader
+        eyebrow="Launch"
+        title="Campaigns"
+        description="Review before anything spends."
+        actions={<Button>New campaign</Button>}
+      />,
+    );
+    expect(screen.getByText("Launch")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Campaigns" })).toBeInTheDocument();
+    expect(screen.getByText("Review before anything spends.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New campaign" })).toBeInTheDocument();
   });
 });
 

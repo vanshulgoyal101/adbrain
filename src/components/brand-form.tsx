@@ -74,6 +74,13 @@ function fromBusiness(b: Business | null): FieldsState {
   };
 }
 
+function firstLine(value: string): string {
+  return value
+    .split("\n")
+    .map((part) => part.trim())
+    .find(Boolean) ?? "";
+}
+
 export function BrandForm({ business }: { business: Business | null }) {
   const [fields, setFields] = useState<FieldsState>(() =>
     fromBusiness(business),
@@ -89,6 +96,14 @@ export function BrandForm({ business }: { business: Business | null }) {
   const errors = Object.fromEntries(
     validateBrandFields(fields).map((i) => [i.field, i.message]),
   ) as Partial<Record<string, string>>;
+  const previewMessage =
+    firstLine(fields.offers) ||
+    firstLine(fields.usps) ||
+    fields.description.trim() ||
+    "Add an offer or proof point to shape the message.";
+  const previewAudience = fields.target_audience.trim() || "your ideal customer";
+  const previewLocation = firstLine(fields.locations) || "your service area";
+  const previewContact = fields.phone.trim() || fields.website.trim();
 
   function set<K extends keyof FieldsState>(key: K, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
@@ -153,6 +168,34 @@ export function BrandForm({ business }: { business: Business | null }) {
   return (
     <form action={formAction} className="flex flex-col gap-6">
       {business && <input type="hidden" name="id" value={business.id} />}
+
+      <section
+        aria-label="Live brand context"
+        className="grid gap-5 border-y border-slate-200/80 py-5 lg:grid-cols-[0.7fr_1.3fr] lg:items-center"
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+            Live context check
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-950">
+            What AdBrain will use
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            This updates as you edit. It is the foundation for copy, visuals,
+            targeting, and contact details.
+          </p>
+        </div>
+        <div className="border-l-2 border-blue-500 pl-4">
+          <p className="font-semibold text-slate-950">{previewMessage}</p>
+          <p className="mt-1 text-sm text-slate-600">
+            For {previewAudience} in {previewLocation}
+            {fields.brand_voice.trim() ? ` · ${fields.brand_voice.trim()} voice` : ""}
+          </p>
+          {previewContact && (
+            <p className="mt-2 text-xs font-medium text-blue-700">{previewContact}</p>
+          )}
+        </div>
+      </section>
 
       <Card>
         <CardHeader className="flex items-center justify-between gap-4">

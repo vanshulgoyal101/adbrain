@@ -3,6 +3,7 @@ import { Building2 } from "lucide-react";
 import { AssetsLibrary } from "@/components/assets-library";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   getBrandAssets,
   getCreatives,
@@ -43,12 +44,16 @@ export default async function AssetsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-900">Assets</h1>
-      <p className="mt-1 text-slate-600">
-        Every image AdBrain generates for{" "}
-        <span className="font-medium">{business.name}</span> is saved here — reuse,
-        download, or share it any time.
-      </p>
+      <PageHeader
+        eyebrow="Workspace library"
+        title="Assets"
+        description={
+          <p>
+            Every image AdBrain generates for <span className="font-medium">{business.name}</span> is saved here — reuse,
+            download, or share it any time.
+          </p>
+        }
+      />
       <div className="mt-6">
         <AssetsLibrary creatives={creatives} brandAssets={brandAssets} />
       </div>

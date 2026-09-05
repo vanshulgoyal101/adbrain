@@ -81,6 +81,8 @@ export function LeadInbox({
 
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(digest)}`;
   const now = new Date();
+  const contactableCount = leads.filter((lead) => lead.phone || lead.email).length;
+  const cityCount = new Set(leads.map((lead) => lead.city).filter(Boolean)).size;
 
   // Render a deterministic absolute date on the server and first client render
   // (same string on both sides = no hydration mismatch), then upgrade to the
@@ -99,6 +101,24 @@ export function LeadInbox({
           credentials to pull leads in.
         </Alert>
       )}
+
+      <div className="grid gap-2 border-y border-slate-200/80 py-3 sm:grid-cols-3 sm:gap-0">
+        {[
+          { label: "Total responses", value: leads.length },
+          { label: "Ready to contact", value: contactableCount },
+          { label: "Areas represented", value: cityCount },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-lg px-3 py-2 sm:border-r sm:border-slate-200/80 sm:last:border-r-0"
+          >
+            <p className="text-xs text-slate-500">{item.label}</p>
+            <p className="mt-1 text-xl font-semibold tracking-[-0.02em] text-slate-950">
+              {item.value}
+            </p>
+          </div>
+        ))}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
@@ -161,8 +181,8 @@ export function LeadInbox({
           </CardContent>
         </Card>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="min-w-[720px] w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-2 font-medium">Name</th>

@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowRight, Building2, CheckCircle2, Circle, ImageIcon, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Building2, Circle, ImageIcon, Megaphone, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SpendStatusBanner } from "@/components/spend-status";
+import { getMetaConnection } from "@/lib/meta/credentials";
 import {
   getCampaigns,
   getCreatives,
@@ -22,6 +23,7 @@ export default async function DashboardPage() {
   const audit = business ? await getAuditLog(business.id, 8) : [];
   const campaigns = business ? await getCampaigns(business.id) : [];
   const spend = business ? await getSpendEvaluation(business.id) : null;
+  const metaConnection = business ? await getMetaConnection(business.id) : null;
   const drafts = creatives.filter((c) => c.status === "draft").length;
   const approved = creatives.filter((c) => c.status === "approved").length;
 
@@ -58,9 +60,9 @@ export default async function DashboardPage() {
   }
 
   const stats = [
-    { label: "Total creatives", value: creatives.length, icon: ImageIcon },
-    { label: "Drafts", value: drafts, icon: Sparkles },
-    { label: "Approved", value: approved, icon: CheckCircle2 },
+    { label: "Ads created", value: creatives.length, icon: ImageIcon },
+    { label: "Ready to review", value: drafts, icon: Sparkles },
+    { label: "Campaigns", value: campaigns.length, icon: Megaphone },
   ];
 
   const steps = onboardingSteps({
@@ -70,12 +72,18 @@ export default async function DashboardPage() {
     campaignCount: campaigns.length,
   });
   const progress = onboardingProgress(steps);
+  const nextStep = progress.next;
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{business.name}</h1>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
+            Your advertising workspace
+          </p>
+          <h1 className="font-display text-3xl font-semibold tracking-[-0.03em] text-slate-950">
+            {business.name}
+          </h1>
           <p className="mt-1 text-slate-600">
             {business.description ?? "Your business dashboard."}
           </p>
@@ -96,8 +104,8 @@ export default async function DashboardPage() {
         )}
 
       <Link href="/create" className="mt-6 block">
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-5 transition-colors hover:bg-blue-100">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-[linear-gradient(110deg,#eef4ff,#f8fbff)] p-5 shadow-[0_8px_24px_rgba(21,94,239,0.07)] transition-colors hover:border-blue-300 hover:bg-blue-50">
+          <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
             <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-blue-600 text-white">
               <Wand2 className="h-5 w-5" />
             </span>
@@ -109,56 +117,60 @@ export default async function DashboardPage() {
               </p>
             </div>
           </div>
-          <ArrowRight className="h-5 w-5 flex-none text-blue-700" />
+          <ArrowRight className="hidden h-5 w-5 flex-none text-blue-700 sm:block" />
         </div>
       </Link>
 
-      {!progress.complete && (
-        <Card className="mt-6">
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-slate-900">Get set up</h2>
-              <span className="text-sm text-slate-500">
-                {progress.done} of {progress.total} done
+      <div className="mt-6 grid gap-2 border-y border-slate-200/80 py-3 sm:grid-cols-4 sm:gap-0">
+        {[
+          { label: "Brand foundation", value: "Ready", href: "/brand", tone: "text-blue-700" },
+          { label: "Ads to review", value: String(drafts), href: "/studio", tone: drafts ? "text-amber-700" : "text-slate-500" },
+          { label: "Meta connection", value: metaConnection?.ready ? "Connected" : "Needs setup", href: "/settings", tone: metaConnection?.ready ? "text-blue-700" : "text-amber-700" },
+          { label: "Active campaigns", value: String(campaigns.filter((c) => c.status === "active").length), href: "/campaigns", tone: "text-slate-700" },
+        ].map((item) => (
+          <Link key={item.label} href={item.href} className="rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 sm:border-r sm:border-slate-200/80 sm:last:border-r-0">
+            <p className="text-xs text-slate-500">{item.label}</p>
+            <p className={cn("mt-1 text-sm font-semibold", item.tone)}>{item.value}</p>
+          </Link>
+        ))}
+      </div>
+
+      {!progress.complete && nextStep && (
+        <Card className="mt-6 overflow-hidden border-blue-200">
+          <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="flex items-start gap-4">
+              <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <Circle className="h-5 w-5" />
               </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+                    Next best action
+                  </p>
+                  <span className="text-xs text-slate-400">
+                    {progress.done} of {progress.total} complete
+                  </span>
+                </div>
+                <h2 className="mt-1 text-lg font-semibold text-slate-950">
+                  {nextStep.title}
+                </h2>
+                <p className="mt-1 max-w-xl text-sm text-slate-600">
+                  {nextStep.hint}
+                </p>
+              </div>
             </div>
-            <ol className="flex flex-col gap-2">
-              {steps.map((step) => (
-                <li key={step.id}>
-                  <Link
-                    href={step.href}
-                    className={cn(
-                      "flex items-start gap-3 rounded-lg border p-3 transition-colors",
-                      step.done
-                        ? "border-slate-100 bg-slate-50"
-                        : progress.next?.id === step.id
-                          ? "border-blue-300 bg-blue-50 hover:bg-blue-100"
-                          : "border-slate-200 hover:bg-slate-50",
-                    )}
-                  >
-                    {step.done ? (
-                      <CheckCircle2 className="h-5 w-5 flex-none text-blue-600" />
-                    ) : (
-                      <Circle className="h-5 w-5 flex-none text-slate-300" />
-                    )}
-                    <div>
-                      <p
-                        className={cn(
-                          "text-sm font-medium",
-                          step.done ? "text-slate-400 line-through" : "text-slate-900",
-                        )}
-                      >
-                        {step.title}
-                      </p>
-                      {!step.done && (
-                        <p className="text-sm text-slate-500">{step.hint}</p>
-                      )}
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ol>
+            <Link href={nextStep.href} className="flex-none">
+              <Button size="sm">
+                Continue <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
           </CardContent>
+          <div className="h-1 bg-slate-100">
+            <div
+              className="h-full bg-blue-600 transition-[width]"
+              style={{ width: `${(progress.done / progress.total) * 100}%` }}
+            />
+          </div>
         </Card>
       )}
 
