@@ -109,6 +109,18 @@ real customer activity.
 
 ### Phase A — Public proof reset
 
+**Progress (2026-09-05):** the public route now has a photographic first viewport,
+a labelled fictional brand-to-ad example with two selectable copy angles, and
+explicit review/paused-launch guidance. The generic feature-card grid is gone.
+The auth redirect, FAQ schema, and legal links remain intact. Production-build
+browser checks covered 1440, 1024, 768, and 390 CSS pixels; see
+[validation evidence](qa/public-refresh.md).
+
+This is partial delivery, not Phase A acceptance: the example is authored sample
+copy with stock photography, not verified output from the generation pipeline.
+Actual generated-work proof, results/follow-up evidence, and customer-task
+validation remain open. No authenticated workspace redesign is claimed here.
+
 **Outcome:** a stranger understands the product and sees its output in five
 seconds.
 

@@ -1,0 +1,114 @@
+.page { --ink: #18211f; --subtle: #52605b; --line: #d9dfdc; --accent: #dcf77a; background: #fff; color: var(--ink); font-family: "Trebuchet MS", sans-serif; letter-spacing: 0; }
+.page h1, .page h2, .page h3, .page p { margin: 0; }
+.page a, .page button, .page input, .page summary { scroll-margin-top: 24px; }
+.page section { scroll-margin-top: 24px; }
+.page a:focus-visible, .page summary:focus-visible, .page input:focus-visible { outline: 3px solid #216849; outline-offset: 5px; }
+.skip { position: absolute; top: -100px; z-index: 20; padding: 12px; background: white; }
+.skip:focus { top: 8px; }
+.header { max-width: 1440px; margin: auto; height: 80px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; }
+.logo { display: inline-flex; align-items: center; gap: 10px; font-size: 23px; font-weight: 700; }
+.header nav { display: flex; align-items: center; gap: 32px; }
+.exampleLink { font-size: 14px; }
+.signIn, .primary, .heroSecondary, .textLink { display: inline-flex; align-items: center; justify-content: center; gap: 12px; font-weight: 700; }
+.signIn { min-height: 44px; border: 1px solid var(--line); border-radius: 4px; padding: 0 18px; }
+.hero { position: relative; min-height: 570px; isolation: isolate; color: white; background: #253e3f; }
+.heroPhoto { object-fit: cover; object-position: center 65%; z-index: 0; }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(9, 25, 26, .88), rgba(9, 25, 26, .42) 53%, rgba(9, 25, 26, .05)); }
+.heroContent { position: relative; z-index: 2; max-width: 1440px; margin: auto; padding: 48px; }
+.eyebrow { font-size: 11px; font-weight: 700; line-height: 1.6; }
+.hero h1 { font-size: 76px; font-weight: 700; line-height: 1.1; margin: 12px 0 16px; }
+.heroStatement { font-family: Georgia, serif; font-size: 38px; line-height: 1.15; }
+.heroDescription { max-width: 420px; font-size: 16px; line-height: 1.6; margin-top: 20px !important; color: #f0f5ef; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; margin-top: 28px; }
+.primary { min-height: 48px; padding: 12px 20px; border-radius: 4px; color: var(--ink); background: var(--accent); font-size: 14px; }
+.primary:hover { background: #c9ed53; }
+.heroSecondary { min-height: 44px; font-size: 14px; }
+.heroCaption { position: absolute; z-index: 2; right: 48px; bottom: 24px; font-size: 10px; padding: 6px 10px; background: #18211f; }
+.example, .workflow, .faq { max-width: 1344px; margin: auto; padding: 56px 48px; }
+.sectionHeading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 32px; }
+.sectionHeading h2, .faq h2, .safety h2 { font-family: Georgia, serif; font-size: 34px; font-weight: 400; line-height: 1.2; margin-top: 10px; }
+.sectionHeading > p { font-size: 12px; line-height: 1.7; color: var(--subtle); }
+.exampleGrid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 64px; align-items: start; }
+.brief { border-top: 2px solid var(--ink); padding-top: 24px; }
+.label { font-size: 10px; font-weight: 700; color: var(--subtle); }
+.brief h3 { font-size: 25px; margin: 10px 0 8px; }
+.location { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--subtle); }
+.brandDetails { margin: 24px 0; }
+.brandDetails > div { display: grid; grid-template-columns: 100px 1fr; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; font-size: 13px; line-height: 1.5; }
+.brandDetails dt { color: var(--subtle); }
+.brandDetails dd { margin: 0; }
+.goal { border-left: 3px solid #739641; padding-left: 16px; }
+.goal p { margin-top: 8px; font-family: Georgia, serif; font-size: 21px; line-height: 1.5; }
+.angles { border: 0; padding: 0; margin: 26px 0 0; display: grid; gap: 8px; }
+.angles legend { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+.angles label { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; cursor: pointer; }
+.angles .selectedAngle { background: #eff5e6; border-color: #66883b; }
+.angles input { accent-color: #395b23; width: 16px; height: 16px; }
+.ad { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.adTop { padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-size: 13px; }
+.adTop span { color: var(--subtle); font-size: 11px; }
+.poster { background: #eef3d7; }
+.posterCopy { padding: 28px 32px; min-height: 218px; }
+.posterCopy > span { font-size: 10px; font-weight: 700; }
+.posterCopy h3 { font-family: Georgia, serif; font-size: 36px; font-weight: 400; line-height: 1.12; max-width: 340px; margin: 18px 0; }
+.posterCopy p { font-size: 11px; }
+.adPhoto { width: 100%; height: auto; aspect-ratio: 2.1; object-fit: cover; object-position: center 65%; }
+.adCopy { padding: 20px; }
+.adCopy > p { font-size: 13px; line-height: 1.7; min-height: 66px; }
+.adCopy > div { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+.adCopy span { font-size: 10px; color: var(--subtle); }
+.adCopy strong { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.exampleFoot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 20px; font-size: 10px; line-height: 1.6; color: var(--subtle); }
+.exampleFoot a { text-decoration: underline; }
+.workflow { border-top: 1px solid var(--line); }
+.textLink { font-size: 13px; min-height: 44px; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; padding: 0; list-style: none; margin: 32px 0 0; }
+.steps li { border-top: 1px solid var(--line); padding-top: 20px; }
+.steps span { font-size: 12px; color: #526a25; }
+.steps h3 { font-size: 18px; margin: 18px 0 12px; }
+.steps p { font-size: 14px; line-height: 1.7; color: var(--subtle); }
+.safety { background: #eff3f1; padding: 48px max(48px, calc((100% - 1248px) / 2)); display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+.safety .eyebrow { margin-top: 20px; }
+.safety > div > p:last-child { font-size: 14px; line-height: 1.7; color: var(--subtle); margin-top: 20px; max-width: 360px; }
+.safety ul { list-style: none; padding: 0; margin: 0; }
+.safety li { display: flex; gap: 18px; border-bottom: 1px solid #cdd7d1; padding: 22px 0; }
+.safety li svg { flex-shrink: 0; width: 20px; color: #3e684e; }
+.safety h3 { font-size: 15px; margin-bottom: 8px; }
+.safety li p { font-size: 13px; line-height: 1.7; color: var(--subtle); }
+.faq { display: grid; grid-template-columns: 1fr 1.5fr; gap: 64px; }
+.faq .primary { margin-top: 24px; }
+.faq details { border-bottom: 1px solid var(--line); padding: 20px 0; }
+.faq summary { font-size: 15px; font-weight: 700; cursor: pointer; }
+.faq details p { margin-top: 14px; font-size: 14px; line-height: 1.7; color: var(--subtle); }
+.footer { border-top: 1px solid var(--line); padding: 28px 48px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; font-size: 11px; color: var(--subtle); }
+.footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
+@media (max-width: 1000px) {
+  .exampleGrid, .safety, .faq { gap: 32px; }
+  .sectionHeading { align-items: start; flex-direction: column; }
+  .posterCopy { padding: 24px; min-height: 240px; }
+  .posterCopy h3 { font-size: 32px; }
+}
+@media (max-width: 760px) {
+  .header { height: 68px; padding: 0 20px; }
+  .header nav { gap: 12px; }
+  .exampleLink { display: none; }
+  .hero { min-height: 570px; }
+  .heroContent { padding: 36px 24px 64px; }
+  .hero h1 { font-size: 56px; }
+  .heroStatement { font-size: 32px; }
+  .heroDescription { font-size: 15px; max-width: 330px; }
+  .hero::after { background: rgba(9, 25, 26, .65); }
+  .heroPhoto { object-position: 60% center; }
+  .actions { gap: 12px; align-items: start; flex-direction: column; margin-top: 24px; }
+  .heroCaption { right: 20px; bottom: 16px; font-size: 9px; }
+  .example, .workflow, .faq { padding: 36px 24px; }
+  .sectionHeading h2, .faq h2, .safety h2 { font-size: 29px; }
+  .sectionHeading { gap: 16px; }
+  .exampleGrid, .steps, .safety, .faq { grid-template-columns: minmax(0, 1fr); }
+  .posterCopy { min-height: 226px; }
+  .adCopy > p { min-height: 110px; }
+  .safety { padding: 36px 24px; }
+  .steps { gap: 24px; }
+  .steps h3 { margin-top: 10px; }
+  .footer { padding: 24px; }
+}
