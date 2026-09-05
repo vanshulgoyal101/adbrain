@@ -391,17 +391,22 @@ describe("<Studio> review board", () => {
   });
 
   it("keeps a failed approval visible and retryable", async () => {
+    const user = userEvent.setup();
     h.setCreativeStatus.mockResolvedValueOnce({
       ok: false,
       error: "Save failed",
     });
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+    await user.click(screen.getByRole("button", { name: /^approve$/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
     expect(
       screen.getByRole("button", { name: /export approved/i }),
     ).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+    const retry = screen.getByRole("button", { name: /^approve$/i });
+    await waitFor(() => expect(retry).toBeEnabled());
+    await user.click(retry);
+    await waitFor(() => expect(h.setCreativeStatus).toHaveBeenCalledTimes(2));
+    expect(h.setCreativeStatus).toHaveBeenNthCalledWith(2, "c1", "approved");
     expect(
       await screen.findByRole("button", { name: /unapprove/i }),
     ).toBeInTheDocument();
