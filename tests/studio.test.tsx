@@ -136,6 +136,24 @@ describe("<Studio> approval", () => {
   });
 });
 
+describe("<Studio> creative preview", () => {
+  it("shows placement context and closes with Escape", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Preview Cut your power bill" }),
+    );
+
+    expect(screen.getByRole("dialog", { name: "Review before approval" })).toBeInTheDocument();
+    expect(screen.getByText("Meta feed preview")).toBeInTheDocument();
+    expect(screen.getByText("Solaride")).toBeInTheDocument();
+    expect(screen.getByText("Facebook and Instagram feed")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
 describe("<Studio> deletion", () => {
   it("confirms before deleting and then removes the card", async () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
