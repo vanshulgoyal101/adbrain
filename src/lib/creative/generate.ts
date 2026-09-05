@@ -27,7 +27,19 @@ export interface GeneratedVariant {
     provider: string;
     model: string;
     usage: TokenUsage;
+    inputChars?: number;
+    outputChars?: number;
+    latencyMs?: number;
+    cacheHit?: boolean;
   }[];
+  imageUsage: {
+    provider: string;
+    model: string;
+    estimatedCostUsd: number;
+    latencyMs?: number;
+    width: number;
+    height: number;
+  };
 }
 
 const MAX_BRIEF_CHARS = 2_000;
@@ -63,6 +75,7 @@ export async function generateVariants(params: {
   instructions?: string;
   language?: string;
   format?: AdFormat;
+  referenceImages?: string[];
 }): Promise<GeneratedVariant[]> {
   const {
     brand: rawBrand,
@@ -70,6 +83,7 @@ export async function generateVariants(params: {
     instructions: rawInstructions,
     language,
     format,
+    referenceImages,
   } = params;
   const brand = boundedBrand(rawBrand);
   const brief = rawBrief.slice(0, MAX_BRIEF_CHARS);
@@ -86,7 +100,15 @@ export async function generateVariants(params: {
 
   return Promise.all(
     angles.map((angle) =>
-      generateOneVariant(brand, brief, angle, instructions, language, format),
+      generateOneVariant(
+        brand,
+        brief,
+        angle,
+        instructions,
+        language,
+        format,
+        referenceImages,
+      ),
     ),
   );
 }
@@ -109,6 +131,10 @@ async function generateGuardedCopy(
         provider: string;
         model: string;
         usage?: TokenUsage;
+        inputChars?: number;
+        outputChars?: number;
+        latencyMs?: number;
+        cached?: boolean;
       };
     }>(
       buildCopyMessages(brand, brief, angle, instructions, language),
@@ -119,6 +145,10 @@ async function generateGuardedCopy(
         provider: copy.__completion.provider,
         model: copy.__completion.model,
         usage: copy.__completion.usage,
+        inputChars: copy.__completion.inputChars,
+        outputChars: copy.__completion.outputChars,
+        latencyMs: copy.__completion.latencyMs,
+        cacheHit: copy.__completion.cached,
       });
     }
     normalized = {
@@ -142,14 +172,16 @@ export async function generateOneVariant(
   instructions?: string,
   language?: string,
   format?: AdFormat,
+  referenceImages?: string[],
 ): Promise<GeneratedVariant> {
   const dims = formatDimensions(format ?? "portrait");
   const [copyResult, image] = await Promise.all([
     generateGuardedCopy(brand, brief, angle, instructions, language),
     generateImage({
-      prompt: buildImagePrompt(brand, brief, angle, instructions),
+      prompt: buildImagePrompt(brand, brief, angle, instructions, format),
       width: dims.width,
       height: dims.height,
+      referenceImages: referenceImages?.slice(0, 3),
     }),
   ]);
   const normalizedCopy = copyResult.copy;
@@ -170,5 +202,13 @@ export async function generateOneVariant(
       format,
     }),
     llmUsage: copyResult.usage,
+    imageUsage: {
+      provider: image.provider,
+      model: image.model ?? image.provider,
+      estimatedCostUsd: image.estimatedCostUsd ?? 0,
+      latencyMs: image.latencyMs,
+      width: dims.width,
+      height: dims.height,
+    },
   };
 }

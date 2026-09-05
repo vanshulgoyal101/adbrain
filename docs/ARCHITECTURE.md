@@ -260,8 +260,11 @@ the current free image default; evaluate a paid image provider before recurring
 billing because image reliability and quality dominate the cost and customer
 experience.
 
-Do not price from request counts alone. Use persisted `llm_usage_events` plus
-image-provider accounting to measure ten representative ads across several
+Do not price from request counts alone. `llm_usage_events` now records text and
+image events with provider/model, token counts, estimated provider cost,
+latency, cache/fallback state, image dimensions, route, and safe generation
+metadata. It intentionally does not store raw prompts, brand fields, API keys,
+or image bytes. Use the ledger to measure ten representative ads across several
 businesses, then multiply by planned volume and add a 2x retry/failure buffer.
 The operational demo reserve and payment sequencing are documented in
 [`DEMO-RUNBOOK.md`](./DEMO-RUNBOOK.md). Payments are not a prerequisite for the

@@ -66,4 +66,13 @@ describe("ad templates", () => {
       expect(angle.imageHint.toLowerCase()).not.toContain("customer");
     }
   });
+
+  it("gives every angle a distinct visual composition", () => {
+    const prompts = AD_ANGLES.map((angle) => buildImagePrompt(brand, "rooftop solar", angle));
+    expect(new Set(prompts).size).toBe(AD_ANGLES.length);
+    expect(prompts[0]).toContain("negative space on the left");
+    expect(prompts[1]).toContain("before-to-after");
+    expect(prompts.every((prompt) => prompt.includes("No text"))).toBe(true);
+    expect(buildImagePrompt(brand, "brief", AD_ANGLES[0], undefined, "story")).toContain("vertical 9:16 story/reel");
+  });
 });

@@ -44,6 +44,9 @@ export interface CompletionResult {
   usage?: TokenUsage;
   /** True when served from the response cache (zero token cost). */
   cached?: boolean;
+  latencyMs?: number;
+  inputChars?: number;
+  outputChars?: number;
 }
 
 export interface ProviderCallContext {

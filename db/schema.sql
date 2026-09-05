@@ -501,15 +501,48 @@ create table if not exists public.llm_usage_events (
   business_id       uuid not null references public.businesses (id) on delete cascade,
   user_id           uuid references auth.users (id) on delete set null,
   route             text not null,
+  usage_kind        text not null default 'text'
+                    check (usage_kind in ('text', 'image')),
   provider          text not null,
   model             text not null,
   prompt_tokens     integer not null default 0,
   completion_tokens integer not null default 0,
   total_tokens      integer not null default 0,
   estimated_cost_usd numeric(12, 8) not null default 0,
+  prompt_version    text,
+  input_chars       integer not null default 0,
+  output_chars      integer not null default 0,
+  temperature       numeric(5, 3),
+  max_tokens        integer,
+  cache_hit         boolean not null default false,
+  latency_ms        integer,
+  attempt           integer not null default 1,
+  status            text not null default 'success'
+                    check (status in ('success', 'error', 'fallback')),
+  error_code        text,
+  image_width       integer,
+  image_height      integer,
+  metadata          jsonb not null default '{}'::jsonb,
   request_id        text,
   created_at        timestamptz not null default now()
 );
+
+-- Idempotent telemetry upgrades for databases created before detailed usage
+-- logging. Never store raw prompts, brand fields, API keys, or image bytes here.
+alter table public.llm_usage_events add column if not exists usage_kind text not null default 'text';
+alter table public.llm_usage_events add column if not exists prompt_version text;
+alter table public.llm_usage_events add column if not exists input_chars integer not null default 0;
+alter table public.llm_usage_events add column if not exists output_chars integer not null default 0;
+alter table public.llm_usage_events add column if not exists temperature numeric(5, 3);
+alter table public.llm_usage_events add column if not exists max_tokens integer;
+alter table public.llm_usage_events add column if not exists cache_hit boolean not null default false;
+alter table public.llm_usage_events add column if not exists latency_ms integer;
+alter table public.llm_usage_events add column if not exists attempt integer not null default 1;
+alter table public.llm_usage_events add column if not exists status text not null default 'success';
+alter table public.llm_usage_events add column if not exists error_code text;
+alter table public.llm_usage_events add column if not exists image_width integer;
+alter table public.llm_usage_events add column if not exists image_height integer;
+alter table public.llm_usage_events add column if not exists metadata jsonb not null default '{}'::jsonb;
 
 create index if not exists llm_usage_events_business_month_idx
   on public.llm_usage_events (business_id, created_at);

@@ -26,6 +26,19 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
   const benefitSize = Math.round(30 * s);
   const brandSize = Math.round(38 * s);
   const ctaSize = Math.round(30 * s);
+  const contentTop =
+    spec.layout === "top"
+      ? pad * 4
+      : spec.layout === "center"
+        ? Math.round(spec.height * 0.28)
+        : undefined;
+  const contentBottom = spec.layout === "bottom" ? pad : undefined;
+  const scrim =
+    spec.layout === "top"
+      ? "linear-gradient(180deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.52) 34%, rgba(0,0,0,0.08) 72%, rgba(0,0,0,0.24) 100%)"
+      : spec.layout === "center"
+        ? "linear-gradient(90deg, rgba(0,0,0,0.76) 0%, rgba(0,0,0,0.36) 52%, rgba(0,0,0,0.16) 100%)"
+        : "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 32%, rgba(0,0,0,0.55) 66%, rgba(0,0,0,0.88) 100%)";
 
   return (
     <div
@@ -66,8 +79,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
           width: "100%",
           height: "100%",
           display: "flex",
-          background:
-            "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 32%, rgba(0,0,0,0.55) 66%, rgba(0,0,0,0.88) 100%)",
+          background: scrim,
         }}
       />
 
@@ -127,7 +139,8 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
         style={{
           position: "absolute",
           left: pad,
-          bottom: pad,
+          top: contentTop,
+          bottom: contentBottom,
           width: spec.width - pad * 2,
           display: "flex",
           flexDirection: "column",

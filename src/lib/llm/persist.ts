@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getEnv } from "@/lib/env";
 import type { TokenUsage } from "./types";
+import type { Json } from "@/lib/types";
 
 export interface LLMUsageEvent {
   businessId: string;
@@ -10,6 +11,29 @@ export interface LLMUsageEvent {
   model: string;
   usage: TokenUsage;
   requestId: string;
+  usageKind?: "text" | "image";
+  promptVersion?: string;
+  inputChars?: number;
+  outputChars?: number;
+  temperature?: number;
+  maxTokens?: number;
+  cacheHit?: boolean;
+  latencyMs?: number;
+  attempt?: number;
+  status?: "success" | "error" | "fallback";
+  errorCode?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  estimatedCostUsd?: number;
+  metadata?: { [key: string]: Json };
+}
+
+export interface LLMUsageSummary {
+  calls: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  provider: string | null;
+  model: string | null;
 }
 
 const RATES_USD_PER_MILLION: Record<string, { input: number; output: number }> = {
@@ -47,6 +71,42 @@ export async function monthlyTokenUsage(businessId: string): Promise<number | nu
   }
 }
 
+/** Small aggregate for the private demo account; raw prompts are never returned. */
+export async function businessLLMUsageSummary(
+  businessId: string,
+): Promise<LLMUsageSummary> {
+  const empty: LLMUsageSummary = {
+    calls: 0,
+    totalTokens: 0,
+    estimatedCostUsd: 0,
+    provider: null,
+    model: null,
+  };
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("llm_usage_events")
+      .select("provider, model, total_tokens, estimated_cost_usd, created_at")
+      .eq("business_id", businessId)
+      .eq("route", "creatives.generate")
+      .eq("usage_kind", "text")
+      .order("created_at", { ascending: false });
+    if (error || !data?.length) return empty;
+    return {
+      calls: data.length,
+      totalTokens: data.reduce((sum, row) => sum + (row.total_tokens ?? 0), 0),
+      estimatedCostUsd: data.reduce(
+        (sum, row) => sum + (row.estimated_cost_usd ?? 0),
+        0,
+      ),
+      provider: data[0].provider,
+      model: data[0].model,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export function configuredMonthlyTokenLimit(): number {
   return getEnv().LLM_MONTHLY_TOKEN_LIMIT;
 }
@@ -61,12 +121,27 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
         business_id: event.businessId,
         user_id: event.userId,
         route: event.route,
+        usage_kind: event.usageKind ?? "text",
         provider: event.provider,
         model: event.model,
         prompt_tokens: event.usage.promptTokens,
         completion_tokens: event.usage.completionTokens,
         total_tokens: event.usage.totalTokens,
-        estimated_cost_usd: estimatedCost(event.model, event.usage),
+        estimated_cost_usd:
+          event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
+        prompt_version: event.promptVersion ?? null,
+        input_chars: event.inputChars ?? 0,
+        output_chars: event.outputChars ?? 0,
+        temperature: event.temperature ?? null,
+        max_tokens: event.maxTokens ?? null,
+        cache_hit: event.cacheHit ?? false,
+        latency_ms: event.latencyMs ?? null,
+        attempt: event.attempt ?? 1,
+        status: event.status ?? "success",
+        error_code: event.errorCode ?? null,
+        image_width: event.imageWidth ?? null,
+        image_height: event.imageHeight ?? null,
+        metadata: event.metadata ?? {},
         request_id: event.requestId,
       })),
     );

@@ -3,6 +3,8 @@ export interface ImageRequest {
   width?: number;
   height?: number;
   seed?: number;
+  /** Public brand/product images used by capable providers as visual references. */
+  referenceImages?: string[];
 }
 
 export interface GeneratedImage {
@@ -11,6 +13,9 @@ export interface GeneratedImage {
   provider: string;
   prompt: string;
   seed?: number;
+  model?: string;
+  estimatedCostUsd?: number;
+  latencyMs?: number;
 }
 
 export interface ImageProvider {

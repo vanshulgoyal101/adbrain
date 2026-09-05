@@ -82,6 +82,13 @@ export async function POST(req: Request) {
   }
 
   const instructions = await getActiveInstructionsText(businessId);
+  const { data: brandAssets } = await supabase
+    .from("brand_assets")
+    .select("url, type")
+    .eq("business_id", businessId)
+    .in("type", ["product_photo", "past_ad"])
+    .order("created_at", { ascending: false })
+    .limit(3);
   let variants;
   try {
     variants = await generateVariants({
@@ -90,6 +97,7 @@ export async function POST(req: Request) {
       count,
       instructions,
       language,
+      referenceImages: (brandAssets ?? []).map((asset) => asset.url),
     });
   } catch (err) {
     if (err instanceof NoLLMKeysError) {
@@ -107,15 +115,37 @@ export async function POST(req: Request) {
   const requestId = crypto.randomUUID();
   await persistLLMUsage(
     variants.flatMap((variant) =>
-      variant.llmUsage.map((entry) => ({
-        businessId,
-        userId: user.id,
-        route: "creatives.generate",
-        provider: entry.provider,
-        model: entry.model,
-        usage: entry.usage,
-        requestId,
-      })),
+      [
+        ...variant.llmUsage.map((entry) => ({
+          businessId,
+          userId: user.id,
+          route: "creatives.generate",
+          provider: entry.provider,
+          model: entry.model,
+          usage: entry.usage,
+          requestId,
+          inputChars: entry.inputChars,
+          outputChars: entry.outputChars,
+          latencyMs: entry.latencyMs,
+          cacheHit: entry.cacheHit,
+          metadata: { angle: variant.angleId },
+        })),
+        {
+          businessId,
+          userId: user.id,
+          route: "creatives.generate",
+          provider: variant.imageUsage.provider,
+          model: variant.imageUsage.model,
+          usageKind: "image" as const,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          estimatedCostUsd: variant.imageUsage.estimatedCostUsd,
+          latencyMs: variant.imageUsage.latencyMs,
+          imageWidth: variant.imageUsage.width,
+          imageHeight: variant.imageUsage.height,
+          requestId,
+          metadata: { angle: variant.angleId },
+        },
+      ],
     ),
   );
 

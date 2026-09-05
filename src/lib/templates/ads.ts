@@ -28,6 +28,8 @@ export interface AdAngle {
   description: string;
   /** Visual mood/direction for the image (the subject comes from the industry + brief). */
   imageHint: string;
+  /** Composition direction that makes this angle visually distinct. */
+  compositionHint: string;
 }
 
 /** LLM output shape for ad copy. */
@@ -74,6 +76,8 @@ export const AD_ANGLES: AdAngle[] = [
       "Emphasise the money saved or the clear value the customer gains.",
     imageHint:
       "bright, aspirational mood with warm natural light and a clean, premium look",
+    compositionHint:
+      "show the product or finished work in a believable real-world setting, with generous negative space on the left for a headline",
   },
   {
     id: "problem",
@@ -82,6 +86,8 @@ export const AD_ANGLES: AdAngle[] = [
       "Lead with the customer's problem, then the relief the business provides.",
     imageHint:
       "reassuring, solution-focused mood, crisp and modern composition",
+    compositionHint:
+      "use a clear before-to-after visual story or a problem-to-solution composition, with the resolved outcome dominant in the foreground",
   },
   {
     id: "offer",
@@ -90,6 +96,8 @@ export const AD_ANGLES: AdAngle[] = [
       "Highlight a current offer, discount, deal, or incentive to act.",
     imageHint:
       "energetic, celebratory advertising mood, vibrant and inviting",
+    compositionHint:
+      "create a bold close product or service moment with a strong focal subject and clean open space near the top for an offer badge",
   },
   {
     id: "trust",
@@ -98,6 +106,8 @@ export const AD_ANGLES: AdAngle[] = [
       "Emphasise experience, quality, reviews, guarantees, and local track record.",
     imageHint:
       "trustworthy, precise and professional mood; skilled workers delivering the product/service in a real setting",
+    compositionHint:
+      "show the real work, craft, team, or finished result in context; use an authentic documentary-style frame rather than a posed stock portrait",
   },
   {
     id: "aspiration",
@@ -105,6 +115,8 @@ export const AD_ANGLES: AdAngle[] = [
     description: "Sell the better outcome or lifestyle the customer wants.",
     imageHint:
       "warm, optimistic, aspirational mood with soft golden light",
+    compositionHint:
+      "show the customer-visible outcome in a lived-in environment, with layered depth and the subject placed off-center for editorial balance",
   },
   {
     id: "urgency",
@@ -112,6 +124,8 @@ export const AD_ANGLES: AdAngle[] = [
     description: "Give a limited-time reason to enquire now.",
     imageHint:
       "dynamic, high-energy, bold and attention-grabbing mood",
+    compositionHint:
+      "use a decisive action moment, diagonal energy, and a visually clear focal subject without clutter or artificial sale graphics",
   },
 ];
 
@@ -192,12 +206,13 @@ Return strict JSON: {"headline": string, "primary_text": string, "cta": string}`
   ];
 }
 
-/** Build a photorealistic, text-free image prompt for an angle. */
+/** Build a model-agnostic creative brief for a text-free image model. */
 export function buildImagePrompt(
   brand: BrandContext,
   brief: string,
   angle: AdAngle,
   instructions?: string,
+  format?: string,
 ): string {
   const industry = brandIndustry(brand);
   const colorHint = brand.primary_color
@@ -207,15 +222,26 @@ export function buildImagePrompt(
     // Keep it short and subject-dominant: weak free models (flux/Pollinations)
     // drift to empty skies or stock portraits when the subject isn't the loud,
     // first thing in the prompt.
-    `Photorealistic advertising photograph of ${brief}. ` +
-    `The ${industry} product or work is the main subject, in sharp focus and ` +
-    `filling most of the frame. ` +
-    `${angle.imageHint}. ${colorHint}` +
-    `natural daylight, high detail, realistic, shot on a DSLR, commercial quality. ` +
-    `Avoid close-up portraits or headshots as the main subject. ` +
-    `${instructions ? `Follow these brand instructions: ${instructions.slice(0, 500)}. ` : ""}` +
-    `No text, no words, no logos, no watermarks.`
+    `Create a premium, photorealistic advertising image for this campaign: ${brief}. ` +
+    `The ${industry} product, service, place, or finished work must be the unmistakable main subject, ` +
+    `sharp and specific rather than a generic stock scene. ` +
+    `Visual angle: ${angle.name} — ${angle.description}. ` +
+    `Composition: ${angle.compositionHint}. ` +
+    `Visual mood: ${angle.imageHint}. ${colorHint}` +
+    `Use natural light, realistic materials, believable scale, strong subject separation, ` +
+    `commercial photography, and a deliberate ${formatImageFraming(format)} framing. ` +
+    `Avoid close-up portraits or headshots as the main subject; do not make a generic smiling-person image. ` +
+    `Show the actual offering and its customer-visible context. If reference images are provided, preserve the real product, materials, proportions, and recognizable visual identity from them. ` +
+    `${instructions ? `Follow these brand instructions without adding unverified claims: ${instructions.slice(0, 500)}. ` : ""}` +
+    `No text, no words, no logos, no watermarks, no UI, no collage, no split-screen, no artificial typography.`
   );
+}
+
+function formatImageFraming(format?: string): string {
+  if (format === "story") return "vertical 9:16 story/reel";
+  if (format === "square") return "square 1:1 feed";
+  if (format === "landscape") return "wide 1.91:1 link ad";
+  return "vertical 4:5 feed";
 }
 
 /** Build messages that extract brand fields from scraped website text. */

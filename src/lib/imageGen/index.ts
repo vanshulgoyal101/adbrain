@@ -1,5 +1,6 @@
 import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
+import { createOpenRouterProvider } from "./providers/openrouter";
 import type { GeneratedImage, ImageProvider, ImageRequest } from "./types";
 
 export type { GeneratedImage, ImageRequest } from "./types";
@@ -9,19 +10,45 @@ function getProvider(): ImageProvider {
   switch (env.IMAGE_PROVIDER) {
     case "pollinations":
       return createPollinationsProvider();
-    // Add paid providers here when you have keys:
-    // case "falai":  return createFalProvider();
-    // case "openai": return createOpenAIImageProvider();
+    case "openrouter":
+      return getEnv().OPENROUTER_API_KEYS.length
+        ? createOpenRouterProvider()
+        : createPollinationsProvider();
     default:
       return createPollinationsProvider();
   }
+}
+
+function getFallbackProvider(): ImageProvider | null {
+  const env = getEnv();
+  if (env.IMAGE_PROVIDER_FALLBACK === "pollinations") {
+    return createPollinationsProvider();
+  }
+  if (env.IMAGE_PROVIDER_FALLBACK === "openrouter" && env.OPENROUTER_API_KEYS.length) {
+    return createOpenRouterProvider();
+  }
+  return null;
 }
 
 /** Generate a single image with the configured provider. */
 export async function generateImage(
   req: ImageRequest,
 ): Promise<GeneratedImage> {
-  return getProvider().generate(req);
+  const startedAt = Date.now();
+  const provider = getProvider();
+  try {
+    return {
+      ...(await provider.generate(req)),
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    const fallback = getFallbackProvider();
+    if (!fallback || fallback.name === provider.name) throw error;
+    return {
+      ...(await fallback.generate(req)),
+      latencyMs: Date.now() - startedAt,
+    };
+  }
 }
 
 /** The active image provider's name (for UI/diagnostics). */

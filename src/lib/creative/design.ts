@@ -32,6 +32,8 @@ export interface AdDesignSpec {
   ctaTextColor: string;
   /** CSS family the renderer can resolve, derived from the brand's font choice. */
   fontFamily: string;
+  /** Angle-specific content placement so every concept is not the same poster. */
+  layout: "bottom" | "top" | "center";
 }
 
 export const DEFAULT_BRAND_COLOR = "#2563eb";
@@ -192,6 +194,7 @@ export function buildAdDesign(params: {
   const dims = formatDimensions(format);
   const primaryColor = normalizeHex(brand.primary_color);
   const headline = shortenHeadline(copy.headline) || brand.name;
+  const layout = layoutForAngle(params.angle?.id);
 
   return {
     format,
@@ -208,5 +211,12 @@ export function buildAdDesign(params: {
     primaryColor,
     ctaTextColor: readableTextOn(primaryColor),
     fontFamily: fontFamilyFor(brand.font),
+    layout,
   };
+}
+
+function layoutForAngle(angleId?: string): AdDesignSpec["layout"] {
+  if (angleId === "offer" || angleId === "urgency") return "top";
+  if (angleId === "problem") return "center";
+  return "bottom";
 }

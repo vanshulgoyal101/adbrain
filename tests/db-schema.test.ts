@@ -30,6 +30,7 @@ const OWNED_TABLES = [
   "audit_log",
   "leads",
   "spend_limits",
+  "llm_usage_events",
 ] as const;
 
 const ALL_TABLES = [...OWNED_TABLES, "profiles", "rate_limit_hits"] as const;
@@ -94,6 +95,19 @@ describe("schema: audit_log is append-only", () => {
     expect(SQL).toContain("on public.audit_log for select");
     expect(SQL).toContain("on public.audit_log for insert");
     expect(SQL).not.toMatch(/on public\.audit_log for (update|delete|all)/);
+  });
+});
+
+describe("schema: usage telemetry", () => {
+  it("keeps text and image cost events queryable without raw content", () => {
+    expect(SQL).toContain("usage_kind");
+    expect(SQL).toContain("check (usage_kind in ('text', 'image'))");
+    expect(SQL).toContain("estimated_cost_usd");
+    expect(SQL).toContain("latency_ms");
+    expect(SQL).toContain("image_width");
+    expect(SQL).toContain("image_height");
+    expect(SQL).toContain("metadata jsonb");
+    expect(SQL).toContain("never store raw prompts");
   });
 });
 

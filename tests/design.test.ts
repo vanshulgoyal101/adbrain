@@ -144,6 +144,7 @@ describe("buildAdDesign", () => {
     expect(spec.ctaLabel).toBe("Get Quote");
     expect(spec.primaryColor).toBe("#0b7a3b");
     expect(spec.ctaTextColor).toBe("#ffffff");
+    expect(spec.layout).toBe("bottom");
   });
 
   it("threads the brand's font choice through to the renderer", () => {
@@ -176,5 +177,10 @@ describe("buildAdDesign", () => {
     expect(spec.format).toBe("story");
     expect(spec.width).toBe(1080);
     expect(spec.height).toBe(1920);
+  });
+
+  it("changes the poster composition for different campaign angles", () => {
+    expect(buildAdDesign({ brand, copy, angle: { id: "offer", name: "Offer", description: "", imageHint: "", compositionHint: "" } }).layout).toBe("top");
+    expect(buildAdDesign({ brand, copy, angle: { id: "problem", name: "Problem", description: "", imageHint: "", compositionHint: "" } }).layout).toBe("center");
   });
 });

@@ -63,14 +63,14 @@ function buildRegistry(): RegisteredProvider[] {
           provider: createOpenAICompatibleProvider({
             name: "openrouter",
             baseUrl: "https://openrouter.ai/api/v1/chat/completions",
-            defaultModel: "meta-llama/llama-3.3-70b-instruct:free",
+            defaultModel: env.OPENROUTER_MODEL,
             extraHeaders: {
               "HTTP-Referer": env.NEXT_PUBLIC_SITE_URL,
               "X-Title": "AdBrain",
             },
           }),
           keys: env.OPENROUTER_API_KEYS,
-          model: "meta-llama/llama-3.3-70b-instruct:free",
+          model: env.OPENROUTER_MODEL,
         }
       : null,
     cerebras: env.CEREBRAS_API_KEYS.length
@@ -113,13 +113,20 @@ export async function complete(
   const registry = buildRegistry();
   if (registry.length === 0) throw new NoLLMKeysError();
 
+  const startedAt = Date.now();
   const result = await withCache(
     cacheKey(messages, options),
     options.cache,
     () => callProviders(messages, options, registry),
   );
-  recordUsage(result);
-  return result;
+  const enriched = {
+    ...result,
+    latencyMs: Date.now() - startedAt,
+    inputChars: messages.reduce((sum, message) => sum + message.content.length, 0),
+    outputChars: result.text.length,
+  };
+  recordUsage(enriched);
+  return enriched;
 }
 
 /** Rotate across providers/keys, returning the first success. */

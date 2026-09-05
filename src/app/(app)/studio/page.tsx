@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Studio } from "@/components/studio";
+import { DemoLlmUsage } from "@/components/demo-llm-usage";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getUser } from "@/lib/supabase/queries";
+import { businessLLMUsageSummary } from "@/lib/llm/persist";
+import { getEnv } from "@/lib/env";
 
 export const metadata = { title: "Creative Studio" };
 
@@ -39,6 +43,12 @@ export default async function StudioPage({
   }
 
   const creatives = await getCreatives(business.id);
+  const user = await getUser();
+  const showDemoUsage =
+    user?.email?.toLowerCase() === getEnv().DEMO_USER_EMAIL.toLowerCase();
+  const usage = showDemoUsage
+    ? await businessLLMUsageSummary(business.id)
+    : null;
   const params = await searchParams;
   const filter = params.creative
     ? "all"
@@ -55,6 +65,7 @@ export default async function StudioPage({
         <h1 className="mt-2 text-3xl font-semibold text-slate-950">Review</h1>
       </header>
       <div className="mt-6">
+        {usage && <DemoLlmUsage usage={usage} />}
         <Studio
           key={`${business.id}:${filter}:${params.creative ?? ""}`}
           business={business}

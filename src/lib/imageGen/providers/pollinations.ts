@@ -27,7 +27,14 @@ export function createPollinationsProvider(): ImageProvider {
         `https://image.pollinations.ai/prompt/` +
         `${encodeURIComponent(req.prompt)}?${params.toString()}`;
 
-      return { url, provider: "pollinations", prompt: req.prompt, seed };
+      return {
+        url,
+        provider: "pollinations",
+        model: env.POLLINATIONS_MODEL,
+        estimatedCostUsd: 0,
+        prompt: req.prompt,
+        seed,
+      };
     },
   };
 }

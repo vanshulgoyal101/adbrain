@@ -92,6 +92,10 @@ describe("getEnv: optional values and defaults", () => {
   it("coerces numeric settings and applies defaults", async () => {
     const withDefaults = await loadEnv();
     expect(withDefaults.GEMINI_MODEL).toBe("gemini-3.6-flash");
+    expect(withDefaults.DEMO_USER_EMAIL).toBe("demo@adbrain.vanshul.com");
+    expect(withDefaults.OPENROUTER_MODEL).toBe("qwen/qwen3.8-max-0902");
+    expect(withDefaults.OPENROUTER_IMAGE_MODEL).toBe("openai/gpt-image-2");
+    expect(withDefaults.IMAGE_PROVIDER_FALLBACK).toBe("pollinations");
     expect(withDefaults.GEMINI_THINKING_HEADROOM).toBe(3000);
     expect(withDefaults.LLM_MONTHLY_TOKEN_LIMIT).toBe(2_000_000);
     expect(withDefaults.TRAFFIC_GENERATOR_MAX_ROUNDS).toBe(20);

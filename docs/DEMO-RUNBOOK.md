@@ -74,17 +74,45 @@ being healthy at that exact moment.
 For the first customer demos, use:
 
 ```env
-LLM_PROVIDER_ORDER=google,groq,openrouter,cerebras
+LLM_PROVIDER_ORDER=openrouter,groq,cerebras,google
+OPENROUTER_MODEL=qwen/qwen3.8-max-0902
 GEMINI_MODEL=gemini-3.6-flash
 GEMINI_THINKING_HEADROOM=3000
 LLM_MONTHLY_TOKEN_LIMIT=2000000
+IMAGE_PROVIDER=openrouter
+IMAGE_PROVIDER_FALLBACK=pollinations
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
 ```
 
-Gemini 3.6 Flash is the validated primary copy model because it is a stable
-endpoint with free-tier access and supports the existing structured-output
-request path. Use a cheaper Flash-Lite-class model for low-stakes summaries,
-classification, or retries only after evaluating quality. Keep the existing
-provider rotation enabled as a reliability fallback.
+Qwen 3.8 Max through OpenRouter is the proposed paid primary copy model because
+it is stronger than the current free-tier path for brand-grounded structured
+copy. GPT Image 2 through OpenRouter is the proposed paid image model; keep
+Pollinations as the automatic fallback. Do not activate either paid provider
+until the provider wallet and key limits below are configured.
+
+The current local environment remains on Pollinations with an empty
+`OPENROUTER_API_KEYS` value. That is intentional: adding the model names does
+not spend money or send requests.
+
+### Controlled paid-provider setup
+
+1. Create an OpenRouter account and add at most **$10** to the wallet. Disable
+   auto-reload.
+2. Create a dedicated AdBrain API key with a **$10 key limit** if the dashboard
+   offers one. Also set the account/monthly limit to $10.
+3. Add the key directly to local `.env.local` as `OPENROUTER_API_KEYS`; never
+   paste it into chat or commit it.
+4. Run ten copy generations and ten image generations only. Review quality,
+   latency, failures, and the OpenRouter usage page.
+5. Set `IMAGE_PROVIDER=openrouter` only after the test is acceptable. Keep
+   `IMAGE_PROVIDER_FALLBACK=pollinations`.
+6. Add the same secret and non-secret variables to Vercel only after the local
+   benchmark passes. Do not enable auto-reload there.
+
+The application limits each request to five variants, but provider dashboard
+limits are the real monetary boundary. Keep both limits enabled. A provider
+can experience delayed billing, so never treat an application counter as a
+replacement for the provider's wallet/key cap.
 
 Use a dedicated Google AI project for AdBrain. Prefer Gemini Prepay with the
 minimum initial credit, leave auto-reload off, and set the project-level monthly
@@ -134,10 +162,13 @@ payment/card fees, depending mainly on image pricing and retries. Keep **₹1,50
 not a quote to customers. Recalculate from the recorded usage before setting a
 commercial price.
 
-The application already captures provider/model/token usage and persists
-`llm_usage_events` for durable per-business quota accounting. Before billing,
-expose a usage summary and enforce a per-business generation budget; process-local
-counters alone are not sufficient for commercial chargeback.
+The application persists `llm_usage_events` for durable per-business quota and
+cost accounting. Text and image events include provider/model, token counts,
+estimated cost, latency, cache/fallback state, image dimensions, route, and
+safe metadata such as the creative angle. Raw prompts, brand fields, API keys,
+and image bytes are intentionally excluded. Before billing, expose a usage
+summary and enforce a per-business generation budget; process-local counters
+alone are not sufficient for commercial chargeback.
 
 ## Spend and Safety Controls
 
