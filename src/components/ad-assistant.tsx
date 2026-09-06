@@ -133,6 +133,7 @@ export function AdAssistant({ business }: { business: Business }) {
     { type: "step"; answers: Answer[] } | { type: "generate"; brief: string; language?: string } | null
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inFlightRef = useRef(false);
 
   // Restore after mount (never during SSR) so server and client markup agree.
   const mounted = useMounted();
@@ -175,7 +176,8 @@ export function AdAssistant({ business }: { business: Business }) {
       : null;
 
   async function step(nextAnswers: Answer[]) {
-    if (loading) return;
+    if (loading || inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoading(true);
     setError(null);
     setLastAction({ type: "step", answers: nextAnswers });
@@ -207,10 +209,14 @@ export function AdAssistant({ business }: { business: Business }) {
       setError("Couldn't reach the assistant — check your connection.");
     } finally {
       setLoading(false);
+      inFlightRef.current = false;
     }
   }
 
   async function generate(brief: string, language?: string) {
+    if (inFlightRef.current && phase !== "chat") return;
+    const ownsLock = !inFlightRef.current;
+    if (ownsLock) inFlightRef.current = true;
     setPhase("generating");
     setError(null);
     setLastAction({ type: "generate", brief, language });
@@ -224,17 +230,25 @@ export function AdAssistant({ business }: { business: Business }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ businessId: business.id, brief, count: 3, language }),
       });
-      const data = (await res.json()) as { creatives?: Creative[]; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        creatives?: Creative[];
+        error?: string;
+      };
       if (!res.ok || !data.creatives?.length) {
-        setError(data.error ?? "Couldn't create the ad. Please try again.");
+        setError(
+          data.error ??
+            `Couldn't create the ad (server returned ${res.status}). Please try again.`,
+        );
         setPhase("chat");
         return;
       }
       setTurns((t) => [...t, { role: "result", creatives: data.creatives! }]);
       setPhase("done");
     } catch {
-      setError("Couldn't create the ad — check your connection.");
+      setError("Couldn't create the ad — the generation request timed out or the server stopped responding.");
       setPhase("chat");
+    } finally {
+      if (ownsLock) inFlightRef.current = false;
     }
   }
 

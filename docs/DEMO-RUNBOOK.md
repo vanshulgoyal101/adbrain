@@ -90,6 +90,12 @@ copy. GPT Image 2 through OpenRouter is the proposed paid image model; keep
 Pollinations as the automatic fallback. Do not activate either paid provider
 until the provider wallet and key limits below are configured.
 
+The Ad Assistant interview uses a bounded 2,400-token response budget so Qwen's
+reasoning does not truncate structured JSON after shortcuts such as “Let AI
+decide”. Duplicate generation submissions are blocked client-side, and the UI
+shows actionable server errors instead of collapsing every failure into a
+connection message.
+
 The current local environment remains on Pollinations with an empty
 `OPENROUTER_API_KEYS` value. That is intentional: adding the model names does
 not spend money or send requests.
@@ -113,6 +119,11 @@ The application limits each request to five variants, but provider dashboard
 limits are the real monetary boundary. Keep both limits enabled. A provider
 can experience delayed billing, so never treat an application counter as a
 replacement for the provider's wallet/key cap.
+
+The Meta launch path validates active lead forms, keeps human creative CTA
+labels separate from strict Graph API CTA fields, rejects invalid image URLs,
+and refuses silent WhatsApp/call-to-form fallback. Raw or localized Meta errors
+are translated into stable English recovery messages.
 
 Use a dedicated Google AI project for AdBrain. Prefer Gemini Prepay with the
 minimum initial credit, leave auto-reload off, and set the project-level monthly

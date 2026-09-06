@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MetaClient, MetaError } from "@/lib/meta/client";
+import { friendlyMetaError, MetaClient, MetaError } from "@/lib/meta/client";
 
 const creds = {
   adAccountId: "act_123",
@@ -47,5 +47,37 @@ describe("MetaClient.updateCampaignStatus", () => {
     await expect(
       new MetaClient(creds).updateCampaignStatus("bad", "PAUSED"),
     ).rejects.toBeInstanceOf(MetaError);
+  });
+});
+
+describe("friendlyMetaError", () => {
+  it("hides localized CTA validation text", () => {
+    expect(
+      friendlyMetaError(
+        new MetaError("इस CTA प्रकार के लिए अमान्य मान फ़ील्ड lead_gen_form_id: BOOK_NOW."),
+      ),
+    ).toContain("Meta rejected the ad call-to-action");
+  });
+
+  it("gives reconnect guidance for token and permission failures", () => {
+    expect(friendlyMetaError(new MetaError("Invalid OAuth access token"))).toContain(
+      "Reconnect the ad account",
+    );
+  });
+
+  it("uses a safe fallback for unknown provider errors", () => {
+    expect(friendlyMetaError(new Error("opaque provider detail"), "Try again later.")).toBe(
+      "Try again later.",
+    );
+  });
+});
+
+describe("MetaClient input boundaries", () => {
+  it("rejects malformed creative image URLs before fetch", async () => {
+    const client = new MetaClient(creds);
+    await expect(client.uploadAdImage("not-a-url")).rejects.toMatchObject({
+      name: "MetaError",
+      message: "Creative image URL is invalid.",
+    });
   });
 });

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { logEvent } from "@/lib/audit";
-import { MetaError } from "@/lib/meta/client";
+import { MetaError, friendlyMetaError } from "@/lib/meta/client";
 import { fetchAdAccounts, fetchPages } from "@/lib/meta/oauth";
 
 export const runtime = "nodejs";
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     const status = err instanceof MetaError ? err.status ?? 502 : 502;
-    return NextResponse.json({ error: (err as Error).message }, { status });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not connect the Meta account.") }, { status });
   }
 
   const { error } = await supabase

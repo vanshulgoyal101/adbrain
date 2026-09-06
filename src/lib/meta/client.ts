@@ -106,19 +106,29 @@ export class MetaError extends Error {
   }
 }
 
-/** Human CTA label → Meta call_to_action enum. */
-const CTA_MAP: Record<string, string> = {
-  "Get Quote": "GET_QUOTE",
-  "Learn More": "LEARN_MORE",
-  "Contact Us": "CONTACT_US",
-  "Sign Up": "SIGN_UP",
-  "Get Offer": "GET_OFFER",
-  "Book Now": "BOOK_NOW",
-  "Call Now": "CALL_NOW",
-};
-
-function ctaType(label?: string | null): string {
-  return (label && CTA_MAP[label]) || "LEARN_MORE";
+/** Convert raw Graph API text into stable customer-facing copy. */
+export function friendlyMetaError(
+  error: unknown,
+  fallback = "Meta could not complete that request.",
+): string {
+  const message = error instanceof Error ? error.message : "";
+  const normalized = message.toLowerCase();
+  if (/lead_gen_form_id|call_to_action|invalid.*cta|cta.*invalid/.test(normalized)) {
+    return "Meta rejected the ad call-to-action for this lead form. Please choose another approved creative or lead form and try again.";
+  }
+  if (/permission|permissions|not authorized|oauth|access token|token.*expired|session/.test(normalized)) {
+    return "Your Meta connection needs attention. Reconnect the ad account in Settings and try again.";
+  }
+  if (/targeting|geo|location|age_min|age_max|audience/.test(normalized)) {
+    return "Meta rejected the audience settings. Review the locations and age range, then try again.";
+  }
+  if (/budget|daily_budget|billing_event|bid_strategy/.test(normalized)) {
+    return "Meta rejected the budget settings. Check the daily budget and try again.";
+  }
+  if (/image|creative|adcreative|ad image/.test(normalized)) {
+    return "Meta could not use this creative. Choose another approved ad or regenerate it, then try again.";
+  }
+  return fallback;
 }
 
 /** Where leads land: an in-ad instant form, a WhatsApp chat, or a phone call. */
@@ -152,8 +162,10 @@ export function destinationCTA(
   if (dest === "whatsapp") {
     return { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } };
   }
+  // A human creative CTA is presentation copy, not a safe Graph API CTA. In
+  // particular, BOOK_NOW is not accepted for every instant-form lead ad.
   return {
-    type: ctaType(opts.ctaLabel),
+    type: "LEARN_MORE",
     value: { lead_gen_form_id: opts.leadFormId },
   };
 }
@@ -478,9 +490,21 @@ export class MetaClient {
 
   /** Upload an image to the ad account and return its hash. */
   async uploadAdImage(imageUrl: string): Promise<string> {
-    const imgRes = await fetch(imageUrl, {
-      signal: AbortSignal.timeout(30_000),
-    });
+    let parsed: URL;
+    try {
+      parsed = new URL(imageUrl);
+    } catch {
+      throw new MetaError("Creative image URL is invalid.");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new MetaError("Creative image URL must use HTTP or HTTPS.");
+    }
+    let imgRes: Response;
+    try {
+      imgRes = await fetch(parsed, { signal: AbortSignal.timeout(30_000) });
+    } catch {
+      throw new MetaError("Could not fetch the creative image.");
+    }
     if (!imgRes.ok) {
       throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
     }
@@ -601,7 +625,7 @@ export class MetaClient {
       });
     };
 
-    let destination = requested;
+    const destination = requested;
     const adSetIds: string[] = [];
     const adIds: string[] = [];
 
@@ -614,8 +638,12 @@ export class MetaClient {
           adSet = await makeAdSet(requested, variants[i], i);
         } catch (err) {
           if (requested === "instant_form") throw err;
-          destination = "instant_form";
-          adSet = await makeAdSet("instant_form", variants[i], i);
+          throw new MetaError(
+            requested === "whatsapp"
+              ? "WhatsApp is not available for this Meta Page. Connect WhatsApp or choose an instant lead form."
+              : "Call ads are not available for this Meta Page. Add a phone number or choose an instant lead form.",
+            err instanceof MetaError ? err.status : undefined,
+          );
         }
       } else {
         adSet = await makeAdSet(destination, variants[i], i);

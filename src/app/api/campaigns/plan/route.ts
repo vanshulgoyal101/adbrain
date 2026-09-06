@@ -7,7 +7,7 @@ import {
   type PlannerQuestion,
 } from "@/lib/campaign/planner";
 import {
-  MetaError,
+  friendlyMetaError,
   type GeoTargeting,
 } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   try {
     leadForms = await meta.listLeadForms();
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not load lead forms.") }, { status: 502 });
   }
   if (!leadForms.length) {
     return NextResponse.json({
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
       answers,
     });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not prepare the campaign plan.") }, { status: 502 });
   }
 
   if (!result.ready || !result.plan) {
@@ -231,7 +231,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof MetaError ? err.message : (err as Error).message },
+      { error: friendlyMetaError(err, "Meta could not create the campaign.") },
       { status: 502 },
     );
   }

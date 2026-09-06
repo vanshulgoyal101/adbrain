@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import {
-  MetaError,
+  friendlyMetaError,
   geoItemsToTargeting,
   splitAgeRange,
   type GeoTargeting,
@@ -59,6 +59,21 @@ export async function POST(req: Request) {
   const meta = await metaClientForBusiness(businessId);
   if (!meta) {
     return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
+  }
+
+  try {
+    const leadForms = await meta.listLeadForms();
+    if (!leadForms.some((form) => form.id === leadFormId)) {
+      return NextResponse.json(
+        { error: "That lead form is no longer available in Meta. Refresh the forms and choose an active form." },
+        { status: 400 },
+      );
+    }
+  } catch (err) {
+    return NextResponse.json(
+      { error: friendlyMetaError(err, "Could not verify the selected lead form.") },
+      { status: 502 },
+    );
   }
 
   const { data: business } = await supabase
@@ -146,7 +161,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof MetaError ? err.message : (err as Error).message },
+      { error: friendlyMetaError(err, "Meta could not create the campaign.") },
       { status: 502 },
     );
   }

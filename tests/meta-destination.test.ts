@@ -24,8 +24,16 @@ describe("destinationCTA", () => {
       leadFormId: "form_1",
       ctaLabel: "Get Quote",
     });
-    expect(cta.type).toBe("GET_QUOTE");
+    expect(cta.type).toBe("LEARN_MORE");
     expect(cta.value).toEqual({ lead_gen_form_id: "form_1" });
+  });
+
+  it("does not pass a creative BOOK_NOW CTA to an instant form", () => {
+    const cta = destinationCTA("instant_form", {
+      leadFormId: "form_1",
+      ctaLabel: "Book Now",
+    });
+    expect(cta.type).toBe("LEARN_MORE");
   });
 
   it("call uses CALL_NOW with a tel: link", () => {

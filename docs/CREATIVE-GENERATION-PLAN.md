@@ -155,5 +155,12 @@ Do not infer production configuration from `.env.local`.
    concept calls and validation/image failures retain usage, but billing must still
    be reconciled against provider records. Unknown image cost is null in receipts
    and marked costKnown=false in the existing numeric ledger.
-- No live multibrand comparison, production generation test or deployment has been
-   completed in this implementation pass. The database migration is applied and verified.
+- A single real production generation was verified after provider configuration:
+   text used `openrouter/qwen/qwen3.8-max-0902`, image used
+   `openrouter-image/openai/gpt-image-2`, and the saved receipt reported a
+   `$0.087922` image cost. The client-side request exceeded five minutes while
+   the server completed and persisted the creative; future UX should poll or use
+   a durable job for long image generations.
+- The full generation/routing implementation was deployed. The separate Meta,
+   campaign and assistant reliability slice is documented in
+   `docs/RELEASE-2026-09-06.md` and deployed with the current release.

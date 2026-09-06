@@ -14,14 +14,15 @@ See [docs/SPEC.md](docs/SPEC.md) for the full product spec and
 [docs/how-we-got-here.md](docs/how-we-got-here.md) for the rationale.
 See [docs/FEATURES.md](docs/FEATURES.md) for the living feature list,
 [docs/ROADMAP.md](docs/ROADMAP.md) for what's next, and
-[docs/DEPLOY.md](docs/DEPLOY.md) for the deploy runbook.
+[docs/DEPLOY.md](docs/DEPLOY.md) for the deploy runbook. The latest combined
+release is documented in [docs/RELEASE-2026-09-06.md](docs/RELEASE-2026-09-06.md).
 
 ## Stack
 
 - **Next.js 16** (App Router) + **TypeScript** + **Tailwind v4**
 - **Supabase** — Postgres, Auth, Storage (RLS on every table)
-- **LLM layer** — provider-agnostic with multi-key rotation (Gemini, Groq,
-  OpenRouter, Cerebras)
+- **LLM layer** — provider-agnostic with multi-key rotation and task-aware
+  standard/budget routing (Gemini, Groq, OpenRouter, Cerebras)
 - **Image gen** — provider-agnostic; default **Pollinations** (free, no key)
 
 ## Getting started
@@ -112,8 +113,14 @@ db/schema.sql              # Postgres tables + RLS + storage policies
 ### LLM key rotation
 
 The LLM layer round-robins across each provider's comma-separated key pool and
-falls through providers in `LLM_PROVIDER_ORDER`. A key that returns HTTP 429 is
-parked on a short cooldown. Add keys any time — no code changes needed.
+falls through providers in `LLM_PROVIDER_ORDER` for premium creative and
+campaign-planning tasks. Low-risk extraction, interview and summary tasks use
+`LLM_BUDGET_PROVIDER_ORDER` instead, which excludes OpenRouter by default. A key
+that returns HTTP 429 is parked on a short cooldown. Add keys any time — no code
+changes needed.
+
+The budget pool is a cost-control policy, not a promise that Groq, Google or
+Cerebras are free on a particular account.
 
 ### Swapping the image provider
 

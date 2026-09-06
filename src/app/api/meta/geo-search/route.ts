@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { friendlyMetaError } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -41,6 +42,6 @@ export async function GET(req: Request) {
     }));
     return NextResponse.json({ results });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not search Meta locations.") }, { status: 502 });
   }
 }

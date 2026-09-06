@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
-import { MetaError } from "@/lib/meta/client";
+import { MetaError, friendlyMetaError } from "@/lib/meta/client";
 import { fetchAdAccounts, fetchPages } from "@/lib/meta/oauth";
 
 export const runtime = "nodejs";
@@ -39,7 +39,7 @@ export async function GET() {
   } catch (err) {
     const status = err instanceof MetaError ? err.status ?? 502 : 502;
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: friendlyMetaError(err, "Could not load Meta ad accounts.") },
       { status },
     );
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { friendlyMetaError } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
 import { enforceAutoPause } from "@/lib/campaign/spend-enforce";
@@ -45,7 +46,7 @@ export async function POST(
   try {
     insights = await meta.getCampaignInsights(campaign.meta_campaign_id);
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results.") }, { status: 502 });
   }
 
   const { data: result } = await supabase

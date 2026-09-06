@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { MetaError } from "@/lib/meta/client";
+import { MetaError, friendlyMetaError } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -73,7 +73,7 @@ export async function PATCH(
     );
   } catch (err) {
     if (err instanceof MetaError) {
-      return apiError(err.message, err.status && err.status >= 500 ? 502 : 400);
+      return apiError(friendlyMetaError(err), err.status && err.status >= 500 ? 502 : 400);
     }
     return serverError("campaign.status", err, "Could not update the campaign.");
   }

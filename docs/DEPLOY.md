@@ -58,8 +58,13 @@ Set these for **Production** (and Preview if you want previews to work):
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | service-role key |
 | `NEXT_PUBLIC_SITE_URL` | `https://adbrain.vanshul.com` |
-| `GOOGLE_AI_API_KEYS` | comma-separated keys (or another provider's) |
-| `GEMINI_MODEL` | e.g. `gemini-3.6-flash` (current default) |
+| `OPENROUTER_API_KEYS` | dedicated production key with a provider-side spending limit |
+| `LLM_PROVIDER_ORDER` | e.g. `openrouter,groq,cerebras,google` |
+| `OPENROUTER_MODEL` | e.g. `qwen/qwen3.8-max-0902` |
+| `OPENROUTER_IMAGE_MODEL` | e.g. `openai/gpt-image-2` |
+| `IMAGE_PROVIDER_FALLBACK` | `pollinations` for a non-paid image fallback |
+| `GOOGLE_AI_API_KEYS` | optional fallback keys |
+| `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |
 | `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini thinking (default `3000`; `0` for a paid non-thinking model) |
 | `IMAGE_PROVIDER` | `pollinations` |
 | `AD_DESIGN_OVERLAY` | composite the designed poster over the AI photo (default `true`; `false` = bare photo) |
@@ -67,6 +72,12 @@ Set these for **Production** (and Preview if you want previews to work):
 | `META_SYSTEM_USER_TOKEN` | long-lived system-user token (single-tenant fallback) |
 | `META_AD_ACCOUNT_ID` | `act_...` (single-tenant fallback) |
 | `META_PAGE_ID` | page id (single-tenant fallback) |
+
+Campaign creation validates the selected lead form before creating Meta
+objects, uses a Meta-safe CTA for instant-form campaigns, validates creative
+image URLs, and refuses to silently change a requested WhatsApp or call
+destination into an instant-form campaign. Graph API errors are translated into
+customer-safe messages; detailed provider text remains server-side only.
 
 > **Connecting ad accounts from the UI (Facebook Login):** whitelist
 > `https://<your-domain>/api/meta/oauth/callback` as a Valid OAuth Redirect URI

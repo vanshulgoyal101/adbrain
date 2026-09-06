@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { friendlyMetaError } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -23,6 +24,6 @@ export async function GET() {
     const forms = await meta.listLeadForms();
     return NextResponse.json({ forms });
   } catch (err) {
-    return NextResponse.json({ forms: [], error: (err as Error).message });
+    return NextResponse.json({ forms: [], error: friendlyMetaError(err, "Could not load lead forms.") });
   }
 }

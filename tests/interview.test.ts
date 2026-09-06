@@ -63,4 +63,23 @@ describe("buildInterviewMessages", () => {
     const msgs = buildInterviewMessages({ brand: { name: "Acme" }, goal: "x" });
     expect(msgs[0].content).toContain("local business");
   });
+
+  it("treats the AI decision shortcut as a completed answer", () => {
+    const messages = buildInterviewMessages({
+      brand: { name: "Cedar Ridge", vertical: "chiropractic" },
+      goal: "Drive urgency with a limited-time offer",
+      answers: [
+        {
+          question: "Which offer should the ad feature?",
+          answer: "Let the AI decide based on the brand.",
+        },
+      ],
+    });
+    expect(messages[1].content).toContain(
+      "Let the AI decide based on the brand.",
+    );
+    expect(messages[0].content).toContain(
+      'When the answer is "Surprise me" or "Let the AI decide", choose',
+    );
+  });
 });

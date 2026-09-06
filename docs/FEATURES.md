@@ -161,13 +161,15 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 ## 8. AI infrastructure
 | Status | Feature | Notes |
 | --- | --- | --- |
-| ✅ | Provider-agnostic LLM rotation | Gemini / Groq / OpenRouter / Cerebras |
+| ✅ | Provider-agnostic LLM rotation | Gemini / Groq / OpenRouter / Cerebras; production demo path uses OpenRouter Qwen |
 | ✅ | Multi-key rotation + cooldown | parks 429'd keys |
 | ✅ | JSON mode + robust parsing | fences/prose salvage |
 | ✅ | Token usage capture + accounting | per-provider spend, `usageSnapshot()`; creative generation also persists `llm_usage_events` per business |
 | ✅ | Response cache + single-flight | opt-in `{cache}`, zero-cost identical calls |
 | ✅ | Configurable Gemini thinking headroom | `GEMINI_THINKING_HEADROOM` (0 for paid non-thinking) |
-| ✅ | Provider-abstracted image gen | Pollinations default (free, no key); suitable for private demos, variable for production |
+| ✅ | Provider-abstracted image gen | OpenRouter image generation with 1K/medium source settings and Pollinations fallback; final poster is composited and persisted |
+| ✅ | Detailed AI cost telemetry | Text/image events persist provider, model, tokens/cost, latency, dimensions, route, and fallback/cache metadata without raw prompts or image bytes |
+| ✅ | Meta launch boundary validation | Active lead-form validation, safe instant-form CTA mapping, URL validation, explicit destination failures, and customer-safe Graph API errors |
 | 📋 | Paid image provider | Evaluate fal.ai / OpenAI Images before charging customers; preserve timeout/fallback behaviour |
 
 ## 9. Marketing & SEO

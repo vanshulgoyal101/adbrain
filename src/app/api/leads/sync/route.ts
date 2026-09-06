@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { parseLeadFields } from "@/lib/leads/parse";
-import { MetaError } from "@/lib/meta/client";
+import { friendlyMetaError } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
@@ -36,7 +36,7 @@ export async function POST() {
     forms = await meta.listLeadForms();
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof MetaError ? err.message : (err as Error).message },
+      { error: friendlyMetaError(err, "Could not sync leads.") },
       { status: 502 },
     );
   }

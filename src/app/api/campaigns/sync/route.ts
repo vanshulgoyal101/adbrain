@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { friendlyMetaError } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
 import {
@@ -35,7 +36,7 @@ export async function POST() {
   try {
     metaCampaigns = await meta.listCampaigns();
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not sync campaigns.") }, { status: 502 });
   }
 
   let synced = 0;

@@ -253,12 +253,11 @@ for extraction/summaries so cache hit-rates stay high.
 The Creative Studio currently generates 3-6 variants per batch. Each variant
 uses one copy completion and one image request; the copy path may make one
 additional completion when the deterministic scanner rejects the first draft.
-Copy and image requests run in parallel. For private demos, Gemini 3.6 Flash is
-the recommended primary text model, with a cheaper Flash-Lite-class model for
-low-stakes work and the existing provider rotation as fallback. Pollinations is
-the current free image default; evaluate a paid image provider before recurring
-billing because image reliability and quality dominate the cost and customer
-experience.
+Copy and image requests run in parallel. The current controlled demo path uses
+Qwen through OpenRouter for copy and OpenRouter Images for source imagery. Image
+requests prefer 1K/medium output because AdBrain composites the finished poster
+itself; Pollinations remains the fallback. Gemini, Groq, and Cerebras remain
+configurable fallbacks. Keep provider-side wallet and key limits enabled.
 
 Do not price from request counts alone. `llm_usage_events` now records text and
 image events with provider/model, token counts, estimated provider cost,
@@ -271,6 +270,15 @@ The operational demo reserve and payment sequencing are documented in
 first validation demos; recurring billing requires verified webhooks,
 idempotent subscription state, entitlements, cancellation/refund handling, and
 durable usage limits.
+
+### Meta external-contract hardening
+
+Meta fields are treated as strict external contracts rather than free-form UI
+values. Active lead forms are checked before direct campaign creation, creative
+CTA labels are not passed as instant-form CTA enums, image URLs must be HTTP(S),
+and unavailable WhatsApp/call destinations fail explicitly instead of silently
+changing campaign behavior. API routes use `friendlyMetaError()` to translate
+localized or provider-specific Graph errors into stable English UI messages.
 
 ---
 
