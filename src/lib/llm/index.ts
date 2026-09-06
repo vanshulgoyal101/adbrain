@@ -34,7 +34,7 @@ const cooldownUntil = new Map<string, number>();
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
-function buildRegistry(): RegisteredProvider[] {
+function buildRegistry(routing: "standard" | "budget" = "standard"): RegisteredProvider[] {
   const env = getEnv();
 
   const registry: Record<string, RegisteredProvider | null> = {
@@ -86,7 +86,10 @@ function buildRegistry(): RegisteredProvider[] {
       : null,
   };
 
-  const order = env.LLM_PROVIDER_ORDER.split(",")
+  const orderValue = routing === "budget"
+    ? env.LLM_BUDGET_PROVIDER_ORDER
+    : env.LLM_PROVIDER_ORDER;
+  const order = orderValue.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
@@ -110,7 +113,7 @@ export async function complete(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<CompletionResult> {
-  const registry = buildRegistry();
+  const registry = buildRegistry(options.routing);
   if (registry.length === 0) throw new NoLLMKeysError();
 
   const startedAt = Date.now();

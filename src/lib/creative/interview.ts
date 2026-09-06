@@ -117,7 +117,10 @@ export async function runInterview(
   input: InterviewInput,
 ): Promise<InterviewResult> {
   return completeJSON<InterviewResult>(buildInterviewMessages(input), {
+    routing: "budget",
     temperature: 0.5,
-    maxTokens: 1200,
+    // Qwen spends part of this budget on reasoning before returning the small
+    // JSON object. Keep the response bounded, but leave enough room for repair.
+    maxTokens: 2400,
   });
 }
