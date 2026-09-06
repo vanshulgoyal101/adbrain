@@ -80,7 +80,10 @@ export function createOpenAICompatibleProvider(config: {
       const content = data.choices?.[0]?.message?.content;
       const finishReason = data.choices?.[0]?.finish_reason;
       if (finishReason === "length") {
-        throw new LLMError(`${config.name}: output token budget exhausted before completion. Increase CREATIVE_MAX_TOKENS or reduce CREATIVE_REASONING_EFFORT.`, { provider: config.name, retryable: false });
+        const guidance = options.routing === "budget"
+          ? "The budget-model output was truncated; retry the task or shorten its input."
+          : "Increase the task token budget or reduce reasoning effort.";
+        throw new LLMError(`${config.name}: ${options.task ?? "LLM task"} output token budget exhausted before completion. ${guidance}`, { provider: config.name, retryable: false });
       }
       if (!content) {
         throw new LLMError(`${config.name}: empty response (finish reason: ${finishReason ?? "unknown"})`, {

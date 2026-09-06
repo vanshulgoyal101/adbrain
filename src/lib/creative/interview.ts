@@ -118,6 +118,7 @@ export async function runInterview(
 ): Promise<InterviewResult> {
   return completeJSON<InterviewResult>(buildInterviewMessages(input), {
     routing: "budget",
+    task: "creative brief interview",
     temperature: 0.5,
     // Qwen spends part of this budget on reasoning before returning the small
     // JSON object. Keep the response bounded, but leave enough room for repair.

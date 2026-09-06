@@ -8,6 +8,7 @@ export interface ChatMessage {
 export interface CompletionOptions {
   /** Select the provider pool for this task. Budget excludes OpenRouter. */
   routing?: "standard" | "budget";
+  task?: string;
   temperature?: number;
   maxTokens?: number;
   reasoningEffort?: "minimal" | "low" | "medium" | "high";

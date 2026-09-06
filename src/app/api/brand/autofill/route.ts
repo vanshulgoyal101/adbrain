@@ -88,6 +88,7 @@ export async function POST(req: Request) {
       buildBrandExtractionMessages(text, parsed.toString()),
       {
         routing: "budget",
+        task: "website brand extraction",
         temperature: 0.3,
         maxTokens: 1_200,
         reasoningEffort: "minimal",

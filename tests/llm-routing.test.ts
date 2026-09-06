@@ -39,7 +39,7 @@ describe("task-aware LLM routing", () => {
     const { complete } = await import("@/lib/llm");
     const result = await complete(
       [{ role: "user", content: "extract fields" }],
-      { routing: "budget", maxTokens: 1200, reasoningEffort: "minimal" },
+      { routing: "budget", task: "website brand extraction", maxTokens: 1200, reasoningEffort: "minimal" },
     );
     expect(result.provider).toBe("groq");
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);

@@ -61,6 +61,18 @@ describe("openai-compatible provider", () => {
       }),
     ).rejects.toMatchObject({ status: 429, retryable: true });
   });
+
+  it("names the task and budget route when output is truncated", async () => {
+    mockFetch({
+      ok: true,
+      json: { choices: [{ message: { content: "" }, finish_reason: "length" }] },
+    });
+    const provider = createOpenAICompatibleProvider({ name: "groq", baseUrl: "https://x", defaultModel: "m" });
+    await expect(provider.complete([], { routing: "budget", task: "website brand extraction" }, { apiKey: "k", model: "m" })).rejects.toMatchObject({
+      retryable: false,
+      message: expect.stringContaining("website brand extraction"),
+    });
+  });
 });
 
 describe("gemini provider", () => {
