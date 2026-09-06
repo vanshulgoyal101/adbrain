@@ -16,19 +16,24 @@ describe("<AdAssistant> draft persistence", () => {
     render(<AdAssistant business={business} />);
 
     expect(screen.getByText("Grounded in Cedar Ridge Chiro")).toBeInTheDocument();
-    expect(screen.getByText("Brief preview")).toBeInTheDocument();
-    expect(screen.getByText("Describe the goal")).toBeInTheDocument();
-    expect(screen.getByText("Answer what matters")).toBeInTheDocument();
-    expect(screen.getByText("Review three ads")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Creation stages" })).toBeInTheDocument();
+    expect(screen.queryByText("Brief preview")).toBeNull();
 
     const goal = screen.getByRole("textbox", { name: "Campaign goal" });
     const start = screen.getByRole("button", { name: /start creating/i });
     expect(start).toBeDisabled();
 
     await user.type(goal, "Bring local families in for a spring checkup");
-    expect(screen.getByText("Local families")).toBeInTheDocument();
-    expect(screen.getByText("Spring checkup")).toBeInTheDocument();
+    expect(goal).toHaveValue("Bring local families in for a spring checkup");
     expect(start).toBeEnabled();
+  });
+
+  it("offers grounded starting goals without fabricating an offer", async () => {
+    const user = userEvent.setup();
+    render(<AdAssistant business={business} />);
+    await user.click(screen.getByRole("button", { name: "Promote an existing offer" }));
+    expect(screen.getByRole("textbox", { name: "Campaign goal" })).toHaveValue("Create a campaign around an offer already saved in my Brand Brain. Ask me to confirm the offer details.");
+    expect(screen.queryByText("Free consult")).toBeNull();
   });
 
   it("restores a typed goal after navigating away and back", async () => {

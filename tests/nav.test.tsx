@@ -18,8 +18,8 @@ describe("<Nav>", () => {
       ["Create", "/create"],
       ["Brand Brain", "/brand"],
       ["Review", "/studio"],
-      ["Launch", "/campaigns"],
-      ["Results", "/leads"],
+      ["Campaigns", "/campaigns"],
+      ["Enquiries", "/leads"],
       ["Assets", "/assets"],
       ["Settings", "/settings"],
     ];
@@ -34,8 +34,8 @@ describe("<Nav>", () => {
   it("highlights only the current section", () => {
     pathname.mockReturnValue("/campaigns");
     render(<Nav />);
-    expect(screen.getByRole("link", { name: "Launch" })).toHaveClass(ACTIVE);
-    expect(screen.getByRole("link", { name: "Launch" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Campaigns" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Campaigns" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -48,7 +48,7 @@ describe("<Nav>", () => {
   it("keeps the section highlighted on nested routes", () => {
     pathname.mockReturnValue("/campaigns/abc123");
     render(<Nav />);
-    expect(screen.getByRole("link", { name: "Launch" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Campaigns" })).toHaveClass(ACTIVE);
   });
 
   it("does not highlight a section that merely shares a prefix", () => {
@@ -56,7 +56,7 @@ describe("<Nav>", () => {
     pathname.mockReturnValue("/create");
     render(<Nav />);
     expect(screen.getByRole("link", { name: "Create" })).toHaveClass(ACTIVE);
-    expect(screen.getByRole("link", { name: "Launch" })).not.toHaveClass(
+    expect(screen.getByRole("link", { name: "Campaigns" })).not.toHaveClass(
       ACTIVE,
     );
   });

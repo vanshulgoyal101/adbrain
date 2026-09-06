@@ -1,4 +1,6 @@
 import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { siteConfig } from "@/lib/site";
 
 export const alt = `${siteConfig.name} — ${siteConfig.tagline}`;
@@ -6,7 +8,8 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 /** Social share card rendered at build time. */
-export default function OpengraphImage() {
+export default async function OpengraphImage() {
+  const icon = await readFile(join(process.cwd(), "public/icon-192.png"));
   return new ImageResponse(
     (
       <div
@@ -36,7 +39,7 @@ export default function OpengraphImage() {
               fontWeight: 800,
             }}
           >
-            A
+            <img src={`data:image/png;base64,${icon.toString("base64")}`} alt="" width={72} height={72} />
           </div>
           <div style={{ fontSize: 40, fontWeight: 800, color: "#0f172a" }}>
             {siteConfig.name}
@@ -53,15 +56,15 @@ export default function OpengraphImage() {
               maxWidth: 900,
             }}
           >
-            AI ad creative for any local business
+            Marketing for your next customer.
           </div>
           <div style={{ fontSize: 32, color: "#475569", maxWidth: 880 }}>
-            Fill your brand brain, type a goal, and get on-brand ads ready to launch.
+            Your brand. Your message. Your next campaign.
           </div>
         </div>
 
         <div style={{ display: "flex", gap: "16px" }}>
-          {["Brand Brain", "Creative Studio", "One-click Meta launch"].map((t) => (
+          {["Create", "Review", "Reach customers"].map((t) => (
             <div
               key={t}
               style={{

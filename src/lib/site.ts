@@ -33,12 +33,12 @@ export function normalizeSiteUrl(raw: string | undefined): string {
 export const siteConfig = {
   name: "AdBrain",
   url: normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL),
-  tagline: "AI ad creative for any local business",
+  tagline: "Customer-focused marketing for local businesses",
   description:
-    "AdBrain turns your brand into launch-ready ad creatives — image, headline, and copy — in seconds. Fill your brand brain, type a goal, and get on-brand Meta ads with AI-picked targeting.",
+    "Create on-brand marketing, reach potential customers with Facebook and Instagram campaigns, and follow up on enquiries. AI-assisted creative, with you in control.",
   // Short description for cards where space is tight.
   shortDescription:
-    "AI ad creative + campaign launcher for local businesses. On-brand ads in seconds.",
+    "Create marketing campaigns around your business, your customers, and your goals.",
   keywords: [
     "AI ad creative",
     "AI ad generator",

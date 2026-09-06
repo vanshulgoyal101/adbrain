@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Error({
@@ -16,7 +17,7 @@ export default function Error({
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-      <p className="text-sm font-medium text-blue-600">AdBrain</p>
+      <p className="flex items-center gap-2 text-sm font-medium text-blue-600"><Brain size={24} aria-hidden="true" />AdBrain</p>
       <h1 className="text-xl font-semibold text-slate-900">
         Something went wrong
       </h1>

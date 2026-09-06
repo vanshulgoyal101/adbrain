@@ -68,8 +68,8 @@ export function SpendGuardrails({
 
         {limits.weeklyCapRupees == null && (
           <Alert variant="warning">
-            No spend cap is set — active campaigns can spend without any limit.
-            Set a weekly cap below to turn on overspend protection.
+            No weekly cap is set in AdBrain. Active campaigns still follow their
+            Meta budgets, but have no additional weekly limit here.
           </Alert>
         )}
 
@@ -121,6 +121,12 @@ export function SpendGuardrails({
             automatically (checked whenever results refresh).
           </span>
         </label>
+
+        <p className="text-xs leading-5 text-slate-500">
+          Checks are periodic, not real-time. Reporting delays and unsuccessful
+          pause requests can allow spending beyond this cap. Use Meta account
+          spending limits for an additional control.
+        </p>
 
         <Button onClick={save} disabled={saving}>
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}

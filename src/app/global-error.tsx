@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Brain } from "lucide-react";
 
 /**
  * Last-resort boundary. `error.tsx` cannot catch a failure in the root layout,
@@ -21,6 +22,7 @@ export default function GlobalError({
 
   return (
     <html lang="en">
+      <head><title>Something went wrong - AdBrain</title><link rel="icon" href="/icon.svg?v=brain-1" type="image/svg+xml" /></head>
       <body
         style={{
           margin: 0,
@@ -38,7 +40,7 @@ export default function GlobalError({
           background: "#ffffff",
         }}
       >
-        <p style={{ margin: 0, fontWeight: 500, color: "#2563eb" }}>AdBrain</p>
+        <p style={{ margin: 0, fontWeight: 500, color: "#2563eb", display: "flex", alignItems: "center", gap: 8 }}><Brain size={24} aria-hidden="true" />AdBrain</p>
         <h1 style={{ margin: 0, fontSize: "1.25rem" }}>Something went wrong</h1>
         <p style={{ margin: 0, maxWidth: "28rem", color: "#475569" }}>
           We hit an unexpected error and couldn&apos;t load the page. Try again —

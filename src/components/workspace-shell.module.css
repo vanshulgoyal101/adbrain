@@ -1,0 +1,46 @@
+.shell { --workspace-ink: #24292e; display: flex; min-height: 100dvh; width: 100%; background: #fff; color: var(--workspace-ink); font-family: var(--font-sans); letter-spacing: 0; }
+.skip { position: fixed; left: 20px; top: -100px; z-index: 100; padding: 12px 18px; background: #fff; border: 2px solid #2563eb; border-radius: 6px; }
+.skip:focus { top: 12px; }
+.sidebar { display: flex; flex-direction: column; flex-shrink: 0; width: 236px; height: 100dvh; position: sticky; top: 0; padding: 24px 14px 14px; border-right: 1px solid #e2e5e8; background: linear-gradient(180deg, #f7f8fa, #f2f4f6); overflow-y: auto; }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 650; padding: 0 10px; }
+.logo svg { color: #255acd; }
+.business { display: flex; align-items: center; gap: 10px; border-block: 1px solid #e1e5e9; padding: 16px 4px; margin: 24px 0 20px; min-width: 0; }
+.business:hover { background: #edf0f4; }
+.businessIcon { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid #dce2e6; border-radius: 6px; background: #fff; color: #5b6670; }
+.business > span:nth-child(2) { min-width: 0; flex: 1; }
+.business strong { display: block; font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.business small { display: block; color: #73808c; font-size: 10px; margin-top: 3px; }
+.business > svg { flex-shrink: 0; color: #7b858e; }
+.account { margin-top: auto; padding-top: 24px; }
+.account > div { display: flex; align-items: center; gap: 9px; padding: 12px 6px; border-top: 1px solid #e1e5e9; }
+.account > div > span:last-child { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #e0e8e9; color: #3e5b5f; display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+.body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.header { min-height: 65px; position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e7eaed; padding: 10px 32px; background: rgba(255,255,255,.97); }
+.breadcrumb { min-width: 0; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #78828c; }
+.breadcrumb > span { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.breadcrumb strong { color: #424a52; font-weight: 500; white-space: nowrap; }
+.breadcrumb svg { flex-shrink: 0; }
+.create { display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-left: auto; min-height: 36px; padding: 8px 12px; border: 1px solid #d9dfe5; background: #fff; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.create:hover { border-color: #9cafd0; background: #f5f8fd; }
+.main { width: 100%; max-width: 1440px; margin: 0 auto; padding: 32px; flex: 1; outline: none; }
+.footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid #eceef0; padding: 18px 32px; font-size: 10px; color: #7d8790; }
+.footer nav { display: flex; gap: 16px; }
+.footer a:hover { color: #2455b6; text-decoration: underline; }
+.menu { display: none; }
+.drawer { position: fixed; inset: 0 auto 0 0; width: min(320px, calc(100vw - 32px)); height: 100dvh; max-height: 100dvh; max-width: none; padding: 0; margin: 0; border: 0; background: #f7f8fa; color: #24292e; }
+.drawer::backdrop { background: rgba(25,32,39,.38); backdrop-filter: blur(2px); }
+.drawerBody { min-height: 100%; display: flex; flex-direction: column; padding: 24px 16px 16px; }
+.drawerHeading { display: flex; align-items: center; justify-content: space-between; }
+.drawerHeading button { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 6px; }
+@media (max-width: 1100px) { .sidebar { width: 208px; } .header { padding-inline: 24px; } .main { padding: 28px 24px; } }
+@media (max-width: 767px) {
+  .sidebar { display: none; }
+  .header { padding: 8px 16px; min-height: 60px; }
+  .menu { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 40px; border-radius: 6px; }
+  .breadcrumb > span, .breadcrumb > svg { display: none; }
+  .breadcrumb strong { font-size: 13px; }
+  .create { padding-inline: 10px; }
+  .main { padding: 24px 20px; }
+  .footer { padding: 16px 20px; }
+}

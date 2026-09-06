@@ -5,7 +5,7 @@ import { LoginForm } from "@/components/login-form";
 export const metadata = {
   title: "Sign in",
   description:
-    "Sign in to AdBrain to generate on-brand ad creatives and launch Meta lead campaigns.",
+    "Sign in to AdBrain to create marketing campaigns and follow up with potential customers.",
   alternates: { canonical: "/login" },
   // A thin auth page shouldn't compete with the landing in search.
   robots: { index: false, follow: true },
@@ -23,7 +23,7 @@ export default function LoginPage() {
             Sign in to AdBrain
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Use a magic link, password, or continue with Google.
+            Your brand, campaigns, and customer enquiries in one place.
           </p>
         </div>
         <Suspense>

@@ -40,11 +40,11 @@ describe("jsonLd builders", () => {
     expect(site.publisher).toEqual({ "@id": `${siteConfig.url}/#organization` });
   });
 
-  it("software application is a BusinessApplication with an offer", () => {
+  it("describes the business application without inventing a price", () => {
     const app = softwareApplicationSchema();
     expect(app["@type"]).toBe("SoftwareApplication");
     expect(app.applicationCategory).toBe("BusinessApplication");
-    expect(app.offers).toMatchObject({ "@type": "Offer", price: "0" });
+    expect(app.offers).toBeUndefined();
     expect(Array.isArray(app.featureList)).toBe(true);
   });
 

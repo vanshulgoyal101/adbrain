@@ -307,10 +307,11 @@ export function MetaConnectionPanel({
           </div>
         )}
 
-        <div className="space-y-3 border-t border-slate-100 pt-4">
-          <p className="text-sm font-medium text-slate-800">
-            Internal Meta traffic runner
-          </p>
+        <details className="space-y-3 border-t border-slate-100 pt-4">
+          <summary className="cursor-pointer text-sm font-medium text-slate-600">
+            Developer tools
+          </summary>
+          <h3 className="text-sm font-medium text-slate-800">Internal Meta traffic runner</h3>
           <p className="text-sm text-slate-600">
             Generates repeat Marketing API activity to help with Meta access-tier
             review. Requires a signed-in account.
@@ -350,7 +351,7 @@ export function MetaConnectionPanel({
               Create paused campaigns
             </label>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={runTrafficGenerator} disabled={trafficRunning}>
               {trafficRunning ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -363,7 +364,7 @@ export function MetaConnectionPanel({
               <p className="text-sm text-blue-700">{trafficResult}</p>
             )}
           </div>
-        </div>
+        </details>
       </CardContent>
     </Card>
   );

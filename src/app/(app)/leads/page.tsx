@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { getLeads, getPrimaryBusiness } from "@/lib/supabase/queries";
 
-export const metadata = { title: "Leads" };
+export const metadata = { title: "Enquiries" };
 
 export default async function LeadsPage() {
   const business = await getPrimaryBusiness();
@@ -15,7 +15,7 @@ export default async function LeadsPage() {
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Leads</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Enquiries</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -42,9 +42,9 @@ export default async function LeadsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Results"
-        title="Leads"
-        description="See who responded, reach them quickly, and share a concise follow-up digest with your team."
+        eyebrow="Customer conversations"
+        title="Enquiries"
+        description="People who responded to your campaigns. Find their details and make the next conversation count."
       />
       <div className="mt-6">
         <LeadInbox

@@ -30,8 +30,8 @@ export function onboardingSteps(state: OnboardingState): OnboardingStep[] {
     },
     {
       id: "generate",
-      title: "Create your first ad",
-      hint: "Tell the Ad Assistant what you want and get finished ads.",
+      title: "Create your first campaign creative",
+      hint: "Choose a customer goal and create images and copy for review.",
       href: "/create",
       done: state.creativeCount > 0,
     },
@@ -44,7 +44,7 @@ export function onboardingSteps(state: OnboardingState): OnboardingStep[] {
     },
     {
       id: "launch",
-      title: "Launch a campaign",
+      title: "Prepare a campaign",
       hint: "Turn approved ads into a paused Meta lead campaign.",
       href: "/campaigns",
       done: state.campaignCount > 0,

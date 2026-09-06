@@ -203,7 +203,7 @@ export function BrandAssets({
                   <img
                     src={a.url}
                     alt={a.notes ?? TYPE_LABELS[a.type]}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                     loading="lazy"
                   />
                 </div>

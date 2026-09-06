@@ -18,8 +18,8 @@ const primaryItems = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
   { href: "/create", label: "Create", icon: Wand2 },
   { href: "/studio", label: "Review", icon: Sparkles },
-  { href: "/campaigns", label: "Launch", icon: Megaphone },
-  { href: "/leads", label: "Results", icon: Inbox },
+  { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/leads", label: "Enquiries", icon: Inbox },
 ];
 
 const workspaceItems = [
@@ -53,8 +53,8 @@ export function Nav({
       )}
     >
       {orientation === "vertical" && (
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Workbench
+        <p className="mb-2 px-3 text-[10px] font-semibold text-slate-500">
+          Marketing
         </p>
       )}
       {primaryItems.map(({ href, label, icon: Icon }) => {
@@ -72,7 +72,7 @@ export function Nav({
         );
       })}
       {orientation === "vertical" && (
-        <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <p className="mb-2 mt-7 px-3 text-[10px] font-semibold text-slate-500">
           Workspace
         </p>
       )}

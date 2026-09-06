@@ -85,10 +85,10 @@ export function buildWorkQueue({
   if (!creatives.length)
     queue.push({
       id: "create",
-      title: "Create your first ad",
-      detail: "Start with a goal for your business.",
+      title: "Create your first campaign creative",
+      detail: "Who do you want to reach, and what would you like them to do?",
       href: "/create",
-      action: "Create ad",
+      action: "Start creating",
       tone: "work",
     });
   if (!metaReady && (unusedApproved || campaigns.length))

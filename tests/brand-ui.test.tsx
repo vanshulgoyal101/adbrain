@@ -66,7 +66,8 @@ beforeEach(() => {
 describe("<BrandForm> prefill", () => {
   it("starts empty for a brand new business", () => {
     render(<BrandForm business={null} />);
-    expect(screen.getByPlaceholderText("Solaride")).toHaveValue("");
+    expect(screen.getByPlaceholderText("Your business name")).toHaveValue("");
+    expect(screen.getByPlaceholderText("example.com")).toHaveValue("");
   });
 
   it("joins list fields the way the server action expects", () => {

@@ -9,9 +9,11 @@ import {
   Loader2,
   Pause,
   Play,
+  Plus,
   RefreshCw,
   Rocket,
   Sparkles,
+  Search,
   Trash2,
 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -37,9 +39,9 @@ import {
   BUDGET_PRESETS,
   campaignNarrative,
   campaignNextAction,
-  describeBudget,
   spendHealth,
 } from "@/lib/campaign/budget";
+import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -78,6 +80,15 @@ export function Campaigns({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
+  const [showComposer, setShowComposer] = useState(initialCampaigns.length === 0);
+  const [creationMode, setCreationMode] = useState("manual");
+  const [campaignQuery, setCampaignQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const visibleCampaigns = campaigns.filter(campaign =>
+    (statusFilter === "all" || campaign.status === statusFilter) &&
+    (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
+  );
+  const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
   const [results, setResults] =
     useState<Record<string, CampaignResult>>(initialResults);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
@@ -284,6 +295,12 @@ export function Campaigns({
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+        <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
+        {metaReady && <Button variant={showComposer ? "outline" : "primary"} onClick={() => setShowComposer(!showComposer)} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>}
+      </div>
+      {error && <Alert variant="error">{error}</Alert>}
+      {notice && <Alert variant="success">{notice}</Alert>}
       {!metaReady && (
         <Alert variant="warning">
           Meta isn’t connected yet.{" "}
@@ -294,35 +311,40 @@ export function Campaigns({
         </Alert>
       )}
 
+      <div id="campaign-composer" hidden={!showComposer}>
       {metaReady && (
         <>
           <section
             aria-label="Launch preflight"
-            className="grid gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-[0_8px_20px_rgba(15,23,42,0.03)] sm:grid-cols-3 sm:p-5"
+            className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-3"
           >
             {[
               ["Creative", approved.length ? `${approved.length} approved` : "Needs approval", Boolean(approved.length)],
               ["Meta connection", "Ready to create", true],
               ["Safety", "Created paused", true],
             ].map(([label, value, ready]) => (
-              <div key={label as string} className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+              <div key={label as string} className="flex items-start gap-3 py-2">
                 <CheckCircle2 className={cn("mt-0.5 h-4 w-4 flex-none", ready ? "text-emerald-600" : "text-amber-600")} />
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+                  <p className="text-xs font-medium text-slate-500">{label}</p>
                   <p className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</p>
                 </div>
               </div>
             ))}
           </section>
-          <CampaignChat
+          <fieldset className="my-5 flex flex-wrap gap-2">
+            <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
+            {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
+          </fieldset>
+          <div hidden={creationMode !== "guided"}><CampaignChat
             businessId={business.id}
             onCreated={(c) => setCampaigns((prev) => [c, ...prev])}
-          />
+          /></div>
         </>
       )}
 
       {metaReady && (
-        <Card className="overflow-hidden border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f5f0e9_100%)] shadow-[0_14px_30px_rgba(15,23,42,0.06)]">
+        <Card hidden={creationMode !== "manual"} className="min-w-0 rounded-none border-0 bg-white">
           <CardHeader className="border-b border-slate-200/80 bg-white/60">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -360,10 +382,10 @@ export function Campaigns({
                           onClick={() => toggle(c.id)}
                           aria-pressed={isSel}
                           className={cn(
-                            "group relative overflow-hidden rounded-xl border-2 text-left transition-all",
+                            "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
                             isSel
                               ? "border-slate-950 shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
-                              : "border-transparent hover:border-slate-300",
+                              : "border-slate-200 hover:border-slate-300",
                           )}
                         >
                           <div className="aspect-square bg-slate-100">
@@ -371,7 +393,7 @@ export function Campaigns({
                               <img
                                 src={c.image_url}
                                 alt={c.headline || "Ad creative preview"}
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain"
                                 loading="lazy"
                               />
                             )}
@@ -390,8 +412,8 @@ export function Campaigns({
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="flex flex-col gap-1.5">
+                <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="name">Campaign name</Label>
                     <Input
                       id="name"
@@ -399,8 +421,8 @@ export function Campaigns({
                       onChange={(e) => setName(e.target.value)}
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="budget">Daily budget (₹)</Label>
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <Label htmlFor="budget">{abTest ? "Daily budget per ad set (₹)" : "Daily budget (₹)"}</Label>
                     <Input
                       id="budget"
                       type="number"
@@ -409,13 +431,13 @@ export function Campaigns({
                       onChange={(e) => setBudget(Number(e.target.value))}
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="leadform">Lead form</Label>
                     <select
                       id="leadform"
                       value={leadFormId}
                       onChange={(e) => setLeadFormId(e.target.value)}
-                      className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                      className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                     >
                       {leadForms.length === 0 && (
                         <option value="">No lead forms found</option>
@@ -446,8 +468,8 @@ export function Campaigns({
                       ₹{amount}/day
                     </button>
                   ))}
-                  <span className="ml-auto text-xs font-medium text-blue-700">
-                    {describeBudget(budget)}
+                  <span className="ml-auto text-xs font-medium text-slate-600">
+                    Total: {formatCurrency(totalDailyBudget)}/day{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
 
@@ -478,8 +500,7 @@ export function Campaigns({
                       A/B test the audience by age
                     </span>
                     <span className="block text-xs text-slate-500">
-                      Advanced: splits your age range into two ad sets so Meta can
-                      find the cheaper audience for you.
+                      Two ad sets, each with the entered daily budget. Total daily budget: {formatCurrency(totalDailyBudget)}.
                     </span>
                   </span>
                 </label>
@@ -487,7 +508,7 @@ export function Campaigns({
                 <div className="border-t border-slate-200 pt-5">
                   <CampaignLaunchReview
                     selectedCount={selected.size}
-                    budget={budget}
+                    budget={totalDailyBudget}
                     leadFormName={selectedLeadForm?.name}
                     audience={audiencePreview}
                   />
@@ -503,17 +524,16 @@ export function Campaigns({
                     Create paused campaign
                   </Button>
                 </div>
-                <HowItWorks />
-                {error && <Alert variant="error">{error}</Alert>}
-                {notice && <Alert variant="success">{notice}</Alert>}
+                <details className="border-t border-slate-200 pt-3"><summary className="cursor-pointer text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>
               </>
             )}
           </CardContent>
         </Card>
       )}
+      </div>
 
       <div>
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">
             Your campaigns{" "}
             <span className="font-normal text-slate-400">
@@ -521,7 +541,7 @@ export function Campaigns({
             </span>
           </h2>
           {metaReady && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {lastSynced && !syncing && (
                 <span className="text-xs text-slate-400">
                   Synced {timeAgo(lastSynced)}
@@ -554,6 +574,10 @@ export function Campaigns({
             </div>
           )}
         </div>
+        {campaigns.length > 0 && <div className="mb-5 flex flex-wrap gap-3">
+          <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
+          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
+        </div>}
         {campaigns.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center gap-1 py-10 text-center">
@@ -566,16 +590,16 @@ export function Campaigns({
               </p>
             </CardContent>
           </Card>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {campaigns.map((c) => {
+        ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
+          <div className="flex flex-col border-t border-slate-200">
+            {visibleCampaigns.map((c) => {
               const r = results[c.id];
               return (
-                <Card key={c.id}>
-                  <CardContent className="flex flex-col gap-3">
+                <Card key={c.id} className="rounded-none border-x-0 border-t-0">
+                  <CardContent className="flex flex-col gap-3 px-0 py-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <h3 className="min-w-0 break-words font-semibold text-slate-900">
                           {c.name ?? `${business.name} — ${c.objective}`}
                         </h3>
                         <Badge
@@ -587,7 +611,7 @@ export function Campaigns({
                           {c.status}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <span className="text-sm text-slate-500">
                           {c.daily_budget != null
                             ? `${formatCurrency(c.daily_budget)}/day`

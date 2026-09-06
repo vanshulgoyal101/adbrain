@@ -2,11 +2,23 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import manifest from "@/app/manifest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Brain } from "lucide-react";
+import { parse } from "node-html-parser";
 
 const pub = join(process.cwd(), "public");
 
 describe("app icons", () => {
   const icons = manifest().icons ?? [];
+
+  it("uses the landing-page Brain geometry in every SVG brand asset", () => {
+    const expected = parse(renderToStaticMarkup(createElement(Brain))).querySelectorAll("path").map(path => path.getAttribute("d"));
+    for (const asset of ["logo.svg", "icon.svg"]) {
+      const actual = parse(readFileSync(join(pub, asset), "utf8")).querySelectorAll("path").map(path => path.getAttribute("d"));
+      expect(actual, asset).toEqual(expected);
+    }
+  });
 
   it("ships the PNG sizes Chrome's install prompt requires", () => {
     // An SVG-only manifest is rejected, which is why installs fell back to a

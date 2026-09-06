@@ -56,7 +56,7 @@ function AssetTile({
             src={url}
             alt={title}
             loading="lazy"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             onError={() => setBroken(true)}
           />
         ) : (

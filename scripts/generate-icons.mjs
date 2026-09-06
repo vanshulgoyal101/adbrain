@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * Rasterise the brand mark (public/icon.svg) into the icon formats that SVG
+ * Generate the landing-page Lucide Brain mark and rasterise the formats SVG
  * alone doesn't satisfy:
+ *   - public/logo.svg      portable monochrome mark for other product surfaces
+ *   - public/icon.svg      browser mark with a contrasting blue background
  *   - public/favicon.ico   browsers/OS surfaces still request /favicon.ico
  *   - public/icon-192.png  Chrome PWA install requires PNG (SVG is rejected)
  *   - public/icon-512.png
@@ -10,29 +12,32 @@
  *
  * Run: npm run generate:icons
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Brain } from "lucide-react";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pub = join(root, "public");
-const svg = readFileSync(join(pub, "icon.svg"));
+const mark = (props = {}) => createElement(Brain, { xmlns: "http://www.w3.org/2000/svg", "aria-hidden": true, ...props });
+const logo = renderToStaticMarkup(mark());
+const appIcon = (maskable = false) => Buffer.from(renderToStaticMarkup(
+  createElement("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64", width: 64, height: 64 },
+    createElement("rect", { width: 64, height: 64, rx: maskable ? 0 : 12, fill: "#2563eb" }),
+    mark({ x: maskable ? 14 : 10, y: maskable ? 14 : 10, width: maskable ? 36 : 44, height: maskable ? 36 : 44, color: "#ffffff" }),
+  ),
+));
+const svg = appIcon();
+writeFileSync(join(pub, "logo.svg"), logo + "\n");
+writeFileSync(join(pub, "icon.svg"), svg + "\n");
 
 /**
- * Maskable variant: Android masks icons to a circle/squircle, cropping ~10% on
- * each edge. Drop the rounded corners (full-bleed background) and inset the
- * brain so it stays inside the safe zone.
+ * Keep the maskable mark within the central safe circle on a full-bleed background.
  */
-const maskableSvg = Buffer.from(
-  svg
-    .toString()
-    .replace('rx="15"', 'rx="0"')
-    .replace(
-      '<g fill="none"',
-      '<g transform="translate(32 32) scale(0.8) translate(-32 -32)" fill="none"',
-    ),
-);
+const maskableSvg = appIcon(true);
 
 const png = (input, size) =>
   sharp(input, { density: 384 }).resize(size, size).png().toBuffer();

@@ -22,9 +22,11 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --pool=threads --maxWorkers=2",
     "test:workspace-browser": "node --env-file-if-exists=.env.local ./node_modules/@playwright/test/cli.js test",
+    "test:workspace-ux": "node --env-file-if-exists=.env.local scripts/check-workspace-ux.mjs",
     "eval:creative": "node scripts/eval-creative.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.111.0",
     "clsx": "^2.1.1",

@@ -7,9 +7,17 @@
 > visibly better in desktop and mobile screenshots and can be used without
 > explanation.
 
-_Last reviewed: 2026-09-05_
+_Last reviewed: 2026-09-07_
 
-## Honest baseline
+## Current delivery
+
+The customer-focused public page and workspace revision are implemented:
+a business-aware shell and mobile menu, list-first campaign
+management, searchable responsive enquiries, a focused creation brief, complete
+asset previews, and quieter Settings. See [workspace UX verification](qa/workspace-ux-2026-09.md)
+for delivered behavior, test evidence, and release limits.
+
+## Original baseline (2026-09-05)
 
 The backend has meaningful capability and the safety work is strong, but the
 customer experience is not yet a sellable product. The live public page is a
@@ -33,8 +41,11 @@ Therefore:
 
 ## Product promise
 
-AdBrain helps a local business turn its real brand and offer into ads it can
-understand, approve, launch safely, and improve from results.
+AdBrain helps a local business reach the right customers through marketing
+grounded in its real brand and offer. Customers create and review creative,
+prepare campaigns, and follow up on enquiries. Reach and sales are goals,
+not guaranteed outcomes. See the [September audit](PRODUCT-AUDIT-2026-09.md)
+for verified launch-safety and follow-up gaps that qualify this promise.
 
 | Screen | Customer question |
 |---|---|
@@ -43,8 +54,8 @@ understand, approve, launch safely, and improve from results.
 | Brand Brain | What does AdBrain know, and how does it affect the ad? |
 | Create | What am I trying to achieve? |
 | Review | Which ad should I use, and why? |
-| Launch | What exactly will happen, and what is protected? |
-| Results | Did it work, and what should I do next? |
+| Campaigns | What is running, and what will campaign creation do? |
+| Enquiries | Who responded, and how can I contact them? |
 
 ## Two experiences, one product
 
@@ -74,12 +85,13 @@ desktop sidebar.
 
 ## Visual contract
 
-Use a restrained editorial operations language: warm mineral background, deep
-ink, white work surfaces, cobalt primary action, amber/coral attention, and
+Use a restrained operations language: neutral gray background, charcoal
+ink, white work surfaces, cobalt primary action, amber attention, and
 green only for verified success. The work supplies the visual drama: creative
 previews, lead status, campaign state, and performance change.
 
-- Use a distinctive display face and a separate interface face.
+- Use self-hosted DM Sans for workspace typography; retain the public site's
+	separate editorial typography.
 - Use a 12-column desktop grid and deliberate mobile rhythm.
 - Prefer split panes, tables, timelines, dividers, and work queues over nested
 	card grids.
@@ -108,6 +120,13 @@ real customer activity.
 ## Delivery phases
 
 ### Phase A — Public proof reset
+
+**Positioning update (2026-09-07, deployed):** the hero now leads with "Reach the
+right customers" and example campaign artwork. Three selectable fictional
+businesses replace the solar-only story. Shared FAQ, metadata, and entry-point
+language reflect customer goals and actual product limits. Four-width isolated
+browser checks cover the new examples and crops. This remains illustrative
+proof, not measured customer results or verified AI generation quality.
 
 **Progress (2026-09-05):** the public route now has a photographic first viewport,
 a labelled fictional brand-to-ad example with two selectable copy angles, and

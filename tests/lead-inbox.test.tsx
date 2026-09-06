@@ -60,6 +60,34 @@ describe("<LeadInbox> Meta readiness", () => {
 });
 
 describe("<LeadInbox> table", () => {
+  it("searches contact and source details and clears an empty result", () => {
+    render(<LeadInbox businessName="Form Studio" initialLeads={[lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })]} metaReady />);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search enquiries" }), { target: { value: "ravi@" } });
+    expect(screen.getByText("Ravi Shah")).toBeInTheDocument();
+    expect(screen.queryByText("Asha Verma")).toBeNull();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search enquiries" }), { target: { value: "no-match-123" } });
+    expect(screen.getByRole("heading", { name: "No matching enquiries" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByText("Ravi Shah")).toBeInTheDocument();
+  });
+
+  it("filters missing contact details without changing the overall counts", () => {
+    render(<LeadInbox businessName="Form Studio" initialLeads={[lead(), lead({ id: "l2", full_name: "Ravi Shah", phone: null, email: null })]} metaReady />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Contact availability" }), { target: { value: "missing" } });
+    expect(screen.queryByText("Asha Verma")).toBeNull();
+    expect(screen.getByText("Ravi Shah")).toBeInTheDocument();
+    expect(screen.getByText("Total responses").nextSibling).toHaveTextContent("2");
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 enquiries");
+  });
+
+  it("keeps the full digest collapsed until requested", () => {
+    const { container } = render(<LeadInbox businessName="Form Studio" initialLeads={[lead()]} metaReady />);
+    expect(container.querySelector("details")).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("WhatsApp digest"));
+    expect(container.querySelector("details")).toHaveAttribute("open");
+  });
+
   it("summarises responses, contactability, and represented areas", () => {
     render(
       <LeadInbox
@@ -85,6 +113,14 @@ describe("<LeadInbox> table", () => {
     expect(screen.getByText("+919876543210")).toBeInTheDocument();
     expect(screen.getByText("Jaipur")).toBeInTheDocument();
     expect(screen.getByText("Rooftop solar enquiry")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "asha@example.com" })).toHaveAttribute("href", "mailto:asha@example.com");
+  });
+
+  it("makes an email-only enquiry actionable", () => {
+    render(<LeadInbox businessName="Form Studio" initialLeads={[lead({ phone: null })]} metaReady />);
+    expect(screen.getByText("Ready to contact").nextSibling).toHaveTextContent("1");
+    expect(screen.getByRole("link", { name: "asha@example.com" })).toHaveAttribute("href", "mailto:asha@example.com");
+    expect(screen.getByRole("columnheader", { name: "Contact" })).toBeInTheDocument();
   });
 
   it("counts the leads in the heading", () => {
@@ -171,6 +207,7 @@ describe("<LeadInbox> WhatsApp digest", () => {
   it("shows a shareable digest and a WhatsApp link", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
     expect(screen.getByText("WhatsApp digest")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("WhatsApp digest"));
     const share = screen.getByRole("link", { name: /share on whatsapp/i });
     expect(share).toHaveAttribute("target", "_blank");
     expect(share.getAttribute("href")).toContain("https://wa.me/?text=");
@@ -183,6 +220,7 @@ describe("<LeadInbox> WhatsApp digest", () => {
     Object.assign(navigator, { clipboard: { writeText } });
 
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
+    fireEvent.click(screen.getByText("WhatsApp digest"));
     fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());

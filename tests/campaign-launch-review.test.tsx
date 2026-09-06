@@ -45,7 +45,7 @@ describe("<CampaignLaunchReview>", () => {
     expect(screen.getByText(/nothing spends until you activate it/i)).toBeInTheDocument();
   });
 
-  it("shows exactly when the campaign is ready to launch", () => {
+  it("distinguishes paused creation from activation and external eligibility", () => {
     render(
       <CampaignLaunchReview
         selectedCount={2}
@@ -54,7 +54,7 @@ describe("<CampaignLaunchReview>", () => {
         audience="Jaipur"
       />,
     );
-    expect(screen.getByText(/ready to launch/i)).toBeInTheDocument();
-    expect(screen.getByText(/launch checklist is complete/i)).toBeInTheDocument();
+    expect(screen.getByText(/ready to create paused campaign/i)).toBeInTheDocument();
+    expect(screen.getByText(/Meta eligibility and audience checks still apply/i)).toBeInTheDocument();
   });
 });

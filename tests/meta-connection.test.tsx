@@ -44,6 +44,13 @@ beforeEach(() => {
 });
 
 describe("<MetaConnectionPanel> not connected", () => {
+  it("keeps developer operations collapsed by default", () => {
+    render(<MetaConnectionPanel connection={connection()} oauthConfigured />);
+    const details = screen.getByText("Developer tools").closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByText("Run traffic generator")).not.toBeVisible();
+  });
+
   it("invites the owner to connect when OAuth is available", () => {
     render(<MetaConnectionPanel connection={connection()} oauthConfigured />);
     expect(

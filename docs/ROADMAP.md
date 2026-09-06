@@ -8,6 +8,15 @@ acceptance criteria, and delivery sequence live in
 [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). This file answers
 "what next, and why".
 
+## September Product Audit
+
+The [customer-focused marketing audit](./PRODUCT-AUDIT-2026-09.md) records the
+latest source-verified risks and acceptance gates. The public direction is
+**"Reach the right customers"**, supported by multiple industry examples rather
+than a solar identity. Prioritize business-bound Meta credentials, explicit
+geography, launch preflight/recovery, and enquiry follow-up before expanding
+acquisition. Industry-neutral branding does not imply multi-currency support.
+
 > **Legend:** effort is a rough T-shirt size (S ≈ hours, M ≈ a day or two,
 > L ≈ several days / needs external process).
 
@@ -65,7 +74,7 @@ Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 | **Scheduled activation** | Launch a paused campaign at a chosen date/time. | cron | S |
 | **Creative winner detection** | Promote the best-performing variant automatically. | per-creative metrics | M |
 | **Video creatives** | When models are good/cheap enough. | paid provider | L |
-| **Solar vertical depth** | Savings calculator, PM Surya Ghar subsidy helper, bill-based lead qualification — deepens the flagship vertical. | — | M |
+| **Industry-specific evidence** | Permissioned examples and useful campaign briefs across representative local-business categories; deepen verticals only when customer demand supports it. | validated customer workflows | M |
 
 ---
 

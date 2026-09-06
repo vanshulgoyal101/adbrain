@@ -21,15 +21,15 @@ export function PageHeader({
         className,
       )}
     >
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
+      <div className="min-w-0">
+        <p className="text-xs font-medium tracking-normal text-slate-500">
           {eyebrow}
         </p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.03em] text-slate-950">
+        <h1 className="mt-1 font-display text-2xl font-semibold tracking-normal text-slate-950">
           {title}
         </h1>
         {description && (
-          <div className="mt-1 max-w-2xl text-slate-600">{description}</div>
+          <div className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</div>
         )}
       </div>
       {actions && <div className="flex-none">{actions}</div>}

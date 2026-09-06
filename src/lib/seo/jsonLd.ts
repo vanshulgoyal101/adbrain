@@ -100,15 +100,10 @@ export function softwareApplicationSchema(): JsonLdObject {
     featureList: [
       "AI-generated ad creative (image + copy)",
       "Brand Brain: reusable brand voice, USPs, and offers",
-      "One-click Meta lead campaigns with AI-picked targeting",
+      "Facebook and Instagram campaigns with reviewed targeting and paused creation",
       "Plain-language results and campaign summaries",
+      "Instant-form enquiry inbox and shareable lead digest",
     ],
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "USD",
-      availability: "https://schema.org/InStock",
-    },
   };
 }
 
@@ -163,32 +158,32 @@ export const MARKETING_FAQS: FaqItem[] = [
   {
     question: "What is AdBrain?",
     answer:
-      "AdBrain is an AI tool that creates ready-to-launch ad creatives (image, headline, and copy) for any local business and launches them as Meta lead campaigns. You fill in your brand once, type a goal, and get on-brand ads in seconds.",
+      "AdBrain helps local businesses create marketing campaigns around their brand, offer, and customers. Create images and copy with AI, review the work, plan Facebook and Instagram campaigns, and follow up on form enquiries in one workspace.",
   },
   {
     question: "Do I need to know how to use Meta Ads Manager?",
     answer:
-      "No. AdBrain is built for business owners, not marketers. It writes the ads, picks the audience and location, and creates a paused campaign for you. Nothing spends until you review and activate it.",
+      "You can create and export marketing creative without connecting Meta. To publish a campaign, connect an eligible Meta ad account and Facebook Page, review your audience and budget, and create the campaign paused. Meta permissions and review still apply.",
   },
   {
-    question: "How does AdBrain decide who sees my ads?",
+    question: "How do I reach the right people?",
     answer:
-      "You can target specific cities or areas (with an adjustable radius), include or exclude locations, and set an age range — or let AdBrain choose based on your service areas and goal. Meta Advantage+ then optimises delivery within that audience.",
+      "Start with your customer goal and service areas. Review suggested locations, radius, and age range before creating a campaign. Meta controls delivery within its targeting rules; neither audience suggestions nor AI creative guarantee enquiries or sales.",
   },
   {
-    question: "Will the ads match my brand?",
+    question: "Will the marketing sound like my business?",
     answer:
-      "Yes. Your Brand Brain stores your voice, unique selling points, colours, and offers, and every ad is generated from it. You can also add custom instructions (for example, always mention a 25-year warranty) that steer every generation.",
+      "Your Brand Brain holds your voice, offers, service areas, and visual assets. These guide generation, along with any custom instructions you add. AI can still get details wrong, so check the image, claims, and copy before approving the work.",
   },
   {
-    question: "Does it cost money to run ads?",
+    question: "When does a campaign start spending?",
     answer:
-      "AdBrain creates campaigns in a paused state, so nothing is spent until you activate them in Meta. Your ad spend goes directly to Meta at the daily budget you choose.",
+      "New campaigns are created paused. Activating a campaign is a separate decision, and advertising spend is billed by Meta. Review the total campaign budget, including any split tests, before activation. AdBrain's spend checks are a backstop, not a guaranteed hard spending limit.",
   },
   {
-    question: "Can I see the leads my ads generate?",
+    question: "What happens after someone gets in touch?",
     answer:
-      "Yes. AdBrain pulls instant-form leads from Meta into a single inbox and can produce a plain-language, WhatsApp-ready digest of recent leads so you can follow up quickly.",
+      "Sync Meta instant-form enquiries into the lead inbox, review contact details, and prepare a digest for your team. Calls and WhatsApp conversations stay in their respective channels. AdBrain does not automatically contact customers or track follow-up status yet.",
   },
 ];
 

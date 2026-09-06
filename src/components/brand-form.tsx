@@ -269,7 +269,7 @@ export function BrandForm({ business }: { business: Business | null }) {
               required
               value={fields.name}
               onChange={(e) => set("name", e.target.value)}
-              placeholder="Solaride"
+              placeholder="Your business name"
             />
           </Field>
           <Field label="Website" error={errors.website}>
@@ -277,7 +277,7 @@ export function BrandForm({ business }: { business: Business | null }) {
               name="website"
               value={fields.website}
               onChange={(e) => set("website", e.target.value)}
-              placeholder="solaride.in"
+              placeholder="example.com"
               aria-invalid={errors.website ? true : undefined}
             />
           </Field>
@@ -286,7 +286,7 @@ export function BrandForm({ business }: { business: Business | null }) {
               name="vertical"
               value={fields.vertical}
               onChange={(e) => set("vertical", e.target.value)}
-              placeholder="solar energy, dental clinic, gym…"
+              placeholder="Coffee shop, fitness studio, interior design…"
             />
           </Field>
           <div className="sm:col-span-2">

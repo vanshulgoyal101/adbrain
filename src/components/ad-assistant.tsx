@@ -19,7 +19,6 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
-import { seasonalSuggestions } from "@/lib/seasonal";
 import { useMounted } from "@/lib/use-mounted";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -56,29 +55,6 @@ interface Draft {
 }
 
 const draftKey = (businessId: string) => `adbrain:assistant:${businessId}`;
-
-function getBriefPreview(goal: string) {
-  const input = goal.trim().toLowerCase();
-
-  const audienceLabels = [
-    { label: "Local families", match: /local families|families|parents|family|community|neighborhood|nearby/ },
-    { label: "New patients", match: /new patient|new patients|new customers|first-time|new client/ },
-    { label: "High-intent buyers", match: /buyers|shoppers|customers|prospects|service seekers|local shoppers/ },
-    { label: "Business owners", match: /business owners|owners|teams|companies|brands/ },
-  ];
-
-  const offerLabels = [
-    { label: "Spring checkup", match: /spring checkup|spring|seasonal|special offer|limited time/ },
-    { label: "Weekend offer", match: /weekend|weekends|weeknight|sale|promotion/ },
-    { label: "Free consult", match: /free consult|free quote|free estimate|trial|demo/ },
-    { label: "Limited-time conversion", match: /offer|discount|launch|conversion|appointment|book now/ },
-  ];
-
-  const audience = audienceLabels.find((entry) => entry.match.test(input))?.label ?? "Local audience";
-  const offer = offerLabels.find((entry) => entry.match.test(input))?.label ?? "Offer-focused campaign";
-
-  return { audience, offer };
-}
 
 /**
  * Session-scoped draft so navigating to another tab and back doesn't throw away
@@ -222,7 +198,7 @@ export function AdAssistant({ business }: { business: Business }) {
     setLastAction({ type: "generate", brief, language });
     setTurns((t) => [
       ...t,
-      { role: "assistant", text: "Perfect — creating your ad now. This takes a few seconds…" },
+      { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
     ]);
     try {
       const res = await fetch("/api/creatives/generate", {
@@ -290,77 +266,47 @@ export function AdAssistant({ business }: { business: Business }) {
   }
 
   if (!started) {
-    const suggestions = seasonalSuggestions();
+    const suggestions = [
+      { label: "Introduce my business", prompt: `Introduce ${business.name} to potential customers in our service areas.` },
+      { label: "Promote an existing offer", prompt: "Create a campaign around an offer already saved in my Brand Brain. Ask me to confirm the offer details." },
+      { label: "Invite enquiries", prompt: `Help interested customers ask ${business.name} about our services and next steps.` },
+    ];
     return (
-      <Card className="overflow-hidden">
-        <CardContent className="p-0">
-          <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[0.7fr_1.3fr] lg:gap-8">
+      <section aria-label="Campaign brief" className="min-w-0">
+        <div>
+          <div className="flex flex-col gap-6">
             <div>
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                <Wand2 className="h-5 w-5" />
-              </span>
-              <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+              <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                <Wand2 className="h-4 w-4 text-blue-600" aria-hidden="true" />
                 Grounded in {business.name}
               </p>
-              <h2 className="mt-1 text-xl font-semibold tracking-[-0.02em] text-slate-950">
-                Start with the outcome
+              <h2 className="mt-3 text-xl font-semibold tracking-normal text-slate-950">
+                What would you like to achieve?
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Describe what you want this ad to achieve. AdBrain already has
-                your brand context and will ask only what is still missing.
-              </p>
             </div>
             <div className="min-w-0">
               <label htmlFor="assistant-goal" className="text-sm font-medium text-slate-800">
                 Campaign goal
               </label>
-              <p className="mt-1 text-xs text-slate-500">
-                Include an offer, audience, location, or occasion if it matters.
-              </p>
               <Textarea
                 id="assistant-goal"
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
-                rows={4}
+                rows={6}
                 maxLength={500}
-                className="mt-3"
-                placeholder={`e.g. ${suggestions[0]?.prompt ?? "A weekend offer for my business"}`}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    start();
-                  }
-                }}
+                className="mt-3 resize-y rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
+                placeholder="Who do you want to reach, and what would you like them to do?"
               />
-              <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700">
-                  Brief preview
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {getBriefPreview(goal).audience && (
-                    <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-medium text-blue-700">
-                      {getBriefPreview(goal).audience}
-                    </span>
-                  )}
-                  {getBriefPreview(goal).offer && (
-                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-                      {getBriefPreview(goal).offer}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-2 text-xs text-slate-600">
-                  AdBrain will lean into {getBriefPreview(goal).audience.toLowerCase()} and {getBriefPreview(goal).offer.toLowerCase()} when it builds the first ad brief.
-                </p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label="Campaign goal length">{goal.length}/500</p>
+              <div className="mt-5 flex flex-col divide-y divide-slate-100 border-y border-slate-200">
                 {suggestions.map((s) => (
                   <button
                     key={s.label}
                     type="button"
                     onClick={() => setGoal(s.prompt)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-blue-300 hover:text-blue-700"
+                    className="flex min-h-12 items-center justify-between gap-3 py-3 text-left text-sm text-slate-600 hover:text-blue-700"
                   >
-                    {s.label}
+                    {s.label}<ArrowRight size={15} aria-hidden="true" />
                   </button>
                 ))}
               </div>
@@ -371,13 +317,13 @@ export function AdAssistant({ business }: { business: Business }) {
               </div>
             </div>
           </div>
-          <ol className="grid border-t border-slate-200 bg-slate-50/70 text-sm sm:grid-cols-3">
+          <ol aria-label="Creation stages" className="mt-8 grid grid-cols-3 border-t border-slate-200 text-xs">
             {[
-              ["1", "Describe the goal"],
-              ["2", "Answer what matters"],
-              ["3", "Review three ads"],
+              ["1", "Brief"],
+              ["2", "Create"],
+              ["3", "Review"],
             ].map(([number, label]) => (
-              <li key={number} className="flex items-center gap-2 px-5 py-3 sm:border-r sm:border-slate-200 sm:last:border-r-0">
+              <li key={number} aria-current={number === "1" ? "step" : undefined} className="flex items-center gap-2 py-4">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-semibold text-blue-700 ring-1 ring-slate-200">
                   {number}
                 </span>
@@ -385,8 +331,8 @@ export function AdAssistant({ business }: { business: Business }) {
               </li>
             ))}
           </ol>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     );
   }
 
@@ -406,9 +352,9 @@ export function AdAssistant({ business }: { business: Business }) {
             />
           ))}
 
-          {loading && (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> Thinking…
+          {(loading || phase === "generating") && (
+            <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}
             </div>
           )}
         </div>
