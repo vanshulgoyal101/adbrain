@@ -13,7 +13,7 @@ const expected = paths(await readFile(new URL("../public/logo.svg", import.meta.
 for (const asset of ["logo.svg", "icon.svg", "favicon.ico", "icon-192.png", "icon-512.png", "apple-icon-180.png", "maskable-512.png"]) {
   const response = await fetch(`${origin}/${asset}?v=brain-1`);
   assert.equal(response.status, 200, asset);
-  assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile(new URL(`../public/${asset}`, import.meta.url)), asset);
+  assert.ok(Buffer.from(await response.arrayBuffer()).equals(await readFile(new URL(`../public/${asset}`, import.meta.url))), `${asset}: deployed bytes differ`);
 }
 const portfolioIcon = await fetch("https://vanshul.com/images/projects/adbrain-icon.svg");
 assert.equal(portfolioIcon.status, 200);
@@ -52,6 +52,10 @@ try {
     const image = title.locator("img");
     await image.waitFor();
     assert.equal(await image.evaluate(element => element.complete && element.naturalWidth > 0), true);
+    const preview = page.getByRole("img", { name: "AdBrain", exact: true });
+    const previewResponse = await page.request.get(new URL(await preview.getAttribute("src"), page.url()).href);
+    assert.equal(previewResponse.status(), 200);
+    assert.ok((await previewResponse.body()).equals(await readFile(new URL("../../vanshul-portfolio/public/images/projects/adbrain.webp", import.meta.url))), "Portfolio displayed preview differs from the release capture");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.screenshot({ path: `${output}/portfolio-${width}.png` });
     await page.close();
