@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import type { Campaign } from "@/lib/types";
+import type { DraftDTO } from "@/lib/campaign/connect-contracts";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
 
@@ -56,9 +57,11 @@ function reviveSession(raw: unknown): ChatSession | null {
 export function CampaignChat({
   businessId,
   onCreated,
+  onDraftReady,
 }: {
   businessId: string;
-  onCreated: (campaign: Campaign) => void;
+  onCreated?: (campaign: Campaign) => void;
+  onDraftReady?: (draft: DraftDTO) => void;
 }) {
   // Keeps the interview alive across tab changes; a finished one is discarded.
   const [session, setSession, clearSession] = useSessionDraft<ChatSession>(
@@ -94,6 +97,7 @@ export function CampaignChat({
         questions?: PlannerQuestion[];
         summary?: string;
         campaign?: Campaign;
+        draft?: DraftDTO;
         error?: string;
       };
       if (!res.ok) {
@@ -109,9 +113,10 @@ export function CampaignChat({
       } else if (data.ready) {
         setSession((s) => ({
           ...s,
-          turns: [...s.turns, { role: "summary", text: data.summary ?? "Campaign created." }],
+          turns: [...s.turns, { role: "summary", text: data.draft ? "Draft saved. Review the account, audience, budget, and blockers before creating the paused campaign." : data.summary ?? "Campaign created." }],
         }));
-        if (data.campaign) onCreated(data.campaign);
+        if (data.draft) onDraftReady?.(data.draft);
+        else if (data.campaign) onCreated?.(data.campaign);
         setDone(true);
       }
     } catch {
