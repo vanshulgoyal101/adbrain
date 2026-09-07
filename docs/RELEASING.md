@@ -158,7 +158,35 @@ passed. These are dated receipts, not approval to release the Meta feature set.
 
 ## Current Meta Connect Work
 
-Meta connection, campaign drafts, and operation recovery remain development-only.
+### Production connection pilot: 2026-09-08
+
+The owner authorized testing real Meta consent on the existing production HTTPS
+callback, with Solaride as the pilot. This supersedes the earlier requirement to
+complete real consent in a non-production environment. It is not a general rollout.
+
+- Entry: `/connect/meta`, authenticated and restricted by server-side
+   `META_CONNECT_ROLLOUT=pilot` and `META_CONNECT_PILOT_USER_ID`.
+- An absent production rollout value denies access. `disabled` is the kill switch;
+   `enabled` is reserved for a separately approved broad release.
+- Release only connection routes, encrypted storage, discovery/selection UI and
+   their dependencies. Keep existing campaign routes, settings and credentials.
+- Signed OAuth state distinguishes the new flow from legacy OAuth. Missing browser
+   binding on a new attempt never falls back to legacy token storage.
+- Apply only `20260907_meta_instant_connect.sql`, reviewed as additive. It now
+   preserves legacy credential privileges and owner policy. Do not apply the
+   campaign migration, fresh schema, credential backfill or credential revocation.
+- Production requires the existing app ID/secret plus `SUPABASE_SERVICE_ROLE_KEY`
+   and a newly generated base64 32-byte `META_TOKEN_ENCRYPTION_KEY`. Store secrets
+   directly in Vercel production env; never log them or rotate an existing key.
+- Non-main branch Git deployments are disabled by the `*` rule, with `main`
+   explicitly enabled. Required GitHub PR build/secrets checks still apply.
+- Rollback to the prior main code leaves the additive tables unused and preserves
+   legacy credentials. Keep the encryption key while encrypted tokens exist.
+- Consent completion, real account/Page access and Meta review eligibility are
+   unverified until the owner completes the production journey. No ads should be
+   created or activated during this pilot.
+
+Campaign drafts and operation recovery remain development-only.
 Local journey tests pass with mocked Meta consent, but real consent, account/Page
 selection, customer permissions, production migrations, and credential setup have
 not been verified. Do not promote the UI without its backend and release gates.

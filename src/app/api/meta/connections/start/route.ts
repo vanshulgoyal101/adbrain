@@ -10,6 +10,7 @@ import {
 } from "@/lib/meta/connection-repository";
 import {
   ConnectionAccessError,
+  getConnectionStatus,
   requireOwnedBusiness,
 } from "@/lib/meta/connection-access";
 import {
@@ -88,20 +89,21 @@ export async function POST(request: NextRequest) {
   }
 
   const browserBinding = createBrowserBinding();
-  const state = signState({ businessId: business.businessId, userId: business.userId });
+  const state = signState({ businessId: business.businessId, userId: business.userId, flow: "instant" });
   const signedState = verifyState(state);
   if (!signedState) {
     return errorResponse(requestId, 503, "UNAVAILABLE", "Meta connection could not be started.", true);
   }
   let attempt;
   try {
+    const connection = await getConnectionStatus(business);
     attempt = await createConnectionAttempt({
       businessId: business.businessId,
       userId: business.userId,
       intent: parsedIntent.data as ConnectIntent,
       state,
       browserBinding,
-      expectedGeneration: 0,
+      expectedGeneration: connection.generation,
     });
   } catch {
     return errorResponse(requestId, 503, "UNAVAILABLE", "Meta connection could not be started.", true);

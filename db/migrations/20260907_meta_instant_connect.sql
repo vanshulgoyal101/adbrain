@@ -1,6 +1,5 @@
 -- Meta Instant Connect foundation.
--- Review and apply only after the server token-store cutover and isolated RLS tests.
--- This migration is intentionally not executed by Worker 1.
+-- Additive pilot migration; legacy credentials and their policies remain unchanged.
 
 create schema if not exists private;
 
@@ -86,19 +85,6 @@ revoke all on private.meta_tokens from public, anon, authenticated, service_role
 revoke all on private.meta_connection_attempts from public, anon, authenticated, service_role;
 revoke all on public.meta_connections from public, anon, authenticated;
 grant select, insert, update, delete on public.meta_connections to service_role;
-
--- Keep an existing legacy table available for the controlled backfill, but make
--- it unreadable to browser roles immediately. The backfill tool must run and
--- verify counts before the legacy table is dropped in a later cutover step.
-do $$
-begin
-  if to_regclass('public.meta_credentials') is not null then
-    execute 'revoke all on table public.meta_credentials from public, anon, authenticated';
-    execute 'grant select on table public.meta_credentials to service_role';
-    execute 'drop policy if exists "meta_credentials: all own" on public.meta_credentials';
-  end if;
-end
-$$;
 
 create or replace function public.meta_attempt_discovery_result(
   p_attempt_id uuid, p_discovered_assets jsonb, p_status text, p_error_code text

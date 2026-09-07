@@ -26,6 +26,7 @@ export interface MetaOAuthState {
   userId: string;
   issuedAt: number;
   nonce: string;
+  flow?: "instant";
 }
 
 export interface MetaAdAccountOption {
@@ -136,6 +137,7 @@ export function verifyMetaSignedRequest(value: string): MetaSignedRequest | null
 export function signState(payload: {
   businessId: string;
   userId: string;
+  flow?: "instant";
 }): string {
   const body = b64url(
     JSON.stringify({
@@ -143,6 +145,7 @@ export function signState(payload: {
       u: payload.userId,
       t: Date.now(),
       n: randomBytes(8).toString("hex"),
+      ...(payload.flow ? { f: payload.flow } : {}),
     }),
   );
   const sig = b64url(createHmac("sha256", stateSecret()).update(body).digest());
@@ -169,11 +172,12 @@ export function verifyState(
   try {
     const json = JSON.parse(
       Buffer.from(body.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString(),
-    ) as { b?: string; u?: string; t?: number; n?: string };
+    ) as { b?: string; u?: string; t?: number; n?: string; f?: string };
     if (!json.b || !json.u || typeof json.t !== "number" || !json.n) return null;
     if (json.t > Date.now() + 30_000) return null;
     if (Date.now() - json.t > maxAgeMs) return null;
-    return { businessId: json.b, userId: json.u, issuedAt: json.t, nonce: json.n };
+    if (json.f !== undefined && json.f !== "instant") return null;
+    return { businessId: json.b, userId: json.u, issuedAt: json.t, nonce: json.n, ...(json.f === "instant" ? { flow: "instant" as const } : {}) };
   } catch {
     return null;
   }

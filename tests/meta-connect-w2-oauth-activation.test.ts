@@ -77,6 +77,7 @@ beforeEach(() => {
     businessId: "business-1",
     userId: "user-1",
     nonce: "nonce-1",
+    flow: "instant",
   });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business-1", userId: "user-1" });
   mocks.claimConnectionAttempt.mockResolvedValue({ attemptId: "attempt-1" });

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getConnectionAttempt } from "@/lib/meta/connection-repository";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,10 @@ export async function GET(
       { status: 401, headers: { "Cache-Control": "no-store" } },
     );
   }
+  if (!canUseMetaConnect(user.id)) return NextResponse.json(
+    { ok: false, error: { code: "FORBIDDEN", message: "Meta connection is not enabled for this account.", retryable: false }, requestId: crypto.randomUUID() },
+    { status: 403, headers: { "Cache-Control": "no-store" } },
+  );
   const { id } = await context.params;
   const attempt = await getConnectionAttempt(id, user.id);
   if (!attempt) {

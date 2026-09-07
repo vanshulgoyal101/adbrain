@@ -42,6 +42,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(settings);
   }
 
+  if (verified.flow !== "instant") {
+    const { completeLegacyMetaOAuth } = await import("@/lib/meta/legacy-callback");
+    return completeLegacyMetaOAuth(request, verified);
+  }
+
   // The person completing the flow must be the one who started it.
   const supabase = await createClient();
   const {

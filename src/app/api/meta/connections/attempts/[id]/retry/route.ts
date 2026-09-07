@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getConnectionAttempt } from "@/lib/meta/connection-repository";
 import { retryConnectionDiscovery } from "@/lib/meta/retry-discovery";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,10 @@ export async function POST(
   if (!user) return NextResponse.json(
     { ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in required.", retryable: false }, requestId },
     { status: 401 },
+  );
+  if (!canUseMetaConnect(user.id)) return NextResponse.json(
+    { ok: false, error: { code: "FORBIDDEN", message: "Meta connection is not enabled for this account.", retryable: false }, requestId },
+    { status: 403 },
   );
   const body = await request.json().catch(() => null) as { revision?: unknown } | null;
   const { id } = await context.params;

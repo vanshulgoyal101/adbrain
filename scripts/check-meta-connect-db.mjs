@@ -55,6 +55,16 @@ async function verify(database, source) {
     await db.query(bootstrap);
     await db.query(source);
     console.log(`PASS ${database}: schema executes`);
+    if (database === "ordered_upgrade") {
+      await check("ordered_upgrade: legacy OAuth privileges and owner policy survive", async () => {
+        const { rows } = await db.query(`select
+          has_table_privilege('authenticated', 'public.meta_credentials', 'SELECT,INSERT,UPDATE,DELETE') as allowed,
+          exists(select 1 from pg_policies where schemaname = 'public'
+            and tablename = 'meta_credentials' and policyname = 'meta_credentials: all own') as owner_policy`);
+        assert.equal(rows[0].allowed, true);
+        assert.equal(rows[0].owner_policy, true);
+      });
+    }
     const ownerId = randomUUID();
     const businessId = randomUUID();
     const draftId = randomUUID();

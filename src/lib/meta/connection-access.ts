@@ -12,6 +12,7 @@ import {
 } from "./connect-contracts";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import { verifyMetaCapabilities } from "./capability-verification";
+import { canUseMetaConnect } from "./pilot-access";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -44,6 +45,8 @@ export async function requireOwnedBusiness(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new ConnectionAccessError("UNAUTHENTICATED", "Sign in required.");
+
+  if (!canUseMetaConnect(user.id)) throw new ConnectionAccessError("FORBIDDEN", "Meta connection is not enabled for this account.");
 
   const { data: business, error } = await supabase
     .from("businesses")
@@ -221,6 +224,7 @@ export async function getOwnedConnectionAttempt(attemptId: string): Promise<Atte
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new ConnectionAccessError("UNAUTHENTICATED", "Sign in required.");
+  if (!canUseMetaConnect(user.id)) throw new ConnectionAccessError("FORBIDDEN", "Meta connection is not enabled for this account.");
   const { getConnectionAttempt } = await import("./connection-repository");
   const attempt = await getConnectionAttempt(attemptId, user.id);
   if (!attempt) throw new ConnectionAccessError("NOT_FOUND", "Connection attempt not found.");
