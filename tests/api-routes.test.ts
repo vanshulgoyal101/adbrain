@@ -12,8 +12,12 @@ const getUser = vi.fn();
 const rateLimitResponse = vi.fn();
 const getPrimaryBusiness = vi.fn();
 const metaClientForBusiness = vi.fn();
+const requireOwnedBusiness = vi.fn();
+const withMetaConnection = vi.fn();
 const upsert = vi.fn();
 const del = vi.fn();
+const adminFrom = vi.fn();
+const adminRpc = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -33,6 +37,13 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: adminFrom,
+    rpc: adminRpc,
+  }),
+}));
+
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse }));
 vi.mock("@/lib/supabase/queries", () => ({
   getPrimaryBusiness,
@@ -46,6 +57,11 @@ vi.mock("@/lib/supabase/queries", () => ({
   getCampaignSpend: async () => [],
 }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness }));
+vi.mock("@/lib/meta/connection-access", () => ({
+  ConnectionAccessError: class ConnectionAccessError extends Error {},
+  requireOwnedBusiness,
+  withMetaConnection,
+}));
 vi.mock("@/lib/audit", () => ({ logEvent: async () => {} }));
 
 const BUSINESS = { id: "b1", name: "Acme", website: null, locations: [] };
@@ -74,8 +90,21 @@ beforeEach(() => {
   rateLimitResponse.mockResolvedValue(null); // not rate-limited by default
   getPrimaryBusiness.mockResolvedValue(BUSINESS);
   metaClientForBusiness.mockResolvedValue(null);
+  requireOwnedBusiness.mockResolvedValue({ businessId: BUSINESS.id, userId: "u1" });
+  withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ listLeadForms: vi.fn().mockResolvedValue([]) }));
   upsert.mockResolvedValue({ error: null });
-  del.mockResolvedValue({ error: null });
+  adminFrom.mockImplementation((table: string) => {
+    if (table === "meta_connections") {
+      return {
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+        }),
+        update: () => ({ eq: async () => ({ error: null }) }),
+      };
+    }
+    return {};
+  });
+  adminRpc.mockResolvedValue({ error: null });
 });
 
 afterEach(() => vi.resetModules());
@@ -151,11 +180,20 @@ describe("POST /api/meta/disconnect", () => {
     expect((await POST()).status).toBe(401);
   });
 
-  it("deletes the stored connection for the business", async () => {
+  it("atomically disconnects the owned business", async () => {
     signedIn();
+    adminRpc.mockResolvedValue({ data: true, error: null });
     const { POST } = await import("@/app/api/meta/disconnect/route");
     expect((await POST()).status).toBe(200);
-    expect(del).toHaveBeenCalled();
+    expect(adminRpc).toHaveBeenCalledWith("meta_disconnect", { p_business_id: "b1", p_user_id: "u1" });
+    expect(adminFrom).not.toHaveBeenCalled();
+  });
+
+  it("does not report success when the transaction rejects ownership", async () => {
+    signedIn();
+    adminRpc.mockResolvedValue({ data: false, error: null });
+    const { POST } = await import("@/app/api/meta/disconnect/route");
+    expect((await POST()).status).toBe(500);
   });
 });
 
@@ -232,6 +270,23 @@ describe("GET /api/campaigns/lead-forms", () => {
     const res = await GET();
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ forms: [] });
+  });
+
+  it("uses the authorized connection boundary instead of legacy credentials", async () => {
+    signedIn();
+    withMetaConnection.mockImplementationOnce(async (_context, _options, execute) =>
+      execute({ listLeadForms: vi.fn().mockResolvedValue([{ id: "form-1", name: "Leads", status: "ACTIVE" }]) }),
+    );
+    const { GET } = await import("@/app/api/campaigns/lead-forms/route");
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(withMetaConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ businessId: BUSINESS.id }),
+      { purpose: "create_paused" },
+      expect.any(Function),
+    );
+    expect(metaClientForBusiness).not.toHaveBeenCalled();
   });
 });
 
@@ -329,6 +384,20 @@ describe("POST /api/internal/meta-traffic", () => {
     // Past the gate: fails later on Meta not being configured, not on 403.
     expect(res.status).not.toBe(403);
     expect(res.status).not.toBe(404);
+    process.env.TRAFFIC_GENERATOR_ALLOWED_EMAILS = "";
+  });
+
+  it("rejects legacy campaign creation mode before Meta credential lookup", async () => {
+    signedIn({ email: "owner@example.com" });
+    process.env.TRAFFIC_GENERATOR_ALLOWED_EMAILS = "owner@example.com";
+    const { POST } = await import("@/app/api/internal/meta-traffic/route");
+    const res = await POST(post({ createDraftCampaigns: true }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringMatching(/disabled/i),
+    });
+    expect(metaClientForBusiness).not.toHaveBeenCalled();
     process.env.TRAFFIC_GENERATOR_ALLOWED_EMAILS = "";
   });
 });

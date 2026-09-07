@@ -3,7 +3,11 @@ import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { parseLeadFields } from "@/lib/leads/parse";
 import { friendlyMetaError } from "@/lib/meta/client";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ConnectionAccessError,
+  requireOwnedBusiness,
+  withMetaConnection,
+} from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import type { Json, Lead, LeadInsert } from "@/lib/types";
@@ -26,45 +30,53 @@ export async function POST() {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const meta = await metaClientForBusiness(business.id);
-  if (!meta) {
-    return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
-  }
-
   let forms;
+  let rows: LeadInsert[];
   try {
-    forms = await meta.listLeadForms();
+    const context = await requireOwnedBusiness(business.id);
+    const synced = await withMetaConnection(
+      context,
+      { purpose: "read_leads" },
+      async (meta) => {
+        const availableForms = await meta.listLeadForms();
+        const imported: LeadInsert[] = [];
+        for (const form of availableForms) {
+          let leads;
+          try {
+            leads = await meta.listLeadsForForm(form.id);
+          } catch {
+            // A form the token can't read (missing leads_retrieval) — skip it.
+            continue;
+          }
+          for (const lead of leads) {
+            const parsed = parseLeadFields(lead.field_data);
+            imported.push({
+              business_id: business.id,
+              meta_lead_id: lead.id,
+              form_id: form.id,
+              form_name: form.name,
+              full_name: parsed.fullName,
+              phone: parsed.phone,
+              email: parsed.email,
+              city: parsed.city,
+              field_data: parsed.fields as unknown as Json,
+              created_time: lead.created_time ?? null,
+            });
+          }
+        }
+        return { forms: availableForms, rows: imported };
+      },
+    );
+    forms = synced.forms;
+    rows = synced.rows;
   } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.code === "UNAUTHENTICATED" ? 401 : 400 });
+    }
     return NextResponse.json(
       { error: friendlyMetaError(err, "Could not sync leads.") },
       { status: 502 },
     );
-  }
-
-  const rows: LeadInsert[] = [];
-  for (const form of forms) {
-    let leads;
-    try {
-      leads = await meta.listLeadsForForm(form.id);
-    } catch {
-      // A form the token can't read (missing leads_retrieval) — skip it.
-      continue;
-    }
-    for (const lead of leads) {
-      const parsed = parseLeadFields(lead.field_data);
-      rows.push({
-        business_id: business.id,
-        meta_lead_id: lead.id,
-        form_id: form.id,
-        form_name: form.name,
-        full_name: parsed.fullName,
-        phone: parsed.phone,
-        email: parsed.email,
-        city: parsed.city,
-        field_data: parsed.fields as unknown as Json,
-        created_time: lead.created_time ?? null,
-      });
-    }
   }
 
   if (rows.length === 0) {

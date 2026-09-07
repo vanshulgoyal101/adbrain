@@ -43,7 +43,7 @@ describe("POST /api/campaigns/create", () => {
     const { POST } = await import("@/app/api/campaigns/create/route");
     const res = await POST(jsonRequest({}));
     expect(res.status).toBe(401);
-    await expect(res.json()).resolves.toMatchObject({ error: expect.any(String) });
+    await expect(res.json()).resolves.toMatchObject({ error: { code: "UNAUTHENTICATED" } });
   });
 
   it("returns 400 when required fields are missing", async () => {
@@ -51,8 +51,8 @@ describe("POST /api/campaigns/create", () => {
     const { POST } = await import("@/app/api/campaigns/create/route");
     const res = await POST(jsonRequest({ businessId: "", creativeIds: [] }));
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/required/i);
+    const body = await res.json();
+    expect(body.error).toMatchObject({ code: "INVALID_INPUT" });
   });
 });
 

@@ -13,6 +13,8 @@ const insert = vi.fn();
 const updateEq = vi.fn();
 const updateCampaignStatus = vi.fn();
 const metaClientForBusiness = vi.fn();
+const requireOwnedBusiness = vi.fn();
+const withMetaConnection = vi.fn();
 const getCampaigns = vi.fn();
 const getLatestResults = vi.fn();
 const getSpendLimits = vi.fn();
@@ -27,6 +29,11 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness }));
+vi.mock("@/lib/meta/connection-access", () => ({
+  ConnectionAccessError: class ConnectionAccessError extends Error {},
+  requireOwnedBusiness,
+  withMetaConnection,
+}));
 vi.mock("@/lib/supabase/queries", () => ({
   getCampaigns,
   getLatestResults,
@@ -42,6 +49,22 @@ beforeEach(() => {
   updateEq.mockResolvedValue({ error: null });
   updateCampaignStatus.mockResolvedValue(undefined);
   metaClientForBusiness.mockResolvedValue({ updateCampaignStatus });
+  requireOwnedBusiness.mockResolvedValue({ businessId: "b1", userId: "u1" });
+  withMetaConnection.mockImplementation(async (_context, _options, execute) =>
+    execute({ updateCampaignStatus }, {
+      generation: 3,
+      selected: {
+        metaBusinessId: null,
+        adAccountId: "act_1",
+        accountName: "Account",
+        pageId: "page_1",
+        pageName: "Page",
+        currency: "INR",
+        timezoneName: "Asia/Kolkata",
+      },
+      capabilities: { canActivate: { state: "available", blockers: [] } },
+    }),
+  );
 });
 
 describe("logEvent", () => {
@@ -99,6 +122,9 @@ describe("enforceAutoPause", () => {
     status: "active",
     daily_budget: 500,
     meta_campaign_id: "meta-1",
+    meta_ad_account_id: "act_1",
+    meta_page_id: "page_1",
+    meta_connection_generation: 3,
     ...over,
   });
 
@@ -146,7 +172,26 @@ describe("enforceAutoPause", () => {
     const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
     await expect(enforceAutoPause("b1")).resolves.toEqual(["c1"]);
     expect(updateCampaignStatus).toHaveBeenCalledWith("meta-1", "PAUSED");
+    expect(metaClientForBusiness).not.toHaveBeenCalled();
+    expect(withMetaConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ businessId: "b1" }),
+      expect.objectContaining({ purpose: "pause", binding: { adAccountId: "act_1", pageId: "page_1" } }),
+      expect.any(Function),
+    );
     expect(updateEq).toHaveBeenCalled();
+  });
+
+  it("skips old campaigns without a verified binding", async () => {
+    setup({
+      autoPause: true,
+      cap: 7000,
+      spend: 8000,
+      campaigns: [campaign({ meta_ad_account_id: null })],
+    });
+    const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPause("b1")).resolves.toEqual([]);
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
+    expect(metaClientForBusiness).not.toHaveBeenCalled();
   });
 
   it("skips campaigns that were never launched to Meta", async () => {

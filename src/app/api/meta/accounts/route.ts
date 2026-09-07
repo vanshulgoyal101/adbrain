@@ -1,46 +1,24 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getPrimaryBusiness } from "@/lib/supabase/queries";
-import { MetaError, friendlyMetaError } from "@/lib/meta/client";
-import { fetchAdAccounts, fetchPages } from "@/lib/meta/oauth";
+import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 
 export const runtime = "nodejs";
 
 /** List the connected user's ad accounts + pages for the selection UI. */
-export async function GET() {
-  const supabase = await createClient();
+export async function GET(request?: Request) {
+  const authClient = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  } = await authClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const business = await getPrimaryBusiness();
-  if (!business) {
-    return NextResponse.json({ error: "No business" }, { status: 400 });
-  }
-
-  const { data: row } = await supabase
-    .from("meta_credentials")
-    .select("access_token, token_type")
-    .eq("business_id", business.id)
-    .maybeSingle();
-  if (!row?.access_token || row.token_type !== "oauth") {
-    return NextResponse.json({ error: "Not connected" }, { status: 400 });
-  }
-
-  try {
-    const [adAccounts, pages] = await Promise.all([
-      fetchAdAccounts(row.access_token),
-      fetchPages(row.access_token),
-    ]);
-    return NextResponse.json({ adAccounts, pages });
-  } catch (err) {
-    const status = err instanceof MetaError ? err.status ?? 502 : 502;
-    return NextResponse.json(
-      { error: friendlyMetaError(err, "Could not load Meta ad accounts.") },
-      { status },
-    );
-  }
+  const businessId = request
+    ? new URL(request.url).searchParams.get("businessId")?.trim()
+    : undefined;
+  if (!businessId) return NextResponse.json({ error: "Business is required." }, { status: 400 });
+  await requireOwnedBusiness(businessId);
+  return NextResponse.json(
+    { error: "This discovery endpoint has been replaced by the contextual connection flow." },
+    { status: 410 },
+  );
 }

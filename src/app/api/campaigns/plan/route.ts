@@ -1,32 +1,22 @@
 import { NextResponse } from "next/server";
-import { logEvent } from "@/lib/audit";
-import {
-  formatAnswers,
-  runPlanner,
-  type PlannerAnswer,
-  type PlannerQuestion,
-} from "@/lib/campaign/planner";
-import {
-  friendlyMetaError,
-  type GeoTargeting,
-} from "@/lib/meta/client";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import { draftDtoSchema } from "@/lib/campaign/connect-contracts";
+import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
+import { formatAnswers, runPlanner, type PlannerAnswer, type PlannerQuestion } from "@/lib/campaign/planner";
+import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
+import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
+import { friendlyMetaError } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/types";
 import {
   getActiveInstructionsText,
   getApprovedCreatives,
   getPerformanceContext,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
-import type { Creative, Json } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const clamp = (n: number, lo: number, hi: number) =>
-  Math.min(Math.max(n, lo), hi);
 
 /** A non-answerable informational message rendered in the chat. */
 const note = (text: string): PlannerQuestion => ({
@@ -70,11 +60,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const meta = await metaClientForBusiness(business.id);
-  if (!meta) {
-    return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
-  }
-
   const approved = await getApprovedCreatives(business.id);
   if (!approved.length) {
     return NextResponse.json({
@@ -88,9 +73,18 @@ export async function POST(req: Request) {
   }
 
   let leadForms;
+  let actor;
   try {
-    leadForms = await meta.listLeadForms();
+    actor = await requireOwnedBusiness(business.id);
+    leadForms = await withMetaConnection(
+      actor,
+      { purpose: "create_paused" },
+      (meta) => meta.listLeadForms(),
+    );
   } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.code === "UNAUTHENTICATED" ? 401 : 400 });
+    }
     return NextResponse.json({ error: friendlyMetaError(err, "Could not load lead forms.") }, { status: 502 });
   }
   if (!leadForms.length) {
@@ -139,167 +133,49 @@ export async function POST(req: Request) {
     });
   }
 
-  // Validate the AI's plan against reality — never trust invented IDs.
-  const approvedById = new Map(approved.map((c) => [c.id, c]));
-  let chosenIds = result.plan.creative_ids.filter((id) => approvedById.has(id));
-  if (!chosenIds.length) chosenIds = approved.map((c) => c.id);
-  const usable = chosenIds
-    .map((id) => approvedById.get(id))
-    .filter(
-      (c): c is Creative => !!c && !!c.image_url && !!c.headline,
-    );
-  if (!usable.length) {
+  const draftResult = plannerPlanToDraftInput({
+    businessId: business.id,
+    goal,
+    plan: result.plan,
+    approvedCreativeIds: approved.map((creative) => creative.id),
+    leadFormIds: leadForms.map((form) => form.id),
+  });
+  if (!draftResult.ok) {
     return NextResponse.json({
       ready: false,
-      questions: [
-        note(
-          "The chosen creatives are missing images. Regenerate them in the Studio, then try again.",
-        ),
-      ],
+      questions: [note(draftResult.error)],
     });
   }
 
-  const leadForm =
-    leadForms.find((f) => f.id === result.plan!.lead_form_id) ?? leadForms[0];
-  const budget = clamp(Math.round(result.plan.daily_budget_rupees || 0), 100, 100000);
-  const ageMin = clamp(Math.round(result.plan.age_min || 25), 18, 65);
-  const ageMax = clamp(Math.round(result.plan.age_max || 55), ageMin, 65);
-  const name = (result.plan.name || `${business.name} — AI leads`).slice(0, 120);
-
-  // Resolve target areas: the planner's chosen locations, else the brand's areas.
-  const planLocations = Array.isArray(result.plan.locations)
-    ? result.plan.locations.filter((s): s is string => typeof s === "string")
-    : [];
-  const targetNames = planLocations.length
-    ? planLocations
-    : business.locations ?? [];
-  let location: GeoTargeting | undefined;
-  let areaLabel = "India (nationwide)";
-  if (targetNames.length) {
-    try {
-      const resolved = await meta.resolveGeoTargeting(targetNames);
-      if (resolved.matched.length) {
-        location = resolved.targeting;
-        areaLabel = resolved.matched.map((m) => m.label).join(", ");
-      }
-    } catch {
-      // Fall back to nationwide if geo resolution fails.
-    }
+  const now = new Date().toISOString();
+  const plan = prepareDraftCreate({ actor, draftInput: draftResult.draft, now, ttlMs: DRAFT_TTL_MS });
+  if ("ok" in plan) {
+    return NextResponse.json({ error: plan.message }, { status: plan.code === "FORBIDDEN" ? 403 : 400 });
   }
-
-  // Resolve nearby areas to exclude (so the business avoids out-of-area calls).
-  const excludeNames = Array.isArray(result.plan.excluded_locations)
-    ? result.plan.excluded_locations.filter((s): s is string => typeof s === "string")
-    : [];
-  let excludedLocation: GeoTargeting | undefined;
-  let excludeLabel = "";
-  if (excludeNames.length) {
-    try {
-      const resolved = await meta.resolveGeoTargeting(excludeNames);
-      if (resolved.matched.length) {
-        excludedLocation = resolved.targeting;
-        excludeLabel = resolved.matched.map((m) => m.label).join(", ");
-      }
-    } catch {
-      // Exclusions are best-effort.
-    }
+  const { data: activeRows, error: countError } = await supabase
+    .from("campaign_drafts")
+    .select("id")
+    .eq("business_id", actor.businessId)
+    .eq("owner_id", actor.userId)
+    .gt("expires_at", now);
+  if (countError) return NextResponse.json({ error: "Draft storage is unavailable." }, { status: 503 });
+  if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
+    return NextResponse.json({ error: "Draft limit reached. Finish or remove an existing draft first." }, { status: 409 });
   }
-
-  const destination =
-    result.plan.destination === "whatsapp" || result.plan.destination === "call"
-      ? result.plan.destination
-      : "instant_form";
-
-  let created;
-  try {
-    created = await meta.createLeadCampaign({
-      name,
-      dailyBudgetRupees: budget,
-      leadFormId: leadForm.id,
-      link: business.website || "https://facebook.com",
-      creatives: usable.map((c) => ({
-        imageUrl: c.image_url as string,
-        headline: c.headline ?? "",
-        message: c.primary_text ?? "",
-        cta: c.cta,
-      })),
-      ageMin,
-      ageMax,
-      location,
-      excludedLocation,
-      destination,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: friendlyMetaError(err, "Meta could not create the campaign.") },
-      { status: 502 },
-    );
-  }
-
-  const { data: campaign } = await supabase
-    .from("campaigns")
+  const { data: row, error } = await supabase
+    .from("campaign_drafts")
     .insert({
-      business_id: business.id,
-      name,
-      objective: "leads",
-      daily_budget: budget,
-      status: "paused",
-      meta_campaign_id: created.campaignId,
-      meta_adset_id: created.adSetId,
-      meta_ad_ids: created.adIds,
-      creative_ids: usable.map((c) => c.id),
-      raw: { plan: result.plan, created } as unknown as Json,
+      business_id: plan.businessId,
+      owner_id: plan.ownerId,
+      version: plan.version,
+      input: plan.input as unknown as Json,
+      expires_at: plan.expiresAt,
+      created_at: plan.createdAt,
+      updated_at: plan.updatedAt,
     })
     .select("*")
     .single();
-
-  await logEvent({
-    businessId: business.id,
-    action: "campaign.ai_create",
-    entityType: "campaign",
-    entityId: campaign?.id,
-    metaObjectId: created.campaignId,
-    reason: result.plan.rationale,
-    details: {
-      budget,
-      leadFormId: leadForm.id,
-      creativeIds: usable.map((c) => c.id),
-      ageMin,
-      ageMax,
-      locations: targetNames,
-      area: areaLabel,
-      excluded: excludeNames,
-    },
-  });
-
-  const destLabel: Record<string, string> = {
-    instant_form: "an instant lead form",
-    whatsapp: "WhatsApp chat",
-    call: "a phone call",
-  };
-  const fellBack = destination !== "instant_form" && created.destination === "instant_form";
-
-  const summary = [
-    `Created a paused Leads campaign “${name}”.`,
-    `Budget: ${formatCurrency(budget)}/day.`,
-    `Creatives: ${usable.length}${
-      usable.map((c) => c.angle).filter(Boolean).length
-        ? ` (${usable.map((c) => c.angle).filter(Boolean).join(", ")})`
-        : ""
-    }.`,
-    `Leads reach you via ${destLabel[created.destination]}${
-      created.destination === "instant_form" && leadForm ? ` (“${leadForm.name}”)` : ""
-    }.`,
-    fellBack
-      ? `Note: ${destLabel[destination]} isn't set up on your account yet, so I used an instant form instead.`
-      : "",
-    `Audience: ${areaLabel} (residents only), ages ${ageMin}–${ageMax}.`,
-    excludeLabel ? `Excluded: ${excludeLabel}.` : "",
-    result.plan.rationale ? `Why: ${result.plan.rationale}` : "",
-    "It's paused — review and activate it in Meta Ads Manager when you're ready to spend.",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return NextResponse.json({ ready: true, created: true, summary, campaign });
+  if (error || !row) return NextResponse.json({ error: "Draft storage is unavailable." }, { status: 503 });
+  const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
+  return NextResponse.json({ ready: true, draft });
 }

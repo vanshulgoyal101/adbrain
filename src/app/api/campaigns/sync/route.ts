@@ -1,14 +1,6 @@
 import { NextResponse } from "next/server";
-import { friendlyMetaError } from "@/lib/meta/client";
-import { logEvent } from "@/lib/audit";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
-import {
-  mapCampaignObjective,
-  mapCampaignStatus,
-} from "@/lib/meta/mappers";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
-import type { Json } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -27,73 +19,10 @@ export async function POST() {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
 
-  const meta = await metaClientForBusiness(business.id);
-  if (!meta) {
-    return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
-  }
-
-  let metaCampaigns;
-  try {
-    metaCampaigns = await meta.listCampaigns();
-  } catch (err) {
-    return NextResponse.json({ error: friendlyMetaError(err, "Could not sync campaigns.") }, { status: 502 });
-  }
-
-  let synced = 0;
-  const failed: string[] = [];
-  for (const mc of metaCampaigns) {
-    const row = {
-      business_id: business.id,
-      name: mc.name,
-      objective: mapCampaignObjective(mc.objective),
-      // daily_budget is NOT NULL; Meta omits it for adset-budget campaigns.
-      daily_budget: mc.daily_budget ? Number(mc.daily_budget) / 100 : 0,
-      status: mapCampaignStatus(mc.status),
-      meta_campaign_id: mc.id,
-      raw: mc as unknown as Json,
-    };
-    const { data: existing } = await supabase
-      .from("campaigns")
-      .select("id")
-      .eq("meta_campaign_id", mc.id)
-      .maybeSingle();
-    const { error: writeErr } = existing
-      ? await supabase.from("campaigns").update(row).eq("id", existing.id)
-      : await supabase.from("campaigns").insert(row);
-    // A concurrent sync may have inserted the same campaign between our select
-    // and insert. The unique index (business_id, meta_campaign_id) rejects the
-    // duplicate with 23505 — fall back to an update so the sync stays idempotent.
-    const error =
-      writeErr?.code === "23505"
-        ? (
-            await supabase
-              .from("campaigns")
-              .update(row)
-              .eq("business_id", business.id)
-              .eq("meta_campaign_id", mc.id)
-          ).error
-        : writeErr;
-    if (error) {
-      console.error("[campaigns.sync] upsert failed", mc.id, error);
-      failed.push(mc.name || mc.id);
-    } else {
-      synced++;
-    }
-  }
-
-  await logEvent({
-    businessId: business.id,
-    action: "campaigns.sync",
-    entityType: "campaign",
-    reason: `Synced ${synced} campaign(s) from Meta`,
-    details: { count: synced, failed: failed.length },
-  });
-
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select("*")
-    .eq("business_id", business.id)
-    .order("created_at", { ascending: false });
-
-  return NextResponse.json({ synced, failed, campaigns: campaigns ?? [] });
+  return NextResponse.json(
+    {
+      error: "Campaign sync is unavailable until account binding storage is enabled. Reconnect or use the campaign review flow.",
+    },
+    { status: 503 },
+  );
 }
