@@ -88,9 +88,7 @@ try {
         assert.ok((await goal.inputValue()).includes("Ask me to confirm"));
       }
       if (path === "settings") {
-        assert.equal(await page.getByRole("button", { name: "Run traffic generator" }).isVisible(), false);
-        await page.getByText("Developer tools", { exact: true }).click();
-        assert.equal(await page.getByRole("button", { name: "Run traffic generator" }).isVisible(), true);
+        assert.equal(await page.getByRole("button", { name: "Run traffic generator" }).count(), 0);
       }
       if (path === "leads") {
         const sync = page.getByRole("button", { name: "Sync leads", exact: true });
