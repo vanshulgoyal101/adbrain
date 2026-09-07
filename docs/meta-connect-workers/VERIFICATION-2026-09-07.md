@@ -34,7 +34,7 @@ the same as proving that experience.
 | Login, discover, and automatically select one eligible pair | Implemented and locally tested; not proven with an actual completed Meta consent. Personal/shared-asset compatibility and external-user permissions remain unverified. |
 | Choose between accounts on mobile/same-tab return | Completion previously offered only a return link. This review reused the existing owned-attempt dialog to expose selection/recovery on completion. Focused tests pass; actual mobile OAuth is not yet tested. |
 | Recover from expired authorization | This review added a fresh Reconnect action instead of retrying an expired attempt; covered by a focused test. |
-| Recover from missing assets or permissions | Partial. Generic attempt blockers and null actions still lack specific setup/admin guidance. Bounded polling now ends in a visible recovery state; Check again reads an in-progress attempt without restarting discovery. |
+| Recover from missing assets or permissions | Implemented locally for saved discovery evidence. Missing account/Page access, insufficient Page tasks, incomplete discovery, and expired or denied consent receive specific guidance and settings/reconnect actions. The dialog displays all blockers. Desktop/mobile browser tests cover recovery through explicit choice between two pairs; Meta discovery and consent remain mocked. |
 | Return to the exact draft with no surprise mutation | Continuous local browser tests pass at 1440px (popup) and 390px (same-tab). Real local draft persistence preserves name, creative, budget and A/B settings; refreshed forms load, and the chosen form updates the same versioned draft. Meta consent/status/forms are mocked; same-tab consent redirects to Campaigns rather than exercising the real OAuth completion page. No campaign mutation is sent. Lost-create-response recovery also passes. |
 | Available to customers | No. No production migration, backfill, deployment, or non-app-role consent verification was performed. |
 
@@ -61,6 +61,19 @@ they do not all need further expansion to validate account connection.
 
 ### Latest Executed Evidence
 
+- Latest recovery pass: 870 tests passed, one skipped; coverage 66.19% statements,
+  57.87% branches, 67.2% functions, 68.03% lines. Lint, types, and build passed
+  (50/50 pages). Five local browser journeys passed: missing-access recovery and
+  explicit pair selection at 1440/390, draft return at 1440/390, and lost-response
+  campaign recovery. Screenshots inspected and dialog viewport geometry checked.
+  Tests use local Supabase auth/drafts and mocked Meta responses; no provider
+  consent, real asset discovery, or production readiness is implied.
+- Recovery guidance now comes from the owned saved-attempt response; tests cover
+  ownership lookup failure, unknown stored state, expiry, and missing access.
+  Incomplete discovery does not claim that accounts or Pages are absent.
+- Remaining next product gate: complete a user-driven real Meta consent and
+  confirm the correct account/Page and saved-draft return. No automatic provider
+  setup or campaign mutation was added. Temporary app and QA VM stopped.
 - Dev-branch publication gate: 856 tests passed, one skipped; coverage 65.83%
   statements, 57.35% branches, 67.03% functions, 67.65% lines. Lint, types,
   and production build passed (50/50 generated pages). These results supersede

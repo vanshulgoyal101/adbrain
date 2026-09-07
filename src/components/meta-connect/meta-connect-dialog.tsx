@@ -365,6 +365,8 @@ export function MetaConnectDialog({
   }
 
   const selected = connection?.selected;
+  const needsReconnect = !attempt || ["expired", "cancelled"].includes(attempt.state)
+    || attempt.blockers.some(blocker => blocker.code === "REAUTH_REQUIRED" || blocker.action?.kind === "reconnect");
   const selectedCandidate = attempt?.candidates.find((candidate) => candidate.pairId === selectedPairId);
   const requiresReplacementConfirmation = Boolean(
     selectedCandidate &&
@@ -382,7 +384,8 @@ export function MetaConnectDialog({
         event.preventDefault();
         close();
       }}
-      className="w-[min(100%-2rem,32rem)] rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/40"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,32rem)] overflow-y-scroll rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/40"
+      style={{ scrollbarGutter: "stable" }}
     >
       <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
         <div>
@@ -454,17 +457,25 @@ export function MetaConnectDialog({
           </div>
         )}
         {view === "recovery" && (
-          <div className="flex gap-2">
-            {!attempt || ["expired", "cancelled"].includes(attempt.state) || attempt.blockers.some(blocker => blocker.code === "REAUTH_REQUIRED") ? (
-              <Button onClick={() => void startConnection()}>Reconnect Meta</Button>
-            ) : (
-              <Button onClick={() => void retryAttempt()}>Check again</Button>
+          <div className="space-y-4">
+            {Boolean(attempt?.blockers.length) && (
+              <ul aria-label="Connection issues" className="space-y-3 text-sm text-slate-700">
+                {attempt?.blockers.map((blocker, index) => (
+                  <li key={`${blocker.code}:${index}`} className="space-y-2">
+                    <p>{blocker.message}</p>
+                    {blocker.action?.kind === "open_meta" && (
+                      <a className="inline-flex items-center gap-2 text-blue-700 underline underline-offset-4" href={blocker.action.url} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4 shrink-0" aria-hidden="true" />{blocker.action.label}
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
-            {attempt?.blockers[0]?.action?.kind === "open_meta" && (
-              <a className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100" href={attempt.blockers[0].action.url} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />Open Meta
-              </a>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {!needsReconnect && <Button onClick={() => void retryAttempt()}>Check again</Button>}
+              <Button variant={needsReconnect ? "primary" : "outline"} onClick={() => void startConnection()}>Reconnect Meta</Button>
+            </div>
           </div>
         )}
       </div>

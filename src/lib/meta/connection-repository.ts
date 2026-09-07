@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/types";
 import {
   attemptDtoSchema,
+  candidateDtoSchema,
   capabilitiesSchema,
   connectionDtoSchema,
   type AttemptDTO,
@@ -13,6 +14,7 @@ import {
   toPostgresBytea,
   type EncryptedMetaToken,
 } from "./token-store";
+import { buildAttemptBlockers } from "./attempt-recovery";
 
 export const META_ATTEMPT_TTL_MS = 10 * 60_000;
 
@@ -158,6 +160,8 @@ export async function getConnectionAttempt(
   const state = expired && !["connected", "failed", "cancelled"].includes(data.status)
     ? "expired"
     : data.status;
+  const parsedState = attemptDtoSchema.shape.state.safeParse(state);
+  if (!parsedState.success) return null;
   const snapshot = data.discovered_assets;
   const candidates = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
     ? snapshot.candidates
@@ -210,9 +214,16 @@ export async function getConnectionAttempt(
     discoveryComplete: Boolean(data.discovery_complete),
     candidates: storedCandidates,
     connection: connection?.success ? connection.data : null,
-    blockers: data.error_code
-      ? [{ code: data.error_code, message: "Meta connection needs attention.", action: null }]
-      : [],
+    blockers: buildAttemptBlockers({
+      state: parsedState.data,
+      errorCode: data.error_code,
+      discoveryComplete: Boolean(data.discovery_complete),
+      snapshot,
+      candidates: storedCandidates.flatMap(candidate => {
+        const parsed = candidateDtoSchema.safeParse(candidate);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    }),
     retryAfterMs: null,
   };
   const parsed = attemptDtoSchema.safeParse(dto);

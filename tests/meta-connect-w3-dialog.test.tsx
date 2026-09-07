@@ -13,6 +13,41 @@ import {
 } from "./fixtures/meta-connect-w3";
 
 describe("MetaConnectDialog", () => {
+  it("shows every recovery issue and its labeled Meta settings action", async () => {
+    const pending = {
+      ...connectedAttemptForActivation,
+      state: "action_required" as const,
+      connection: null,
+      blockers: [
+        { code: "SETUP_REQUIRED" as const, message: "Ask your admin for ad account access.", action: null },
+        { code: "MISSING_PERMISSION" as const, message: "Your Page needs advertising access.", action: { kind: "open_meta" as const, url: "https://business.facebook.com/settings/", label: "Open business settings" } },
+      ],
+    };
+    const client = { attempt: vi.fn().mockResolvedValue(pending) } as never;
+    render(<MetaConnectDialog businessId={businessId} intent={pending.intent} initialAttempt={pending}
+      open onClose={vi.fn()} onConnected={vi.fn()} client={client} />);
+    expect(await screen.findByRole("list", { name: "Connection issues" })).toBeInTheDocument();
+    expect(screen.getByText("Ask your admin for ad account access.")).toBeInTheDocument();
+    expect(screen.getByText("Your Page needs advertising access.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open business settings" })).toHaveAttribute("href", "https://business.facebook.com/settings/");
+    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reconnect Meta" })).toBeInTheDocument();
+  });
+
+  it("requires fresh consent when the server specifies a reconnect action", async () => {
+    const pending = {
+      ...connectedAttemptForActivation,
+      state: "action_required" as const,
+      connection: null,
+      blockers: [{ code: "MISSING_PERMISSION" as const, message: "Allow access when reconnecting.", action: { kind: "reconnect" as const } }],
+    };
+    const client = { attempt: vi.fn().mockResolvedValue(pending) } as never;
+    render(<MetaConnectDialog businessId={businessId} intent={pending.intent} initialAttempt={pending}
+      open onClose={vi.fn()} onConnected={vi.fn()} client={client} />);
+    expect(await screen.findByRole("button", { name: "Reconnect Meta" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+  });
+
   it("checks an in-progress authorization without restarting discovery", async () => {
     const pending = { ...connectedAttemptForActivation, state: "authorizing" as const, connection: null };
     const retry = vi.fn();

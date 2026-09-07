@@ -66,8 +66,9 @@ if (mode === "setup") {
     e2e: ["npx", ["playwright", "test", "e2e/workspace.spec.ts", "--workers=1"]],
     recovery: ["npx", ["playwright", "test", "e2e/campaign-recovery.spec.ts", "--workers=1"]],
     "draft-connect": ["npx", ["playwright", "test", "e2e/draft-connect.spec.ts", "--workers=1"]],
+    "connection-recovery": ["npx", ["playwright", "test", "e2e/meta-recovery.spec.ts", "e2e/draft-connect.spec.ts", "e2e/campaign-recovery.spec.ts", "--workers=1"]],
   };
-  assert.ok(commands[mode], "Choose setup, dev, oauth-dev, oauth-check, build, workspace, connect, e2e, or recovery.");
+  assert.ok(commands[mode], "Choose setup, dev, oauth-dev, oauth-check, build, workspace, connect, e2e, recovery, draft-connect, or connection-recovery.");
   const [command, args] = commands[mode];
   const child = spawn(command, args, { cwd: root, env, stdio: mode === "oauth-dev" ? ["inherit", "pipe", "pipe"] : "inherit" });
   if (mode === "oauth-dev") {
