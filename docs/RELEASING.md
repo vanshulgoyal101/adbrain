@@ -186,10 +186,27 @@ complete real consent in a non-production environment. It is not a general rollo
    unverified until the owner completes the production journey. No ads should be
    created or activated during this pilot.
 
-Campaign drafts and operation recovery remain development-only.
-Local journey tests pass with mocked Meta consent, but real consent, account/Page
-selection, customer permissions, production migrations, and credential setup have
-not been verified. Do not promote the UI without its backend and release gates.
+#### Infrastructure receipt
+
+Applied the connection-only migration transactionally to production project
+`kmzuxrvfrwwpwmoovwcp` (verified `adbrain`, `ACTIVE_HEALTHY`). SQL SHA-256:
+`4cdedd4fb2757e50a73b7e3bd4c6ebbd915b0b9036a1f3d0ad3354d7ef330e49`.
+Post-check: connection table exists; campaign draft/operation tables remain absent;
+legacy credentials remain empty with authenticated privileges preserved; browser
+roles cannot access the private schema. No backfill or provider mutation occurred.
+
+Installed the four missing production env entries on Vercel project
+`prj_LNNhyKmbQYXyBUNadG2hZJSLDjOw`: service-role key, encryption key, pilot rollout
+and Solaride owner ID. Existing app credentials and legacy system token were not
+changed. Vercel CLI refreshed its saved session; raw API calls had initially failed
+with HTTP 403 from an expired access token.
+
+Local connection release slice: 767 tests passed, one skipped; lint/types/build
+(46 pages) passed. Disposable PostgreSQL verification: 33 checks passed, including
+legacy access preservation. GitHub and Vercel release receipts are still pending.
+
+Campaign drafts and operation recovery remain development-only. Real consent,
+account/Page selection and customer permission eligibility are still unverified.
 
 See [the verification report](meta-connect-workers/VERIFICATION-2026-09-07.md)
 on `dev` for current evidence and limitations.

@@ -21,7 +21,10 @@ const mocks = vi.hoisted(() => ({
   metaClientForBusiness: vi.fn(),
   updateCampaignStatus: vi.fn(),
   createLeadCampaign: vi.fn(),
+  legacyCallback: vi.fn(),
 }));
+
+vi.mock("@/lib/meta/legacy-callback", () => ({ completeLegacyMetaOAuth: mocks.legacyCallback }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -100,6 +103,26 @@ beforeEach(() => {
 });
 
 describe("W2-T11: OAuth completion never activates spending", () => {
+  it("keeps verified legacy OAuth on the existing callback path", async () => {
+    mocks.verifyState.mockReturnValue({ businessId: "business-1", userId: "user-1", nonce: "nonce-1" });
+    mocks.legacyCallback.mockResolvedValue(new Response(null, { status: 302 }));
+    const { GET } = await import("@/app/api/meta/oauth/callback/route");
+    const response = await GET(new NextRequest("https://adbrain.example.com/api/meta/oauth/callback?code=code&state=state"));
+    expect(response.status).toBe(302);
+    expect(mocks.legacyCallback).toHaveBeenCalledOnce();
+    expect(mocks.claimConnectionAttempt).not.toHaveBeenCalled();
+    expect(mocks.saveEncryptedMetaToken).not.toHaveBeenCalled();
+  });
+
+  it("never downgrades a new OAuth attempt to legacy storage when browser binding is missing", async () => {
+    const { GET } = await import("@/app/api/meta/oauth/callback/route");
+    const response = await GET(new NextRequest("https://adbrain.example.com/api/meta/oauth/callback?code=code&state=state"));
+    expect(response.headers.get("location")).toContain("error=invalid_attempt");
+    expect(mocks.legacyCallback).not.toHaveBeenCalled();
+    expect(mocks.exchangeCodeForToken).not.toHaveBeenCalled();
+    expect(mocks.saveEncryptedMetaToken).not.toHaveBeenCalled();
+  });
+
   it("stores connection discovery but makes zero campaign activation or creation calls", async () => {
     const { GET } = await import("@/app/api/meta/oauth/callback/route");
     const request = new NextRequest(

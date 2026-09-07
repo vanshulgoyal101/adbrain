@@ -73,6 +73,12 @@ describe("metaOAuthConfigured", () => {
 });
 
 describe("signState / verifyState", () => {
+  it("authenticates the instant-connect flow marker without changing legacy state", async () => {
+    const { signState, verifyState } = await import("@/lib/meta/oauth");
+    expect(verifyState(signState({ businessId: "business", userId: "owner", flow: "instant" }))?.flow).toBe("instant");
+    expect(verifyState(signState({ businessId: "business", userId: "owner" }))?.flow).toBeUndefined();
+  });
+
   it("round-trips a valid state token", async () => {
     const { signState, verifyState } = await import("@/lib/meta/oauth");
     const token = signState({ businessId: "biz-1", userId: "user-1" });
