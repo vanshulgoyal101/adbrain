@@ -1,6 +1,11 @@
 import { logEvent } from "@/lib/audit";
 import { campaignsToAutoPause } from "@/lib/campaign/spend";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ConnectionAccessError,
+  requireOwnedBusiness,
+  withMetaConnection,
+} from "@/lib/meta/connection-access";
+import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { createClient } from "@/lib/supabase/server";
 import {
   getCampaigns,
@@ -34,16 +39,38 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
     );
     if (!toPause.length) return [];
 
-    const meta = await metaClientForBusiness(businessId);
-    if (!meta) return [];
-
     const supabase = await createClient();
+    let context;
+    try {
+      context = await requireOwnedBusiness(businessId);
+    } catch {
+      return [];
+    }
     const paused: string[] = [];
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
       if (!campaign?.meta_campaign_id) continue;
+      const storedBinding = readStoredCampaignBinding(campaign);
+      if (
+        !storedBinding.metaAdAccountId ||
+        !storedBinding.metaPageId ||
+        storedBinding.metaConnectionGeneration === null
+      ) {
+        continue;
+      }
       try {
-        await meta.updateCampaignStatus(campaign.meta_campaign_id, "PAUSED");
+        await withMetaConnection(
+          context,
+          {
+            purpose: "pause",
+            binding: {
+              adAccountId: storedBinding.metaAdAccountId,
+              pageId: storedBinding.metaPageId,
+            },
+            expectedGeneration: storedBinding.metaConnectionGeneration,
+          },
+          (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
+        );
         await supabase.from("campaigns").update({ status: "paused" }).eq("id", id);
         paused.push(id);
         await logEvent({
@@ -54,7 +81,10 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
           metaObjectId: campaign.meta_campaign_id,
           reason: `Weekly spend cap of ₹${limits.weeklyCapRupees} reached`,
         });
-      } catch {
+      } catch (error) {
+        if (!(error instanceof ConnectionAccessError)) {
+          // Provider and persistence failures remain best-effort; the next refresh retries.
+        }
         // Leave it running rather than fail the whole refresh; the banner still warns.
       }
     }

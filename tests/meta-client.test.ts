@@ -50,6 +50,45 @@ describe("MetaClient.updateCampaignStatus", () => {
   });
 });
 
+describe("MetaClient.createLeadCampaign checkpoints", () => {
+  it("reports each external mutation as soon as it returns", async () => {
+    const responses = [
+      new Response(JSON.stringify({ id: "campaign-1" }), { status: 200 }),
+      new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+      new Response(JSON.stringify({ images: { uploaded: { hash: "image-hash-1" } } }), { status: 200 }),
+      new Response(JSON.stringify({ id: "adset-1" }), { status: 200 }),
+      new Response(JSON.stringify({ id: "creative-1" }), { status: 200 }),
+      new Response(JSON.stringify({ id: "ad-1" }), { status: 200 }),
+    ];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const response = responses.shift();
+      if (!response) throw new Error("unexpected fetch");
+      return response;
+    });
+    const checkpoints: string[] = [];
+
+    const result = await new MetaClient(creds).createLeadCampaign({
+      name: "Checkpoint test",
+      dailyBudgetRupees: 200,
+      leadFormId: "form-1",
+      link: "https://example.com",
+      creatives: [{ imageUrl: "https://example.com/image.png", headline: "Headline", message: "Message" }],
+      onCheckpoint: (checkpoint) => {
+        checkpoints.push(`${checkpoint.phase}:${checkpoint.externalId}`);
+      },
+    });
+
+    expect(result).toMatchObject({ campaignId: "campaign-1", adSetId: "adset-1", adIds: ["ad-1"] });
+    expect(checkpoints).toEqual([
+      "campaign:campaign-1",
+      "creative:image-hash-1",
+      "adset:adset-1",
+      "creative:creative-1",
+      "ad:ad-1",
+    ]);
+  });
+});
+
 describe("friendlyMetaError", () => {
   it("hides localized CTA validation text", () => {
     expect(

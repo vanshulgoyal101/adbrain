@@ -78,6 +78,13 @@ export interface CreateCampaignResult {
   destination: AdDestination;
 }
 
+export type CampaignMutationCheckpoint = {
+  phase: "campaign" | "adset" | "creative" | "ad";
+  externalId: string;
+  variantIndex?: number;
+  creativeIndex?: number;
+};
+
 export interface CampaignInsights {
   impressions: number;
   clicks: number;
@@ -535,6 +542,7 @@ export class MetaClient {
     destination?: AdDestination;
     phone?: string;
     variants?: AdSetVariant[];
+    onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
   }): Promise<CreateCampaignResult> {
     const acct = this.creds.adAccountId;
     const requested = params.destination ?? "instant_form";
@@ -562,13 +570,21 @@ export class MetaClient {
         is_adset_budget_sharing_enabled: "false",
       },
     });
+    await params.onCheckpoint?.({ phase: "campaign", externalId: campaign.id });
 
     // Upload each creative image once and reuse the hash across all ad sets.
     const prepared: { input: CreativeInput; imageHash: string }[] = [];
-    for (const c of params.creatives) {
+    for (let creativeIndex = 0; creativeIndex < params.creatives.length; creativeIndex++) {
+      const c = params.creatives[creativeIndex];
+      const imageHash = await this.uploadAdImage(c.imageUrl);
+      await params.onCheckpoint?.({
+        phase: "creative",
+        externalId: imageHash,
+        creativeIndex,
+      });
       prepared.push({
         input: c,
-        imageHash: await this.uploadAdImage(c.imageUrl),
+        imageHash,
       });
     }
 
@@ -649,8 +665,10 @@ export class MetaClient {
         adSet = await makeAdSet(destination, variants[i], i);
       }
       adSetIds.push(adSet.id);
+      await params.onCheckpoint?.({ phase: "adset", externalId: adSet.id, variantIndex: i });
 
-      for (const { input: c, imageHash } of prepared) {
+      for (let creativeIndex = 0; creativeIndex < prepared.length; creativeIndex++) {
+        const { input: c, imageHash } = prepared[creativeIndex];
         const creative = await this.graph<{ id: string }>(
           `${acct}/adcreatives`,
           {
@@ -674,6 +692,12 @@ export class MetaClient {
             },
           },
         );
+        await params.onCheckpoint?.({
+          phase: "creative",
+          externalId: creative.id,
+          variantIndex: i,
+          creativeIndex,
+        });
 
         const ad = await this.graph<{ id: string }>(`${acct}/ads`, {
           method: "POST",
@@ -685,6 +709,12 @@ export class MetaClient {
           },
         });
         adIds.push(ad.id);
+        await params.onCheckpoint?.({
+          phase: "ad",
+          externalId: ad.id,
+          variantIndex: i,
+          creativeIndex,
+        });
       }
     }
 

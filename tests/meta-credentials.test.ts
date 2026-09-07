@@ -1,12 +1,49 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ row: null as Record<string, unknown> | null }));
+const h = vi.hoisted(() => ({
+  connection: null as Record<string, unknown> | null,
+  token: null as Record<string, unknown> | null,
+  plaintext: "oauth-token",
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     from: () => ({
       select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: h.row }) }),
+        eq: () => ({ maybeSingle: async () => ({ data: null }) }),
+      }),
+    }),
+  }),
+}));
+
+vi.mock("@/lib/meta/token-store", () => ({
+  decryptMetaToken: () => h.plaintext,
+  fromPostgresBytea: (value: string) => value,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    rpc: async (name: string) => ({
+      data: name === "meta_token_get" && h.token ? [h.token] : [],
+      error: null,
+    }),
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: table === "meta_connections" ? h.connection : null,
+            error: null,
+          }),
+        }),
+      }),
+    }),
+    schema: () => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({ maybeSingle: async () => ({ data: h.token, error: null }) }),
+          }),
+        }),
       }),
     }),
   }),
@@ -21,7 +58,9 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  h.row = null;
+  h.connection = null;
+  h.token = null;
+  h.plaintext = "oauth-token";
 });
 
 const future = () => new Date(Date.now() + 86_400_000).toISOString();
@@ -29,13 +68,16 @@ const past = () => new Date(Date.now() - 1000).toISOString();
 
 describe("resolveMetaCredentials", () => {
   it("uses a complete, unexpired OAuth connection", async () => {
-    h.row = {
+    h.connection = {
+      business_id: "biz",
+      token_id: "token-1",
       ad_account_id: "act_oauth",
       page_id: "pg_oauth",
-      access_token: "oauth-token",
-      token_type: "oauth",
-      token_expires_at: future(),
-      scopes: "ads_management",
+      authorization_status: "connected",
+    };
+    h.token = {
+      id: "token-1", business_id: "biz", ciphertext: "", nonce: "", auth_tag: "",
+      key_id: "", format_version: "", expires_at: null, revoked_at: null,
     };
     const { resolveMetaCredentials } = await import("@/lib/meta/credentials");
     expect(await resolveMetaCredentials("biz")).toEqual({
@@ -45,48 +87,29 @@ describe("resolveMetaCredentials", () => {
     });
   });
 
-  it("falls back to env when the OAuth connection is pending selection", async () => {
-    h.row = {
-      ad_account_id: null,
-      page_id: null,
-      access_token: "oauth-token",
-      token_type: "oauth",
-      token_expires_at: future(),
-      scopes: null,
-    };
+  it("fails closed when the OAuth connection is pending selection", async () => {
+    h.connection = { business_id: "biz", token_id: null, ad_account_id: null, page_id: null, authorization_status: "connected" };
     const { resolveMetaCredentials } = await import("@/lib/meta/credentials");
-    expect((await resolveMetaCredentials("biz"))?.adAccountId).toBe("act_env");
+    expect(await resolveMetaCredentials("biz")).toBeNull();
   });
 
-  it("falls back to env when the token has expired", async () => {
-    h.row = {
-      ad_account_id: "act_oauth",
-      page_id: "pg_oauth",
-      access_token: "oauth-token",
-      token_type: "oauth",
-      token_expires_at: past(),
-      scopes: null,
-    };
+  it("fails closed when the token has expired", async () => {
+    h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: "act_oauth", page_id: "pg_oauth", authorization_status: "connected" };
+    h.token = { id: "token-1", business_id: "biz", expires_at: past(), revoked_at: null };
     const { resolveMetaCredentials } = await import("@/lib/meta/credentials");
-    expect((await resolveMetaCredentials("biz"))?.adAccountId).toBe("act_env");
+    expect(await resolveMetaCredentials("biz")).toBeNull();
   });
 
-  it("uses env when there is no stored row", async () => {
+  it("fails closed when there is no stored row", async () => {
     const { resolveMetaCredentials } = await import("@/lib/meta/credentials");
-    expect((await resolveMetaCredentials("biz"))?.accessToken).toBe("env-token");
+    expect(await resolveMetaCredentials("biz")).toBeNull();
   });
 });
 
 describe("getMetaConnection", () => {
   it("reports a ready OAuth connection", async () => {
-    h.row = {
-      ad_account_id: "act_oauth",
-      page_id: "pg_oauth",
-      access_token: "oauth-token",
-      token_type: "oauth",
-      token_expires_at: future(),
-      scopes: "ads_management,pages_show_list",
-    };
+    h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: "act_oauth", page_id: "pg_oauth", authorization_status: "connected" };
+    h.token = { id: "token-1", business_id: "biz", expires_at: future(), revoked_at: null };
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     const c = await getMetaConnection("biz");
     expect(c).toMatchObject({
@@ -95,40 +118,28 @@ describe("getMetaConnection", () => {
       pending: false,
       adAccountId: "act_oauth",
     });
-    expect(c.scopes).toEqual(["ads_management", "pages_show_list"]);
+    expect(c.scopes).toEqual([]);
   });
 
   it("reports pending when no account/page chosen", async () => {
-    h.row = {
-      ad_account_id: null,
-      page_id: null,
-      access_token: "oauth-token",
-      token_type: "oauth",
-      token_expires_at: future(),
-      scopes: null,
-    };
+    h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: null, page_id: null, authorization_status: "connected" };
+    h.token = { id: "token-1", business_id: "biz", expires_at: future(), revoked_at: null };
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     const c = await getMetaConnection("biz");
     expect(c).toMatchObject({ source: "oauth", pending: true, ready: false });
   });
 
   it("reports expired OAuth connections", async () => {
-    h.row = {
-      ad_account_id: "act_oauth",
-      page_id: "pg_oauth",
-      access_token: "oauth-token",
-      token_type: "oauth",
-      token_expires_at: past(),
-      scopes: null,
-    };
+    h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: "act_oauth", page_id: "pg_oauth", authorization_status: "connected" };
+    h.token = { id: "token-1", business_id: "biz", expires_at: past(), revoked_at: null };
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     const c = await getMetaConnection("biz");
     expect(c).toMatchObject({ source: "oauth", expired: true, ready: false });
   });
 
-  it("reports the env connection when nothing is stored", async () => {
+  it("reports no connection when nothing is stored", async () => {
     const { getMetaConnection } = await import("@/lib/meta/credentials");
     const c = await getMetaConnection("biz");
-    expect(c).toMatchObject({ source: "env", ready: true, adAccountId: "act_env" });
+    expect(c).toMatchObject({ source: "none", ready: false, adAccountId: null });
   });
 });
