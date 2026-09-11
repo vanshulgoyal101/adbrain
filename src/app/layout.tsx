@@ -47,12 +47,12 @@ export const metadata: Metadata = {
   icons: {
     // .ico first for surfaces that only understand it, SVG for everything modern.
     icon: [
-      { url: "/favicon.ico?v=brain-1", sizes: "48x48", type: "image/x-icon" },
-      { url: "/icon.svg?v=brain-1", type: "image/svg+xml" },
+      { url: `/favicon.ico?v=${siteConfig.assetVersion}`, sizes: "48x48", type: "image/x-icon" },
+      { url: `/icon.svg?v=${siteConfig.assetVersion}`, type: "image/svg+xml" },
     ],
-    apple: [{ url: "/apple-icon-180.png?v=brain-1", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: `/apple-icon-180.png?v=${siteConfig.assetVersion}`, sizes: "180x180", type: "image/png" }],
   },
-  manifest: "/manifest.webmanifest",
+  manifest: `/manifest.webmanifest?v=${siteConfig.assetVersion}`,
 };
 
 export const viewport = {

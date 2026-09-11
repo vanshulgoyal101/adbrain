@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { Brain } from "lucide-react";
+import { siteConfig } from "@/lib/site";
 
 /**
  * Last-resort boundary. `error.tsx` cannot catch a failure in the root layout,
@@ -22,7 +23,7 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <head><title>Something went wrong - AdBrain</title><link rel="icon" href="/icon.svg?v=brain-1" type="image/svg+xml" /></head>
+      <head><title>Something went wrong - AdBrain</title><link rel="icon" href={`/icon.svg?v=${siteConfig.assetVersion}`} type="image/svg+xml" /></head>
       <body
         style={{
           margin: 0,
