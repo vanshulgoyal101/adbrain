@@ -27,6 +27,43 @@ import { creativeReferences } from "@/lib/creative/references";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+/**
+ * Reconcile a client whose long-running generation request outlived its HTTP
+ * connection. Successful variants are persisted independently, so the client
+ * can recover them without issuing a second paid generation request.
+ */
+export async function GET(req: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const params = new URL(req.url).searchParams;
+  const businessId = params.get("businessId")?.trim() ?? "";
+  const generationId = params.get("generationId")?.trim() ?? "";
+  const expectedCount = Number(params.get("expectedCount") ?? 1);
+  if (!businessId || !z.string().uuid().safeParse(generationId).success || !Number.isSafeInteger(expectedCount) || expectedCount < 1 || expectedCount > 6) {
+    return NextResponse.json({ error: "A valid businessId, generationId, and expectedCount are required." }, { status: 400 });
+  }
+
+  const { data: creatives, error } = await supabase
+    .from("creatives")
+    .select("*")
+    .eq("business_id", businessId)
+    .eq("variant_group", generationId)
+    .order("created_at", { ascending: true });
+  if (error) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+
+  const saved = (creatives ?? []) as Creative[];
+  return NextResponse.json({
+    status: saved.length >= expectedCount ? "complete" : saved.length ? "partial" : "processing",
+    creatives: saved,
+    count: saved.length,
+    expectedCount,
+  });
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -48,6 +85,7 @@ export async function POST(req: Request) {
       businessId: z.string().trim().min(1),
       brief: z.string().trim().min(1).max(2000),
       count: z.number().int().min(1).max(6).default(3),
+      generationId: z.string().uuid().optional(),
       language: z.string().optional(),
       format: z
         .enum(["portrait", "square", "story", "landscape"])
@@ -124,7 +162,7 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   const requestId = crypto.randomUUID();
-  const variantGroup = crypto.randomUUID();
+  const variantGroup = body.generationId ?? crypto.randomUUID();
   const inserted: Creative[] = [];
   const failures: { angle: string; error: string }[] = [];
   try {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdAssistant } from "@/components/ad-assistant";
 import type { Business } from "@/lib/types";
 
@@ -9,7 +9,42 @@ const business = { id: "biz-1", name: "Cedar Ridge Chiro" } as Business;
 
 describe("<AdAssistant> draft persistence", () => {
   beforeEach(() => sessionStorage.clear());
-  afterEach(() => sessionStorage.clear());
+  afterEach(() => {
+    sessionStorage.clear();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+  });
+
+  it("checks the same generation after a timeout instead of paying for another request", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") {
+        return Response.json({ ready: true, brief: "Use saved brand facts" });
+      }
+      if (init?.method === "POST") return new Response(null, { status: 504 });
+      return Response.json({ status: "processing", creatives: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Campaign goal" }), { target: { value: "Invite enquiries" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /start creating/i }));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(screen.getByText(/generation result is not confirmed/i)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    const posts = fetchMock.mock.calls.filter(([url, init]) => url === "/api/creatives/generate" && init?.method === "POST");
+    expect(posts).toHaveLength(1);
+    const generationId = JSON.parse(posts[0][1]!.body as string).generationId;
+    const reads = fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/creatives/generate?"));
+    expect(reads).toHaveLength(30);
+    expect(reads.every(([url]) => new URL(url, "http://localhost").searchParams.get("generationId") === generationId)).toBe(true);
+  });
 
   it("frames creation as a brand-grounded campaign brief", async () => {
     const user = userEvent.setup();

@@ -110,6 +110,7 @@ export function AdAssistant({ business }: { business: Business }) {
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inFlightRef = useRef(false);
+  const generationIdRef = useRef<string | null>(null);
 
   // Restore after mount (never during SSR) so server and client markup agree.
   const mounted = useMounted();
@@ -142,7 +143,9 @@ export function AdAssistant({ business }: { business: Business }) {
   }, [restored, business.id, goal, started, turns, answers, phase]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
   }, [turns, loading]);
 
   const lastTurn = turns[turns.length - 1];
@@ -196,6 +199,20 @@ export function AdAssistant({ business }: { business: Business }) {
     setPhase("generating");
     setError(null);
     setLastAction({ type: "generate", brief, language });
+    if (generationIdRef.current) {
+      try {
+        const recovered = await recoverPersistedGeneration(generationIdRef.current);
+        if (!recovered) {
+          setError("No saved ads found yet. Check again shortly or open Creative Studio. No new generation was started.");
+          setPhase("chat");
+        }
+      } finally {
+        if (ownsLock) inFlightRef.current = false;
+      }
+      return;
+    }
+    const generationId = crypto.randomUUID();
+    generationIdRef.current = generationId;
     setTurns((t) => [
       ...t,
       { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
@@ -204,13 +221,21 @@ export function AdAssistant({ business }: { business: Business }) {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: business.id, brief, count: 3, language }),
+        body: JSON.stringify({ businessId: business.id, brief, count: 3, language, generationId }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         creatives?: Creative[];
         error?: string;
       };
-      if (!res.ok || !data.creatives?.length) {
+      if (!res.ok) {
+        if (res.status >= 500 || res.status === 408) {
+          const recovered = await recoverPersistedGeneration(generationId);
+          if (recovered) return;
+          setError("The generation result is not confirmed. Check again shortly or open Creative Studio. No new generation was started.");
+          setPhase("chat");
+          return;
+        }
+        generationIdRef.current = null;
         setError(
           data.error ??
             `Couldn't create the ad (server returned ${res.status}). Please try again.`,
@@ -218,14 +243,53 @@ export function AdAssistant({ business }: { business: Business }) {
         setPhase("chat");
         return;
       }
+      if (!data.creatives?.length) {
+        const recovered = await recoverPersistedGeneration(generationId);
+        if (recovered) return;
+        setError("The generation completed without returning saved creatives. Open Creative Studio to check the result.");
+        setPhase("chat");
+        return;
+      }
       setTurns((t) => [...t, { role: "result", creatives: data.creatives! }]);
       setPhase("done");
     } catch {
-      setError("Couldn't create the ad — the generation request timed out or the server stopped responding.");
-      setPhase("chat");
+      const recovered = await recoverPersistedGeneration(generationId);
+      if (!recovered) {
+        setError("Generation is still processing or the server stopped responding. Open Creative Studio shortly; do not retry yet, because completed image work may already be saved.");
+        setPhase("chat");
+      }
     } finally {
       if (ownsLock) inFlightRef.current = false;
     }
+  }
+
+  async function recoverPersistedGeneration(generationId: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      try {
+        const res = await fetch(
+          `/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=3`,
+          { cache: "no-store" },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as {
+            status?: "processing" | "partial" | "complete";
+            creatives?: Creative[];
+          };
+          if (data.creatives?.length) {
+            setTurns((t) => [...t, { role: "result", creatives: data.creatives! }]);
+            setPhase("done");
+            if (data.status === "partial") {
+              setError("Some ads finished while the request was reconnecting. Review the saved work in Creative Studio; no duplicate generation was started.");
+            }
+            return true;
+          }
+        }
+      } catch {
+        // Keep reconciling transient status failures without retrying generation.
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+    }
+    return false;
   }
 
   function retry() {
@@ -255,6 +319,7 @@ export function AdAssistant({ business }: { business: Business }) {
 
   function reset() {
     clearDraft(business.id);
+    generationIdRef.current = null;
     setStarted(false);
     setTurns([]);
     setAnswers([]);
@@ -339,7 +404,11 @@ export function AdAssistant({ business }: { business: Business }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-4 sm:p-6">
-        <div ref={scrollRef} className="flex max-h-[62vh] flex-col gap-3 overflow-y-auto pr-1">
+        <div
+          ref={scrollRef}
+          className="flex max-h-[62vh] flex-col gap-3 overflow-y-scroll pr-1"
+          style={{ scrollbarGutter: "stable" }}
+        >
           {turns.map((turn, i) => (
             <TurnView
               key={i}
