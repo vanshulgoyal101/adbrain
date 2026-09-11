@@ -21,6 +21,7 @@ import {
   verifyState,
 } from "@/lib/meta/oauth";
 import { createClient } from "@/lib/supabase/server";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return errorResponse(requestId, 401, "UNAUTHENTICATED", "Sign in required.");
+  if (!canUseMetaConnect(user.id)) return errorResponse(requestId, 403, "FORBIDDEN", "Meta connection is not enabled for this account.");
 
   const body = await request.json().catch(() => null) as {
     businessId?: unknown;

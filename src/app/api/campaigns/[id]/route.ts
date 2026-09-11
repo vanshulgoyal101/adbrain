@@ -6,6 +6,7 @@ import { wouldExceedCap } from "@/lib/campaign/spend";
 import { MetaError, friendlyMetaError } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
+  recheckMetaConnection,
   requireOwnedBusiness,
   withMetaConnection,
 } from "@/lib/meta/connection-access";
@@ -94,6 +95,9 @@ export async function PATCH(
 
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
+    if (action === "active") {
+      await recheckMetaConnection(context, storedBinding.metaConnectionGeneration);
+    }
     await withMetaConnection(
       context,
       {
@@ -119,6 +123,10 @@ export async function PATCH(
           if (parsed.data.confirmationDigest !== expectedDigest) {
             throw new ConnectionAccessError("CONFLICT", "Campaign review changed; review the current budget and Meta assets again.");
           }
+          await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
+            dailyBudgetRupees: campaign.daily_budget!,
+            status: campaign.status,
+          });
         }
         await meta.updateCampaignStatus(
           campaign.meta_campaign_id!,
@@ -218,14 +226,10 @@ export async function DELETE(
     if (err instanceof ConnectionAccessError) {
       return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
     }
-    // A campaign already deleted in Meta shouldn't block local cleanup.
-    console.error("[campaign.delete] Meta delete failed", err);
-    if (err instanceof MetaError && err.status && err.status >= 500) {
-      return NextResponse.json(
-        { error: "Meta couldn't delete this campaign right now — try again." },
-        { status: 502 },
-      );
-    }
+    return NextResponse.json(
+      { error: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status." },
+      { status: 502 },
+    );
   }
 
   const { error } = await supabase.from("campaigns").delete().eq("id", id);

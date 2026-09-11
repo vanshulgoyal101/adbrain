@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { operationDtoSchema } from "@/lib/campaign/connect-contracts";
-import { operationRecordFromRow, operationToDTO } from "@/lib/campaign/operation-store";
+import { getPersistedOperationStatus, operationToDTO } from "@/lib/campaign/operation-store";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import type { Blocker } from "@/lib/meta/connect-contracts";
@@ -69,7 +69,11 @@ export async function GET(
     return errorResponse(requestId, 503, "UNAVAILABLE", "Operation access could not be checked.", true);
   }
 
-  const operation = operationRecordFromRow(row);
-  const data = operationDtoSchema.parse(operationToDTO(operation, operationBlockers(operation.state)));
-  return NextResponse.json({ ok: true, data, requestId }, { headers: { "Cache-Control": "no-store" } });
+  try {
+    const operation = await getPersistedOperationStatus(row);
+    const data = operationDtoSchema.parse(operationToDTO(operation, operationBlockers(operation.state)));
+    return NextResponse.json({ ok: true, data, requestId }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return errorResponse(requestId, 503, "UNAVAILABLE", "Operation status could not be checked.", true);
+  }
 }

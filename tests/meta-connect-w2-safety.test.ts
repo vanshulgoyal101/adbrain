@@ -21,10 +21,14 @@ const business: {
 };
 
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness }));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => business }));
 vi.mock("@/lib/meta/connection-access", () => ({
-  ConnectionAccessError: class ConnectionAccessError extends Error {},
+  ConnectionAccessError: class ConnectionAccessError extends Error {
+    constructor(public code: string, message: string) { super(message); }
+  },
   requireOwnedBusiness: mocks.requireOwnedBusiness,
   withMetaConnection: mocks.withMetaConnection,
+  getConnectionStatus: vi.fn(),
 }));
 vi.mock("@/lib/audit", () => ({ logEvent: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -68,7 +72,7 @@ const validBody = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.creatives.length = 0;
   business.locations = [];
   getUser.mockResolvedValue({ data: { user: { id: "owner-1" } } });
@@ -204,11 +208,14 @@ describe("campaign create authorization boundary", () => {
     }
   });
 
-  it("does not run legacy campaign sync without binding storage", async () => {
+  it("fails closed without a verified connection instead of using legacy sync credentials", async () => {
+    const { ConnectionAccessError } = await import("@/lib/meta/connection-access");
+    mocks.withMetaConnection.mockRejectedValueOnce(new ConnectionAccessError("UNAVAILABLE", "Meta is not connected."));
     const { POST } = await import("@/app/api/campaigns/sync/route");
     const response = await POST();
 
-    expect(response.status).toBe(503);
+    expect(mocks.withMetaConnection).toHaveBeenCalledWith(expect.any(Object), { purpose: "read_insights" }, expect.any(Function));
+    expect(response.status).toBe(400);
     expect(mocks.metaClientForBusiness).not.toHaveBeenCalled();
   });
 });

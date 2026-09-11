@@ -140,7 +140,11 @@ async function persistCheckpoint(
   checkpoint: OperationCheckpointPort,
   operation: OperationRecord,
 ): Promise<OperationRecord | null> {
-  return checkpoint.checkpoint(operation);
+  try {
+    return await checkpoint.checkpoint(operation);
+  } catch {
+    return null;
+  }
 }
 
 export async function executeOperation(
@@ -192,7 +196,7 @@ export async function executeOperation(
       }
       current = saved;
     } catch (error) {
-      const reconciled = error instanceof OperationPhaseError && !error.transmitted
+      const reconciled = error instanceof OperationPhaseError && !error.transmitted && current.externalIds.length === 0
         ? markFailed(current, error.message)
         : markNeedsReconciliation(current, sanitizeOperationError(error));
       const saved = await persistCheckpoint(checkpoint, reconciled);
@@ -205,7 +209,12 @@ export async function executeOperation(
 
   let finalized = current;
   if (options.finalize) {
-    finalized = (await options.finalize(current)) ?? current;
+    try {
+      finalized = (await options.finalize(current)) ?? current;
+    } catch {
+      const reconciled = markNeedsReconciliation(current, "Local campaign save could not be persisted.");
+      return { kind: "needs_reconciliation", operation: (await persistCheckpoint(checkpoint, reconciled)) ?? reconciled };
+    }
     if (!finalized.campaignId) {
       const reconciled = markNeedsReconciliation(finalized, "Local campaign save could not be persisted.");
       return { kind: "needs_reconciliation", operation: (await persistCheckpoint(checkpoint, reconciled)) ?? reconciled };
@@ -219,7 +228,7 @@ export async function executeOperation(
   const saved = await persistCheckpoint(checkpoint, finished);
   if (!saved) {
     const reconciled = markNeedsReconciliation(finished, "Final operation result could not be persisted.");
-    return { kind: "needs_reconciliation", operation: reconciled };
+    return { kind: "needs_reconciliation", operation: (await persistCheckpoint(checkpoint, reconciled)) ?? reconciled };
   }
   return { kind: "succeeded", operation: saved };
 }

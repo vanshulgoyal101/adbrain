@@ -46,8 +46,6 @@ export async function requireOwnedBusiness(
   } = await supabase.auth.getUser();
   if (!user) throw new ConnectionAccessError("UNAUTHENTICATED", "Sign in required.");
 
-  if (!canUseMetaConnect(user.id)) throw new ConnectionAccessError("FORBIDDEN", "Meta connection is not enabled for this account.");
-
   const { data: business, error } = await supabase
     .from("businesses")
     .select("id, owner_id")
@@ -126,6 +124,9 @@ async function withConnectionCredentials<Result>(
 ): Promise<Result> {
   if (!isAuthorizedBusiness(context)) {
     throw new ConnectionAccessError("FORBIDDEN", "Authorized business context required.");
+  }
+  if (!["pause", "delete", "read_insights", "read_leads"].includes(options.purpose) && !canUseMetaConnect(context.userId)) {
+    throw new ConnectionAccessError("FORBIDDEN", "Meta publishing is not enabled for this account.");
   }
   const connection = await getConnectionStatus(context);
   if (connection.authorization !== "connected" || !connection.selected) {

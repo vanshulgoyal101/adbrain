@@ -239,10 +239,14 @@ export function TargetingControls({
   value,
   onChange,
   brandAreas,
+  plannedAreas = [],
+  plannedExclusions = [],
 }: {
   value: TargetingValue;
   onChange: (v: TargetingValue) => void;
   brandAreas: string[];
+  plannedAreas?: string[];
+  plannedExclusions?: string[];
 }) {
   const set = (patch: Partial<TargetingValue>) => onChange({ ...value, ...patch });
 
@@ -261,12 +265,8 @@ export function TargetingControls({
   };
 
   const hasCities = value.included.some((i) => i.type === "city");
-  const areaLabel =
-    value.locationMode === "manual" && value.included.length
-      ? value.included.map((i) => i.name).join(", ")
-      : brandAreas.length
-        ? brandAreas.join(", ")
-        : "India (nationwide)";
+  const areaNames = [...(value.locationMode === "manual" ? value.included.map((item) => item.name) : plannedAreas.length ? [] : brandAreas), ...plannedAreas];
+  const areaLabel = areaNames.length ? areaNames.join(", ") : "an area still to be selected";
 
   const audience = describeAudience({
     areaLabel,
@@ -301,15 +301,16 @@ export function TargetingControls({
 
         {value.locationMode === "ai" ? (
           <p className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-sm text-blue-800">
-            {brandAreas.length ? (
+            {plannedAreas.length ? (
+              <>Saved campaign areas: <span className="font-medium">{plannedAreas.join(", ")}</span>.</>
+            ) : brandAreas.length ? (
               <>
                 AdBrain will target your service areas from your Brand Brain:{" "}
                 <span className="font-medium">{brandAreas.join(", ")}</span>.
               </>
             ) : (
               <>
-                No service areas saved yet, so ads would run across India. Add
-                your areas in the Brand Brain, or switch to “Choose myself”.
+                No service areas selected.
               </>
             )}
           </p>
@@ -418,6 +419,7 @@ export function TargetingControls({
       <div className="rounded-lg bg-white px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-200">
         <span className="font-medium text-slate-800">Who’ll see this:</span>{" "}
         {audience}
+        {plannedExclusions.length > 0 && <> Excluding {plannedExclusions.join(", ")}.</>}
       </div>
     </div>
   );

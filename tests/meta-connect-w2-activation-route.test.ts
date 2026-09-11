@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   getSpendLimits: vi.fn(),
   getCampaignSpend: vi.fn(),
   updateCampaignStatus: vi.fn(),
+  verifyCampaignActivation: vi.fn(),
+  recheckMetaConnection: vi.fn(),
+  deleteCampaign: vi.fn(),
   dailyBudget: 500,
 }));
 
@@ -41,7 +44,7 @@ vi.mock("@/lib/supabase/server", () => ({
             }),
           }),
           update: () => ({ eq: async () => ({ error: null }) }),
-          delete: () => ({ eq: async () => ({ error: null }) }),
+          delete: () => ({ eq: mocks.deleteCampaign }),
         };
       }
       return { update: () => ({ eq: async () => ({ error: null }) }) };
@@ -53,6 +56,7 @@ vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: MockConnectionAccessError,
   requireOwnedBusiness: mocks.requireOwnedBusiness,
   withMetaConnection: mocks.withMetaConnection,
+  recheckMetaConnection: mocks.recheckMetaConnection,
 }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClientForBusiness }));
 vi.mock("@/lib/supabase/queries", () => ({
@@ -72,12 +76,15 @@ function patch(body: unknown): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.dailyBudget = 500;
+  mocks.verifyCampaignActivation.mockResolvedValue(undefined);
+  mocks.recheckMetaConnection.mockResolvedValue(undefined);
+  mocks.deleteCampaign.mockResolvedValue({ error: null });
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business-1", userId: "user-1" });
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, verifyCampaignActivation: mocks.verifyCampaignActivation }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -103,6 +110,24 @@ describe("campaign activation generation fence", () => {
     const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
     expect(response.status).toBe(200);
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
+    expect(mocks.recheckMetaConnection).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, 4);
+    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused" });
+  });
+
+  it("does not activate when fresh provider verification fails", async () => {
+    mocks.verifyCampaignActivation.mockRejectedValueOnce(new Error("Provider data changed"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(500);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not activate when fresh capability verification fails", async () => {
+    mocks.recheckMetaConnection.mockRejectedValueOnce(new MockConnectionAccessError("Meta access changed"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("rejects a budget changed since confirmation", async () => {
@@ -140,6 +165,8 @@ describe("campaign activation generation fence", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.recheckMetaConnection).not.toHaveBeenCalled();
+    expect(mocks.verifyCampaignActivation).not.toHaveBeenCalled();
   });
 
   it("blocks unknown activation capability before the ACTIVE provider call", async () => {
@@ -184,5 +211,13 @@ describe("campaign activation generation fence", () => {
     expect(response.status).toBe(200);
     expect(deleteObject).toHaveBeenCalledWith("meta-campaign-1");
     expect(mocks.metaClientForBusiness).not.toHaveBeenCalled();
+  });
+
+  it("retains the local record when Meta deletion is unconfirmed", async () => {
+    mocks.withMetaConnection.mockRejectedValueOnce(new Error("Provider timeout"));
+    const { DELETE } = await import("@/app/api/campaigns/[id]/route");
+    const response = await DELETE(new Request("http://localhost/api/campaigns/campaign-1", { method: "DELETE" }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(502);
+    expect(mocks.deleteCampaign).not.toHaveBeenCalled();
   });
 });

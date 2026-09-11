@@ -50,6 +50,7 @@ async function getEncryptedToken(row: ConnectionRow): Promise<string | null> {
   const data = rows?.[0];
   if (error || !data || data.revoked_at) return null;
   if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) return null;
+  if (data.data_access_expires_at && new Date(data.data_access_expires_at).getTime() <= Date.now()) return null;
   try {
     return decryptMetaToken({
       ciphertext: fromPostgresBytea(data.ciphertext),
@@ -107,6 +108,9 @@ export async function getMetaConnection(
   const row = await getConnectionRow(businessId);
   const accessToken = row ? await getEncryptedToken(row) : null;
 
+  if (row && ["reauth_required", "revoked"].includes(row.authorization_status)) {
+    return { source: "oauth", pending: false, ready: false, adAccountId: row.ad_account_id, pageId: row.page_id, tokenExpiresAt: null, expired: true, scopes: [] };
+  }
   if (row?.authorization_status === "connected") {
     const expired = !accessToken;
     const complete = Boolean(row.ad_account_id && row.page_id);

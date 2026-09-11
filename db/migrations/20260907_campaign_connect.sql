@@ -1,6 +1,5 @@
--- Worker 2 campaign persistence delta for Meta Instant Connect v1.
--- Worker 1 must consolidate this migration with the connection migration and
--- generated/manual database types before any runtime route is enabled.
+-- Additive campaign draft and operation persistence. Requires the Meta connection migration.
+-- Verified against fresh and ordered-upgrade local databases before promotion.
 
 create table if not exists public.campaign_drafts (
   id uuid primary key default gen_random_uuid(),
@@ -88,6 +87,8 @@ alter table public.campaigns add column if not exists meta_connection_generation
 create index if not exists campaigns_binding_idx
   on public.campaigns(business_id, meta_ad_account_id, meta_page_id);
 
+create unique index if not exists campaign_operations_draft_id_uidx on public.campaign_operations(draft_id);
+
 create or replace function public.update_campaign_draft_if_version(
   p_draft_id uuid,
   p_business_id uuid,
@@ -110,6 +111,7 @@ as $$
     and owner_id = p_owner_id
     and version = p_expected_version
     and expires_at > p_now
+    and not exists (select 1 from public.campaign_operations where draft_id = p_draft_id)
   returning *;
 $$;
 
@@ -142,6 +144,12 @@ begin
   where business_id = p_business_id and generation = p_connection_generation
     and authorization_status = 'connected' for share;
   if not found or p_lease_until <= now() then return; end if;
+  perform 1 from public.campaign_drafts
+    where id = p_draft_id and business_id = p_business_id and version = p_draft_version
+      and expires_at > now() for update;
+  if not found then return; end if;
+  if exists (select 1 from public.campaign_operations where draft_id = p_draft_id
+    and (kind <> p_kind or idempotency_key <> p_idempotency_key)) then return; end if;
   select * into current_operation
   from public.campaign_operations
   where business_id = p_business_id
@@ -270,3 +278,51 @@ revoke execute on function public.finish_campaign_operation(uuid, uuid, bigint, 
 grant execute on function public.claim_campaign_operation(uuid, uuid, uuid, bigint, bigint, text, text, text, timestamptz, jsonb, timestamptz) to service_role;
 grant execute on function public.checkpoint_campaign_operation(uuid, uuid, bigint, text, timestamptz, jsonb, uuid, timestamptz) to service_role;
 grant execute on function public.finish_campaign_operation(uuid, uuid, bigint, uuid, jsonb, timestamptz) to service_role;
+
+create or replace function public.fail_campaign_operation(
+  p_operation_id uuid, p_business_id uuid, p_connection_generation bigint,
+  p_state text, p_external_ids jsonb, p_campaign_id uuid default null, p_error text default null
+)
+returns setof public.campaign_operations language plpgsql security invoker set search_path = public
+as $$
+declare
+  current_operation public.campaign_operations;
+  known_ids jsonb;
+  next_state text;
+begin
+  if p_state not in ('failed', 'needs_reconciliation') or jsonb_typeof(p_external_ids) <> 'array' then return; end if;
+  select * into current_operation from public.campaign_operations
+  where id = p_operation_id and business_id = p_business_id
+    and connection_generation = p_connection_generation
+    and state in ('running', 'needs_reconciliation') for update;
+  if not found then return; end if;
+  if p_campaign_id is not null and not exists (
+    select 1 from public.campaigns where id = p_campaign_id and business_id = p_business_id
+  ) then return; end if;
+  select coalesce(jsonb_agg(external_id), '[]'::jsonb) into known_ids
+  from (select distinct value as external_id from jsonb_array_elements_text(current_operation.external_ids || p_external_ids)) known;
+  next_state := case when p_state = 'failed' and current_operation.state = 'running'
+    and current_operation.lease_until > now() and jsonb_array_length(known_ids) = 0
+    and coalesce(p_campaign_id, current_operation.campaign_id) is null then 'failed' else 'needs_reconciliation' end;
+  return query update public.campaign_operations
+  set state = next_state, phase = case when next_state = 'failed' then 'complete' else 'reconcile' end,
+    external_ids = known_ids, campaign_id = coalesce(p_campaign_id, current_operation.campaign_id),
+    lease_until = null, sanitized_error = left(p_error, 240), updated_at = now()
+  where id = current_operation.id returning *;
+end;
+$$;
+
+create or replace function public.expire_campaign_operation(p_operation_id uuid, p_business_id uuid)
+returns setof public.campaign_operations language plpgsql security invoker set search_path = public
+as $$ begin
+  update public.campaign_operations set state = 'needs_reconciliation', phase = 'reconcile',
+    lease_until = null, sanitized_error = 'Operation expired with an unverified external outcome.', updated_at = now()
+  where id = p_operation_id and business_id = p_business_id and state in ('pending', 'running')
+    and (lease_until is null or lease_until <= now());
+  return query select * from public.campaign_operations where id = p_operation_id and business_id = p_business_id;
+end; $$;
+
+revoke execute on function public.fail_campaign_operation(uuid, uuid, bigint, text, jsonb, uuid, text) from public, anon, authenticated;
+revoke execute on function public.expire_campaign_operation(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.fail_campaign_operation(uuid, uuid, bigint, text, jsonb, uuid, text) to service_role;
+grant execute on function public.expire_campaign_operation(uuid, uuid) to service_role;

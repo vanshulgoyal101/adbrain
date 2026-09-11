@@ -223,4 +223,42 @@ describe("restartable campaign operation executor", () => {
     expect(result.kind).toBe("replay");
     expect(calls).toBe(0);
   });
+
+  it("persists reconciliation when the local campaign save throws after provider mutations", async () => {
+    const operation = runningOperation();
+    const checkpoint = new MemoryCheckpoint(operation);
+    const phases = ["campaign", "adset", "creative", "ad"] as const;
+    const result = await executeOperation(operation, phases.map((phase) =>
+      step(phase, async () => ({ externalIds: [`${phase}-1`] }))), checkpoint, {
+      finalize: async () => { throw new Error("Database unavailable"); },
+    });
+
+    expect(result.kind).toBe("needs_reconciliation");
+    expect(checkpoint.saved.state).toBe("needs_reconciliation");
+    expect(checkpoint.saved.externalIds).toEqual(["campaign-1", "adset-1", "creative-1", "ad-1"]);
+    expect(checkpoint.saved.sanitizedError).toBe("Local campaign save could not be persisted.");
+  });
+
+  it("returns a recovery outcome when checkpoint storage throws", async () => {
+    const operation = runningOperation();
+    const result = await executeOperation(operation, [
+      step("campaign", async () => ({ externalIds: ["campaign-1"] })),
+    ], { checkpoint: async () => { throw new Error("Database unavailable"); } });
+
+    expect(result.kind).toBe("needs_reconciliation");
+    expect(result.operation.externalIds).toEqual(["campaign-1"]);
+  });
+
+  it("does not mark an operation safely failed after earlier provider mutations", async () => {
+    const operation = runningOperation();
+    const checkpoint = new MemoryCheckpoint(operation);
+    const result = await executeOperation(operation, [
+      step("campaign", async () => ({ externalIds: ["campaign-1"] })),
+      step("adset", async () => { throw new OperationPhaseError("Validation failed", { transmitted: false }); }),
+    ], checkpoint);
+
+    expect(result.kind).toBe("needs_reconciliation");
+    expect(checkpoint.saved.state).toBe("needs_reconciliation");
+    expect(checkpoint.saved.externalIds).toEqual(["campaign-1"]);
+  });
 });
