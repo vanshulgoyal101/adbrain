@@ -3,7 +3,12 @@ import { friendlyMetaError } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
 import { enforceAutoPause } from "@/lib/campaign/spend-enforce";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ConnectionAccessError,
+  requireOwnedBusiness,
+  withMetaConnection,
+} from "@/lib/meta/connection-access";
+import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -37,15 +42,37 @@ export async function POST(
     );
   }
 
-  const meta = await metaClientForBusiness(campaign.business_id);
-  if (!meta) {
-    return NextResponse.json({ error: "Meta is not configured" }, { status: 400 });
+  const storedBinding = readStoredCampaignBinding(campaign);
+  if (
+    !storedBinding.metaAdAccountId ||
+    !storedBinding.metaPageId ||
+    storedBinding.metaConnectionGeneration === null
+  ) {
+    return NextResponse.json(
+      { error: "This campaign needs account reconciliation before it can refresh." },
+      { status: 409 },
+    );
   }
 
   let insights;
   try {
-    insights = await meta.getCampaignInsights(campaign.meta_campaign_id);
+    const context = await requireOwnedBusiness(campaign.business_id);
+    insights = await withMetaConnection(
+      context,
+      {
+        purpose: "read_insights",
+        binding: {
+          adAccountId: storedBinding.metaAdAccountId,
+          pageId: storedBinding.metaPageId,
+        },
+        expectedGeneration: storedBinding.metaConnectionGeneration,
+      },
+      (meta) => meta.getCampaignInsights(campaign.meta_campaign_id!),
+    );
   } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
+    }
     return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results.") }, { status: 502 });
   }
 

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ConnectionAccessError,
+  requireScheduledBusiness,
+  withMetaConnection,
+} from "@/lib/meta/connection-access";
+import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import {
   campaignsToAutoPause,
   type CampaignSpend,
@@ -59,7 +64,7 @@ export async function GET(request: Request) {
 
     const { data: campaigns } = await admin
       .from("campaigns")
-      .select("id, status, daily_budget, meta_campaign_id")
+      .select("*")
       .eq("business_id", businessId);
     if (!campaigns?.length) continue;
 
@@ -89,15 +94,37 @@ export async function GET(request: Request) {
     const toPause = campaignsToAutoPause(spends, limits);
     if (!toPause.length) continue;
 
-    const meta = await metaClientForBusiness(businessId, admin);
-    if (!meta) continue;
-
     const paused: string[] = [];
+    let context;
+    try {
+      context = await requireScheduledBusiness(businessId, request);
+    } catch {
+      continue;
+    }
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
       if (!campaign?.meta_campaign_id) continue;
+      const storedBinding = readStoredCampaignBinding(campaign);
+      if (
+        !storedBinding.metaAdAccountId ||
+        !storedBinding.metaPageId ||
+        storedBinding.metaConnectionGeneration === null
+      ) {
+        continue;
+      }
       try {
-        await meta.updateCampaignStatus(campaign.meta_campaign_id, "PAUSED");
+        await withMetaConnection(
+          context,
+          {
+            purpose: "pause",
+            binding: {
+              adAccountId: storedBinding.metaAdAccountId,
+              pageId: storedBinding.metaPageId,
+            },
+            expectedGeneration: storedBinding.metaConnectionGeneration,
+          },
+          (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
+        );
         await admin.from("campaigns").update({ status: "paused" }).eq("id", id);
         paused.push(id);
         await admin.from("audit_log").insert({
@@ -111,7 +138,10 @@ export async function GET(request: Request) {
           reason: `Weekly spend cap of ₹${limits.weeklyCapRupees} reached (cron sweep)`,
           details: {} as unknown as Json,
         });
-      } catch {
+      } catch (error) {
+        if (!(error instanceof ConnectionAccessError)) {
+          // Provider and persistence failures remain best-effort; next sweep retries.
+        }
         // Leave it running rather than fail the whole sweep; next run retries.
       }
     }

@@ -1,5 +1,6 @@
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
+import { MetaConnectionPanel } from "@/components/meta-connection";
 import { Instructions } from "@/components/instructions";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -8,17 +9,20 @@ import {
   getBrandAssets,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
+import { getMetaConnection } from "@/lib/meta/credentials";
+import { metaOAuthConfigured } from "@/lib/meta/oauth";
 
 export const metadata = { title: "Brand Brain" };
 
 export default async function BrandPage() {
   const business = await getPrimaryBusiness();
-  const [assets, instructions] = business
+  const [assets, instructions, connection] = business
     ? await Promise.all([
         getBrandAssets(business.id),
         getAdInstructions(business.id),
+        getMetaConnection(business.id),
       ])
-    : [[], []];
+    : [[], [], null];
 
   return (
     <div>
@@ -68,6 +72,15 @@ export default async function BrandPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+      {business && connection && (
+        <div className="mt-6 max-w-2xl">
+          <MetaConnectionPanel
+            businessId={business.id}
+            connection={connection}
+            oauthConfigured={metaOAuthConfigured()}
+          />
+        </div>
       )}
       <nav
         aria-label="Brand Brain sections"

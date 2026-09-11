@@ -11,6 +11,7 @@ paths = [
   '''.*\.tsbuildinfo''',
 ]
 regexes = [
+  '''^operation-key-1$''',
   '''your-.*-key''',
   '''https://placeholder\.supabase\.co''',
 ]

@@ -8,6 +8,15 @@ acceptance criteria, and delivery sequence live in
 [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). This file answers
 "what next, and why".
 
+## Planned Meta onboarding
+
+The [Meta Instant Connect implementation plan](META-INSTANT-CONNECT-PLAN.md)
+defines contextual business linking, secure credential storage, deterministic
+asset selection, resumable campaign preparation, and eligibility-gated account
+provisioning. It includes proposed schema/API contracts, code sketches, external
+Meta approval gates, rollout phases, and acceptance tests. Planning only; no
+implementation or database migration has been applied.
+
 ## September Product Audit
 
 The [customer-focused marketing audit](./PRODUCT-AUDIT-2026-09.md) records the

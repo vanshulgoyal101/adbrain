@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Building2 } from "lucide-react";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -66,8 +67,13 @@ export default async function SettingsPage({
     );
   }
 
-  const [connection, params, spend] = await Promise.all([
-    getMetaConnection(business.id),
+  const [connectionResult, params, spend] = await Promise.all([
+    getMetaConnection(business.id)
+      .then((connection) => ({ connection, error: null }))
+      .catch(() => ({
+        connection: null,
+        error: "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
+      })),
     searchParams,
     getSpendEvaluation(business.id),
   ]);
@@ -80,11 +86,19 @@ export default async function SettingsPage({
         title="Settings"
         description="Manage publishing connections and the safety limits that protect your advertising budget."
       />
-      <MetaConnectionPanel
-        connection={connection}
-        oauthConfigured={metaOAuthConfigured()}
-        notice={noticeFrom(params)}
-      />
+      {connectionResult.connection ? (
+        <MetaConnectionPanel
+          businessId={business.id}
+          connection={connectionResult.connection}
+          oauthConfigured={metaOAuthConfigured()}
+          notice={noticeFrom(params)}
+        />
+      ) : (
+        <Alert variant="error">
+          {connectionResult.error}
+          <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
+        </Alert>
+      )}
       <SpendGuardrails limits={limits} evaluation={evaluation} />
     </div>
   );

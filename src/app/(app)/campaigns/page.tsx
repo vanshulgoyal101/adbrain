@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { type LeadForm } from "@/lib/meta/client";
 import {
   getMetaConnection,
-  metaClientForBusiness,
 } from "@/lib/meta/credentials";
+import { requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import {
   getApprovedCreatives,
   getCampaigns,
@@ -23,8 +23,13 @@ async function loadLeadForms(
   businessId: string,
 ): Promise<{ forms: LeadForm[]; error: string | null }> {
   try {
-    const meta = await metaClientForBusiness(businessId);
-    return { forms: (await meta?.listLeadForms()) ?? [], error: null };
+    const context = await requireOwnedBusiness(businessId);
+    const forms = await withMetaConnection(
+      context,
+      { purpose: "create_paused" },
+      (meta) => meta.listLeadForms(),
+    );
+    return { forms, error: null };
   } catch (err) {
     return { forms: [], error: (err as Error).message };
   }

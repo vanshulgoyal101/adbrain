@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import {
   claimConnectionAttempt,
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || user.id !== verified.userId) {
+  if (!user || user.id !== verified.userId || !canUseMetaConnect(user.id)) {
     settings.searchParams.set("error", "invalid_state");
     return NextResponse.redirect(settings);
   }

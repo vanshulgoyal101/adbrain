@@ -1,11 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
-import {
-  MetaClient,
-  getMetaCredentialsFromEnv,
-  type MetaCredentials,
-} from "./client";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/types";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { MetaClient, type MetaCredentials } from "./client";
+import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 
 /** Non-sensitive view of a business's Meta connection, safe to send to the UI. */
 export interface MetaConnection {
@@ -21,63 +16,86 @@ export interface MetaConnection {
   scopes: string[];
 }
 
-interface StoredRow {
+interface ConnectionRow {
+  business_id: string;
+  token_id: string | null;
   ad_account_id: string | null;
   page_id: string | null;
-  access_token: string;
-  token_type: string;
-  token_expires_at: string | null;
-  scopes: string | null;
+  account_name: string | null;
+  page_name: string | null;
+  currency: string | null;
+  timezone_name: string | null;
+  authorization_status: string;
+  generation: number;
+  last_checked_at: string | null;
+  capabilities: unknown;
 }
 
-async function getStoredRow(
-  businessId: string,
-  db?: SupabaseClient<Database>,
-): Promise<StoredRow | null> {
-  const supabase = db ?? (await createClient());
-  const { data } = await supabase
-    .from("meta_credentials")
-    .select(
-      "ad_account_id, page_id, access_token, token_type, token_expires_at, scopes",
-    )
+async function getConnectionRow(businessId: string): Promise<ConnectionRow | null> {
+  const { data, error } = await createAdminClient()
+    .from("meta_connections")
+    .select("business_id, token_id, ad_account_id, page_id, account_name, page_name, currency, timezone_name, authorization_status, generation, last_checked_at, capabilities")
     .eq("business_id", businessId)
     .maybeSingle();
-  return (data as StoredRow | null) ?? null;
+  if (error) throw new Error("Meta connection storage could not be read.");
+  return (data as ConnectionRow | null) ?? null;
 }
 
-function isExpired(expiresAt: string | null): boolean {
-  if (!expiresAt) return false;
-  return new Date(expiresAt).getTime() <= Date.now();
+async function getEncryptedToken(row: ConnectionRow): Promise<string | null> {
+  if (!row.token_id || row.authorization_status !== "connected") return null;
+  const { data: rows, error } = await createAdminClient().rpc("meta_token_get", {
+    p_token_id: row.token_id,
+    p_business_id: row.business_id,
+  });
+  const data = rows?.[0];
+  if (error || !data || data.revoked_at) return null;
+  if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) return null;
+  if (data.data_access_expires_at && new Date(data.data_access_expires_at).getTime() <= Date.now()) return null;
+  try {
+    return decryptMetaToken({
+      ciphertext: fromPostgresBytea(data.ciphertext),
+      nonce: fromPostgresBytea(data.nonce),
+      authTag: fromPostgresBytea(data.auth_tag),
+      keyId: data.key_id,
+      formatVersion: data.format_version,
+    }, { tokenId: data.id, businessId: data.business_id });
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Resolve the Meta credentials to use for a business: a complete, non-expired
- * stored OAuth connection wins; otherwise fall back to single-tenant env creds.
+ * Resolve only the explicit business's stored credentials. Missing, pending,
+ * expired, or unreadable credentials fail closed; environment credentials are
+ * never a tenant fallback.
  */
 export async function resolveMetaCredentials(
   businessId: string,
-  db?: SupabaseClient<Database>,
+  _db?: unknown,
 ): Promise<MetaCredentials | null> {
-  const row = await getStoredRow(businessId, db);
+  void _db;
+  const row = await getConnectionRow(businessId);
+  const accessToken = row ? await getEncryptedToken(row) : null;
   if (
-    row?.access_token &&
+    row &&
+    accessToken &&
     row.ad_account_id &&
     row.page_id &&
-    !isExpired(row.token_expires_at)
+    row.authorization_status === "connected"
   ) {
     return {
       adAccountId: row.ad_account_id,
       pageId: row.page_id,
-      accessToken: row.access_token,
+      accessToken,
     };
   }
-  return getMetaCredentialsFromEnv();
+  return null;
 }
 
 /** A MetaClient bound to a business's resolved credentials, or null if none. */
 export async function metaClientForBusiness(
   businessId: string,
-  db?: SupabaseClient<Database>,
+  db?: unknown,
 ): Promise<MetaClient | null> {
   const creds = await resolveMetaCredentials(businessId, db);
   return creds ? new MetaClient(creds) : null;
@@ -87,11 +105,14 @@ export async function metaClientForBusiness(
 export async function getMetaConnection(
   businessId: string,
 ): Promise<MetaConnection> {
-  const row = await getStoredRow(businessId);
-  const scopes = row?.scopes ? row.scopes.split(",").filter(Boolean) : [];
+  const row = await getConnectionRow(businessId);
+  const accessToken = row ? await getEncryptedToken(row) : null;
 
-  if (row?.token_type === "oauth" && row.access_token) {
-    const expired = isExpired(row.token_expires_at);
+  if (row && ["reauth_required", "revoked"].includes(row.authorization_status)) {
+    return { source: "oauth", pending: false, ready: false, adAccountId: row.ad_account_id, pageId: row.page_id, tokenExpiresAt: null, expired: true, scopes: [] };
+  }
+  if (row?.authorization_status === "connected") {
+    const expired = !accessToken;
     const complete = Boolean(row.ad_account_id && row.page_id);
     return {
       source: "oauth",
@@ -99,23 +120,9 @@ export async function getMetaConnection(
       ready: complete && !expired,
       adAccountId: row.ad_account_id,
       pageId: row.page_id,
-      tokenExpiresAt: row.token_expires_at,
-      expired,
-      scopes,
-    };
-  }
-
-  const env = getMetaCredentialsFromEnv();
-  if (env) {
-    return {
-      source: "env",
-      pending: false,
-      ready: true,
-      adAccountId: env.adAccountId,
-      pageId: env.pageId,
       tokenExpiresAt: null,
-      expired: false,
-      scopes,
+      expired,
+      scopes: [],
     };
   }
 
@@ -127,7 +134,7 @@ export async function getMetaConnection(
     pageId: null,
     tokenExpiresAt: null,
     expired: false,
-    scopes,
+    scopes: [],
   };
 }
 

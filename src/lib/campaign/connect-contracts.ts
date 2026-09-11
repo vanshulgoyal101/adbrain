@@ -27,6 +27,8 @@ export const targetingInputSchema = z
         mode: z.enum(["ai", "manual"]).optional(),
         included: z.array(targetingItemSchema).max(50).optional(),
         excluded: z.array(targetingItemSchema).max(50).optional(),
+        includedNames: z.array(boundedText(200)).max(50).optional(),
+        excludedNames: z.array(boundedText(200)).max(50).optional(),
         radiusKm: z.number().finite().int().min(5).max(80).optional(),
       })
       .optional(),

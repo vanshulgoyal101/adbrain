@@ -158,6 +158,18 @@ passed. These are dated receipts, not approval to release the Meta feature set.
 
 ## Current Meta Connect Work
 
+### Staging promotion authorized: 2026-09-11
+
+The owner requested completion and promotion of the pending `dev` workflows, and
+explicitly approved the additive campaign migration and all-owner rollout. The
+[staging completion report](releases/2026-09-staging-completion.md) is the current
+scope, local evidence and cutover reference. It supersedes the pilot-only and
+development-only limits in the historical receipts below, not the required PR
+checks or the need to distinguish real Meta consent from mocks.
+
+Real consent remains externally unverified. Existing production campaigns must
+not be assigned guessed account/Page bindings or changed as a migration side effect.
+
 ### Production connection pilot: 2026-09-08
 
 The owner authorized testing real Meta consent on the existing production HTTPS
@@ -178,8 +190,10 @@ complete real consent in a non-production environment. It is not a general rollo
 - Production requires the existing app ID/secret plus `SUPABASE_SERVICE_ROLE_KEY`
    and a newly generated base64 32-byte `META_TOKEN_ENCRYPTION_KEY`. Store secrets
    directly in Vercel production env; never log them or rotate an existing key.
-- Non-main branch Git deployments are disabled by the `*` rule, with `main`
-   explicitly enabled. Required GitHub PR build/secrets checks still apply.
+- The `*` rule requests non-main deployment disablement, with `main` explicitly
+   enabled. The release branch nevertheless produced a preview; do not rely on
+   this rule as verified isolation. Inspect actual deployment targets and keep
+   production-only credentials out of preview. Required PR checks still apply.
 - Rollback to the prior main code leaves the additive tables unused and preserves
    legacy credentials. Keep the encryption key while encrypted tokens exist.
 - Consent completion, real account/Page access and Meta review eligibility are
@@ -201,9 +215,21 @@ and Solaride owner ID. Existing app credentials and legacy system token were not
 changed. Vercel CLI refreshed its saved session; raw API calls had initially failed
 with HTTP 403 from an expired access token.
 
-Local connection release slice: 767 tests passed, one skipped; lint/types/build
-(46 pages) passed. Disposable PostgreSQL verification: 33 checks passed, including
-legacy access preservation. GitHub and Vercel release receipts are still pending.
+Merged [PR #2](https://github.com/vanshulgoyal101/adbrain/pull/2) through required
+checks at main `147f887920ca20b2b7f7d130a2cd991d23449b38`. PR CI `34194820423`
+and main CI `34194979744` passed: 770 tests, one skipped; lint/types/build and
+coverage gates passed. Disposable PostgreSQL: 33 checks passed.
+
+Vercel production deployment `dpl_4C8pEXRH95Cu9PffAaJvS3hFBmau` is Ready and
+serves `https://adbrain.vanshul.com`. Authenticated production browser checks:
+Solaride `/connect/meta` HTTP 200, dialog reaches Connect Business at 1440/390px;
+no horizontal overflow or page errors; other owner page 404/API 403; anonymous
+API 401. All browser mutations blocked; no Meta consent or ad mutations performed.
+Main merged back into dev as `8ae957a`; unrelated local creative edits preserved.
+
+Observed release-branch preview `dpl_2LqVNRLUpsoNy7CTEh6WRpkERjVB` despite the
+disable rule. Its target was preview, not production. Preview suppression needs
+separate verification before relying on it for a future release branch.
 
 Campaign drafts and operation recovery remain development-only. Real consent,
 account/Page selection and customer permission eligibility are still unverified.

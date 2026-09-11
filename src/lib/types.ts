@@ -558,6 +558,22 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
       };
+      fail_campaign_operation: {
+        Args: {
+          p_operation_id: string;
+          p_business_id: string;
+          p_connection_generation: number;
+          p_state: string;
+          p_external_ids: Json;
+          p_campaign_id?: string | null;
+          p_error?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
+      };
+      expire_campaign_operation: {
+        Args: { p_operation_id: string; p_business_id: string };
+        Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
+      };
       finish_campaign_operation: {
         Args: {
           p_operation_id: string;

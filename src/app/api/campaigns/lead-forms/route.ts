@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { friendlyMetaError } from "@/lib/meta/client";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ConnectionAccessError,
+  requireOwnedBusiness,
+  withMetaConnection,
+} from "@/lib/meta/connection-access";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,14 +20,21 @@ export async function GET() {
   }
 
   const business = await getPrimaryBusiness();
-  const meta = business ? await metaClientForBusiness(business.id) : null;
-  if (!meta) {
+  if (!business) {
     return NextResponse.json({ forms: [], error: "Meta not configured" });
   }
   try {
-    const forms = await meta.listLeadForms();
+    const context = await requireOwnedBusiness(business.id);
+    const forms = await withMetaConnection(
+      context,
+      { purpose: "create_paused" },
+      (meta) => meta.listLeadForms(),
+    );
     return NextResponse.json({ forms });
   } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return NextResponse.json({ forms: [], error: err.message });
+    }
     return NextResponse.json({ forms: [], error: friendlyMetaError(err, "Could not load lead forms.") });
   }
 }

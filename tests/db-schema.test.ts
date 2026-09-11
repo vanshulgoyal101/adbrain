@@ -22,9 +22,10 @@ const SQL = readFileSync(
 const OWNED_TABLES = [
   "businesses",
   "brand_assets",
-  "meta_credentials",
   "creatives",
   "campaigns",
+  "campaign_drafts",
+  "campaign_operations",
   "campaign_results",
   "ad_instructions",
   "audit_log",
@@ -33,7 +34,7 @@ const OWNED_TABLES = [
   "llm_usage_events",
 ] as const;
 
-const ALL_TABLES = [...OWNED_TABLES, "profiles", "rate_limit_hits"] as const;
+const ALL_TABLES = [...OWNED_TABLES, "profiles", "rate_limit_hits", "meta_connections"] as const;
 
 describe("schema: tables", () => {
   it("creates every expected table", () => {
@@ -72,6 +73,54 @@ describe("schema: row-level security", () => {
       ];
       expect(policies.length, `${t} has no RLS policy`).toBeGreaterThan(0);
     }
+  });
+
+  it("keeps Meta connection metadata and private credentials server-only", () => {
+    expect(SQL).toContain("revoke all on public.meta_connections from public, anon, authenticated");
+    expect(SQL).toMatch(/revoke all on private\.meta_tokens from public, anon, authenticated/);
+    expect(SQL).toMatch(/revoke all on private\.meta_connection_attempts from public, anon, authenticated/);
+    expect(SQL).toContain("grant usage on schema private to service_role");
+    expect(SQL).not.toContain("create table if not exists public.meta_credentials");
+    expect(SQL).not.toContain("access_token     text");
+  });
+
+  it("protects Meta private-storage RPCs with a pinned definer boundary", () => {
+    const functions = [
+      "meta_token_insert",
+      "meta_token_get",
+      "meta_token_delete",
+      "meta_attempt_create",
+      "meta_attempt_claim",
+      "meta_attempt_get",
+      "meta_attempt_set_discovering",
+      "meta_attempt_attach_token",
+      "meta_attempt_action_required",
+      "meta_attempt_failed",
+      "meta_attempt_cancelled",
+      "meta_attempt_commit_selection",
+      "meta_revoke_subject",
+    ];
+    for (const name of functions) {
+      const start = SQL.indexOf(`function public.${name}`);
+      expect(start, `${name} is missing`).toBeGreaterThan(-1);
+      const body = SQL.slice(start, SQL.indexOf("$$", start));
+      expect(body, `${name} must be SECURITY DEFINER`).toContain("security definer");
+      expect(body, `${name} must pin search_path`).toContain("set search_path = private, public");
+      expect(SQL, `${name} must be included in the service-role grant list`).toContain(
+        `'${name}'`,
+      );
+    }
+    expect(SQL).toContain("grant execute on function %s to service_role");
+    expect(SQL).toContain("revoke all on function %s from public, anon, authenticated, service_role");
+  });
+
+  it("claims each OAuth attempt only once", () => {
+    const start = SQL.indexOf("function public.meta_attempt_claim");
+    const opening = SQL.indexOf("$$", start);
+    const end = SQL.indexOf("$$", opening + 2);
+    const body = SQL.slice(start, end);
+    expect(body).toContain("claimed_at is null");
+    expect(body).not.toContain("coalesce(claimed_at, now())");
   });
 
   it("scopes ownership through owns_business()", () => {
@@ -143,12 +192,22 @@ describe("schema: constraints", () => {
     expect(SQL).toMatch(/alert_pct\s+integer not null default 80 check \(alert_pct between 1 and 100\)/);
   });
 
-  it("allows one Meta connection per business (upsert target)", () => {
-    expect(SQL).toContain(
-      "create unique index if not exists meta_credentials_business_id_key",
-    );
-    // The old non-unique index is superseded and must be dropped.
-    expect(SQL).toContain("drop index if exists public.meta_credentials_business_id_idx");
+  it("allows one safe Meta connection per business", () => {
+    expect(SQL).toContain("create table if not exists public.meta_connections");
+    expect(SQL).toContain("business_id          uuid primary key");
+    expect(SQL).toContain("foreign key (business_id, token_id)");
+  });
+
+  it("consolidates durable campaign drafts, operations, and binding columns", () => {
+    expect(SQL).toContain("create table if not exists public.campaign_drafts");
+    expect(SQL).toContain("create table if not exists public.campaign_operations");
+    expect(SQL).toContain("add column if not exists meta_ad_account_id text");
+    expect(SQL).toContain("add column if not exists meta_page_id text");
+    expect(SQL).toContain("add column if not exists meta_connection_generation bigint");
+    expect(SQL).toContain("create or replace function public.update_campaign_draft_if_version");
+    expect(SQL).toContain("create or replace function public.claim_campaign_operation");
+    expect(SQL).toContain("create or replace function public.checkpoint_campaign_operation");
+    expect(SQL).toContain("create or replace function public.finish_campaign_operation");
   });
 
   it("dedupes leads per business", () => {
@@ -156,7 +215,7 @@ describe("schema: constraints", () => {
   });
 
   it("cascades child rows when a business is deleted", () => {
-    for (const t of ["brand_assets", "meta_credentials", "creatives", "campaigns", "leads"]) {
+    for (const t of ["brand_assets", "creatives", "campaigns", "leads"]) {
       const idx = SQL.indexOf(`create table if not exists public.${t}`);
       const body = SQL.slice(idx, SQL.indexOf(");", idx));
       expect(body, `${t} should cascade from businesses`).toContain(

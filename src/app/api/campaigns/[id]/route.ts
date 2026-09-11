@@ -1,11 +1,20 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
 import { MetaError, friendlyMetaError } from "@/lib/meta/client";
-import { metaClientForBusiness } from "@/lib/meta/credentials";
+import {
+  ConnectionAccessError,
+  recheckMetaConnection,
+  requireOwnedBusiness,
+  withMetaConnection,
+} from "@/lib/meta/connection-access";
 import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
+import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts";
+import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { activationConfirmationPayload } from "@/lib/campaign/activation";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,11 +34,15 @@ export async function PATCH(
   } = await supabase.auth.getUser();
   if (!user) return apiError("Unauthorized", 401);
 
-  const body = await readJson<{ status?: string }>(req);
-  const action = (body?.status ?? "").toLowerCase();
-  if (action !== "active" && action !== "paused") {
-    return apiError('status must be "active" or "paused"', 400);
+  const body = await readJson<unknown>(req);
+  const parsed = campaignActivationPatchSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(
+      'status must be "paused", or "active" with a fresh confirmationDigest and connectionGeneration',
+      400,
+    );
   }
+  const action = parsed.data.status;
 
   // RLS scopes this to the user's own campaigns.
   const { data: campaign } = await supabase
@@ -61,17 +74,73 @@ export async function PATCH(
     }
   }
 
-  const meta = await metaClientForBusiness(campaign.business_id);
-  if (!meta || !campaign.meta_campaign_id) {
+  if (!campaign.meta_campaign_id) {
     return apiError("This campaign isn't linked to Meta yet.", 400);
   }
 
+  const storedBinding = readStoredCampaignBinding(campaign);
+  if (
+    !storedBinding.metaAdAccountId ||
+    !storedBinding.metaPageId ||
+    storedBinding.metaConnectionGeneration === null
+  ) {
+    return apiError("This campaign needs account reconciliation before it can be changed.", 409);
+  }
+  if (
+    action === "active" &&
+    parsed.data.connectionGeneration !== storedBinding.metaConnectionGeneration
+  ) {
+    return apiError("Meta connection changed; review the campaign again.", 409);
+  }
+
   try {
-    await meta.updateCampaignStatus(
-      campaign.meta_campaign_id,
-      action === "active" ? "ACTIVE" : "PAUSED",
+    const context = await requireOwnedBusiness(campaign.business_id);
+    if (action === "active") {
+      await recheckMetaConnection(context, storedBinding.metaConnectionGeneration);
+    }
+    await withMetaConnection(
+      context,
+      {
+        purpose: action === "active" ? "activate" : "pause",
+        binding: {
+          adAccountId: storedBinding.metaAdAccountId,
+          pageId: storedBinding.metaPageId,
+        },
+        expectedGeneration: storedBinding.metaConnectionGeneration,
+      },
+      async (meta, connection) => {
+        if (action === "active" && connection.capabilities.canActivate.state !== "available") {
+          throw new ConnectionAccessError(
+            "UNAVAILABLE",
+            "Meta has not confirmed campaign activation access.",
+          );
+        }
+        if (parsed.data.status === "active") {
+          if (!Number.isFinite(campaign.daily_budget) || (campaign.daily_budget ?? 0) <= 0 || connection.selected?.currency !== "INR") {
+            throw new ConnectionAccessError("UNAVAILABLE", "Campaign budget and currency must be verified before activation.");
+          }
+          const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection)).digest("hex");
+          if (parsed.data.confirmationDigest !== expectedDigest) {
+            throw new ConnectionAccessError("CONFLICT", "Campaign review changed; review the current budget and Meta assets again.");
+          }
+          await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
+            dailyBudgetRupees: campaign.daily_budget!,
+            status: campaign.status,
+          });
+        }
+        await meta.updateCampaignStatus(
+          campaign.meta_campaign_id!,
+          action === "active" ? "ACTIVE" : "PAUSED",
+        );
+      },
     );
   } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return apiError(
+        err.message,
+        err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400,
+      );
+    }
     if (err instanceof MetaError) {
       return apiError(friendlyMetaError(err), err.status && err.status >= 500 ? 502 : 400);
     }
@@ -122,23 +191,45 @@ export async function DELETE(
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
 
+  const storedBinding = readStoredCampaignBinding(campaign);
+  if (
+    !storedBinding.metaAdAccountId ||
+    !storedBinding.metaPageId ||
+    storedBinding.metaConnectionGeneration === null
+  ) {
+    return NextResponse.json(
+      { error: "This campaign needs account reconciliation before it can be deleted." },
+      { status: 409 },
+    );
+  }
+
   // Remove it from Meta first (best-effort — it may already be gone there).
   let metaDeleted = false;
-  const meta = await metaClientForBusiness(campaign.business_id);
-  if (meta && campaign.meta_campaign_id) {
-    try {
-      await meta.deleteObject(campaign.meta_campaign_id);
-      metaDeleted = true;
-    } catch (err) {
-      // A campaign already deleted in Meta shouldn't block local cleanup.
-      console.error("[campaign.delete] Meta delete failed", err);
-      if (err instanceof MetaError && err.status && err.status >= 500) {
-        return NextResponse.json(
-          { error: "Meta couldn't delete this campaign right now — try again." },
-          { status: 502 },
-        );
-      }
+  try {
+    const context = await requireOwnedBusiness(campaign.business_id);
+    await withMetaConnection(
+      context,
+      {
+        purpose: "delete",
+        binding: {
+          adAccountId: storedBinding.metaAdAccountId,
+          pageId: storedBinding.metaPageId,
+        },
+        expectedGeneration: storedBinding.metaConnectionGeneration,
+      },
+      async (meta) => {
+        if (campaign.meta_campaign_id) await meta.deleteObject(campaign.meta_campaign_id);
+      },
+    );
+    metaDeleted = Boolean(campaign.meta_campaign_id);
+  } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
     }
+    return NextResponse.json(
+      { error: "Meta deletion could not be confirmed. The campaign remains in AdBrain so you can check its status." },
+      { status: 502 },
+    );
   }
 
   const { error } = await supabase.from("campaigns").delete().eq("id", id);
