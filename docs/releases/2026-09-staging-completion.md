@@ -32,8 +32,8 @@ the original checkout is excluded and preserved.
 
 ## Verification
 
-- Full Vitest run: 909 passed, one existing live-provider test skipped.
-- Coverage: 65.70% statements, 58.02% branches, 66.53% functions, 67.81% lines.
+- Full Vitest run: 910 passed, one existing live-provider test skipped.
+- Coverage: 65.60% statements, 57.96% branches, 66.31% functions, 67.76% lines.
 - Lint, TypeScript and production build passed (50 generated pages).
 - Disposable PostgreSQL: 39 checks across fresh and ordered upgrade schemas,
   including tenant isolation, draft version races, single submission per draft,
@@ -61,6 +61,15 @@ sync under a verified per-business connection can establish the actual Page.
 Set Vercel production `META_CONNECT_ROLLOUT=enabled` for the new deployment. Keep
 the existing encryption key, service-role key, Meta app credentials and legacy
 system token unchanged. The latter is no longer a runtime tenant fallback.
+
+Infrastructure receipt for [PR #3](https://github.com/vanshulgoyal101/adbrain/pull/3):
+the migration was applied transactionally with SHA-256
+`2d9e996613894757754c8e9f53781065fb1db9f3cd4b322e393224fcde8ca780`.
+Before/after campaign fingerprints match (116 rows). Draft/operation tables are
+present, operation count is zero, and browser write/private-schema access checks
+remain denied. The rollout setting is enabled for the next deployment. The
+missing `CRON_SECRET` was generated and installed for authenticated scheduled
+spend checks; existing secret values were preserved. No backfill occurred.
 
 Use the existing protected `dev` to `main` PR with passing `build` and `secrets`
 checks. Verify the exact main SHA and canonical domain after deployment. The

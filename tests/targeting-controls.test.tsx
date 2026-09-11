@@ -72,7 +72,14 @@ describe("<TargetingControls> automatic mode", () => {
 
   it("warns when there are no saved areas to target", () => {
     view(defaultTargeting, vi.fn(), []);
-    expect(screen.getByText(/would run across India/i)).toBeInTheDocument();
+    expect(screen.getByText("No service areas selected.")).toBeInTheDocument();
+    expect(screen.queryByText(/would run across India/i)).toBeNull();
+  });
+
+  it("shows saved campaign areas and exclusions instead of the brand default", () => {
+    render(<TargetingControls value={defaultTargeting} onChange={vi.fn()} brandAreas={["Bengaluru"]} plannedAreas={["Jaipur"]} plannedExclusions={["Ajmer"]} />);
+    expect(screen.getByText(/People in Jaipur/)).toHaveTextContent("Excluding Ajmer");
+    expect(screen.queryByText(/People in Bengaluru/)).toBeNull();
   });
 
   it("hides the pickers until the owner opts into choosing", () => {
