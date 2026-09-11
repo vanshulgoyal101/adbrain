@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import manifest from "@/app/manifest";
+import { siteConfig } from "@/lib/site";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Brain } from "lucide-react";
@@ -39,7 +40,15 @@ describe("app icons", () => {
 
   it("has every manifest icon present on disk", () => {
     for (const icon of icons) {
-      expect(existsSync(join(pub, icon.src!)), `missing ${icon.src}`).toBe(true);
+      const url = new URL(icon.src!, siteConfig.url);
+      expect(existsSync(join(pub, url.pathname)), `missing ${icon.src}`).toBe(true);
+    }
+  });
+
+  it("versions every manifest icon with the shared asset revision", () => {
+    for (const icon of icons) {
+      const url = new URL(icon.src!, siteConfig.url);
+      expect(url.searchParams.get("v")).toBe(siteConfig.assetVersion);
     }
   });
 

@@ -49,7 +49,7 @@ await context.route("**/*", async (route) => {
   const url = new URL(request.url());
   const method = request.method();
   if (["GET", "HEAD", "OPTIONS"].includes(method)) {
-    if (url.origin === origin && (["/api/meta/oauth/start", "/api/meta/oauth/callback", "/auth/dev-login"].includes(url.pathname) || url.pathname.startsWith("/api/scheduler"))) {
+    if (url.origin === origin && (["/api/meta/oauth/start", "/api/meta/oauth/callback", "/auth/dev-login"].includes(url.pathname) || url.pathname.startsWith("/api/scheduler") || url.pathname.startsWith("/api/cron/"))) {
       report.blockedActions.push({ method, path: url.pathname });
       return route.abort("blockedbyclient");
     }
