@@ -133,6 +133,25 @@ beforeEach(() => {
 });
 
 describe("guided planner route", () => {
+  it("plans and saves a draft while Meta is unavailable", async () => {
+    mocks.withMetaConnection.mockRejectedValueOnce(new Error("Meta not connected"));
+    const proposed = await mocks.runPlanner();
+    mocks.runPlanner.mockResolvedValueOnce({ ...proposed, plan: { ...proposed.plan, lead_form_id: null } });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(post());
+    expect(response.status).toBe(200);
+    expect((await response.json()).ready).toBe(true);
+    expect(mocks.runPlanner).toHaveBeenLastCalledWith(expect.objectContaining({ leadForms: [] }));
+    expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed planner input before provider calls", async () => {
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: 42 }) }));
+    expect(response.status).toBe(400);
+    expect(mocks.runPlanner).not.toHaveBeenCalled();
+  });
+
   it("returns a validated proposal without making a Meta mutation", async () => {
     const { POST } = await import("@/app/api/campaigns/plan/route");
     const response = await POST(post());

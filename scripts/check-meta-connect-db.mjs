@@ -73,14 +73,19 @@ async function verify(database, source) {
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
 
-    const claim = async (key, operationId = randomUUID()) => {
+    const operationDrafts = new Map();
+    const claim = async (key, operationId = randomUUID(), targetDraftId) => {
+      if (!targetDraftId) {
+        if (!operationDrafts.has(key)) operationDrafts.set(key, db.query("insert into public.campaign_drafts (business_id, owner_id, input, expires_at) values ($1, $2, '{}', now() + interval '1 day') returning id", [businessId, ownerId]).then(result => result.rows[0].id));
+        targetDraftId = await operationDrafts.get(key);
+      }
       const session = client(database);
       await session.connect();
       try {
         await session.query("set role service_role");
         return (await session.query(`select * from public.claim_campaign_operation(
-          $1, $2, $3, 1, 1, 'campaign_create', $4, $5, now() + interval '1 minute')`,
-        [operationId, businessId, draftId, key, "a".repeat(64)])).rows;
+          $1, $2, $3, (select version from public.campaign_drafts where id = $3), 1, 'campaign_create', $4, $5, now() + interval '1 minute')`,
+        [operationId, businessId, targetDraftId, key, "a".repeat(64)])).rows;
       } finally {
         await session.end();
       }
@@ -103,7 +108,7 @@ async function verify(database, source) {
     await check(`${database}: operation mutation RPCs are service-only`, async () => {
       const { rows } = await db.query(`select proname from pg_proc
         where pronamespace = 'public'::regnamespace
-          and proname in ('claim_campaign_operation', 'checkpoint_campaign_operation', 'finish_campaign_operation')
+          and proname in ('claim_campaign_operation', 'checkpoint_campaign_operation', 'finish_campaign_operation', 'fail_campaign_operation', 'expire_campaign_operation')
           and (has_function_privilege('authenticated', oid, 'execute') or has_function_privilege('anon', oid, 'execute'))`);
       assert.deepEqual(rows, []);
     });
@@ -126,6 +131,12 @@ async function verify(database, source) {
       assert.ok(results.every(result => result.status === "fulfilled"), "Concurrent claims must not throw unique violations");
       assert.equal(results.flatMap(result => result.value ?? []).filter(row => row.state === "running").length, 1);
     });
+    await check(`${database}: two request keys cannot submit the same draft twice`, async () => {
+      const results = await Promise.all([claim("draft-key-first", randomUUID(), draftId), claim("draft-key-second", randomUUID(), draftId)]);
+      assert.equal(results.flat().length, 1);
+      const editable = await db.query("select * from public.update_campaign_draft_if_version($1, $2, $3, 2, '{}')", [draftId, businessId, ownerId]);
+      assert.equal(editable.rowCount, 0);
+    });
     await check(`${database}: expired running operation requires reconciliation`, async () => {
       const [operation] = await claim("expired-key");
       await db.query("update public.campaign_operations set lease_until = now() - interval '1 second' where id = $1", [operation.id]);
@@ -138,6 +149,30 @@ async function verify(database, source) {
       const { rows } = await db.query(`select * from public.checkpoint_campaign_operation(
         $1, $2, 1, 'adset', now() + interval '1 minute', '[]')`, [operation.id, businessId]);
       assert.equal(rows.length, 0);
+    });
+    await check(`${database}: expiry is durable and cannot overwrite success`, async () => {
+      await db.query("update public.meta_connections set generation = 1 where business_id = $1", [businessId]);
+      const [operation] = await claim("status-expiry-key");
+      await db.query("update public.campaign_operations set lease_until = now() - interval '1 second' where id = $1", [operation.id]);
+      const expired = await db.query("select * from public.expire_campaign_operation($1, $2)", [operation.id, businessId]);
+      assert.equal(expired.rows[0].state, "needs_reconciliation");
+      await db.query("update public.campaign_operations set state = 'succeeded', phase = 'complete' where id = $1", [operation.id]);
+      const preserved = await db.query("select * from public.expire_campaign_operation($1, $2)", [operation.id, businessId]);
+      assert.equal(preserved.rows[0].state, "succeeded");
+      assert.equal((await db.query("select * from public.expire_campaign_operation($1, $2)", [operation.id, randomUUID()])).rowCount, 0);
+    });
+    await check(`${database}: failure preserves known IDs and fences terminal and tenant changes`, async () => {
+      const [operation] = await claim("failure-fence-key");
+      await db.query("update public.campaign_operations set external_ids = '[\"first-id\"]' where id = $1", [operation.id]);
+      const fail = (owner, generation, ids) => db.query("select * from public.fail_campaign_operation($1, $2, $3, 'failed', $4, null, 'fixture failure')", [operation.id, owner, generation, JSON.stringify(ids)]);
+      assert.equal((await fail(randomUUID(), 1, ["foreign-id"])).rowCount, 0);
+      assert.equal((await fail(businessId, 2, ["stale-id"])).rowCount, 0);
+      const failed = await fail(businessId, 1, ["second-id"]);
+      assert.equal(failed.rows[0].state, "needs_reconciliation");
+      assert.deepEqual(failed.rows[0].external_ids.sort(), ["first-id", "second-id"]);
+      await db.query("update public.campaign_operations set state = 'succeeded', phase = 'complete' where id = $1", [operation.id]);
+      assert.equal((await fail(businessId, 1, ["late-id"])).rowCount, 0);
+      await db.query("update public.meta_connections set generation = 2 where business_id = $1", [businessId]);
     });
     const seedAttempt = async (expectedGeneration, expired = false) => {
       const tokenId = randomUUID();

@@ -158,6 +158,18 @@ passed. These are dated receipts, not approval to release the Meta feature set.
 
 ## Current Meta Connect Work
 
+### Staging promotion authorized: 2026-09-11
+
+The owner requested completion and promotion of the pending `dev` workflows, and
+explicitly approved the additive campaign migration and all-owner rollout. The
+[staging completion report](releases/2026-09-staging-completion.md) is the current
+scope, local evidence and cutover reference. It supersedes the pilot-only and
+development-only limits in the historical receipts below, not the required PR
+checks or the need to distinguish real Meta consent from mocks.
+
+Real consent remains externally unverified. Existing production campaigns must
+not be assigned guessed account/Page bindings or changed as a migration side effect.
+
 ### Production connection pilot: 2026-09-08
 
 The owner authorized testing real Meta consent on the existing production HTTPS

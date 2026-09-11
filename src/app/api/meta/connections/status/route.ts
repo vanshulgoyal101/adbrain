@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import {
   type Capabilities,
   type ConnectionDTO,
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await requireOwnedBusiness(businessId);
+    const context = await requireOwnedBusiness(businessId);
+    if (!canUseMetaConnect(context.userId)) throw new ConnectionAccessError("FORBIDDEN", "Meta connection is not enabled for this account.");
     const { data, error } = await createAdminClient()
       .from("meta_connections")
       .select("business_id, generation, authorization_status, meta_business_id, ad_account_id, page_id, account_name, page_name, currency, timezone_name, capabilities, last_checked_at")

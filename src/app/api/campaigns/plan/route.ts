@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { draftDtoSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
-import { formatAnswers, runPlanner, type PlannerAnswer, type PlannerQuestion } from "@/lib/campaign/planner";
+import { formatAnswers, runPlanner, type PlannerQuestion } from "@/lib/campaign/planner";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
-import { friendlyMetaError } from "@/lib/meta/client";
+import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
+import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 import {
   getActiveInstructionsText,
   getApprovedCreatives,
@@ -40,12 +42,15 @@ export async function POST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = (await req.json().catch(() => null)) as {
-    goal?: string;
-    answers?: PlannerAnswer[] | string;
-  } | null;
-  const goal = (body?.goal ?? "").trim();
-  const rawAnswers = body?.answers;
+  const parsed = z.object({
+    goal: z.string().trim().min(1).max(2_000),
+    answers: z.union([z.string().max(12_000), z.array(z.object({
+      question: z.string().max(1_000), answer: z.string().max(2_000),
+    })).max(30)]).optional(),
+  }).safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "A valid goal and answers are required." }, { status: 400 });
+  const goal = parsed.data.goal;
+  const rawAnswers = parsed.data.answers;
   const answers = Array.isArray(rawAnswers)
     ? formatAnswers(rawAnswers) || undefined
     : typeof rawAnswers === "string"
@@ -72,30 +77,20 @@ export async function POST(req: Request) {
     });
   }
 
-  let leadForms;
+  let leadForms: LeadForm[] = [];
   let actor;
   try {
     actor = await requireOwnedBusiness(business.id);
-    leadForms = await withMetaConnection(
-      actor,
-      { purpose: "create_paused" },
-      (meta) => meta.listLeadForms(),
-    );
   } catch (err) {
     if (err instanceof ConnectionAccessError) {
       return NextResponse.json({ error: err.message }, { status: err.code === "UNAUTHENTICATED" ? 401 : 400 });
     }
     return NextResponse.json({ error: friendlyMetaError(err, "Could not load lead forms.") }, { status: 502 });
   }
-  if (!leadForms.length) {
-    return NextResponse.json({
-      ready: false,
-      questions: [
-        note(
-          "I couldn't find an active lead form on your Facebook Page. Create one in Meta (or make sure the app has access), then try again.",
-        ),
-      ],
-    });
+  try {
+    leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.listLeadForms());
+  } catch {
+    leadForms = [];
   }
 
   const instructions = await getActiveInstructionsText(business.id);
@@ -160,7 +155,13 @@ export async function POST(req: Request) {
     .gt("expires_at", now);
   if (countError) return NextResponse.json({ error: "Draft storage is unavailable." }, { status: 503 });
   if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
-    return NextResponse.json({ error: "Draft limit reached. Finish or remove an existing draft first." }, { status: 409 });
+    try {
+      if ((await listEditableDrafts(supabase, actor)).length >= MAX_ACTIVE_DRAFTS) {
+        return NextResponse.json({ error: "Draft limit reached. Finish or remove an existing draft first." }, { status: 409 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Saved draft operations could not be checked." }, { status: 503 });
+    }
   }
   const { data: row, error } = await supabase
     .from("campaign_drafts")

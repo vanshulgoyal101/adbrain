@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
-import { operationRecordFromRow, operationToDTO } from "@/lib/campaign/operation-store";
+import { getPersistedOperationStatus, operationToDTO } from "@/lib/campaign/operation-store";
 
 export const runtime = "nodejs";
 const querySchema = z.object({ businessId: z.string().uuid(), idempotencyKey: z.string().min(1).max(200) });
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       .eq("business_id", parsed.data.businessId).eq("kind", "campaign_create")
       .eq("idempotency_key", parsed.data.idempotencyKey).maybeSingle();
     if (error) throw new Error("Operation lookup failed.");
-    return NextResponse.json({ ok: true, data: data ? operationToDTO(operationRecordFromRow(data), []) : null, requestId }, { headers });
+    return NextResponse.json({ ok: true, data: data ? operationToDTO(await getPersistedOperationStatus(data)) : null, requestId }, { headers });
   } catch (error) {
     const code = error instanceof ConnectionAccessError ? error.code : "UNAVAILABLE";
     const status = code === "UNAUTHENTICATED" ? 401 : code === "FORBIDDEN" ? 403 : code === "NOT_FOUND" ? 404 : 503;

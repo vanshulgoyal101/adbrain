@@ -360,12 +360,13 @@ export class MetaClient {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
+        signal: AbortSignal.timeout(15_000),
       });
     } else {
       const sep = path.includes("?") ? "&" : "?";
       res = await fetch(
         `${GRAPH}/${path}${sep}access_token=${encodeURIComponent(token)}`,
-        { method },
+        { method, signal: AbortSignal.timeout(15_000) },
       );
     }
 
@@ -734,6 +735,34 @@ export class MetaClient {
     return data.data ?? [];
   }
 
+  async listCampaignsPage(after?: string) {
+    const query = new URLSearchParams({ fields: "id,name,status,objective,daily_budget,lifetime_budget,account_id", limit: "20" });
+    if (after) query.set("after", after);
+    const result = await this.graph<{ data?: Array<MetaCampaignSummary & { account_id: string; lifetime_budget?: string }>; paging?: { next?: string; cursors?: { after?: string } } }>(`${this.creds.adAccountId}/campaigns?${query}`);
+    if (!Array.isArray(result.data) || (result.paging?.next && !result.paging.cursors?.after)) throw new MetaError("Campaign listing is incomplete.");
+    return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
+  }
+
+  async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }) {
+    if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "") || Number(campaign.lifetime_budget ?? 0) !== 0
+      || !["ACTIVE", "PAUSED"].includes(campaign.status)) return null;
+    const response = await this.graph<{ data?: Array<{ id: string; status: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${campaign.id}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object&limit=100`,
+    );
+    if (!response.data?.length || response.paging?.next) return null;
+    let adSetBudget = 0;
+    for (const adSet of response.data) {
+      if (adSet.promoted_object?.page_id !== this.creds.pageId || Number(adSet.lifetime_budget ?? 0) !== 0
+        || !["ACTIVE", "PAUSED"].includes(adSet.status) || !/^\d+$/.test(adSet.daily_budget ?? "0")) return null;
+      adSetBudget += Number(adSet.daily_budget ?? 0);
+    }
+    if (!/^\d+$/.test(campaign.daily_budget ?? "0")) return null;
+    const campaignBudget = Number(campaign.daily_budget ?? 0);
+    const total = campaignBudget > 0 && adSetBudget === 0 ? campaignBudget : campaignBudget === 0 ? adSetBudget : Number.NaN;
+    if (!Number.isSafeInteger(total) || total <= 0) return null;
+    return { dailyBudgetRupees: total / 100, adSetId: response.data[0].id };
+  }
+
   async getCampaignInsights(campaignId: string): Promise<CampaignInsights> {
     const data = await this.graph<{
       data: Array<{
@@ -758,6 +787,43 @@ export class MetaClient {
 
   async deleteObject(id: string): Promise<void> {
     await this.graph(`${id}`, { method: "DELETE" });
+  }
+
+  async verifyCampaignActivation(
+    campaignId: string,
+    expected: { dailyBudgetRupees: number; status: string },
+  ): Promise<void> {
+    const [campaign, adSets] = await Promise.all([
+      this.graph<{ id: string; account_id: string; status: string; daily_budget?: string; lifetime_budget?: string }>(
+        `${campaignId}?fields=id,account_id,status,daily_budget,lifetime_budget`,
+      ),
+      this.graph<{ data?: Array<{ id: string; status: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+        `${campaignId}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object&limit=100`,
+      ),
+    ]);
+    const minorUnits = (value: string | undefined): number => {
+      if (value === undefined) return 0;
+      if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) return Number.NaN;
+      return Number(value);
+    };
+    if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")
+      || campaign.status !== expected.status.toUpperCase() || minorUnits(campaign.lifetime_budget) !== 0
+      || !Array.isArray(adSets.data) || adSets.data.length === 0 || adSets.paging?.next) {
+      throw new MetaError("Campaign details could not be verified. Refresh the campaign before activation.");
+    }
+    let adSetBudget = 0;
+    for (const adSet of adSets.data) {
+      if (!["ACTIVE", "PAUSED"].includes(adSet.status) || adSet.promoted_object?.page_id !== this.creds.pageId
+        || minorUnits(adSet.lifetime_budget) !== 0) {
+        throw new MetaError("Campaign Page or delivery settings changed. Review the campaign in Meta before activation.");
+      }
+      adSetBudget += minorUnits(adSet.daily_budget);
+    }
+    const campaignBudget = minorUnits(campaign.daily_budget);
+    const total = campaignBudget > 0 && adSetBudget === 0 ? campaignBudget : campaignBudget === 0 ? adSetBudget : Number.NaN;
+    if (!Number.isSafeInteger(total) || total <= 0 || total !== Math.round(expected.dailyBudgetRupees * 100)) {
+      throw new MetaError("Campaign budget changed in Meta. Refresh and review the budget before activation.");
+    }
   }
 
   /** Pause or resume a campaign (or any adset/ad) by updating its status. */

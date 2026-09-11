@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const getUser = vi.hoisted(() => vi.fn());
 const adminFrom = vi.hoisted(() => vi.fn());
 const adminRpc = vi.hoisted(() => vi.fn());
+afterEach(() => vi.unstubAllEnvs());
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -44,6 +45,16 @@ function connection(capability: "available" | "blocked" | "unknown") {
 }
 
 describe("withMetaConnection capability boundary", () => {
+  it("keeps business ownership available for drafts when Meta publishing is disabled", async () => {
+    vi.stubEnv("META_CONNECT_ROLLOUT", "disabled");
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+    const { requireOwnedBusiness, withMetaConnection } = await import("@/lib/meta/connection-access");
+    const context = await requireOwnedBusiness("business-1");
+    expect(context.businessId).toBe("business-1");
+    await expect(withMetaConnection(context, { purpose: "create_paused" }, async () => "unexpected"))
+      .rejects.toThrow("Meta publishing is not enabled");
+  });
+
   it("blocks unknown or unavailable operation capability before token access", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
     adminFrom.mockImplementation((table: string) => {

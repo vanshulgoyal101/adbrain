@@ -3,6 +3,7 @@ import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
 import type { PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { createClient } from "@/lib/supabase/server";
+import { resolveDraftTargeting } from "./draft-targeting";
 
 export type CampaignSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -58,7 +59,7 @@ export function buildCampaignPreflightLoaders(
     },
     resolveGeo: async (actor, draft) => {
       const location = draft.input.targeting.location;
-      if (location?.mode === "manual" && location.included?.length) {
+      if (location?.mode === "manual" && location.included?.length && !location.includedNames?.length && !location.excludedNames?.length) {
         return {
           resolvedAreaLabel: location.included.map((item) => item.name).join(", "),
           unresolvedNames: [],
@@ -70,7 +71,7 @@ export function buildCampaignPreflightLoaders(
         .select("locations")
         .eq("id", actor.businessId)
         .maybeSingle();
-      const names = business?.locations ?? [];
+      const names = location?.includedNames?.length ? location.includedNames : business?.locations ?? [];
       if (!names.length) return { resolvedAreaLabel: null, unresolvedNames: [], explicitlyNationwide: false };
       const connection = await getConnectionStatus(authorizedBusiness);
       if (connection.capabilities.canCreatePaused.state !== "available") {
@@ -79,22 +80,7 @@ export function buildCampaignPreflightLoaders(
       return withMetaConnection(
         authorizedBusiness,
         { purpose: "create_paused" },
-        async (meta) => {
-          const resolved = await meta.resolveGeoTargeting(names, {
-            radiusKm: location?.radiusKm,
-          });
-          return {
-            resolvedAreaLabel: resolved.matched.length
-              ? resolved.matched.map((item) => item.label).join(", ")
-              : null,
-            unresolvedNames: resolved.unresolved.length
-              ? resolved.unresolved
-              : resolved.matched.length
-                ? []
-                : names,
-            explicitlyNationwide: false,
-          };
-        },
+        (meta) => resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta)),
       );
     },
     hash: (payload) => createHash("sha256").update(payload).digest("hex"),

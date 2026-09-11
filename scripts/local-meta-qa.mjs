@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import pg from "pg";
@@ -12,7 +12,8 @@ const dockerEnv = { ...process.env, DOCKER_HOST: `unix://${process.env.HOME}/.co
 const local = JSON.parse(execFileSync("supabase", ["status", "--workdir", root, "-o", "json"], { env: dockerEnv, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
 for (const key of ["API_URL", "DB_URL"]) assert.ok(["127.0.0.1", "localhost"].includes(new URL(local[key]).hostname), "Only loopback Supabase is permitted.");
 const derive = label => createHmac("sha256", local.SERVICE_ROLE_KEY).update(`adbrain-local-qa:${label}`).digest("base64");
-const inherited = parseEnv(readFileSync(new URL("../.env.local", import.meta.url), "utf8"));
+const envFile = new URL("../.env.local", import.meta.url);
+const inherited = existsSync(envFile) ? parseEnv(readFileSync(envFile, "utf8")) : {};
 const env = { ...process.env, ...Object.fromEntries(Object.keys(inherited).map(key => [key, ""])) };
 Object.assign(env, {
   NEXT_PUBLIC_SUPABASE_URL: local.API_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: local.ANON_KEY,
@@ -22,6 +23,7 @@ Object.assign(env, {
   CREATIVE_MAX_TOKENS: "6000", CREATIVE_REASONING_EFFORT: "medium",
   META_TOKEN_ENCRYPTION_KEY: derive("encryption"),
   META_APP_ID: "local-qa-not-a-meta-app", META_APP_SECRET: "local-qa-not-a-meta-secret", META_LOGIN_CONFIG_ID: "", META_SYSTEM_USER_TOKEN: "", META_AD_ACCOUNT_ID: "", META_PAGE_ID: "",
+  META_CONNECT_ROLLOUT: "enabled", META_CONNECT_PILOT_USER_ID: "",
   GOOGLE_AI_API_KEYS: "", GROQ_API_KEYS: "", OPENROUTER_API_KEYS: "", CEREBRAS_API_KEYS: "", FALAI_API_KEY: "", OPENAI_API_KEY: "",
   CRON_SECRET: "", IMAGE_PROVIDER: "none", IMAGE_PROVIDER_FALLBACK: "none",
   WORKSPACE_CHECK_URL: "http://localhost:3939", META_CONNECT_UI_BASE_URL: "http://localhost:3939",
@@ -66,7 +68,8 @@ if (mode === "setup") {
     e2e: ["npx", ["playwright", "test", "e2e/workspace.spec.ts", "--workers=1"]],
     recovery: ["npx", ["playwright", "test", "e2e/campaign-recovery.spec.ts", "--workers=1"]],
     "draft-connect": ["npx", ["playwright", "test", "e2e/draft-connect.spec.ts", "--workers=1"]],
-    "connection-recovery": ["npx", ["playwright", "test", "e2e/meta-recovery.spec.ts", "e2e/draft-connect.spec.ts", "e2e/campaign-recovery.spec.ts", "--workers=1"]],
+    "connection-recovery": ["npx", ["playwright", "test", "e2e/meta-recovery.spec.ts", "e2e/draft-connect.spec.ts", "e2e/campaign-recovery.spec.ts", "e2e/draft-lifecycle.spec.ts", "--workers=1"]],
+    "draft-lifecycle": ["npx", ["playwright", "test", "e2e/draft-lifecycle.spec.ts", "--workers=1"]],
   };
   assert.ok(commands[mode], "Choose setup, dev, oauth-dev, oauth-check, build, workspace, connect, e2e, recovery, draft-connect, or connection-recovery.");
   const [command, args] = commands[mode];

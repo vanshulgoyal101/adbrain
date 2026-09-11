@@ -166,6 +166,12 @@ export function createMetaConnectClient({
     draft(draftId: string, signal?: AbortSignal): Promise<DraftDTO> {
       return request(`/api/campaign-drafts/${encodeURIComponent(draftId)}`, draftDtoSchema, { signal });
     },
+    drafts(businessId: string, signal?: AbortSignal): Promise<DraftDTO[]> {
+      return request(`/api/campaign-drafts?businessId=${encodeURIComponent(businessId)}`, draftDtoSchema.array(), { signal });
+    },
+    deleteDraft(draftId: string, version: number, signal?: AbortSignal): Promise<{ deleted: true }> {
+      return request(`/api/campaign-drafts/${encodeURIComponent(draftId)}?version=${version}`, z.object({ deleted: z.literal(true) }), { method: "DELETE", signal });
+    },
     operationForRequest(businessId: string, idempotencyKey: string, signal?: AbortSignal): Promise<OperationDTO | null> {
       return request(`/api/campaigns/operations?businessId=${encodeURIComponent(businessId)}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`, operationDtoSchema.nullable(), { signal });
     },

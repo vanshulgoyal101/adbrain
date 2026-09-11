@@ -6,7 +6,7 @@ const plannerPlanSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     daily_budget_rupees: z.number().finite().int().positive().max(10_000_000),
-    lead_form_id: z.string().trim().min(1).max(128),
+    lead_form_id: z.string().trim().min(1).max(128).nullable().default(null),
     creative_ids: z.array(z.string().uuid()).min(1).max(50),
     age_min: z.number().finite().int().min(18).max(65),
     age_max: z.number().finite().int().min(18).max(65),
@@ -62,12 +62,13 @@ export function plannerPlanToDraftInput(input: {
   if (!parsed.success) return { ok: false, error: "Planner returned an invalid campaign draft." };
 
   const plan: PlannerPlanInput = parsed.data;
+  if (plan.destination !== "instant_form") return { ok: false, error: "This campaign editor supports instant lead forms. Choose an instant-form campaign." };
   const approved = new Set(input.approvedCreativeIds);
-  const creativeIds = plan.creative_ids.filter((id) => approved.has(id));
-  if (!creativeIds.length) return { ok: false, error: "Planner did not choose an approved creative." };
+  const creativeIds = [...new Set(plan.creative_ids)];
+  if (creativeIds.some((id) => !approved.has(id))) return { ok: false, error: "Planner did not choose an approved creative." };
 
   const leadForms = new Set(input.leadFormIds);
-  if (!leadForms.has(plan.lead_form_id)) {
+  if (plan.lead_form_id !== null && !leadForms.has(plan.lead_form_id)) {
     return { ok: false, error: "Planner chose a lead form that is not available." };
   }
 
@@ -88,6 +89,8 @@ export function plannerPlanToDraftInput(input: {
         mode: included.length ? "manual" as const : "ai" as const,
         included,
         excluded,
+        includedNames: plan.locations.filter((name) => !included.some((location) => locationKey(location.name) === locationKey(name))),
+        excludedNames: plan.excluded_locations.filter((name) => !excluded.some((location) => locationKey(location.name) === locationKey(name))),
       },
       age: {
         mode: "manual" as const,

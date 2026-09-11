@@ -10,6 +10,7 @@ import {
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
+import { listEditableDrafts } from "@/lib/campaign/draft-repository";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,21 @@ function responseError(
     { ok: false, error: { code, message, retryable }, requestId },
     { status },
   );
+}
+
+export async function GET(request: Request) {
+  const requestId = crypto.randomUUID();
+  const businessId = draftInputSchema.shape.businessId.safeParse(new URL(request.url).searchParams.get("businessId"));
+  if (!businessId.success) return responseError(requestId, 400, "INVALID_INPUT", "A valid business is required.");
+  try {
+    const actor = await requireOwnedBusiness(businessId.data);
+    const drafts = await listEditableDrafts(await createClient(), actor);
+    return NextResponse.json({ ok: true, data: draftDtoSchema.array().parse(drafts), requestId }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    const code = error instanceof ConnectionAccessError ? error.code : "UNAVAILABLE";
+    const status = code === "UNAUTHENTICATED" ? 401 : code === "FORBIDDEN" ? 403 : code === "NOT_FOUND" ? 404 : 503;
+    return responseError(requestId, status, code, "Saved drafts could not be loaded.", status >= 500);
+  }
 }
 
 export async function POST(request: Request) {
@@ -61,7 +77,13 @@ export async function POST(request: Request) {
     .gt("expires_at", now);
   if (countError) return responseError(requestId, 503, "UNAVAILABLE", "Draft storage is unavailable.", true);
   if ((activeRows ?? []).length >= MAX_ACTIVE_DRAFTS) {
-    return responseError(requestId, 409, "CONFLICT", "Draft limit reached. Finish or remove an existing draft first.");
+    try {
+      if ((await listEditableDrafts(supabase, actor)).length >= MAX_ACTIVE_DRAFTS) {
+        return responseError(requestId, 409, "CONFLICT", "Draft limit reached. Finish or remove an existing draft first.");
+      }
+    } catch {
+      return responseError(requestId, 503, "UNAVAILABLE", "Saved draft operations could not be checked.", true);
+    }
   }
 
   const { data: row, error } = await supabase

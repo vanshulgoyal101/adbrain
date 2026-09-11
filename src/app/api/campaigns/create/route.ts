@@ -13,12 +13,14 @@ import {
 } from "@/lib/campaign/operations";
 import {
   claimPersistedOperation,
+  getPersistedOperationStatus,
   operationRecordFromRow,
   operationToDTO,
   type OperationClaimRepository,
 } from "@/lib/campaign/operation-store";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
-import { geoItemsToTargeting, splitAgeRange, type CreateCampaignResult, type GeoTargeting } from "@/lib/meta/client";
+import { splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
+import { resolveDraftTargeting } from "@/lib/campaign/draft-targeting";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -129,7 +131,12 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (existingOperationError) return errorResponse(requestId, 503, "UNAVAILABLE", "Campaign operation storage is unavailable.", true);
   if (existingOperationRow) {
-    const existingOperation = operationRecordFromRow(existingOperationRow);
+    let existingOperation;
+    try {
+      existingOperation = await getPersistedOperationStatus(existingOperationRow);
+    } catch {
+      return errorResponse(requestId, 503, "UNAVAILABLE", "Campaign operation storage is unavailable.", true);
+    }
     if (existingOperation.requestHash !== requestHash || existingOperation.connectionGeneration !== input.connectionGeneration) {
       return errorResponse(requestId, 409, "CONFLICT", "This idempotency key was used for a different campaign request.");
     }
@@ -219,13 +226,16 @@ export async function POST(request: Request) {
         return error || !data?.[0] ? null : mergeCheckpointState(operationRecordFromRow(data[0]));
       }
       if (operation.state === "failed" || operation.state === "needs_reconciliation") {
-        const { data, error } = await operationDb.from("campaign_operations")
-          .update({ state: durableOperation.state, phase: durableOperation.phase, lease_until: null, external_ids: durableOperation.externalIds as unknown as Json, sanitized_error: durableOperation.sanitizedError })
-          .eq("id", durableOperation.operationId)
-          .eq("business_id", durableOperation.businessId)
-          .select("*")
-          .maybeSingle();
-        return error || !data ? null : mergeCheckpointState(operationRecordFromRow(data));
+        const { data, error } = await operationDb.rpc("fail_campaign_operation", {
+          p_operation_id: durableOperation.operationId,
+          p_business_id: durableOperation.businessId,
+          p_connection_generation: durableOperation.connectionGeneration,
+          p_state: durableOperation.state,
+          p_external_ids: durableOperation.externalIds,
+          p_campaign_id: durableOperation.campaignId,
+          p_error: durableOperation.sanitizedError,
+        });
+        return error || !data?.[0] ? null : mergeCheckpointState(operationRecordFromRow(data[0]));
       }
       const { data, error } = await operationDb.rpc("checkpoint_campaign_operation", {
         p_operation_id: operation.operationId,
@@ -241,7 +251,8 @@ export async function POST(request: Request) {
   };
 
   const onCheckpoint = async (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => {
-    const saved = await checkpoint.checkpoint({ ...recordExternalId(checkpointState, event.externalId), phase: event.phase });
+    checkpointState = { ...recordExternalId(checkpointState, event.externalId), phase: event.phase };
+    const saved = await checkpoint.checkpoint(checkpointState);
     if (!saved) throw new OperationPhaseError("Operation lease was lost after Meta mutation.", { transmitted: true });
     checkpointState = saved;
   };
@@ -259,15 +270,9 @@ export async function POST(request: Request) {
             expectedGeneration: review.connectionGeneration,
           }, async (meta) => {
             const { data: business } = await supabase.from("businesses").select("website, locations").eq("id", actor.businessId).maybeSingle();
-            let location: GeoTargeting | undefined;
-            if (targeting.location?.mode === "manual" && targeting.location.included?.length) {
-              location = geoItemsToTargeting(targeting.location.included, targeting.location.radiusKm ?? 25);
-            } else {
-              const resolved = await meta.resolveGeoTargeting(business?.locations ?? [], { radiusKm: targeting.location?.radiusKm });
-              if (resolved.unresolved.length || !resolved.matched.length) throw new OperationPhaseError("Campaign geography could not be resolved.", { transmitted: false });
-              location = resolved.targeting;
-            }
-            const excludedLocation = targeting.location?.excluded?.length ? geoItemsToTargeting(targeting.location.excluded, targeting.location.radiusKm ?? 25) : undefined;
+            const resolved = await resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta));
+            if (resolved.unresolvedNames.length || !resolved.resolvedAreaLabel) throw new OperationPhaseError("Campaign geography could not be resolved.", { transmitted: false });
+            const { location, excludedLocation } = resolved;
             const { data: creatives } = await supabase.from("creatives").select("id, image_url, headline, primary_text, cta").in("id", draft.input.creativeIds).eq("business_id", actor.businessId).eq("status", "approved");
             const byId = new Map((creatives ?? []).map((creative) => [creative.id, creative]));
             const creativeInputs = draft.input.creativeIds.map((id) => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));

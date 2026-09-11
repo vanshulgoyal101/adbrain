@@ -1,6 +1,7 @@
 import type { Blocker } from "@/lib/meta/connect-contracts";
 import type { OperationDTO } from "@/lib/campaign/connect-contracts";
 import type { Database, Json } from "@/lib/types";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   claimOperation,
   type OperationRecord,
@@ -92,9 +93,25 @@ export async function claimPersistedOperation(
   return { kind: "conflict", operation: decision.operation };
 }
 
+export async function getPersistedOperationStatus(row: OperationRow): Promise<OperationRecord> {
+  const operation = operationRecordFromRow(row);
+  if (!["pending", "running"].includes(operation.state)
+    || (operation.leaseUntil !== null && operation.leaseUntil > Date.now())) return operation;
+  const { data, error } = await createAdminClient().rpc("expire_campaign_operation", {
+    p_operation_id: operation.operationId,
+    p_business_id: operation.businessId,
+  });
+  if (error || !data?.[0]) throw new Error("Campaign operation status could not be recovered.");
+  return operationRecordFromRow(data[0]);
+}
+
 export function operationToDTO(
   operation: OperationRecord,
-  blockers: Blocker[] = [],
+  blockers: Blocker[] = operation.state === "needs_reconciliation" ? [{
+    code: "RECONCILIATION_REQUIRED",
+    message: "Campaign creation needs reconciliation before it can be retried.",
+    action: { kind: "contact_admin" },
+  }] : [],
 ): OperationDTO {
   return {
     operationId: operation.operationId,

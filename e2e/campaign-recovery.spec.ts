@@ -28,6 +28,7 @@ test("reload recovers an ambiguous create without mutation and retries the origi
   const respond = (data: unknown) => ({ ok: true, data, requestId: "33333333-3333-4333-8333-333333333333" });
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/campaign-drafts" && route.request().method() === "GET") return route.fulfill({ json: respond([]) });
     if (path === `/api/campaign-drafts/${draft.draftId}`) return route.fulfill({ json: respond(draft) });
     if (path === "/api/meta/connections/status") return route.fulfill({ json: respond(connection) });
     if (path === "/api/campaigns/preflight") return route.fulfill({ json: respond(review) });

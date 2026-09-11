@@ -214,6 +214,19 @@ describe("W2-04 planner output conversion", () => {
     expect(result).toEqual({ ok: false, error: "Planner did not choose an approved creative." });
   });
 
+  it("preserves unresolved included and excluded areas for later Meta resolution", () => {
+    const result = plannerPlanToDraftInput({ businessId, goal: "Generate leads", plan: { ...plan, lead_form_id: null }, approvedCreativeIds: [creativeId], leadFormIds: [] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.draft.leadFormId).toBeNull();
+    expect(result.draft.targeting.location).toMatchObject({ includedNames: ["Jaipur"], excludedNames: ["Ajmer"] });
+  });
+
+  it("does not silently convert an unsupported destination into a form campaign", () => {
+    const result = plannerPlanToDraftInput({ businessId, goal: "Phone calls", plan: { ...plan, destination: "call" }, approvedCreativeIds: [creativeId], leadFormIds: [leadFormId] });
+    expect(result.ok).toBe(false);
+  });
+
   it("rejects unavailable lead forms before draft persistence", () => {
     const result = plannerPlanToDraftInput({
       businessId,

@@ -16,6 +16,7 @@ import {
   Rocket,
   Sparkles,
   Search,
+  Save,
   Trash2,
 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -118,6 +119,9 @@ export function Campaigns({
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
   const [name, setName] = useState(`${business.name} — leads`);
   const [targeting, setTargeting] = useState<TargetingValue>(defaultTargeting);
+  const [draftGoal, setDraftGoal] = useState("");
+  const [includedNames, setIncludedNames] = useState("");
+  const [excludedNames, setExcludedNames] = useState("");
   const [abTest, setAbTest] = useState(false);
   const [creating, setCreating] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -140,6 +144,8 @@ export function Campaigns({
   const recoveryKey = recoveryStorageKey(business.owner_id, business.id);
   const recoveryRef = useRef<CampaignRecovery | null>(null);
   const [recoveryPending, setRecoveryPending] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState<DraftDTO[]>([]);
+  const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   const [creationMode, setCreationMode] = useState("manual");
   const [campaignQuery, setCampaignQuery] = useState("");
@@ -155,9 +161,14 @@ export function Campaigns({
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const syncCursorRef = useRef<string | null>(null);
   const selectedLeadForm = availableForms.find((form) => form.id === leadFormId);
+  const plannedAreas = includedNames.split(",").map((value) => value.trim()).filter(Boolean);
+  const plannedExclusions = excludedNames.split(",").map((value) => value.trim()).filter(Boolean);
   const audiencePreview =
-    targeting.locationMode === "manual"
+    plannedAreas.length
+      ? `${[...(targeting.locationMode === "manual" ? targeting.included.map((place) => place.name) : []), ...plannedAreas].join(", ")}${plannedExclusions.length ? `; excluding ${plannedExclusions.join(", ")}` : ""}`
+      : targeting.locationMode === "manual"
       ? targeting.included.length
         ? targeting.included.map((place) => place.name).join(", ")
         : "Choose an area"
@@ -172,7 +183,10 @@ export function Campaigns({
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
     setAbTest(input.abTest);
-    setCreationMode(input.mode);
+    setCreationMode("manual");
+    setDraftGoal(input.goal);
+    setIncludedNames((input.targeting.location?.includedNames ?? []).join(", "));
+    setExcludedNames((input.targeting.location?.excludedNames ?? []).join(", "));
     setShowComposer(true);
     setTargeting({
       locationMode: input.targeting.location?.mode ?? defaultTargeting.locationMode,
@@ -197,6 +211,16 @@ export function Campaigns({
   useEffect(() => {
     startTransition(() => setCampaigns(initialCampaigns));
   }, [initialCampaigns]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void createMetaConnectClient().drafts(business.id, controller.signal).then((drafts) => {
+      if (!controller.signal.aborted) setSavedDrafts(drafts);
+    }).catch((reason) => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Saved drafts could not be loaded.");
+    });
+    return () => controller.abort();
+  }, [business.id]);
 
   useEffect(() => {
     const saved = readCampaignRecovery(window.sessionStorage, recoveryKey, business.id);
@@ -238,6 +262,64 @@ export function Campaigns({
   function saveRecovery(recovery: CampaignRecovery) {
     writeCampaignRecovery(window.sessionStorage, recoveryKey, recovery);
     recoveryRef.current = recovery;
+    setSavedDrafts((drafts) => recovery.request
+      ? drafts.filter((draft) => draft.draftId !== recovery.draft.draftId)
+      : [recovery.draft, ...drafts.filter((draft) => draft.draftId !== recovery.draft.draftId)]);
+  }
+
+  async function reopenDraft(draftId: string) {
+    if (unresolvedRecovery()) { setError("Resolve the current campaign operation before opening another draft."); return; }
+    setDraftBusy(draftId);
+    setError(null);
+    try {
+      const draft = await createMetaConnectClient().draft(draftId);
+      preparedDraftRef.current = draft;
+      saveRecovery({ draft, request: null, operationId: null });
+      setOperation(null);
+      setRecoveryPending(false);
+      setPrepareReview(null);
+      restoreDraft(draft);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Draft could not be opened."); }
+    finally { setDraftBusy(null); }
+  }
+
+  async function removeDraft(draft: DraftDTO) {
+    if (!window.confirm(`Remove saved draft "${draft.input.name}"?`)) return;
+    setDraftBusy(draft.draftId);
+    try {
+      await createMetaConnectClient().deleteDraft(draft.draftId, draft.version);
+      setSavedDrafts((drafts) => drafts.filter((saved) => saved.draftId !== draft.draftId));
+      if (preparedDraftRef.current?.draftId === draft.draftId && !recoveryRef.current?.request) {
+        preparedDraftRef.current = null;
+        recoveryRef.current = null;
+        window.sessionStorage.removeItem(recoveryKey);
+        setPrepareReview(null);
+      }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Draft could not be removed."); }
+    finally { setDraftBusy(null); }
+  }
+
+  function toggleComposer() {
+    if (showComposer) { setShowComposer(false); return; }
+    if (unresolvedRecovery()) { setError("Resolve the current campaign operation before starting another campaign."); return; }
+    preparedDraftRef.current = null;
+    recoveryRef.current = null;
+    operationRef.current = null;
+    window.sessionStorage.removeItem(recoveryKey);
+    setOperation(null);
+    setRecoveryPending(false);
+    setPrepareReview(null);
+    setCreationMode("manual");
+    setName(`${business.name} - leads`);
+    setDraftGoal("");
+    setSelected(new Set());
+    setBudget(200);
+    setAbTest(false);
+    setTargeting(defaultTargeting);
+    setIncludedNames("");
+    setExcludedNames("");
+    setLeadFormId("");
+    setShowComposer(true);
   }
 
   async function finishDraftConnection(connection: ConnectionDTO) {
@@ -298,14 +380,20 @@ export function Campaigns({
     setSyncing(true);
     if (!opts.silent) setError(null);
     try {
-      const res = await fetch("/api/campaigns/sync", { method: "POST" });
+      const cursor = syncCursorRef.current;
+      const res = await fetch(`/api/campaigns/sync${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`, { method: "POST" });
       const data = (await res.json()) as {
         campaigns?: Campaign[];
         error?: string;
+        nextCursor?: string | null;
+        skipped?: number;
       };
       if (res.ok && Array.isArray(data.campaigns)) {
         setCampaigns(data.campaigns);
         setLastSynced(new Date());
+        syncCursorRef.current = data.nextCursor ?? null;
+        if (data.nextCursor) setNotice("More campaigns are available. Sync again to continue.");
+        else if (data.skipped) setNotice(`${data.skipped} campaign(s) could not be verified for this Page and were left unchanged.`);
       } else if (!res.ok && !opts.silent) {
         setError(data.error ?? "Sync failed.");
       }
@@ -326,6 +414,7 @@ export function Campaigns({
   }, [metaReady]);
 
   function toggle(id: string) {
+    if (!unresolvedRecovery()) setPrepareReview(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -340,8 +429,8 @@ export function Campaigns({
     return {
       businessId: business.id,
       name,
-      goal: name,
-      mode: creationMode === "guided" ? "guided" : "manual",
+      goal: draftGoal || name,
+      mode: preparedDraftRef.current?.input.mode === "guided" || creationMode === "guided" ? "guided" : "manual",
       creativeIds: [...selected],
       dailyBudgetRupees: Math.max(0, budget),
       leadFormId: leadFormId || null,
@@ -355,6 +444,8 @@ export function Campaigns({
             .map((place) => toDraftLocation(place, targeting.radiusKm))
             .filter((place): place is NonNullable<typeof place> => place !== null),
           radiusKm: targeting.radiusKm,
+          ...(includedNames.trim() ? { includedNames: includedNames.split(",").map((value) => value.trim()).filter(Boolean) } : {}),
+          ...(excludedNames.trim() ? { excludedNames: excludedNames.split(",").map((value) => value.trim()).filter(Boolean) } : {}),
         },
         age: {
           mode: targeting.ageMode,
@@ -366,7 +457,7 @@ export function Campaigns({
     };
   }
 
-  async function prepareManualCampaign() {
+  async function prepareManualCampaign(reviewAfterSave = true) {
     if (unresolvedRecovery()) {
       setError("Check the existing campaign operation before preparing another campaign.");
       return;
@@ -377,7 +468,7 @@ export function Campaigns({
     operationRef.current = null;
     let input: DraftInput;
     try {
-      input = manualDraftInput();
+      input = manualDraftInput(reviewAfterSave);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Complete the campaign details first.");
       return;
@@ -392,6 +483,7 @@ export function Campaigns({
       saveRecovery({ draft, request: null, operationId: null });
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
+      if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
       const connection = await client.status(business.id);
       if (connection.authorization !== "connected" || !connection.selected) {
         setConnectionIntent({ kind: "setup" });
@@ -508,6 +600,7 @@ export function Campaigns({
     saveRecovery({ draft, request: null, operationId: null });
     setRecoveryPending(false);
     preparedDraftRef.current = draft;
+    restoreDraft(draft);
     setOperation(null);
     operationRef.current = null;
     setError(null);
@@ -518,6 +611,7 @@ export function Campaigns({
         setConnectOpen(true);
         return;
       }
+      await refreshDraftForms();
       await loadPrepareReview(draft, connection);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not open the saved campaign review.");
@@ -648,7 +742,7 @@ export function Campaigns({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
-        <Button variant={showComposer ? "outline" : "primary"} onClick={() => setShowComposer(!showComposer)} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>
+        <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
@@ -787,6 +881,18 @@ export function Campaigns({
         }}
       />
 
+      {savedDrafts.length > 0 && <section aria-label="Saved drafts" className="border-y border-slate-200 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">Saved drafts</h2>
+        <ul className="mt-2 divide-y divide-slate-100">
+          {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
+            <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
+              <span className="block wrap-break-word">{draft.input.name}</span>
+              <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatCurrency(draft.input.dailyBudgetRupees)} per ad set</span>
+            </button>
+            <Button variant="ghost" size="sm" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+          </li>)}
+        </ul>
+      </section>}
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
@@ -820,7 +926,7 @@ export function Campaigns({
       )}
 
       {(
-        <Card hidden={creationMode !== "manual"} className="min-w-0 rounded-none border-0 bg-white">
+        <Card hidden={creationMode !== "manual"} className="min-w-0 rounded-none border-0 bg-white" onChange={() => { if (!unresolvedRecovery()) setPrepareReview(null); }}>
           <CardHeader className="border-b border-slate-200/80 bg-white/60">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -857,6 +963,7 @@ export function Campaigns({
                           key={c.id}
                           onClick={() => toggle(c.id)}
                           aria-pressed={isSel}
+                          aria-label={c.headline || "Select creative"}
                           className={cn(
                             "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
                             isSel
@@ -931,7 +1038,7 @@ export function Campaigns({
                     <button
                       key={amount}
                       type="button"
-                      onClick={() => setBudget(amount)}
+                      onClick={() => { setBudget(amount); if (!unresolvedRecovery()) setPrepareReview(null); }}
                       className={cn(
                         "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                         budget === amount
@@ -954,11 +1061,17 @@ export function Campaigns({
                 )}
 
                 <div className="flex flex-col gap-2">
+                  {(includedNames || excludedNames) && <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                    <div><Label htmlFor="planned-areas">Planned areas</Label><Input id="planned-areas" value={includedNames} onChange={(event) => setIncludedNames(event.target.value)} /></div>
+                    <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Input id="planned-exclusions" value={excludedNames} onChange={(event) => setExcludedNames(event.target.value)} /></div>
+                  </div>}
                   <Label>Audience &amp; location</Label>
                   <TargetingControls
                     value={targeting}
-                    onChange={setTargeting}
+                    onChange={(value) => { setTargeting(value); if (!unresolvedRecovery()) setPrepareReview(null); }}
                     brandAreas={business.locations ?? []}
+                    plannedAreas={plannedAreas}
+                    plannedExclusions={plannedExclusions}
                   />
                 </div>
 
@@ -989,6 +1102,9 @@ export function Campaigns({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="outline" onClick={() => void prepareManualCampaign(false)} disabled={preparing || creating}>
+                    <Save className="h-4 w-4" aria-hidden="true" /> Save draft
+                  </Button>
                   <Button onClick={() => void prepareManualCampaign()} disabled={preparing || selected.size === 0 || budget <= 0}>
                     {preparing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

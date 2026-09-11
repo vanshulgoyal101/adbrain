@@ -9,7 +9,50 @@ const creds = {
 
 afterEach(() => vi.restoreAllMocks());
 
+describe("MetaClient.verifyCampaignActivation", () => {
+  const campaign = { id: "camp_1", account_id: "123", status: "PAUSED" };
+  const adSet = { id: "set_1", status: "ACTIVE", daily_budget: "25000", promoted_object: { page_id: "999" } };
+  const mockDelivery = (campaignResponse: unknown, adSetResponse: unknown) => vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(new Response(JSON.stringify(campaignResponse)))
+    .mockResolvedValueOnce(new Response(JSON.stringify(adSetResponse)));
+
+  it("verifies the total ad-set budget and bound Page using only timed GET requests", async () => {
+    const fetchMock = mockDelivery(campaign, { data: [adSet, { ...adSet, id: "set_2" }] });
+    await new MetaClient(creds).verifyCampaignActivation("camp_1", { dailyBudgetRupees: 500, status: "paused" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.method).toBe("GET");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it.each([
+    ["foreign account", { ...campaign, account_id: "other" }, { data: [adSet] }],
+    ["changed budget", campaign, { data: [{ ...adSet, daily_budget: "90000" }] }],
+    ["changed Page", campaign, { data: [{ ...adSet, promoted_object: { page_id: "other" } }] }],
+    ["incomplete ad sets", campaign, { data: [adSet], paging: { next: "https://graph.facebook.com/next" } }],
+    ["lifetime budget", campaign, { data: [{ ...adSet, lifetime_budget: "100000" }] }],
+    ["invalid budget", campaign, { data: [{ ...adSet, daily_budget: "unknown" }] }],
+  ])("blocks %s", async (_label, campaignResponse, adSetResponse) => {
+    mockDelivery(campaignResponse, adSetResponse);
+    await expect(new MetaClient(creds).verifyCampaignActivation("camp_1", { dailyBudgetRupees: 250, status: "paused" }))
+      .rejects.toBeInstanceOf(MetaError);
+  });
+});
+
 describe("MetaClient.updateCampaignStatus", () => {
+  it("does not bind campaigns containing a different Page", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "set", status: "ACTIVE", daily_budget: "50000", promoted_object: { page_id: "other" } }] })));
+    expect(await new MetaClient(creds).readBoundCampaign({ id: "campaign", account_id: "123", name: "Other Page", status: "PAUSED", objective: "OUTCOME_LEADS" })).toBeNull();
+  });
+
+  it("reads a verified Page binding and ad-set budget for sync", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "set", status: "ACTIVE", daily_budget: "50000", promoted_object: { page_id: "999" } }] })));
+    expect(await new MetaClient(creds).readBoundCampaign({ id: "campaign", account_id: "123", name: "Our Page", status: "PAUSED", objective: "OUTCOME_LEADS" }))
+      .toEqual({ dailyBudgetRupees: 500, adSetId: "set" });
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
+  });
+
   it("POSTs the new status to the campaign node with the token", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

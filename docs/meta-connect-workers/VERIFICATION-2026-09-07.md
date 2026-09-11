@@ -2,6 +2,12 @@
 
 Date: 2026-09-07. Scope: integrated shared checkout, not a deployed release.
 
+Current release scope and evidence are in
+[Staging Workflow Completion](../releases/2026-09-staging-completion.md). The owner
+authorized broader promotion on 2026-09-11. The assessment below is historical;
+its real-consent caveats still apply, while its unreleased-feature status and
+instructions to limit work to one milestone are superseded.
+
 ## Verdict
 
 **Current product verdict, after the local follow-up and journey review: not yet
