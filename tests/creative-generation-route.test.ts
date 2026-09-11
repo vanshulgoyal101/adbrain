@@ -107,6 +107,20 @@ beforeEach(() => {
 });
 
 describe("creative generation route", () => {
+  it("uses the client generation id as the persisted variant group", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({
+      businessId: "business",
+      brief: "Installation",
+      format: "story",
+      generationId: "11111111-1111-4111-8111-111111111111",
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.insert.mock.calls[0][1]).toMatchObject({
+      variant_group: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
   it("saves completed variants and their receipt while reporting failed siblings", async () => {
     const { POST } = await import("@/app/api/creatives/generate/route");
     const response = await POST(request());

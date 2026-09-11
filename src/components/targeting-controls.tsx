@@ -184,7 +184,10 @@ function LocationPicker({
           className="pl-9"
         />
         {open && results.length > 0 && (
-          <ul className="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <ul
+            className="absolute z-30 mt-1 max-h-60 w-full overflow-y-scroll rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+            style={{ scrollbarGutter: "stable" }}
+          >
             {results.map((r) => (
               <li key={`${r.type}:${r.key}`}>
                 <button

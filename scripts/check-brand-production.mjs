@@ -6,12 +6,13 @@ import { parse } from "node-html-parser";
 import sharp from "sharp";
 
 const origin = "https://adbrain.vanshul.com";
+const assetVersion = "brain-2";
 const output = fileURLToPath(new URL("../test-results/brand-release/", import.meta.url));
 await mkdir(output, { recursive: true });
 const paths = markup => parse(markup).querySelectorAll("path").map(path => path.getAttribute("d"));
 const expected = paths(await readFile(new URL("../public/logo.svg", import.meta.url), "utf8"));
 for (const asset of ["logo.svg", "icon.svg", "favicon.ico", "icon-192.png", "icon-512.png", "apple-icon-180.png", "maskable-512.png"]) {
-  const response = await fetch(`${origin}/${asset}?v=brain-1`);
+  const response = await fetch(`${origin}/${asset}?v=${assetVersion}`);
   assert.equal(response.status, 200, asset);
   assert.ok(Buffer.from(await response.arrayBuffer()).equals(await readFile(new URL(`../public/${asset}`, import.meta.url))), `${asset}: deployed bytes differ`);
 }
@@ -33,7 +34,7 @@ try {
     for (const route of ["/", "/login", "/privacy"]) {
       await page.goto(`${origin}${route}`, { waitUntil: "networkidle" });
       assert.ok((await page.title()).includes("AdBrain"));
-      assert.ok(await page.locator('link[rel="icon"][href*="brain-1"]').count());
+      assert.ok(await page.locator(`link[rel="icon"][href*="${assetVersion}"]`).count());
       const mark = page.locator("svg.lucide-brain").first();
       assert.deepEqual(await mark.locator("path").evaluateAll(elements => elements.map(element => element.getAttribute("d"))), expected);
     }

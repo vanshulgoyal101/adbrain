@@ -244,7 +244,12 @@ export function LeadInbox({
             WhatsApp digest
             <span className="ml-auto text-xs font-normal text-slate-500">All {leads.length} enquiries</span>
           </summary>
-          <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700">{digest}</pre>
+          <pre
+            className="max-h-72 overflow-y-scroll whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700"
+            style={{ scrollbarGutter: "stable" }}
+          >
+            {digest}
+          </pre>
           <div className="mt-3 flex flex-wrap items-center gap-3 pb-4">
             <Button size="sm" variant="outline" onClick={copyDigest}>
               {copied ? <Check className="h-4 w-4 text-blue-600" /> : <Copy className="h-4 w-4" />}
