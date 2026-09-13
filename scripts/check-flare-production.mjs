@@ -34,6 +34,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   context.setDefaultTimeout(30_000);
   let logins = 0;
+  let authSession;
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -41,7 +42,11 @@ try {
       if (url.origin === origin && /^\/api\/(meta|cron|scheduler|campaigns)/.test(url.pathname)) return route.abort();
       return route.continue();
     }
-    if (url.origin === process.env.NEXT_PUBLIC_SUPABASE_URL && url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password" && logins++ === 0) return route.continue();
+    if (url.origin === process.env.NEXT_PUBLIC_SUPABASE_URL && url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password" && logins++ === 0) {
+      const response = await route.fetch({ maxRetries: 0 });
+      if (response.status() === 200) authSession = await response.json();
+      return route.fulfill({ response });
+    }
     return route.abort();
   });
   const page = await context.newPage();
@@ -52,10 +57,10 @@ try {
   await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
   const authResponse = await authPromise;
   assert.equal(authResponse.status(), 200, "Demo sign-in failed; credentials are not logged.");
-  const session = await authResponse.json();
+  assert.ok(authSession?.access_token, "Demo session was not captured before navigation.");
   await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith("/login"), { waitUntil: "load", timeout: 60_000 });
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${session.access_token}` } },
+    global: { headers: { Authorization: `Bearer ${authSession.access_token}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: baseline, error } = await supabase.from("creatives").select("id,business_id,brief,generation").eq("id", baselineId).single();
