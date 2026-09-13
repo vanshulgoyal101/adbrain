@@ -50,6 +50,29 @@ exclude entire test directories or suppress uninvestigated findings.
 
 ## Normal Development
 
+### Flare and Branch Synchronization: 2026-09-13
+
+The owner approved publishing the remaining Flare evaluation work and aligning
+all existing AdBrain branches and checkouts through the required PR checks.
+The pre-sync audit found local/remote `dev` and `main` at `1af9601`, with no
+unique commits on the historical pilot branch and no dirty release worktrees.
+There is no separate `staging` branch: `adbrain-staging-release` is a detached
+local checkout, not an independently isolated hosted staging environment.
+
+The source default, example configuration, and primary local model setting now
+use `openai/gpt-image-2.5-flare`, matching production's explicit override.
+Explicit `dev` and `release/meta-connect-pilot` deployment rules are disabled;
+only `main` is intended to deploy. Synchronizing Git does not authorize copying
+credentials, starting paid evaluations, applying migrations, or enabling previews.
+Private image artifacts and consumed evaluation guards remain Git-ignored.
+
+The existing Meta consent limitation remains externally unverified. Branch
+alignment does not establish successful customer OAuth or live campaign spending.
+Paid image evidence is recorded in [the production receipt](qa/flare-production-2026-09-12.md)
+and [the matched comparison](qa/flare-quality-2026-09-13.md).
+
+### Development Steps
+
 1. Confirm repository, branch, and local changes with `git status --short --branch`.
 2. Fetch remote state. Work on `dev`, or a feature branch based on current `dev`.
    Do not switch away from a dirty tree without preserving and understanding it.

@@ -61,7 +61,7 @@ Set these for **Production** (and Preview if you want previews to work):
 | `OPENROUTER_API_KEYS` | dedicated production key with a provider-side spending limit |
 | `LLM_PROVIDER_ORDER` | e.g. `openrouter,groq,cerebras,google` |
 | `OPENROUTER_MODEL` | e.g. `qwen/qwen3.8-max-0902` |
-| `OPENROUTER_IMAGE_MODEL` | e.g. `openai/gpt-image-2` |
+| `OPENROUTER_IMAGE_MODEL` | e.g. `openai/gpt-image-2.5-flare` |
 | `IMAGE_PROVIDER_FALLBACK` | `pollinations` for a non-paid image fallback |
 | `GOOGLE_AI_API_KEYS` | optional fallback keys |
 | `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |

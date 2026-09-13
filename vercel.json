@@ -3,7 +3,8 @@
     "deploymentEnabled": {
       "*": false,
       "main": true,
-      "dev": false
+      "dev": false,
+      "release/meta-connect-pilot": false
     }
   },
   "crons": [
