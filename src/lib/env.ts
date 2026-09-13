@@ -59,7 +59,7 @@ const schema = z.object({
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),
   IMAGE_PROVIDER_FALLBACK: z.string().optional().default("none"),
   POLLINATIONS_MODEL: z.string().optional().default("flux"),
-  OPENROUTER_IMAGE_MODEL: z.string().optional().default("openai/gpt-image-2"),
+  OPENROUTER_IMAGE_MODEL: z.string().optional().default("openai/gpt-image-2.5-flare"),
   FALAI_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),
   // Composite the designed poster (logo + headline + benefits + CTA) over the

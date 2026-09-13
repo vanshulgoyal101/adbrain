@@ -81,7 +81,7 @@ GEMINI_THINKING_HEADROOM=3000
 LLM_MONTHLY_TOKEN_LIMIT=2000000
 IMAGE_PROVIDER=openrouter
 IMAGE_PROVIDER_FALLBACK=pollinations
-OPENROUTER_IMAGE_MODEL=openai/gpt-image-2
+OPENROUTER_IMAGE_MODEL=openai/gpt-image-2.5-flare
 ```
 
 Qwen 3.8 Max through OpenRouter is the proposed paid primary copy model because

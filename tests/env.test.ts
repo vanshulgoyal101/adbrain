@@ -26,6 +26,7 @@ beforeEach(() => {
     "GOOGLE_AI_API_KEYS",
     "GROQ_API_KEYS",
     "OPENROUTER_API_KEYS",
+    "OPENROUTER_IMAGE_MODEL",
     "CEREBRAS_API_KEYS",
     "SUPABASE_SERVICE_ROLE_KEY",
     "NEXT_PUBLIC_SITE_URL",
@@ -94,7 +95,7 @@ describe("getEnv: optional values and defaults", () => {
     expect(withDefaults.GEMINI_MODEL).toBe("gemini-3.6-flash");
     expect(withDefaults.DEMO_USER_EMAIL).toBe("demo@adbrain.vanshul.com");
     expect(withDefaults.OPENROUTER_MODEL).toBe("qwen/qwen3.8-max-0902");
-    expect(withDefaults.OPENROUTER_IMAGE_MODEL).toBe("openai/gpt-image-2");
+    expect(withDefaults.OPENROUTER_IMAGE_MODEL).toBe("openai/gpt-image-2.5-flare");
     expect(withDefaults.IMAGE_PROVIDER_FALLBACK).toBe("none");
     expect(withDefaults.GEMINI_THINKING_HEADROOM).toBe(3000);
     expect(withDefaults.LLM_MONTHLY_TOKEN_LIMIT).toBe(2_000_000);
@@ -114,6 +115,11 @@ describe("getEnv: optional values and defaults", () => {
     await expect(
       loadEnv({ TRAFFIC_GENERATOR_MAX_ROUNDS: "1000" }),
     ).rejects.toThrow(/environment/i);
+  });
+
+  it("preserves an explicit image model override", async () => {
+    const env = await loadEnv({ OPENROUTER_IMAGE_MODEL: "openai/gpt-image-2" });
+    expect(env.OPENROUTER_IMAGE_MODEL).toBe("openai/gpt-image-2");
   });
 
   it("rejects a negative thinking headroom", async () => {
