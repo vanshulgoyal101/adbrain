@@ -33,8 +33,10 @@ export async function readBoundedResponse(
   response: Response,
   maximum = MAX_IMAGE_BYTES,
 ): Promise<Uint8Array> {
-  if (Number(response.headers.get("content-length")) > maximum)
+  if (Number(response.headers.get("content-length")) > maximum) {
+    await response.body?.cancel();
     throw new Error("Image response is too large.");
+  }
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Image response has no body.");
   const chunks: Uint8Array[] = [];
@@ -48,7 +50,7 @@ export async function readBoundedResponse(
       chunks.push(value);
     }
   } finally {
-    await reader.cancel();
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   return Buffer.concat(chunks);

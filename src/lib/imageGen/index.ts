@@ -2,7 +2,8 @@ import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
 import type { GeneratedImage, ImageProvider, ImageRequest } from "./types";
-import { readBoundedResponse, validateRaster } from "./raster";
+import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
+import { fetchPublicUrl } from "@/lib/security/ssrf";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
@@ -67,9 +68,13 @@ export async function downloadImage(
   url: string,
   signal?: AbortSignal,
 ): Promise<{ bytes: Uint8Array; contentType: string; width: number; height: number }> {
-  const res = await fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
-  if (!res.ok) {
-    throw new Error(`Failed to download image (${res.status}).`);
+  signal?.throwIfAborted();
+  if (url.startsWith("data:")) {
+    if (url.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 64) throw new Error("Image response is too large.");
+    const match = /^data:image\/(?:png|jpeg|webp);base64,([a-z\d+/]+={0,2})$/i.exec(url);
+    if (!match) throw new Error("Expected a base64 PNG, JPEG or WebP image.");
+    return validateRaster(Buffer.from(match[1], "base64"));
   }
+  const res = await fetchPublicUrl(url, { signal, timeoutMs: 30_000 });
   return validateRaster(await readBoundedResponse(res));
 }

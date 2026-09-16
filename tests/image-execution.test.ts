@@ -151,6 +151,25 @@ describe("image execution", () => {
       vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 })),
     );
     const { generateImage } = await import("@/lib/imageGen");
-    await expect(generateImage({ prompt: "test" })).rejects.toThrow("503");
+    await expect(generateImage({ prompt: "test" })).rejects.toMatchObject({ code: "status", status: 503 });
+  });
+
+  it.each(["http://[::ffff:127.0.0.1]/image.png", "file:///image.png", "data:text/html;base64,PHNjcmlwdD4="])(
+    "rejects unsafe media before making a request: %s", async (url) => {
+      const fetchMock = mockProvider();
+      const { downloadImage } = await import("@/lib/imageGen");
+      await expect(downloadImage(url)).rejects.toThrow();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects an image redirect to cloud metadata", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 302, headers: { location: "http://169.254.169.254/" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { downloadImage } = await import("@/lib/imageGen");
+    await expect(downloadImage("https://example.com/image.png")).rejects.toMatchObject({ code: "blocked" });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

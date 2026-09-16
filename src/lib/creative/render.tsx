@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import type { AdDesignSpec } from "./design";
+import { downloadImage } from "@/lib/imageGen";
 
 /**
  * Rasterise an {@link AdDesignSpec} into a finished poster-style ad using the
@@ -9,7 +10,14 @@ import type { AdDesignSpec } from "./design";
  * a contact/CTA bar laid on top the way a human designer would.
  */
 export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array> {
-  const res = new ImageResponse(<AdComposite spec={spec} />, {
+  const [backgroundUrl, logoUrl] = await Promise.all(
+    [spec.backgroundUrl, spec.logoUrl].map(async (url) => {
+      if (!url) return null;
+      const image = await downloadImage(url);
+      return `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`;
+    }),
+  );
+  const res = new ImageResponse(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} />, {
     width: spec.width,
     height: spec.height,
   });

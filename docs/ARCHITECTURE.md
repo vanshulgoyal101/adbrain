@@ -12,6 +12,10 @@ treated as an engineering concern: shared visual tokens, navigation hierarchy,
 workflow states, responsive behavior, and recovery states are cross-cutting
 interfaces, not page-specific decoration.
 
+The [September 16 security and quality audit](qa/security-quality-audit-2026-09-16.md)
+records the shared DNS-checked outbound fetch policy, media limits, regression
+evidence, and remaining audit gates.
+
 ---
 
 ## 1. What AdBrain is
@@ -44,7 +48,7 @@ Design principles:
 | Styling | Tailwind CSS v4, `lucide-react` icons, small local UI primitives (`components/ui`) |
 | Auth / DB / Storage | Supabase (`@supabase/ssr`): magic-link + Google OAuth, Postgres with Row-Level Security, Storage buckets |
 | LLM | Provider-agnostic (`lib/llm`): Gemini + OpenAI-compatible (Groq/OpenRouter/Cerebras), JSON mode, multi-key rotation |
-| Images | `lib/imageGen`: Pollinations by default (keyless, URL-based) |
+| Images | `lib/imageGen`: OpenRouter GPT Image 2.5 Flare by default; explicit provider selection and no implicit free fallback |
 | Ads | Meta Graph API v21 (`lib/meta/client.ts`) |
 | Validation | Zod (env + boundaries) |
 | Tests | Vitest (node + jsdom), Testing Library |
@@ -97,7 +101,7 @@ current auth user owns that business. Storage buckets (`brand-assets`,
 | `profiles` | 1:1 with `auth.users` | created by a trigger on signup |
 | `businesses` | the Brand Brain | `vertical` (industry, free text), voice, colours, USPs, offers, `languages[]`, `locations[]` |
 | `brand_assets` | logos / product photos / past ads | stored in the `brand-assets` bucket |
-| `meta_credentials` | per-business Meta creds (one row/business): OAuth **or** single-tenant env fallback; `token_type`, `token_expires_at`, `scopes`, nullable account/page while pending |
+| `meta_credentials` | legacy per-business credential records; active publishing uses owner-scoped encrypted connections, not a shared server-token fallback |
 | `spend_limits` | per-business ad-spend guardrails: `weekly_cap_rupees` (null = none), `alert_pct`, `auto_pause` |
 | `creatives` | generated ads | `angle`, `headline`, `primary_text`, `cta`, `image_url`, `status` (draft/approved), `variant_group` |
 | `campaigns` | launched campaigns | `meta_campaign_id`, `status`, `daily_budget`, `creative_ids[]`, `raw jsonb`; **unique (business_id, meta_campaign_id)** |
