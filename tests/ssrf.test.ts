@@ -2,10 +2,47 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchPublicUrlText,
   isBlockedHost,
+  lookupPublicHost,
   parsePublicUrl,
   resolveRedirectTarget,
   SafeFetchError,
 } from "@/lib/security/ssrf";
+
+const { dnsLookup } = vi.hoisted(() => ({ dnsLookup: vi.fn() }));
+vi.mock("node:dns", () => ({ lookup: dnsLookup }));
+
+describe("connection-time DNS validation", () => {
+  it("blocks an internal DNS result through the actual fetch dispatcher", async () => {
+    dnsLookup.mockImplementationOnce((_host, _options, callback) => {
+      callback(null, [{ address: "127.0.0.1", family: 4 }]);
+    });
+    await expect(fetchPublicUrlText("http://dns-boundary.example.invalid/"))
+      .rejects.toMatchObject({ code: "blocked" });
+  });
+
+  it.each([
+    [{ address: "127.0.0.1", family: 4 }],
+    [{ address: "8.8.8.8", family: 4 }, { address: "10.0.0.1", family: 4 }],
+    [{ address: "::ffff:7f00:1", family: 6 }],
+    [],
+  ])("rejects non-public or empty DNS answers %j", (...addresses) => {
+    dnsLookup.mockImplementationOnce((_host, _options, callback) => {
+      (callback as unknown as (error: null, result: unknown) => void)(null, addresses);
+    });
+    const callback = vi.fn();
+    lookupPublicHost("public.example.com", {}, callback);
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ code: "blocked" }), "", 4);
+  });
+
+  it("hands the validated address directly to the connection callback", () => {
+    dnsLookup.mockImplementationOnce((_host, _options, callback) => {
+      (callback as unknown as (error: null, result: unknown) => void)(null, [{ address: "8.8.8.8", family: 4 }]);
+    });
+    const callback = vi.fn();
+    lookupPublicHost("public.example.com", {}, callback);
+    expect(callback).toHaveBeenCalledWith(null, "8.8.8.8", 4);
+  });
+});
 
 describe("isBlockedHost", () => {
   it("blocks loopback and named internal hosts", () => {
@@ -81,6 +118,22 @@ describe("parsePublicUrl", () => {
     expect(parsePublicUrl("169.254.169.254")).toBeNull();
     expect(parsePublicUrl("http://10.0.0.1/secret")).toBeNull();
   });
+
+  it.each([
+    "http://[::ffff:127.0.0.1]/",
+    "http://[::ffff:a9fe:a9fe]/",
+    "http://[fe90::1]/",
+    "http://localhost./",
+    "http://100.64.0.1/",
+    "http://user:password@example.com/",
+  ])("rejects non-public or credential-bearing URL %s", (input) => {
+    expect(parsePublicUrl(input)).toBeNull();
+  });
+
+  it.each(["https://fda.gov/", "https://fcb.example.com/"])(
+    "does not treat hostname prefixes as IPv6: %s",
+    (input) => expect(parsePublicUrl(input)?.toString()).toBe(input),
+  );
 
   it("rejects non-http(s) schemes", () => {
     expect(parsePublicUrl("ftp://example.com")).toBeNull();
@@ -182,5 +235,35 @@ describe("fetchPublicUrlText", () => {
     await expect(
       fetchPublicUrlText("https://example.com"),
     ).rejects.toMatchObject({ code: "status", status: 404 });
+  });
+
+  it("enforces decoded byte limits without trusting content-length", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("\u00e9\u00e9", {
+      headers: { "content-length": "1" },
+    }));
+    await expect(fetchPublicUrlText("https://example.com", { maxBytes: 3 }))
+      .rejects.toMatchObject({ code: "too_big" });
+  });
+
+  it("cancels an oversized stream before consuming the remainder", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) { controller.enqueue(new Uint8Array(10)); },
+      cancel,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body));
+    await expect(fetchPublicUrlText("https://example.com", { maxBytes: 5 }))
+      .rejects.toMatchObject({ code: "too_big" });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps one deadline and a guarded dispatcher across redirect hops", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(redirect("/next"))
+      .mockResolvedValueOnce(new Response("final"));
+    await fetchPublicUrlText("https://example.com");
+    const first = fetchMock.mock.calls[0][1];
+    expect(first).toHaveProperty("dispatcher");
+    expect(fetchMock.mock.calls[1][1]?.signal).toBe(first?.signal);
   });
 });

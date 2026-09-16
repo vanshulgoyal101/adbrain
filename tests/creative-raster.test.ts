@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { mkdir, writeFile } from "node:fs/promises";
 import {
@@ -10,6 +10,20 @@ import { renderCompositeAd } from "@/lib/creative/render";
 import type { CreativeConcept } from "@/lib/creative/concept";
 
 describe("actual creative raster output", () => {
+  it("blocks a private logo before the renderer can fetch it", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    try {
+      const design = buildAdDesign({
+        brand: { name: "Example", logo_url: "http://[::ffff:7f00:1]/logo.png" },
+        copy: { headline: "Example", primary_text: "A local service", cta: "Learn More" },
+      });
+      await expect(renderCompositeAd(design)).rejects.toMatchObject({ code: "blocked" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it.each(Object.keys(AD_FORMATS) as AdFormat[])(
     "renders nonblank %s composites in every text position",
     async (format) => {

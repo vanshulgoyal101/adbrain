@@ -10,6 +10,25 @@
 
 ## Product experience program
 
+### Verified development changes (2026-09-16)
+
+These changes are implemented on `dev`, not yet promoted to production. See the
+[security and quality audit](qa/security-quality-audit-2026-09-16.md) for evidence,
+release requirements and limits.
+
+| Status | Feature | Contract |
+| --- | --- | --- |
+| Built on dev | Public guide library | `/guides`, creative-size reference and Meta readiness checklist; static HTML, related links, per-page metadata and sitemap registration |
+| Built on dev | Shared outbound URL/media protection | Connection-time DNS and redirect checks; bounded text/images; compositor receives validated inline rasters |
+| Built on dev | Auth and settings hardening | Safe auth return paths, validated request types, safe error messages, sign-out failure/retry state |
+| Built on dev | Dependency and PostgreSQL CI gates | High-severity audit gate, fresh/upgrade DB execution and concurrency checks |
+| Migration required | Trusted usage and rate enforcement | Server-only writes/RPC; atomic shared limiter; all-row tenant-scoped quota aggregate; production fails closed if unavailable |
+
+Production already uses GPT Image 2.5 Flare through OpenRouter. Saved campaign
+drafts and durable Meta operations were released in September; real customer
+Meta consent remains externally unverified. Older dated tables below are historical
+inventory, not fresh release evidence.
+
 The product-design plan is tracked in
 [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). The current focus is
 making AdBrain feel like a coherent, trustworthy marketing workspace rather

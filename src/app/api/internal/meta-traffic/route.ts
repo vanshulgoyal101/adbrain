@@ -5,15 +5,10 @@ import { metaClientForBusiness } from "@/lib/meta/credentials";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-interface RunBody {
-  rounds?: number;
-  createDraftCampaigns?: boolean;
-  campaignsPerRound?: number;
-}
 
 interface RoundSummary {
   round: number;
@@ -64,7 +59,13 @@ export async function POST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = (await req.json().catch(() => ({}))) as RunBody;
+  const parsed = z.object({
+    rounds: z.number().optional(),
+    createDraftCampaigns: z.boolean().optional(),
+    campaignsPerRound: z.number().optional(),
+  }).safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid traffic-runner settings." }, { status: 422 });
+  const body = parsed.data;
   const env = getEnv();
   const rounds = clampInt(body.rounds, 1, env.TRAFFIC_GENERATOR_MAX_ROUNDS, 5);
   const createDraftCampaigns = body.createDraftCampaigns === true;

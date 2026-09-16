@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandForm } from "@/components/brand-form";
+import { BrandAssets } from "@/components/brand-assets";
 import { Instructions } from "@/components/instructions";
 import type { AdInstruction, Business } from "@/lib/types";
 
@@ -11,6 +12,7 @@ const h = vi.hoisted(() => ({
   saveInstruction: vi.fn(),
   deleteInstruction: vi.fn(),
   refresh: vi.fn(),
+  storageFrom: vi.fn(),
 }));
 const { saveBusiness, saveInstruction, deleteInstruction } = h;
 
@@ -20,6 +22,9 @@ vi.mock("@/app/(app)/brand/instruction-actions", () => ({
   deleteInstruction: h.deleteInstruction,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({ storage: { from: h.storageFrom } }),
+}));
 
 const business = (over: Partial<Business> = {}): Business =>
   ({
@@ -64,6 +69,16 @@ beforeEach(() => {
 });
 
 describe("<BrandForm> prefill", () => {
+  it.each(["image/svg+xml", "image/gif", "text/html", ""])("rejects unsupported asset type %s before uploading", (type) => {
+    render(<BrandAssets businessId="b1" initialAssets={[]} />);
+    fireEvent.change(screen.getByLabelText("Image file"), {
+      target: { files: [new File(["asset"], "asset", { type })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+    expect(screen.getByText("Choose a PNG, JPEG or WebP image.")).toBeInTheDocument();
+    expect(h.storageFrom).not.toHaveBeenCalled();
+  });
+
   it("starts empty for a brand new business", () => {
     render(<BrandForm business={null} />);
     expect(screen.getByPlaceholderText("Your business name")).toHaveValue("");

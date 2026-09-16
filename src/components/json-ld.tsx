@@ -1,8 +1,7 @@
-import type { JsonLdObject } from "@/lib/seo/jsonLd";
+import { serializeJsonLd, type JsonLdObject } from "@/lib/seo/jsonLd";
 
 /**
- * Renders a JSON-LD structured-data block. `data` is trusted, server-built
- * schema (never user input), so dangerouslySetInnerHTML is safe here.
+ * Renders server-built schema using an HTML-safe JSON serialization.
  */
 export function JsonLd({
   data,
@@ -12,7 +11,7 @@ export function JsonLd({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
     />
   );
 }

@@ -39,7 +39,10 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
-    return [{ source: "/:path*", headers: getSecurityHeaders(supabaseUrl) }];
+    return [
+      { source: "/:path*", headers: getSecurityHeaders(supabaseUrl) },
+      { source: "/(api|auth|connect)/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
+    ];
   },
 };
 

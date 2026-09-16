@@ -1,4 +1,6 @@
 import { getEnv } from "@/lib/env";
+import { fetchPublicUrl } from "@/lib/security/ssrf";
+import { readBoundedResponse } from "@/lib/imageGen/raster";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -509,14 +511,14 @@ export class MetaClient {
     }
     let imgRes: Response;
     try {
-      imgRes = await fetch(parsed, { signal: AbortSignal.timeout(30_000) });
+      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000 });
     } catch {
       throw new MetaError("Could not fetch the creative image.");
     }
     if (!imgRes.ok) {
       throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
     }
-    const b64 = Buffer.from(await imgRes.arrayBuffer()).toString("base64");
+    const b64 = Buffer.from(await readBoundedResponse(imgRes)).toString("base64");
     const data = await this.graph<{ images: Record<string, { hash: string }> }>(
       `${this.creds.adAccountId}/adimages`,
       { method: "POST", form: { bytes: b64 } },

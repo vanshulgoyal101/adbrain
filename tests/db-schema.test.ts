@@ -170,13 +170,16 @@ describe("schema: check_rate_limit function", () => {
     expect(body).toContain("set search_path = public");
   });
 
-  it("is not executable by the public role but is granted to app roles", () => {
+  it("is service-only and serializes competing checks for the same key", () => {
     expect(SQL).toContain(
-      "revoke all on function public.check_rate_limit(text, integer, integer) from public",
+      "revoke all on function public.check_rate_limit(text, integer, integer) from public, anon, authenticated",
     );
     expect(SQL).toMatch(
-      /grant execute on function public\.check_rate_limit\(text, integer, integer\)\s*\n?\s*to authenticated, anon/,
+      /grant execute on function public\.check_rate_limit\(text, integer, integer\)\s*to service_role/,
     );
+    expect(SQL).toContain("pg_advisory_xact_lock(hashtextextended(p_key, 0))");
+    expect(SQL).not.toContain('create policy "llm_usage_events: insert own business"');
+    expect(SQL).toContain("constraint llm_usage_nonnegative");
   });
 });
 

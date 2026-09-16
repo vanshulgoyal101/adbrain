@@ -8,14 +8,28 @@ acceptance criteria, and delivery sequence live in
 [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). This file answers
 "what next, and why".
 
-## Planned Meta onboarding
+## Current Release Priorities (2026-09-16)
+
+1. Review the tested security/quality batches on `dev` and coordinate the trusted
+	usage/rate-limit migration before production promotion. See the
+	[audit and cutover notes](qa/security-quality-audit-2026-09-16.md).
+2. Complete real Meta consent and account/Page selection with the intended owner.
+	Existing local transaction tests do not establish live provider consent.
+3. Verify the public guide routes, submit the sitemap through an owner-controlled
+	search console, and measure index coverage and relevant queries after release.
+	No keyword stuffing, synthetic reviews or rank guarantees.
+4. Add permissioned, measured customer examples when there is evidence. Keep paid
+	generation and campaign activation separately authorized.
+
+## Meta onboarding
 
 The [Meta Instant Connect implementation plan](META-INSTANT-CONNECT-PLAN.md)
 defines contextual business linking, secure credential storage, deterministic
 asset selection, resumable campaign preparation, and eligibility-gated account
 provisioning. It includes proposed schema/API contracts, code sketches, external
-Meta approval gates, rollout phases, and acceptance tests. Planning only; no
-implementation or database migration has been applied.
+Meta approval gates, rollout phases, and acceptance tests. Draft persistence and
+durable campaign operations were released in September; the plan is no longer
+entirely prospective. Real customer consent remains an external verification gate.
 
 ## September Product Audit
 
@@ -68,7 +82,7 @@ Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
 | **Branded auth domain (no `*.supabase.co`)** | Sign-in currently bounces the browser through the raw project host (`<ref>.supabase.co`) — for Google *and* for magic-link `verify` links. It looks untrustworthy next to a phishing warning, and on some networks (e.g. Safari + iCloud Private Relay) the browser shows a scary "connection is not private" interstitial instead of a login screen. Two routes: **(a)** Supabase **Pro custom domain** (`auth.adbrain.vanshul.com`) — near-zero code, also removes free-tier auto-pausing, ~$10/mo; **(b)** free but more code — run Google OAuth ourselves (`/api/auth/google/{start,callback}` reusing the HMAC-signed-state pattern from `lib/meta/oauth.ts`) and finish with `signInWithIdToken`, plus proxy `/auth/v1/verify` for magic links. Prefer (a) once on a paid plan. | (a) Pro plan; (b) Google Console redirect URI | (a) S · (b) M |
 | **Weekly WhatsApp results digest** | "14 leads at ₹19 each this week" — the retention hook and the plain-language moat. | scheduled sync + send channel | M |
 | **Lead → deal → revenue (ROI)** | Show return, not just cost per lead — what justifies the subscription at renewal. Mark lead won + value. | — | M |
-| **Paid image provider** | Creative quality is do-or-die; default Pollinations is free/variable. The `imageGen` layer is already swappable (fal.ai / OpenAI). Evaluate one paid provider before recurring billing; private demos may continue using Pollinations with a fallback pack. | budget + key | S |
+| **Paid image evaluation follow-up** | Flare is the current OpenRouter image model. Matched samples favored cost with comparable quality; broader product fidelity and conversion evidence remain open. Do not repeat paid evaluations without a bounded authorization. | representative fixtures + approved budget | M |
 | **Long ops → job/queue** | Creative generation (LLM + image + compositing) runs inline; on serverless this risks function timeouts under load. | queue choice | M |
 | **Trends dashboard** | CPL/leads over time — turns raw snapshots into a story owners revisit. | historical results | M |
 

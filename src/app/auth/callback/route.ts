@@ -12,7 +12,10 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("redirect") ?? "/dashboard";
+  const requestedPath = searchParams.get("redirect") ?? "/dashboard";
+  const next = requestedPath.startsWith("/") && !requestedPath.startsWith("//") &&
+    !/[\\\u0000-\u0020]/.test(requestedPath)
+    ? requestedPath : "/dashboard";
 
   const supabase = await createClient();
 

@@ -39,7 +39,8 @@ export function LegalPage({
       <footer className="border-t border-slate-200 py-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-500 sm:flex-row">
           <span>© {new Date().getFullYear()} AdBrain. All rights reserved.</span>
-          <nav className="flex gap-4">
+          <nav aria-label="Resources and legal" className="flex flex-wrap justify-center gap-4">
+            <Link href="/guides" className="hover:underline">Guides</Link>
             {LEGAL_LINKS.map((l) => (
               <Link key={l.href} href={l.href} className="hover:underline">
                 {l.label}

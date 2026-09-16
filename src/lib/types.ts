@@ -514,6 +514,10 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      monthly_token_usage: {
+        Args: { p_business_id: string; p_since: string };
+        Returns: number;
+      };
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number };
         Returns: { allowed: boolean; retry_after_ms: number }[];

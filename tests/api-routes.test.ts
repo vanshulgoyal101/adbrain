@@ -116,6 +116,22 @@ const signedIn = (over: Record<string, unknown> = {}) =>
   });
 
 describe("POST /api/spend-limits", () => {
+  it.each([null, [], true, { weeklyCapRupees: [] }, { weeklyCapRupees: "500" }, { weeklyCapRupees: 2_147_483_648 }, { autoPause: "false" }, { alertPct: true }])(
+    "rejects malformed settings without writing: %j", async (body) => {
+      signedIn();
+      const { POST } = await import("@/app/api/spend-limits/route");
+      expect((await POST(post(body))).status).toBe(422);
+      expect(upsert).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects invalid JSON without resetting settings", async () => {
+    signedIn();
+    const { POST } = await import("@/app/api/spend-limits/route");
+    expect((await POST(new Request("http://localhost/api/spend-limits", { method: "POST", body: "{" }))).status).toBe(422);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it("rejects anonymous callers", async () => {
     anon();
     const { POST } = await import("@/app/api/spend-limits/route");
@@ -159,6 +175,15 @@ describe("POST /api/spend-limits", () => {
 });
 
 describe("POST /api/meta/connect", () => {
+  it.each([null, [], { businessId: 42 }, { businessId: "b1", adAccountId: {}, pageId: "p1" }])(
+    "rejects malformed selection before ownership lookup: %j", async (body) => {
+      signedIn();
+      const { POST } = await import("@/app/api/meta/connect/route");
+      expect((await POST(nextPost(body))).status).toBe(422);
+      expect(requireOwnedBusiness).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects anonymous callers", async () => {
     anon();
     const { POST } = await import("@/app/api/meta/connect/route");

@@ -73,6 +73,60 @@ async function verify(database, source) {
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
 
+    await check(`${database}: quota ledger and limiter are server-only`, async () => {
+      for (const role of ["anon", "authenticated"]) {
+        const { rows } = await db.query(`select
+          has_table_privilege($1, 'public.llm_usage_events', 'INSERT') as can_insert,
+          has_function_privilege($1, 'public.check_rate_limit(text,integer,integer)', 'EXECUTE') as can_limit`, [role]);
+        assert.equal(rows[0].can_insert, false);
+        assert.equal(rows[0].can_limit, false);
+      }
+    });
+    await check(`${database}: negative usage cannot lower the quota ledger`, async () => {
+      await assert.rejects(db.query(`insert into public.llm_usage_events
+        (business_id, user_id, route, provider, model, total_tokens)
+        values ($1, $2, 'test', 'test', 'test', -1)`, [businessId, ownerId]),
+      { code: "23514" });
+    });
+    await check(`${database}: quota totals include all rows and enforce tenant RLS`, async () => {
+      await db.query(`insert into public.llm_usage_events
+        (business_id, user_id, route, provider, model, total_tokens)
+        select $1, $2, 'test', 'test', 'test', 2 from generate_series(1, 1100)`, [businessId, ownerId]);
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+        const owned = await session.query("select public.monthly_token_usage($1, now() - interval '1 day') as total", [businessId]);
+        assert.equal(Number(owned.rows[0].total), 2200);
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [randomUUID()]);
+        const foreign = await session.query("select public.monthly_token_usage($1, now() - interval '1 day') as total", [businessId]);
+        assert.equal(Number(foreign.rows[0].total), 0);
+      } finally {
+        await session.end();
+      }
+    });
+    await check(`${database}: concurrent rate checks cannot exceed capacity`, async () => {
+      const key = `rate-test:${randomUUID()}`;
+      const results = await Promise.all(Array.from({ length: 12 }, async () => {
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("set role service_role");
+          return (await session.query("select * from public.check_rate_limit($1, 3, 60000)", [key])).rows[0];
+        } finally {
+          await session.end();
+        }
+      }));
+      assert.equal(results.filter(result => result.allowed).length, 3);
+      assert.ok(results.filter(result => !result.allowed).every(result => result.retry_after_ms > 0));
+    });
+    await check(`${database}: invalid rate windows fail without inserting`, async () => {
+      await assert.rejects(db.query("select * from public.check_rate_limit('invalid', 1, 0)"), { code: "22023" });
+      const { rows } = await db.query("select count(*)::int as count from public.rate_limit_hits where key = 'invalid'");
+      assert.equal(rows[0].count, 0);
+    });
+
     const operationDrafts = new Map();
     const claim = async (key, operationId = randomUUID(), targetDraftId) => {
       if (!targetDraftId) {
@@ -302,8 +356,9 @@ try {
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
-  await verify("fresh_install", schema);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}`);
+  const trustedUsageMigration = await readFile(join(root, "db/migrations/20260916_trusted_usage_and_rate_limits.sql"), "utf8");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

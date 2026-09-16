@@ -13,14 +13,18 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run audit:dependencies
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:coverage
+      - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db
       - run: npm run build
 
   secrets:

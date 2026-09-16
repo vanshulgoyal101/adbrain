@@ -3,56 +3,46 @@
  * loopback, private, link-local, and other non-public hosts so a fetch on the
  * server can't be pointed at internal infrastructure or cloud metadata.
  *
- * Note: this is a hostname/literal-IP check. DNS rebinding (a public name that
- * resolves to a private IP) is out of scope here. Use fetchPublicUrlText to
- * fetch, which re-validates every redirect hop with a short timeout.
+ * URL parsing checks literals; the shared transport also validates DNS answers
+ * at connection time and re-validates every redirect hop.
  */
 
-function isBlockedIPv4(host: string): boolean {
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const [a, b] = [Number(m[1]), Number(m[2])];
-  const octets = [a, b, Number(m[3]), Number(m[4])];
-  if (octets.some((n) => n > 255)) return true; // malformed → block
-  if (a === 127 || a === 10 || a === 0) return true; // loopback / private / this-host
-  if (a === 192 && b === 168) return true; // private
-  if (a === 169 && b === 254) return true; // link-local (incl. cloud metadata)
-  if (a === 172 && b >= 16 && b <= 31) return true; // private
-  if (a >= 224) return true; // multicast / reserved
-  return false;
-}
+import ipaddr from "ipaddr.js";
+import { lookup } from "node:dns";
+import type { LookupFunction } from "node:net";
+import { Agent } from "undici";
+
+export const lookupPublicHost: LookupFunction = (hostname, options, callback) => {
+  lookup(hostname, { ...options, all: true }, (error, addresses) => {
+    if (error) return callback(error, "", 4);
+    if (!addresses.length || addresses.some(({ address }) => isBlockedHost(address))) {
+      return callback(new SafeFetchError("blocked"), "", 4);
+    }
+    if (options.all) return callback(null, addresses);
+    callback(null, addresses[0].address, addresses[0].family);
+  });
+};
+
+const publicDispatcher = new Agent({ connect: { lookup: lookupPublicHost } });
 
 /** True if the hostname must not be fetched from the server. */
 export function isBlockedHost(hostname: string): boolean {
-  let h = (hostname ?? "").trim().toLowerCase().replace(/^\[|\]$/g, "");
-  if (!h) return true;
+  const host = (hostname ?? "").trim().toLowerCase()
+    .replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  if (!host) return true;
 
   // Named hosts that resolve to internal networks.
   if (
-    h === "localhost" ||
-    h.endsWith(".local") ||
-    h.endsWith(".internal") ||
-    h.endsWith(".localhost")
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".localhost")
   ) {
     return true;
   }
 
-  // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) — unwrap and re-check as IPv4.
-  const mapped = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (mapped) h = mapped[1];
-
-  // IPv6 loopback / link-local / unique-local.
-  if (
-    h === "::1" ||
-    h === "::" ||
-    h.startsWith("fe80:") ||
-    h.startsWith("fc") ||
-    h.startsWith("fd")
-  ) {
-    return true;
-  }
-
-  return isBlockedIPv4(h);
+  if (ipaddr.isValid(host)) return ipaddr.process(host).range() !== "unicast";
+  return host.includes(":") || /^[\d.]+$/.test(host);
 }
 
 /**
@@ -79,6 +69,7 @@ export function parsePublicUrl(input: string): URL | null {
     return null;
   }
   if (!["http:", "https:"].includes(parsed.protocol)) return null;
+  if (parsed.username || parsed.password) return null;
   if (isBlockedHost(parsed.hostname)) return null;
   return parsed;
 }
@@ -120,58 +111,93 @@ export class SafeFetchError extends Error {
  * — closing the redirect-to-internal-IP bypass that `redirect: "follow"` has.
  * Returns the response body text (capped), or throws a SafeFetchError.
  */
-export async function fetchPublicUrlText(
+export async function fetchPublicUrl(
   input: string,
   opts: {
     maxRedirects?: number;
     timeoutMs?: number;
-    maxBytes?: number;
     headers?: Record<string, string>;
+    signal?: AbortSignal;
   } = {},
-): Promise<string> {
+): Promise<Response> {
   const {
     maxRedirects = 5,
     timeoutMs = 10_000,
-    maxBytes = 2_000_000,
     headers,
   } = opts;
 
   let current = parsePublicUrl(input);
   if (!current) throw new SafeFetchError("blocked");
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const signal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     let res: Response;
     try {
-      res = await fetch(current.toString(), {
+      const init: RequestInit & { dispatcher: Agent } = {
         headers,
         redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch {
+        cache: "no-store",
+        signal,
+        dispatcher: publicDispatcher,
+      };
+      res = await fetch(current.toString(), init);
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      if (error instanceof Error && error.cause instanceof SafeFetchError) throw error.cause;
       throw new SafeFetchError("fetch");
     }
 
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location");
+      await res.body?.cancel();
       if (!location) throw new SafeFetchError("redirect");
       const next = resolveRedirectTarget(location, current);
       if (!next) throw new SafeFetchError("blocked");
+      if (next.origin !== current.origin && headers &&
+          Object.keys(headers).some((name) => /^(authorization|cookie|proxy-authorization)$/i.test(name))) {
+        throw new SafeFetchError("blocked");
+      }
       current = next;
       continue;
     }
 
-    if (!res.ok) throw new SafeFetchError("status", res.status);
-
-    const declared = Number(res.headers.get("content-length") ?? "");
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      throw new SafeFetchError("too_big");
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new SafeFetchError("status", res.status);
     }
-
-    const text = await res.text();
-    if (text.length > maxBytes) throw new SafeFetchError("too_big");
-    return text;
+    return res;
   }
 
   throw new SafeFetchError("redirect");
+}
+
+export async function fetchPublicUrlText(
+  input: string,
+  opts: Parameters<typeof fetchPublicUrl>[1] & { maxBytes?: number } = {},
+): Promise<string> {
+  const maximum = opts.maxBytes ?? 2_000_000;
+  const response = await fetchPublicUrl(input, opts);
+  if (Number(response.headers.get("content-length")) > maximum) {
+    await response.body?.cancel();
+    throw new SafeFetchError("too_big");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      size += value.byteLength;
+      if (size > maximum) throw new SafeFetchError("too_big");
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
 }
 

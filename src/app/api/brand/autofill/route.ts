@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { parse } from "node-html-parser";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
 import { fetchPublicUrlText, parsePublicUrl, SafeFetchError } from "@/lib/security/ssrf";
@@ -40,13 +41,13 @@ export async function POST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = (await req.json().catch(() => null)) as { url?: string } | null;
-  const rawUrl = (body?.url ?? "").trim();
-  if (!rawUrl) {
-    return NextResponse.json({ error: "url is required" }, { status: 400 });
+  const body = z.object({ url: z.string().trim().min(1).max(2048) })
+    .safeParse(await req.json().catch(() => null));
+  if (!body.success) {
+    return NextResponse.json({ error: "A website URL of at most 2048 characters is required." }, { status: 400 });
   }
 
-  const parsed = parsePublicUrl(rawUrl);
+  const parsed = parsePublicUrl(body.data.url);
   if (!parsed) {
     return NextResponse.json({ error: "That URL is not allowed" }, { status: 400 });
   }
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
   let html: string;
   try {
     html = await fetchPublicUrlText(parsed.toString(), {
-      headers: { "User-Agent": "AdBrainBot/1.0 (+https://adbrain.app)" },
+      headers: { "User-Agent": "AdBrainBot/1.0 (+https://adbrain.vanshul.com)" },
       timeoutMs: 10_000,
     });
   } catch (err) {
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Could not extract business details. Try again later or enter them manually." },
       { status: 502 },
     );
   }

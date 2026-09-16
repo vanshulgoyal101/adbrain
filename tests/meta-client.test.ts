@@ -155,6 +155,22 @@ describe("friendlyMetaError", () => {
 });
 
 describe("MetaClient input boundaries", () => {
+  it.each(["http://localhost./image.png", "http://[::ffff:7f00:1]/image.png"])(
+    "rejects private media without fetching or uploading: %s", async (url) => {
+      const fetchMock = vi.spyOn(globalThis, "fetch");
+      await expect(new MetaClient(creds).uploadAdImage(url)).rejects.toBeInstanceOf(MetaError);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects oversized media before uploading to Meta", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("image", {
+      headers: { "content-length": "999999999" },
+    }));
+    await expect(new MetaClient(creds).uploadAdImage("https://example.com/image.png")).rejects.toThrow("too large");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("rejects malformed creative image URLs before fetch", async () => {
     const client = new MetaClient(creds);
     await expect(client.uploadAdImage("not-a-url")).rejects.toMatchObject({

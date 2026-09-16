@@ -1138,15 +1138,13 @@ export function Campaigns({
                 </span>
               )}
               {campaigns.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.href = "/api/campaigns/report";
-                  }}
+                <a
+                  href="/api/campaigns/report"
+                  download
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400"
                 >
                   <FileText className="h-4 w-4" /> Export report
-                </button>
+                </a>
               )}
               <Button
                 size="sm"
