@@ -56,6 +56,10 @@ export function BrandAssets({
       setError("Choose a file first.");
       return;
     }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      setError("Choose a PNG, JPEG or WebP image.");
+      return;
+    }
     if (file.size > MAX_BYTES) {
       setError("File must be under 5 MB.");
       return;
@@ -172,7 +176,7 @@ export function BrandAssets({
                 id="asset-file"
                 ref={fileRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
                 className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
               />

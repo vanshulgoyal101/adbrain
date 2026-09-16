@@ -33,6 +33,32 @@ beforeEach(() => {
   signOut.mockResolvedValue({ error: null });
 });
 
+describe("sign-out failure handling", () => {
+  it("keeps the user in place when Supabase rejects sign-out and allows retry", async () => {
+    signOut.mockResolvedValueOnce({ error: { message: "offline" } });
+    render(<SignOutButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not sign out");
+    expect(push).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
+  });
+
+  it("disables repeated submissions while sign-out is pending", async () => {
+    let finish!: (result: { error: null }) => void;
+    signOut.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(<SignOutButton />);
+    const button = screen.getByRole("button", { name: "Sign out" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(button).toBeDisabled();
+    expect(signOut).toHaveBeenCalledOnce();
+    finish({ error: null });
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/login"));
+  });
+});
+
 describe("<LoginForm> magic link", () => {
   it("sends a magic link back to the auth callback", async () => {
     render(<LoginForm />);
