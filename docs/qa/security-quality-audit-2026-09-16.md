@@ -52,9 +52,28 @@ Residual operational controls: private DNS/egress restrictions are still useful
 defense in depth; any future user-controlled server download must use this
 transport. Fixed provider APIs have separate timeout/authentication policies.
 
+## Dependency Baseline
+
+The September 16 npm audit reported five affected dependency entries: Next.js
+(critical), its nested Sharp and PostCSS, plus js-yaml and nanoid (high). The
+Windows-specific Next advisory is not proof of exposure on Vercel/Linux; the
+image-optimization and transitive parser advisories still warranted updating.
+
+Updated Next and eslint-config-next together from 16.2.12 to 16.3.5 and refreshed
+compatible js-yaml/nanoid resolutions without force upgrades. `npm audit` then
+reported zero vulnerabilities and the production build passed. The duplicate
+Sharp/libvips warning seen before the upgrade was absent afterwards.
+
+CI now uses Node 22 and runs `npm run audit:dependencies` after installation.
+This checks development and production dependencies and fails at high severity.
+Registry availability/advisory changes can fail the gate independently of source
+changes; investigate rather than silently disabling it. Use a maintained Node 22
+release locally (22.13 or newer for the current ESLint dependency engine range).
+The audit is a dated registry result, not a guarantee that dependencies are safe.
+
 ## Remaining Audit Work
 
-- Dependency advisories, API input validation, auth/tenant boundaries, database
+- API input validation, auth/tenant boundaries, database
   policies, public metadata/discovery, and frontend workflow checks are separate
   audit batches, not covered merely by the outbound-fetch tests.
 - Real Meta consent remains an external gate. Local mocks cannot prove it works.
