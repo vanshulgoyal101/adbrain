@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { absoluteUrl, siteConfig } from "@/lib/site";
+import { MARKETING_GUIDES } from "@/lib/seo/guides";
+import sitemap from "@/app/sitemap";
+import { generateMetadata, generateStaticParams } from "@/app/guides/[slug]/page";
 import {
   breadcrumbSchema,
   contentPageGraph,
@@ -14,6 +17,28 @@ import {
 } from "@/lib/seo/jsonLd";
 
 describe("site config", () => {
+  it("discovers every guide with a stable content date and no private routes", () => {
+    const entries = sitemap();
+    expect(new Set(entries.map(entry => entry.url)).size).toBe(entries.length);
+    for (const guide of MARKETING_GUIDES) {
+      expect(entries).toContainEqual({ url: absoluteUrl(`/guides/${guide.slug}`), lastModified: guide.updated });
+      expect(guide.sections.length).toBeGreaterThanOrEqual(3);
+    }
+    expect(entries.find(entry => entry.url === siteConfig.url)?.lastModified).toBeUndefined();
+    expect(entries.some(entry => /\/(login|dashboard|api|connect)\b/.test(entry.url))).toBe(false);
+  });
+
+  it("generates only known guides with unique canonical and social metadata", async () => {
+    expect(generateStaticParams()).toEqual(MARKETING_GUIDES.map(({ slug }) => ({ slug })));
+    for (const guide of MARKETING_GUIDES) {
+      const metadata = await generateMetadata({ params: Promise.resolve({ slug: guide.slug }) });
+      expect(metadata.alternates?.canonical).toBe(`/guides/${guide.slug}`);
+      expect(metadata.openGraph).toMatchObject({ title: guide.title, type: "article" });
+      expect(metadata.twitter).toMatchObject({ title: guide.title, description: guide.description });
+    }
+    await expect(generateMetadata({ params: Promise.resolve({ slug: "not-a-guide" }) })).rejects.toThrow();
+  });
+
   it("exposes a normalized, slash-trimmed url", () => {
     expect(siteConfig.url).not.toMatch(/\/$/);
     expect(siteConfig.url).toMatch(/^https?:\/\//);

@@ -130,10 +130,69 @@ rewritten by the migration. Usage recording remains best effort after paid work;
 the monthly quota is a preflight check, not an atomic reservation or a hard-dollar
 provider cap. Concurrent generations and failed telemetry writes remain limits.
 
+## Public Discovery and Frontend Reliability
+
+The public `/guides` index and two statically generated articles cover actual
+AdBrain export sizes and Meta campaign readiness. Content lives in the typed
+`src/lib/seo/guides.ts` registry. Adding a registry entry supplies static params,
+sitemap discovery and related navigation; each article has canonical/social
+metadata, Article/WebPage/Breadcrumb structured data, source photography and
+official Meta reference links. Creative dimensions come from `AD_FORMATS`, not a
+second manually maintained table. Unknown slugs return 404.
+
+The sitemap no longer publishes a fabricated current modification date on every
+request. Guide dates represent content edits. The shared app layout is noindex;
+API, auth and connect responses also carry an X-Robots-Tag. These are indexing
+directives, not access controls. Homepage/legal footers link to the guide index.
+No fictional reviews, customer outcomes or performance claims were added.
+
+Sign-out now checks resolved Supabase errors as well as exceptions, prevents
+duplicate submission, and leaves a visible retryable failure instead of falsely
+navigating away. Campaign CSV export uses a native download link. Brand asset
+uploads reject unsupported declared MIME types before storage access and the
+picker lists PNG/JPEG/WebP. This client check is usability validation, not proof
+of valid bytes; server raster decoding remains authoritative. Existing SVG/GIF
+assets need conversion before compositing, and spoofed or animated raster files
+can still be rejected during generation.
+
+### Final Local Verification
+
+- Vitest: 998 passed, one skipped, across 123 passed files and one skipped file.
+  Coverage: statements 67.94%, branches 60.09%, functions 68.13%, lines 70.27%.
+- ESLint and TypeScript passed. Next 16.3.5 production build passed, including
+  53 static-generation tasks and both new guide articles.
+- npm audit: zero vulnerabilities on September 16. Temporary local PostgreSQL:
+  49 passing checks across fresh and ordered-upgrade paths; no remote DB used.
+- Chromium: all three guide routes at widths 1440, 390 and 320 returned 200,
+  with no document overflow, loaded article images, canonical tags and parseable
+  structured data. Unknown slug returned 404. Sampled API/auth/connect responses
+  had `noindex, nofollow`. Desktop and mobile full-page screenshots were reviewed;
+  local artifacts are ignored under `test-results/guide-*.png`.
+- Browser server used placeholder Supabase auth. An initial shared analytics
+  beacon was attempted; subsequent browser checks blocked all nonlocal requests.
+  Local canonical origin was the configured localhost URL, not evidence of
+  production canonical settings. Dev React logged its eval/CSP diagnostic;
+  production CSP was not weakened to suppress it. Temporary servers were stopped.
+- The full authenticated Playwright journeys were not rerun in this pass. Unit
+  and local DB checks do not substitute for real consent or paid-provider tests.
+
+### Published Batches
+
+| Commit | Scope | Hosted CI |
+| --- | --- | --- |
+| `8a87d5b` | Outbound URL/media boundary | `35070625305` passed |
+| `284c763` | Dependency update and audit gate | `35071039826` passed |
+| `fb5b0cf` | Auth redirects and request schemas | `35071302129` passed |
+| `1dbb4e9` | Trusted ledger and shared limiter | `35071677622` passed |
+
+All publication in this audit targets `dev`. Production promotion and the new
+database migration are not performed by publishing these commits.
+
 ## Remaining Audit Work
 
-- Public metadata/discovery and frontend workflow checks are separate
-  audit batches, not covered merely by the outbound-fetch tests.
+- Continue bounded review of fixed-provider OAuth timeouts, storage lifecycle
+  recovery and high-volume usage-report pagination. These are follow-up review
+  areas, not claimed fixed by this audit.
 - Real Meta consent remains an external gate. Local mocks cannot prove it works.
 - Technical SEO can improve crawlability and relevance; ranking depends on search
   engines, competition, content quality, and authority. No universal first-place

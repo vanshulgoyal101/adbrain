@@ -160,7 +160,7 @@ export function MarketingHome() {
           <div>{MARKETING_FAQS.map((faq) => <details key={faq.question}><summary>{faq.question}</summary><p>{faq.answer}</p></details>)}</div>
         </section>
       </main>
-      <footer className={styles.footer}><span>AdBrain / Customer-focused marketing for local businesses</span><nav aria-label="Legal">{LEGAL_LINKS.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav></footer>
+      <footer className={styles.footer}><span>AdBrain / Customer-focused marketing for local businesses</span><nav aria-label="Resources and legal"><Link href="/guides">Guides</Link>{LEGAL_LINKS.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav></footer>
     </div>
   );
 }

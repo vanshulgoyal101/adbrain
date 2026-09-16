@@ -45,6 +45,9 @@ describe("sitemap", () => {
         absoluteUrl("/privacy"),
         absoluteUrl("/terms"),
         absoluteUrl("/data-deletion"),
+        absoluteUrl("/guides"),
+        absoluteUrl("/guides/ad-creative-sizes"),
+        absoluteUrl("/guides/meta-campaign-checklist"),
       ]),
     );
   });
@@ -57,8 +60,10 @@ describe("sitemap", () => {
   it("uses absolute URLs and valid priorities, with the homepage highest", () => {
     for (const e of entries) {
       expect(e.url.startsWith(siteConfig.url)).toBe(true);
-      expect(e.priority).toBeGreaterThanOrEqual(0);
-      expect(e.priority).toBeLessThanOrEqual(1);
+      if (e.priority !== undefined) {
+        expect(e.priority).toBeGreaterThanOrEqual(0);
+        expect(e.priority).toBeLessThanOrEqual(1);
+      }
     }
     const home = entries.find((e) => e.url === absoluteUrl("/"));
     expect(home?.priority).toBe(1);
