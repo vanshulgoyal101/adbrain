@@ -92,10 +92,47 @@ The audit is a dated registry result, not a guarantee that dependencies are safe
 Regression homes: `tests/auth-callback.test.ts`, `tests/brand-autofill-route.test.ts`,
 `tests/api-routes.test.ts`, and `tests/seo.test.ts`.
 
+## Trusted Ledger and Rate Limits
+
+`20260916_trusted_usage_and_rate_limits.sql` removes browser writes to usage
+events and browser execution of the rate-limit RPC. Application writes/checks use
+the server credential; owner-scoped usage reads retain RLS. A negative-value
+constraint applies to new ledger writes, and a security-invoker aggregate counts
+all monthly events rather than the first PostgREST page. Historical negative
+tokens cannot reduce its result.
+
+The rate-limit function validates parameters and locks by key before counting and
+inserting, using a fresh wall-clock timestamp after acquiring the lock. Production
+requests return 503 when shared protection is unavailable, not a weaker per-instance
+fallback. Local development retains its in-memory fallback.
+
+Verification uses temporary local PostgreSQL for fresh and ordered upgrades,
+including repeated migration execution, browser privilege denial, nonnegative
+ledger enforcement, 1,100-row aggregation, tenant isolation, and twelve concurrent
+requests competing for three slots. Existing Meta transaction/race checks still
+run. CI executes this harness using its installed PostgreSQL binaries and full Git
+history for the pinned legacy baseline.
+
+### Production Cutover Prerequisite
+
+Not applied remotely during this audit. Review and authorize the exact migration,
+verify the target and server credential, and schedule a coordinated code/migration
+cutover. Deploying code first can temporarily return 503 because the new aggregate
+and service-role RPC grant are absent; migrating first leaves old code unable to
+write telemetry/use the browser RPC. Do not promote this batch independently of
+its migration. A code rollback after migration must retain the trusted-client
+changes, not restore browser access to the ledger.
+
+The new check constraint is `NOT VALID` to avoid silently changing historical data
+or blocking on a large validation scan. Audit negative legacy rows and explicitly
+validate the constraint after investigation. No existing events are deleted or
+rewritten by the migration. Usage recording remains best effort after paid work;
+the monthly quota is a preflight check, not an atomic reservation or a hard-dollar
+provider cap. Concurrent generations and failed telemetry writes remain limits.
+
 ## Remaining Audit Work
 
-- API input validation, auth/tenant boundaries, database
-  policies, public metadata/discovery, and frontend workflow checks are separate
+- Public metadata/discovery and frontend workflow checks are separate
   audit batches, not covered merely by the outbound-fetch tests.
 - Real Meta consent remains an external gate. Local mocks cannot prove it works.
 - Technical SEO can improve crawlability and relevance; ranking depends on search

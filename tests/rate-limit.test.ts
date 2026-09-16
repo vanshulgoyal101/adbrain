@@ -1,11 +1,18 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   _resetRateLimits,
   rateLimit,
   rateLimitResponse,
 } from "@/lib/security/rate-limit";
 
-afterEach(() => _resetRateLimits());
+const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc }) }));
+
+afterEach(() => {
+  _resetRateLimits();
+  vi.resetAllMocks();
+  vi.unstubAllEnvs();
+});
 
 describe("rateLimit", () => {
   it("allows up to the limit within the window", () => {
@@ -42,6 +49,21 @@ describe("rateLimit", () => {
 });
 
 describe("rateLimitResponse", () => {
+  it("fails closed in production if shared protection is unavailable", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    rpc.mockResolvedValue({ error: { message: "offline" } });
+    const response = await rateLimitResponse("paid:owner", { limit: 10, windowMs: 60_000 });
+    expect(response?.status).toBe(503);
+    expect(response?.headers.get("Retry-After")).toBe("30");
+  });
+
+  it("uses the service RPC result in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    rpc.mockResolvedValue({ data: [{ allowed: true, retry_after_ms: 0 }], error: null });
+    expect(await rateLimitResponse("paid:owner", { limit: 10, windowMs: 60_000 })).toBeNull();
+    expect(rpc).toHaveBeenCalledWith("check_rate_limit", { p_key: "paid:owner", p_limit: 10, p_window_ms: 60_000 });
+  });
+
   // Outside a request context the shared RPC is unavailable, so these exercise
   // the in-memory fallback path.
   it("returns null while under the limit", async () => {

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
 import type { TokenUsage } from "./types";
 import type { Json } from "@/lib/types";
@@ -59,13 +60,12 @@ function monthStart(): string {
 export async function monthlyTokenUsage(businessId: string): Promise<number | null> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("llm_usage_events")
-      .select("total_tokens")
-      .eq("business_id", businessId)
-      .gte("created_at", monthStart());
-    if (error) return null;
-    return (data ?? []).reduce((sum, row) => sum + (row.total_tokens ?? 0), 0);
+    const { data, error } = await supabase.rpc("monthly_token_usage", {
+      p_business_id: businessId,
+      p_since: monthStart(),
+    });
+    if (error || typeof data !== "number" || !Number.isSafeInteger(data) || data < 0) return null;
+    return data;
   } catch {
     return null;
   }
@@ -115,7 +115,7 @@ export function configuredMonthlyTokenLimit(): number {
 export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
   if (!events.length) return;
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     await supabase.from("llm_usage_events").insert(
       events.map((event) => ({
         business_id: event.businessId,

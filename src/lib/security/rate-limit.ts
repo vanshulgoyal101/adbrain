@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Sliding-window rate limiter. The shared path uses a Postgres SECURITY DEFINER
- * function (`check_rate_limit`) so limits hold across serverless instances; if
- * that call fails for any reason it falls back to the in-memory limiter below,
- * so a database hiccup never blocks legitimate use. The in-memory limiter is
- * per-instance and kept as the fallback (and for unit tests).
+ * function (`check_rate_limit`) so limits hold across serverless instances.
+ * Production fails closed when shared enforcement is unavailable. In-memory
+ * fallback is limited to local development and tests.
  */
 const buckets = new Map<string, number[]>();
 
 export interface RateLimitResult {
   ok: boolean;
+  unavailable?: boolean;
   remaining: number;
   /** Milliseconds until the next request would be allowed (0 when ok). */
   retryAfterMs: number;
@@ -38,28 +38,34 @@ export function rateLimit(
 }
 
 /**
- * Shared (cross-instance) rate check backed by Postgres. Falls back to the
- * in-memory limiter if the RPC is unavailable (e.g. outside a request context).
+ * Shared rate check backed by Postgres. Only non-production environments may
+ * fall back to the in-memory limiter if the RPC is unavailable.
  */
 export async function checkRateLimit(
   key: string,
   opts: { limit: number; windowMs: number },
 ): Promise<RateLimitResult> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase.rpc("check_rate_limit", {
       p_key: key,
       p_limit: opts.limit,
       p_window_ms: opts.windowMs,
     });
     const row = Array.isArray(data) ? data[0] : data;
-    if (error || !row) throw error ?? new Error("no rate-limit row");
+    if (error || !row || typeof row.allowed !== "boolean" ||
+        !Number.isFinite(row.retry_after_ms) || row.retry_after_ms < 0) {
+      throw new Error("Invalid rate-limit result");
+    }
     return {
       ok: row.allowed,
       remaining: row.allowed ? Math.max(opts.limit - 1, 0) : 0,
       retryAfterMs: row.retry_after_ms ?? 0,
     };
   } catch {
+    if (process.env.NODE_ENV === "production") {
+      return { ok: false, unavailable: true, remaining: 0, retryAfterMs: 30_000 };
+    }
     return rateLimit(key, opts);
   }
 }
@@ -74,6 +80,12 @@ export async function rateLimitResponse(
 ): Promise<NextResponse | null> {
   const result = await checkRateLimit(key, opts);
   if (result.ok) return null;
+  if (result.unavailable) {
+    return NextResponse.json(
+      { error: "Request protection is temporarily unavailable. Please try again shortly." },
+      { status: 503, headers: { "Retry-After": "30" } },
+    );
+  }
   const retryAfter = Math.ceil(result.retryAfterMs / 1000);
   return NextResponse.json(
     { error: "Too many requests. Please slow down and try again shortly." },
