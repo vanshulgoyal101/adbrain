@@ -8,6 +8,7 @@ import {
   marketingGraph,
   organizationSchema,
   softwareApplicationSchema,
+  serializeJsonLd,
   webPageSchema,
   webSiteSchema,
 } from "@/lib/seo/jsonLd";
@@ -26,6 +27,12 @@ describe("site config", () => {
 });
 
 describe("jsonLd builders", () => {
+  it("escapes HTML script boundaries without changing the JSON value", () => {
+    const data = { name: "</script><script>alert(1)</script><!--" };
+    const output = serializeJsonLd(data);
+    expect(output).not.toContain("<");
+    expect(JSON.parse(output)).toEqual(data);
+  });
   it("organization has stable @id and required fields", () => {
     const org = organizationSchema();
     expect(org["@type"]).toBe("Organization");

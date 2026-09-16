@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { logEvent } from "@/lib/audit";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
@@ -20,11 +21,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No business" }, { status: 400 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    weeklyCapRupees?: number | null;
-    alertPct?: number;
-    autoPause?: boolean;
-  };
+  const parsed = z.object({
+    weeklyCapRupees: z.number().nonnegative().max(2_147_483_647).nullable().optional(),
+    alertPct: z.number().min(1).max(100).optional(),
+    autoPause: z.boolean().optional(),
+  }).safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Provide a nonnegative weekly cap, an alert threshold from 1 to 100, and a boolean auto-pause setting." }, { status: 422 });
+  }
+  const body = parsed.data;
 
   let cap: number | null = null;
   if (body.weeklyCapRupees != null) {
@@ -57,7 +62,7 @@ export async function POST(request: Request) {
     { onConflict: "business_id" },
   );
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Could not save spend limits." }, { status: 500 });
   }
 
   await logEvent({

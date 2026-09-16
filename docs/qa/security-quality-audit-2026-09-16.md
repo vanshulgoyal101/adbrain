@@ -71,6 +71,27 @@ changes; investigate rather than silently disabling it. Use a maintained Node 22
 release locally (22.13 or newer for the current ESLint dependency engine range).
 The audit is a dated registry result, not a guarantee that dependencies are safe.
 
+## Authentication, Input and HTML Boundaries
+
+- Auth callback destinations previously concatenated the origin with unvalidated
+  text. An `@host` value could change the parsed destination host. Both code and
+  email callbacks now accept only root-relative paths without authority, control
+  characters or backslashes, falling back to the dashboard.
+- Spend settings, website autofill, the retired Meta selection endpoint and the
+  internal quota runner now use runtime schemas. Invalid JSON/types cannot become
+  default spend settings or trigger work. Spend caps fit the database integer
+  column. Autofill URLs are length-bounded before parsing.
+- Autofill and spend settings return safe client errors instead of raw provider
+  or database diagnostics. Direct route tests cover authentication, rate limiting,
+  malformed inputs, budget-pool selection and zero side effects on rejected input.
+- JSON-LD now escapes `<` before HTML insertion, preserving JSON semantics while
+  preventing a future content field from closing the script element. Current
+  structured data was server-authored; this is boundary hardening, not evidence
+  that user-supplied script execution was possible in the current marketing page.
+
+Regression homes: `tests/auth-callback.test.ts`, `tests/brand-autofill-route.test.ts`,
+`tests/api-routes.test.ts`, and `tests/seo.test.ts`.
+
 ## Remaining Audit Work
 
 - API input validation, auth/tenant boundaries, database

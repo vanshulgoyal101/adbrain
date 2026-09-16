@@ -17,6 +17,10 @@ const ORG_ID = `${siteConfig.url}/#organization`;
 const WEBSITE_ID = `${siteConfig.url}/#website`;
 const APP_ID = `${siteConfig.url}/#app`;
 
+export function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
 /** The publishing organization behind AdBrain. */
 export function organizationSchema(): JsonLdObject {
   return {
