@@ -224,13 +224,21 @@ describe("W2-04 planner output conversion", () => {
   it("preserves AI radius, interests and rationale in the saved targeting contract", () => {
     const result = plannerPlanToDraftInput({
       businessId, goal: "Generate leads", approvedCreativeIds: [creativeId], leadFormIds: [leadFormId],
-      plan: { ...plan, radius_km: 20, interests: ["Solar energy", "Solar energy"] },
+      plan: { ...plan, city_scope: "radius", radius_km: 20, interests: ["Solar energy", "Solar energy"] },
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error);
     expect(result.draft.targeting.location?.radiusKm).toBe(20);
     expect(result.draft.targeting.age).toEqual({ mode: "manual", min: 24, max: 54 });
     expect(result.draft.targeting.audience).toEqual({ interestNames: ["Solar energy"], rationale: plan.rationale });
+  });
+
+  it("creates a city-only plan without serializing an unused radius", () => {
+    const result = plannerPlanToDraftInput({ businessId, goal: "Leads", plan: { ...plan, city_scope: "city_only", radius_km: 35 }, approvedCreativeIds: [creativeId], leadFormIds: [leadFormId] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.draft.targeting.location?.cityScope).toBe("city_only");
+    expect(result.draft.targeting.location).not.toHaveProperty("radiusKm");
   });
 
   it.each([

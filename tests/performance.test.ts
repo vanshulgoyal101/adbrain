@@ -5,6 +5,7 @@ import {
 } from "@/lib/campaign/performance";
 
 const base: CampaignPerf = {
+  destination: "instant_form",
   name: "C",
   angles: [],
   area: null,
@@ -16,8 +17,19 @@ const base: CampaignPerf = {
 };
 
 describe("buildPerformanceContext", () => {
+  it("does not teach the planner that missing or unknown metrics are zero leads", () => {
+    const out = buildPerformanceContext([
+      { ...base, destination: "whatsapp", spend: 100 },
+      { ...base, destination: "unknown", spend: 200, leads: 500 },
+    ]);
+    expect(out).toContain("WhatsApp conversation metrics unavailable");
+    expect(out).toContain("comparable outcome metrics unavailable");
+    expect(out).not.toContain("500 leads");
+    expect(out).not.toContain("no leads yet");
+  });
+
   it("keeps WhatsApp conversations distinct from leads in planner evidence", () => {
-    const out = buildPerformanceContext([{ ...base, conversations: 5, costPerConversation: 20, spend: 100 }]);
+    const out = buildPerformanceContext([{ ...base, destination: "whatsapp", conversations: 5, costPerConversation: 20, spend: 100 }]);
     expect(out).toContain("5 WhatsApp conversations started at INR 20 per conversation");
     expect(out).toContain("not verified leads or sales");
     expect(out).not.toContain("no leads yet");

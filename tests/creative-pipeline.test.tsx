@@ -20,6 +20,7 @@ vi.mock("@/lib/imageGen", () => ({ generateImage, downloadImage }));
 const concept = {
   headline: "  Cut your power bill  ",
   primary_text: "  Two lines of copy.  ",
+  description: "Discuss your rooftop plans.",
   cta: "Get Quote",
   rationale: "Show the practical value of rooftop solar.",
   visual: { medium: "Illustration", direction: "A rooftop array on a home occupies the lower half, leaving open space above.", textPlacement: "top" },
@@ -32,7 +33,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
-  complete.mockResolvedValue(completion(concept));
+  complete.mockImplementation(async (messages) => {
+    const recent = JSON.parse(messages[1].content).recentCopy ?? [];
+    return completion(recent.length ? {
+      ...concept, headline: `Roof idea ${recent.length}`, primary_text: `Approach ${recent.length}: explore your rooftop options.`,
+    } : concept);
+  });
   generateImage.mockResolvedValue({
     url: "https://img.example/a.jpg",
     prompt: "a photo",
@@ -43,6 +49,19 @@ beforeEach(() => {
 const brand = { name: "Solaride", vertical: "solar energy" } as never;
 
 describe("generateVariants", () => {
+  it("repairs repeated copy using history and earlier siblings before image generation", async () => {
+    const fresh = { ...concept, headline: "A useful rooftop", primary_text: "Start with a conversation about your roof." };
+    complete.mockResolvedValueOnce(completion(concept))
+      .mockResolvedValueOnce(completion(fresh))
+      .mockResolvedValueOnce(completion({ ...fresh, headline: "Explore rooftop solar", primary_text: "Find out what fits your home." }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const variants = await generateVariants({ brand, brief: "x", count: 2, recentCopy: [concept] });
+    expect(variants).toHaveLength(2);
+    expect(complete.mock.calls[1][0].at(-1).content).toContain("repeated-headline");
+    expect(JSON.parse(complete.mock.calls[2][0][1].content).recentCopy[0].headline).toBe(fresh.headline);
+    expect(generateImage).toHaveBeenCalledTimes(2);
+  });
+
   it("preserves each completed variant when a sibling fails", async () => {
     generateImage.mockRejectedValueOnce(new Error("Image unavailable"));
     const onVariant = vi.fn().mockResolvedValue(undefined);

@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { applyMigration } from "./database-migrations.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -55,6 +56,17 @@ async function verify(database, source) {
     await db.query(bootstrap);
     await db.query(source);
     console.log(`PASS ${database}: schema executes`);
+    await check(`${database}: reporting identity is explicit and migration history is immutable`, async () => {
+      const columns = await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='campaign_results' and column_name in ('destination', 'period_start', 'period_end') order by column_name");
+      assert.deepEqual(columns.rows.map(row => row.column_name), ["destination", "period_end", "period_start"]);
+      const name = "20260919_ledger_test.sql";
+      assert.equal(await applyMigration(db, name, "select 1"), "applied");
+      assert.equal(await applyMigration(db, name, "select 1"), "already_applied");
+      await assert.rejects(applyMigration(db, name, "select 2"), /checksum changed/);
+      await assert.rejects(applyMigration(db, "20260919_failure_test.sql", "select missing_column"));
+      const failed = await db.query("select count(*)::int as total from private.schema_migrations where name = '20260919_failure_test.sql'");
+      assert.equal(failed.rows[0].total, 0);
+    });
     await check(`${database}: nullable WhatsApp result fields and nonnegative checks exist`, async () => {
       const { rows } = await db.query("select column_name, is_nullable from information_schema.columns where table_schema='public' and table_name='campaign_results' and column_name in ('conversations', 'cost_per_conversation') order by column_name");
       assert.deepEqual(rows, [{ column_name: "conversations", is_nullable: "YES" }, { column_name: "cost_per_conversation", is_nullable: "YES" }]);
@@ -79,6 +91,32 @@ async function verify(database, source) {
     await db.query("insert into public.businesses (id, owner_id, name) values ($1, $2, 'Isolated DB test')", [businessId, ownerId]);
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
+
+    await check(`${database}: worker queue has server-only atomic claims and never replays interrupted mutations`, async () => {
+      for (const role of ["anon", "authenticated"]) {
+        const privileges = await db.query("select has_function_privilege($1, 'public.claim_next_campaign_job()', 'EXECUTE') as claim, has_function_privilege($1, 'public.enqueue_campaign_operation(uuid,jsonb,text)', 'EXECUTE') as enqueue", [role]);
+        assert.deepEqual(privileges.rows[0], { claim: false, enqueue: false });
+      }
+      const queuedDraft = randomUUID();
+      const operationId = randomUUID();
+      await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1,$2,$3,'{}',now()+interval '1 day')", [queuedDraft, businessId, ownerId]);
+      const input = { businessId, draftId: queuedDraft, draftVersion: 1, connectionGeneration: 1, idempotencyKey: randomUUID(), planHash: "a".repeat(64) };
+      const queued = await db.query("select * from public.enqueue_campaign_operation($1,$2,$3)", [operationId, input, "b".repeat(64)]);
+      assert.equal(queued.rows[0].state, "pending");
+      const claims = await Promise.all(Array.from({ length: 4 }, async () => {
+        const worker = client(database);
+        await worker.connect();
+        try {
+          await worker.query("set role service_role");
+          return (await worker.query("select * from public.claim_next_campaign_job()")).rows;
+        } finally { await worker.end(); }
+      }));
+      assert.equal(claims.flat().filter(row => row.id === operationId).length, 1);
+      await db.query("update public.campaign_operations set lease_until=now()-interval '1 second', external_ids='[\"remote-id\"]' where id=$1", [operationId]);
+      assert.equal((await db.query("select * from public.claim_next_campaign_job()")).rows.length, 0);
+      const expired = await db.query("select state,external_ids from public.campaign_operations where id=$1", [operationId]);
+      assert.deepEqual(expired.rows[0], { state: "needs_reconciliation", external_ids: ["remote-id"] });
+    });
 
     await check(`${database}: product telemetry is server-only and retention is bounded`, async () => {
       for (const role of ["anon", "authenticated"]) {
@@ -390,8 +428,10 @@ try {
   const trustedUsageMigration = await readFile(join(root, "db/migrations/20260916_trusted_usage_and_rate_limits.sql"), "utf8");
   const productEventsMigration = await readFile(join(root, "db/migrations/20260918_product_events.sql"), "utf8");
   const whatsappMigration = await readFile(join(root, "db/migrations/20260918_whatsapp_results.sql"), "utf8");
+  const reportingMigration = await readFile(join(root, "db/migrations/20260919_campaign_reporting_identity.sql"), "utf8");
+  const workerMigration = await readFile(join(root, "db/migrations/20260919_campaign_worker.sql"), "utf8");
   await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

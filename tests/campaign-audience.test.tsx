@@ -52,6 +52,25 @@ beforeEach(() => {
 });
 
 describe("campaign Ads Manager links", () => {
+  it("saves and restores city coverage without invoking AI or creating ads", async () => {
+    const first = view();
+    expect(screen.getByRole("radio", { name: "City only" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "City + radius" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(saved.input.targeting.location).toMatchObject({ cityScope: "radius", radiusKm: 25 }));
+    first.unmount();
+    view();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "City + radius" })).toBeChecked());
+    fireEvent.click(screen.getByRole("radio", { name: "City only" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalled());
+    const updated = mocks.updateDraft.mock.lastCall![2];
+    expect(updated.targeting.location.cityScope).toBe("city_only");
+    expect(updated.targeting.location).not.toHaveProperty("radiusKm");
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/campaigns/plan")).toBe(false);
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("saves and restores WhatsApp drafts without a form and reviews the verified number", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
@@ -95,6 +114,43 @@ describe("campaign Ads Manager links", () => {
 });
 
 describe("campaign sync feedback", () => {
+  it("loads another page and can recover from an empty server-side search", async () => {
+    const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
+    const second = { id: "second", name: "Second campaign", status: "active" } as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const params = new URL(url, "http://localhost").searchParams;
+      return Response.json({ campaigns: params.has("query") ? [] : params.has("cursor") ? [first, second] : [first], results: {}, nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[first]} initialNextCursor="next-page" initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    fireEvent.click(screen.getByRole("button", { name: "Load more campaigns" }));
+    await screen.findByText("Second campaign");
+    expect(screen.getAllByText("First campaign")).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls[0][0]).toContain("cursor=next-page");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search campaigns" }), { target: { value: "missing" } });
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("query=missing"))).toBe(true));
+    await screen.findByText("No matching campaigns");
+    expect(screen.getByRole("searchbox", { name: "Search campaigns" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await screen.findByText("First campaign");
+    expect(String(vi.mocked(fetch).mock.lastCall![0])).not.toContain("cursor=");
+  });
+
+  it("ignores a canceled page response when status filters change", async () => {
+    let completePage!: (response: Response) => void;
+    const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
+    const active = { id: "active", name: "Active campaign", status: "active" } as Campaign;
+    vi.stubGlobal("fetch", vi.fn((url: string) => String(url).includes("cursor=")
+      ? new Promise<Response>(resolve => { completePage = resolve; })
+      : Promise.resolve(Response.json({ campaigns: [active], results: {}, nextCursor: null }))));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[first]} initialNextCursor="next-page" initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    fireEvent.click(screen.getByRole("button", { name: "Load more campaigns" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Campaign status" }), { target: { value: "active" } });
+    await screen.findByText("Active campaign");
+    await act(async () => { completePage(Response.json({ campaigns: [{ ...active, id: "late", name: "Late campaign" }], results: {}, nextCursor: "stale" })); });
+    expect(screen.queryByText("Late campaign")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Load more campaigns" })).not.toBeInTheDocument();
+  });
+
   it("caches empty results but never shares freshness across businesses or owners", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ forms: [] })));
     const props = { approved: [creative], initialCampaigns: [], initialResults: {}, leadForms: [], leadFormError: null, metaReady: true, adAccountId: "" };

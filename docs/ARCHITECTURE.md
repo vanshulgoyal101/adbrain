@@ -120,6 +120,40 @@ ad sets. Targeting failures block rather than silently broaden the audience.
 
 ## Consistency Boundaries
 
+### Campaign Execution and Read Models
+
+Campaign creation orchestration lives in
+[create-service](../src/lib/campaign/create-service.ts), independent of HTTP.
+The create route authenticates and verifies the reviewed request; the operation
+repository owns claims/checkpoints; the Meta adapter owns provider payloads.
+In opt-in worker mode, the route enqueues and returns 202. The standalone worker
+rechecks current ownership, draft version, review hash and connection generation
+before calling the same service. No Meta creation step is moved to a browser task
+or an unawaited Vercel promise. All creation remains PAUSED.
+
+The existing `campaign_operations` ledger is also the queue. Service-only RPCs
+claim pending rows with `FOR UPDATE SKIP LOCKED`; expired running jobs require
+reconciliation rather than automatic mutation replay. See
+[Operations](OPERATIONS.md#campaign-worker-rollout) for leases and deployment.
+Inline execution remains the default compatibility mode until that rollout.
+
+Campaign display reads use stable `(created_at,id)` cursors, owner-scoped filters,
+and at most 50 rows. Reports/spend checks use complete keyset reads and fail on
+any page error; they do not reuse the display page. Complete reads still scale
+linearly and are not a transactionally consistent financial ledger. The dashboard
+is a server component and still computes its queue from complete campaign data.
+
+Destination is explicit on campaigns and result snapshots: `instant_form`,
+`whatsapp`, `call`, `mixed`, or `unknown`. Unavailable conversation metrics are
+not zero leads; mixed/unknown/call outcomes are excluded from lead comparisons.
+Legacy fallbacks use saved creation evidence, conversation metrics, or the old
+app-specific `leads` objective, not arbitrary Meta engagement objectives.
+
+Editor preparation cancellation, list requests, and targeting conversion have
+separate owners in `meta-connect-ui` hooks and `campaign/editor-targeting`.
+The composer is still sizeable; this change does not claim a complete editor
+state-machine rewrite or an application-wide scalability certification.
+
 | Boundary | Failure mode | Recovery principle |
 | --- | --- | --- |
 | Browser -> generation | HTTP ends after some paid work | GET by generation ID before new POST |
@@ -155,6 +189,10 @@ signed state, browser binding, expiry, replay protection, and selection revision
 Vercel invokes authenticated daily keepalive and spend-enforcement routes. These
 are bounded HTTP jobs, not a persistent worker fleet. UI polling and post-response
 `after` tasks do not constitute durable queues.
+
+The opt-in campaign worker is a separate persistent process, not a Vercel cron
+route. Its source is present locally; hosting, health checks and alert ownership
+must be established before enabling it on an environment.
 
 Owner audit history, trusted AI usage, and structured product events are separate
 stores. Product telemetry uses request-local async context and safe metadata;

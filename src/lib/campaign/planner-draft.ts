@@ -11,6 +11,7 @@ export const plannerPlanSchema = z
     age_min: z.number().finite().int().min(18).max(65),
     age_max: z.number().finite().int().min(18).max(65),
     radius_km: z.number().finite().int().min(17).max(80).default(25),
+    city_scope: z.enum(["city_only", "radius"]).default("city_only"),
     interests: z.array(z.string().trim().min(1).max(100)).min(1).max(5),
     special_ad_category: z.enum(["none", "housing", "employment", "financial_products_services", "issues_elections_politics", "unknown"]),
     locations: z.array(z.string().trim().min(1).max(200)).max(50),
@@ -92,7 +93,8 @@ export function plannerPlanToDraftInput(input: {
     destination: plan.destination,
     targeting: {
       location: {
-        radiusKm: plan.radius_km,
+        cityScope: plan.city_scope,
+        ...(plan.city_scope === "radius" ? { radiusKm: plan.radius_km } : {}),
         mode: included.length ? "manual" as const : "ai" as const,
         included,
         excluded,

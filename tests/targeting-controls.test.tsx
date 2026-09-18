@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { InfoHint } from "@/components/ui/info-hint";
 import {
   TargetingControls,
   defaultTargeting,
   type TargetingValue,
 } from "@/components/targeting-controls";
+import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
 
 const JAIPUR = { key: "1027633", name: "Jaipur", type: "city", region: "Rajasthan" };
 const AJMER = { key: "999", name: "Ajmer", type: "city", region: "Rajasthan" };
@@ -42,7 +45,7 @@ async function search(term: string, placeholder = INCLUDE_PLACEHOLDER) {
   fireEvent.change(screen.getByPlaceholderText(placeholder), {
     target: { value: term },
   });
-  await vi.advanceTimersByTimeAsync(400);
+  await act(async () => { await vi.advanceTimersByTimeAsync(400); });
 }
 
 beforeEach(() => {
@@ -53,7 +56,54 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
+describe("targeting help", () => {
+  it("keeps help open after a complete pointer click and describes its trigger", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<InfoHint>City coverage explanation</InfoHint>);
+    const trigger = screen.getByRole("button", { name: "More info" });
+    await user.click(trigger);
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    expect(trigger).toHaveAccessibleDescription("City coverage explanation");
+  });
+
+  it("keeps keyboard help open when the pointer leaves and dismisses on Escape", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<InfoHint>City coverage explanation</InfoHint>);
+    const trigger = screen.getByRole("button", { name: "More info" });
+    await user.tab();
+    await user.hover(trigger);
+    await user.unhover(trigger);
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("dismisses hover-only help on Escape and click-away, and can reopen", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<InfoHint>City coverage explanation</InfoHint>);
+    const trigger = screen.getByRole("button", { name: "More info" });
+    await user.hover(trigger);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.click(trigger);
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    await user.click(document.body);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+});
+
 describe("defaultTargeting", () => {
+  it("defaults new drafts to city only and keeps radius for legacy drafts", () => {
+    expect(defaultTargeting.cityScope).toBe("city_only");
+    expect(targetingToEditor({ location: { radiusKm: 35 } })).toMatchObject({ cityScope: "radius", radiusKm: 35 });
+    const draft = targetingFromEditor(manual({ included: [JAIPUR], excluded: [AJMER] }), [], []);
+    expect(draft.location).toMatchObject({ cityScope: "city_only", included: [{ key: JAIPUR.key }], excluded: [{ key: AJMER.key }] });
+    expect(draft.location).not.toHaveProperty("radiusKm");
+    expect(draft.location?.included?.[0]).not.toHaveProperty("radiusKm");
+    expect(targetingToEditor(draft).cityScope).toBe("city_only");
+  });
+
   it("starts hands-off so AdBrain decides", () => {
     expect(defaultTargeting).toMatchObject({
       locationMode: "ai",
@@ -65,6 +115,17 @@ describe("defaultTargeting", () => {
 });
 
 describe("<TargetingControls> automatic mode", () => {
+  it("offers coverage before planning and shows radius only when selected", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<TargetingControls value={defaultTargeting} onChange={onChange} brandAreas={["Jaipur"]} />);
+    expect(screen.getByRole("radio", { name: "City only" })).toBeChecked();
+    expect(screen.queryByRole("slider")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "City + radius" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ cityScope: "radius" }));
+    rerender(<TargetingControls value={{ ...defaultTargeting, cityScope: "radius" }} onChange={onChange} brandAreas={["Jaipur"]} />);
+    expect(screen.getByRole("slider", { name: "City radius in kilometers" })).toHaveValue("25");
+  });
+
   it("promises to use the Brand Brain service areas", () => {
     view(defaultTargeting);
     expect(screen.getByText(/target your service areas/i)).toBeInTheDocument();
@@ -107,6 +168,103 @@ describe("<TargetingControls> automatic mode", () => {
 });
 
 describe("<TargetingControls> location search", () => {
+  it("clears obsolete options immediately while the next query is debouncing", async () => {
+    const onChange = view(manual());
+    await search("jai");
+    expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(2);
+    const input = screen.getByRole("combobox", { name: "Search locations to include" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.change(input, { target: { value: "delhi" } });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(input).not.toHaveAttribute("aria-activedescendant");
+    expect(input).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Searching locations");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("selects a result with arrows and Enter while retaining input focus", async () => {
+    const onChange = view(manual());
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const input = screen.getByRole("combobox", { name: "Search locations to include" });
+    await user.click(input);
+    await search("jai");
+    await user.keyboard("{ArrowUp}");
+    const ajmer = screen.getByRole("option", { name: /Ajmer/ });
+    expect(ajmer).toHaveAttribute("aria-selected", "true");
+    expect(input).toHaveAttribute("aria-activedescendant", ajmer.id);
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("option", { name: /Jaipur/ })).toHaveAttribute("aria-selected", "true");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ included: [AJMER] }));
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("announces empty results separately from errors", async () => {
+    setFetch([]);
+    view(manual());
+    await search("missing");
+    expect(screen.getByRole("status")).toHaveTextContent('No locations found for "missing".');
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
+  it("dismisses search feedback when Tab moves to a selected-place chip", async () => {
+    setFetch([]);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    view(manual({ included: [JAIPUR] }));
+    await user.click(screen.getByRole("combobox", { name: "Search locations to include" }));
+    await search("missing");
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Remove Jaipur" })).toHaveFocus();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("retries the same failed search without changing selected places", async () => {
+    global.fetch = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({
+      ok: true, json: async () => ({ results: [AJMER] }),
+    });
+    const onChange = view(manual({ included: [JAIPUR] }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("combobox", { name: "Search locations to include" }));
+    await search("ajm");
+    expect(screen.getByRole("status")).toHaveTextContent("Location search is unavailable");
+    expect(screen.getByRole("button", { name: "Remove Jaipur" })).toBeInTheDocument();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(screen.getByRole("combobox", { name: "Search locations to include" })).toHaveFocus();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("option", { name: /Ajmer/ })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("treats rejected HTTP responses as failures even when they contain results", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ results: [JAIPUR] }) });
+    view(manual());
+    await search("jai");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it.each(["Escape", "Tab"])("does not reopen a pending search dismissed with %s", async (key) => {
+    let resolveSearch!: (response: unknown) => void;
+    global.fetch = vi.fn().mockImplementation(() => new Promise((resolve) => { resolveSearch = resolve; }));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    view(manual());
+    const input = screen.getByRole("combobox", { name: "Search locations to include" });
+    await user.click(input);
+    await search("jai");
+    await user.keyboard(`{${key}}`);
+    await act(async () => { resolveSearch({ ok: true, json: async () => ({ results: [JAIPUR] }) }); });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(input).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("reuses recent successful searches and refetches expired entries", async () => {
     view(manual());
     await search("jai");

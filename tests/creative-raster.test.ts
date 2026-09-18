@@ -35,6 +35,7 @@ describe("actual creative raster output", () => {
         const concept: CreativeConcept = {
           headline: "A better use for your rooftop",
           primary_text: "Explore solar with a local installation team.",
+          description: "Discuss your rooftop plans.",
           cta: "Get Quote",
           rationale: "Show a concrete home improvement.",
           visual: {

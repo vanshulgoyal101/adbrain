@@ -94,6 +94,29 @@ describe("evaluateSpend", () => {
 });
 
 describe("wouldExceedCap", () => {
+  it.each([null, 0, -1, NaN, Infinity])("fails closed on unknown active budget %s under a cap", dailyBudget => {
+    expect(wouldExceedCap([c("other", "active", dailyBudget)], 200, 7000))
+      .toEqual({ verified: false, exceeds: true, projectedAfter: null });
+  });
+
+  it("does not require budgets of campaigns that are not active", () => {
+    expect(wouldExceedCap([c("other", "paused", null)], 200, 7000))
+      .toEqual({ verified: true, exceeds: false, projectedAfter: 1400 });
+  });
+
+  it("preserves deliberately uncapped activation despite an unrelated unknown budget", () => {
+    expect(wouldExceedCap([c("other", "active", null)], 200, null).exceeds).toBe(false);
+  });
+
+  it.each([0, -1, NaN, Infinity])("rejects invalid new budget or cap %s", value => {
+    expect(wouldExceedCap([], value, null).verified).toBe(false);
+    expect(wouldExceedCap([], 200, value).verified).toBe(false);
+  });
+
+  it("rejects arithmetic overflow", () => {
+    expect(wouldExceedCap([], Number.MAX_VALUE, 7000).verified).toBe(false);
+  });
+
   it("never exceeds when there is no cap", () => {
     expect(wouldExceedCap([c("a", "active", 900)], 900, null).exceeds).toBe(false);
   });

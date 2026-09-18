@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   render: vi.fn(),
   instructions: vi.fn(),
   references: vi.fn(),
+  recentCopy: vi.fn(),
   schemaError: null as unknown,
   used: 0 as number | null,
 }));
@@ -44,6 +45,7 @@ vi.mock("@/lib/creative/generate", async (importOriginal) => ({
 }));
 vi.mock("@/lib/creative/references", () => ({
   creativeReferences: mocks.references,
+  recentCreativeCopy: mocks.recentCopy,
 }));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://cdn.example/photo.png",
@@ -70,7 +72,7 @@ const variant = {
   cta: "Book Now",
   imageUrl: "data:image/png;base64,test",
   imagePrompt: "Model-directed installation scene",
-  concept: { rationale: "Show the work" },
+  concept: { rationale: "Show the work", description: "Discuss your installation." },
   llmUsage: [],
   imageUsage: {
     provider: "openrouter-image",
@@ -101,6 +103,7 @@ beforeEach(() => {
   mocks.render.mockResolvedValue("https://cdn.example/finished.png");
   mocks.instructions.mockResolvedValue("No discounts");
   mocks.references.mockResolvedValue(["https://example.com/product.png"]);
+  mocks.recentCopy.mockResolvedValue([{ headline: "Previous ad", primary_text: "Previous opening" }]);
   mocks.generateVariants.mockImplementation(async (params) => {
     try {
       await params.onVariant(variant);
@@ -113,6 +116,13 @@ beforeEach(() => {
 });
 
 describe("creative generation route", () => {
+  it("stops before paid generation when recent copy cannot be loaded", async () => {
+    mocks.recentCopy.mockRejectedValueOnce(new Error("History unavailable"));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request())).status).toBe(502);
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+  });
+
   it("loads independent context together and composites the in-memory source", async () => {
     let resolveInstructions!: (value: string) => void;
     mocks.instructions.mockReturnValue(new Promise<string>(resolve => { resolveInstructions = resolve; }));
@@ -131,6 +141,7 @@ describe("creative generation route", () => {
     const response = await POST(request(), { params: Promise.resolve({ id: "creative" }) });
     expect(response.status).toBe(502);
     expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
+    expect(mocks.generateOneVariant.mock.calls[0][8]).toContainEqual({ headline: "Previous ad", primary_text: "Previous opening" });
     expect(await response.text()).not.toMatch(/private-test-secret|private prompt/);
   });
 
@@ -179,12 +190,14 @@ describe("creative generation route", () => {
       image_url: "https://cdn.example/finished.png",
       generation: {
         format: "story",
+        concept: { description: "Discuss your installation." },
         image: { model: "paid-image", estimatedCostUsd: null },
       },
     });
     expect(mocks.generateVariants.mock.calls[0][0]).toMatchObject({
       format: "story",
       referenceImages: ["https://example.com/product.png"],
+      recentCopy: [{ headline: "Previous ad", primary_text: "Previous opening" }],
     });
   });
 

@@ -23,7 +23,7 @@ import {
   variantUsageEvents,
   failedVariantUsage,
 } from "@/lib/creative/receipt";
-import { creativeReferences } from "@/lib/creative/references";
+import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -93,9 +93,10 @@ async function handlePOST(
     );
 
   try {
-    const [instructions, referenceImages] = await Promise.all([
+    const [instructions, referenceImages, recentCopy] = await Promise.all([
       getActiveInstructionsText(business.id),
       creativeReferences(supabase, business.id),
+      recentCreativeCopy(supabase, business.id),
     ]);
     const settings = savedGenerationSettings(creative.generation);
     const variant = await generateOneVariant(
@@ -106,6 +107,8 @@ async function handlePOST(
       settings.language ?? undefined,
       settings.format,
       referenceImages,
+      undefined,
+      [{ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" }, ...recentCopy].slice(0, 12),
     );
     await persistLLMUsage(
       variantUsageEvents(variant, {

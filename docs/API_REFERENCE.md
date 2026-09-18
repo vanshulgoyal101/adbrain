@@ -68,13 +68,14 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | DELETE | `/api/campaign-drafts/[id]` | `version` query -> envelope `{deleted:true}` | Retention-aware delete |
 | POST | `/api/campaigns/plan` | Goal/answers/optional audience draft -> plain result | Model; can save a draft |
 | POST | `/api/campaigns/preflight` | Draft ID/version/business -> envelope review | Provider verification, no campaign creation |
-| POST | `/api/campaigns/create` | Reviewed identifiers -> envelope operation | Creates paused remote objects |
+| POST | `/api/campaigns/create` | Reviewed identifiers -> envelope operation | Worker mode enqueues (202); inline mode creates paused remote objects |
+| GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> plain status | Live Meta mutation + local mirror |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused | Provider read, DB write, possible auto-pause |
-| POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor | Provider read + local imports |
+| POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |

@@ -1,6 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types";
 
+export async function recentCreativeCopy(supabase: SupabaseClient<Database>, businessId: string) {
+  const { data, error } = await supabase.from("creatives")
+    .select("headline, primary_text")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+  if (error) throw new Error("Could not load recent copy. Generation has not started.");
+  return (data ?? []).map((copy) => ({ headline: copy.headline ?? "", primary_text: copy.primary_text ?? "" }));
+}
+
 export async function creativeReferences(
   supabase: SupabaseClient<Database>,
   businessId: string,

@@ -39,6 +39,17 @@ function input(over: Partial<Parameters<typeof runPreflight>[0]> = {}) {
 }
 
 describe("campaign preflight", () => {
+  it("binds city scope to review and blocks contradictory radius resolution", () => {
+    const base = input({ hash: payload => createHash("sha256").update(payload).digest("hex") });
+    const cityOnly = { ...base, draft: { ...draft, targeting: { ...draft.targeting, location: { cityScope: "city_only" as const, radiusKm: 5 } } } };
+    const review = runPreflight(cityOnly);
+    expect(review.canCreatePaused).toBe(true);
+    expect(runPreflight({ ...cityOnly, geo: { ...base.geo, location: { cities: [{ key: "city", radius: 25 }] } } }).canCreatePaused).toBe(false);
+    const radius = runPreflight({ ...base, draft: { ...draft, targeting: { ...draft.targeting, location: { cityScope: "radius", radiusKm: 25 } } } });
+    expect(radius.canCreatePaused).toBe(true);
+    expect(radius.planHash).not.toBe(review.planHash);
+  });
+
   it.each([undefined, { interestNames: [], rationale: "Broad audience" }])("blocks missing detailed targeting: %j", (audience) => {
     const review = runPreflight(input({ draft: { ...draft, targeting: { ...draft.targeting, audience } } }));
     expect(review.canCreatePaused).toBe(false);
@@ -69,7 +80,7 @@ describe("campaign preflight", () => {
     expect(runPreflight({ ...base, draft: { ...draft, destination: "instant_form" }, form: input().form }).canCreatePaused).toBe(true);
   });
 
-  it.each(["imageUrl", "headline", "primaryText", "cta"] as const)("invalidates review when creative %s changes", (field) => {
+  it.each(["imageUrl", "headline", "primaryText", "description", "cta"] as const)("invalidates review when creative %s changes", (field) => {
     const original = input({ hash: payload => createHash("sha256").update(payload).digest("hex") });
     const review = runPreflight(original);
     const changed = runPreflight({ ...original, creatives: [{ ...original.creatives[0], [field]: "changed" }] });

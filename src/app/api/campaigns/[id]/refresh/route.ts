@@ -83,6 +83,9 @@ async function handlePOST(
     .from("campaign_results")
     .insert({
       campaign_id: id,
+      destination: insights.destination ?? "unknown",
+      period_start: insights.periodStart ?? null,
+      period_end: insights.periodEnd ?? null,
       impressions: insights.impressions,
       clicks: insights.clicks,
       leads: insights.leads,

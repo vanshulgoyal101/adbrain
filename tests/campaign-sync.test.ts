@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireOwnedBusiness: vi.fn(), getConnectionStatus: vi.fn(), withMetaConnection: vi.fn(),
   listCampaignsPage: vi.fn(), readBoundCampaign: vi.fn(), insert: vi.fn(), update: vi.fn(),
   existing: null as Record<string, unknown> | null,
+  getCampaignPage: vi.fn(), getLatestResults: vi.fn(),
 }));
 const connection = { generation: 4, authorization: "connected", selected: { adAccountId: "act_123", pageId: "page_1", currency: "INR" } };
 
@@ -19,7 +20,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
     return query;
   },
 }) }));
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "business" }) }));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "business" }), getCampaignPage: mocks.getCampaignPage, getLatestResults: mocks.getLatestResults }));
 vi.mock("@/lib/meta/connection-access", () => ({
   requireOwnedBusiness: mocks.requireOwnedBusiness, getConnectionStatus: mocks.getConnectionStatus, withMetaConnection: mocks.withMetaConnection,
   ConnectionAccessError: class extends Error { constructor(public code: string, message: string) { super(message); } },
@@ -28,6 +29,8 @@ vi.mock("@/lib/meta/connection-access", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.existing = null;
+  mocks.getCampaignPage.mockResolvedValue({ campaigns: [], nextCursor: null });
+  mocks.getLatestResults.mockResolvedValue({});
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business", userId: "owner" });
   mocks.getConnectionStatus.mockResolvedValue(connection);
   mocks.withMetaConnection.mockImplementation(async (_context, _purpose, execute) => execute({ listCampaignsPage: mocks.listCampaignsPage, readBoundCampaign: mocks.readBoundCampaign }, connection));
@@ -37,6 +40,32 @@ beforeEach(() => {
 });
 
 describe("verified campaign sync", () => {
+  it("returns an owner-scoped display page and latest snapshots", async () => {
+    mocks.getCampaignPage.mockResolvedValue({ campaigns: [{ id: "campaign" }], nextCursor: "display-next" });
+    const { GET } = await import("@/app/api/campaigns/list/route");
+    const response = await GET(new Request("http://localhost/api/campaigns/list?businessId=11111111-1111-4111-8111-111111111111&status=paused&query=solar"));
+    expect(response.status).toBe(200);
+    expect(mocks.getCampaignPage).toHaveBeenCalledWith("business", expect.objectContaining({ status: "paused", query: "solar" }));
+    expect(mocks.getLatestResults).toHaveBeenCalledWith(["campaign"]);
+    expect(await response.json()).toMatchObject({ nextCursor: "display-next", results: {} });
+  });
+
+  it("rejects unsupported list filters before loading campaigns", async () => {
+    const { GET } = await import("@/app/api/campaigns/list/route");
+    expect((await GET(new Request("http://localhost/api/campaigns/list?businessId=11111111-1111-4111-8111-111111111111&status=deleted"))).status).toBe(400);
+    expect(mocks.getCampaignPage).not.toHaveBeenCalled();
+  });
+
+  it("does not query list data when business authorization fails", async () => {
+    const { ConnectionAccessError } = await import("@/lib/meta/connection-access");
+    mocks.requireOwnedBusiness.mockRejectedValue(new ConnectionAccessError("FORBIDDEN", "Private detail"));
+    const { GET } = await import("@/app/api/campaigns/list/route");
+    const response = await GET(new Request("http://localhost/api/campaigns/list?businessId=11111111-1111-4111-8111-111111111111"));
+    expect(response.status).toBe(403);
+    expect(mocks.getCampaignPage).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain("Private detail");
+  });
+
   it("saves only verified account/Page bindings and actual budgets", async () => {
     const { POST } = await import("@/app/api/campaigns/sync/route");
     expect((await POST()).status).toBe(200);

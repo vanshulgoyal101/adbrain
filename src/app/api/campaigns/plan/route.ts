@@ -167,6 +167,7 @@ async function handlePOST(req: Request) {
     goal,
     plan: audienceDraft ? {
       ...result.plan,
+      city_scope: audienceDraft.targeting.location?.cityScope ?? "radius",
       name: audienceDraft.name,
       daily_budget_rupees: audienceDraft.dailyBudgetRupees,
       creative_ids: audienceDraft.creativeIds,
@@ -188,6 +189,7 @@ async function handlePOST(req: Request) {
       gender: audienceDraft.targeting.gender ?? "all",
       location: audienceDraft.targeting.location?.mode === "manual" ? audienceDraft.targeting.location : {
         ...draftResult.draft.targeting.location,
+        cityScope: audienceDraft.targeting.location?.cityScope ?? "radius",
         ...(audienceDraft.targeting.location?.excludedNames?.length ? { excludedNames: audienceDraft.targeting.location.excludedNames } : {}),
         ...(audienceDraft.targeting.location?.excluded?.length ? { excluded: audienceDraft.targeting.location.excluded } : {}),
       },

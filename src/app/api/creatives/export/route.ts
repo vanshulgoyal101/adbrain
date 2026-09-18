@@ -6,6 +6,7 @@ import { downloadImage } from "@/lib/imageGen";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { z } from "zod";
+import { savedCreativeDescription } from "@/lib/creative/concept";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -74,6 +75,7 @@ async function handlePOST(req: Request) {
         `Ad ${i + 1} — ${c.angle ?? ""}\n` +
         `Headline: ${c.headline ?? ""}\n` +
         `Primary text:\n${c.primary_text ?? ""}\n` +
+        `Description: ${savedCreativeDescription(c.generation) ?? ""}\n` +
         `CTA: ${c.cta ?? ""}\n`,
     )
     .join("\n----------------------------------------\n\n");

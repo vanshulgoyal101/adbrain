@@ -75,6 +75,21 @@ Phases: `campaign`, `adset`, `creative`, `ad`, `reconcile`, `complete`.
 Draft FK deletion is restricted while an operation references it; campaign FK
 deletion sets operation `campaign_id` null while retaining recovery evidence.
 
+Local hardening adds `destination` to campaigns and snapshots with a constrained
+set of `instant_form`, `whatsapp`, `call`, `mixed`, `unknown` (default).
+Snapshot `period_start`/`period_end` record provider dates when available; legacy
+rows remain null. No historical range or destination is invented. A snapshot's
+known destination wins over the campaign's current destination; unknown snapshots
+can fall back to current/legacy evidence, so historical reclassification is not exact.
+These fields do not make the spend cap a calendar-week accounting system.
+Campaign lists use an index on `(business_id,created_at desc,id desc)`.
+
+Worker jobs use existing operation rows with `payload.execution='worker'` and a
+validated reviewed request. A partial pending index supports queue claims. No
+second job table can diverge from the operation's idempotency and recovery state.
+`private.schema_migrations` records approved named migrations and SHA-256 checksums;
+it is administrator-only and does not retroactively catalog earlier deployments.
+
 ### Connections and Secrets
 
 | Table | Important fields and access |
@@ -139,6 +154,7 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation |
 | `update_campaign_draft_if_version` | Owner/version-checked draft update, blocks unsafe operation overlap |
 | `claim_campaign_operation` | Durable idempotency/lease claim |
+| `enqueue_campaign_operation`, `claim_next_campaign_job` | Service-only durable enqueue and exclusive pending-job claim |
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |

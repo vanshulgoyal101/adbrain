@@ -153,10 +153,26 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
 - `.env.local` points at production Supabase, not the local QA database. The
   production project reference is `kmzuxrvfrwwpwmoovwcp`; verify the actual target
   before every database command. Never print secrets to establish that identity.
-- **Do not casually run `npm run db:push`.** It uses the configured environment
-  and can modify production. A committed migration is not an applied migration.
+- `npm run db:push` now rejects non-loopback targets. It is a full-schema tool
+   for disposable local databases, not a production migration command. A local
+   tunnel can still point at a remote database; verify what is behind the address.
+- `npm run db:migrate -- --migration <filename.sql>` previews one migration and
+   its SHA-256 without connecting. Applying requires `--apply`, explicit `PGHOST`,
+   `PGPORT`, `PGDATABASE`, `PGUSER`, and a securely supplied password. Remote targets
+   additionally require `--target 'host:port/database@user'` matching exactly.
+   Remote TLS certificate verification is mandatory; use `PGSSLROOTCERT` when needed.
+- The runner serializes migrations under a transaction advisory lock and records
+   filename/checksum in `private.schema_migrations`. An identical applied file is
+   skipped; checksum drift fails. Failed SQL rolls back with no ledger entry.
+   Historical migrations predate this ledger: never replay the directory or assume
+   an absent ledger entry means a historical migration has not run. Inspect deployed
+   state and apply only the individually reviewed incremental migration.
 - Review migrations against existing data, test fresh and upgrade paths, and
   define backup/restore, compatibility, and sequencing before applying remotely.
+- The local campaign hardening changes require the reporting-identity migration
+   before the new web code, and the worker migration before enabling worker mode.
+   See [worker rollout](OPERATIONS.md#campaign-worker-rollout). Neither new migration
+   nor a worker deployment is authorized merely by publishing code.
 - Credential backfills and encryption-key changes require explicit planning.
   Do not replace an encryption key without preserving access to existing tokens.
 - Local QA uses the existing `adbrain-qa` Colima profile and

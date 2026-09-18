@@ -1,7 +1,7 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getCampaignPage, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection, getConnectionStatus } from "@/lib/meta/connection-access";
 import { z } from "zod";
 
@@ -43,6 +43,7 @@ async function handlePOST(request?: Request) {
           if (!binding) { skipped += 1; continue; }
           rows.push({
             business_id: context.businessId, name: campaign.name, objective: campaign.objective,
+            destination: binding.destination,
             daily_budget: binding.dailyBudgetRupees, status: campaign.status === "ACTIVE" ? "active" as const : "paused" as const,
             meta_campaign_id: campaign.id, meta_adset_id: binding.adSetId,
             meta_ad_account_id: connection.selected.adAccountId, meta_page_id: connection.selected.pageId,
@@ -65,9 +66,8 @@ async function handlePOST(request?: Request) {
       }
       return { skipped, nextCursor: page.nextCursor };
     });
-    const { data: campaigns, error } = await supabase.from("campaigns").select("*").eq("business_id", business.id).order("created_at", { ascending: false });
-    if (error) throw new Error("Synced campaigns could not be loaded.");
-    return NextResponse.json({ campaigns, ...result });
+    const page = await getCampaignPage(business.id);
+    return NextResponse.json({ campaigns: page.campaigns, pageCursor: page.nextCursor, ...result });
   } catch (error) {
     const status = error instanceof ConnectionAccessError ? error.code === "CONFLICT" ? 409 : error.code === "FORBIDDEN" ? 403 : 400 : 502;
     return NextResponse.json({ error: error instanceof ConnectionAccessError ? error.message : "Campaign sync could not be completed. Existing campaigns are preserved." }, { status });

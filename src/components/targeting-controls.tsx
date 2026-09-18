@@ -1,42 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, MapPin, Search, Sparkles, X } from "lucide-react";
+import { Loader2, MapPin, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { Input, Label } from "@/components/ui/input";
 import { InfoHint } from "@/components/ui/info-hint";
 import { AGE_BOUNDS, describeAudience, normalizeAgeRange } from "@/lib/campaign/targeting";
 import { cn } from "@/lib/utils";
-import type { TargetingInputDTO } from "@/lib/campaign/connect-contracts";
-
-export interface GeoPick {
-  key: string;
-  name: string;
-  type: string;
-  region?: string | null;
-}
-
-export interface TargetingValue {
-  gender?: TargetingInputDTO["gender"];
-  locationMode: "ai" | "manual";
-  included: GeoPick[];
-  excluded: GeoPick[];
-  radiusKm: number;
-  ageMode: "ai" | "manual";
-  ageMin: number;
-  ageMax: number;
-  audience?: TargetingInputDTO["audience"];
-}
-
-export const defaultTargeting: TargetingValue = {
-  gender: "all",
-  locationMode: "ai",
-  included: [],
-  excluded: [],
-  radiusKm: 25,
-  ageMode: "ai",
-  ageMin: 25,
-  ageMax: 55,
-};
+import type { GeoPick, TargetingValue } from "@/lib/campaign/editor-targeting";
+export { defaultTargeting, type GeoPick, type TargetingValue } from "@/lib/campaign/editor-targeting";
 
 function ModeToggle({
   mode,
@@ -93,9 +64,15 @@ function LocationPicker({
 }) {
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<GeoPick[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  const [status, setStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
+  const [retry, setRetry] = React.useState(0);
+  const [activeIndex, setActiveIndex] = React.useState(-1);
+  const listId = React.useId();
+  const statusId = React.useId();
+  const loading = status === "loading";
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
   const searchCache = React.useRef(new Map<string, { results: GeoPick[]; expiresAt: number }>());
   // Set when the user dismisses the list, so a slow in-flight search can't pop
   // it back open underneath them. Cleared as soon as they type again.
@@ -128,16 +105,16 @@ function LocationPicker({
     let cancelled = false;
     const t = setTimeout(async () => {
       if (q.length < 2) {
-        if (!cancelled) { setResults([]); setLoading(false); }
+        if (!cancelled) { setResults([]); setStatus("idle"); }
         return;
       }
       if (fresh) {
         setResults(cached.results);
-        setLoading(false);
+        setStatus("success");
         if (!dismissed.current) setOpen(true);
         return;
       }
-      setLoading(true);
+      setStatus("loading");
       try {
         const res = await fetch(
           `/api/meta/geo-search?q=${encodeURIComponent(q)}`,
@@ -152,12 +129,15 @@ function LocationPicker({
           }
           searchCache.current.set(cacheKey, { results: data.results, expiresAt: Date.now() + 60_000 });
           setResults(data.results);
+          setStatus("success");
           if (!dismissed.current) setOpen(true);
         }
       } catch {
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setResults([]);
+          setStatus("error");
+          if (!dismissed.current) setOpen(true);
+        }
       }
     }, fresh ? 0 : 300);
     return () => {
@@ -165,7 +145,13 @@ function LocationPicker({
       controller.abort();
       clearTimeout(t);
     };
-  }, [query]);
+  }, [query, retry]);
+
+  React.useEffect(() => {
+    if (open && activeIndex >= 0) {
+      document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView?.({ block: "nearest" });
+    }
+  }, [activeIndex, listId, open]);
 
   function add(pick: GeoPick) {
     if (!value.some((v) => v.type === pick.type && v.key === pick.key)) {
@@ -173,7 +159,9 @@ function LocationPicker({
     }
     setQuery("");
     setResults([]);
-    setOpen(false);
+    setActiveIndex(-1);
+    setStatus("idle");
+    dismiss();
   }
 
   function remove(pick: GeoPick) {
@@ -186,7 +174,9 @@ function LocationPicker({
       : "bg-rose-50 text-rose-800 border-rose-200";
 
   return (
-    <div ref={rootRef} className="flex flex-col gap-2">
+    <div ref={rootRef} className="flex flex-col gap-2" onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) dismiss();
+    }}>
       <div className="relative">
         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
           {loading ? (
@@ -196,32 +186,73 @@ function LocationPicker({
           )}
         </span>
         <Input
+          ref={inputRef}
+          role="combobox"
+          aria-label={tone === "include" ? "Search locations to include" : "Search locations to exclude"}
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={open && results.length > 0 ? listId : undefined}
+          aria-activedescendant={open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+          aria-describedby={open && (loading || status === "error" || (status === "success" && results.length === 0)) ? statusId : undefined}
+          aria-busy={loading}
           value={query}
           onChange={(e) => {
             dismissed.current = false;
             setQuery(e.target.value);
+            setResults([]);
+            setActiveIndex(-1);
+            const searchable = e.target.value.trim().length >= 2;
+            setStatus(searchable ? "loading" : "idle");
+            setOpen(searchable);
           }}
-          onFocus={() => results.length && !dismissed.current && setOpen(true)}
+          onFocus={() => {
+            dismissed.current = false;
+            if (status !== "idle") setOpen(true);
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") dismiss();
+            if (e.key === "Escape" || (e.key === "Tab" && status !== "error")) dismiss();
+            if ((e.key === "ArrowDown" || e.key === "ArrowUp") && results.length > 0) {
+              e.preventDefault();
+              dismissed.current = false;
+              setOpen(true);
+              setActiveIndex((current) => e.key === "ArrowDown"
+                ? (current + 1) % results.length
+                : (current <= 0 ? results.length - 1 : current - 1));
+            }
+            if (e.key === "Enter" && open) {
+              e.preventDefault();
+              if (activeIndex >= 0 && results[activeIndex]) add(results[activeIndex]);
+            }
           }}
           placeholder={placeholder}
           className="pl-9"
         />
         {open && results.length > 0 && (
           <ul
+            id={listId}
+            role="listbox"
+            aria-label={tone === "include" ? "Locations to include" : "Locations to exclude"}
             className="absolute z-30 mt-1 max-h-60 w-full overflow-y-scroll rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
             style={{ scrollbarGutter: "stable" }}
           >
-            {results.map((r) => (
-              <li key={`${r.type}:${r.key}`}>
+            {results.map((r, index) => (
+              <li key={`${r.type}:${r.key}`} role="presentation">
                 <button
+                  id={`${listId}-${index}`}
                   type="button"
+                  role="option"
+                  aria-selected={activeIndex === index}
+                  tabIndex={-1}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => add(r)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50", activeIndex === index && "bg-blue-50")}
                 >
                   <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <span className="truncate text-slate-800">{r.name}</span>
+                  <span className="min-w-0 text-slate-800">
+                    <span className="block truncate">{r.name}</span>
+                    {r.region && <span className="block truncate text-xs text-slate-500">{r.region}</span>}
+                  </span>
                   <span className="ml-auto shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
                     {r.type}
                   </span>
@@ -229,6 +260,19 @@ function LocationPicker({
               </li>
             ))}
           </ul>
+        )}
+        {open && (loading || status === "error" || (status === "success" && results.length === 0)) && (
+          <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-lg">
+            <p id={statusId} role="status" className="wrap-break-word">
+              {loading ? "Searching locations..." : status === "error" ? "Location search is unavailable. Your selected places are unchanged." : `No locations found for "${query.trim()}".`}
+            </p>
+            {status === "error" && (
+              <button type="button" className="mt-2 inline-flex items-center gap-1.5 rounded px-2 py-1 font-medium text-blue-700 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-600"
+                onClick={() => { inputRef.current?.focus(); dismissed.current = false; setStatus("loading"); setRetry((current) => current + 1); }}>
+                <RefreshCw className="h-3.5 w-3.5" />Retry
+              </button>
+            )}
+          </div>
         )}
       </div>
       {value.length > 0 && (
@@ -294,7 +338,9 @@ export function TargetingControls({
     }
   };
 
-  const hasCities = value.included.some((i) => i.type === "city");
+  const hasCities = [...value.included, ...value.excluded].some((place) => place.type === "city");
+  const cityScope = value.cityScope ?? "radius";
+  const scopeId = React.useId();
   const areaNames = [...(value.locationMode === "manual" ? value.included.map((item) => item.name) : plannedAreas.length ? [] : brandAreas), ...plannedAreas];
   const areaLabel = areaNames.length ? areaNames.join(", ") : "an area still to be selected";
 
@@ -379,7 +425,25 @@ export function TargetingControls({
           </div>
         )}
 
-        {(hasCities || plannedAreas.length > 0) && (
+        {(value.locationMode === "ai" || hasCities || plannedAreas.length > 0 || plannedExclusions.length > 0) && (
+          <fieldset className="min-w-0">
+            <legend className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-600">
+              City coverage
+              <InfoHint>No added radius uses Meta&apos;s city area, not a guaranteed municipal boundary. Applies to included and excluded cities; states and countries are unchanged.</InfoHint>
+            </legend>
+            <div className="grid w-full grid-cols-2 rounded-md border border-slate-200 bg-slate-100 p-0.5 sm:max-w-80">
+              {([ ["city_only", "City only"], ["radius", "City + radius"] ] as const).map(([scope, label]) => (
+                <label key={scope} className="relative min-w-0 cursor-pointer">
+                  <input type="radio" name={scopeId} value={scope} checked={cityScope === scope}
+                    onChange={() => set({ cityScope: scope })} className="peer sr-only" />
+                  <span title={scope === "city_only" ? "No added radius; Meta defines the city area" : "City with a surrounding radius"}
+                    className="flex min-h-10 items-center justify-center rounded px-2 py-1 text-center text-sm font-medium text-slate-600 peer-checked:bg-white peer-checked:text-blue-700 peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-blue-600">{label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {cityScope === "radius" && (hasCities || plannedAreas.length > 0 || plannedExclusions.length > 0 || value.locationMode === "ai") && (
           <div className="flex flex-col gap-1.5">
             <Label className="flex items-center gap-1.5 text-xs text-slate-600">
               Radius around each city: {value.radiusKm} km
@@ -390,6 +454,7 @@ export function TargetingControls({
             </Label>
             <input
               type="range"
+              aria-label="City radius in kilometers"
               min={17}
               max={80}
               step={1}

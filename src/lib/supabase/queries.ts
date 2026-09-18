@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { z } from "zod";
 import {
   DEV_AUTH_COOKIE,
   DEV_USER,
@@ -7,6 +8,7 @@ import {
   type AppUser,
 } from "@/lib/dev-auth";
 import { buildPerformanceContext } from "@/lib/campaign/performance";
+import { campaignDestination } from "@/lib/campaign/outcomes";
 import type { ReportRow } from "@/lib/campaign/report";
 import {
   DEFAULT_SPEND_LIMITS,
@@ -30,6 +32,25 @@ import type {
 } from "@/lib/types";
 
 const QUERY_BATCH_SIZE = 100;
+const campaignCursorSchema = z.object({ createdAt: z.iso.datetime({ offset: true }), id: z.uuid() }).strict();
+
+export async function getCampaignPage(businessId: string, options: { cursor?: string | null; query?: string; status?: Campaign["status"] } = {}) {
+  const cursor = options.cursor ? campaignCursorSchema.parse(JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8"))) : null;
+  const database = await createClient();
+  let query = database.from("campaigns").select("*", { count: "exact" }).eq("business_id", businessId)
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50);
+  if (cursor) query = query.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`);
+  if (options.query) query = query.ilike("name", `%${options.query.replace(/[\\%_]/g, "\\$&")}%`);
+  if (options.status) query = query.eq("status", options.status);
+  const { data, error, count } = await query;
+  if (error || !data || count === null) throw new Error("Campaign page could not be loaded.");
+  const last = data[data.length - 1];
+  return {
+    campaigns: data,
+    nextCursor: last && count > data.length
+      ? Buffer.from(JSON.stringify({ createdAt: last.created_at, id: last.id })).toString("base64url") : null,
+  };
+}
 
 async function readAllById<Row extends { id: string }>(
   fetchPage: (after: string | null) => PromiseLike<{ data: Row[] | null; error: unknown }>,
@@ -316,6 +337,7 @@ export async function getPerformanceRows(
     ];
     return {
       name: c.name ?? `${c.objective} campaign`,
+      destination: campaignDestination(c, r),
       angles,
       area: raw.plan?.area ?? raw.area ?? null,
       dailyBudget: c.daily_budget ?? null,

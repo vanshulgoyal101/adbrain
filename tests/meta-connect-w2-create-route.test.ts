@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   existingOperation: null as Record<string, unknown> | null,
   creativeReads: 0,
   changeCreativeBeforeExecution: false,
+  description: null as string | null,
+  submittedCreative: vi.fn(),
 }));
 
 const businessId = "b123b123-b123-4123-8123-b123b123b123";
@@ -116,7 +118,7 @@ function reviewPlanHash(): string {
       },
       canCreatePaused: true,
     },
-    creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "Headline", primaryText: "Message", cta: "Learn More" }],
+    creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "Headline", primaryText: "Message", cta: "Learn More", description: mocks.description }],
     form: { id: "form-1", businessId, active: true },
     geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key: "jaipur", radius: 25, distance_unit: "kilometer" }] }, audienceInterests: [{ id: "12345", name: "Solar energy" }] },
     hash: (value) => { payload = value; return "0".repeat(64); },
@@ -176,7 +178,7 @@ vi.mock("@/lib/supabase/server", () => ({
         };
       }
       if (table === "creatives") {
-        const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More" }], error: null };
+        const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More", generation: { concept: { description: mocks.description } } }], error: null };
         mocks.creativeReads++;
         if (mocks.changeCreativeBeforeExecution && mocks.creativeReads > 1) creativeData.data[0].primary_text = "Unreviewed copy";
         type CreativeResult = { data: typeof creativeData.data; error: null };
@@ -228,6 +230,7 @@ beforeEach(() => {
   mocks.existingOperation = null;
   mocks.creativeReads = 0;
   mocks.changeCreativeBeforeExecution = false;
+  mocks.description = null;
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId, userId });
   mocks.getConnectionStatus.mockResolvedValue({
@@ -241,6 +244,7 @@ beforeEach(() => {
         resolveGeoTargeting: vi.fn().mockResolvedValue({ targeting: {}, matched: [{ label: "Jaipur" }], unresolved: [] }),
         resolveAudienceInterests: vi.fn().mockResolvedValue({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }),
         createLeadCampaign: vi.fn().mockImplementation(async (params: { onCheckpoint?: (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => Promise<void> }) => {
+          mocks.submittedCreative(params);
           await params.onCheckpoint?.({ phase: "campaign", externalId: "meta-campaign-1" });
           await params.onCheckpoint?.({ phase: "adset", externalId: "meta-adset-1" });
           await params.onCheckpoint?.({ phase: "ad", externalId: "meta-ad-1" });
@@ -258,6 +262,40 @@ beforeEach(() => {
 });
 
 describe("durable campaign create route", () => {
+  it("queues worker-mode execution without mutating Meta in the HTTP request", async () => {
+    vi.stubEnv("CAMPAIGN_EXECUTION_MODE", "worker");
+    try {
+      mocks.rpc.mockResolvedValue({ data: [operationRow({ state: "pending" })], error: null });
+      const { POST } = await import("@/app/api/campaigns/create/route");
+      const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+      expect(response.status).toBe(202);
+      expect((await response.json()).data.state).toBe("pending");
+      expect(mocks.rpc).toHaveBeenCalledWith("enqueue_campaign_operation", expect.any(Object));
+      expect(mocks.submittedCreative).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("never falls back to inline mutations if the worker queue is unavailable", async () => {
+    vi.stubEnv("CAMPAIGN_EXECUTION_MODE", "worker");
+    try {
+      mocks.rpc.mockResolvedValue({ data: null, error: { message: "offline" } });
+      const { POST } = await import("@/app/api/campaigns/create/route");
+      const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+      expect(response.status).toBe(503);
+      expect(mocks.submittedCreative).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("submits the saved and reviewed description to Meta", async () => {
+    mocks.description = "Discuss your rooftop plans.";
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect((await response.json()).data.state).toBe("succeeded");
+    expect(mocks.submittedCreative).toHaveBeenCalledWith(expect.objectContaining({
+      creatives: [expect.objectContaining({ description: mocks.description })],
+    }));
+  });
+
   it("blocks WhatsApp creation even with a forged review hash and verified recipient", async () => {
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
     const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });

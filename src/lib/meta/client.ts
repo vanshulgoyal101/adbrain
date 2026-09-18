@@ -1,6 +1,9 @@
 import { getEnv } from "@/lib/env";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
+import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
+import { decodeCampaignInsights, type CampaignInsights } from "./insights";
+export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -27,6 +30,7 @@ export interface CreativeInput {
   imageUrl: string;
   headline: string;
   message: string;
+  description?: string | null;
   cta?: string | null;
 }
 
@@ -91,16 +95,6 @@ export type CampaignMutationCheckpoint = {
   variantIndex?: number;
   creativeIndex?: number;
 };
-
-export interface CampaignInsights {
-  impressions: number;
-  clicks: number;
-  leads: number;
-  spend: number;
-  cpl: number | null;
-  conversations?: number;
-  costPerConversation?: number | null;
-}
 
 export interface MetaCampaignSummary {
   id: string;
@@ -280,6 +274,7 @@ function geoLabel(m: GeoSearchResult): string {
 export function geoItemsToTargeting(
   items: GeoItem[],
   defaultRadiusKm = 25,
+  cityScope: "city_only" | "radius" = "radius",
 ): GeoTargeting {
   const cities: NonNullable<GeoTargeting["cities"]> = [];
   const regions: NonNullable<GeoTargeting["regions"]> = [];
@@ -294,8 +289,10 @@ export function geoItemsToTargeting(
     if (item.type === "city") {
       cities.push({
         key,
-        radius: clampRadiusKm(item.radiusKm ?? defaultRadiusKm),
-        distance_unit: "kilometer",
+        ...(cityScope === "radius" ? {
+          radius: clampRadiusKm(item.radiusKm ?? defaultRadiusKm),
+          distance_unit: "kilometer",
+        } : {}),
       });
     } else if (item.type === "region") {
       regions.push({ key });
@@ -349,7 +346,7 @@ export function metaClientFromEnv(): MetaClient | null {
 export class MetaClient {
   private pageAccessToken: Promise<string> | null = null;
 
-  constructor(private readonly creds: MetaCredentials) {}
+  constructor(private readonly creds: MetaCredentials, private readonly executionSignal?: AbortSignal) {}
 
   private async graph<T>(
     path: string,
@@ -362,9 +359,12 @@ export class MetaClient {
   ): Promise<T> {
     const method = opts.method ?? "GET";
     const token = opts.token ?? this.creds.accessToken;
-    const signal = opts.signal
-      ? AbortSignal.any([opts.signal, AbortSignal.timeout(15_000)])
-      : AbortSignal.timeout(15_000);
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(15_000),
+      ...(opts.signal ? [opts.signal] : []),
+      ...(this.executionSignal ? [this.executionSignal] : []),
+    ]);
+    signal.throwIfAborted();
 
     let res: Response;
     if (method === "POST") {
@@ -474,7 +474,7 @@ export class MetaClient {
    */
   async resolveGeoTargeting(
     names: string[],
-    opts: { radiusKm?: number; preferCountry?: string } = {},
+    opts: { radiusKm?: number; preferCountry?: string; cityScope?: "city_only" | "radius" } = {},
   ): Promise<ResolvedGeo> {
     const radius = clampRadiusKm(opts.radiusKm ?? 25);
     const preferCountry = opts.preferCountry ?? "";
@@ -505,7 +505,7 @@ export class MetaClient {
       seen.add(dedupe);
 
       if (best.type === "city") {
-        cities.push({ key: best.key, radius, distance_unit: "kilometer" });
+        cities.push({ key: best.key, ...(opts.cityScope === "city_only" ? {} : { radius, distance_unit: "kilometer" }) });
       } else if (best.type === "region") {
         regions.push({ key: best.key });
       } else if (best.type === "country" && best.country_code) {
@@ -542,7 +542,7 @@ export class MetaClient {
     }
     let imgRes: Response;
     try {
-      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000 });
+      imgRes = await fetchPublicUrl(parsed.toString(), { timeoutMs: 30_000, signal: this.executionSignal });
     } catch {
       throw new MetaError("Could not fetch the creative image.");
     }
@@ -768,6 +768,7 @@ export class MetaClient {
                   image_hash: imageHash,
                   message: c.message,
                   name: c.headline,
+                  ...(c.description?.trim() ? { description: c.description.trim() } : {}),
                   link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
                   call_to_action: destinationCTA(destination, {
                     leadFormId: params.leadFormId,
@@ -832,8 +833,8 @@ export class MetaClient {
   async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }) {
     if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "") || Number(campaign.lifetime_budget ?? 0) !== 0
       || !["ACTIVE", "PAUSED"].includes(campaign.status)) return null;
-    const response = await this.graph<{ data?: Array<{ id: string; status: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${campaign.id}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object&limit=100`,
+    const response = await this.graph<{ data?: Array<{ id: string; status: string; destination_type?: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${campaign.id}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object,destination_type&limit=100`,
     );
     if (!response.data?.length || response.paging?.next) return null;
     let adSetBudget = 0;
@@ -846,10 +847,10 @@ export class MetaClient {
     const campaignBudget = Number(campaign.daily_budget ?? 0);
     const total = campaignBudget > 0 && adSetBudget === 0 ? campaignBudget : campaignBudget === 0 ? adSetBudget : Number.NaN;
     if (!Number.isSafeInteger(total) || total <= 0) return null;
-    return { dailyBudgetRupees: total / 100, adSetId: response.data[0].id };
+    return { dailyBudgetRupees: total / 100, adSetId: response.data[0].id, destination: destinationFromAdSets(response.data) };
   }
 
-  private async verifyCampaignBinding(campaignId: string): Promise<"whatsapp" | null> {
+  private async verifyCampaignBinding(campaignId: string): Promise<CampaignDestination> {
     const node = encodeURIComponent(campaignId);
     const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
@@ -862,34 +863,13 @@ export class MetaClient {
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
     }
-    return adSets.data.every(adSet => adSet.destination_type === "WHATSAPP") ? "whatsapp" : null;
+    return destinationFromAdSets(adSets.data);
   }
 
   async getCampaignInsights(campaignId: string): Promise<CampaignInsights> {
     const destination = await this.verifyCampaignBinding(campaignId);
-    const data = await this.graph<{
-      data: Array<{
-        impressions?: string;
-        clicks?: string;
-        spend?: string;
-        actions?: Array<{ action_type: string; value: string }>;
-      }>;
-    }>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions`);
-
-    const row = data.data?.[0];
-    const impressions = Number(row?.impressions ?? 0);
-    const clicks = Number(row?.clicks ?? 0);
-    const spend = Number(row?.spend ?? 0);
-    const leadAction = row?.actions?.find((a) =>
-      a.action_type.includes("lead"),
-    );
-    const leads = Number(leadAction?.value ?? 0);
-    const cpl = leads > 0 ? spend / leads : null;
-    const conversationAction = row?.actions?.find(action => action.action_type === "onsite_conversion.messaging_conversation_started_7d");
-    const conversations = Number(conversationAction?.value ?? 0);
-    return { impressions, clicks, leads, spend, cpl,
-      ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null } : {}),
-    };
+    const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions`);
+    return decodeCampaignInsights(data, destination);
   }
 
   async deleteObject(id: string): Promise<void> {

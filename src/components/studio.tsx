@@ -1,4 +1,5 @@
 "use client";
+import { savedCreativeDescription } from "@/lib/creative/concept";
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
@@ -612,6 +613,11 @@ function CreativeCard({
         <p className="whitespace-pre-line text-sm text-slate-600">
           {creative.primary_text}
         </p>
+        {savedCreativeDescription(creative.generation) && (
+          <p className="break-words text-sm text-slate-600">
+            <span className="font-medium">Description: </span>{savedCreativeDescription(creative.generation)}
+          </p>
+        )}
         {creative.cta && (
           <span className="mt-1 inline-flex w-fit rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">
             {creative.cta}
@@ -808,6 +814,12 @@ function CreativePreview({
                   {creative.headline || "No headline"}
                 </p>
               </div>
+              {savedCreativeDescription(creative.generation) && (
+                <div className="border-t border-slate-200 pt-5">
+                  <p className="text-xs font-semibold text-slate-400">Description</p>
+                  <p className="mt-2 break-words text-sm leading-6 text-slate-700">{savedCreativeDescription(creative.generation)}</p>
+                </div>
+              )}
               <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-5">
                 <span className="text-xs text-slate-500">
                   Facebook and Instagram feed

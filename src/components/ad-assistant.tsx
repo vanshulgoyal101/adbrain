@@ -1,4 +1,5 @@
 "use client";
+import { savedCreativeDescription } from "@/lib/creative/concept";
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -697,6 +698,11 @@ function ResultCard({ creative }: { creative: Creative }) {
         <p className="line-clamp-4 whitespace-pre-line text-xs text-slate-600">
           {creative.primary_text}
         </p>
+        {savedCreativeDescription(creative.generation) && (
+          <p className="break-words text-xs text-slate-600">
+            <span className="font-medium">Description: </span>{savedCreativeDescription(creative.generation)}
+          </p>
+        )}
         {creative.cta && (
           <span className="mt-1 inline-flex w-fit rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-white">
             {creative.cta}

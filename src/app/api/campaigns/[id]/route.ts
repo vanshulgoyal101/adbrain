@@ -65,11 +65,13 @@ async function handlePATCH(
     if (!verifiedSpend) return apiError("Spend limits could not be verified. Try again before activating.", 503);
     const [limits, spend] = verifiedSpend;
     const otherActive = spend.filter((c) => c.status === "active" && c.id !== id);
-    const { exceeds, projectedAfter } = wouldExceedCap(
+    const projection = wouldExceedCap(
       otherActive,
       campaign.daily_budget ?? 0,
       limits.weeklyCapRupees,
     );
+    if (!projection.verified) return apiError("Campaign budgets or the saved cap could not be verified. Sync campaigns and review spend settings before activating.", 503);
+    const { exceeds, projectedAfter } = projection;
     if (exceeds) {
       const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
       return apiError(

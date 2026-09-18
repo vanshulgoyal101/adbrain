@@ -4,7 +4,10 @@
  * that produced cheaper leads. Pure and side-effect free for easy testing.
  */
 
+import type { CampaignDestination } from "./outcomes";
+
 export interface CampaignPerf {
+  destination: CampaignDestination;
   name: string;
   angles: string[];
   area: string | null;
@@ -19,17 +22,20 @@ export interface CampaignPerf {
 
 /** Rank: most leads first, then cheapest cost-per-lead. */
 function rank(a: CampaignPerf, b: CampaignPerf): number {
-  if (a.conversations != null || b.conversations != null) {
-    if (a.conversations == null) return -1;
-    if (b.conversations == null) return 1;
-    return b.conversations - a.conversations || (a.costPerConversation ?? Infinity) - (b.costPerConversation ?? Infinity);
+  const group = (row: CampaignPerf) => row.destination === "instant_form" ? 0 : row.destination === "whatsapp" && row.conversations != null ? 1 : 2;
+  if (group(a) !== group(b)) return group(a) - group(b);
+  if (group(a) === 2) return b.spend - a.spend;
+  if (a.destination === "whatsapp" && b.destination === "whatsapp") {
+    return (b.conversations ?? 0) - (a.conversations ?? 0) || (a.costPerConversation ?? Infinity) - (b.costPerConversation ?? Infinity);
   }
   if (a.leads !== b.leads) return b.leads - a.leads;
   return (a.cpl ?? Infinity) - (b.cpl ?? Infinity);
 }
 
 function resultText(r: CampaignPerf): string {
-  if (r.conversations != null) return `${r.conversations} WhatsApp conversations started${r.costPerConversation != null ? ` at INR ${Math.round(r.costPerConversation)} per conversation` : ""}; INR ${Math.round(r.spend)} spent. Conversations are not verified leads or sales.`;
+  if (r.destination === "unknown" || r.destination === "mixed" || r.destination === "call") return `INR ${Math.round(r.spend)} spent; comparable outcome metrics unavailable (${r.destination}).`;
+  if (r.destination === "whatsapp" && r.conversations == null) return `INR ${Math.round(r.spend)} spent; WhatsApp conversation metrics unavailable. Refresh required.`;
+  if (r.destination === "whatsapp") return `${r.conversations} WhatsApp conversations started${r.costPerConversation != null ? ` at INR ${Math.round(r.costPerConversation)} per conversation` : ""}; INR ${Math.round(r.spend)} spent. Conversations are not verified leads or sales.`;
   if (r.leads > 0) {
     return `${r.leads} lead${r.leads === 1 ? "" : "s"}${
       r.cpl != null ? ` at ₹${Math.round(r.cpl)} per lead` : ""

@@ -3,6 +3,7 @@ import {
   buildConceptMessages,
   conceptImagePrompt,
   validateConcept,
+  savedCreativeDescription,
 } from "@/lib/creative/concept";
 import { AD_ANGLES } from "@/lib/templates/ads";
 
@@ -20,6 +21,7 @@ const input = {
 const concept = {
   headline: "Make your roof work",
   primary_text: "Explore rooftop solar with our local installation team.",
+  description: "Discuss your roof with our local team.",
   cta: "Get Quote",
   rationale: "Connect unused roof space to a useful home improvement.",
   visual: {
@@ -33,6 +35,29 @@ const concept = {
 };
 
 describe("creative concept contract", () => {
+  it("reads descriptions without inventing copy for legacy receipts", () => {
+    expect(savedCreativeDescription({ concept })).toBe(concept.description);
+    expect(savedCreativeDescription(null)).toBeNull();
+    expect(savedCreativeDescription({ concept: { rationale: "Legacy ad" } })).toBeNull();
+  });
+
+  it("rejects missing descriptions and repeated headlines or openings", () => {
+    expect(validateConcept({ ...concept, description: undefined }, input).success).toBe(false);
+    expect(validateConcept({ ...concept, description: " " }, input).success).toBe(false);
+    expect(validateConcept(concept, { ...input, recentCopy: [concept] })).toMatchObject({
+      success: false,
+      issues: expect.arrayContaining([expect.stringContaining("repeated-headline"), expect.stringContaining("repeated-opening")]),
+    });
+  });
+
+  it("does not treat previous ads as evidence and checks description claims", () => {
+    expect(validateConcept({ ...concept, description: "Free installation" }, {
+      ...input, recentCopy: [{ headline: "Free installation", primary_text: "Free installation" }],
+    }).success).toBe(false);
+    const context = JSON.parse(buildConceptMessages({ ...input, recentCopy: [concept] })[1].content);
+    expect(context.recentCopy[0].headline).toBe(concept.headline);
+  });
+
   it("preserves model art direction, medium, brand and placement in image execution", () => {
     const result = validateConcept(concept, input);
     expect(result.success).toBe(true);

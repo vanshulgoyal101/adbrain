@@ -67,6 +67,25 @@ export async function requireOwnedBusiness(
   };
 }
 
+export async function requireCampaignWorkerActor(operationId: string): Promise<AuthorizedBusiness> {
+  const database = createAdminClient();
+  const { data: operation, error } = await database.from("campaign_operations").select("*").eq("id", operationId).maybeSingle();
+  if (error || !operation || operation.state !== "running" || !operation.lease_until || !Number.isFinite(Date.parse(operation.lease_until)) || Date.parse(operation.lease_until) <= Date.now()) {
+    throw new ConnectionAccessError("CONFLICT", "Worker operation is not currently claimed.");
+  }
+  if (!operation.payload || typeof operation.payload !== "object" || Array.isArray(operation.payload) || operation.payload.execution !== "worker") {
+    throw new ConnectionAccessError("FORBIDDEN", "Worker operation required.");
+  }
+  const [{ data: business, error: businessError }, { data: draft, error: draftError }] = await Promise.all([
+    database.from("businesses").select("id, owner_id").eq("id", operation.business_id).maybeSingle(),
+    database.from("campaign_drafts").select("business_id, owner_id, version").eq("id", operation.draft_id).maybeSingle(),
+  ]);
+  if (businessError || draftError || !business || !draft || draft.business_id !== business.id || draft.owner_id !== business.owner_id || draft.version !== operation.draft_version) {
+    throw new ConnectionAccessError("FORBIDDEN", "Worker draft ownership or version changed.");
+  }
+  return { businessId: business.id, userId: business.owner_id, [authorizedBusinessBrand]: true };
+}
+
 export async function getConnectionStatus(
   context: AuthorizedBusiness,
 ): Promise<ConnectionDTO> {
@@ -114,12 +133,13 @@ export async function withMetaConnection<Result>(
     purpose: ConnectionPurpose;
     binding?: ConnectionBinding;
     expectedGeneration?: number;
+    signal?: AbortSignal;
   },
   execute: (client: MetaClient, connection: ConnectionDTO) => Promise<Result>,
 ): Promise<Result> {
   const started = performance.now();
   try {
-    const result = await withConnectionCredentials(context, options, (credentials, connection) => execute(new MetaClient(credentials), connection));
+    const result = await withConnectionCredentials(context, options, (credentials, connection) => execute(new MetaClient(credentials, options.signal), connection));
     recordProductEvent({ kind: "workflow", name: `meta.${options.purpose}`, outcome: "success", businessId: context.businessId,
       durationMs: Math.round(performance.now() - started), attributes: { provider: "meta" } });
     return result;
