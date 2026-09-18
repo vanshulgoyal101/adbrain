@@ -31,11 +31,15 @@ describe("<AdAssistant> draft persistence", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Campaign goal" }), { target: { value: "Invite enquiries" } });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /start creating/i }));
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/creatives/generate")).toHaveLength(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Generate 3 ads" }));
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(screen.getByText(/generation result is not confirmed/i)).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Check saved results" }));
       await vi.advanceTimersByTimeAsync(30_000);
     });
     const posts = fetchMock.mock.calls.filter(([url, init]) => url === "/api/creatives/generate" && init?.method === "POST");
@@ -65,9 +69,9 @@ describe("<AdAssistant> draft persistence", () => {
 
   it("offers grounded starting goals without fabricating an offer", async () => {
     const user = userEvent.setup();
-    render(<AdAssistant business={business} />);
-    await user.click(screen.getByRole("button", { name: "Promote an existing offer" }));
-    expect(screen.getByRole("textbox", { name: "Campaign goal" })).toHaveValue("Create a campaign around an offer already saved in my Brand Brain. Ask me to confirm the offer details.");
+    render(<AdAssistant business={{ ...business, offers: ["$49 initial consultation"] }} />);
+    await user.click(screen.getByRole("button", { name: "Feature: $49 initial consultation" }));
+    expect(screen.getByRole("textbox", { name: "Campaign goal" })).toHaveValue("Feature this saved offer from Cedar Ridge Chiro: $49 initial consultation. Do not add new terms.");
     expect(screen.queryByText("Free consult")).toBeNull();
   });
 
@@ -107,5 +111,53 @@ describe("<AdAssistant> draft persistence", () => {
     sessionStorage.setItem(`adbrain:assistant:${business.id}`, "{not json");
     render(<AdAssistant business={business} />);
     expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("preserves decision metadata and requires review before generation", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ ready: false, question: { id: "scene", field: "visual", question: "Which scene?", options: ["Team at work", "Service space"] } })).mockResolvedValueOnce(Response.json({ ready: true, brief: "Show the team at work." }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const first = render(<AdAssistant business={business} />);
+    await user.type(screen.getByRole("textbox", { name: "Campaign goal" }), "Introduce the team");
+    await user.click(screen.getByRole("button", { name: /start creating/i }));
+    await user.click(await screen.findByRole("button", { name: "Team at work" }));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers[0]).toMatchObject({ field: "visual", questionId: "scene", options: ["Team at work", "Service space"] });
+    const brief = await screen.findByRole("textbox", { name: "Creative brief" });
+    await user.clear(brief);
+    await user.type(brief, "Show only the service space, no people.");
+    first.unmount();
+    render(<AdAssistant business={business} />);
+    expect(await screen.findByRole("textbox", { name: "Creative brief" })).toHaveValue("Show only the service space, no people.");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("carries a specific recommended next query and full reviewed context into another request", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+    const brief = "Keep the confirmed message. ".repeat(20);
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({ goal: "Introduce our service", started: true, turns: [], answers: [], phase: "done", prepared: { brief, recommendations: [{ label: "Focus on the reception", prompt: "Show the reception setting, retaining all confirmed constraints." }] } }));
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ready: true, brief }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<AdAssistant business={business} />);
+    await user.click(await screen.findByRole("button", { name: "Focus on the reception" }));
+    await user.click(screen.getByRole("button", { name: "Start creating" }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ goal: "Show the reception setting, retaining all confirmed constraints.", referenceBrief: brief, recentGoals: ["Introduce our service"] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores uncertain generation identity and checks saved results without posting", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+    const identity = "12345678-1234-4234-8234-123456789012";
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({ goal: "Introduce our service", started: true, turns: [], answers: [], phase: "chat", generationId: identity, prepared: { brief: "Use saved brand facts" } }));
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ status: "complete", creatives: [{ id: "saved", headline: "Our service", primary_text: "Enquire today", status: "draft" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<AdAssistant business={business} />);
+    await user.click(await screen.findByRole("button", { name: "Check saved results" }));
+    await screen.findByRole("button", { name: "Make another" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain(`generationId=${identity}`);
+    expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store" });
   });
 });
