@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Keep-alive cron. This endpoint is what stands between the app and a paused
@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const selectResult = { error: null as { message: string } | null };
+const retention = vi.hoisted(() => ({ rpc: vi.fn(), abortSignal: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: retention.rpc }) }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -25,14 +27,38 @@ function request(auth?: string): Request {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("PRODUCT_LOGGING_DATABASE_ENABLED", "false");
+  retention.rpc.mockReturnValue({ abortSignal: retention.abortSignal });
+  retention.abortSignal.mockResolvedValue({ data: 12, error: null });
   vi.resetModules();
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
   process.env.CRON_SECRET = SECRET;
   selectResult.error = null;
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe("GET /api/cron/keepalive", () => {
+  it("runs bounded retention only when durable logging is enabled", async () => {
+    const { GET } = await import("@/app/api/cron/keepalive/route");
+    expect((await GET(request(`Bearer ${SECRET}`))).status).toBe(200);
+    expect(retention.rpc).not.toHaveBeenCalled();
+    vi.stubEnv("PRODUCT_LOGGING_DATABASE_ENABLED", "true");
+    expect((await GET(request(`Bearer ${SECRET}`))).status).toBe(200);
+    expect(retention.rpc).toHaveBeenCalledWith("prune_product_events", {});
+    expect(retention.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
+  });
+
+  it("reports retention failure without exposing database messages", async () => {
+    vi.stubEnv("PRODUCT_LOGGING_DATABASE_ENABLED", "true");
+    retention.abortSignal.mockResolvedValueOnce({ data: null, error: { message: "private connection details" } });
+    const { GET } = await import("@/app/api/cron/keepalive/route");
+    const response = await GET(request(`Bearer ${SECRET}`));
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("private connection details");
+  });
+
   it("is disabled when no secret is configured", async () => {
     process.env.CRON_SECRET = "";
     const { GET } = await import("@/app/api/cron/keepalive/route");

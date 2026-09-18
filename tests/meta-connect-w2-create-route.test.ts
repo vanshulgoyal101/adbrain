@@ -254,6 +254,18 @@ beforeEach(() => {
 });
 
 describe("durable campaign create route", () => {
+  it("accepts the exact hash returned by the preflight HTTP endpoint", async () => {
+    const { POST: review } = await import("@/app/api/campaigns/preflight/route");
+    const reviewResponse = await review(post({ businessId, draftId, draftVersion: 1 }));
+    const reviewed = await reviewResponse.json();
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewed.data.canCreatePaused).toBe(true);
+    expect(reviewed.requestId).toBe(reviewResponse.headers.get("X-Request-Id"));
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewed.data.planHash, connectionGeneration, idempotencyKey }));
+    expect((await response.json()).data.state).toBe("succeeded");
+  });
+
   it("rejects creative content changed after preflight without a Meta mutation", async () => {
     mocks.changeCreativeBeforeExecution = true;
     const { POST } = await import("@/app/api/campaigns/create/route");
