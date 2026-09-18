@@ -169,6 +169,7 @@ describe("W2-04 planner output conversion", () => {
     locations: ["Jaipur"],
     excluded_locations: ["Ajmer"],
     destination: "instant_form",
+    special_ad_category: "none",
     rationale: "Use the strongest approved creative.",
   };
 
@@ -212,6 +213,26 @@ describe("W2-04 planner output conversion", () => {
     });
 
     expect(result).toEqual({ ok: false, error: "Planner did not choose an approved creative." });
+  });
+
+  it("preserves AI radius, interests and rationale in the saved targeting contract", () => {
+    const result = plannerPlanToDraftInput({
+      businessId, goal: "Generate leads", approvedCreativeIds: [creativeId], leadFormIds: [leadFormId],
+      plan: { ...plan, radius_km: 20, interests: ["Solar energy", "Solar energy"] },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.draft.targeting.location?.radiusKm).toBe(20);
+    expect(result.draft.targeting.age).toEqual({ mode: "manual", min: 24, max: 54 });
+    expect(result.draft.targeting.audience).toEqual({ interestNames: ["Solar energy"], rationale: plan.rationale });
+  });
+
+  it.each([
+    { radius_km: 5 }, { age_min: 60, age_max: 30 }, { interests: ["1", "2", "3", "4", "5", "6"] },
+    { special_ad_category: "housing" }, { special_ad_category: "employment" },
+    { special_ad_category: "financial_products_services" }, { special_ad_category: "unknown" },
+  ])("rejects unsupported or unsafe audience plans: %j", (changes) => {
+    expect(plannerPlanToDraftInput({ businessId, goal: "Leads", plan: { ...plan, ...changes }, approvedCreativeIds: [creativeId], leadFormIds: [leadFormId] }).ok).toBe(false);
   });
 
   it("preserves unresolved included and excluded areas for later Meta resolution", () => {

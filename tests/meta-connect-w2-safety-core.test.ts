@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { checkReviewFreshness, runPreflight } from "@/lib/campaign/preflight";
 import { claimOperation, finishOperation, markNeedsReconciliation, recordExternalId } from "@/lib/campaign/operations";
 
@@ -19,7 +20,7 @@ const draft = {
   creativeIds: ["22222222-2222-4222-8222-222222222222"],
   dailyBudgetRupees: 500,
   leadFormId: "form-1",
-  targeting: {},
+  targeting: { age: { mode: "manual" as const, min: 18, max: 65 } },
   abTest: true,
 };
 
@@ -38,6 +39,34 @@ function input(over: Partial<Parameters<typeof runPreflight>[0]> = {}) {
 }
 
 describe("campaign preflight", () => {
+  it("binds provider-resolved interest IDs to the review hash", () => {
+    const targeting = { ...draft.targeting, audience: { interestNames: ["Solar energy"], rationale: "Test this commercial interest." } };
+    const reviewFor = (id: string) => runPreflight(input({
+      draft: { ...draft, targeting },
+      geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id, name: "Solar energy" }] },
+      hash: (payload) => createHash("sha256").update(payload).digest("hex"),
+    }));
+    expect(reviewFor("12345").canCreatePaused).toBe(true);
+    expect(reviewFor("12345").planHash).not.toBe(reviewFor("67890").planHash);
+  });
+
+  it("blocks unresolved interests instead of dropping them", () => {
+    const review = runPreflight(input({
+      draft: { ...draft, targeting: { ...draft.targeting, audience: { interestNames: ["Solar energy"], rationale: "Test this interest." } } },
+      geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, unresolvedInterests: ["Solar energy"] },
+    }));
+    expect(review.canCreatePaused).toBe(false);
+    expect(review.planHash).toBeNull();
+    expect(review.blockers.some((blocker) => blocker.message.includes("interest"))).toBe(true);
+  });
+
+  it.each([
+    {}, { age: { mode: "ai" as const, min: 25, max: 55 } },
+    { age: { mode: "manual" as const, min: 55, max: 25 } },
+    { age: { mode: "manual" as const, min: 25, max: 55 }, location: { radiusKm: 5 } },
+  ])("blocks incomplete or unsupported targeting during preflight: %j", (targeting) => {
+    expect(runPreflight(input({ draft: { ...draft, targeting } })).canCreatePaused).toBe(false);
+  });
   it("blocks unresolved geography without broadening to nationwide", () => {
     const review = runPreflight(input({ geo: { resolvedAreaLabel: null, unresolvedNames: ["Unknown"], explicitlyNationwide: false } }));
     expect(review.canCreatePaused).toBe(false);

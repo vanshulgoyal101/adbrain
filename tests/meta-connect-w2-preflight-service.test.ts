@@ -19,7 +19,7 @@ const draft: DraftRecord = {
     creativeIds: ["c123c123-c123-4123-8123-c123c123c123"],
     dailyBudgetRupees: 500,
     leadFormId: "form-1",
-    targeting: {},
+    targeting: { age: { mode: "manual", min: 18, max: 65 } },
     abTest: false,
   },
   expiresAt: "2026-09-14T10:00:00.000Z",

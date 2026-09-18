@@ -59,7 +59,7 @@ export function buildCampaignPreflightLoaders(
     },
     resolveGeo: async (actor, draft) => {
       const location = draft.input.targeting.location;
-      if (location?.mode === "manual" && location.included?.length && !location.includedNames?.length && !location.excludedNames?.length) {
+      if (location?.mode === "manual" && location.included?.length && !location.includedNames?.length && !location.excludedNames?.length && !draft.input.targeting.audience?.interestNames.length) {
         return {
           resolvedAreaLabel: location.included.map((item) => item.name).join(", "),
           unresolvedNames: [],
@@ -72,7 +72,7 @@ export function buildCampaignPreflightLoaders(
         .eq("id", actor.businessId)
         .maybeSingle();
       const names = location?.includedNames?.length ? location.includedNames : business?.locations ?? [];
-      if (!names.length) return { resolvedAreaLabel: null, unresolvedNames: [], explicitlyNationwide: false };
+      if (!names.length && !location?.included?.length) return { resolvedAreaLabel: null, unresolvedNames: [], explicitlyNationwide: false };
       const connection = await getConnectionStatus(authorizedBusiness);
       if (connection.capabilities.canCreatePaused.state !== "available") {
         return { resolvedAreaLabel: null, unresolvedNames: names, explicitlyNationwide: false };
@@ -80,7 +80,17 @@ export function buildCampaignPreflightLoaders(
       return withMetaConnection(
         authorizedBusiness,
         { purpose: "create_paused" },
-        (meta) => resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta)),
+        async (meta) => {
+          const geo = await resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta));
+          const names = draft.input.targeting.audience?.interestNames ?? [];
+          if (!names.length) return geo;
+          try {
+            const audience = await meta.resolveAudienceInterests(names);
+            return { ...geo, audienceInterests: audience.interests, unresolvedInterests: audience.unresolved };
+          } catch {
+            return { ...geo, audienceInterests: [], unresolvedInterests: names };
+          }
+        },
       );
     },
     hash: (payload) => createHash("sha256").update(payload).digest("hex"),

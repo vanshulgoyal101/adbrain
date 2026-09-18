@@ -26,6 +26,8 @@ export interface PreflightGeo {
   resolvedAreaLabel: string | null;
   unresolvedNames: string[];
   explicitlyNationwide: boolean;
+  audienceInterests?: NonNullable<ReviewDTO["audienceInterests"]>;
+  unresolvedInterests?: string[];
 }
 
 export interface PreflightInput {
@@ -64,6 +66,7 @@ export interface CanonicalReviewPayload {
   abTest: boolean;
   targeting: DraftInput["targeting"];
   resolvedAreaLabel: string | null;
+  audienceInterests?: ReviewDTO["audienceInterests"];
 }
 
 function blocker(code: ReviewDTO["blockers"][number]["code"], message: string) {
@@ -101,6 +104,7 @@ export function buildCanonicalReviewPayload(
     abTest: input.draft.abTest,
     targeting: input.draft.targeting,
     resolvedAreaLabel: input.geo.resolvedAreaLabel,
+    ...(input.geo.audienceInterests ? { audienceInterests: input.geo.audienceInterests } : {}),
   };
 }
 
@@ -136,8 +140,20 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "Daily budget must be greater than zero before preparation."));
   }
+  const age = draft.targeting.age;
+  if (age?.mode === "ai" || age?.min === undefined || age.max === undefined || age.min > age.max) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "Generate or choose an explicit age range before reviewing the campaign."));
+  }
+  const location = draft.targeting.location;
+  const radii = [location?.radiusKm, ...(location?.included ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm), ...(location?.excluded ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm)];
+  if (radii.some((radius) => radius !== undefined && (radius < 17 || radius > 80))) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "Meta city targeting requires a 17-80 km radius. Review the saved radius."));
+  }
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every selected service area or explicitly review nationwide targeting."));
+  }
+  if (input.geo.unresolvedInterests?.length || (draft.targeting.audience?.interestNames.length && !input.geo.audienceInterests?.length)) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every audience interest with Meta or edit the audience plan."));
   }
 
   const adSetCount = draft.abTest ? 2 : 1;
@@ -159,6 +175,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     totalDailyBudgetRupees,
     resolvedAreaLabel: input.geo.resolvedAreaLabel,
     selected: input.connection?.selected ?? null,
+    ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
   };
 }
 

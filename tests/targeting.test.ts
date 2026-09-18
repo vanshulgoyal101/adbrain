@@ -84,14 +84,14 @@ describe("describeAudience", () => {
     expect(s).toBe("People in Jaipur, excluding Kota, ages 30–55.");
   });
 
-  it("defers ages to Advantage+ in AI mode", () => {
+  it("does not claim an age recommendation before planning", () => {
     const s = describeAudience({
       areaLabel: "India (nationwide)",
       excluded: [],
       ageMode: "ai",
     });
     expect(s).toBe(
-      "People in India (nationwide), ages chosen by Meta Advantage+.",
+      "People in India (nationwide), age recommendation pending.",
     );
   });
 });
