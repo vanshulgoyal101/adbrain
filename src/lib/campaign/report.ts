@@ -10,6 +10,11 @@ function money(n: number): string {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
+function markdownText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/[\\`*_[\]|]/g, "\\$&").replace(/[\r\n]+/g, " ");
+}
+
 function rank(a: ReportRow, b: ReportRow): number {
   if (a.leads !== b.leads) return b.leads - a.leads;
   return (a.cpl ?? Infinity) - (b.cpl ?? Infinity);
@@ -25,13 +30,13 @@ export function buildPerformanceReport(input: {
   rows: ReportRow[];
 }): string {
   const { businessName, generatedAt, rows } = input;
-  const delivered = rows.filter((r) => r.leads > 0 || r.spend > 0);
+  const delivered = rows.filter((r) => r.leads > 0 || r.spend > 0 || r.impressions > 0 || r.clicks > 0);
   const totalLeads = delivered.reduce((s, r) => s + r.leads, 0);
   const totalSpend = delivered.reduce((s, r) => s + r.spend, 0);
   const blendedCpl = totalLeads > 0 ? totalSpend / totalLeads : null;
 
   const lines: string[] = [];
-  lines.push(`# AdBrain Performance Report — ${businessName}`);
+  lines.push(`# AdBrain Performance Report — ${markdownText(businessName)}`);
   lines.push("");
   lines.push(`_Generated ${generatedAt.toISOString().slice(0, 10)}_`);
   lines.push("");
@@ -46,11 +51,11 @@ export function buildPerformanceReport(input: {
   );
   lines.push("");
 
-  if (delivered.length) {
-    const best = [...delivered].sort(rank)[0];
+  const best = [...delivered].filter((campaign) => campaign.leads > 0).sort(rank)[0];
+  if (best) {
     lines.push(
-      `**Best so far:** "${best.name}"${
-        best.angles.length ? ` (${best.angles.join("/")})` : ""
+      `**Best so far:** "${markdownText(best.name)}"${
+        best.angles.length ? ` (${markdownText(best.angles.join("/"))})` : ""
       }${best.cpl != null ? ` at ${money(best.cpl)}/lead` : ""}.`,
     );
     lines.push("");
@@ -64,11 +69,11 @@ export function buildPerformanceReport(input: {
   lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const r of [...rows].sort(rank)) {
     lines.push(
-      `| ${r.name} | ${r.angles.join("/") || "—"} | ${r.area ?? "—"} | ${
+      `| ${markdownText(r.name)} | ${markdownText(r.angles.join("/") || "—")} | ${markdownText(r.area ?? "—")} | ${
         r.dailyBudget != null ? money(r.dailyBudget) : "—"
       } | ${r.impressions} | ${r.clicks} | ${r.leads} | ${
         r.cpl != null ? money(r.cpl) : "—"
-      } | ${r.status} |`,
+      } | ${markdownText(r.status)} |`,
     );
   }
   lines.push("");

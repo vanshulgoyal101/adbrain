@@ -228,6 +228,7 @@ describe("W2-04 planner output conversion", () => {
   });
 
   it.each([
+    { rationale: "", interests: ["Solar energy"] }, { rationale: "   " },
     { radius_km: 5 }, { age_min: 60, age_max: 30 }, { interests: ["1", "2", "3", "4", "5", "6"] },
     { special_ad_category: "housing" }, { special_ad_category: "employment" },
     { special_ad_category: "financial_products_services" }, { special_ad_category: "unknown" },

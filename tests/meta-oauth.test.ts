@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
 
 beforeAll(() => {
@@ -9,6 +9,8 @@ beforeAll(() => {
   process.env.META_APP_SECRET = "shhh-secret";
   process.env.META_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 });
+
+beforeEach(() => vi.clearAllMocks());
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -139,8 +141,9 @@ describe("token exchange", () => {
     const inspection = await inspectMetaToken("user-token");
     expect(inspection.metaUserId).toBe("meta-user");
     expect(inspection.dataAccessExpiresAt).toBe(new Date(1_790_000_000_000).toISOString());
-    expect(String(fetchMock.mock.calls[2][0])).toContain("access_token=123456%7Cshhh-secret");
-    expect(String(fetchMock.mock.calls[2][0])).not.toContain("access_token=user-token");
+    expect(String(fetchMock.mock.calls[2][0])).not.toContain("access_token=");
+    expect(fetchMock.mock.calls[2][1]?.headers).toEqual({ Authorization: "Bearer 123456|shhh-secret" });
+    expect(fetchMock.mock.calls.every(([, init]) => init?.redirect === "error" && init.cache === "no-store" && init.signal instanceof AbortSignal)).toBe(true);
   });
 
   it.each([
@@ -181,6 +184,25 @@ describe("token exchange", () => {
 });
 
 describe("account + page listing", () => {
+  it("strips paging tokens and keeps authorization in a header", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: [], paging: { next: "https://graph.facebook.com/v21.0/me/accounts?after=one&access_token=untrusted" } }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "page-1", name: "Page" }] }));
+    const { fetchPages } = await import("@/lib/meta/oauth");
+    expect(await fetchPages("private-token")).toHaveLength(1);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(String(url)).not.toMatch(/private-token|access_token=/);
+      expect(init?.headers).toEqual({ Authorization: "Bearer private-token" });
+      expect(init?.redirect).toBe("error");
+    }
+  });
+
+  it("rejects foreign paging URLs before sending credentials", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ data: [], paging: { next: "https://attacker.example/collect" } }));
+    const { fetchPages } = await import("@/lib/meta/oauth");
+    await expect(fetchPages("private-token")).rejects.toThrow("invalid paging URL");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
   it("maps ad accounts and flags disabled ones", async () => {
     mockFetch({
       data: [

@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { friendlyMetaError } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
@@ -14,7 +15,9 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export async function POST(
+export const POST = observeRoute("/api/campaigns/[id]/refresh", "POST", handlePOST);
+
+async function handlePOST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {

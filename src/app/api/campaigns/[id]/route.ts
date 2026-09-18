@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
@@ -23,7 +24,9 @@ export const maxDuration = 60;
  * Pause or resume a campaign. Updates the status on Meta, then mirrors it
  * locally so the dashboard reflects reality immediately.
  */
-export async function PATCH(
+export const PATCH = observeRoute("/api/campaigns/[id]", "PATCH", handlePATCH);
+
+async function handlePATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -55,10 +58,12 @@ export async function PATCH(
   // Spend guardrail: block turning a campaign on if it would push the weekly
   // commitment past the business's cap.
   if (action === "active") {
-    const [limits, spend] = await Promise.all([
+    const verifiedSpend = await Promise.all([
       getSpendLimits(campaign.business_id),
       getCampaignSpend(campaign.business_id),
-    ]);
+    ]).catch(() => null);
+    if (!verifiedSpend) return apiError("Spend limits could not be verified. Try again before activating.", 503);
+    const [limits, spend] = verifiedSpend;
     const otherActive = spend.filter((c) => c.status === "active" && c.id !== id);
     const { exceeds, projectedAfter } = wouldExceedCap(
       otherActive,
@@ -168,7 +173,9 @@ export async function PATCH(
 }
 
 /** Delete a campaign from Meta (best-effort) and remove it from AdBrain. */
-export async function DELETE(
+export const DELETE = observeRoute("/api/campaigns/[id]", "DELETE", handleDELETE);
+
+async function handleDELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {

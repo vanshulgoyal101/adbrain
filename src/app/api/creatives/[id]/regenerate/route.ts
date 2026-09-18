@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
@@ -27,7 +28,9 @@ import { creativeReferences } from "@/lib/creative/references";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function POST(
+export const POST = observeRoute("/api/creatives/[id]/regenerate", "POST", handlePOST);
+
+async function handlePOST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -176,10 +179,7 @@ export async function POST(
       return NextResponse.json({ error: err.message }, { status: 400 });
     return NextResponse.json(
       {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Regeneration failed. The previous creative is unchanged.",
+        error: "Regeneration could not be completed. Refresh the creative before trying again.",
       },
       { status: 502 },
     );

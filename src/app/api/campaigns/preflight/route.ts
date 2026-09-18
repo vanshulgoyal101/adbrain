@@ -1,17 +1,13 @@
-import { createHash } from "node:crypto";
+import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import {
   preflightRequestSchema,
 } from "@/lib/campaign/connect-contracts";
-import {
-  draftRecordFromRow,
-} from "@/lib/campaign/draft-store";
+import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
 import { prepareCampaignReview } from "@/lib/campaign/preflight-service";
 import {
   ConnectionAccessError,
-  getConnectionStatus,
   requireOwnedBusiness,
-  withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,11 +26,9 @@ function errorResponse(
   );
 }
 
-function hashReviewPayload(payload: string): string {
-  return createHash("sha256").update(payload).digest("hex");
-}
+export const POST = observeRoute("/api/campaigns/preflight", "POST", handlePOST);
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const requestId = crypto.randomUUID();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -56,92 +50,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await prepareCampaignReview(
-      {
-        findDraft: async (currentActor, draftId) => {
-          const { data } = await supabase
-            .from("campaign_drafts")
-            .select("*")
-            .eq("id", draftId)
-            .eq("business_id", currentActor.businessId)
-            .eq("owner_id", currentActor.userId)
-            .maybeSingle();
-          return data ? draftRecordFromRow(data) : null;
-        },
-        findCreatives: async (businessId, creativeIds) => {
-          const { data } = await supabase
-            .from("creatives")
-            .select("id, business_id, status, image_url, headline")
-            .in("id", creativeIds)
-            .eq("business_id", businessId);
-          return (data ?? []).map((creative) => ({
-            id: creative.id,
-            businessId: creative.business_id,
-            approved: creative.status === "approved",
-            imageUrl: creative.image_url,
-            headline: creative.headline,
-          }));
-        },
-        findForm: async (businessId, formId) => {
-          const context = actor;
-          const forms = await withMetaConnection(
-            context,
-            { purpose: "create_paused" },
-            (meta) => meta.listLeadForms(),
-          );
-          const form = forms.find((candidate) => candidate.id === formId);
-          return form
-            ? { id: form.id, businessId, active: form.status.toUpperCase() === "ACTIVE" }
-            : null;
-        },
-        getConnection: async () => {
-          const connection = await getConnectionStatus(actor);
-          return {
-            generation: connection.generation,
-            selected: connection.selected,
-            canCreatePaused: connection.capabilities.canCreatePaused.state === "available",
-          };
-        },
-        resolveGeo: async (currentActor, draft) => {
-          const location = draft.input.targeting.location;
-          if (location?.mode === "manual" && location.included?.length) {
-            return {
-              resolvedAreaLabel: location.included.map((item) => item.name).join(", "),
-              unresolvedNames: [],
-              explicitlyNationwide: false,
-            };
-          }
-          const { data: business } = await supabase
-            .from("businesses")
-            .select("locations")
-            .eq("id", currentActor.businessId)
-            .maybeSingle();
-          const names = business?.locations ?? [];
-          if (!names.length) {
-            return { resolvedAreaLabel: null, unresolvedNames: [], explicitlyNationwide: false };
-          }
-          return withMetaConnection(
-            actor,
-            { purpose: "create_paused" },
-            async (meta) => {
-              const resolved = await meta.resolveGeoTargeting(names, {
-                radiusKm: location?.radiusKm,
-              });
-              return {
-                resolvedAreaLabel: resolved.matched.length
-                  ? resolved.matched.map((item) => item.label).join(", ")
-                  : null,
-                unresolvedNames: resolved.unresolved.length
-                  ? resolved.unresolved
-                  : resolved.matched.length
-                    ? []
-                    : names,
-                explicitlyNationwide: false,
-              };
-            },
-          );
-        },
-        hash: hashReviewPayload,
-      },
+      buildCampaignPreflightLoaders(supabase, actor),
       {
         actor,
         draftId: parsed.data.draftId,
@@ -153,6 +62,8 @@ export async function POST(request: Request) {
     if (result.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
     if (result.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", "Draft access is not allowed.");
     if (result.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);
+    recordProductEvent({ kind: "workflow", name: "campaign.review", outcome: result.review.canCreatePaused ? "success" : "rejected",
+      businessId: actor.businessId, attributes: { failedCount: result.review.blockers.length, errorCode: result.review.blockers[0]?.code } });
     return NextResponse.json(
       { ok: true, data: result.review, requestId },
       { headers: { "Cache-Control": "no-store" } },

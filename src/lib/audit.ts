@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
+import { recordProductEvent } from "@/lib/observability/logger";
 
 export type AuditEntityType =
   | "business"
@@ -32,7 +33,9 @@ export async function logEvent(event: AuditEvent): Promise<void> {
       data: { user },
     } = await supabase.auth.getUser();
 
-    await supabase.from("audit_log").insert({
+    recordProductEvent({ kind: "workflow", name: event.action, outcome: "success", businessId: event.businessId,
+      attributes: { entityType: event.entityType } });
+    const { error } = await supabase.from("audit_log").insert({
       business_id: event.businessId,
       actor_id: user?.id ?? null,
       actor_label: user?.email ?? "system",
@@ -43,7 +46,8 @@ export async function logEvent(event: AuditEvent): Promise<void> {
       reason: event.reason ?? null,
       details: (event.details ?? {}) as unknown as Json,
     });
+    if (error) recordProductEvent({ kind: "system", name: "audit.persist", outcome: "failed", businessId: event.businessId, attributes: { errorCode: "AUDIT_WRITE_FAILED" } });
   } catch {
-    // Swallow — audit logging is best-effort.
+    recordProductEvent({ kind: "system", name: "audit.persist", outcome: "failed", attributes: { errorCode: "AUDIT_WRITE_FAILED" } });
   }
 }

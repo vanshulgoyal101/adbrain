@@ -1,5 +1,7 @@
 "use server";
 
+import { observeAction } from "@/lib/observability/logger";
+
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
@@ -22,6 +24,7 @@ export async function saveBusiness(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
+  return observeAction("server.saveBusiness", async () => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -79,4 +82,6 @@ export async function saveBusiness(
   revalidatePath("/dashboard");
   revalidatePath("/studio");
   return { ok: true };
+
+  });
 }

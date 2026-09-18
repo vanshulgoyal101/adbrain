@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { commitSelectedConnection } from "@/lib/meta/connection-repository";
@@ -5,7 +6,9 @@ import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 
 export const runtime = "nodejs";
 
-export async function POST(
+export const POST = observeRoute("/api/meta/connections/attempts/[id]/select", "POST", handlePOST);
+
+async function handlePOST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {

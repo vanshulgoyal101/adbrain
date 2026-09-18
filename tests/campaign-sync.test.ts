@@ -51,6 +51,27 @@ describe("verified campaign sync", () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it.each(["DELETED", "ARCHIVED", "UNKNOWN"])("does not import %s campaigns as paused", async (status) => {
+    mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign", status }], nextCursor: null });
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect(await (await POST()).json()).toMatchObject({ skipped: 1 });
+    expect(mocks.readBoundCampaign).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("preserves a known Page binding even when the stored account ID is missing", async () => {
+    mocks.existing = { id: "stored", meta_ad_account_id: null, meta_page_id: "other" };
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect(await (await POST()).json()).toMatchObject({ skipped: 1 });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("does not report a duplicate insertion conflict as a successful sync", async () => {
+    mocks.insert.mockResolvedValue({ error: { code: "23505" } });
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect((await POST()).status).toBe(502);
+  });
+
   it("preserves an existing campaign belonging to a different bound Page", async () => {
     mocks.existing = { id: "stored", meta_ad_account_id: "act_other", meta_page_id: "other" };
     const { POST } = await import("@/app/api/campaigns/sync/route");

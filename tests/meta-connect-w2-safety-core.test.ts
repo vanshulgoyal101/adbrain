@@ -39,6 +39,36 @@ function input(over: Partial<Parameters<typeof runPreflight>[0]> = {}) {
 }
 
 describe("campaign preflight", () => {
+  it.each(["imageUrl", "headline", "primaryText", "cta"] as const)("invalidates review when creative %s changes", (field) => {
+    const original = input({ hash: payload => createHash("sha256").update(payload).digest("hex") });
+    const review = runPreflight(original);
+    const changed = runPreflight({ ...original, creatives: [{ ...original.creatives[0], [field]: "changed" }] });
+    expect(changed.planHash).not.toBe(review.planHash);
+    expect(changed.creativeHash).not.toBe(review.creativeHash);
+  });
+
+  it("binds resolved geographic IDs and exclusions, not just their labels", () => {
+    const reviewFor = (key: string, excludedKey: string) => runPreflight(input({
+      geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key }] }, excludedLocation: { regions: [{ key: excludedKey }] } },
+      hash: (payload) => createHash("sha256").update(payload).digest("hex"),
+    }));
+    const review = reviewFor("123", "456");
+    expect(review.resolvedLocation).toEqual({ cities: [{ key: "123" }] });
+    expect(review.planHash).not.toBe(reviewFor("789", "456").planHash);
+    expect(review.planHash).not.toBe(reviewFor("123", "789").planHash);
+  });
+  it("blocks empty creative selections before creating an empty campaign", () => {
+    const review = runPreflight(input({ draft: { ...draft, creativeIds: [] }, creatives: [] }));
+    expect(review.canCreatePaused).toBe(false);
+    expect(review.planHash).toBeNull();
+  });
+
+  it("requires a one-to-one match between unique selected and approved creatives", () => {
+    const original = input();
+    const duplicated = { ...draft, creativeIds: [draft.creativeIds[0], draft.creativeIds[0]] };
+    const review = runPreflight(input({ draft: duplicated, creatives: [original.creatives[0], original.creatives[0]] }));
+    expect(review.canCreatePaused).toBe(false);
+  });
   it("binds provider-resolved interest IDs to the review hash", () => {
     const targeting = { ...draft.targeting, audience: { interestNames: ["Solar energy"], rationale: "Test this commercial interest." } };
     const reviewFor = (id: string) => runPreflight(input({

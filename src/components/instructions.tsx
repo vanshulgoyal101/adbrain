@@ -79,19 +79,23 @@ function InstructionEditor({
   function save() {
     setError(null);
     startTransition(async () => {
-      const res = await saveInstruction({
-        id: instruction?.id,
-        businessId,
-        title,
-        content,
-        isActive,
-      });
-      if (!res.ok) {
-        setError(res.error ?? "Could not save.");
-        return;
+      try {
+        const res = await saveInstruction({
+          id: instruction?.id,
+          businessId,
+          title,
+          content,
+          isActive,
+        });
+        if (!res.ok) {
+          setError(res.error ?? "Could not save.");
+          return;
+        }
+        onDone?.();
+        router.refresh();
+      } catch {
+        setError("Could not save. Your edits are still here; check your connection and retry.");
       }
-      onDone?.();
-      router.refresh();
     });
   }
 
@@ -101,10 +105,15 @@ function InstructionEditor({
       return;
     }
     if (!window.confirm(`Delete instruction “${instruction.title}”?`)) return;
+    setError(null);
     startTransition(async () => {
-      const res = await deleteInstruction(instruction.id, businessId);
-      if (res.ok) router.refresh();
-      else setError(res.error ?? "Could not delete.");
+      try {
+        const res = await deleteInstruction(instruction.id, businessId);
+        if (res.ok) router.refresh();
+        else setError(res.error ?? "Could not delete.");
+      } catch {
+        setError("Could not delete. Check your connection and retry.");
+      }
     });
   }
 

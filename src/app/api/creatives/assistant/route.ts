@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { apiError, serverError } from "@/lib/api";
 import {
@@ -15,7 +16,9 @@ import { getActiveInstructionsText } from "@/lib/supabase/queries";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
+export const POST = observeRoute("/api/creatives/assistant", "POST", handlePOST);
+
+async function handlePOST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },

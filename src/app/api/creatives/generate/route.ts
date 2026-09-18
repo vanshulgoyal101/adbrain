@@ -1,3 +1,4 @@
+import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
@@ -32,7 +33,9 @@ export const maxDuration = 300;
  * connection. Successful variants are persisted independently, so the client
  * can recover them without issuing a second paid generation request.
  */
-export async function GET(req: Request) {
+export const GET = observeRoute("/api/creatives/generate", "GET", handleGET);
+
+async function handleGET(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -64,7 +67,9 @@ export async function GET(req: Request) {
   });
 }
 
-export async function POST(req: Request) {
+export const POST = observeRoute("/api/creatives/generate", "POST", handlePOST);
+
+async function handlePOST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -233,7 +238,7 @@ export async function POST(req: Request) {
         );
         failures.push({
           angle: angle.name,
-          error: error instanceof Error ? error.message : "Generation failed.",
+          error: "This creative could not be generated or saved. Check saved results before trying again.",
         });
       },
     });
@@ -245,11 +250,14 @@ export async function POST(req: Request) {
       );
     }
     return NextResponse.json(
-      { error: (err as Error).message },
+      { error: "Creative generation could not be completed. Check saved results before trying again." },
       { status: 502 },
     );
   }
 
+  recordProductEvent({ kind: "workflow", name: "creative.batch", businessId,
+    outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
+    attributes: { count: inserted.length, failedCount: failures.length } });
   if (!inserted.length)
     return NextResponse.json(
       { error: failures[0]?.error ?? "No creatives were generated.", failures },

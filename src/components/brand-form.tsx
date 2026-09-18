@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
 import { Alert } from "@/components/ui/alert";
@@ -91,6 +91,13 @@ export function BrandForm({ business }: { business: Business | null }) {
   );
   const [autofilling, setAutofilling] = useState(false);
   const [autofillError, setAutofillError] = useState<string | null>(null);
+  const websiteRevision = useRef(0);
+  const [savedLogo, setSavedLogo] = useState(business?.logo_url ?? "");
+  const incomingLogo = business?.logo_url ?? "";
+  if (savedLogo !== incomingLogo) {
+    setSavedLogo(incomingLogo);
+    setFields((current) => current.logo_url === savedLogo ? { ...current, logo_url: incomingLogo } : current);
+  }
 
   // Mirrors the server action's checks so problems surface before submitting.
   const errors = Object.fromEntries(
@@ -127,6 +134,7 @@ export function BrandForm({ business }: { business: Business | null }) {
   const readinessCount = readinessChecks.filter((check) => check.ready).length;
 
   function set<K extends keyof FieldsState>(key: K, value: string) {
+    if (key === "website") websiteRevision.current++;
     setFields((f) => ({ ...f, [key]: value }));
   }
 
@@ -152,11 +160,13 @@ export function BrandForm({ business }: { business: Business | null }) {
       return;
     }
     setAutofilling(true);
+    const revision = websiteRevision.current;
     try {
       const res = await fetch("/api/brand/autofill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: fields.website }),
+        signal: AbortSignal.timeout(50_000),
       });
       const data = (await res.json()) as {
         extraction?: BrandExtraction;
@@ -166,19 +176,30 @@ export function BrandForm({ business }: { business: Business | null }) {
         setAutofillError(data.error ?? "Autofill failed.");
         return;
       }
+      if (revision !== websiteRevision.current) {
+        setAutofillError("Website changed during autofill. Run it again for the current website.");
+        return;
+      }
       const e = data.extraction ?? {};
-      setFields((f) => ({
-        ...f,
-        description: e.description ?? f.description,
-        vertical: e.vertical ?? f.vertical,
-        brand_voice: e.brand_voice ?? f.brand_voice,
-        primary_color: e.primary_color ?? f.primary_color,
-        secondary_color: e.secondary_color ?? f.secondary_color,
-        target_audience: e.target_audience ?? f.target_audience,
-        usps: e.usps?.length ? e.usps.join("\n") : f.usps,
-        offers: e.offers?.length ? e.offers.join("\n") : f.offers,
-        languages: e.languages?.length ? e.languages.join("\n") : f.languages,
-      }));
+      const extracted: Partial<FieldsState> = {
+        description: e.description,
+        vertical: e.vertical,
+        brand_voice: e.brand_voice,
+        primary_color: e.primary_color,
+        secondary_color: e.secondary_color,
+        target_audience: e.target_audience,
+        usps: e.usps?.length ? e.usps.join("\n") : undefined,
+        offers: e.offers?.length ? e.offers.join("\n") : undefined,
+        languages: e.languages?.length ? e.languages.join("\n") : undefined,
+      };
+      setFields((current) => {
+        const merged = { ...current };
+        for (const key of Object.keys(extracted) as (keyof FieldsState)[]) {
+          const value = extracted[key];
+          if (value != null && current[key] === fields[key]) merged[key] = value;
+        }
+        return merged;
+      });
     } catch {
       setAutofillError("Autofill failed — could not reach the site.");
     } finally {
@@ -256,7 +277,7 @@ export function BrandForm({ business }: { business: Business | null }) {
             variant="outline"
             size="sm"
             onClick={autofill}
-            disabled={autofilling}
+            disabled={autofilling || pending}
           >
             {autofilling ? <Spinner /> : <Wand2 className="h-4 w-4" />}
             Autofill from website
@@ -456,7 +477,7 @@ export function BrandForm({ business }: { business: Business | null }) {
       </div>
 
       <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || autofilling}>
           {pending ? <Spinner /> : <Save className="h-4 w-4" />}
           Save Brand Brain
         </Button>

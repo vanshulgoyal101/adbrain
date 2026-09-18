@@ -1,8 +1,10 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
-import { formatAnswers, runPlanner, type PlannerQuestion } from "@/lib/campaign/planner";
+import { formatAnswers, runPlanner, PLANNER_PROMPT_VERSION, type PlannerQuestion } from "@/lib/campaign/planner";
+import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
@@ -27,7 +29,9 @@ const note = (text: string): PlannerQuestion => ({
   type: "text",
 });
 
-export async function POST(req: Request) {
+export const POST = observeRoute("/api/campaigns/plan", "POST", handlePOST);
+
+async function handlePOST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -98,11 +102,17 @@ export async function POST(req: Request) {
     leadForms = [];
   }
 
-  const instructions = await getActiveInstructionsText(business.id);
-  const performance = await getPerformanceContext(business.id);
-
   let result;
   try {
+    const limit = configuredMonthlyTokenLimit();
+    if (limit > 0) {
+      const used = await monthlyTokenUsage(business.id);
+      if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified. No plan was started." }, { status: 503 });
+      if (used >= limit) return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
+    }
+    const instructions = await getActiveInstructionsText(business.id);
+    const performance = await getPerformanceContext(business.id);
+    const requestId = crypto.randomUUID();
     result = await runPlanner({
       brand: business,
       instructions,
@@ -117,6 +127,20 @@ export async function POST(req: Request) {
       answers: audienceDraft
         ? `${answers ?? ""}\nPlan only the audience. The owner has already chosen these campaign settings: ${JSON.stringify(audienceDraft)}. Preserve manual location and age choices. Do not ask for a budget, creative or form. Decide audience settings from the business evidence; ask only for missing service-area facts.`
         : answers,
+    }, {
+      signal: req.signal,
+      onCompletion: async (completion, valid) => {
+        if (!completion.usage) return;
+        await persistLLMUsage([{
+          businessId: business.id, userId: user.id, requestId, route: "campaigns.plan",
+          provider: completion.provider, model: completion.model, usage: completion.usage,
+          promptVersion: PLANNER_PROMPT_VERSION, inputChars: completion.inputChars,
+          outputChars: completion.outputChars, latencyMs: completion.latencyMs,
+          attempt: 1, maxTokens: 1500, temperature: 0.4,
+          status: valid ? "success" : "error", errorCode: valid ? undefined : "PLANNER_VALIDATION",
+          metadata: { audienceOnly: Boolean(audienceDraft) },
+        }]);
+      },
     });
   } catch (err) {
     return NextResponse.json({ error: friendlyMetaError(err, "Could not prepare the campaign plan.") }, { status: 502 });

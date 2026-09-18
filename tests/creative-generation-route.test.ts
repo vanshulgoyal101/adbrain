@@ -3,6 +3,7 @@ import { AD_ANGLES } from "@/lib/templates/ads";
 
 const mocks = vi.hoisted(() => ({
   generateVariants: vi.fn(),
+  generateOneVariant: vi.fn(),
   insert: vi.fn(),
   render: vi.fn(),
   schemaError: null as unknown,
@@ -37,6 +38,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/creative/generate", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/creative/generate")>()),
   generateVariants: mocks.generateVariants,
+  generateOneVariant: mocks.generateOneVariant,
 }));
 vi.mock("@/lib/creative/references", () => ({
   creativeReferences: async () => ["https://example.com/product.png"],
@@ -107,6 +109,35 @@ beforeEach(() => {
 });
 
 describe("creative generation route", () => {
+  it("does not expose upstream error bodies from regeneration", async () => {
+    mocks.generateOneVariant.mockRejectedValueOnce(new Error("token=private-test-secret and private prompt"));
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "creative" }) });
+    expect(response.status).toBe(502);
+    expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
+    expect(await response.text()).not.toMatch(/private-test-secret|private prompt/);
+  });
+
+  it("does not expose upstream error bodies from total failures", async () => {
+    mocks.generateVariants.mockRejectedValue(new Error("Provider failed with token=private-test-secret and private prompt"));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(await response.text()).not.toMatch(/private-test-secret|private prompt/);
+  });
+
+  it("does not expose upstream error bodies from partial failures", async () => {
+    mocks.generateVariants.mockImplementation(async (params) => {
+      await params.onVariant(variant);
+      await params.onFailure(AD_ANGLES[1], new Error("token=private-test-secret and private prompt"));
+    });
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toContain("failures");
+    expect(body).not.toMatch(/private-test-secret|private prompt/);
+  });
   it("uses the client generation id as the persisted variant group", async () => {
     const { POST } = await import("@/app/api/creatives/generate/route");
     const response = await POST(request({

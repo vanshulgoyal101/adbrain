@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
 import type { TokenUsage } from "./types";
 import type { Json } from "@/lib/types";
+import { recordProductEvent } from "@/lib/observability/logger";
 
 export interface LLMUsageEvent {
   businessId: string;
@@ -114,9 +115,17 @@ export function configuredMonthlyTokenLimit(): number {
 /** Best-effort persistence: generation should not fail because telemetry is unavailable. */
 export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
   if (!events.length) return;
+  for (const event of events) recordProductEvent({
+    kind: "workflow", name: "ai.completion", businessId: event.businessId,
+    outcome: event.status === "error" ? "failed" : event.status === "fallback" ? "partial" : "success",
+    durationMs: event.latencyMs,
+    attributes: { provider: event.provider, model: event.model, inputTokens: event.usage.promptTokens,
+      outputTokens: event.usage.completionTokens, totalTokens: event.usage.totalTokens,
+      estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage) },
+  });
   try {
     const supabase = createAdminClient();
-    await supabase.from("llm_usage_events").insert(
+    const { error } = await supabase.from("llm_usage_events").insert(
       events.map((event) => ({
         business_id: event.businessId,
         user_id: event.userId,
@@ -145,7 +154,8 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
         request_id: event.requestId,
       })),
     );
+    if (error) recordProductEvent({ kind: "system", name: "ai.usage.persist", outcome: "failed", attributes: { errorCode: "USAGE_WRITE_FAILED" } });
   } catch {
-    // Usage telemetry must never break creative generation.
+    recordProductEvent({ kind: "system", name: "ai.usage.persist", outcome: "failed", attributes: { errorCode: "USAGE_WRITE_FAILED" } });
   }
 }

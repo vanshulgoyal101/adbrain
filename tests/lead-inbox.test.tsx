@@ -147,6 +147,23 @@ describe("<LeadInbox> table", () => {
 });
 
 describe("<LeadInbox> syncing", () => {
+  it("warns about a partial sync instead of claiming all leads are up to date", async () => {
+    setFetch({ ok: true, json: async () => ({ leads: [lead()], imported: 0, failedForms: [{ id: "f2", name: "Restricted form" }] }) });
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: /sync leads/i }));
+    expect(await screen.findByText(/Sync incomplete\. Could not read: Restricted form/)).toBeInTheDocument();
+    expect(screen.queryByText(/You're up to date/)).toBeNull();
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+  });
+
+  it("retains the inbox when the server cannot reload saved leads", async () => {
+    setFetch({ ok: false, json: async () => ({ error: "Could not reload saved leads." }) });
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: /sync leads/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not reload saved leads.");
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+  });
+
   it("pulls new leads and reports how many arrived", async () => {
     setFetch({
       ok: true,
@@ -207,6 +224,7 @@ describe("<LeadInbox> WhatsApp digest", () => {
   it("shows a shareable digest and a WhatsApp link", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
     expect(screen.getByText("WhatsApp digest")).toBeInTheDocument();
+    expect(screen.getByText("Last 7 days · Up to 10 contacts")).toBeInTheDocument();
     fireEvent.click(screen.getByText("WhatsApp digest"));
     const share = screen.getByRole("link", { name: /share on whatsapp/i });
     expect(share).toHaveAttribute("target", "_blank");

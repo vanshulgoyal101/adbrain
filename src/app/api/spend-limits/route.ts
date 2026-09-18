@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
@@ -7,7 +8,9 @@ import { z } from "zod";
 export const runtime = "nodejs";
 
 /** Save a business's spend guardrail settings. */
-export async function POST(request: Request) {
+export const POST = observeRoute("/api/spend-limits", "POST", handlePOST);
+
+async function handlePOST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -22,34 +25,17 @@ export async function POST(request: Request) {
   }
 
   const parsed = z.object({
-    weeklyCapRupees: z.number().nonnegative().max(2_147_483_647).nullable().optional(),
-    alertPct: z.number().min(1).max(100).optional(),
-    autoPause: z.boolean().optional(),
-  }).safeParse(await request.json().catch(() => null));
+    weeklyCapRupees: z.number().int().positive().max(2_147_483_647).nullable(),
+    alertPct: z.number().int().min(1).max(100),
+    autoPause: z.boolean(),
+  }).strict().safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Provide a nonnegative weekly cap, an alert threshold from 1 to 100, and a boolean auto-pause setting." }, { status: 422 });
+    return NextResponse.json({ error: "Provide a positive whole-rupee cap (or null for no cap), a whole-number threshold from 1 to 100, and a boolean auto-pause setting." }, { status: 422 });
   }
   const body = parsed.data;
 
-  let cap: number | null = null;
-  if (body.weeklyCapRupees != null) {
-    const n = Math.round(Number(body.weeklyCapRupees));
-    if (!Number.isFinite(n) || n < 0) {
-      return NextResponse.json(
-        { error: "Weekly cap must be a positive amount or empty." },
-        { status: 422 },
-      );
-    }
-    cap = n > 0 ? n : null;
-  }
-
-  const alertPct = Math.round(Number(body.alertPct ?? 80));
-  if (!Number.isFinite(alertPct) || alertPct < 1 || alertPct > 100) {
-    return NextResponse.json(
-      { error: "Alert threshold must be between 1 and 100." },
-      { status: 422 },
-    );
-  }
+  const cap = body.weeklyCapRupees;
+  const alertPct = body.alertPct;
 
   const { error } = await supabase.from("spend_limits").upsert(
     {

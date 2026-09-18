@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { getEnv } from "@/lib/env";
 import {
@@ -52,7 +53,9 @@ function errorResponse(
   );
 }
 
-export async function POST(request: NextRequest) {
+export const POST = observeRoute("/api/meta/connections/start", "POST", handlePOST);
+
+async function handlePOST(request: NextRequest) {
   const requestId = safeRequestId();
   if (!requestOriginAllowed(request)) {
     return errorResponse(requestId, 403, "FORBIDDEN", "Request origin is not allowed.");

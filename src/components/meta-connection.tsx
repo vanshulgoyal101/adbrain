@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Link2, RefreshCw } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,12 +20,32 @@ export function MetaConnectionPanel({
   oauthConfigured: boolean;
   notice?: { kind: "success" | "error"; message: string };
 }) {
+  const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
   async function disconnect() {
+    if (!businessId || disconnecting) return;
     if (!window.confirm("Disconnect this Meta business? This does not pause ads already running in Meta.")) return;
-    await fetch("/api/meta/disconnect", { method: "POST" });
-    window.location.reload();
+    setDisconnecting(true);
+    setDisconnectError(null);
+    try {
+      const response = await fetch("/api/meta/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
+      const result = await response.json();
+      if (!response.ok || result?.ok !== true) {
+        throw new Error(typeof result?.error === "string" ? result.error : "Could not disconnect the Meta connection.");
+      }
+      router.refresh();
+    } catch (error) {
+      setDisconnectError(error instanceof Error ? error.message : "Could not disconnect the Meta connection.");
+    } finally {
+      setDisconnecting(false);
+    }
   }
 
   return (
@@ -37,6 +58,7 @@ export function MetaConnectionPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         {notice && <Alert variant={notice.kind === "error" ? "error" : "success"}>{notice.message}</Alert>}
+        {disconnectError && <Alert variant="error">{disconnectError}</Alert>}
         {connection.source === "env" && (
           <Alert variant="warning">This workspace uses a server-managed Meta connection.</Alert>
         )}
@@ -60,14 +82,14 @@ export function MetaConnectionPanel({
         )}
         <div className="flex flex-wrap gap-2">
           {businessId && oauthConfigured && (
-            <Button onClick={() => setDialogOpen(true)}>
+            <Button disabled={disconnecting} onClick={() => setDialogOpen(true)}>
               {connection.ready || connection.expired ? <RefreshCw className="h-4 w-4" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
               {connection.ready ? "Manage connection" : connection.expired ? "Reconnect" : "Connect Business"}
             </Button>
           )}
           {connection.source === "oauth" && (
-            <Button variant="danger" size="sm" onClick={() => void disconnect()}>
-              Disconnect
+            <Button variant="danger" size="sm" disabled={!businessId || disconnecting} onClick={() => void disconnect()}>
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
             </Button>
           )}
         </div>

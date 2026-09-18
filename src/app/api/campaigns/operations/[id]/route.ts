@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { operationDtoSchema } from "@/lib/campaign/connect-contracts";
 import { getPersistedOperationStatus, operationToDTO } from "@/lib/campaign/operation-store";
@@ -30,7 +31,9 @@ function operationBlockers(state: string): Blocker[] {
     : [];
 }
 
-export async function GET(
+export const GET = observeRoute("/api/campaigns/operations/[id]", "GET", handleGET);
+
+async function handleGET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {

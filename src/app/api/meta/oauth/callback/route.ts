@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { canUseMetaConnect } from "@/lib/meta/pilot-access";
@@ -30,7 +31,9 @@ import {
 export const runtime = "nodejs";
 
 /** Meta redirects here with `?code&state` after the owner authorises. */
-export async function GET(request: NextRequest) {
+export const GET = observeRoute("/api/meta/oauth/callback", "GET", handleGET);
+
+async function handleGET(request: NextRequest) {
   const settings = new URL("/connect/meta/complete", request.url);
   const params = request.nextUrl.searchParams;
 

@@ -73,6 +73,30 @@ async function verify(database, source) {
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
 
+    await check(`${database}: product telemetry is server-only and retention is bounded`, async () => {
+      for (const role of ["anon", "authenticated"]) {
+        const { rows } = await db.query(`select
+          has_table_privilege($1, 'public.product_events', 'SELECT') as can_read,
+          has_table_privilege($1, 'public.product_events', 'INSERT') as can_write,
+          has_function_privilege($1, 'public.prune_product_events()', 'EXECUTE') as can_prune`, [role]);
+        assert.deepEqual(rows[0], { can_read: false, can_write: false, can_prune: false });
+      }
+      const oldId = randomUUID();
+      const recentId = randomUUID();
+      await db.query(`insert into public.product_events(event_id, request_id, version, user_id, business_id, kind, name, outcome, created_at)
+        values ($1, $1, 1, $3, $4, 'request', 'http.request', 'success', now() - interval '91 days'),
+               ($2, $2, 1, $3, $4, 'request', 'http.request', 'failed', now())`, [oldId, recentId, ownerId, businessId]);
+      await db.query("set role service_role");
+      try {
+        const { rows } = await db.query("select public.prune_product_events() as removed");
+        assert.equal(rows[0].removed, 1);
+        const remaining = await db.query("select event_id from public.product_events");
+        assert.deepEqual(remaining.rows, [{ event_id: recentId }]);
+      } finally {
+        await db.query("reset role");
+      }
+    });
+
     await check(`${database}: quota ledger and limiter are server-only`, async () => {
       for (const role of ["anon", "authenticated"]) {
         const { rows } = await db.query(`select
@@ -357,8 +381,9 @@ try {
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
   const trustedUsageMigration = await readFile(join(root, "db/migrations/20260916_trusted_usage_and_rate_limits.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}`);
+  const productEventsMigration = await readFile(join(root, "db/migrations/20260918_product_events.sql"), "utf8");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

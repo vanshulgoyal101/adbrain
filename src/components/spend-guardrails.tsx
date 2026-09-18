@@ -28,16 +28,26 @@ export function SpendGuardrails({
   const [saved, setSaved] = useState(false);
 
   async function save() {
-    setSaving(true);
     setError(null);
     setSaved(false);
+    const weeklyCapRupees = cap.trim() === "" ? null : Number(cap);
+    const threshold = Number(alertPct);
+    if (weeklyCapRupees !== null && (!Number.isInteger(weeklyCapRupees) || weeklyCapRupees <= 0 || weeklyCapRupees > 2_147_483_647)) {
+      setError("Enter a positive whole-rupee cap, or leave it blank for no cap.");
+      return;
+    }
+    if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) {
+      setError("Enter a whole-number alert threshold between 1 and 100.");
+      return;
+    }
+    setSaving(true);
     try {
       const res = await fetch("/api/spend-limits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weeklyCapRupees: cap.trim() === "" ? null : Number(cap),
-          alertPct: Number(alertPct),
+          weeklyCapRupees,
+          alertPct: threshold,
           autoPause,
         }),
       });
@@ -86,11 +96,12 @@ export function SpendGuardrails({
             <Input
               id="cap"
               type="number"
-              min={0}
+              min={1}
+              disabled={saving}
               inputMode="numeric"
               placeholder="No cap"
               value={cap}
-              onChange={(e) => setCap(e.target.value)}
+              onChange={(e) => { setCap(e.target.value); setSaved(false); }}
             />
             <p className="mt-1 text-xs text-slate-500">Leave blank for no cap.</p>
           </div>
@@ -101,9 +112,10 @@ export function SpendGuardrails({
               type="number"
               min={1}
               max={100}
+              disabled={saving}
               inputMode="numeric"
               value={alertPct}
-              onChange={(e) => setAlertPct(e.target.value)}
+              onChange={(e) => { setAlertPct(e.target.value); setSaved(false); }}
             />
           </div>
         </div>
@@ -113,7 +125,8 @@ export function SpendGuardrails({
             type="checkbox"
             className="mt-1 h-4 w-4 rounded border-slate-300"
             checked={autoPause}
-            onChange={(e) => setAutoPause(e.target.checked)}
+            disabled={saving}
+            onChange={(e) => { setAutoPause(e.target.checked); setSaved(false); }}
           />
           <span>
             <span className="font-medium">Auto-pause at the cap.</span> When

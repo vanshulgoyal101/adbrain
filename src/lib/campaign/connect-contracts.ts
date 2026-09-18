@@ -84,6 +84,12 @@ export const preflightRequestSchema = z.object({
 }).strict();
 export type PreflightRequest = z.infer<typeof preflightRequestSchema>;
 
+const resolvedGeoSchema = z.object({
+  countries: z.array(boundedText(128)).max(250).optional(),
+  regions: z.array(z.object({ key: metaId })).max(250).optional(),
+  cities: z.array(z.object({ key: metaId, radius: z.number().finite().optional(), distance_unit: z.string().max(20).optional() })).max(250).optional(),
+});
+
 export const reviewDtoSchema = z.object({
   draftId: uuid,
   draftVersion: safeVersion,
@@ -91,11 +97,14 @@ export const reviewDtoSchema = z.object({
   canCreatePaused: z.boolean(),
   blockers: z.array(blockerSchema).max(20),
   planHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  creativeHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   currency: z.literal("INR"),
   perAdSetDailyBudgetRupees: moneyRupees,
   adSetCount: z.number().int().positive().max(50),
   totalDailyBudgetRupees: moneyRupees,
   resolvedAreaLabel: z.string().max(500).nullable(),
+  resolvedLocation: resolvedGeoSchema.optional(),
+  resolvedExcludedLocation: resolvedGeoSchema.optional(),
   audienceInterests: z.array(z.object({ id: z.string().regex(/^\d+$/), name: boundedText(200) })).max(5).optional(),
   selected: selectedAssetsSchema.nullable(),
 });

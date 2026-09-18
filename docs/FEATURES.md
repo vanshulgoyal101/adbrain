@@ -10,6 +10,43 @@
 
 ## Product experience program
 
+### Workflow reliability audit (local dev, 2026-09-18)
+
+This pass fixes concrete incomplete behaviors across the existing workflows;
+it is not a claim that every platform feature or external provider is verified.
+These changes are local and have not been committed or deployed by this pass.
+
+| Area | Corrected behavior |
+| --- | --- |
+| Campaign planning | Rejects blank rationale instead of silently dropping interests; validates bounded, answerable, nonduplicate questions and exact repeated questions; propagates cancellation with a 45-second deadline; checks monthly quota and records returned model usage, including invalid responses |
+| Lead sync | Counts inserted rows rather than fetched duplicates; reports unreadable forms; fails if every form fails; database read failures no longer return a successful empty inbox |
+| Lead digest | Labels the actual seven-day/ten-contact scope, includes email contacts, and no longer recommends increasing spend merely because no leads were imported |
+| Studio and instructions | Success requires an affected row; instruction mutations are business-scoped; transport errors preserve editor content; approval changes invalidate campaign views |
+| Brand assets | Failed record saves attempt storage cleanup; failed logo assignment is visible; matching logo references are cleared before deletion; files are removed only after confirmed record deletion; refresh reconciles untouched logo fields without clobbering manual edits |
+| Brand autofill | Preserves edits made during extraction, discards results after a website change, bounds the request duration, and blocks saving while extraction is pending |
+| Spend guardrails | Requires complete settings; zero/fractional caps cannot silently disable limits; only explicit null removes the cap; unsaved edits clear the Saved indicator |
+| Asset reuse and ZIP export | Clipboard/download errors are visible; image extensions follow MIME type; HTML cannot download as an image; failed or incomplete creative selection lookups cannot silently produce a partial ZIP |
+
+Verification: focused mocked API/component regressions, lint and typecheck pass.
+Production compilation passed. Chromium checks at 1440/390px verified autofill
+edit preservation, zero-cap rejection with no write, and clipboard failure feedback,
+without horizontal overflow or page errors. Existing-account reads were real;
+AI responses and images were fixtures and browser writes were blocked. This is
+not real-provider or production-mutation verification. Temporary browser sessions
+and the validation server were closed.
+
+Final assembled workspace verification: 1,195 tests passed, one skipped across
+131 files; coverage 75.85% statements, 68.14% branches, 75.46% functions and
+78.27% lines. Production build passed with 53 static-generation entries.
+The earlier three authentication failures from concurrent login work were
+resolved before this final run; concurrent edits were preserved throughout.
+
+Remaining limits: monthly quota preflight is not an atomic reservation, usage
+persistence remains best-effort, storage and database changes are not one atomic
+transaction, and semantic rephrasings can evade exact repeated-question checks.
+No migrations, paid model calls, live ad mutations, credentials, or deployment
+changes were made. Existing legacy image-generation URLs were not invoked.
+
 ### AI campaign audiences (local dev, 2026-09-18)
 
 Campaign planning now proposes explicit ages, a 17-80 km city radius, service

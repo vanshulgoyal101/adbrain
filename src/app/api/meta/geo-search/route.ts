@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { friendlyMetaError } from "@/lib/meta/client";
 import { metaClientForBusiness } from "@/lib/meta/credentials";
@@ -10,7 +11,9 @@ export const runtime = "nodejs";
  * Typeahead for campaign location targeting. Returns Meta's real geo keys so the
  * UI never has to guess — the user picks an exact city/region/country.
  */
-export async function GET(req: Request) {
+export const GET = observeRoute("/api/meta/geo-search", "GET", handleGET);
+
+async function handleGET(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },

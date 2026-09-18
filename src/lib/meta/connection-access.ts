@@ -13,6 +13,7 @@ import {
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import { verifyMetaCapabilities } from "./capability-verification";
 import { canUseMetaConnect } from "./pilot-access";
+import { observeIdentity } from "@/lib/observability/context";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -57,6 +58,7 @@ export async function requireOwnedBusiness(
     throw new ConnectionAccessError("FORBIDDEN", "Business access is not allowed.");
   }
 
+  observeIdentity(user.id, business.id);
   return {
     businessId: business.id,
     userId: user.id,

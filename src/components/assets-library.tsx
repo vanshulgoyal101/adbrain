@@ -14,15 +14,12 @@ const ASSET_TYPE_LABEL: Record<string, string> = {
 };
 
 async function downloadImage(url: string, filename: string) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error();
-    const blob = await res.blob();
-    downloadBlob(blob, filename);
-  } catch {
-    // Fallback: open in a new tab if the fetch is blocked by CORS.
-    window.open(url, "_blank", "noopener");
-  }
+  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error("Image download failed.");
+  const blob = await res.blob();
+  const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as Record<string, string>)[blob.type.split(";")[0]];
+  if (!extension || !blob.size) throw new Error("The response was not a supported image.");
+  downloadBlob(blob, filename.replace(/\.[^.]+$/, `.${extension}`));
 }
 
 function slugify(s: string, fallback: string): string {
@@ -47,6 +44,8 @@ function AssetTile({
 }) {
   const [copied, setCopied] = useState(false);
   const [broken, setBroken] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <Card className="flex flex-col overflow-hidden">
@@ -81,20 +80,31 @@ function AssetTile({
         <p className="truncate text-sm font-medium text-slate-800" title={title}>
           {title}
         </p>
-        <div className="flex items-center gap-1 text-slate-500">
+        <div className="flex flex-wrap items-center gap-1 text-slate-500">
           <button
             type="button"
-            onClick={() => downloadImage(url, filename)}
+            disabled={downloading}
+            onClick={async () => {
+              setError(null);
+              setDownloading(true);
+              try { await downloadImage(url, filename); }
+              catch { setError("Download failed. Retry or use Open to view the original image."); }
+              finally { setDownloading(false); }
+            }}
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-slate-100"
           >
-            <Download className="h-3.5 w-3.5" /> Download
+            <Download className="h-3.5 w-3.5" /> {downloading ? "Downloading" : "Download"}
           </button>
           <button
             type="button"
             onClick={async () => {
-              await navigator.clipboard.writeText(url);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
+              setError(null);
+              setCopied(false);
+              try {
+                await navigator.clipboard.writeText(url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch { setError("Could not copy the link. Use Open to access the image."); }
             }}
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-slate-100"
           >
@@ -109,6 +119,7 @@ function AssetTile({
             <ExternalLink className="h-3.5 w-3.5" /> Open
           </a>
         </div>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       </CardContent>
     </Card>
   );

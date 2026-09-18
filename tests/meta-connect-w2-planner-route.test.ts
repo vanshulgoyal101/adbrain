@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   requireOwnedBusiness: vi.fn(),
   withMetaConnection: vi.fn(),
   createLeadCampaign: vi.fn(),
+  tokenLimit: vi.fn(), usage: vi.fn(), persist: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -55,6 +56,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: mocks.rateLimitResponse }));
+vi.mock("@/lib/llm/persist", () => ({ configuredMonthlyTokenLimit: mocks.tokenLimit, monthlyTokenUsage: mocks.usage, persistLLMUsage: mocks.persist }));
 vi.mock("@/lib/supabase/queries", () => ({
   getPrimaryBusiness: mocks.getPrimaryBusiness,
   getApprovedCreatives: mocks.getApprovedCreatives,
@@ -64,6 +66,7 @@ vi.mock("@/lib/supabase/queries", () => ({
 vi.mock("@/lib/campaign/planner", () => ({
   formatAnswers: (answers: unknown[]) => JSON.stringify(answers),
   runPlanner: mocks.runPlanner,
+  PLANNER_PROMPT_VERSION: "campaign-planner-v2",
 }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {
@@ -98,6 +101,8 @@ function post(): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.tokenLimit.mockReturnValue(1000);
+  mocks.usage.mockResolvedValue(0);
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   mocks.rateLimitResponse.mockResolvedValue(null);
   mocks.getPrimaryBusiness.mockResolvedValue(business);
@@ -134,6 +139,23 @@ beforeEach(() => {
 });
 
 describe("guided planner route", () => {
+  it.each([{ used: null, status: 503 }, { used: 1000, status: 429 }])("blocks planning when usage is $used", async ({ used, status }) => {
+    mocks.usage.mockResolvedValue(used);
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    expect((await POST(post())).status).toBe(status);
+    expect(mocks.runPlanner).not.toHaveBeenCalled();
+  });
+
+  it("records usage even for invalid planner output without storing prompt text", async () => {
+    mocks.runPlanner.mockImplementationOnce(async (_input, options) => {
+      await options.onCompletion({ provider: "test", model: "test", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } }, false);
+      throw new Error("invalid response");
+    });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    expect((await POST(post())).status).toBe(502);
+    expect(mocks.persist).toHaveBeenCalledWith([expect.objectContaining({ businessId: business.id, route: "campaigns.plan", status: "error", errorCode: "PLANNER_VALIDATION", metadata: { audienceOnly: false } })]);
+  });
+
   it("recommends targeting without saving a duplicate draft or reading Meta, retaining manual choices", async () => {
     const audienceDraft = {
       businessId: business.id, name: "Owner name", goal: "Qualified leads", mode: "manual",
@@ -168,7 +190,7 @@ describe("guided planner route", () => {
     const response = await POST(post());
     expect(response.status).toBe(200);
     expect((await response.json()).ready).toBe(true);
-    expect(mocks.runPlanner).toHaveBeenLastCalledWith(expect.objectContaining({ leadForms: [] }));
+    expect(mocks.runPlanner).toHaveBeenLastCalledWith(expect.objectContaining({ leadForms: [] }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
   });
 

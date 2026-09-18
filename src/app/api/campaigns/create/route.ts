@@ -1,9 +1,11 @@
+import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createCampaignRequestSchema, type OperationDTO } from "@/lib/campaign/connect-contracts";
 import { draftRecordFromRow, isDraftExpired } from "@/lib/campaign/draft-store";
 import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
 import { prepareCampaignReview } from "@/lib/campaign/preflight-service";
+import { buildCreativeReviewPayload } from "@/lib/campaign/preflight";
 import {
   executeOperation,
   OperationPhaseError,
@@ -20,7 +22,6 @@ import {
 } from "@/lib/campaign/operation-store";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
-import { resolveDraftTargeting } from "@/lib/campaign/draft-targeting";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -36,6 +37,9 @@ function errorResponse(requestId: string, status: number, code: ErrorCode, messa
 }
 
 function operationResponse(requestId: string, operation: OperationRecord, status: number) {
+  recordProductEvent({ kind: "workflow", name: `campaign.operation.${operation.state}`, businessId: operation.businessId,
+    outcome: operation.state === "failed" ? "failed" : operation.state === "needs_reconciliation" ? "partial" : operation.state === "succeeded" ? "success" : "started",
+    attributes: { count: operation.externalIds.length } });
   const blockers = operation.state === "needs_reconciliation"
     ? [{ code: "RECONCILIATION_REQUIRED" as const, message: "Campaign creation needs reconciliation before it can be retried.", action: { kind: "contact_admin" as const } }]
     : [];
@@ -100,7 +104,9 @@ function operationResultJson(operation: OperationRecord): Json {
   return { externalIds: operation.externalIds, campaignId: operation.campaignId };
 }
 
-export async function POST(request: Request) {
+export const POST = observeRoute("/api/campaigns/create", "POST", handlePOST);
+
+async function handlePOST(request: Request) {
   const requestId = crypto.randomUUID();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -170,7 +176,7 @@ export async function POST(request: Request) {
   if (reviewResult.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", "Draft access is not allowed.");
   if (reviewResult.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);
   const review = reviewResult.review;
-  if (!review.canCreatePaused || !review.planHash || !review.selected) return errorResponse(requestId, 400, "PREFLIGHT_BLOCKED", "Campaign preparation is blocked. Resolve the review blockers before creating.");
+  if (!review.canCreatePaused || !review.planHash || !review.selected || !review.resolvedLocation) return errorResponse(requestId, 400, "PREFLIGHT_BLOCKED", "Campaign preparation is blocked. Resolve the review blockers before creating.");
   if (review.planHash !== input.planHash) return errorResponse(requestId, 409, "CONFLICT", "Campaign review changed. Review again before creating.", true);
   if (review.connectionGeneration !== input.connectionGeneration) return errorResponse(requestId, 409, "CONFLICT", "Meta connection changed. Review again before creating.", true);
 
@@ -270,13 +276,17 @@ export async function POST(request: Request) {
             expectedGeneration: review.connectionGeneration,
           }, async (meta) => {
             const { data: business } = await supabase.from("businesses").select("website, locations").eq("id", actor.businessId).maybeSingle();
-            const resolved = await resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta));
-            if (resolved.unresolvedNames.length || !resolved.resolvedAreaLabel) throw new OperationPhaseError("Campaign geography could not be resolved.", { transmitted: false });
-            const { location, excludedLocation } = resolved;
+            const location = review.resolvedLocation!;
+            const excludedLocation = review.resolvedExcludedLocation;
             const { data: creatives } = await supabase.from("creatives").select("id, image_url, headline, primary_text, cta").in("id", draft.input.creativeIds).eq("business_id", actor.businessId).eq("status", "approved");
             const byId = new Map((creatives ?? []).map((creative) => [creative.id, creative]));
             const creativeInputs = draft.input.creativeIds.map((id) => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
             if (creativeInputs.length !== draft.input.creativeIds.length) throw new OperationPhaseError("Selected creative changed before execution.", { transmitted: false });
+            const creativeHash = createHash("sha256").update(JSON.stringify(buildCreativeReviewPayload(creativeInputs.map(creative => ({
+              id: creative.id, businessId: actor.businessId, approved: true, imageUrl: creative.image_url,
+              headline: creative.headline, primaryText: creative.primary_text, cta: creative.cta,
+            }))))).digest("hex");
+            if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
             metaResult = await meta.createLeadCampaign({
               name: draft.input.name,
               dailyBudgetRupees: draft.input.dailyBudgetRupees,

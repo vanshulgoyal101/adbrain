@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -7,7 +8,9 @@ import { getPersistedOperationStatus, operationToDTO } from "@/lib/campaign/oper
 export const runtime = "nodejs";
 const querySchema = z.object({ businessId: z.string().uuid(), idempotencyKey: z.string().min(1).max(200) });
 
-export async function GET(request: Request) {
+export const GET = observeRoute("/api/campaigns/operations", "GET", handleGET);
+
+async function handleGET(request: Request) {
   const requestId = crypto.randomUUID();
   const headers = { "Cache-Control": "no-store" };
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));

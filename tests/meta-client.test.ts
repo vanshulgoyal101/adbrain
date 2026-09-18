@@ -40,6 +40,42 @@ describe("MetaClient.verifyCampaignActivation", () => {
   });
 });
 
+describe("campaign object binding", () => {
+  it.each(["delete", "insights"])("allows bound campaign %s after verification", async (operation) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json(operation === "delete" ? { success: true } : { data: [{ impressions: "10", clicks: "2", spend: "5" }] }));
+    const client = new MetaClient(creds);
+    if (operation === "delete") await client.deleteObject("camp_1");
+    else expect(await client.getCampaignInsights("camp_1")).toMatchObject({ impressions: 10, clicks: 2, spend: 5 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2][1]?.method).toBe(operation === "delete" ? "DELETE" : "GET");
+  });
+
+  it.each(["pause", "delete", "insights"])("blocks %s for a forged account reference", async (operation) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ id: "foreign", account_id: "456" }));
+    const client = new MetaClient(creds);
+    await expect(operation === "pause" ? client.updateCampaignStatus("foreign", "PAUSED")
+      : operation === "delete" ? client.deleteObject("foreign") : client.getCampaignInsights("foreign"))
+      .rejects.toThrow("connected ad account");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
+  });
+
+  it.each([
+    { data: [{ promoted_object: { page_id: "other" } }] },
+    { data: [] },
+    { data: [{ promoted_object: { page_id: "999" } }], paging: { next: "more" } },
+  ])("blocks deletion when Page evidence is incomplete or foreign: %j", async (adSets) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json(adSets));
+    await expect(new MetaClient(creds).deleteObject("camp_1")).rejects.toThrow("Page binding");
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+});
+
 describe("MetaClient.updateCampaignStatus", () => {
   it("does not bind campaigns containing a different Page", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "set", status: "ACTIVE", daily_budget: "50000", promoted_object: { page_id: "other" } }] })));
@@ -56,6 +92,8 @@ describe("MetaClient.updateCampaignStatus", () => {
   it("POSTs the new status to the campaign node with the token", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
       .mockResolvedValue(
         new Response(JSON.stringify({ success: true }), { status: 200 }),
       );
@@ -63,8 +101,8 @@ describe("MetaClient.updateCampaignStatus", () => {
     const client = new MetaClient(creds);
     await client.updateCampaignStatus("camp_1", "PAUSED");
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const [url, init] = fetchMock.mock.calls[2];
     expect(String(url)).toBe("https://graph.facebook.com/v21.0/camp_1");
     expect(init?.method).toBe("POST");
     const body = String(init?.body);
@@ -75,9 +113,11 @@ describe("MetaClient.updateCampaignStatus", () => {
   it("resumes with ACTIVE", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_2", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
       .mockResolvedValue(new Response("{}", { status: 200 }));
     await new MetaClient(creds).updateCampaignStatus("camp_2", "ACTIVE");
-    expect(String(fetchMock.mock.calls[0][1]?.body)).toContain("status=ACTIVE");
+    expect(String(fetchMock.mock.calls[2][1]?.body)).toContain("status=ACTIVE");
   });
 
   it("throws a MetaError when Meta returns an error", async () => {

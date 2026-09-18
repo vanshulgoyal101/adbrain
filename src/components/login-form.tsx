@@ -1,19 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { safeAuthRedirect } from "@/lib/auth-redirect";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") ?? "/dashboard";
+  const router = useRouter();
+  const redirect = safeAuthRedirect(searchParams.get("redirect"));
   const authError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [pending, setPending] = useState<"magic" | "password" | "google" | null>(null);
   const [error, setError] = useState<string | null>(
     authError ? "Sign-in failed. Please try again." : null,
   );
@@ -24,44 +27,60 @@ export function LoginForm() {
 
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return;
     setError(null);
     setStatus("sending");
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: callbackUrl() },
-    });
-    if (error) {
-      setError(error.message);
-      setStatus("idle");
-    } else {
+    setPending("magic");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: callbackUrl() },
+      });
+      if (error) throw new Error(error.message);
       setStatus("sent");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not send a sign-in link. Please try again.");
+      setStatus("idle");
+    } finally {
+      setPending(null);
     }
   }
 
   async function signInWithGoogle() {
+    if (pending) return;
     setError(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: callbackUrl() },
-    });
-    if (error) setError(error.message);
+    setPending("google");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: callbackUrl() },
+      });
+      if (error) throw new Error(error.message);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not sign in with Google. Please try again.");
+    } finally {
+      setPending(null);
+    }
   }
 
   async function signInWithPassword(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return;
     setError(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) {
-      setError(error.message);
-      return;
+    setPending("password");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error(error.message);
+      router.replace(redirect);
+      router.refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
+    } finally {
+      setPending(null);
     }
-    window.location.href = redirect;
   }
 
   if (status === "sent") {
@@ -106,7 +125,7 @@ export function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <Button type="submit" disabled={status === "sending"}>
+        <Button type="submit" disabled={pending !== null}>
           {status === "sending" ? "Sending…" : "Send magic link"}
         </Button>
       </form>
@@ -130,8 +149,8 @@ export function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-        <Button type="submit" variant="outline" disabled={!email || !password}>
-          Sign in with password
+        <Button type="submit" variant="outline" disabled={pending !== null || !email || !password}>
+          {pending === "password" ? "Signing in..." : "Sign in with password"}
         </Button>
       </form>
 
@@ -141,11 +160,11 @@ export function LoginForm() {
         <div className="h-px flex-1 bg-slate-200" />
       </div>
 
-      <Button type="button" variant="outline" onClick={signInWithGoogle}>
-        Continue with Google
+      <Button type="button" variant="outline" disabled={pending !== null} onClick={signInWithGoogle}>
+        {pending === "google" ? "Connecting..." : "Continue with Google"}
       </Button>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }

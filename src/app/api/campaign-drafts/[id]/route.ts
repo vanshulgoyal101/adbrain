@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import {
   draftDtoSchema,
@@ -49,7 +50,9 @@ async function authorizeDraftBusiness(
   }
 }
 
-export async function GET(
+export const GET = observeRoute("/api/campaign-drafts/[id]", "GET", handleGET);
+
+async function handleGET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -69,7 +72,9 @@ export async function GET(
   return NextResponse.json({ ok: true, data: draftDtoSchema.parse(draftRecordToDTO(draft)), requestId });
 }
 
-export async function PUT(
+export const PUT = observeRoute("/api/campaign-drafts/[id]", "PUT", handlePUT);
+
+async function handlePUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -111,7 +116,9 @@ export async function PUT(
   return NextResponse.json({ ok: true, data: draftDtoSchema.parse(draftRecordToDTO(draft)), requestId });
 }
 
-export async function DELETE(
+export const DELETE = observeRoute("/api/campaign-drafts/[id]", "DELETE", handleDELETE);
+
+async function handleDELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {

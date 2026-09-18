@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
@@ -7,7 +8,9 @@ import { z } from "zod";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export async function POST(request?: Request) {
+export const POST = observeRoute("/api/campaigns/sync", "POST", handlePOST);
+
+async function handlePOST(request?: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -32,6 +35,7 @@ export async function POST(request?: Request) {
       let skipped = 0;
       for (let offset = 0; offset < page.campaigns.length; offset += 5) {
         const batch = await Promise.all(page.campaigns.slice(offset, offset + 5).map(async (campaign) => {
+          if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") return { campaign, binding: null };
           try { return { campaign, binding: await meta.readBoundCampaign(campaign) }; }
           catch { return { campaign, binding: null }; }
         }));
@@ -52,11 +56,12 @@ export async function POST(request?: Request) {
         const { data: existing, error } = await supabase.from("campaigns").select("id,meta_ad_account_id,meta_page_id")
           .eq("business_id", context.businessId).eq("meta_campaign_id", row.meta_campaign_id).maybeSingle();
         if (error) throw new Error("Campaign storage unavailable.");
-        if (existing?.meta_ad_account_id && (existing.meta_ad_account_id !== row.meta_ad_account_id || existing.meta_page_id !== row.meta_page_id)) { skipped += 1; continue; }
+        if ((existing?.meta_ad_account_id && existing.meta_ad_account_id !== row.meta_ad_account_id)
+          || (existing?.meta_page_id && existing.meta_page_id !== row.meta_page_id)) { skipped += 1; continue; }
         const saved = existing
           ? await supabase.from("campaigns").update(row).eq("id", existing.id).eq("business_id", context.businessId)
           : await supabase.from("campaigns").insert(row);
-        if (saved.error && saved.error.code !== "23505") throw new Error("Campaign save failed.");
+        if (saved.error) throw new Error("Campaign save failed.");
       }
       return { skipped, nextCursor: page.nextCursor };
     });

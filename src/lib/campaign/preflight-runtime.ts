@@ -25,7 +25,7 @@ export function buildCampaignPreflightLoaders(
     findCreatives: async (businessId, creativeIds) => {
       const { data } = await supabase
         .from("creatives")
-        .select("id, business_id, status, image_url, headline")
+        .select("id, business_id, status, image_url, headline, primary_text, cta")
         .in("id", creativeIds)
         .eq("business_id", businessId);
       return (data ?? []).map((creative) => ({
@@ -34,6 +34,8 @@ export function buildCampaignPreflightLoaders(
         approved: creative.status === "approved",
         imageUrl: creative.image_url,
         headline: creative.headline,
+        primaryText: creative.primary_text,
+        cta: creative.cta,
       }));
     },
     findForm: async (businessId, formId) => {
@@ -60,11 +62,7 @@ export function buildCampaignPreflightLoaders(
     resolveGeo: async (actor, draft) => {
       const location = draft.input.targeting.location;
       if (location?.mode === "manual" && location.included?.length && !location.includedNames?.length && !location.excludedNames?.length && !draft.input.targeting.audience?.interestNames.length) {
-        return {
-          resolvedAreaLabel: location.included.map((item) => item.name).join(", "),
-          unresolvedNames: [],
-          explicitlyNationwide: false,
-        };
+        return resolveDraftTargeting(draft.input, [], async () => { throw new Error("Unexpected named location lookup."); });
       }
       const { data: business } = await supabase
         .from("businesses")

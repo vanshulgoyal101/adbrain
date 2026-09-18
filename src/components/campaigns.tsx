@@ -163,6 +163,7 @@ export function Campaigns({
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const syncCursorRef = useRef<string | null>(null);
+  const syncSkippedRef = useRef(0);
   const selectedLeadForm = availableForms.find((form) => form.id === leadFormId);
   const plannedAreas = includedNames.split(",").map((value) => value.trim()).filter(Boolean);
   const plannedExclusions = excludedNames.split(",").map((value) => value.trim()).filter(Boolean);
@@ -395,12 +396,14 @@ export function Campaigns({
       };
       if (res.ok && Array.isArray(data.campaigns)) {
         setCampaigns(data.campaigns);
-        setLastSynced(new Date());
+        syncSkippedRef.current = (cursor ? syncSkippedRef.current : 0) + (data.skipped ?? 0);
         syncCursorRef.current = data.nextCursor ?? null;
-        if (data.nextCursor) setNotice("More campaigns are available. Sync again to continue.");
-        else if (data.skipped) setNotice(`${data.skipped} campaign(s) could not be verified for this Page and were left unchanged.`);
-      } else if (!res.ok && !opts.silent) {
-        setError(data.error ?? "Sync failed.");
+        if (!data.nextCursor) setLastSynced(new Date());
+        const skippedNotice = syncSkippedRef.current
+          ? ` ${syncSkippedRef.current} campaign(s) could not be imported and were left unchanged.` : "";
+        setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
+      } else if (!opts.silent) {
+        setError(data.error ?? "Sync failed. Please try again.");
       }
     } catch {
       if (!opts.silent) setError("Sync failed.");

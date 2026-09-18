@@ -814,7 +814,23 @@ export class MetaClient {
     return { dailyBudgetRupees: total / 100, adSetId: response.data[0].id };
   }
 
+  private async verifyCampaignBinding(campaignId: string): Promise<void> {
+    const node = encodeURIComponent(campaignId);
+    const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
+    if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
+      throw new MetaError("Campaign does not match the connected ad account.");
+    }
+    const adSets = await this.graph<{ data?: Array<{ promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=promoted_object&limit=100`,
+    );
+    if (!Array.isArray(adSets.data) || !adSets.data.length || adSets.paging?.next
+      || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
+      throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
+    }
+  }
+
   async getCampaignInsights(campaignId: string): Promise<CampaignInsights> {
+    await this.verifyCampaignBinding(campaignId);
     const data = await this.graph<{
       data: Array<{
         impressions?: string;
@@ -822,7 +838,7 @@ export class MetaClient {
         spend?: string;
         actions?: Array<{ action_type: string; value: string }>;
       }>;
-    }>(`${campaignId}/insights?fields=impressions,clicks,spend,actions`);
+    }>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions`);
 
     const row = data.data?.[0];
     const impressions = Number(row?.impressions ?? 0);
@@ -837,7 +853,8 @@ export class MetaClient {
   }
 
   async deleteObject(id: string): Promise<void> {
-    await this.graph(`${id}`, { method: "DELETE" });
+    await this.verifyCampaignBinding(id);
+    await this.graph(encodeURIComponent(id), { method: "DELETE" });
   }
 
   async verifyCampaignActivation(
@@ -877,12 +894,13 @@ export class MetaClient {
     }
   }
 
-  /** Pause or resume a campaign (or any adset/ad) by updating its status. */
+  /** Pause or resume a campaign after verifying its account and Page. */
   async updateCampaignStatus(
     campaignId: string,
     status: "ACTIVE" | "PAUSED",
   ): Promise<void> {
-    await this.graph(`${campaignId}`, {
+    await this.verifyCampaignBinding(campaignId);
+    await this.graph(encodeURIComponent(campaignId), {
       method: "POST",
       form: { status },
     });

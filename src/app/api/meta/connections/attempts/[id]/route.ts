@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getConnectionAttempt } from "@/lib/meta/connection-repository";
@@ -5,7 +6,9 @@ import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 
 export const runtime = "nodejs";
 
-export async function GET(
+export const GET = observeRoute("/api/meta/connections/attempts/[id]", "GET", handleGET);
+
+async function handleGET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
