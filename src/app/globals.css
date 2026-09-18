@@ -58,6 +58,32 @@ select {
   outline-offset: 2px;
 }
 
+.scrollbar-stable {
+  scrollbar-gutter: stable;
+}
+
+.scrollbar-stable::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scrollbar-stable::-webkit-scrollbar-track {
+  background: #f1f3f5;
+}
+
+.scrollbar-stable::-webkit-scrollbar-thumb {
+  background: #9aa3ad;
+  border: 2px solid #f1f3f5;
+  border-radius: 5px;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .scrollbar-stable {
+    scrollbar-color: #9aa3ad #f1f3f5;
+    scrollbar-width: thin;
+  }
+}
+
 .scrollbar-none {
   scrollbar-width: none;
 }

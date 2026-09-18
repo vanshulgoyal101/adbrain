@@ -52,6 +52,28 @@ beforeEach(() => {
 });
 
 describe("campaign Ads Manager links", () => {
+  it("saves and restores WhatsApp drafts without a form and reviews the verified number", async () => {
+    mocks.preflight.mockImplementation(async () => ({
+      draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
+      canCreatePaused: true, blockers: [], planHash: "a".repeat(64), currency: "INR",
+      perAdSetDailyBudgetRupees: 200, totalDailyBudgetRupees: 200, adSetCount: 1,
+      resolvedAreaLabel: "Jaipur", selected, destination: "whatsapp", whatsappNumber: "+919876543210",
+    }));
+    const first = view();
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText(/Destination: WhatsApp chat \+919876543210/);
+    expect(saved.input).toMatchObject({ destination: "whatsapp", leadFormId: null });
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/campaigns/lead-forms")).toBe(false);
+    first.unmount();
+    view();
+    await waitFor(() => expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked());
+    expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["act_2398686420592052", "act_999", "2398686420592052"],
     ["2398686420592052", "act_999", "2398686420592052"],
@@ -108,7 +130,7 @@ describe("campaign sync feedback", () => {
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
     await screen.findByRole("option", { name: "Fresh form" });
     expect(forms).toHaveBeenCalledTimes(3);
-    expect(screen.getByLabelText("Lead form")).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
   });
 
   it("reuses successful forms on reopen and refreshes after one minute", async () => {
@@ -121,7 +143,7 @@ describe("campaign sync feedback", () => {
       fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
       fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
       expect(screen.getByRole("option", { name: "Enquiries" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Lead form")).toHaveValue("");
+      expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
       expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument();
       expect(formCalls()).toHaveLength(1);
       fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
@@ -170,7 +192,7 @@ describe("campaign sync feedback", () => {
     await screen.findByText(/Page forms are temporarily unavailable/);
     fireEvent.click(screen.getByRole("button", { name: "Retry lead forms" }));
     await screen.findByRole("option", { name: "New enquiry" });
-    expect(screen.getByLabelText("Lead form")).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
     expect(forms).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
     expect(requests.every(signal => signal.aborted)).toBe(true);
@@ -212,6 +234,35 @@ describe("campaign sync feedback", () => {
 });
 
 describe("campaign audience workflow", () => {
+  it("clearly marks WhatsApp setup as draft-only", () => {
+    view();
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    expect(screen.getByText("WhatsApp drafts only. Publishing is not yet available.")).toBeVisible();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("generates detailed targeting even when location and age are manual", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Jaipur" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")).toHaveLength(1);
+    expect(saved.input.targeting.audience?.interestNames).toEqual(["Solar energy"]);
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("blocks an empty AI interest response instead of saving a broad audience", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ready: true, targeting: { ...recommended, audience: { ...recommended.audience, interestNames: [] } } }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("The detailed targeting recommendation is incomplete. Try again.");
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("surfaces failed eligibility checks without offering a Meta submission", async () => {
     mocks.preflight.mockResolvedValueOnce({
       canCreatePaused: false, planHash: null, currency: "INR", selected,
@@ -227,10 +278,95 @@ describe("campaign audience workflow", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("re-decides age using the new mode while retaining chosen locations and campaign settings", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Austin, Texas\nRound Rock, Texas" } });
+    fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Dallas, Texas" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[1]);
+    fireEvent.change(screen.getByLabelText("Minimum age"), { target: { value: "40" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[1]);
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const input = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).audienceDraft;
+    expect(input).toMatchObject({ dailyBudgetRupees: 200, creativeIds: [creative.id], leadFormId: "form-1", abTest: false });
+    expect(input.targeting.age.mode).toBe("ai");
+    expect(input.targeting.location).toMatchObject({ mode: "manual", includedNames: ["Austin, Texas", "Round Rock, Texas"], excludedNames: ["Dallas, Texas"] });
+    await waitFor(() => expect(screen.getByLabelText("Minimum age")).toHaveValue(30));
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("releases old areas for a fresh location decision but retains exclusions and manual ages", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Delhi" } });
+    fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Ajmer" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[1]);
+    fireEvent.change(screen.getByLabelText("Minimum age"), { target: { value: "40" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
+    await waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    const input = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).audienceDraft;
+    expect(input.targeting.location).toMatchObject({ mode: "ai", included: [], includedNames: [], excludedNames: ["Ajmer"] });
+    expect(input.targeting.age).toMatchObject({ mode: "manual", min: 40 });
+    await waitFor(() => expect(screen.getByLabelText("Planned areas")).toHaveValue("Jaipur"));
+  });
+
+  it("preserves comma-containing locations, radius and edited interests through save and reopen", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ready: true, targeting: { ...recommended, location: { ...recommended.location, includedNames: ["Austin, Texas", "Round Rock, Texas"] } } }));
+    const first = view();
+    expect(screen.getByLabelText("Gender")).toHaveValue("all");
+    fireEvent.change(screen.getByLabelText("Gender"), { target: { value: "women" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Recommend audience" }));
+    await screen.findByLabelText("Minimum age");
+    expect(screen.getByLabelText("Planned areas")).toHaveValue("Austin, Texas\nRound Rock, Texas");
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "35" } });
+    fireEvent.change(screen.getByLabelText(/Interests \(up to 5/), { target: { value: "Home improvement" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledOnce());
+    expect(saved.input.targeting).toMatchObject({
+      gender: "women",
+      location: { mode: "manual", includedNames: ["Austin, Texas", "Round Rock, Texas"], radiusKm: 35 },
+      audience: { interestNames: ["Home improvement"] },
+    });
+    first.unmount();
+    view();
+    await waitFor(() => expect(screen.getByLabelText("Planned areas")).toHaveValue("Austin, Texas\nRound Rock, Texas"));
+    expect(screen.getByRole("slider")).toHaveValue("35");
+    expect(screen.getByLabelText(/Interests \(up to 5/)).toHaveValue("Home improvement");
+    expect(screen.getByLabelText("Gender")).toHaveValue("women");
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")).toHaveLength(1);
+  });
+
+  it("keeps inputs on recommendation failure and permits an explicit retry", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: "Recommendation unavailable" }, { status: 502 }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Delhi" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
+    await screen.findByText("Recommendation unavailable");
+    expect(screen.getByLabelText("Planned areas")).toHaveValue("Delhi");
+    fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
+    await waitFor(() => expect(screen.getByLabelText("Planned areas")).toHaveValue("Jaipur"));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("requests and displays a location decision when the owner clicks decide", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")).toHaveLength(1));
+    expect(await screen.findByLabelText("Planned areas")).toHaveValue("Jaipur");
+    expect(screen.getByLabelText("Minimum age")).toHaveValue(30);
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("requires a lead form before starting AI work for a connected campaign", async () => {
     view(true);
     await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Lead form" }), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
     expect(await screen.findByText("Choose a lead form before preparing campaign review.")).toBeInTheDocument();
@@ -322,7 +458,7 @@ describe("campaign audience workflow", () => {
     await waitFor(() => expect(screen.getByRole("region", { name: "Campaign review result" })).toHaveFocus());
     expect(screen.getByRole("button", { name: "Send to Meta (paused)" })).toBeEnabled();
     expect(mocks.saveDraft).toHaveBeenCalledWith(expect.objectContaining({
-      creativeIds: [creative.id], dailyBudgetRupees: 200, leadFormId: "form-1", targeting: recommended,
+      creativeIds: [creative.id], dailyBudgetRupees: 200, leadFormId: "form-1", targeting: { ...recommended, gender: "all" },
     }), expect.any(AbortSignal));
     expect(screen.getByText(/Ages: 30-65\+/)).toHaveTextContent("Interests: Solar energy");
     expect(mocks.createCampaign).not.toHaveBeenCalled();

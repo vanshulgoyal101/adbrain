@@ -98,6 +98,8 @@ export interface CampaignInsights {
   leads: number;
   spend: number;
   cpl: number | null;
+  conversations?: number;
+  costPerConversation?: number | null;
 }
 
 export interface MetaCampaignSummary {
@@ -174,7 +176,7 @@ export function destinationCTA(
     return { type: "CALL_NOW", value: { link: `tel:${opts.phone}` } };
   }
   if (dest === "whatsapp") {
-    return { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP" } };
+    return { type: "WHATSAPP_MESSAGE", value: { app_destination: "WHATSAPP", ...(opts.phone ? { link: `https://wa.me/${opts.phone.replace(/^\+/, "")}` } : {}) } };
   }
   // A human creative CTA is presentation copy, not a safe Graph API CTA. In
   // particular, BOOK_NOW is not accepted for every instant-form lead ad.
@@ -222,22 +224,23 @@ function clampRadiusKm(km: number): number {
 
 /**
  * Pick the best adgeolocation match for a typed place name. Meta returns
- * results already ranked by relevance/audience size, so we preserve that order
- * and only (1) prefer the requested country and (2) prefer a city, then a
- * region, then a country. This keeps the canonical "Jaipur" (Rajasthan) ahead
- * of same-named smaller towns.
+ * Exact names and qualified city/region labels take precedence. Otherwise keep
+ * Meta's relevance order within the requested country and preferred place type.
  */
 export function pickBestGeoMatch(
   matches: GeoSearchResult[],
   query: string,
-  preferCountry = "IN",
+  preferCountry = "",
 ): GeoSearchResult | null {
-  void query;
   if (!matches.length) return null;
+  const normalizedQuery = query.trim().toLowerCase();
+  const exact = matches.filter((match) => [match.name, geoLabel(match)]
+    .some((label) => label.trim().toLowerCase() === normalizedQuery));
+  const candidates = exact.length ? exact : matches;
   const inCountry = preferCountry
-    ? matches.filter((m) => !m.country_code || m.country_code === preferCountry)
-    : matches;
-  const pool = inCountry.length ? inCountry : matches;
+    ? candidates.filter((m) => !m.country_code || m.country_code === preferCountry)
+    : candidates;
+  const pool = inCountry.length ? inCountry : candidates;
   for (const type of ["city", "region", "country"]) {
     const hit = pool.find((m) => m.type === type);
     if (hit) return hit;
@@ -411,6 +414,17 @@ export class MetaClient {
     return this.pageAccessToken;
   }
 
+  async getWhatsAppNumber(): Promise<string | null> {
+    const token = await this.getPageAccessToken();
+    const page = await this.graph<{ id?: string; has_whatsapp_business_number?: boolean; whatsapp_number?: string }>(
+      `${this.creds.pageId}?fields=id,has_whatsapp_business_number,whatsapp_number`,
+      { token },
+    );
+    if (page.id !== this.creds.pageId || page.has_whatsapp_business_number !== true || typeof page.whatsapp_number !== "string") return null;
+    const number = page.whatsapp_number.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
+    return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
+  }
+
   /** Active instant lead forms on the page. */
   async listLeadForms(): Promise<LeadForm[]> {
     const pageToken = await this.getPageAccessToken();
@@ -463,7 +477,7 @@ export class MetaClient {
     opts: { radiusKm?: number; preferCountry?: string } = {},
   ): Promise<ResolvedGeo> {
     const radius = clampRadiusKm(opts.radiusKm ?? 25);
-    const preferCountry = opts.preferCountry ?? "IN";
+    const preferCountry = opts.preferCountry ?? "";
     const cities: NonNullable<GeoTargeting["cities"]> = [];
     const regions: NonNullable<GeoTargeting["regions"]> = [];
     const countries: string[] = [];
@@ -574,15 +588,17 @@ export class MetaClient {
   async createLeadCampaign(params: {
     name: string;
     dailyBudgetRupees: number;
-    leadFormId: string;
+    leadFormId?: string;
     link: string;
     creatives: CreativeInput[];
     ageMin?: number;
     ageMax?: number;
     interests?: AudienceInterest[];
+    gender?: "all" | "men" | "women";
     location?: GeoTargeting;
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
+    whatsappNumber?: string;
     phone?: string;
     variants?: AdSetVariant[];
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
@@ -609,7 +625,15 @@ export class MetaClient {
       throw new MetaError("Review valid Meta audience interests before creating ads.");
     }
     const acct = this.creds.adAccountId;
+    if (params.gender !== undefined && !["all", "men", "women"].includes(params.gender)) {
+      throw new MetaError("Choose a supported gender demographic before creating ads.");
+    }
     const requested = params.destination ?? "instant_form";
+    if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
+    if (requested === "whatsapp") {
+      if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
+      if (await this.getWhatsAppNumber() !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
+    }
 
     // Call ads need a phone number — fetch the page's if none was passed.
     let phone = params.phone;
@@ -628,7 +652,7 @@ export class MetaClient {
       method: "POST",
       form: {
         name: params.name,
-        objective: "OUTCOME_LEADS",
+        objective: requested === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "OUTCOME_LEADS",
         status: "PAUSED",
         special_ad_categories: "[]",
         is_adset_budget_sharing_enabled: "false",
@@ -679,6 +703,7 @@ export class MetaClient {
           : {}),
         ...(ageMin ? { age_min: ageMin } : {}),
         ...(ageMax ? { age_max: ageMax } : {}),
+        ...(params.gender === "men" ? { genders: [1] } : params.gender === "women" ? { genders: [2] } : {}),
         ...(params.interests?.length ? { flexible_spec: [{ interests: params.interests }] } : {}),
         targeting_automation: { advantage_audience: 0 },
       });
@@ -699,7 +724,7 @@ export class MetaClient {
           optimization_goal: dp.optimizationGoal,
           bid_strategy: "LOWEST_COST_WITHOUT_CAP",
           destination_type: dp.destinationType,
-          promoted_object: JSON.stringify({ page_id: this.creds.pageId }),
+          promoted_object: JSON.stringify({ page_id: this.creds.pageId, ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}) }),
           targeting: targetingFor(v),
         },
       });
@@ -712,8 +737,6 @@ export class MetaClient {
     for (let i = 0; i < variants.length; i++) {
       let adSet: { id: string };
       if (i === 0) {
-        // First ad set resolves the destination, falling back to instant form
-        // if Meta rejects the chosen one (e.g. WhatsApp not connected).
         try {
           adSet = await makeAdSet(requested, variants[i], i);
         } catch (err) {
@@ -745,10 +768,10 @@ export class MetaClient {
                   image_hash: imageHash,
                   message: c.message,
                   name: c.headline,
-                  link: params.link,
+                  link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
                   call_to_action: destinationCTA(destination, {
                     leadFormId: params.leadFormId,
-                    phone,
+                    phone: destination === "whatsapp" ? params.whatsappNumber : phone,
                     ctaLabel: c.cta,
                   }),
                 },
@@ -826,23 +849,24 @@ export class MetaClient {
     return { dailyBudgetRupees: total / 100, adSetId: response.data[0].id };
   }
 
-  private async verifyCampaignBinding(campaignId: string): Promise<void> {
+  private async verifyCampaignBinding(campaignId: string): Promise<"whatsapp" | null> {
     const node = encodeURIComponent(campaignId);
     const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
-    const adSets = await this.graph<{ data?: Array<{ promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-      `${node}/adsets?fields=promoted_object&limit=100`,
+    const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
+      `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
     );
     if (!Array.isArray(adSets.data) || !adSets.data.length || adSets.paging?.next
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");
     }
+    return adSets.data.every(adSet => adSet.destination_type === "WHATSAPP") ? "whatsapp" : null;
   }
 
   async getCampaignInsights(campaignId: string): Promise<CampaignInsights> {
-    await this.verifyCampaignBinding(campaignId);
+    const destination = await this.verifyCampaignBinding(campaignId);
     const data = await this.graph<{
       data: Array<{
         impressions?: string;
@@ -861,7 +885,11 @@ export class MetaClient {
     );
     const leads = Number(leadAction?.value ?? 0);
     const cpl = leads > 0 ? spend / leads : null;
-    return { impressions, clicks, leads, spend, cpl };
+    const conversationAction = row?.actions?.find(action => action.action_type === "onsite_conversion.messaging_conversation_started_7d");
+    const conversations = Number(conversationAction?.value ?? 0);
+    return { impressions, clicks, leads, spend, cpl,
+      ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null } : {}),
+    };
   }
 
   async deleteObject(id: string): Promise<void> {

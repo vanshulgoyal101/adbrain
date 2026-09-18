@@ -168,10 +168,16 @@ describe("W2-04 planner output conversion", () => {
     age_max: 54,
     locations: ["Jaipur"],
     excluded_locations: ["Ajmer"],
+    interests: ["Home improvement"],
     destination: "instant_form",
     special_ad_category: "none",
     rationale: "Use the strongest approved creative.",
   };
+
+  it.each([undefined, [], [" "]])("rejects a ready plan without usable detailed interests: %j", (interests) => {
+    const result = plannerPlanToDraftInput({ businessId, goal: "Local leads", plan: { ...plan, interests }, approvedCreativeIds: [creativeId], leadFormIds: [leadFormId] });
+    expect(result.ok).toBe(false);
+  });
 
   it("W2-T04: converts valid guided planner output to a draft without Meta calls", () => {
     const result = plannerPlanToDraftInput({

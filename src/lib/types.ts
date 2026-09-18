@@ -406,6 +406,8 @@ export interface Database {
           leads: number;
           spend: number;
           cpl: number | null;
+          conversations?: number | null;
+          cost_per_conversation?: number | null;
           fetched_at: string;
         };
         Insert: {
@@ -416,6 +418,8 @@ export interface Database {
           leads?: number;
           spend?: number;
           cpl?: number | null;
+          conversations?: number | null;
+          cost_per_conversation?: number | null;
           fetched_at?: string;
         };
         Update: Partial<

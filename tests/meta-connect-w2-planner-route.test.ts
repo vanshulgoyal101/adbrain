@@ -131,6 +131,7 @@ beforeEach(() => {
       age_max: 55,
       locations: ["Jaipur"],
       excluded_locations: [],
+      interests: ["Home improvement"],
       destination: "instant_form",
       special_ad_category: "none",
       rationale: "Use the approved local creative.",
@@ -181,6 +182,32 @@ describe("guided planner route", () => {
     }) }));
     expect(response.status).toBe(403);
     expect(mocks.runPlanner).not.toHaveBeenCalled();
+  });
+
+  it("replaces old AI location suggestions while preserving manual age and exclusions", async () => {
+    const audienceDraft = {
+      businessId: business.id, name: "Owner name", goal: "Qualified leads", mode: "manual",
+      creativeIds: [creativeId], dailyBudgetRupees: 700, leadFormId: "owner-form", abTest: false,
+      targeting: { gender: "women", age: { mode: "manual", min: 30, max: 60 }, location: { mode: "ai", includedNames: ["Delhi"], excludedNames: ["Ajmer"], radiusKm: 25 } },
+    };
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: audienceDraft.goal, audienceDraft }) }));
+    const body = await response.json();
+    expect(body.targeting.location.includedNames).toEqual(["Jaipur"]);
+    expect(body.targeting.location.excludedNames).toEqual(["Ajmer"]);
+    expect(body.targeting.age).toEqual(audienceDraft.targeting.age);
+    expect(body.targeting.gender).toBe("women");
+  });
+
+  it("retains explicitly typed place names including commas", async () => {
+    const audienceDraft = {
+      businessId: business.id, name: "Owner name", goal: "Qualified leads", mode: "manual",
+      creativeIds: [creativeId], dailyBudgetRupees: 700, leadFormId: "owner-form", abTest: false,
+      targeting: { age: { mode: "ai" }, location: { mode: "manual", includedNames: ["Austin, Texas"], radiusKm: 35 } },
+    };
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: audienceDraft.goal, audienceDraft }) }));
+    expect((await response.json()).targeting.location).toEqual(audienceDraft.targeting.location);
   });
   it("plans and saves a draft while Meta is unavailable", async () => {
     mocks.withMetaConnection.mockRejectedValueOnce(new Error("Meta not connected"));

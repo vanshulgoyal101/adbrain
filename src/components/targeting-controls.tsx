@@ -16,6 +16,7 @@ export interface GeoPick {
 }
 
 export interface TargetingValue {
+  gender?: TargetingInputDTO["gender"];
   locationMode: "ai" | "manual";
   included: GeoPick[];
   excluded: GeoPick[];
@@ -27,6 +28,7 @@ export interface TargetingValue {
 }
 
 export const defaultTargeting: TargetingValue = {
+  gender: "all",
   locationMode: "ai",
   included: [],
   excluded: [],
@@ -49,6 +51,7 @@ function ModeToggle({
     <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-sm">
       <button
         type="button"
+        aria-pressed={mode === "ai"}
         onClick={() => onChange("ai")}
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-3 py-1 font-medium transition-colors",
@@ -62,6 +65,7 @@ function ModeToggle({
       </button>
       <button
         type="button"
+        aria-pressed={mode === "manual"}
         onClick={() => onChange("manual")}
         className={cn(
           "rounded-md px-3 py-1 font-medium transition-colors",
@@ -265,12 +269,14 @@ export function TargetingControls({
   brandAreas,
   plannedAreas = [],
   plannedExclusions = [],
+  onDecide,
 }: {
   value: TargetingValue;
   onChange: (v: TargetingValue) => void;
   brandAreas: string[];
   plannedAreas?: string[];
   plannedExclusions?: string[];
+  onDecide?: (field: "location" | "age") => void;
 }) {
   const set = (patch: Partial<TargetingValue>) => onChange({ ...value, ...patch });
 
@@ -319,7 +325,7 @@ export function TargetingControls({
           </Label>
           <ModeToggle
             mode={value.locationMode}
-            onChange={(m) => set({ locationMode: m })}
+            onChange={(mode) => mode === "ai" && onDecide ? onDecide("location") : set({ locationMode: mode })}
           />
         </div>
 
@@ -407,7 +413,7 @@ export function TargetingControls({
           </Label>
           <ModeToggle
             mode={value.ageMode}
-            onChange={(m) => set({ ageMode: m })}
+            onChange={(mode) => mode === "ai" && onDecide ? onDecide("age") : set({ ageMode: mode })}
           />
         </div>
         {value.ageMode === "manual" && (
@@ -439,10 +445,25 @@ export function TargetingControls({
         )}
       </div>
 
+      <div className="flex flex-col gap-2 border-t border-slate-200 pt-4">
+        <Label htmlFor="audience-gender">Gender</Label>
+        <select
+          id="audience-gender"
+          value={value.gender ?? "all"}
+          onChange={(event) => set({ gender: event.target.value as TargetingValue["gender"] })}
+          className="h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:max-w-64"
+        >
+          <option value="all">All genders</option>
+          <option value="men">Men</option>
+          <option value="women">Women</option>
+        </select>
+      </div>
+
       {/* Live summary */}
       <div className="rounded-lg bg-white px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-200">
         <span className="font-medium text-slate-800">Who’ll see this:</span>{" "}
         {audience}
+        {" "}{value.gender === "men" ? "Men." : value.gender === "women" ? "Women." : "All genders."}
         {plannedExclusions.length > 0 && <> Excluding {plannedExclusions.join(", ")}.</>}
       </div>
     </div>

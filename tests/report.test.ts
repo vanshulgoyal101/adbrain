@@ -17,6 +17,16 @@ const row = (over: Partial<ReportRow>): ReportRow => ({
 
 describe("buildPerformanceReport", () => {
   const generatedAt = new Date("2026-08-12T00:00:00Z");
+  it("separates WhatsApp spend and conversations from blended lead cost", () => {
+    const md = buildPerformanceReport({ businessName: "Solaride", generatedAt, rows: [
+      row({ name: "Forms", leads: 10, spend: 200, cpl: 20 }),
+      row({ name: "Chats", conversations: 5, costPerConversation: 100, spend: 500 }),
+    ] });
+    expect(md).toContain("Blended cost per lead: ₹20");
+    expect(md).toContain("Total spend: ₹700");
+    expect(md).toContain("WhatsApp conversations started: 5");
+    expect(md).toContain("Cost per WhatsApp conversation: ₹100");
+  });
 
   it("includes a title, date, and summary totals", () => {
     const md = buildPerformanceReport({

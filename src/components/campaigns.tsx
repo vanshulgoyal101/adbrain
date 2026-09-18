@@ -125,6 +125,7 @@ export function Campaigns({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [budget, setBudget] = useState(200);
+  const [destination, setDestination] = useState<"instant_form" | "whatsapp">("instant_form");
   const [leadFormId, setLeadFormId] = useState(leadForms[0]?.id ?? "");
   const [availableForms, setAvailableForms] = useState(leadForms);
   const [formsLoading, setFormsLoading] = useState(false);
@@ -187,8 +188,8 @@ export function Campaigns({
   const syncCursorRef = useRef<string | null>(null);
   const syncSkippedRef = useRef(0);
   const selectedLeadForm = availableForms.find((form) => form.id === leadFormId);
-  const plannedAreas = includedNames.split(",").map((value) => value.trim()).filter(Boolean);
-  const plannedExclusions = excludedNames.split(",").map((value) => value.trim()).filter(Boolean);
+  const plannedAreas = includedNames.split("\n").map((value) => value.trim()).filter(Boolean);
+  const plannedExclusions = excludedNames.split("\n").map((value) => value.trim()).filter(Boolean);
   const audiencePreview =
     plannedAreas.length
       ? `${[...(targeting.locationMode === "manual" ? targeting.included.map((place) => place.name) : []), ...plannedAreas].join(", ")}${plannedExclusions.length ? `; excluding ${plannedExclusions.join(", ")}` : ""}`
@@ -206,13 +207,15 @@ export function Campaigns({
     setSelected(new Set(input.creativeIds));
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
+    setDestination(input.destination ?? "instant_form");
     setAbTest(input.abTest);
     setCreationMode("manual");
     setDraftGoal(input.goal);
-    setIncludedNames((input.targeting.location?.includedNames ?? []).join(", "));
-    setExcludedNames((input.targeting.location?.excludedNames ?? []).join(", "));
+    setIncludedNames((input.targeting.location?.includedNames ?? []).join("\n"));
+    setExcludedNames((input.targeting.location?.excludedNames ?? []).join("\n"));
     setShowComposer(true);
     setTargeting({
+      gender: input.targeting.gender ?? "all",
       locationMode: input.targeting.location?.mode ?? defaultTargeting.locationMode,
       included: input.targeting.location?.included ?? [], excluded: input.targeting.location?.excluded ?? [],
       radiusKm: input.targeting.location?.radiusKm ?? defaultTargeting.radiusKm,
@@ -231,7 +234,7 @@ export function Campaigns({
   }
 
   useEffect(() => {
-    if (!showComposer || !connectedForDraft) return;
+    if (!showComposer || !connectedForDraft || destination === "whatsapp") return;
     const freshness = formsFreshnessRef.current;
     if (freshness?.ownerId === business.owner_id && freshness.businessId === business.id &&
       freshness.retry === formsRetry && Date.now() - freshness.fetchedAt < LEAD_FORMS_FRESH_MS) return;
@@ -249,7 +252,7 @@ export function Campaigns({
       if (!controller.signal.aborted) setFormsLoading(false);
     });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry]);
+  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination]);
 
   useEffect(() => {
     startTransition(() => setCampaigns(initialCampaigns));
@@ -362,6 +365,7 @@ export function Campaigns({
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
+    setDestination("instant_form");
     setShowComposer(true);
   }
 
@@ -372,7 +376,7 @@ export function Campaigns({
     setPrepareReview(null);
     setShowComposer(true);
     setFormsRetry(current => current + 1);
-    setNotice("Meta connected. Review your lead form before continuing.");
+    setNotice(destination === "whatsapp" ? "Meta connected. Review the linked WhatsApp number before continuing." : "Meta connected. Review your lead form before continuing.");
   }
 
   function acceptOperation(next: OperationDTO) {
@@ -517,8 +521,10 @@ export function Campaigns({
       mode: preparedDraftRef.current?.input.mode === "guided" || creationMode === "guided" ? "guided" : "manual",
       creativeIds: [...selected],
       dailyBudgetRupees: Math.max(0, budget),
-      leadFormId: leadFormId || null,
+      leadFormId: destination === "whatsapp" ? null : leadFormId || null,
+      destination,
       targeting: {
+        gender: targeting.gender ?? "all",
         location: {
           mode: targeting.locationMode,
           included: targeting.included
@@ -528,8 +534,8 @@ export function Campaigns({
             .map((place) => toDraftLocation(place, targeting.radiusKm))
             .filter((place): place is NonNullable<typeof place> => place !== null),
           radiusKm: targeting.radiusKm,
-          ...(includedNames.trim() ? { includedNames: includedNames.split(",").map((value) => value.trim()).filter(Boolean) } : {}),
-          ...(excludedNames.trim() ? { excludedNames: excludedNames.split(",").map((value) => value.trim()).filter(Boolean) } : {}),
+          ...(plannedAreas.length ? { includedNames: plannedAreas } : {}),
+          ...(plannedExclusions.length ? { excludedNames: plannedExclusions } : {}),
         },
         age: {
           mode: targeting.ageMode,
@@ -553,9 +559,10 @@ export function Campaigns({
     const data = await response.json() as { ready?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[] };
     signal.throwIfAborted();
     if (!response.ok || !data.ready) throw new Error(data.error ?? data.questions?.map((question) => question.question).join(" ") ?? "Could not recommend an audience.");
-    const recommended = targetingInputSchema.parse(data.targeting);
-    if (!recommended.audience) throw new Error("The audience recommendation is incomplete. Try again.");
+    const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
+    if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
     setTargeting({
+      gender: recommended.gender,
       locationMode: recommended.location?.mode ?? "ai",
       included: recommended.location?.included ?? [],
       excluded: recommended.location?.excluded ?? [],
@@ -565,19 +572,30 @@ export function Campaigns({
       ageMax: recommended.age?.max ?? defaultTargeting.ageMax,
       audience: recommended.audience,
     });
-    setIncludedNames((recommended.location?.includedNames ?? []).join(", "));
-    setExcludedNames((recommended.location?.excludedNames ?? []).join(", "));
+    setIncludedNames((recommended.location?.includedNames ?? []).join("\n"));
+    setExcludedNames((recommended.location?.excludedNames ?? []).join("\n"));
     setPrepareReview(null);
     return { ...input, targeting: recommended };
   }
 
-  async function requestAudienceRecommendation() {
+  async function requestAudienceRecommendation(field?: "location" | "age") {
     if (unresolvedRecovery() || preparationRef.current) return;
     setError(null);
     setNotice(null);
+    setPrepareReview(null);
     const signal = beginPreparation();
     try {
-      await recommendAudience(manualDraftInput(), signal);
+      const input = manualDraftInput();
+      if (field === "location") {
+        input.targeting.location = { ...input.targeting.location, mode: "ai", included: [], includedNames: [] };
+      }
+      if (field === "age") {
+        input.targeting.age = { ...input.targeting.age, mode: "ai" };
+        if (input.targeting.location?.included?.length || input.targeting.location?.includedNames?.length) {
+          input.targeting.location = { ...input.targeting.location, mode: "manual" };
+        }
+      }
+      await recommendAudience(input, signal);
     } catch (reason) {
       if (!signal.aborted) setError(reason instanceof Error ? reason.message : "Could not recommend an audience.");
     } finally {
@@ -598,14 +616,14 @@ export function Campaigns({
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
-      if (reviewAfterSave && connectedForDraft && !input.leadFormId) throw new Error("Choose a lead form before preparing campaign review.");
+      if (reviewAfterSave && connectedForDraft && input.destination !== "whatsapp" && !input.leadFormId) throw new Error("Choose a lead form before preparing campaign review.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Complete the campaign details first.");
       return;
     }
     const signal = beginPreparation();
     try {
-      if (reviewAfterSave && (input.targeting.age?.mode === "ai" || (input.targeting.location?.mode === "ai" && !input.targeting.audience))) {
+      if (reviewAfterSave && (input.targeting.age?.mode === "ai" || !input.targeting.audience?.interestNames.length)) {
         input = await recommendAudience(input, signal);
       }
       signal.throwIfAborted();
@@ -751,7 +769,7 @@ export function Campaigns({
         setConnectOpen(true);
         return;
       }
-      await refreshDraftForms();
+      if (draft.input.destination !== "whatsapp") await refreshDraftForms();
       await loadPrepareReview(draft, connection);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not open the saved campaign review.");
@@ -965,9 +983,11 @@ export function Campaigns({
               <span className="mt-2 block text-sm font-normal">
                 Account: {prepareReview.review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"} · Page: {prepareReview.review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} · Currency: {prepareReview.review.currency}
                 <br />
+                Destination: {prepareReview.draft.input.destination === "whatsapp" ? `WhatsApp chat ${prepareReview.review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}
+                <br />
                 Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatCurrency(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatCurrency(prepareReview.review.totalDailyBudgetRupees)}
                 <br />
-                Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · All genders · City radius: {prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km
+                Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · Gender: {{ all: "All genders", men: "Men", women: "Women" }[prepareReview.draft.input.targeting.gender ?? "all"]} · City radius: {prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km
                 <br />
                 Interests: {prepareReview.review.audienceInterests?.map((interest) => interest.name).join(", ") || (prepareReview.draft.input.targeting.audience?.interestNames.length ? "Needs resolution" : "No interest narrowing")}
                 <br />
@@ -1071,8 +1091,14 @@ export function Campaigns({
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
+          <fieldset disabled={preparing || creating || recoveryPending || Boolean(operation && !["succeeded", "failed"].includes(operation.state))} className="mb-4 flex flex-wrap gap-2">
+            <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
+            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+          </fieldset>
+          {destination === "whatsapp" && <Alert variant="warning">WhatsApp drafts only. Publishing is not yet available.</Alert>}
           <div hidden={creationMode !== "guided"}><CampaignChat
             businessId={business.id}
+            destination={destination}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
           /></div>
         </>
@@ -1168,7 +1194,7 @@ export function Campaigns({
                       onChange={(e) => setBudget(Number(e.target.value))}
                     />
                   </div>
-                  <div className="flex min-w-0 flex-col gap-1.5">
+                  {destination === "instant_form" && <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="leadform">Lead form</Label>
                     <select
                       id="leadform"
@@ -1183,7 +1209,7 @@ export function Campaigns({
                         </option>
                       ))}
                     </select>
-                  </div>
+                  </div>}
                 </div>
 
                 <div className="-mt-2 flex flex-wrap items-center gap-2">
@@ -1208,8 +1234,8 @@ export function Campaigns({
                   </span>
                 </div>
 
-                {formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
-                {formsError && (
+                {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
+                {destination === "instant_form" && formsError && (
                   <Alert variant="warning">
                     Couldn’t load lead forms: {formsError}
                     <Button variant="outline" onClick={() => setFormsRetry(current => current + 1)} disabled={formsLoading}>
@@ -1221,13 +1247,14 @@ export function Campaigns({
                 <div className="flex flex-col gap-2">
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
                   <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    <div><Label htmlFor="planned-areas">Planned areas</Label><Input id="planned-areas" value={includedNames} onChange={(event) => setIncludedNames(event.target.value)} /></div>
-                    <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Input id="planned-exclusions" value={excludedNames} onChange={(event) => setExcludedNames(event.target.value)} /></div>
+                    <div><Label htmlFor="planned-areas">Planned areas</Label><textarea id="planned-areas" rows={2} placeholder="One place per line" value={includedNames} onChange={(event) => { setIncludedNames(event.target.value); setTargeting({ ...targeting, locationMode: "manual" }); setPrepareReview(null); }} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" /></div>
+                    <div><Label htmlFor="planned-exclusions">Excluded areas</Label><textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" /></div>
                   </div>
                   <Label>Audience &amp; location</Label>
                   <TargetingControls
                     value={targeting}
-                    onChange={(value) => { setTargeting(value); if (!unresolvedRecovery()) setPrepareReview(null); }}
+                    onDecide={(field) => void requestAudienceRecommendation(field)}
+                    onChange={(value) => { setTargeting(value.radiusKm !== targeting.radiusKm ? { ...value, locationMode: "manual" } : value); if (!unresolvedRecovery()) setPrepareReview(null); }}
                     brandAreas={business.locations ?? []}
                     plannedAreas={plannedAreas}
                     plannedExclusions={plannedExclusions}
@@ -1240,7 +1267,7 @@ export function Campaigns({
                     <div><Label htmlFor="audience-interests">Interests (up to 5, one per line)</Label>
                       <textarea id="audience-interests" rows={3} value={targeting.audience.interestNames.join("\n")} onChange={(event) => setTargeting({ ...targeting, audience: { ...targeting.audience!, interestNames: event.target.value.split("\n") } })} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" />
                     </div>
-                    <p className="text-xs text-slate-500">All genders. Interest signals are not verified ownership or purchase intent. Meta may expand detailed targeting for lead optimization.</p>
+                    <p className="text-xs text-slate-500">Interest signals are not verified ownership or purchase intent. Meta may expand detailed targeting for lead optimization.</p>
                   </div>}
                 </div>
 
@@ -1266,7 +1293,8 @@ export function Campaigns({
                     selectedCount={selected.size}
                     budget={totalDailyBudget}
                     leadFormName={selectedLeadForm?.name}
-                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; city radius ${targeting.radiusKm} km${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
+                    destination={destination}
+                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; city radius ${targeting.radiusKm} km${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
 
@@ -1449,14 +1477,14 @@ export function Campaigns({
                       <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">
                         <Stat label="Impressions" value={formatNumber(r.impressions)} />
                         <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label="Leads" value={formatNumber(r.leads)} />
+                        <Stat label={r.conversations != null ? "WhatsApp conversations" : "Leads"} value={formatNumber(r.conversations ?? r.leads)} />
                         <Stat
-                          label="Cost / lead"
-                          value={r.cpl != null ? formatCurrency(r.cpl) : "—"}
+                          label={r.conversations != null ? "Cost / conversation" : "Cost / lead"}
+                          value={r.conversations != null ? (r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : r.cpl != null ? formatCurrency(r.cpl) : "—"}
                         />
                       </div>
                     )}
-                    {r &&
+                    {r && r.conversations == null &&
                       (() => {
                         const h = spendHealth(
                           { spend: r.spend, leads: r.leads, cpl: r.cpl },

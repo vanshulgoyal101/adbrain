@@ -29,6 +29,25 @@ import type {
   Lead,
 } from "@/lib/types";
 
+const QUERY_BATCH_SIZE = 100;
+
+async function readAllById<Row extends { id: string }>(
+  fetchPage: (after: string | null) => PromiseLike<{ data: Row[] | null; error: unknown }>,
+  errorMessage: string,
+): Promise<Row[]> {
+  const rows: Row[] = [];
+  let after: string | null = null;
+  for (;;) {
+    const { data, error } = await fetchPage(after);
+    if (error || !data) throw new Error(errorMessage);
+    if (!data.length) return rows;
+    const next = data[data.length - 1].id;
+    if (after !== null && next <= after) throw new Error(errorMessage);
+    rows.push(...data);
+    after = next;
+  }
+}
+
 /** Current authenticated user, or null. A real Supabase session always wins;
  * the dev bypass cookie is only a fallback when there's no real session. */
 export const getUser = cache(async function getUser(): Promise<AppUser | null> {
@@ -124,13 +143,12 @@ export async function getApprovedCreatives(
 /** Campaigns for a business, newest first. */
 export const getCampaigns = cache(async function getCampaigns(businessId: string): Promise<Campaign[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("campaigns")
-    .select("*")
-    .eq("business_id", businessId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error("Campaigns could not be loaded.");
-  return data ?? [];
+  const campaigns = await readAllById(after => {
+    const query = supabase.from("campaigns").select("*")
+      .eq("business_id", businessId).order("id").limit(QUERY_BATCH_SIZE);
+    return after ? query.gt("id", after) : query;
+  }, "Campaigns could not be loaded.");
+  return campaigns.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
 });
 
 /** Latest result row per campaign, keyed by campaign id. */
@@ -139,18 +157,23 @@ export async function getLatestResults(
 ): Promise<Record<string, CampaignResult>> {
   if (!campaignIds.length) return {};
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("campaigns")
-    .select("id, campaign_results!inner(*)")
-    .in("id", campaignIds)
-    .order("fetched_at", { referencedTable: "campaign_results", ascending: false })
-    .order("id", { referencedTable: "campaign_results", ascending: false })
-    .limit(1, { referencedTable: "campaign_results" });
-  if (error) throw new Error("Campaign spend could not be loaded.");
   const map: Record<string, CampaignResult> = {};
-  for (const row of data ?? []) {
-    const latest = row.campaign_results[0];
-    if (latest) map[row.id] = latest;
+  const uniqueIds = [...new Set(campaignIds)];
+  for (let offset = 0; offset < uniqueIds.length; offset += QUERY_BATCH_SIZE) {
+    const batch = uniqueIds.slice(offset, offset + QUERY_BATCH_SIZE);
+    const rows = await readAllById(after => {
+      const query = supabase.from("campaigns")
+        .select("id, campaign_results!inner(*)").in("id", batch)
+        .order("id")
+        .order("fetched_at", { referencedTable: "campaign_results", ascending: false })
+        .order("id", { referencedTable: "campaign_results", ascending: false })
+        .limit(1, { referencedTable: "campaign_results" }).limit(QUERY_BATCH_SIZE);
+      return after ? query.gt("id", after) : query;
+    }, "Campaign spend could not be loaded.");
+    for (const row of rows) {
+      const latest = row.campaign_results[0];
+      if (latest) map[row.id] = latest;
+    }
   }
   return map;
 }
@@ -270,11 +293,15 @@ export async function getPerformanceRows(
   const angleById = new Map<string, string | null>();
   if (creativeIds.length) {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("creatives")
-      .select("id, angle")
-      .in("id", creativeIds);
-    for (const c of data ?? []) angleById.set(c.id, c.angle);
+    for (let offset = 0; offset < creativeIds.length; offset += QUERY_BATCH_SIZE) {
+      const batch = creativeIds.slice(offset, offset + QUERY_BATCH_SIZE);
+      const creatives = await readAllById(after => {
+        const query = supabase.from("creatives").select("id, angle")
+          .in("id", batch).order("id").limit(QUERY_BATCH_SIZE);
+        return after ? query.gt("id", after) : query;
+      }, "Campaign creative details could not be loaded.");
+      for (const creative of creatives) angleById.set(creative.id, creative.angle);
+    }
   }
 
   return campaigns.map((c) => {
@@ -298,6 +325,7 @@ export async function getPerformanceRows(
       leads: r?.leads ?? 0,
       spend: r?.spend ?? 0,
       cpl: r?.cpl ?? null,
+      ...(r?.conversations != null ? { conversations: r.conversations, costPerConversation: r.cost_per_conversation ?? null } : {}),
     };
   });
 }

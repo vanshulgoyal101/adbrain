@@ -39,6 +39,7 @@ const draftInput: DraftInput = {
       excluded: [],
     },
     age: { mode: "manual", min: 25, max: 55 },
+    audience: { interestNames: ["Solar energy"], rationale: "Test solar interest." },
   },
   abTest: false,
 };
@@ -96,8 +97,10 @@ function requestHash(): string {
 
 function reviewPlanHash(): string {
   let payload = "";
+  const input = (mocks.draftRow?.input ?? draftInput) as DraftInput;
   runPreflight({
-    draft: draftInput,
+    draft: input,
+    whatsappNumber: input.destination === "whatsapp" ? "+919876543210" : null,
     draftId,
     draftVersion: 1,
     connection: {
@@ -115,7 +118,7 @@ function reviewPlanHash(): string {
     },
     creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "Headline", primaryText: "Message", cta: "Learn More" }],
     form: { id: "form-1", businessId, active: true },
-    geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key: "jaipur", radius: 25, distance_unit: "kilometer" }] } },
+    geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key: "jaipur", radius: 25, distance_unit: "kilometer" }] }, audienceInterests: [{ id: "12345", name: "Solar energy" }] },
     hash: (value) => { payload = value; return "0".repeat(64); },
   });
   return createHash("sha256").update(payload).digest("hex");
@@ -236,6 +239,7 @@ beforeEach(() => {
       execute({
         listLeadForms: vi.fn().mockResolvedValue([{ id: "form-1", name: "Leads", status: "ACTIVE" }]),
         resolveGeoTargeting: vi.fn().mockResolvedValue({ targeting: {}, matched: [{ label: "Jaipur" }], unresolved: [] }),
+        resolveAudienceInterests: vi.fn().mockResolvedValue({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }),
         createLeadCampaign: vi.fn().mockImplementation(async (params: { onCheckpoint?: (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => Promise<void> }) => {
           await params.onCheckpoint?.({ phase: "campaign", externalId: "meta-campaign-1" });
           await params.onCheckpoint?.({ phase: "adset", externalId: "meta-adset-1" });
@@ -254,6 +258,22 @@ beforeEach(() => {
 });
 
 describe("durable campaign create route", () => {
+  it("blocks WhatsApp creation even with a forged review hash and verified recipient", async () => {
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
+    const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
+    const forms = vi.fn().mockRejectedValue(new Error("WhatsApp must not load forms"));
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => "+919876543210", createLeadCampaign: create, listLeadForms: forms, resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
+    expect(reviewed.data).toMatchObject({ canCreatePaused: false, planHash: null, whatsappNumber: "+919876543210" });
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: "a".repeat(64), connectionGeneration, idempotencyKey }));
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(create).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(forms).not.toHaveBeenCalled();
+  });
+
   it("accepts the exact hash returned by the preflight HTTP endpoint", async () => {
     const { POST: review } = await import("@/app/api/campaigns/preflight/route");
     const reviewResponse = await review(post({ businessId, draftId, draftVersion: 1 }));

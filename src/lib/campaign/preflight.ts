@@ -41,6 +41,7 @@ export interface PreflightInput {
   connection: PreflightConnection | null;
   creatives: PreflightCreative[];
   form: PreflightForm | null;
+  whatsappNumber?: string | null;
   geo: PreflightGeo;
   hash: (payload: string) => string;
 }
@@ -69,6 +70,8 @@ export interface CanonicalReviewPayload {
   creativeIds: string[];
   creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
+  destination: "instant_form" | "whatsapp";
+  whatsappNumber: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
   targeting: DraftInput["targeting"];
@@ -107,7 +110,9 @@ export function buildCanonicalReviewPayload(
     selected: input.connection?.selected ?? null,
     creativeIds: [...input.draft.creativeIds].sort(),
     creatives: buildCreativeReviewPayload(input.creatives),
-    leadFormId: input.draft.leadFormId,
+    leadFormId: input.draft.destination === "whatsapp" ? null : input.draft.leadFormId,
+    destination: input.draft.destination ?? "instant_form",
+    whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
     targeting: input.draft.targeting,
@@ -157,7 +162,12 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   ) {
     blockers.push(blocker("FORBIDDEN", "Every selected creative must belong to this business and be approved with an image and headline."));
   }
-  if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
+  if (draft.destination === "whatsapp") {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "WhatsApp publishing is not yet available. You can save this draft or choose an instant form."));
+    if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
+    }
+  } else if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Choose an active lead form belonging to this business."));
   }
   if (draft.dailyBudgetRupees <= 0) {
@@ -175,7 +185,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every selected service area or explicitly review nationwide targeting."));
   }
-  if (input.geo.unresolvedInterests?.length || (draft.targeting.audience?.interestNames.length && !input.geo.audienceInterests?.length)) {
+  if (!draft.targeting.audience?.interestNames.length) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "Generate AI detailed targeting before reviewing the campaign."));
+  } else if (input.geo.unresolvedInterests?.length || !input.geo.audienceInterests?.length) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every audience interest with Meta or edit the audience plan."));
   }
 
@@ -194,6 +206,8 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers,
     planHash,
     creativeHash,
+    destination: draft.destination ?? "instant_form",
+    whatsappNumber: draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,

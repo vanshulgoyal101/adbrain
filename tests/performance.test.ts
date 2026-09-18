@@ -16,6 +16,13 @@ const base: CampaignPerf = {
 };
 
 describe("buildPerformanceContext", () => {
+  it("keeps WhatsApp conversations distinct from leads in planner evidence", () => {
+    const out = buildPerformanceContext([{ ...base, conversations: 5, costPerConversation: 20, spend: 100 }]);
+    expect(out).toContain("5 WhatsApp conversations started at INR 20 per conversation");
+    expect(out).toContain("not verified leads or sales");
+    expect(out).not.toContain("no leads yet");
+  });
+
   it("returns empty when no campaign has spent or produced leads", () => {
     expect(buildPerformanceContext([{ ...base }, { ...base }])).toBe("");
   });

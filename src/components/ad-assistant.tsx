@@ -433,8 +433,10 @@ export function AdAssistant({ business }: { business: Business }) {
       <div className="flex min-w-0 flex-col gap-4">
         <div
           ref={scrollRef}
-          className="flex max-h-[62vh] flex-col gap-3 overflow-y-scroll pr-1"
-          style={{ scrollbarGutter: "stable" }}
+          role="region"
+          aria-label="Conversation history"
+          tabIndex={0}
+          className="scrollbar-stable flex max-h-[62vh] flex-col gap-3 overflow-y-auto pr-1"
         >
           {turns.map((turn, i) => (
             <TurnView
