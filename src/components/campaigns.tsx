@@ -55,6 +55,7 @@ import type {
   OperationDTO,
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
+import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import type { LeadForm } from "@/lib/meta/client";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
@@ -195,6 +196,7 @@ export function Campaigns({
       ageMode: input.targeting.age?.mode ?? defaultTargeting.ageMode,
       ageMin: input.targeting.age?.min ?? defaultTargeting.ageMin,
       ageMax: input.targeting.age?.max ?? defaultTargeting.ageMax,
+      audience: input.targeting.audience,
     });
   }
 
@@ -268,6 +270,7 @@ export function Campaigns({
   }
 
   async function reopenDraft(draftId: string) {
+    if (preparing || creating) return;
     if (unresolvedRecovery()) { setError("Resolve the current campaign operation before opening another draft."); return; }
     setDraftBusy(draftId);
     setError(null);
@@ -284,6 +287,7 @@ export function Campaigns({
   }
 
   async function removeDraft(draft: DraftDTO) {
+    if (preparing || creating) return;
     if (!window.confirm(`Remove saved draft "${draft.input.name}"?`)) return;
     setDraftBusy(draft.draftId);
     try {
@@ -300,6 +304,7 @@ export function Campaigns({
   }
 
   function toggleComposer() {
+    if (preparing || creating) return;
     if (showComposer) { setShowComposer(false); return; }
     if (unresolvedRecovery()) { setError("Resolve the current campaign operation before starting another campaign."); return; }
     preparedDraftRef.current = null;
@@ -452,9 +457,50 @@ export function Campaigns({
           min: targeting.ageMin,
           max: targeting.ageMax,
         },
+        ...(targeting.audience ? { audience: { ...targeting.audience, interestNames: targeting.audience.interestNames.map((name) => name.trim()).filter(Boolean) } } : {}),
       },
       abTest,
     };
+  }
+
+  async function recommendAudience(input: DraftInput): Promise<DraftInput> {
+    const response = await fetch("/api/campaigns/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
+    });
+    const data = await response.json() as { ready?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[] };
+    if (!response.ok || !data.ready) throw new Error(data.error ?? data.questions?.map((question) => question.question).join(" ") ?? "Could not recommend an audience.");
+    const recommended = targetingInputSchema.parse(data.targeting);
+    if (!recommended.audience) throw new Error("The audience recommendation is incomplete. Try again.");
+    setTargeting({
+      locationMode: recommended.location?.mode ?? "ai",
+      included: recommended.location?.included ?? [],
+      excluded: recommended.location?.excluded ?? [],
+      radiusKm: recommended.location?.radiusKm ?? defaultTargeting.radiusKm,
+      ageMode: recommended.age?.mode ?? "manual",
+      ageMin: recommended.age?.min ?? defaultTargeting.ageMin,
+      ageMax: recommended.age?.max ?? defaultTargeting.ageMax,
+      audience: recommended.audience,
+    });
+    setIncludedNames((recommended.location?.includedNames ?? []).join(", "));
+    setExcludedNames((recommended.location?.excludedNames ?? []).join(", "));
+    setPrepareReview(null);
+    return { ...input, targeting: recommended };
+  }
+
+  async function requestAudienceRecommendation() {
+    if (unresolvedRecovery() || preparing) return;
+    setError(null);
+    setNotice(null);
+    setPreparing(true);
+    try {
+      await recommendAudience(manualDraftInput());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not recommend an audience.");
+    } finally {
+      setPreparing(false);
+    }
   }
 
   async function prepareManualCampaign(reviewAfterSave = true) {
@@ -475,6 +521,9 @@ export function Campaigns({
     }
     setPreparing(true);
     try {
+      if (reviewAfterSave && (input.targeting.age?.mode === "ai" || (input.targeting.location?.mode === "ai" && !input.targeting.audience))) {
+        input = await recommendAudience(input);
+      }
       const client = createMetaConnectClient();
       const previous = preparedDraftRef.current;
       const draft = previous && !recoveryRef.current?.request
@@ -485,6 +534,7 @@ export function Campaigns({
       preparedDraftRef.current = draft;
       if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
       const connection = await client.status(business.id);
+      setConnectedForDraft(connection.authorization === "connected" && Boolean(connection.selected));
       if (connection.authorization !== "connected" || !connection.selected) {
         setConnectionIntent({ kind: "setup" });
         setConnectOpen(true);
@@ -820,6 +870,12 @@ export function Campaigns({
                 Account: {prepareReview.review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"} · Page: {prepareReview.review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} · Currency: {prepareReview.review.currency}
                 <br />
                 Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatCurrency(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatCurrency(prepareReview.review.totalDailyBudgetRupees)}
+                <br />
+                Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · All genders · City radius: {prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km
+                <br />
+                Interests: {prepareReview.review.audienceInterests?.map((interest) => interest.name).join(", ") || (prepareReview.draft.input.targeting.audience?.interestNames.length ? "Needs resolution" : "No interest narrowing")}
+                <br />
+                Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.
               </span>
               {prepareReview.review.blockers.length > 0 && (
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
@@ -914,7 +970,7 @@ export function Campaigns({
               </div>
             ))}
           </section>
-          <fieldset className="my-5 flex flex-wrap gap-2">
+          <fieldset disabled={preparing || creating} className="my-5 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
@@ -937,6 +993,7 @@ export function Campaigns({
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
+            <fieldset disabled={preparing || creating} className="flex min-w-0 flex-col gap-5">
             {approved.length === 0 ? (
               <div className="flex flex-col items-start gap-3 py-2">
                 <p className="text-sm text-slate-500">
@@ -1061,10 +1118,11 @@ export function Campaigns({
                 )}
 
                 <div className="flex flex-col gap-2">
-                  {(includedNames || excludedNames) && <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                  <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
+                  <div className="mb-4 grid gap-3 sm:grid-cols-2">
                     <div><Label htmlFor="planned-areas">Planned areas</Label><Input id="planned-areas" value={includedNames} onChange={(event) => setIncludedNames(event.target.value)} /></div>
                     <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Input id="planned-exclusions" value={excludedNames} onChange={(event) => setExcludedNames(event.target.value)} /></div>
-                  </div>}
+                  </div>
                   <Label>Audience &amp; location</Label>
                   <TargetingControls
                     value={targeting}
@@ -1073,6 +1131,16 @@ export function Campaigns({
                     plannedAreas={plannedAreas}
                     plannedExclusions={plannedExclusions}
                   />
+                  <Button variant="outline" onClick={() => void requestAudienceRecommendation()} disabled={preparing || selected.size === 0 || budget <= 0}>
+                    <Sparkles className="h-4 w-4" aria-hidden="true" /> Recommend audience
+                  </Button>
+                  {targeting.audience && <div className="space-y-3 border-t border-slate-200 pt-3">
+                    <p className="text-sm text-slate-700">{targeting.audience.rationale}</p>
+                    <div><Label htmlFor="audience-interests">Interests (up to 5, one per line)</Label>
+                      <textarea id="audience-interests" rows={3} value={targeting.audience.interestNames.join("\n")} onChange={(event) => setTargeting({ ...targeting, audience: { ...targeting.audience!, interestNames: event.target.value.split("\n") } })} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" />
+                    </div>
+                    <p className="text-xs text-slate-500">All genders. Interest signals are not verified ownership or purchase intent. Meta may expand detailed targeting for lead optimization.</p>
+                  </div>}
                 </div>
 
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 p-3">
@@ -1097,7 +1165,7 @@ export function Campaigns({
                     selectedCount={selected.size}
                     budget={totalDailyBudget}
                     leadFormName={selectedLeadForm?.name}
-                    audience={audiencePreview}
+                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; city radius ${targeting.radiusKm} km${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
 
@@ -1117,6 +1185,7 @@ export function Campaigns({
                 <details className="border-t border-slate-200 pt-3"><summary className="cursor-pointer text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>
               </>
             )}
+            </fieldset>
           </CardContent>
         </Card>
       )}

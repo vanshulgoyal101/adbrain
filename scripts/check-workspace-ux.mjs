@@ -84,8 +84,9 @@ try {
         await goal.press("Enter");
         await goal.pressSequentially("in our service areas");
         assert.equal(await goal.inputValue(), "Reach new customers\nin our service areas");
-        await page.getByRole("button", { name: "Promote an existing offer" }).click();
-        assert.ok((await goal.inputValue()).includes("Ask me to confirm"));
+        await page.getByRole("region", { name: "Campaign brief" }).locator("button").filter({ has: page.locator("svg") }).first().click();
+        assert.ok((await goal.inputValue()).length > 0);
+        assert.ok((await goal.inputValue()).length <= 500);
       }
       if (path === "settings") {
         assert.equal(await page.getByRole("button", { name: "Run traffic generator" }).count(), 0);

@@ -10,6 +10,9 @@ const plannerPlanSchema = z
     creative_ids: z.array(z.string().uuid()).min(1).max(50),
     age_min: z.number().finite().int().min(18).max(65),
     age_max: z.number().finite().int().min(18).max(65),
+    radius_km: z.number().finite().int().min(17).max(80).default(25),
+    interests: z.array(z.string().trim().min(1).max(100)).max(5).default([]),
+    special_ad_category: z.enum(["none", "housing", "employment", "financial_products_services", "issues_elections_politics", "unknown"]),
     locations: z.array(z.string().trim().min(1).max(200)).max(50),
     excluded_locations: z.array(z.string().trim().min(1).max(200)).max(50),
     destination: z.enum(["instant_form", "whatsapp", "call"]),
@@ -72,6 +75,8 @@ export function plannerPlanToDraftInput(input: {
     return { ok: false, error: "Planner chose a lead form that is not available." };
   }
 
+  if (plan.special_ad_category !== "none") return { ok: false, error: "This offer needs a special-category review in Meta Ads Manager before demographic targeting can be prepared." };
+  if (plan.age_min > plan.age_max) return { ok: false, error: "Planner returned an inverted age range." };
   const age = normalizeAgeRange(plan.age_min, plan.age_max);
   const knownLocations = input.knownLocations ?? [];
   const included = selectLocations(plan.locations, knownLocations);
@@ -86,6 +91,7 @@ export function plannerPlanToDraftInput(input: {
     leadFormId: plan.lead_form_id,
     targeting: {
       location: {
+        radiusKm: plan.radius_km,
         mode: included.length ? "manual" as const : "ai" as const,
         included,
         excluded,
@@ -97,6 +103,7 @@ export function plannerPlanToDraftInput(input: {
         min: age.min,
         max: age.max,
       },
+      ...(plan.rationale ? { audience: { interestNames: [...new Set(plan.interests)], rationale: plan.rationale } } : {}),
     },
     abTest: false,
   };

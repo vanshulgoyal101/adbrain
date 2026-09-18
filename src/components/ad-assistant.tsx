@@ -17,26 +17,17 @@ import {
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Badge, Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { useMounted } from "@/lib/use-mounted";
+import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/interview";
+import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** A single interview question (mirrors the server's InterviewQuestion). */
-interface Question {
-  id: string;
-  question: string;
-  help?: string;
-  options?: string[];
-  allowText?: boolean;
-  allowRandom?: boolean;
-  aiCanDecide?: boolean;
-}
-interface Answer {
-  question: string;
-  answer: string;
-}
+type Question = InterviewQuestion;
+type Answer = InterviewAnswer;
+type PreparedBrief = { brief: string; language?: string; recommendations?: { label: string; prompt: string }[] };
 type Turn =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string }
@@ -51,7 +42,11 @@ interface Draft {
   started: boolean;
   turns: Turn[];
   answers: Answer[];
-  phase: "chat" | "done";
+  phase: "chat" | "review" | "done";
+  prepared?: PreparedBrief;
+  recentGoals?: string[];
+  generationId?: string;
+  referenceBrief?: string;
 }
 
 const draftKey = (businessId: string) => `adbrain:assistant:${businessId}`;
@@ -72,7 +67,15 @@ function readDraft(businessId: string): Draft | null {
       started: d.started === true,
       turns: d.turns as Turn[],
       answers: Array.isArray(d.answers) ? (d.answers as Answer[]) : [],
-      phase: d.phase === "done" ? "done" : "chat",
+      phase: d.phase === "done" ? "done" : d.phase === "review" ? "review" : "chat",
+      prepared: typeof d.prepared?.brief === "string" ? {
+        brief: d.prepared.brief.slice(0, 2000),
+        language: typeof d.prepared.language === "string" ? d.prepared.language : undefined,
+        recommendations: Array.isArray(d.prepared.recommendations) ? d.prepared.recommendations.filter((item) => typeof item?.label === "string" && typeof item?.prompt === "string").slice(0, 3).map((item) => ({ label: item.label.slice(0, 80), prompt: item.prompt.slice(0, 500) })) : undefined,
+      } : undefined,
+      recentGoals: Array.isArray(d.recentGoals) ? d.recentGoals.filter((item): item is string => typeof item === "string").slice(-6) : [],
+      generationId: typeof d.generationId === "string" && /^[0-9a-f-]{36}$/i.test(d.generationId) ? d.generationId : undefined,
+      referenceBrief: typeof d.referenceBrief === "string" ? d.referenceBrief.slice(0, 2000) : undefined,
     };
   } catch {
     return null;
@@ -102,7 +105,10 @@ export function AdAssistant({ business }: { business: Business }) {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [custom, setCustom] = useState("");
   const [loading, setLoading] = useState(false);
-  const [phase, setPhase] = useState<"chat" | "generating" | "done">("chat");
+  const [phase, setPhase] = useState<"chat" | "review" | "generating" | "done">("chat");
+  const [prepared, setPrepared] = useState<PreparedBrief | undefined>();
+  const [recentGoals, setRecentGoals] = useState<string[]>([]);
+  const [referenceBrief, setReferenceBrief] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
   // Remembers the last network action so an error can be retried in place.
   const [lastAction, setLastAction] = useState<
@@ -110,7 +116,7 @@ export function AdAssistant({ business }: { business: Business }) {
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inFlightRef = useRef(false);
-  const generationIdRef = useRef<string | null>(null);
+  const [generationId, setGenerationId] = useState<string | null>(null);
 
   // Restore after mount (never during SSR) so server and client markup agree.
   const mounted = useMounted();
@@ -124,12 +130,24 @@ export function AdAssistant({ business }: { business: Business }) {
       setTurns(saved.turns);
       setAnswers(saved.answers);
       setPhase(saved.phase);
+      setPrepared(saved.prepared);
+      setRecentGoals(saved.recentGoals ?? []);
+      setReferenceBrief(saved.referenceBrief);
+      setGenerationId(saved.generationId ?? null);
+      if (saved.generationId && saved.phase !== "done" && saved.prepared) {
+        setPhase("chat");
+        setLastAction({ type: "generate", ...saved.prepared });
+        setError("An earlier generation may still be processing. Check for saved results before starting another.");
+      } else if (saved.started && saved.phase === "chat" && saved.turns.at(-1)?.role === "user") {
+        setLastAction({ type: "step", answers: saved.answers });
+        setError("The last assistant response was interrupted. Retry to continue your brief.");
+      }
     }
   }
 
   useEffect(() => {
     if (!restored) return;
-    if (!goal && !started && turns.length === 0) {
+    if (!goal && !started && turns.length === 0 && !recentGoals.length) {
       clearDraft(business.id);
       return;
     }
@@ -138,9 +156,13 @@ export function AdAssistant({ business }: { business: Business }) {
       started,
       turns,
       answers,
-      phase: phase === "done" ? "done" : "chat",
+      phase: phase === "generating" ? "chat" : phase,
+      prepared,
+      recentGoals,
+      generationId: generationId ?? undefined,
+      referenceBrief,
     });
-  }, [restored, business.id, goal, started, turns, answers, phase]);
+  }, [restored, business.id, goal, started, turns, answers, phase, prepared, recentGoals, referenceBrief, generationId]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -164,13 +186,15 @@ export function AdAssistant({ business }: { business: Business }) {
       const res = await fetch("/api/creatives/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: business.id, goal: goal.trim(), answers: nextAnswers }),
+        body: JSON.stringify({ businessId: business.id, goal: goal.trim(), answers: nextAnswers, recentGoals, referenceBrief }),
+        signal: AbortSignal.timeout(50_000),
       });
       const data = (await res.json()) as {
         ready?: boolean;
         question?: Question;
         brief?: string;
         language?: string;
+        recommendations?: PreparedBrief["recommendations"];
         error?: string;
       };
       if (!res.ok) {
@@ -178,7 +202,9 @@ export function AdAssistant({ business }: { business: Business }) {
         return;
       }
       if (data.ready && data.brief) {
-        await generate(data.brief, data.language);
+        setPrepared({ brief: data.brief, language: data.language, recommendations: data.recommendations });
+        setPhase("review");
+        setLastAction(null);
       } else if (data.question) {
         setTurns((t) => [...t, { role: "question", question: data.question! }]);
       } else {
@@ -193,15 +219,15 @@ export function AdAssistant({ business }: { business: Business }) {
   }
 
   async function generate(brief: string, language?: string) {
-    if (inFlightRef.current && phase !== "chat") return;
+    if (inFlightRef.current) return;
     const ownsLock = !inFlightRef.current;
     if (ownsLock) inFlightRef.current = true;
     setPhase("generating");
     setError(null);
     setLastAction({ type: "generate", brief, language });
-    if (generationIdRef.current) {
+    if (generationId) {
       try {
-        const recovered = await recoverPersistedGeneration(generationIdRef.current);
+        const recovered = await recoverPersistedGeneration(generationId);
         if (!recovered) {
           setError("No saved ads found yet. Check again shortly or open Creative Studio. No new generation was started.");
           setPhase("chat");
@@ -211,8 +237,9 @@ export function AdAssistant({ business }: { business: Business }) {
       }
       return;
     }
-    const generationId = crypto.randomUUID();
-    generationIdRef.current = generationId;
+    const newGenerationId = crypto.randomUUID();
+    setGenerationId(newGenerationId);
+    writeDraft(business.id, { goal, started, turns, answers, phase: "chat", prepared: { ...prepared, brief, language }, recentGoals, generationId: newGenerationId, referenceBrief });
     setTurns((t) => [
       ...t,
       { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
@@ -221,7 +248,7 @@ export function AdAssistant({ business }: { business: Business }) {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: business.id, brief, count: 3, language, generationId }),
+        body: JSON.stringify({ businessId: business.id, brief, count: 3, language, generationId: newGenerationId }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         creatives?: Creative[];
@@ -229,13 +256,13 @@ export function AdAssistant({ business }: { business: Business }) {
       };
       if (!res.ok) {
         if (res.status >= 500 || res.status === 408) {
-          const recovered = await recoverPersistedGeneration(generationId);
+          const recovered = await recoverPersistedGeneration(newGenerationId);
           if (recovered) return;
           setError("The generation result is not confirmed. Check again shortly or open Creative Studio. No new generation was started.");
           setPhase("chat");
           return;
         }
-        generationIdRef.current = null;
+        setGenerationId(null);
         setError(
           data.error ??
             `Couldn't create the ad (server returned ${res.status}). Please try again.`,
@@ -244,7 +271,7 @@ export function AdAssistant({ business }: { business: Business }) {
         return;
       }
       if (!data.creatives?.length) {
-        const recovered = await recoverPersistedGeneration(generationId);
+        const recovered = await recoverPersistedGeneration(newGenerationId);
         if (recovered) return;
         setError("The generation completed without returning saved creatives. Open Creative Studio to check the result.");
         setPhase("chat");
@@ -253,7 +280,7 @@ export function AdAssistant({ business }: { business: Business }) {
       setTurns((t) => [...t, { role: "result", creatives: data.creatives! }]);
       setPhase("done");
     } catch {
-      const recovered = await recoverPersistedGeneration(generationId);
+      const recovered = await recoverPersistedGeneration(newGenerationId);
       if (!recovered) {
         setError("Generation is still processing or the server stopped responding. Open Creative Studio shortly; do not retry yet, because completed image work may already be saved.");
         setPhase("chat");
@@ -300,7 +327,7 @@ export function AdAssistant({ business }: { business: Business }) {
 
   function answer(q: Question, text: string, displayText?: string) {
     if (loading) return;
-    const next = [...answers, { question: q.question, answer: text }];
+    const next = [...answers, { question: q.question, answer: text, questionId: q.id, field: q.field, options: q.options }];
     setAnswers(next);
     setCustom("");
     setTurns((t) => [...t, { role: "user", text: displayText ?? text }]);
@@ -317,9 +344,11 @@ export function AdAssistant({ business }: { business: Business }) {
     step([]);
   }
 
-  function reset() {
+  function reset(nextGoal = "", nextReference?: string) {
+    if (loading || inFlightRef.current) return;
     clearDraft(business.id);
-    generationIdRef.current = null;
+    setRecentGoals((previous) => [...previous, goal.slice(0, 500)].filter(Boolean).slice(-6));
+    setGenerationId(null);
     setStarted(false);
     setTurns([]);
     setAnswers([]);
@@ -327,15 +356,13 @@ export function AdAssistant({ business }: { business: Business }) {
     setPhase("chat");
     setError(null);
     setLastAction(null);
-    setGoal("");
+    setPrepared(undefined);
+    setReferenceBrief(nextReference);
+    setGoal(nextGoal);
   }
 
   if (!started) {
-    const suggestions = [
-      { label: "Introduce my business", prompt: `Introduce ${business.name} to potential customers in our service areas.` },
-      { label: "Promote an existing offer", prompt: "Create a campaign around an offer already saved in my Brand Brain. Ask me to confirm the offer details." },
-      { label: "Invite enquiries", prompt: `Help interested customers ask ${business.name} about our services and next steps.` },
-    ];
+    const suggestions = creativeRecommendations(business, goal, recentGoals);
     return (
       <section aria-label="Campaign brief" className="min-w-0">
         <div>
@@ -366,10 +393,10 @@ export function AdAssistant({ business }: { business: Business }) {
               <div className="mt-5 flex flex-col divide-y divide-slate-100 border-y border-slate-200">
                 {suggestions.map((s) => (
                   <button
-                    key={s.label}
+                    key={s.id}
                     type="button"
                     onClick={() => setGoal(s.prompt)}
-                    className="flex min-h-12 items-center justify-between gap-3 py-3 text-left text-sm text-slate-600 hover:text-blue-700"
+                    className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-600 hover:text-blue-700"
                   >
                     {s.label}<ArrowRight size={15} aria-hidden="true" />
                   </button>
@@ -402,8 +429,8 @@ export function AdAssistant({ business }: { business: Business }) {
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-4 p-4 sm:p-6">
+    <section aria-label="Creative conversation" className="min-w-0">
+      <div className="flex min-w-0 flex-col gap-4">
         <div
           ref={scrollRef}
           className="flex max-h-[62vh] flex-col gap-3 overflow-y-scroll pr-1"
@@ -428,13 +455,24 @@ export function AdAssistant({ business }: { business: Business }) {
           )}
         </div>
 
+        {phase === "review" && prepared && (
+          <section aria-label="Review creative brief" className="min-w-0 border-t border-slate-200 pt-4">
+            <label htmlFor="prepared-brief" className="text-sm font-semibold text-slate-900">Creative brief</label>
+            <Textarea id="prepared-brief" value={prepared.brief} onChange={(event) => setPrepared({ ...prepared, brief: event.target.value, recommendations: undefined })} maxLength={2000} rows={7} className="mt-3 w-full" />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <Button variant="outline" onClick={() => reset(goal, prepared.brief)} disabled={loading}><Pencil className="h-4 w-4" /> Revise goal</Button>
+              <Button onClick={() => generate(prepared.brief.trim(), prepared.language)} disabled={loading || !prepared.brief.trim()}><Sparkles className="h-4 w-4" /> Generate 3 ads</Button>
+            </div>
+          </section>
+        )}
+
         {error && (
           <Alert variant="error">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span>{error}</span>
               {lastAction && (
                 <Button size="sm" variant="outline" onClick={retry} disabled={loading}>
-                  <RotateCcw className="h-4 w-4" /> Try again
+                  <RotateCcw className="h-4 w-4" /> {generationId ? "Check saved results" : "Try again"}
                 </Button>
               )}
             </div>
@@ -448,13 +486,18 @@ export function AdAssistant({ business }: { business: Business }) {
                 Open in Creative Studio <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Button variant="outline" onClick={reset}>
+            <Button variant="outline" onClick={() => reset()}>
               <RotateCcw className="h-4 w-4" /> Make another
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+        {phase === "done" && (
+          <div aria-label="Next creative directions" className="flex flex-col divide-y divide-slate-100 border-t border-slate-200">
+            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700">{suggestion.label}<ArrowRight size={15} aria-hidden="true" /></button>)}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -521,7 +564,7 @@ function TurnView({
       <span className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-blue-100 text-blue-700">
         <Bot className="h-3.5 w-3.5" />
       </span>
-      <div className="max-w-[92%] rounded-2xl rounded-bl-sm border border-slate-200 bg-slate-50 p-3.5">
+      <div className="min-w-0 max-w-[92%] break-words rounded-lg border border-slate-200 bg-slate-50 p-3.5">
         <p className="text-sm font-medium text-slate-800">{q.question}</p>
         {q.help && <p className="mt-1 text-xs text-slate-500">{q.help}</p>}
         {active && (
@@ -567,6 +610,8 @@ function TurnView({
               <div className="flex items-center gap-2">
                 <input
                   value={custom}
+                  aria-label="Your answer"
+                  maxLength={1000}
                   disabled={disabled}
                   onChange={(e) => setCustom(e.target.value)}
                   onKeyDown={(e) => {
@@ -576,11 +621,12 @@ function TurnView({
                     }
                   }}
                   placeholder="…or type your own answer"
-                  className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                 />
                 <Button
                   size="sm"
                   variant="outline"
+                  aria-label="Send answer"
                   disabled={disabled || !custom.trim()}
                   onClick={() => custom.trim() && onAnswer(q, custom.trim())}
                 >

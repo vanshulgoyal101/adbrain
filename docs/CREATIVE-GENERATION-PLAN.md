@@ -1,5 +1,89 @@
 # Creative generation: coherent concepts, explicit failures
 
+## Create harness revision (2026-09-18, local)
+
+The interview now uses `interview-v2`. This is a local implementation, not a
+production deployment or measured real-model quality improvement.
+
+- Zero to three clarification questions, selected for information that changes
+   the ad. Complete requests can proceed directly to an editable brief.
+- Question field, id, shown options and answer travel together. Runtime checks
+   reject repeated fields, near-identical question text, duplicate options and
+   recycled option sets. One validation repair shares a 45-second deadline;
+   invalid JSON or repeated invalid output cannot silently trigger image work.
+- Brand facts are bounded and include service areas. Current answers take
+   priority over previous creative preferences. Recent requests are novelty
+   context, not evidence of campaign performance or business facts.
+- Starter recommendations rank actual offers, USPs, audience and service areas
+   by relevance and recent use, with category diversity. They are deterministic
+   suggestions, not a model prediction of the highest-performing campaign.
+- The model can propose two or three brief-specific next queries in the same
+   completion. Labels/prompts must be distinct and pass the commercial-term gate.
+   Edited briefs invalidate these suggestions; conservative generic directions
+   remain available when no current model recommendations exist.
+- Follow-ups carry the full reviewed reference brief separately from the new
+   request. There is no truncation of a 2,000-character brief into a 500-character
+   goal, and no automatic image generation when a recommendation is selected.
+- Every ready response stops at an editable brief. `Generate 3 ads` is a separate
+   explicit action. This is creative approval for generation, not ad activation.
+- Generation identity is persisted before POST. After navigation/reload, an
+   uncertain generation checks the same saved results instead of issuing another
+   paid POST. This is tab-session recovery, not durable server-side idempotency.
+- Interview quota preflight uses the existing owner-scoped monthly aggregate.
+   Returned completions, including failed validation/repair, persist reported
+   tokens, model, latency, attempt and prompt version through the trusted ledger.
+   Raw prompts, answers and business facts are not added to usage metadata.
+
+### Design references
+
+- [Anthropic: Building effective agents](https://www.anthropic.com/engineering/building-effective-agents):
+   explicit workflows, programmatic gates, bounded evaluator/repair loops, and
+   human checkpoints instead of adding an autonomous multi-agent framework.
+- [Anthropic: Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents):
+   relevant bounded context, explicit conversation decisions, and separation of
+   current intent from historical information.
+- [OpenAI: Structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs):
+   JSON parsing is not schema adherence. This provider-agnostic implementation
+   validates with Zod; provider-native constrained decoding is not implemented
+   or assumed to work across the configured providers.
+
+### Verification and remaining gates
+
+Final local checks: 1,057 tests passed, one live test skipped; coverage 72.57%
+statements, 65.14% branches, 72.96% functions and 74.96% lines. Lint, typecheck
+and production build (53 static-generation entries) passed. All three Create
+browser journeys passed and desktop/mobile screenshots were inspected. These
+totals include concurrent campaign work in the shared checkout; 42 tests directly
+cover the interview/API/Create slice. The temporary validation server was stopped.
+
+Offline tests exercise malformed input/output, duplicate and rephrased questions,
+question limits, free-text commercial clarification, unsupported terms, cancellation,
+usage preflight/accounting, context-dependent recommendations, editable review,
+follow-up continuity, and timeout recovery without duplicate POSTs.
+
+The existing workspace browser suite has `Create harness` journeys at 1440, 390
+and 320 pixels: real test-account authentication and reads, intercepted AI and
+generation responses, edited-brief reload, same-identity recovery, image loading,
+runtime errors and horizontal overflow. These do not validate real model quality.
+
+Before production promotion, run an explicitly budgeted text-only comparison of
+the previous and revised prompt on the same model/settings: solar, clinic and
+retail brands; sparse versus complete goals; corrections; repeated requests;
+unknown offers; multilingual requests; adversarial source instructions. Score
+question usefulness, repetition, factual entailment, brief fidelity and distinct
+follow-up hypotheses. Record latency, token cost, repair rate and failed cases.
+Image-quality comparisons require separate bounded authorization and matched
+brief/reference/model settings. No paid evaluation was run for this revision.
+
+Known limits: field matching and lexical overlap are not semantic equivalence;
+commercial-term detection is a conservative lexical check, not comprehensive
+multilingual fact verification. A human-reviewed reference brief can still contain
+incorrect facts. Ledger writes remain best effort, quota checks do not reserve
+tokens atomically, and provider failures without returned usage cannot be fully
+accounted for. Interview state is client-supplied and must never authorize Meta
+actions. Durable generation jobs/idempotency and real-model evaluation remain
+separate production gates; no queue, migration, credentials or deployment changed.
+
 ## Outcome and limits
 
 An ad must communicate a real offering to a particular audience, depict it

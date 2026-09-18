@@ -127,12 +127,39 @@ beforeEach(() => {
       locations: ["Jaipur"],
       excluded_locations: [],
       destination: "instant_form",
+      special_ad_category: "none",
       rationale: "Use the approved local creative.",
     },
   });
 });
 
 describe("guided planner route", () => {
+  it("recommends targeting without saving a duplicate draft or reading Meta, retaining manual choices", async () => {
+    const audienceDraft = {
+      businessId: business.id, name: "Owner name", goal: "Qualified leads", mode: "manual",
+      creativeIds: [creativeId], dailyBudgetRupees: 700, leadFormId: "owner-form", abTest: false,
+      targeting: { age: { mode: "manual", min: 30, max: 60 }, location: { mode: "manual", included: [{ key: "city-1", name: "Jaipur", type: "city" }], radiusKm: 25 } },
+    };
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: audienceDraft.goal, audienceDraft }) }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.draft).toBeUndefined();
+    expect(body.targeting.age).toEqual(audienceDraft.targeting.age);
+    expect(body.targeting.location).toEqual(audienceDraft.targeting.location);
+    expect(body.targeting.audience.rationale).toBe("Use the approved local creative.");
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
+  });
+
+  it("rejects audience planning for another business before the model is called", async () => {
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({
+      goal: "Leads", audienceDraft: { businessId: creativeId, name: "Leads", goal: "Leads", mode: "manual", creativeIds: [creativeId], dailyBudgetRupees: 500, leadFormId: null, targeting: {}, abTest: false },
+    }) }));
+    expect(response.status).toBe(403);
+    expect(mocks.runPlanner).not.toHaveBeenCalled();
+  });
   it("plans and saves a draft while Meta is unavailable", async () => {
     mocks.withMetaConnection.mockRejectedValueOnce(new Error("Meta not connected"));
     const proposed = await mocks.runPlanner();

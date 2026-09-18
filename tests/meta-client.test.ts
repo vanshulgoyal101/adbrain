@@ -94,6 +94,43 @@ describe("MetaClient.updateCampaignStatus", () => {
 });
 
 describe("MetaClient.createLeadCampaign checkpoints", () => {
+  it.each([
+    { location: { cities: [{ key: "city-1", radius: 5, distance_unit: "kilometer" }] }, ageMin: 25, ageMax: 55 },
+    { location: { countries: ["IN"] }, ageMin: 55, ageMax: 25 },
+    { location: { countries: ["IN"] } },
+    { location: { countries: ["IN"] }, ageMin: 25, ageMax: 55, variants: [{ ageMin: 30, ageMax: 20 }] },
+  ])("rejects invalid radii and age ranges before mutations: %j", async (targeting) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(new MetaClient(creds).createLeadCampaign({ name: "Invalid targeting", dailyBudgetRupees: 200, leadFormId: "form-1", link: "https://example.com", creatives: [], ...targeting })).rejects.toBeInstanceOf(MetaError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves interests and excluded geography across both age variants", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "campaign-1" }))
+      .mockResolvedValueOnce(Response.json({ id: "adset-1" }))
+      .mockResolvedValueOnce(Response.json({ id: "adset-2" }));
+    const interests = [{ id: "12345", name: "Solar energy" }];
+    await new MetaClient(creds).createLeadCampaign({
+      name: "Audience bands", dailyBudgetRupees: 200, leadFormId: "form-1", link: "https://example.com", creatives: [],
+      location: { regions: [{ key: "region-1" }] }, excludedLocation: { cities: [{ key: "city-2", radius: 20, distance_unit: "kilometer" }] }, interests,
+      variants: [{ ageMin: 25, ageMax: 39 }, { ageMin: 40, ageMax: 65 }],
+    });
+    const calls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/adsets"));
+    expect(calls).toHaveLength(2);
+    const payloads = calls.map(([, init]) => JSON.parse(new URLSearchParams(String(init?.body)).get("targeting")!));
+    expect(payloads.map((payload) => [payload.age_min, payload.age_max])).toEqual([[25, 39], [40, 65]]);
+    for (const payload of payloads) expect(payload).toMatchObject({ flexible_spec: [{ interests }], excluded_geo_locations: { cities: [{ key: "city-2", radius: 20 }] }, targeting_automation: { advantage_audience: 0 } });
+  });
+  it("rejects missing geography before any provider mutation", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(new MetaClient(creds).createLeadCampaign({
+      name: "Missing audience", dailyBudgetRupees: 200, leadFormId: "form-1",
+      link: "https://example.com", creatives: [],
+    })).rejects.toThrow("resolved campaign location");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("reports each external mutation as soon as it returns", async () => {
     const responses = [
       new Response(JSON.stringify({ id: "campaign-1" }), { status: 200 }),
@@ -103,7 +140,7 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
       new Response(JSON.stringify({ id: "creative-1" }), { status: 200 }),
       new Response(JSON.stringify({ id: "ad-1" }), { status: 200 }),
     ];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       const response = responses.shift();
       if (!response) throw new Error("unexpected fetch");
       return response;
@@ -115,6 +152,10 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
       dailyBudgetRupees: 200,
       leadFormId: "form-1",
       link: "https://example.com",
+      location: { cities: [{ key: "city-1", radius: 25, distance_unit: "kilometer" }] },
+      ageMin: 28,
+      ageMax: 58,
+      interests: [{ id: "12345", name: "Solar energy" }],
       creatives: [{ imageUrl: "https://example.com/image.png", headline: "Headline", message: "Message" }],
       onCheckpoint: (checkpoint) => {
         checkpoints.push(`${checkpoint.phase}:${checkpoint.externalId}`);
@@ -122,6 +163,14 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     });
 
     expect(result).toMatchObject({ campaignId: "campaign-1", adSetId: "adset-1", adIds: ["ad-1"] });
+    const adsetCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/adsets"));
+    const payload = new URLSearchParams(String(adsetCall?.[1]?.body));
+    expect(JSON.parse(payload.get("targeting")!)).toEqual({
+      geo_locations: { cities: [{ key: "city-1", radius: 25, distance_unit: "kilometer" }], location_types: ["home", "recent"] },
+      age_min: 28, age_max: 58,
+      flexible_spec: [{ interests: [{ id: "12345", name: "Solar energy" }] }],
+      targeting_automation: { advantage_audience: 0 },
+    });
     expect(checkpoints).toEqual([
       "campaign:campaign-1",
       "creative:image-hash-1",
@@ -133,6 +182,22 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
 });
 
 describe("friendlyMetaError", () => {
+  it("resolves only exact provider-backed interests, not invented or loosely related matches", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "12345", name: "Solar energy" }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "54321", name: "Unrelated" }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "12345", current_status: "NORMAL" }] }));
+    await expect(new MetaClient(creds).resolveAudienceInterests(["Solar energy", "Home improvements"]))
+      .resolves.toEqual({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: ["Home improvements"] });
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+  it.each(["DEPRECATING", "NON-DELIVERABLE", "UNKNOWN"])("blocks a catalog interest with status %s", async (current_status) => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "12345", name: "Solar energy" }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "12345", current_status }] }));
+    await expect(new MetaClient(creds).resolveAudienceInterests(["Solar energy"]))
+      .resolves.toEqual({ interests: [], unresolved: ["Solar energy"] });
+  });
   it("hides localized CTA validation text", () => {
     expect(
       friendlyMetaError(

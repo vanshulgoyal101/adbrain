@@ -6,6 +6,7 @@ import { Input, Label } from "@/components/ui/input";
 import { InfoHint } from "@/components/ui/info-hint";
 import { AGE_BOUNDS, describeAudience, normalizeAgeRange } from "@/lib/campaign/targeting";
 import { cn } from "@/lib/utils";
+import type { TargetingInputDTO } from "@/lib/campaign/connect-contracts";
 
 export interface GeoPick {
   key: string;
@@ -22,6 +23,7 @@ export interface TargetingValue {
   ageMode: "ai" | "manual";
   ageMin: number;
   ageMax: number;
+  audience?: TargetingInputDTO["audience"];
 }
 
 export const defaultTargeting: TargetingValue = {
@@ -352,7 +354,7 @@ export function TargetingControls({
           </div>
         )}
 
-        {value.locationMode === "manual" && hasCities && (
+        {(hasCities || plannedAreas.length > 0) && (
           <div className="flex flex-col gap-1.5">
             <Label className="flex items-center gap-1.5 text-xs text-slate-600">
               Radius around each city: {value.radiusKm} km
@@ -363,9 +365,9 @@ export function TargetingControls({
             </Label>
             <input
               type="range"
-              min={5}
+              min={17}
               max={80}
-              step={5}
+              step={1}
               value={value.radiusKm}
               onChange={(e) => set({ radiusKm: Number(e.target.value) })}
               className="w-full accent-blue-600"
@@ -380,8 +382,8 @@ export function TargetingControls({
           <Label className="flex items-center gap-1.5">
             Age range
             <InfoHint>
-              Most local-business buyers skew 30–60. Leaving this to AdBrain lets
-              Meta Advantage+ find the best ages automatically.
+              AdBrain recommends an age range from the business and campaign context.
+              You can review and change the recommendation before creation.
             </InfoHint>
           </Label>
           <ModeToggle

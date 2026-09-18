@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { draftDtoSchema } from "@/lib/campaign/connect-contracts";
+import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
 import { formatAnswers, runPlanner, type PlannerQuestion } from "@/lib/campaign/planner";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
@@ -44,6 +44,7 @@ export async function POST(req: Request) {
 
   const parsed = z.object({
     goal: z.string().trim().min(1).max(2_000),
+    audienceDraft: draftInputSchema.optional(),
     answers: z.union([z.string().max(12_000), z.array(z.object({
       question: z.string().max(1_000), answer: z.string().max(2_000),
     })).max(30)]).optional(),
@@ -63,6 +64,10 @@ export async function POST(req: Request) {
   const business = await getPrimaryBusiness();
   if (!business) {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
+  }
+  const audienceDraft = parsed.data.audienceDraft;
+  if (audienceDraft && audienceDraft.businessId !== business.id) {
+    return NextResponse.json({ error: "Business access is not allowed." }, { status: 403 });
   }
 
   const approved = await getApprovedCreatives(business.id);
@@ -88,7 +93,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: friendlyMetaError(err, "Could not load lead forms.") }, { status: 502 });
   }
   try {
-    leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.listLeadForms());
+    if (!audienceDraft) leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.listLeadForms());
   } catch {
     leadForms = [];
   }
@@ -109,7 +114,9 @@ export async function POST(req: Request) {
       })),
       leadForms: leadForms.map((f) => ({ id: f.id, name: f.name })),
       goal,
-      answers,
+      answers: audienceDraft
+        ? `${answers ?? ""}\nPlan only the audience. The owner has already chosen these campaign settings: ${JSON.stringify(audienceDraft)}. Preserve manual location and age choices. Do not ask for a budget, creative or form. Decide audience settings from the business evidence; ask only for missing service-area facts.`
+        : answers,
     });
   } catch (err) {
     return NextResponse.json({ error: friendlyMetaError(err, "Could not prepare the campaign plan.") }, { status: 502 });
@@ -131,7 +138,13 @@ export async function POST(req: Request) {
   const draftResult = plannerPlanToDraftInput({
     businessId: business.id,
     goal,
-    plan: result.plan,
+    plan: audienceDraft ? {
+      ...result.plan,
+      name: audienceDraft.name,
+      daily_budget_rupees: audienceDraft.dailyBudgetRupees,
+      creative_ids: audienceDraft.creativeIds,
+      lead_form_id: null,
+    } : result.plan,
     approvedCreativeIds: approved.map((creative) => creative.id),
     leadFormIds: leadForms.map((form) => form.id),
   });
@@ -140,6 +153,19 @@ export async function POST(req: Request) {
       ready: false,
       questions: [note(draftResult.error)],
     });
+  }
+  if (audienceDraft) {
+    const targeting = {
+      ...draftResult.draft.targeting,
+      location: audienceDraft.targeting.location?.mode === "manual" ? audienceDraft.targeting.location : {
+        ...draftResult.draft.targeting.location,
+        ...(audienceDraft.targeting.location?.includedNames?.length ? { includedNames: audienceDraft.targeting.location.includedNames } : {}),
+        ...(audienceDraft.targeting.location?.excludedNames?.length ? { excludedNames: audienceDraft.targeting.location.excludedNames } : {}),
+        ...(audienceDraft.targeting.location?.excluded?.length ? { excluded: audienceDraft.targeting.location.excluded } : {}),
+      },
+      ...(audienceDraft.targeting.age?.mode === "manual" ? { age: audienceDraft.targeting.age } : {}),
+    };
+    return NextResponse.json({ ready: true, targeting });
   }
 
   const now = new Date().toISOString();

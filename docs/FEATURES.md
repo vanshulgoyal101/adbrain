@@ -10,6 +10,34 @@
 
 ## Product experience program
 
+### AI campaign audiences (local dev, 2026-09-18)
+
+Campaign planning now proposes explicit ages, a 17-80 km city radius, service
+areas, up to five commercial interest names, and a reviewable rationale using
+Brand Brain, approved creatives, instructions and available campaign results.
+The manual builder's AI modes call the planner before review; saving an
+incomplete draft does not call the model. Recommendations survive save/reopen
+and remain editable. Manual age/location choices are preserved.
+
+Preflight resolves interests through Meta search and requires NORMAL targeting
+option status. Resolved IDs are bound to the review hash and sent to every ad
+set, including age-test variants. Missing geography, unresolved interests,
+incomplete ages and unsupported city radii block creation instead of silently
+broadening delivery. Existing campaigns are not modified.
+
+The payload requests original audiences (`advantage_audience: 0`), all genders,
+and Meta's supported residents-and-recent-visitors location mode. Interest
+targeting is a signal, not verified ownership or purchase intent, and Meta may
+expand detailed targeting for lead optimization. AI recommendations are starting
+hypotheses, not a proven best audience. The planner rejects declared special
+categories; it is not an independent compliance classifier. Sensitive-trait
+inference is prohibited in the prompt. Restricted-category workflows, additional
+demographics, custom/lookalike audiences, and live provider verification remain
+outside this change. No migration is required; targeting lives in draft JSON.
+
+Verification: mocked unit/component workflows and 1440/390px Chromium checks;
+no paid AI calls, live Meta mutations, activation, or deployment.
+
 ### Verified development changes (2026-09-16)
 
 These changes are implemented on `dev`, not yet promoted to production. See the
@@ -53,7 +81,7 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 (each business sets its own `vertical`); Solaride (solar) is just one customer.
 
 **What we deliberately DON'T build (so the product stays simple):**
-- Manual targeting micro-optimisation — **delegate to Meta Advantage+**, don't fight it.
+- Manual targeting micro-optimisation: AI proposes a reviewable starting audience; actual lead quality must validate it.
 - A full CRM / analytics suite — keep lead tracking **lightweight**; integrate, don't rebuild.
 - New ad channels (Google, etc.) before Meta is nailed.
 - Dashboards a busy owner won't read — results are **one plain-language line** (and WhatsApp), not charts.
@@ -131,9 +159,9 @@ done. Every feature must move that number. The engine is **industry-agnostic**
 | ✅ | Location typeahead (include & exclude) | Meta `adgeolocation`; cities/regions/countries |
 | ✅ | Radius + age controls | Meta min radius 17 km enforced |
 | ✅ | "Let AdBrain decide" per field | AI fills from brand + goal |
-| ✅ | Residents-only default | `location_types: home` — no traveller calls |
+| Built on dev | Residents and recent visitors | Meta supports `location_types: [home, recent]`; resident-only delivery is not promised |
 | ✅ | Budget helper | daily ₹ → "~X leads/week" + presets |
-| ✅ | Meta launch (Advantage+ leads, PAUSED) | zero spend until activated |
+| Built on dev | Reviewed audience launch (PAUSED) | explicit ages, geography and provider-resolved interests; zero spend until activated |
 | ✅ | Sync existing campaigns from Meta | manual button + auto-sync on page load |
 | ✅ | Delete a campaign | removes it from Meta + AdBrain (with confirm) |
 | ✅ | Results refresh + plain-language summary | insights → friendly sentence |

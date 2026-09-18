@@ -39,6 +39,10 @@ export const targetingInputSchema = z
         max: z.number().finite().int().min(18).max(65).optional(),
       })
       .optional(),
+    audience: z.object({
+      interestNames: z.array(boundedText(100)).max(5),
+      rationale: boundedText(2_000),
+    }).strict().optional(),
   })
   .strict();
 
@@ -92,6 +96,7 @@ export const reviewDtoSchema = z.object({
   adSetCount: z.number().int().positive().max(50),
   totalDailyBudgetRupees: moneyRupees,
   resolvedAreaLabel: z.string().max(500).nullable(),
+  audienceInterests: z.array(z.object({ id: z.string().regex(/^\d+$/), name: boundedText(200) })).max(5).optional(),
   selected: selectedAssetsSchema.nullable(),
 });
 export type ReviewDTO = z.infer<typeof reviewDtoSchema>;

@@ -287,6 +287,7 @@ export async function POST(request: Request) {
               excludedLocation,
               ageMin: targeting.age?.min,
               ageMax: targeting.age?.max,
+              interests: review.audienceInterests,
               variants: draft.input.abTest ? splitAgeRange(targeting.age?.min ?? 25, targeting.age?.max ?? 60).map((band) => ({ label: band.label, ageMin: band.ageMin, ageMax: band.ageMax, location, excludedLocation })) : undefined,
               onCheckpoint,
             });

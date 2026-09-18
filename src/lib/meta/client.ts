@@ -37,6 +37,11 @@ export interface GeoTargeting {
   cities?: { key: string; radius?: number; distance_unit?: string }[];
 }
 
+export interface AudienceInterest {
+  id: string;
+  name: string;
+}
+
 /** One result from Meta's adgeolocation search. */
 export interface GeoSearchResult {
   key: string;
@@ -532,6 +537,28 @@ export class MetaClient {
    * Create a PAUSED Advantage+ lead campaign: campaign → ad set → (creative →
    * ad) per creative. Nothing spends until you set it ACTIVE in Meta.
    */
+  async resolveAudienceInterests(names: string[]): Promise<{ interests: AudienceInterest[]; unresolved: string[] }> {
+    const interests: AudienceInterest[] = [];
+    const unresolved: string[] = [];
+    if (names.length > 5) throw new MetaError("Choose at most five audience interests.");
+    const matches = await Promise.all([...new Set(names)].map(async (name) => {
+      const params = new URLSearchParams({ type: "adinterest", q: name, limit: "25", locale: "en_US" });
+      const response = await this.graph<{ data?: AudienceInterest[] }>(`search?${params}`);
+      const match = response.data?.find((candidate) =>
+        typeof candidate.id === "string" && /^\d+$/.test(candidate.id) &&
+        typeof candidate.name === "string" && candidate.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      return { name, match };
+    }));
+    const ids = [...new Set(matches.flatMap(({ match }) => match ? [match.id] : []))];
+    const statuses = ids.length ? await this.graph<{ data?: { id: string; current_status: string }[] }>(`search?${new URLSearchParams({ type: "targetingoptionstatus", targeting_option_list: JSON.stringify(ids) })}`) : { data: [] };
+    for (const { name, match } of matches) {
+      if (!match || !statuses.data?.some((status) => String(status.id) === match.id && status.current_status === "NORMAL")) unresolved.push(name);
+      else if (!interests.some((interest) => interest.id === match.id)) interests.push({ id: match.id, name: match.name });
+    }
+    return { interests, unresolved };
+  }
+
   async createLeadCampaign(params: {
     name: string;
     dailyBudgetRupees: number;
@@ -540,6 +567,7 @@ export class MetaClient {
     creatives: CreativeInput[];
     ageMin?: number;
     ageMax?: number;
+    interests?: AudienceInterest[];
     location?: GeoTargeting;
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
@@ -547,6 +575,27 @@ export class MetaClient {
     variants?: AdSetVariant[];
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
   }): Promise<CreateCampaignResult> {
+    const locations = params.variants?.length
+      ? params.variants.map((variant) => variant.location ?? params.location)
+      : [params.location];
+    if (locations.some((location) => !hasGeo(location))) {
+      throw new MetaError("Choose a resolved campaign location before creating ads.");
+    }
+    const excludedLocations = params.variants?.length
+      ? params.variants.map((variant) => variant.excludedLocation ?? params.excludedLocation)
+      : [params.excludedLocation];
+    if ([...locations, ...excludedLocations].some((location) => location?.cities?.some((city) =>
+      city.radius !== undefined && (!Number.isFinite(city.radius) || city.radius < (city.distance_unit === "mile" ? 10 : 17) || city.radius > (city.distance_unit === "mile" ? 50 : 80)),
+    ))) throw new MetaError("Meta city targeting requires a radius of 17-80 km (10-50 miles). Review the location radius.");
+    const ageRanges = params.variants?.length ? params.variants : [params];
+    if (ageRanges.some((range) => {
+      const min = range.ageMin ?? params.ageMin;
+      const max = range.ageMax ?? params.ageMax;
+      return min === undefined || max === undefined || !Number.isInteger(min) || !Number.isInteger(max) || min < 18 || max > 65 || min > max;
+    })) throw new MetaError("Review an explicit age range between 18 and 65+ before creating ads.");
+    if ((params.interests?.length ?? 0) > 5 || params.interests?.some((interest) => !/^\d+$/.test(interest.id))) {
+      throw new MetaError("Review valid Meta audience interests before creating ads.");
+    }
     const acct = this.creds.adAccountId;
     const requested = params.destination ?? "instant_form";
 
@@ -610,16 +659,16 @@ export class MetaClient {
       const ageMax = v.ageMax ?? params.ageMax;
       return JSON.stringify({
         geo_locations: {
-          ...buildGeoLocations(loc, ["IN"]),
-          // Residents only — not travellers/visitors — to avoid out-of-area leads.
-          location_types: ["home"],
+          ...buildGeoLocations(loc, []),
+          location_types: ["home", "recent"],
         },
         ...(hasGeo(excl)
           ? { excluded_geo_locations: buildGeoLocations(excl, []) }
           : {}),
         ...(ageMin ? { age_min: ageMin } : {}),
         ...(ageMax ? { age_max: ageMax } : {}),
-        targeting_automation: { advantage_audience: 1 },
+        ...(params.interests?.length ? { flexible_spec: [{ interests: params.interests }] } : {}),
+        targeting_automation: { advantage_audience: 0 },
       });
     };
 

@@ -124,9 +124,9 @@ export function describeAudience(t: {
     parts.push(`excluding ${t.excluded.map((e) => e.name).join(", ")}`);
   }
   if (t.ageMode === "manual" && t.ageMin && t.ageMax) {
-    parts.push(`ages ${t.ageMin}–${t.ageMax}`);
+    parts.push(`ages ${t.ageMin}–${t.ageMax === 65 ? "65+" : t.ageMax}`);
   } else {
-    parts.push("ages chosen by Meta Advantage+");
+    parts.push("age recommendation pending");
   }
   return parts.join(", ") + ".";
 }

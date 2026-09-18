@@ -27,7 +27,7 @@ const draftRow = {
     creativeIds: [creativeId],
     dailyBudgetRupees: 500,
     leadFormId: "form-1",
-    targeting: {},
+    targeting: { age: { mode: "manual", min: 18, max: 65 } },
     abTest: false,
   },
   expires_at: "2099-09-14T10:00:00.000Z",

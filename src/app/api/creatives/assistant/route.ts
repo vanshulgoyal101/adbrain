@@ -1,39 +1,19 @@
 import { NextResponse } from "next/server";
-import { apiError, readJson, serverError } from "@/lib/api";
+import { apiError, serverError } from "@/lib/api";
 import {
   runInterview,
-  type InterviewAnswer,
-  type InterviewQuestion,
+  interviewRequestSchema,
+  InterviewValidationError,
+  INTERVIEW_PROMPT_VERSION,
 } from "@/lib/creative/interview";
 import { NoLLMKeysError } from "@/lib/llm";
+import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-/** Coerce an untrusted LLM question into a safe, bounded shape for the UI. */
-function sanitizeQuestion(q: unknown): InterviewQuestion | null {
-  if (!q || typeof q !== "object") return null;
-  const raw = q as Record<string, unknown>;
-  const question = typeof raw.question === "string" ? raw.question.trim() : "";
-  if (!question) return null;
-  const options = Array.isArray(raw.options)
-    ? raw.options
-        .filter((o): o is string => typeof o === "string" && o.trim().length > 0)
-        .slice(0, 6)
-    : [];
-  return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : "q",
-    question,
-    help: typeof raw.help === "string" ? raw.help : undefined,
-    options,
-    allowText: raw.allowText !== false,
-    allowRandom: Boolean(raw.allowRandom),
-    aiCanDecide: Boolean(raw.aiCanDecide),
-  };
-}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -48,24 +28,9 @@ export async function POST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = await readJson<{
-    businessId?: string;
-    goal?: string;
-    answers?: InterviewAnswer[];
-  }>(req);
-  const businessId = (body?.businessId ?? "").trim();
-  const goal = (body?.goal ?? "").trim();
-  if (!businessId || !goal) {
-    return apiError("businessId and goal are required", 400);
-  }
-  const answers = Array.isArray(body?.answers)
-    ? body.answers
-        .filter(
-          (a): a is InterviewAnswer =>
-            !!a && typeof a.question === "string" && typeof a.answer === "string",
-        )
-        .slice(0, 12)
-    : [];
+  const parsed = interviewRequestSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return apiError("A valid business, goal and bounded answer history are required.", 400);
+  const { businessId, goal, answers, recentGoals, referenceBrief } = parsed.data;
 
   // RLS scopes this to the user's own business.
   const { data: business } = await supabase
@@ -75,25 +40,33 @@ export async function POST(req: Request) {
     .maybeSingle();
   if (!business) return apiError("Business not found", 404);
 
-  const instructions = await getActiveInstructionsText(businessId);
-
   try {
-    const result = await runInterview({ brand: business, instructions, goal, answers });
-    if (result.ready && typeof result.brief === "string" && result.brief.trim()) {
-      return NextResponse.json({
-        ready: true,
-        brief: result.brief.trim(),
-        language: typeof result.language === "string" ? result.language : undefined,
-        angleId: typeof result.angleId === "string" ? result.angleId : undefined,
-      });
+    const limit = configuredMonthlyTokenLimit();
+    if (limit > 0) {
+      const used = await monthlyTokenUsage(businessId);
+      if (used === null) return apiError("AI usage limits could not be verified. No interview was started.", 503);
+      if (used >= limit) return apiError("This business has reached its monthly AI generation limit.", 429);
     }
-    const question = sanitizeQuestion(result.question);
-    if (!question) {
-      // Model gave neither a usable question nor a brief — fail soft to generation.
-      return NextResponse.json({ ready: true, brief: goal });
-    }
-    return NextResponse.json({ ready: false, question });
+    const instructions = await getActiveInstructionsText(businessId);
+    const requestId = crypto.randomUUID();
+    const result = await runInterview({ brand: business, instructions, goal, answers, recentGoals, referenceBrief }, {
+      signal: req.signal,
+      onAttempt: async (completion, attempt, valid) => {
+        if (!completion.usage) return;
+        await persistLLMUsage([{
+          businessId, userId: user.id, requestId, route: "creatives.assistant",
+          provider: completion.provider, model: completion.model, usage: completion.usage,
+          promptVersion: INTERVIEW_PROMPT_VERSION, inputChars: completion.inputChars,
+          outputChars: completion.outputChars, latencyMs: completion.latencyMs,
+          attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
+          status: valid ? "success" : "error", errorCode: valid ? undefined : "INTERVIEW_VALIDATION",
+          metadata: { answerCount: answers.length, repaired: attempt > 1 },
+        }]);
+      },
+    });
+    return NextResponse.json({ ...result, promptVersion: INTERVIEW_PROMPT_VERSION }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
+    if (err instanceof InterviewValidationError) return apiError(err.message, 502);
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json(
         { error: err.message, code: "NO_LLM_KEYS" },
