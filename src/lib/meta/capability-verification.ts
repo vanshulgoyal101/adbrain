@@ -8,15 +8,16 @@ const accountSchema = z.object({
 });
 const pagesSchema = z.object({ data: z.array(z.object({ id: z.string(), tasks: z.array(z.string()).optional() })) });
 const permissionsSchema = z.object({ data: z.array(z.object({ permission: z.string(), status: z.string() })) });
+const pageTokenSchema = z.object({ access_token: z.string().min(1) });
 
 function unavailable(message: string, state: "blocked" | "unknown" = "blocked"): Capability {
   return { state, blockers: [{ code: "MISSING_PERMISSION", message, action: { kind: "retry_check" } }] };
 }
 
 export async function verifyMetaCapabilities(token: string, selected: SelectedAssets): Promise<Capabilities> {
-  async function read(path: string): Promise<unknown> {
+  async function read(path: string, accessToken = token): Promise<unknown> {
     const response = await fetch(`https://graph.facebook.com/v21.0/${path}`, {
-      method: "GET", headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+      method: "GET", headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error("Meta access could not be verified.");
@@ -30,7 +31,9 @@ export async function verifyMetaCapabilities(token: string, selected: SelectedAs
     read("me/accounts?fields=id,tasks&limit=200").then(value => pagesSchema.parse(value)),
     read("me/permissions?limit=200").then(value => permissionsSchema.parse(value)),
     read(`${encodeURIComponent(selected.adAccountId)}/insights?fields=impressions&limit=1`),
-    read(`${encodeURIComponent(selected.pageId)}/leadgen_forms?fields=id,status&limit=1`),
+    read(`${encodeURIComponent(selected.pageId)}?fields=access_token`)
+      .then(value => pageTokenSchema.parse(value))
+      .then(page => read(`${encodeURIComponent(selected.pageId)}/leadgen_forms?fields=id,status&limit=1`, page.access_token)),
   ]);
   if (permissionsResult.status !== "fulfilled") return result;
   const scopes = new Set(permissionsResult.value.data.filter(entry => entry.status === "granted").map(entry => entry.permission));
