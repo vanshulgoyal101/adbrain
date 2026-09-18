@@ -23,11 +23,13 @@ responses/images and business mutations blocked. No page errors or horizontal
 overflow were observed. This does not certify live media, paid AI quality,
 customer Meta consent, or live ad mutations. Browser sessions were closed.
 
-The product-events migration was published but **not applied remotely**.
-`PRODUCT_LOGGING_DATABASE_ENABLED` was absent in production, so durable logging
-and retention remain off. No production flags, credentials, paid generation, or
-ad state were changed. The application merge was fast-forwarded back to `dev`;
-the subsequent documentation-only synchronization is recorded in its PR.
+At that release, the product-events migration was published but not applied
+remotely, and database logging remained off. The later owner-authorized
+[database logging rollout](OBSERVABILITY.md#production-database-rollout-2026-09-18)
+applied the migration and configured the production flag; its release PR records
+deployment and persistence verification. No paid generation or ad state was
+changed. The application merge was fast-forwarded back to `dev`; the subsequent
+documentation-only synchronization is recorded in its PR.
 
 ## Non-Negotiable Rules
 
