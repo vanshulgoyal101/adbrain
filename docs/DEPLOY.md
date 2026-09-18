@@ -1,180 +1,109 @@
-# Deploying AdBrain to adbrain.vanshul.com
+# Deployment Setup
 
-> **Status:** live in production at <https://adbrain.vanshul.com> (Vercel +
-> custom domain). This is the runbook for reproducing or updating that setup.
+AdBrain needs a dynamic Node/Next.js host, Supabase Auth/Postgres/Storage, and
+explicit provider configuration. It is not a static export. The canonical
+production origin is `https://adbrain.vanshul.com`; this guide describes setup,
+not verification of the current remote deployment. For publishing changes, follow
+[Release Workflow](RELEASING.md), which takes precedence over this checklist.
 
-AdBrain is a **dynamic** Next.js app (auth, API routes, server rendering), so it
-needs a Node/serverless host — it can't be a static export. This guide uses
-**Vercel** (native Next.js support, free tier is enough to start).
+## 1. Establish the Target
 
-For the customer-facing demo sequence, provider choice, cost planning, payment
-timing, and launch gates, see [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md).
+Identify the exact Vercel project, Git branch, Supabase project, site origin,
+provider accounts, and owner approving the change. Verify credentials without
+printing them. A preview deployment is not an isolated database. The checked-in
+Git deployment rules enable only `main` with a wildcard disabled rule; inspect
+effective remote settings before any branch push or environment change.
 
----
+Use supported Node 22 (22.13+ with the current lint dependency graph), install with
+`npm ci`, and keep framework build/output defaults unless a reviewed change needs
+otherwise. Configure adequate Node runtime duration and memory for generation;
+declaring `maxDuration` in a route does not override hosting-plan limits.
 
-## 0. Prerequisites
-- The GitHub repo (`vanshulgoyal101/adbrain`).
-- A Supabase project (URL, anon/publishable key, service-role key, DB password).
-- A Meta system-user token + ad account id + page id.
-- At least one LLM key pool (Gemini / Groq / OpenRouter / Cerebras).
+## 2. Prepare Database and Storage
 
-## 1. Apply the database schema
-`db/schema.sql` is idempotent — safe to run repeatedly.
+For a new isolated installation, review [schema.sql](../db/schema.sql). For an
+existing installation, inventory applied migrations and follow the
+[migration map](DATA_MODEL.md#migration-map). Repeated DDL is not inherently safe:
+grants, policies and functions can change even when tables already exist.
 
-```bash
-# Option A: from your machine (needs the DB password)
-PGHOST=db.<ref>.supabase.co PGPORT=5432 PGUSER=postgres \
-  PGPASSWORD=<db-password> PGDATABASE=postgres \
-  npm run db:push
-```
+`npm run db:push` writes to the configured database. It is **not** a routine
+deployment prerequisite to run blindly. Obtain explicit migration approval,
+verify target, backup/compatibility, and local fresh/upgrade tests first. No
+production credentials are required for `npm run test:meta-db`.
 
-Or paste `db/schema.sql` into the Supabase **SQL editor** and run it.
+Verify quota aggregation and trusted rate-limit RPCs, encrypted connection
+storage, campaign operations, generation receipts, and public media buckets.
+Enable the optional product-event database sink only after its migration. A
+missing quota read is not treated as permission for unlimited generation.
 
-The paid-LLM controls add the `llm_usage_events` table. Apply the schema before
-relying on monthly quotas; until that table exists, generation remains available
-and usage persistence is best-effort for migration compatibility.
+## 3. Configure Secrets and Public Values
 
-Set these Vercel environment variables for production:
+[Configuration](CONFIGURATION.md) is the complete variable/default reference.
+Minimum deployment groups:
 
-```env
-LLM_MONTHLY_TOKEN_LIMIT=2000000
-SUPABASE_SERVICE_ROLE_KEY=<server-only-service-role-key>
-```
-
-`SUPABASE_SERVICE_ROLE_KEY` is required by the spend cron and must never be
-exposed as a `NEXT_PUBLIC_*` variable.
-
-## 2. Import the project into Vercel
-1. vercel.com → **Add New → Project** → import `vanshulgoyal101/adbrain`.
-2. Framework preset: **Next.js** (auto-detected). Leave build/output defaults.
-3. Don't deploy yet — set env vars first (next step).
-
-## 3. Environment variables (Vercel → Project → Settings → Environment Variables)
-Set these for **Production** (and Preview if you want previews to work):
-
-| Variable | Value |
+| Group | Required decision |
 | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable key |
-| `SUPABASE_SERVICE_ROLE_KEY` | service-role key |
-| `NEXT_PUBLIC_SITE_URL` | `https://adbrain.vanshul.com` |
-| `OPENROUTER_API_KEYS` | dedicated production key with a provider-side spending limit |
-| `LLM_PROVIDER_ORDER` | e.g. `openrouter,groq,cerebras,google` |
-| `OPENROUTER_MODEL` | e.g. `qwen/qwen3.8-max-0902` |
-| `OPENROUTER_IMAGE_MODEL` | e.g. `openai/gpt-image-2.5-flare` |
-| `IMAGE_PROVIDER_FALLBACK` | `pollinations` for a non-paid image fallback |
-| `GOOGLE_AI_API_KEYS` | optional fallback keys |
-| `GEMINI_MODEL` | e.g. `gemini-3.6-flash` |
-| `GEMINI_THINKING_HEADROOM` | output-token headroom for Gemini thinking (default `3000`; `0` for a paid non-thinking model) |
-| `IMAGE_PROVIDER` | `pollinations` |
-| `AD_DESIGN_OVERLAY` | composite the designed poster over the AI photo (default `true`; `false` = bare photo) |
-| `META_APP_ID` / `META_APP_SECRET` | Meta app creds (also required for the Facebook-Login connect flow) |
-| `META_SYSTEM_USER_TOKEN` | long-lived system-user token (single-tenant fallback) |
-| `META_AD_ACCOUNT_ID` | `act_...` (single-tenant fallback) |
-| `META_PAGE_ID` | page id (single-tenant fallback) |
+| Supabase | Correct public URL/key; server-only service-role key for trusted operations |
+| Site | Canonical `NEXT_PUBLIC_SITE_URL`; public values are baked into builds |
+| Auth | Supabase site URL, exact `/auth/callback`, enabled login providers and email delivery |
+| Text models | Available key pools, explicit order/models, provider-side spending controls |
+| Images | Explicit primary provider/model and `IMAGE_PROVIDER_FALLBACK=none` unless an evaluated fallback is deliberately approved |
+| Meta | App ID/secret, Login for Business config ID, stable 32-byte base64 encryption key, explicit rollout mode |
+| Jobs | Strong server-only `CRON_SECRET`; scheduled-job monitoring owner |
+| Telemetry | Console/client flags; database sink off until migrated and retention understood |
 
-Campaign creation validates the selected lead form before creating Meta
-objects, uses a Meta-safe CTA for instant-form campaigns, validates creative
-image URLs, and refuses to silently change a requested WhatsApp or call
-destination into an instant-form campaign. Graph API errors are translated into
-customer-safe messages; detailed provider text remains server-side only.
+Never set development bypass or demo password credentials in production. Do not
+copy production secrets into Preview automatically. Never expose service-role,
+provider, cron, or encryption secrets via `NEXT_PUBLIC_*` variables.
 
-> **Connecting ad accounts from the UI (Facebook Login):** whitelist
-> `https://<your-domain>/api/meta/oauth/callback` as a Valid OAuth Redirect URI
-> in the Meta app, and submit the ad scopes for **App Review** before non-test
-> users can connect. Owners then connect at `/settings`; stored OAuth creds take
-> priority over the single-tenant `META_*` env vars per business.
+The paid OpenRouter adapter already exists. Model names are configuration, not a
+guarantee of account availability or current pricing. Test with bounded explicit
+authorization; do not use a production deployment as an unbudgeted benchmark.
+Pollinations is not an equivalent fallback for reference-guided product imagery.
 
-> **Do NOT set `NEXT_PUBLIC_DEV_AUTH_BYPASS` in production.** Leaving it unset
-> keeps the dev-login routes inert.
+## 4. Configure Identity and Domain
 
-## 4. Custom domain
-1. Vercel → Project → **Settings → Domains** → add `adbrain.vanshul.com`.
-2. In your DNS provider for `vanshul.com`, add the record Vercel shows —
-   typically `CNAME adbrain → cname.vercel-dns.com` (Vercel confirms the exact
-   target). Wait for it to verify.
+Add the custom domain to the host and use the DNS records it currently specifies.
+Confirm HTTPS, canonical redirects, and the configured Supabase origin in CSP.
+Do not replace allowlists with `*` to work around configuration mistakes.
 
-## 5. Supabase auth redirect URLs
-Supabase → **Authentication → URL Configuration**:
-- **Site URL:** `https://adbrain.vanshul.com`
-- **Redirect URLs:** add `https://adbrain.vanshul.com/auth/callback`
+In Supabase, set the site URL and allow the exact application `/auth/callback` for
+magic links/Google sign-in. In the Google provider console, use the callback
+required by Supabase's provider setup, not an invented direct application route.
 
-(Otherwise magic-link + Google sign-in will reject the redirect.)
+In Meta, configure the exact `/api/meta/oauth/callback`, appropriate application
+domains, privacy/deletion URLs, Login for Business settings and permissions. Follow
+[Meta Connect](META_CONNECT.md) and [Approval Readiness](META_APPROVAL_ACTION_PLAN.md).
+An AdBrain login smoke test does not verify this second authorization flow.
 
-## 6. Deploy & verify
-Trigger a deploy (push to `main` or click Deploy). Then check:
-- `https://adbrain.vanshul.com/` — landing renders.
-- `/robots.txt`, `/sitemap.xml`, `/manifest.webmanifest`, `/opengraph-image` — 200.
-- Sign in works (magic link / Google).
-- Campaigns page loads and can sync from Meta.
+## 5. Validate and Promote
 
-Verify the response security contract after deployment:
+Run required local/CI gates on the dependency-complete release. Promote through
+the protected `main` PR workflow and verify hosting success for the resulting
+merge SHA. Do not use a direct production CLI deploy to bypass checks.
 
-```bash
-curl -sI https://adbrain.vanshul.com/ | grep -Ei \
-  'content-security-policy|x-content-type-options|x-frame-options|referrer-policy'
-```
+After an authorized deployment, verify:
 
-The CSP is generated from `NEXT_PUBLIC_SUPABASE_URL`. If the Supabase project
-uses a custom origin, confirm that origin appears in `connect-src`; do not
-replace the policy with `*` to work around a missing allowlist entry.
+- Public homepage, legal routes, guide pages, sitemap/robots/manifest/social image.
+- Expected production security headers and CSP behavior with real origins.
+- Real authentication and owner-scoped reads; no development bypass.
+- Correct schema/RPC access, public asset rendering and existing saved content.
+- Exact affected workflow with approved fixtures and side-effect limits.
+- Job configuration and logs, without manually invoking mutating enforcement
+  merely to get HTTP 200.
+- Telemetry correlation and redaction; no credential/personal-data leakage.
 
-For a prospect demo, also complete the [demo acceptance checklist](./DEMO-RUNBOOK.md#demo-acceptance-checklist)
-and keep a pre-generated creative fallback available. A live provider or Meta
-request must not be the only path through a customer call.
+Paid generation, real consent, campaign creation and activation each need their
+own evidence and authorization. A homepage HTTP 200 proves none of them.
 
-## 7. Scheduled jobs (Vercel Cron)
+## 6. Scheduled Jobs and Rollback
 
-`vercel.json` registers two cron jobs, both authorised by `CRON_SECRET`:
+Both cron endpoints run daily at 06:00 UTC in source configuration. Enforcement
+uses stored spend and can pause ads; keepalive can prune old product events.
+See [Operations](OPERATIONS.md#scheduled-jobs) for authentication, timing limits,
+partial results, and monitoring. A cron declaration does not prove a job ran.
 
-- **`/api/cron/keepalive`** (daily) — keeps the Supabase project awake.
-- **`/api/cron/enforce-spend`** (daily, scheduled for 06:00 UTC) — spend backstop: pauses
-  active campaigns whose tracked spend has reached the weekly cap for any
-  business with `auto_pause` on, even when nobody opens the app (Meta spends
-  24/7). Runs under the service-role client. On Hobby, invocation can occur
-  anywhere between 06:00 and 06:59 UTC. More frequent cron expressions are
-  rejected at deployment, not automatically reduced to daily execution.
-
-Both schedules intentionally support Vercel Hobby. Daily enforcement is weaker
-than the previous six-hour schedule: spend can exceed the configured cap between
-checks, and failed invocations can delay enforcement further. Refresh-time
-enforcement remains enabled, but neither layer guarantees a hard spending limit.
-
-> **This is not optional in production.** Free-tier Supabase projects auto-pause
-> after ~7 days of inactivity, and a paused project **stops resolving in DNS** —
-> so auth and every query fail, and browsers show a security warning instead of
-> your login page rather than anything that looks like an app bug. The daily
-> read counts as activity and prevents that. (Upgrading to Pro also removes
-> auto-pausing, and unlocks the custom domain that would keep `*.supabase.co`
-> out of the sign-in flow entirely.)
-
-Set `CRON_SECRET` in Vercel → Project → Settings → Environment Variables.
-Generate one with:
-
-```bash
-openssl rand -hex 32
-```
-
-Vercel sends it as `Authorization: Bearer <secret>`; the endpoint 404s when the
-secret is unset and 401s on a bad one. Verify after deploying:
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' \
-  -H "Authorization: Bearer $CRON_SECRET" \
-  https://adbrain.vanshul.com/api/cron/keepalive   # expect 200
-
-curl -s -o /dev/null -w '%{http_code}\n' \
-  -H "Authorization: Bearer $CRON_SECRET" \
-  https://adbrain.vanshul.com/api/cron/enforce-spend   # expect 200
-```
-
-**If the project ever does pause**, restore it from the Supabase dashboard (or
-`POST /v1/projects/<ref>/restore` via the Management API); it takes a few
-minutes to come back and DNS returns first.
-
-Campaign auto-sync on a schedule can reuse the same pattern — it additionally
-needs the service-role key to run without a user session (see `docs/ROADMAP.md`).
-
-## Rollback
-Vercel keeps every deployment — use **Instant Rollback** to revert to a previous
-build if a release misbehaves.
+Choose a previously verified compatible build for rollback. Preserve schema and
+key compatibility; code rollback cannot reverse remote ads, restore deleted data,
+or decrypt tokens encrypted under a lost key. Record the exact deployment,
+migration state, smoke evidence, rollback result and remaining external gates.

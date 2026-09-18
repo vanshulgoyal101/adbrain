@@ -176,3 +176,23 @@ failure, all-route coverage, client privacy controls, ingestion abuse, and schem
 parity. The disposable PostgreSQL harness verifies browser privilege denial,
 service access and bounded retention for fresh installs and repeated upgrades.
 Production persistence and external alert delivery require rollout verification.
+
+### Local Receipt: 2026-09-18
+
+- Environment-free isolated snapshot: 1,227 tests passed, one live-provider test
+  skipped, across 137 passing files. Statement coverage 76.48%, branches 68.59%,
+  functions 75.88%, lines 78.96%.
+- TypeScript, ESLint and production build passed (54 generation tasks); npm
+  audit reported zero known vulnerabilities. Current source and tests matched
+  the snapshot after validation; editor diagnostics and diff whitespace checks
+  were clean.
+- Disposable PostgreSQL fresh-install and repeated-upgrade tests passed,
+  including telemetry browser privilege denial, service access and retention.
+- Browser collector behavior was tested in jsdom, not in a live authenticated
+  browser. Production `after` persistence has not been verified against a hosted
+  database. No migration, deployment, credentials, production configuration,
+  paid model calls or Meta mutations occurred.
+- Route instrumentation covers 44 API/auth methods including `/api/events`,
+  plus five server actions. The preflight endpoint was also aligned with the
+  shared creation-time loaders; a regression test submits the exact preflight
+  hash to creation successfully.
