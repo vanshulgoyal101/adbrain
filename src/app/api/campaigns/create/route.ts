@@ -1,4 +1,4 @@
-import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createCampaignRequestSchema, type OperationDTO } from "@/lib/campaign/connect-contracts";
@@ -107,7 +107,7 @@ function operationResultJson(operation: OperationRecord): Json {
 export const POST = observeRoute("/api/campaigns/create", "POST", handlePOST);
 
 async function handlePOST(request: Request) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return errorResponse(requestId, 401, "UNAUTHENTICATED", "Sign in required.");

@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getConnectionAttempt } from "@/lib/meta/connection-repository";
@@ -18,24 +18,24 @@ async function handleGET(
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json(
-      { ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in required.", retryable: false }, requestId: crypto.randomUUID() },
+      { ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in required.", retryable: false }, requestId: currentRequestId() },
       { status: 401, headers: { "Cache-Control": "no-store" } },
     );
   }
   if (!canUseMetaConnect(user.id)) return NextResponse.json(
-    { ok: false, error: { code: "FORBIDDEN", message: "Meta connection is not enabled for this account.", retryable: false }, requestId: crypto.randomUUID() },
+    { ok: false, error: { code: "FORBIDDEN", message: "Meta connection is not enabled for this account.", retryable: false }, requestId: currentRequestId() },
     { status: 403, headers: { "Cache-Control": "no-store" } },
   );
   const { id } = await context.params;
   const attempt = await getConnectionAttempt(id, user.id);
   if (!attempt) {
     return NextResponse.json(
-      { ok: false, error: { code: "NOT_FOUND", message: "Connection attempt not found.", retryable: false }, requestId: crypto.randomUUID() },
+      { ok: false, error: { code: "NOT_FOUND", message: "Connection attempt not found.", retryable: false }, requestId: currentRequestId() },
       { status: 404, headers: { "Cache-Control": "no-store" } },
     );
   }
   return NextResponse.json(
-    { ok: true, data: attempt, requestId: crypto.randomUUID() },
+    { ok: true, data: attempt, requestId: currentRequestId() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

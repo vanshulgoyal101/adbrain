@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { eventContext, newEventContext, observeIdentity, type EventContext } from "./context";
 import { requestOutcome, sanitizeProductEvent, type ProductEventInput } from "./events";
+export { currentRequestId } from "./context";
 
 export function recordProductEvent(input: ProductEventInput): void {
   if (process.env.PRODUCT_LOGGING_ENABLED === "false") return;
@@ -16,7 +17,11 @@ export function recordProductEvent(input: ProductEventInput): void {
       occurredAt: new Date().toISOString(),
       userId: context?.userId ?? null,
       businessId: input.businessId ?? context?.businessId ?? null,
-      attributes: input.attributes ?? {},
+      attributes: {
+        ...input.attributes,
+        environment: process.env.VERCEL_ENV === "production" ? "production" : process.env.VERCEL_ENV === "preview" ? "preview" : process.env.NODE_ENV === "test" ? "test" : "development",
+        release: /^[a-f0-9]{7,40}$/.test(process.env.VERCEL_GIT_COMMIT_SHA ?? "") ? process.env.VERCEL_GIT_COMMIT_SHA : undefined,
+      },
     });
     if (!event) {
       console.warn(JSON.stringify({ source: "adbrain.telemetry", code: "INVALID_EVENT" }));
@@ -24,6 +29,7 @@ export function recordProductEvent(input: ProductEventInput): void {
     }
     console.info(JSON.stringify({ source: "adbrain.product", ...event }));
     if (context.events.length < 100) context.events.push(event);
+    else if (event.kind === "request" || event.kind === "action") context.events[99] = event;
     if (!activeContext) schedulePersistence(context);
   } catch {
     return;

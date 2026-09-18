@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import {
   draftDtoSchema,
@@ -56,7 +56,7 @@ async function handleGET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return errorResponse(requestId, 401, "UNAUTHENTICATED", "Sign in required.");
@@ -78,7 +78,7 @@ async function handlePUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return errorResponse(requestId, 401, "UNAUTHENTICATED", "Sign in required.");
@@ -122,7 +122,7 @@ async function handleDELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return errorResponse(requestId, 401, "UNAUTHENTICATED", "Sign in required.");

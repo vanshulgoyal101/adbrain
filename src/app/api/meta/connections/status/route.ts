@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
@@ -20,7 +20,7 @@ const unknownCapabilities: Capabilities = {
 export const GET = observeRoute("/api/meta/connections/status", "GET", handleGET);
 
 async function handleGET(request: NextRequest) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const businessId = request.nextUrl.searchParams.get("businessId")?.trim();
   if (!businessId) {
     return NextResponse.json(

@@ -11,6 +11,10 @@ export interface EventContext {
 
 export const eventContext = new AsyncLocalStorage<EventContext>();
 
+export function currentRequestId(): string {
+  return eventContext.getStore()?.requestId ?? randomUUID();
+}
+
 export function newEventContext(): EventContext {
   return { requestId: randomUUID(), userId: null, businessId: null, events: [] };
 }

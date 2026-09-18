@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { apiError, serverError } from "@/lib/api";
 import {
@@ -51,7 +51,7 @@ async function handlePOST(req: Request) {
       if (used >= limit) return apiError("This business has reached its monthly AI generation limit.", 429);
     }
     const instructions = await getActiveInstructionsText(businessId);
-    const requestId = crypto.randomUUID();
+    const requestId = currentRequestId();
     const result = await runInterview({ brand: business, instructions, goal, answers, recentGoals, referenceBrief }, {
       signal: req.signal,
       onAttempt: async (completion, attempt, valid) => {

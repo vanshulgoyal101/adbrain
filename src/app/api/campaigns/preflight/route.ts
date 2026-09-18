@@ -1,4 +1,4 @@
-import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import {
   preflightRequestSchema,
@@ -29,7 +29,7 @@ function errorResponse(
 export const POST = observeRoute("/api/campaigns/preflight", "POST", handlePOST);
 
 async function handlePOST(request: Request) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return errorResponse(requestId, 401, "UNAUTHENTICATED", "Sign in required.");

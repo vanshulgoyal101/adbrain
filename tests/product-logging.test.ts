@@ -6,9 +6,26 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { g
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const businessId = "22222222-2222-4222-8222-222222222222";
+const persistence = vi.hoisted(() => ({ callbacks: [] as Array<() => Promise<void>>, persist: vi.fn() }));
+vi.mock("next/server", () => ({ after: (callback: () => Promise<void>) => persistence.callbacks.push(callback) }));
+vi.mock("@/lib/observability/store", () => ({ persistProductEvents: persistence.persist }));
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("request product logging", () => {
+  it("flushes after failed requests and contains persistence errors", async () => {
+    vi.stubEnv("PRODUCT_LOGGING_DATABASE_ENABLED", "true");
+    persistence.callbacks.length = 0;
+    persistence.persist.mockRejectedValueOnce(new Error("private database details"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const handler = observeRoute("/api/campaigns", "POST", async () => { throw new Error("original failure"); });
+    await expect(handler()).rejects.toThrow("original failure");
+    expect(persistence.callbacks).toHaveLength(1);
+    await expect(persistence.callbacks[0]()).resolves.toBeUndefined();
+    expect(warning.mock.calls[0][0]).toContain("PERSIST_FAILED");
+    expect(warning.mock.calls[0][0]).not.toContain("private database details");
+  });
+
   it("records rejected server actions without logging their error text", async () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const result = await observeAction("creative.approve", async () => ({ ok: false, error: "private content" }));

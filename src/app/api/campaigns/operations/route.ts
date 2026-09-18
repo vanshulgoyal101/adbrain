@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -11,7 +11,7 @@ const querySchema = z.object({ businessId: z.string().uuid(), idempotencyKey: z.
 export const GET = observeRoute("/api/campaigns/operations", "GET", handleGET);
 
 async function handleGET(request: Request) {
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const headers = { "Cache-Control": "no-store" };
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ ok: false, error: { code: "INVALID_INPUT", message: "Valid business and operation key required.", retryable: false }, requestId }, { status: 400, headers });

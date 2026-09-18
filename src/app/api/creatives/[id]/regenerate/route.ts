@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
@@ -110,7 +110,7 @@ async function handlePOST(
         businessId: business.id,
         userId: user.id,
         route: "creatives.regenerate",
-        requestId: crypto.randomUUID(),
+        requestId: currentRequestId(),
       }),
     );
 
@@ -172,7 +172,7 @@ async function handlePOST(
         businessId: business.id,
         userId: user.id,
         route: "creatives.regenerate",
-        requestId: crypto.randomUUID(),
+        requestId: currentRequestId(),
       }),
     );
     if (err instanceof NoLLMKeysError)

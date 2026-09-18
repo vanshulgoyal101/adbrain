@@ -1,4 +1,4 @@
-import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
@@ -166,7 +166,7 @@ async function handlePOST(req: Request) {
       },
       { status: 503 },
     );
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   const variantGroup = body.generationId ?? crypto.randomUUID();
   const inserted: Creative[] = [];
   const failures: { angle: string; error: string }[] = [];

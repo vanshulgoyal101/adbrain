@@ -121,7 +121,8 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
     durationMs: event.latencyMs,
     attributes: { provider: event.provider, model: event.model, inputTokens: event.usage.promptTokens,
       outputTokens: event.usage.completionTokens, totalTokens: event.usage.totalTokens,
-      estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage) },
+      estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
+      usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false },
   });
   try {
     const supabase = createAdminClient();

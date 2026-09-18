@@ -15,6 +15,8 @@ export const productEventSchema = z.object({
   businessId: identifier.nullable(),
   durationMs: z.number().int().min(0).max(86_400_000).optional(),
   attributes: z.object({
+    environment: z.enum(["production", "preview", "development", "test"]).optional(),
+    release: z.string().regex(/^[a-f0-9]{7,40}$/).optional(),
     route: label.optional(),
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]).optional(),
     status: z.number().int().min(100).max(599).optional(),
@@ -28,6 +30,9 @@ export const productEventSchema = z.object({
     outputTokens: z.number().int().nonnegative().optional(),
     totalTokens: z.number().int().nonnegative().optional(),
     estimatedCostUsd: z.number().finite().nonnegative().optional(),
+    usageKind: z.enum(["text", "image"]).optional(),
+    attempt: z.number().int().min(1).max(100).optional(),
+    cacheHit: z.boolean().optional(),
   }),
 });
 

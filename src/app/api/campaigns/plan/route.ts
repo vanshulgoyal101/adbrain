@@ -1,4 +1,4 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
@@ -112,7 +112,7 @@ async function handlePOST(req: Request) {
     }
     const instructions = await getActiveInstructionsText(business.id);
     const performance = await getPerformanceContext(business.id);
-    const requestId = crypto.randomUUID();
+    const requestId = currentRequestId();
     result = await runPlanner({
       brand: business,
       instructions,
