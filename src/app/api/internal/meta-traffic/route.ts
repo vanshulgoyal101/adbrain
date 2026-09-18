@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { getEnv } from "@/lib/env";
@@ -27,7 +28,9 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
-export async function POST(req: Request) {
+export const POST = observeRoute("/api/internal/meta-traffic", "POST", handlePOST);
+
+async function handlePOST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },

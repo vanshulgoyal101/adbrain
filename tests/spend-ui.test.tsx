@@ -118,6 +118,22 @@ describe("<SpendGuardrails>", () => {
     expect(JSON.parse((init as RequestInit).body as string).weeklyCapRupees).toBeNull();
   });
 
+  it.each(["0", "-1", "0.1"])("does not submit an unsafe cap: %s", (value) => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Weekly cap (₹)"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: /save guardrails/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent("positive whole-rupee cap");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("clears the saved indicator when settings are edited", async () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: /save guardrails/i }));
+    await screen.findByText("Saved.");
+    fireEvent.change(screen.getByLabelText("Weekly cap (₹)"), { target: { value: "9000" } });
+    expect(screen.queryByText("Saved.")).toBeNull();
+  });
+
   it("surfaces a server rejection instead of claiming success", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,

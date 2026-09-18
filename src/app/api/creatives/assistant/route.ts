@@ -1,3 +1,4 @@
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { apiError, serverError } from "@/lib/api";
 import {
@@ -15,7 +16,9 @@ import { getActiveInstructionsText } from "@/lib/supabase/queries";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
+export const POST = observeRoute("/api/creatives/assistant", "POST", handlePOST);
+
+async function handlePOST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
       if (used >= limit) return apiError("This business has reached its monthly AI generation limit.", 429);
     }
     const instructions = await getActiveInstructionsText(businessId);
-    const requestId = crypto.randomUUID();
+    const requestId = currentRequestId();
     const result = await runInterview({ brand: business, instructions, goal, answers, recentGoals, referenceBrief }, {
       signal: req.signal,
       onAttempt: async (completion, attempt, valid) => {

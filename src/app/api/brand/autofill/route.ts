@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parse } from "node-html-parser";
@@ -26,7 +27,9 @@ function extractText(html: string): string {
   return `${title}\n${metaDesc}\n${body}`.replace(/\s+/g, " ").trim();
 }
 
-export async function POST(req: Request) {
+export const POST = observeRoute("/api/brand/autofill", "POST", handlePOST);
+
+async function handlePOST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },

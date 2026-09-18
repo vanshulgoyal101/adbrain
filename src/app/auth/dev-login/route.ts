@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from "@/lib/dev-auth";
 import { createClient } from "@/lib/supabase/server";
@@ -8,7 +9,9 @@ import { createClient } from "@/lib/supabase/server";
  * it falls back to an offline dev cookie so the app is browsable without any
  * backend. A no-op unless NEXT_PUBLIC_DEV_AUTH_BYPASS=true.
  */
-export async function GET(request: Request) {
+export const GET = observeRoute("/auth/dev-login", "GET", handleGET);
+
+async function handleGET(request: Request) {
   const { origin } = new URL(request.url);
 
   if (!isDevAuthEnabled()) {

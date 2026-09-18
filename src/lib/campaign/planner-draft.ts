@@ -2,7 +2,7 @@ import { z } from "zod";
 import { draftInputSchema, type DraftInput } from "@/lib/campaign/connect-contracts";
 import { normalizeAgeRange } from "@/lib/campaign/targeting";
 
-const plannerPlanSchema = z
+export const plannerPlanSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     daily_budget_rupees: z.number().finite().int().positive().max(10_000_000),
@@ -16,7 +16,7 @@ const plannerPlanSchema = z
     locations: z.array(z.string().trim().min(1).max(200)).max(50),
     excluded_locations: z.array(z.string().trim().min(1).max(200)).max(50),
     destination: z.enum(["instant_form", "whatsapp", "call"]),
-    rationale: z.string().trim().max(2_000),
+    rationale: z.string().trim().min(1).max(2_000),
   })
   .strict();
 
@@ -103,7 +103,7 @@ export function plannerPlanToDraftInput(input: {
         min: age.min,
         max: age.max,
       },
-      ...(plan.rationale ? { audience: { interestNames: [...new Set(plan.interests)], rationale: plan.rationale } } : {}),
+      audience: { interestNames: [...new Set(plan.interests)], rationale: plan.rationale },
     },
     abTest: false,
   };

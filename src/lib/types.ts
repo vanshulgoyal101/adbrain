@@ -26,9 +26,29 @@ export type Json =
   | { [key: string]: Json }
   | Json[];
 
+export type ProductEventRow = {
+  event_id: string;
+  request_id: string;
+  version: number;
+  created_at: string;
+  user_id: string | null;
+  business_id: string | null;
+  kind: string;
+  name: string;
+  outcome: string;
+  duration_ms: number | null;
+  attributes: Json;
+};
+
 export interface Database {
   public: {
     Tables: {
+      product_events: {
+        Row: ProductEventRow;
+        Insert: ProductEventRow;
+        Update: Partial<ProductEventRow>;
+        Relationships: [];
+      };
       profiles: {
         Row: { id: string; email: string | null; created_at: string };
         Insert: { id: string; email?: string | null; created_at?: string };
@@ -514,6 +534,10 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      prune_product_events: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       monthly_token_usage: {
         Args: { p_business_id: string; p_since: string };
         Returns: number;

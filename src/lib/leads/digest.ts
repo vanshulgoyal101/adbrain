@@ -6,6 +6,7 @@
 export interface DigestLead {
   fullName: string | null;
   phone: string | null;
+  email?: string | null;
   city: string | null;
   formName?: string | null;
   createdTime: string | null; // ISO timestamp
@@ -58,7 +59,7 @@ export function buildLeadDigest(leads: DigestLead[], opts: DigestOptions): strin
     return [
       `🌞 ${opts.businessName}: no new leads in ${window}.`,
       "",
-      "Your ads may need a nudge — try a fresh creative or a small budget bump.",
+      "Sync your lead forms to check for enquiries not yet imported.",
     ].join("\n");
   }
 
@@ -70,6 +71,7 @@ export function buildLeadDigest(leads: DigestLead[], opts: DigestOptions): strin
     const name = l.fullName?.trim() || "New lead";
     const bits = [name];
     if (l.phone) bits.push(l.phone);
+    if (l.email) bits.push(l.email);
     if (l.city) bits.push(l.city);
     const age = relativeAge(l.createdTime, now);
     const tail = age ? ` (${age})` : "";

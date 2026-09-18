@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -5,7 +6,9 @@ import { verifyMetaSignedRequest } from "@/lib/meta/oauth";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+export const POST = observeRoute("/api/meta/deauthorize", "POST", handlePOST);
+
+async function handlePOST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
   const form = contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")
     ? await request.formData().catch(() => null)

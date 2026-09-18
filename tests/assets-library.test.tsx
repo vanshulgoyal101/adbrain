@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { downloadBlob } from "@/lib/download";
 import { AssetsLibrary } from "@/components/assets-library";
 import type { BrandAsset, Creative } from "@/lib/types";
+
+vi.mock("@/lib/download", () => ({ downloadBlob: vi.fn() }));
+beforeEach(() => vi.clearAllMocks());
 
 const creative = (over: Partial<Creative>): Creative =>
   ({
@@ -26,6 +30,40 @@ const asset = (over: Partial<BrandAsset>): BrandAsset =>
   }) as unknown as BrandAsset;
 
 describe("<AssetsLibrary>", () => {
+  it("shows clipboard failures without claiming the link was copied", async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) } });
+    render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not copy the link");
+    expect(screen.queryByText("Copied")).toBeNull();
+  });
+
+  it("reports a failed download and leaves the original link accessible", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Download failed");
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute("href", "https://example.com/a.jpg");
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+  });
+
+  it("uses the actual image format rather than mislabelling PNG bytes as JPEG", async () => {
+    const blob = new Blob(["image"], { type: "image/png" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => blob }));
+    render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    await waitFor(() => expect(downloadBlob).toHaveBeenCalledWith(blob, "adbrain-slash-your-power-bill.png"));
+  });
+
+  it("does not download an HTML error page as an image", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["error"], { type: "text/html" }) }));
+    render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    await screen.findByRole("alert");
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
   it("renders both sections with counts", () => {
     render(
       <AssetsLibrary

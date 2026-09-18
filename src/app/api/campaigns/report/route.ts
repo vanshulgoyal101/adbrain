@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { buildPerformanceReport } from "@/lib/campaign/report";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -8,7 +9,9 @@ import {
 export const runtime = "nodejs";
 
 /** Download a Markdown performance report for the current business. */
-export async function GET() {
+export const GET = observeRoute("/api/campaigns/report", "GET", handleGET);
+
+async function handleGET() {
   const supabase = await createClient();
   const {
     data: { user },

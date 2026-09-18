@@ -1,3 +1,4 @@
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getConnectionAttempt } from "@/lib/meta/connection-repository";
@@ -6,13 +7,15 @@ import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 
 export const runtime = "nodejs";
 
-export async function POST(
+export const POST = observeRoute("/api/meta/connections/attempts/[id]/retry", "POST", handlePOST);
+
+async function handlePOST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const requestId = crypto.randomUUID();
+  const requestId = currentRequestId();
   if (!user) return NextResponse.json(
     { ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in required.", retryable: false }, requestId },
     { status: 401 },

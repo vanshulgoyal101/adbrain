@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
       <JsonLd
         data={contentPageGraph({ path: "/privacy", name: TITLE, description: DESCRIPTION })}
       />
-      <LegalPage title={TITLE} updated="13 August 2026">
+      <LegalPage title={TITLE} updated="18 September 2026">
         <p>
           AdBrain (&ldquo;AdBrain&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) helps businesses create ad
           creatives and run lead-generation campaigns on Meta (Facebook and
@@ -48,8 +48,14 @@ export default function PrivacyPolicyPage() {
             lead form).
           </li>
           <li>
-            <strong>Usage data.</strong> Privacy-friendly, cookieless analytics
-            about how the product is used, to improve it.
+            <strong>Usage and diagnostic data.</strong> Account and business
+            identifiers, pages visited, operation outcomes, response times,
+            error categories, and AI usage and estimated costs help us operate
+            and improve the product. Product-event logs exclude prompts,
+            creative copy, lead contact details, passwords, access tokens,
+            request bodies, and raw error messages. Optional browser telemetry
+            uses no tracking cookies and respects Do Not Track and Global
+            Privacy Control; essential server diagnostics remain separate.
           </li>
         </ul>
 
@@ -91,8 +97,15 @@ export default function PrivacyPolicyPage() {
 
         <h2>Security</h2>
         <p>
-          Data is protected with row-level security so that only you can access
-          your business&rsquo;s data, transport encryption (HTTPS), and access
+          Product-event database records are targeted for deletion after 90 days
+          through periodic cleanup; outages or cleanup backlogs may delay removal.
+          Hosting-provider diagnostic logs follow separately configured retention.
+          These account-linked diagnostics are available only to authorized
+          operators, not to other customers.
+        </p>
+        <p>
+          Customer access to business data is isolated with row-level security.
+          We also use transport encryption (HTTPS) and access
           controls on our infrastructure. No system is perfectly secure, but we
           take reasonable measures to protect your information.
         </p>

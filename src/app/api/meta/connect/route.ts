@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwnedBusiness } from "@/lib/meta/connection-access";
@@ -6,7 +7,9 @@ import { z } from "zod";
 export const runtime = "nodejs";
 
 /** Finalise a connection by saving the chosen ad account + page. */
-export async function POST(request: NextRequest) {
+export const POST = observeRoute("/api/meta/connect", "POST", handlePOST);
+
+async function handlePOST(request: NextRequest) {
   const authClient = await createClient();
   const {
     data: { user },

@@ -1,8 +1,8 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  ConnectionAccessError,
   requireScheduledBusiness,
   withMetaConnection,
 } from "@/lib/meta/connection-access";
@@ -30,7 +30,9 @@ export const maxDuration = 60;
  *
  * Vercel Cron calls this with `Authorization: Bearer $CRON_SECRET`.
  */
-export async function GET(request: Request) {
+export const GET = observeRoute("/api/cron/enforce-spend", "GET", handleGET);
+
+async function handleGET(request: Request) {
   const secret = getEnv().CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (request.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -47,12 +49,13 @@ export async function GET(request: Request) {
     .gt("weekly_cap_rupees", 0);
   if (limitsErr) {
     return NextResponse.json(
-      { ok: false, error: limitsErr.message },
+      { ok: false, error: "Spend limits could not be loaded." },
       { status: 502 },
     );
   }
 
   const swept: Array<{ businessId: string; paused: string[] }> = [];
+  let incomplete = false;
 
   for (const row of limitRows ?? []) {
     const businessId = row.business_id;
@@ -62,14 +65,15 @@ export async function GET(request: Request) {
       autoPause: row.auto_pause,
     };
 
-    const { data: campaigns } = await admin
+    const { data: campaigns, error: campaignsError } = await admin
       .from("campaigns")
       .select("*")
       .eq("business_id", businessId);
+    if (campaignsError) { incomplete = true; continue; }
     if (!campaigns?.length) continue;
 
     // Latest tracked spend per campaign (results are newest-first).
-    const { data: results } = await admin
+    const { data: results, error: resultsError } = await admin
       .from("campaign_results")
       .select("campaign_id, spend, fetched_at")
       .in(
@@ -77,6 +81,7 @@ export async function GET(request: Request) {
         campaigns.map((c) => c.id),
       )
       .order("fetched_at", { ascending: false });
+    if (resultsError) { incomplete = true; continue; }
     const latestSpend = new Map<string, number>();
     for (const r of results ?? []) {
       if (!latestSpend.has(r.campaign_id)) {
@@ -99,17 +104,19 @@ export async function GET(request: Request) {
     try {
       context = await requireScheduledBusiness(businessId, request);
     } catch {
+      incomplete = true;
       continue;
     }
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
-      if (!campaign?.meta_campaign_id) continue;
+      if (!campaign?.meta_campaign_id) { incomplete = true; continue; }
       const storedBinding = readStoredCampaignBinding(campaign);
       if (
         !storedBinding.metaAdAccountId ||
         !storedBinding.metaPageId ||
         storedBinding.metaConnectionGeneration === null
       ) {
+        incomplete = true;
         continue;
       }
       try {
@@ -125,7 +132,8 @@ export async function GET(request: Request) {
           },
           (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
         );
-        await admin.from("campaigns").update({ status: "paused" }).eq("id", id);
+        const { error: updateError } = await admin.from("campaigns").update({ status: "paused" }).eq("id", id);
+        if (updateError) { incomplete = true; continue; }
         paused.push(id);
         await admin.from("audit_log").insert({
           business_id: businessId,
@@ -138,15 +146,12 @@ export async function GET(request: Request) {
           reason: `Weekly spend cap of ₹${limits.weeklyCapRupees} reached (cron sweep)`,
           details: {} as unknown as Json,
         });
-      } catch (error) {
-        if (!(error instanceof ConnectionAccessError)) {
-          // Provider and persistence failures remain best-effort; next sweep retries.
-        }
-        // Leave it running rather than fail the whole sweep; next run retries.
+      } catch {
+        incomplete = true;
       }
     }
     if (paused.length) swept.push({ businessId, paused });
   }
 
-  return NextResponse.json({ ok: true, at: new Date().toISOString(), swept });
+  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept }, { status: incomplete ? 503 : 200 });
 }

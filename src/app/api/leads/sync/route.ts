@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
@@ -16,7 +17,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** Pull instant-form leads from Meta into the leads inbox (dedup by meta id). */
-export async function POST() {
+export const POST = observeRoute("/api/leads/sync", "POST", handlePOST);
+
+async function handlePOST() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -32,6 +35,7 @@ export async function POST() {
 
   let forms;
   let rows: LeadInsert[];
+  let failedForms: { id: string; name: string }[] = [];
   try {
     const context = await requireOwnedBusiness(business.id);
     const synced = await withMetaConnection(
@@ -40,12 +44,13 @@ export async function POST() {
       async (meta) => {
         const availableForms = await meta.listLeadForms();
         const imported: LeadInsert[] = [];
+        const failed: { id: string; name: string }[] = [];
         for (const form of availableForms) {
           let leads;
           try {
             leads = await meta.listLeadsForForm(form.id);
           } catch {
-            // A form the token can't read (missing leads_retrieval) — skip it.
+            failed.push({ id: form.id, name: form.name });
             continue;
           }
           for (const lead of leads) {
@@ -64,11 +69,12 @@ export async function POST() {
             });
           }
         }
-        return { forms: availableForms, rows: imported };
+        return { forms: availableForms, rows: imported, failedForms: failed };
       },
     );
     forms = synced.forms;
     rows = synced.rows;
+    failedForms = synced.failedForms;
   } catch (err) {
     if (err instanceof ConnectionAccessError) {
       return NextResponse.json({ error: err.message }, { status: err.code === "UNAUTHENTICATED" ? 401 : 400 });
@@ -79,35 +85,36 @@ export async function POST() {
     );
   }
 
-  if (rows.length === 0) {
-    const { data } = await supabase
+  if (forms.length > 0 && failedForms.length === forms.length) {
+    return NextResponse.json({ error: "Could not read leads from any form. Check Meta lead access and retry.", failedForms }, { status: 502 });
+  }
+
+  let imported = 0;
+  if (rows.length) {
+    const { error: upsertError, count } = await supabase
       .from("leads")
-      .select("*")
-      .eq("business_id", business.id)
-      .order("created_time", { ascending: false, nullsFirst: false });
-    return NextResponse.json({ leads: (data ?? []) as Lead[], imported: 0 });
+      .upsert(rows, { onConflict: "business_id,meta_lead_id", ignoreDuplicates: true, count: "exact" });
+    if (upsertError) {
+      return serverError("leads.sync", upsertError, "Could not save leads.");
+    }
+    if (count === null) return NextResponse.json({ error: "Leads were saved, but the import count could not be verified. Retry to refresh your inbox." }, { status: 503 });
+    imported = count;
   }
 
-  const { error: upsertError } = await supabase
-    .from("leads")
-    .upsert(rows, { onConflict: "business_id,meta_lead_id", ignoreDuplicates: true });
-  if (upsertError) {
-    return serverError("leads.sync", upsertError, "Could not save leads.");
-  }
-
-  const { data: fresh } = await supabase
+  const { data: fresh, error: readError } = await supabase
     .from("leads")
     .select("*")
     .eq("business_id", business.id)
     .order("created_time", { ascending: false, nullsFirst: false });
+  if (readError) return serverError("leads.sync", readError, "Could not reload saved leads. Your existing enquiries are still available.");
 
   await logEvent({
     businessId: business.id,
     action: "leads.sync",
     entityType: "lead",
-    reason: `Synced ${rows.length} lead(s) from ${forms.length} form(s)`,
-    details: { forms: forms.length, fetched: rows.length },
+    reason: `Imported ${imported} new lead(s); ${failedForms.length} form(s) failed`,
+    details: { forms: forms.length, fetched: rows.length, imported, failedForms: failedForms.length },
   });
 
-  return NextResponse.json({ leads: (fresh ?? []) as Lead[], imported: rows.length });
+  return NextResponse.json({ leads: (fresh ?? []) as Lead[], imported, failedForms });
 }

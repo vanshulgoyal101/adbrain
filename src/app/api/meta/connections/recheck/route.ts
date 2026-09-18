@@ -1,3 +1,4 @@
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   ConnectionAccessError,
@@ -8,8 +9,10 @@ import {
 
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest) {
-  const requestId = crypto.randomUUID();
+export const POST = observeRoute("/api/meta/connections/recheck", "POST", handlePOST);
+
+async function handlePOST(request: NextRequest) {
+  const requestId = currentRequestId();
   const body = await request.json().catch(() => null) as {
     businessId?: unknown;
     expectedGeneration?: unknown;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Trash2, Upload } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -40,10 +41,12 @@ export function BrandAssets({
   initialAssets: BrandAsset[];
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const [assets, setAssets] = useState<BrandAsset[]>(initialAssets);
   const [type, setType] = useState<BrandAssetType>("logo");
   const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -94,46 +97,68 @@ export function BrandAssets({
         .select("*")
         .single();
       if (insErr || !row) {
-        setError(insErr?.message ?? "Could not save the asset.");
+        const { error: cleanupError } = await supabase.storage.from(BUCKET).remove([path]);
+        setError(cleanupError ? "Could not save the asset or clean up its uploaded file. Contact support before retrying." : insErr?.message ?? "Could not save the asset.");
         return;
-      }
-
-      // A logo doubles as the brand's logo_url.
-      if (type === "logo") {
-        await supabase
-          .from("businesses")
-          .update({ logo_url: url })
-          .eq("id", businessId);
       }
 
       setAssets((prev) => [row, ...prev]);
       setNotes("");
       setFileName(null);
       if (fileRef.current) fileRef.current.value = "";
+      if (type === "logo") {
+        const { data: updated, error: logoError } = await supabase
+          .from("businesses")
+          .update({ logo_url: url })
+          .eq("id", businessId)
+          .select("id")
+          .maybeSingle();
+        if (logoError || !updated) setError("Asset saved, but the brand logo could not be updated. Set the logo URL in Brand Brain before generating ads.");
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setUploading(false);
+      router.refresh();
     }
   }
 
   async function remove(asset: BrandAsset) {
+    if (uploading || deleting) return;
     if (!window.confirm("Delete this asset?")) return;
     setError(null);
-    const path = decodeURIComponent(asset.url.split(`/${BUCKET}/`)[1] ?? "");
+    setDeleting(true);
     try {
-      if (path) await supabase.storage.from(BUCKET).remove([path]);
-      const { error: delErr } = await supabase
+      const prefix = `/storage/v1/object/public/${BUCKET}/`;
+      const pathname = new URL(asset.url).pathname;
+      const path = pathname.startsWith(prefix) ? decodeURIComponent(pathname.slice(prefix.length)) : "";
+      const { error: logoError } = await supabase.from("businesses")
+        .update({ logo_url: null }).eq("id", businessId).eq("logo_url", asset.url);
+      if (logoError) {
+        setError("Could not clear the brand logo reference. The asset has not been deleted.");
+        return;
+      }
+      const { data: deleted, error: delErr } = await supabase
         .from("brand_assets")
         .delete()
-        .eq("id", asset.id);
-      if (delErr) {
-        setError(delErr.message);
+        .eq("id", asset.id)
+        .eq("business_id", businessId)
+        .select("id")
+        .maybeSingle();
+      if (delErr || !deleted) {
+        setError(delErr?.message ?? "Asset not found or no longer accessible.");
         return;
       }
       setAssets((prev) => prev.filter((a) => a.id !== asset.id));
+      if (path.startsWith(`${businessId}/`)) {
+        const { error: storageError } = await supabase.storage.from(BUCKET).remove([path]);
+        if (storageError) setError("Asset removed from the library, but its stored file could not be deleted. Contact support for cleanup.");
+      }
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setDeleting(false);
+      router.refresh();
     }
   }
 
@@ -180,7 +205,7 @@ export function BrandAssets({
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
                 className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
               />
-              <Button type="submit" disabled={uploading}>
+              <Button type="submit" disabled={uploading || deleting}>
                 {uploading ? <Spinner /> : <Upload className="h-4 w-4" />}
                 Upload
               </Button>
@@ -217,6 +242,7 @@ export function BrandAssets({
                 <button
                   type="button"
                   onClick={() => remove(a)}
+                  disabled={uploading || deleting}
                   aria-label="Delete asset"
                   className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
                 >

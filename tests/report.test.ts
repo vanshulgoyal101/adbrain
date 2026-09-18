@@ -60,4 +60,29 @@ describe("buildPerformanceReport", () => {
     expect(md).toContain("Campaigns: 0 (0 with delivery)");
     expect(md).toContain("Blended cost per lead: —");
   });
+
+  it("keeps campaign names and multiline fields inside a single table row", () => {
+    const md = buildPerformanceReport({
+      businessName: "Solaride\n## Fake heading",
+      generatedAt,
+      rows: [row({ name: "SOLARIDE | CHD-PKL | Lead forms", angles: ["Cost | savings"], area: "Chandigarh\r\nPanchkula" })],
+    });
+    expect(md).toContain("| SOLARIDE \\| CHD-PKL \\| Lead forms | Cost \\| savings | Chandigarh Panchkula |");
+    expect(md.split("\n").filter(line => line.startsWith("|"))).toHaveLength(3);
+    expect(md).not.toContain("\n## Fake heading");
+  });
+
+  it("escapes HTML and formatting in report text", () => {
+    const md = buildPerformanceReport({ businessName: "<b>Brand</b>", generatedAt, rows: [row({ name: "**Winner**", angles: ["[Offer](https://example.test)"], leads: 1, cpl: 20, spend: 20 })] });
+    expect(md).toContain("&lt;b&gt;Brand&lt;/b&gt;");
+    expect(md).toContain('**Best so far:** "\\*\\*Winner\\*\\*"');
+    expect(md).toContain("\\[Offer\\](https://example.test)");
+  });
+
+  it("counts impressions and clicks as delivery without inventing a lead winner", () => {
+    const md = buildPerformanceReport({ businessName: "Solaride", generatedAt, rows: [row({ impressions: 100 }), row({ clicks: 1 }), row({ spend: 50 })] });
+    expect(md).toContain("Campaigns: 3 (3 with delivery)");
+    expect(md).toContain("Total spend: ₹50");
+    expect(md).not.toContain("Best so far");
+  });
 });

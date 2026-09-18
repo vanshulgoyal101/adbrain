@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   requireScheduledBusiness: vi.fn(),
   withMetaConnection: vi.fn(),
   updateCampaignStatus: vi.fn(),
+  failedTable: "",
+  updateError: null as { message: string } | null,
 }));
 
 const boundCampaign = {
@@ -44,15 +46,15 @@ function configureAdmin(campaigns: Record<string, unknown>[]) {
     }
     if (table === "campaigns") {
       return {
-        select: () => ({ eq: async () => ({ data: campaigns }) }),
-        update: () => ({ eq: async () => ({ error: null }) }),
+        select: () => ({ eq: async () => ({ data: campaigns, error: mocks.failedTable === table ? { message: "private database failure" } : null }) }),
+        update: () => ({ eq: async () => ({ error: mocks.updateError }) }),
       };
     }
     if (table === "campaign_results") {
       return {
         select: () => ({
           in: () => ({
-            order: async () => ({ data: [{ campaign_id: "campaign-1", spend: 7000, fetched_at: "2026-09-07T00:00:00Z" }] }),
+            order: async () => ({ data: [{ campaign_id: "campaign-1", spend: 7000, fetched_at: "2026-09-07T00:00:00Z" }], error: mocks.failedTable === table ? { message: "private database failure" } : null }),
           }),
         }),
       };
@@ -63,6 +65,8 @@ function configureAdmin(campaigns: Record<string, unknown>[]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.failedTable = "";
+  mocks.updateError = null;
   mocks.requireScheduledBusiness.mockResolvedValue({ businessId: "business-1", userId: "system" });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
     execute({ updateCampaignStatus: mocks.updateCampaignStatus }, {
@@ -114,8 +118,26 @@ describe("scheduled spend binding boundary", () => {
       headers: { authorization: "Bearer cron-secret" },
     }));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(503);
     expect(mocks.withMetaConnection).not.toHaveBeenCalled();
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["campaigns", "campaign_results"])("reports an incomplete sweep when %s cannot be read", async (table) => {
+    mocks.failedTable = table;
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ ok: false, swept: [] });
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a confirmed local pause when persistence fails", async () => {
+    mocks.updateError = { message: "private database failure" };
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ ok: false, swept: [] });
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledOnce();
   });
 });

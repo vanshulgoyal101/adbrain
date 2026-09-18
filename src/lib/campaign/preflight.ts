@@ -8,6 +8,8 @@ export interface PreflightCreative {
   approved: boolean;
   imageUrl: string | null;
   headline: string | null;
+  primaryText?: string | null;
+  cta?: string | null;
 }
 
 export interface PreflightForm {
@@ -23,6 +25,8 @@ export interface PreflightConnection {
 }
 
 export interface PreflightGeo {
+  location?: ReviewDTO["resolvedLocation"];
+  excludedLocation?: ReviewDTO["resolvedExcludedLocation"];
   resolvedAreaLabel: string | null;
   unresolvedNames: string[];
   explicitlyNationwide: boolean;
@@ -55,12 +59,15 @@ export type ReviewFreshnessResult =
     };
 
 export interface CanonicalReviewPayload {
+  resolvedLocation?: ReviewDTO["resolvedLocation"];
+  resolvedExcludedLocation?: ReviewDTO["resolvedExcludedLocation"];
   businessId: string;
   draftId: string;
   draftVersion: number;
   connectionGeneration: number | null;
   selected: SelectedAssets | null;
   creativeIds: string[];
+  creatives: ReturnType<typeof buildCreativeReviewPayload>;
   leadFormId: string | null;
   dailyBudgetRupees: number;
   abTest: boolean;
@@ -99,13 +106,26 @@ export function buildCanonicalReviewPayload(
     connectionGeneration: input.connection?.generation ?? null,
     selected: input.connection?.selected ?? null,
     creativeIds: [...input.draft.creativeIds].sort(),
+    creatives: buildCreativeReviewPayload(input.creatives),
     leadFormId: input.draft.leadFormId,
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
     targeting: input.draft.targeting,
     resolvedAreaLabel: input.geo.resolvedAreaLabel,
-    ...(input.geo.audienceInterests ? { audienceInterests: input.geo.audienceInterests } : {}),
+    ...(input.geo.location ? { resolvedLocation: input.geo.location } : {}),
+    ...(input.geo.excludedLocation ? { resolvedExcludedLocation: input.geo.excludedLocation } : {}),
+    ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
   };
+}
+
+export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
+  return [...creatives].sort((left, right) => left.id.localeCompare(right.id)).map(creative => ({
+    id: creative.id,
+    imageUrl: creative.imageUrl,
+    headline: creative.headline,
+    primaryText: creative.primaryText ?? "",
+    cta: creative.cta ?? null,
+  }));
 }
 
 export function runPreflight(input: PreflightInput): ReviewDTO {
@@ -122,6 +142,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
 
   if (
+    draft.creativeIds.length === 0 ||
+    new Set(draft.creativeIds).size !== draft.creativeIds.length ||
+    new Set(input.creatives.map((creative) => creative.id)).size !== input.creatives.length ||
     input.creatives.length !== draft.creativeIds.length ||
     input.creatives.some(
       (creative) =>
@@ -160,6 +183,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const perAdSetDailyBudgetRupees = draft.dailyBudgetRupees;
   const totalDailyBudgetRupees = effectiveDailyBudget(perAdSetDailyBudgetRupees, adSetCount);
   const payload = buildCanonicalReviewPayload(input);
+  const creativeHash = input.hash(JSON.stringify(buildCreativeReviewPayload(input.creatives)));
   const planHash = blockers.length ? null : input.hash(canonicalJson(payload));
 
   return {
@@ -169,12 +193,15 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     canCreatePaused: blockers.length === 0,
     blockers,
     planHash,
+    creativeHash,
     currency: "INR",
     perAdSetDailyBudgetRupees,
     adSetCount,
     totalDailyBudgetRupees,
     resolvedAreaLabel: input.geo.resolvedAreaLabel,
     selected: input.connection?.selected ?? null,
+    ...(input.geo.location ? { resolvedLocation: input.geo.location } : {}),
+    ...(input.geo.excludedLocation ? { resolvedExcludedLocation: input.geo.excludedLocation } : {}),
     ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
   };
 }

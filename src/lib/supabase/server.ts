@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/types";
+import { observeIdentity } from "@/lib/observability/context";
 
 /**
  * Supabase client for Server Components, Server Actions, and Route Handlers.
@@ -9,7 +10,7 @@ import type { Database } from "@/lib/types";
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient<Database>(
+  const client = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -30,4 +31,11 @@ export async function createClient() {
       },
     },
   );
+  const getUser = client.auth.getUser.bind(client.auth);
+  client.auth.getUser = async (...args: Parameters<typeof getUser>) => {
+    const result = await getUser(...args);
+    observeIdentity(result.error ? null : result.data.user?.id ?? null);
+    return result;
+  };
+  return client;
 }

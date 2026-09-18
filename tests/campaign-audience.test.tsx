@@ -23,8 +23,8 @@ const recommended: DraftInput["targeting"] = {
 const selected = { adAccountId: "act_1", accountName: "Solar account", pageId: "page_1", pageName: "Solar Page", currency: "INR", timezoneName: "Asia/Kolkata", metaBusinessId: null };
 let saved: DraftDTO;
 
-function view() {
-  return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={false} adAccountId="" />);
+function view(metaReady = false) {
+  return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
 }
 
 beforeEach(() => {
@@ -47,6 +47,41 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/campaigns/plan"
     ? { ready: true, targeting: recommended }
     : { forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] })));
+});
+
+describe("campaign sync feedback", () => {
+  it("keeps skipped counts across pages and clears stale continuation warnings", async () => {
+    const sync = vi.fn()
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "next/page", skipped: 2 }))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 1 }))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 0 }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    expect(await screen.findByText(/More campaigns are available/)).toHaveTextContent("2 campaign(s) could not be imported");
+    fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
+    expect(await screen.findByText(/Campaign sync completed/)).toHaveTextContent("3 campaign(s) could not be imported");
+    expect(sync).toHaveBeenNthCalledWith(2, "/api/campaigns/sync?after=next%2Fpage");
+    expect(screen.queryByText(/More campaigns are available/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
+    await waitFor(() => expect(screen.getByText("Campaign sync completed.")).toBeInTheDocument());
+    expect(screen.queryByText(/could not be imported/)).not.toBeInTheDocument();
+  });
+
+  it("reports a malformed success response and retries the same page", async () => {
+    const sync = vi.fn()
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "next-page" }))
+      .mockResolvedValueOnce(Response.json({}))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    await screen.findByText(/More campaigns are available/);
+    fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
+    expect(await screen.findByText("Sync failed. Please try again.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
+    await screen.findByText("Campaign sync completed.");
+    expect(sync).toHaveBeenNthCalledWith(3, "/api/campaigns/sync?after=next-page");
+    expect(screen.queryByText("Sync failed. Please try again.")).not.toBeInTheDocument();
+  });
 });
 
 describe("campaign audience workflow", () => {

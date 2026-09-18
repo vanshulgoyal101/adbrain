@@ -15,6 +15,7 @@ import {
   type SpendLimits,
 } from "@/lib/campaign/spend";
 import { createClient } from "@/lib/supabase/server";
+import { eventContext, observeIdentity } from "@/lib/observability/context";
 import type {
   AdInstruction,
   AuditLog,
@@ -55,6 +56,8 @@ export async function getBusinesses(): Promise<Business[]> {
 /** The user's first business (v1 is single-business per user). */
 export async function getPrimaryBusiness(): Promise<Business | null> {
   const businesses = await getBusinesses();
+  const userId = eventContext.getStore()?.userId;
+  if (userId && businesses[0]?.owner_id === userId) observeIdentity(userId, businesses[0].id);
   return businesses[0] ?? null;
 }
 
@@ -109,11 +112,12 @@ export async function getApprovedCreatives(
 /** Campaigns for a business, newest first. */
 export async function getCampaigns(businessId: string): Promise<Campaign[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("campaigns")
     .select("*")
     .eq("business_id", businessId)
     .order("created_at", { ascending: false });
+  if (error) throw new Error("Campaigns could not be loaded.");
   return data ?? [];
 }
 
@@ -123,11 +127,12 @@ export async function getLatestResults(
 ): Promise<Record<string, CampaignResult>> {
   if (!campaignIds.length) return {};
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("campaign_results")
     .select("*")
     .in("campaign_id", campaignIds)
     .order("fetched_at", { ascending: false });
+  if (error) throw new Error("Campaign spend could not be loaded.");
   const map: Record<string, CampaignResult> = {};
   for (const row of data ?? []) {
     if (!map[row.campaign_id]) map[row.campaign_id] = row;
@@ -138,11 +143,12 @@ export async function getLatestResults(
 /** A business's spend guardrail settings (defaults when none saved). */
 export async function getSpendLimits(businessId: string): Promise<SpendLimits> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("spend_limits")
     .select("weekly_cap_rupees, alert_pct, auto_pause")
     .eq("business_id", businessId)
     .maybeSingle();
+  if (error) throw new Error("Spend limits could not be loaded.");
   if (!data) return { ...DEFAULT_SPEND_LIMITS };
   return {
     weeklyCapRupees: data.weekly_cap_rupees,

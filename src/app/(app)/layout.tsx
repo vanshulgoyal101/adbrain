@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { ProductTelemetry } from "@/components/product-telemetry";
 import { getPrimaryBusiness, getUser } from "@/lib/supabase/queries";
 
 export const metadata = {
@@ -14,5 +15,5 @@ export default async function AppLayout({
   const user = await getUser();
   if (!user) redirect("/login");
   const business = await getPrimaryBusiness();
-  return <WorkspaceShell email={user.email} businessName={business?.name ?? null}>{children}</WorkspaceShell>;
+  return <WorkspaceShell email={user.email} businessName={business?.name ?? null}><ProductTelemetry />{children}</WorkspaceShell>;
 }

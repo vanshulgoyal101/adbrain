@@ -90,6 +90,17 @@ describe("buildLeadDigest", () => {
     expect(out).toContain("1 new lead in");
   });
 
+  it("includes an email-only lead's contact details", () => {
+    const out = buildLeadDigest([{ fullName: "Email contact", phone: null, email: "contact@example.com", city: null, createdTime: "2026-08-12T11:00:00Z" }], { businessName, now });
+    expect(out).toContain("contact@example.com");
+  });
+
+  it("does not prescribe a budget increase from absent synced leads", () => {
+    const out = buildLeadDigest([], { businessName, now });
+    expect(out).toContain("Sync your lead forms");
+    expect(out).not.toMatch(/budget|fresh creative/i);
+  });
+
   it("excludes leads outside the window", () => {
     const out = buildLeadDigest(
       [{ fullName: "Old", phone: null, city: null, createdTime: "2026-07-01T12:00:00Z" }],

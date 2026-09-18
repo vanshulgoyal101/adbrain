@@ -25,6 +25,7 @@ export function LeadInbox({
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState("");
   const [contactFilter, setContactFilter] = useState("all");
@@ -54,6 +55,7 @@ export function LeadInbox({
         leads.map((l) => ({
           fullName: l.full_name,
           phone: l.phone,
+          email: l.email,
           city: l.city,
           formName: l.form_name,
           createdTime: l.created_time,
@@ -67,11 +69,13 @@ export function LeadInbox({
     setSyncing(true);
     setError(null);
     setNotice(null);
+    setWarning(null);
     try {
       const res = await fetch("/api/leads/sync", { method: "POST" });
       const data = (await res.json()) as {
         leads?: Lead[];
         imported?: number;
+        failedForms?: { id: string; name: string }[];
         error?: string;
       };
       if (!res.ok || !Array.isArray(data.leads)) {
@@ -79,6 +83,10 @@ export function LeadInbox({
         return;
       }
       if (Array.isArray(data.leads)) setLeads(data.leads);
+      if (data.failedForms?.length) {
+        setWarning(`Sync incomplete. Could not read: ${data.failedForms.map((form) => form.name).join(", ")}. Check Meta lead access and retry. ${data.imported ?? 0} new leads imported.`);
+        return;
+      }
       setNotice(
         data.imported
           ? `Synced ${data.imported} lead${data.imported === 1 ? "" : "s"} from Meta.`
@@ -159,6 +167,7 @@ export function LeadInbox({
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}
+      {warning && <Alert variant="warning">{warning}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
 
       {leads.length > 0 && <div>
@@ -242,7 +251,7 @@ export function LeadInbox({
           <summary className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             <MessageCircle className="h-4 w-4 text-blue-600" />
             WhatsApp digest
-            <span className="ml-auto text-xs font-normal text-slate-500">All {leads.length} enquiries</span>
+            <span className="ml-auto text-xs font-normal text-slate-500">Last 7 days · Up to 10 contacts</span>
           </summary>
           <pre
             className="max-h-72 overflow-y-scroll whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700"

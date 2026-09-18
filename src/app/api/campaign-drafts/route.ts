@@ -1,3 +1,4 @@
+import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { draftInputSchema, draftDtoSchema } from "@/lib/campaign/connect-contracts";
 import {
@@ -27,8 +28,10 @@ function responseError(
   );
 }
 
-export async function GET(request: Request) {
-  const requestId = crypto.randomUUID();
+export const GET = observeRoute("/api/campaign-drafts", "GET", handleGET);
+
+async function handleGET(request: Request) {
+  const requestId = currentRequestId();
   const businessId = draftInputSchema.shape.businessId.safeParse(new URL(request.url).searchParams.get("businessId"));
   if (!businessId.success) return responseError(requestId, 400, "INVALID_INPUT", "A valid business is required.");
   try {
@@ -42,8 +45,10 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  const requestId = crypto.randomUUID();
+export const POST = observeRoute("/api/campaign-drafts", "POST", handlePOST);
+
+async function handlePOST(request: Request) {
+  const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return responseError(requestId, 401, "UNAUTHENTICATED", "Sign in required.");

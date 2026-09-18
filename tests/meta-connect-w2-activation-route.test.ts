@@ -114,6 +114,15 @@ describe("campaign activation generation fence", () => {
     expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused" });
   });
 
+  it.each(["getSpendLimits", "getCampaignSpend"] as const)("blocks activation when %s fails", async (query) => {
+    mocks[query].mockRejectedValueOnce(new Error("database unavailable"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(503);
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
   it("does not activate when fresh provider verification fails", async () => {
     mocks.verifyCampaignActivation.mockRejectedValueOnce(new Error("Provider data changed"));
     const { PATCH } = await import("@/app/api/campaigns/[id]/route");

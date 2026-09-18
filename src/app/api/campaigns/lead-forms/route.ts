@@ -1,3 +1,4 @@
+import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { friendlyMetaError } from "@/lib/meta/client";
 import {
@@ -10,7 +11,9 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export const GET = observeRoute("/api/campaigns/lead-forms", "GET", handleGET);
+
+async function handleGET() {
   const supabase = await createClient();
   const {
     data: { user },

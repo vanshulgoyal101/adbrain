@@ -183,11 +183,17 @@ export function verifyState(
   }
 }
 
-async function graphGet<T>(path: string, token: string): Promise<T> {
-  const url = token
-    ? `${GRAPH}/${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(token)}`
-    : `${GRAPH}/${path}`;
-  const res = await fetch(url);
+async function graphRequest<T>(url: URL, token: string): Promise<T> {
+  if (url.origin !== "https://graph.facebook.com" || url.username || url.password) {
+    throw new MetaError("Meta returned an invalid request URL.");
+  }
+  url.searchParams.delete("access_token");
+  const res = await fetch(url.toString(), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    redirect: "error",
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || (json as { error?: unknown }).error) {
     const err = (json as { error?: { message?: string } }).error;
@@ -196,20 +202,16 @@ async function graphGet<T>(path: string, token: string): Promise<T> {
   return json as T;
 }
 
+async function graphGet<T>(path: string, token: string): Promise<T> {
+  return graphRequest<T>(new URL(`${GRAPH}/${path}`), token);
+}
+
 async function graphGetNext<T>(next: string, token: string): Promise<T> {
   const url = new URL(next);
   if (url.origin !== "https://graph.facebook.com") {
     throw new MetaError("Meta returned an invalid paging URL.");
   }
-  url.searchParams.delete("access_token");
-  url.searchParams.set("access_token", token);
-  const res = await fetch(url);
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || (json as { error?: unknown }).error) {
-    const err = (json as { error?: { message?: string } }).error;
-    throw new MetaError(err?.message || `Meta HTTP ${res.status}`, res.status);
-  }
-  return json as T;
+  return graphRequest<T>(url, token);
 }
 
 const MAX_DISCOVERY_PAGES = 20;

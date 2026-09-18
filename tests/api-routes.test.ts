@@ -152,18 +152,25 @@ describe("POST /api/spend-limits", () => {
     expect((await POST(post({ alertPct: 101 }))).status).toBe(422);
   });
 
-  it("stores a valid cap and treats 0/blank as no cap", async () => {
+  it("stores a valid cap and only treats explicit null as no cap", async () => {
     signedIn();
     const { POST } = await import("@/app/api/spend-limits/route");
-    expect((await POST(post({ weeklyCapRupees: 7000, alertPct: 75 }))).status).toBe(200);
+    expect((await POST(post({ weeklyCapRupees: 7000, alertPct: 75, autoPause: false }))).status).toBe(200);
     expect(upsert.mock.calls[0][0]).toMatchObject({
       weekly_cap_rupees: 7000,
       alert_pct: 75,
       auto_pause: false,
     });
 
-    await POST(post({ weeklyCapRupees: 0 }));
+    await POST(post({ weeklyCapRupees: null, alertPct: 75, autoPause: false }));
     expect(upsert.mock.calls[1][0]).toMatchObject({ weekly_cap_rupees: null });
+  });
+
+  it.each([{}, { autoPause: false }, { weeklyCapRupees: 0, alertPct: 80, autoPause: true }, { weeklyCapRupees: 0.1, alertPct: 80, autoPause: true }])("does not silently remove a cap for %j", async (body) => {
+    signedIn();
+    const { POST } = await import("@/app/api/spend-limits/route");
+    expect((await POST(post(body))).status).toBe(422);
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it("returns 400 when the user has no business", async () => {
@@ -373,7 +380,19 @@ describe("POST /api/creatives/export", () => {
   it("404s when none of the ids resolve", async () => {
     signedIn();
     const { POST } = await import("@/app/api/creatives/export/route");
-    expect((await POST(post({ creativeIds: ["x"] }))).status).toBe(404);
+    expect((await POST(post({ creativeIds: ["11111111-1111-4111-8111-111111111111"] }))).status).toBe(404);
+  });
+  it.each([["x"], [12], [{}], Array(51).fill("11111111-1111-4111-8111-111111111111")])("rejects malformed export IDs: %j", async (creativeIds) => {
+    signedIn();
+    const { POST } = await import("@/app/api/creatives/export/route");
+    expect((await POST(post({ creativeIds }))).status).toBe(400);
+  });
+
+  it("honors the export rate limit", async () => {
+    signedIn();
+    rateLimitResponse.mockResolvedValue(new Response(null, { status: 429 }));
+    const { POST } = await import("@/app/api/creatives/export/route");
+    expect((await POST(post({ creativeIds: ["11111111-1111-4111-8111-111111111111"] }))).status).toBe(429);
   });
 });
 

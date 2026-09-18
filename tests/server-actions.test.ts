@@ -15,7 +15,6 @@ const del = vi.fn();
 const revalidatePath = vi.fn();
 const logEvent = vi.fn();
 
-/** Result of `await ...update().eq()` — studio actions await the eq() directly. */
 let updateResult: { error: { message: string } | null } = { error: null };
 
 vi.mock("next/cache", () => ({ revalidatePath }));
@@ -31,16 +30,14 @@ vi.mock("@/lib/supabase/server", () => ({
       },
       update: (payload: unknown) => {
         update(payload);
-        return {
-          // Chainable for `.eq().select().single()` and awaitable on its own.
-          eq: () => ({
-            select: () => ({ single }),
-            then: (resolve: (v: typeof updateResult) => unknown) =>
-              resolve(updateResult),
-          }),
+        const query = {
+          eq: () => query,
+          select: () => ({ single, maybeSingle: async () => ({ data: updateResult.error ? null : { business_id: "b1" }, ...updateResult }) }),
+          then: (resolve: (value: typeof updateResult) => unknown) => resolve(updateResult),
         };
+        return query;
       },
-      delete: () => ({ eq: del }),
+      delete: () => ({ eq: del, select: () => ({ eq: (column: string, value: string) => ({ maybeSingle: () => del(column, value) }) }) }),
     }),
   }),
 }));
@@ -52,7 +49,7 @@ beforeEach(() => {
   getUser.mockResolvedValue({ data: { user: { id: "u1", email: "o@x.com" } } });
   single.mockResolvedValue({ data: { id: "b1" }, error: null });
   maybeSingle.mockResolvedValue({ data: { business_id: "b1" } });
-  del.mockResolvedValue({ error: null });
+  del.mockResolvedValue({ data: { business_id: "b1" }, error: null });
   updateResult = { error: null };
 });
 

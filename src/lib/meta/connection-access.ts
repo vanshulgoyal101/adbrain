@@ -13,6 +13,8 @@ import {
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import { verifyMetaCapabilities } from "./capability-verification";
 import { canUseMetaConnect } from "./pilot-access";
+import { observeIdentity } from "@/lib/observability/context";
+import { recordProductEvent } from "@/lib/observability/logger";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -57,6 +59,7 @@ export async function requireOwnedBusiness(
     throw new ConnectionAccessError("FORBIDDEN", "Business access is not allowed.");
   }
 
+  observeIdentity(user.id, business.id);
   return {
     businessId: business.id,
     userId: user.id,
@@ -114,7 +117,18 @@ export async function withMetaConnection<Result>(
   },
   execute: (client: MetaClient, connection: ConnectionDTO) => Promise<Result>,
 ): Promise<Result> {
-  return withConnectionCredentials(context, options, (credentials, connection) => execute(new MetaClient(credentials), connection));
+  const started = performance.now();
+  try {
+    const result = await withConnectionCredentials(context, options, (credentials, connection) => execute(new MetaClient(credentials), connection));
+    recordProductEvent({ kind: "workflow", name: `meta.${options.purpose}`, outcome: "success", businessId: context.businessId,
+      durationMs: Math.round(performance.now() - started), attributes: { provider: "meta" } });
+    return result;
+  } catch (error) {
+    recordProductEvent({ kind: "workflow", name: `meta.${options.purpose}`, outcome: error instanceof ConnectionAccessError ? "rejected" : "failed",
+      businessId: isAuthorizedBusiness(context) ? context.businessId : undefined,
+      durationMs: Math.round(performance.now() - started), attributes: { provider: "meta", errorCode: error instanceof ConnectionAccessError ? error.code : "META_OPERATION_FAILED" } });
+    throw error;
+  }
 }
 
 async function withConnectionCredentials<Result>(

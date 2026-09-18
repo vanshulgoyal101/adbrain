@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import type { MetaConnection } from "@/lib/meta/credentials";
+
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+beforeEach(() => { refresh.mockClear(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const connection = (over: Partial<MetaConnection> = {}): MetaConnection => ({
   source: "none",
@@ -17,6 +22,42 @@ const connection = (over: Partial<MetaConnection> = {}): MetaConnection => ({
 });
 
 describe("MetaConnectionPanel", () => {
+  it.each(["server", "network", "invalid response"])("keeps the connection visible and allows retry after a %s failure", async failure => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const request = vi.fn();
+    if (failure === "network") request.mockRejectedValue(new Error("Network unavailable"));
+    else request.mockResolvedValue(new Response(JSON.stringify(failure === "server" ? { error: "Disconnect rejected" } : {}), { status: failure === "server" ? 503 : 200 }));
+    vi.stubGlobal("fetch", request);
+    render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: true })} oauthConfigured />);
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(failure === "network" ? "Network unavailable" : failure === "server" ? "Disconnect rejected" : "Could not disconnect");
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeEnabled();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledWith("/api/meta/disconnect", expect.objectContaining({ body: JSON.stringify({ businessId: "11111111-1111-4111-8111-111111111111" }) }));
+  });
+
+  it("disables actions until the disconnect succeeds and refreshes only on success", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let complete!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { complete = resolve; })));
+    render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: true })} oauthConfigured />);
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(screen.getByRole("button", { name: "Disconnecting..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Manage connection" })).toBeDisabled();
+    expect(refresh).not.toHaveBeenCalled();
+    complete(new Response(JSON.stringify({ ok: true })));
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+  });
+
+  it("does not disconnect when confirmation is cancelled", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth" })} oauthConfigured />);
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("offers a prominent business connection without technical controls", () => {
     render(
       <MetaConnectionPanel

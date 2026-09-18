@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   metaClientForBusiness: vi.fn(),
   draftRow: null as Record<string, unknown> | null,
   existingOperation: null as Record<string, unknown> | null,
+  creativeReads: 0,
+  changeCreativeBeforeExecution: false,
 }));
 
 const businessId = "b123b123-b123-4123-8123-b123b123b123";
@@ -111,9 +113,9 @@ function reviewPlanHash(): string {
       },
       canCreatePaused: true,
     },
-    creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "Headline" }],
+    creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "Headline", primaryText: "Message", cta: "Learn More" }],
     form: { id: "form-1", businessId, active: true },
-    geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false },
+    geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key: "jaipur", radius: 25, distance_unit: "kilometer" }] } },
     hash: (value) => { payload = value; return "0".repeat(64); },
   });
   return createHash("sha256").update(payload).digest("hex");
@@ -172,6 +174,8 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       if (table === "creatives") {
         const creativeData = { data: [{ id: creativeId, business_id: businessId, status: "approved", image_url: "https://example.com/ad.png", headline: "Headline", primary_text: "Message", cta: "Learn More" }], error: null };
+        mocks.creativeReads++;
+        if (mocks.changeCreativeBeforeExecution && mocks.creativeReads > 1) creativeData.data[0].primary_text = "Unreviewed copy";
         type CreativeResult = { data: typeof creativeData.data; error: null };
         type CreativeQuery = Promise<CreativeResult> & { eq: () => CreativeQuery };
         const creativeResult = (): CreativeQuery => ({
@@ -219,6 +223,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.draftRow = null;
   mocks.existingOperation = null;
+  mocks.creativeReads = 0;
+  mocks.changeCreativeBeforeExecution = false;
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId, userId });
   mocks.getConnectionStatus.mockResolvedValue({
@@ -242,11 +248,35 @@ beforeEach(() => {
     if (name === "claim_campaign_operation") return { data: [operationRow({ id: args.p_operation_id })], error: null };
     if (name === "checkpoint_campaign_operation") return { data: [operationRow()], error: null };
     if (name === "finish_campaign_operation") return { data: [operationSuccessRow()], error: null };
+    if (name === "fail_campaign_operation") return { data: [operationRow({ state: "failed", lease_until: null })], error: null };
     return { data: [], error: null };
   });
 });
 
 describe("durable campaign create route", () => {
+  it("accepts the exact hash returned by the preflight HTTP endpoint", async () => {
+    const { POST: review } = await import("@/app/api/campaigns/preflight/route");
+    const reviewResponse = await review(post({ businessId, draftId, draftVersion: 1 }));
+    const reviewed = await reviewResponse.json();
+    expect(reviewResponse.status).toBe(200);
+    expect(reviewed.data.canCreatePaused).toBe(true);
+    expect(reviewed.requestId).toBe(reviewResponse.headers.get("X-Request-Id"));
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewed.data.planHash, connectionGeneration, idempotencyKey }));
+    expect((await response.json()).data.state).toBe("succeeded");
+  });
+
+  it("rejects creative content changed after preflight without a Meta mutation", async () => {
+    mocks.changeCreativeBeforeExecution = true;
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect((await response.json()).data.state).toBe("failed");
+    expect(mocks.creativeReads).toBe(2);
+    expect(mocks.rpc).toHaveBeenCalledWith("fail_campaign_operation", expect.any(Object));
+    expect(mocks.rpc).not.toHaveBeenCalledWith("checkpoint_campaign_operation", expect.any(Object));
+    expect(mocks.rpc).not.toHaveBeenCalledWith("finish_campaign_operation", expect.any(Object));
+  });
+
   it("claims, checkpoints, saves a bound paused campaign, and finishes", async () => {
     const { POST } = await import("@/app/api/campaigns/create/route");
     const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
