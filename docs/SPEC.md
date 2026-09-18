@@ -1,155 +1,68 @@
-# AdBrain — Implementation Spec
+# Product Specification
 
-> AI ad-creative + ad manager for local SMBs. Beachhead vertical: **solar**.
-> First tenant: **Solaride** (own account — dogfood + proof case).
+AdBrain helps a local business turn its real brand and offer into reviewed ad
+creative and controlled Meta lead campaigns. Solaride is a historical dogfood
+case, not a restriction to solar businesses or proof that generated ads outperform
+a baseline. Current behavior is specified in [Features](FEATURES.md), contracts in
+[API Reference](API_REFERENCE.md), and internals in [Architecture](ARCHITECTURE.md).
 
-## Product
+## Product Boundaries
 
-A solar business fills a "brand brain," types a goal → AI generates on-brand ad
-creatives (image + copy, multiple variants) → approved creatives launch into
-Meta **Advantage+** (Meta's ML owns targeting; we own creative + simplicity) →
-results return in plain language.
+The primary user is the owner of a local business who needs reusable brand context,
+usable creative, understandable targeting/budgets, and a way to see enquiries and
+results. The local business UUID is the tenancy boundary. Teams, agency roles and
+arbitrary workspace switching are not implemented merely because the database
+permits multiple owned businesses.
 
-**Moat:** brand brain + genuinely good creative + dead-simple UX + solar
-vertical + plain-language (WhatsApp) results. *Not* "we run ads" — that part is
-commodity, and Meta Advantage+ is the free competitor, so we ride it as our
-optimization engine rather than fighting it.
+AdBrain controls the preparation/review workflow; Meta controls ad review,
+delivery and billing. AI proposes copy and imagery; owners remain responsible
+for truth, rights, regulated claims, consent and commercial decisions.
 
-## Non-goals (v1)
+## Core Requirements
 
-- No custom targeting optimization — delegate to Advantage+.
-- No video/audio (images only; add later as models improve).
-- No Google Ads yet, no multi-customer onboarding yet.
-- Solar vertical only. Not a generic "run any business" tool.
+| Stage | User outcome | Required boundary |
+| --- | --- | --- |
+| Brand | Reusable facts, offers, instructions and media | Owner scope, validated fields, explicit save and public-media disclosure |
+| Create | A reviewed brief and distinguishable image/copy variants | Bounded questions, schema checks, paid-action consent, honest partial failure |
+| Review | Inspect, approve, regenerate or export work | Regeneration returns to draft; approval is not spending authorization |
+| Prepare | Durable manual/guided campaign intent | Versioned edits, explicit geography, approved creative and real lead form |
+| Connect | Select the intended account/Page | User consent, complete discovery, encrypted business-bound credentials |
+| Publish paused | Recoverable external object creation | Current preflight hash, generation fence, stable operation identity |
+| Activate | Understand and authorize delivery | Separate confirmation, verified capability/billing/binding/spend checks |
+| Learn | Genuine leads, stored metrics and plain-language interpretation | No fabricated results, transparent freshness and data limitations |
 
-## Tech stack
+The reviewed campaign path supports INR instant-form lead campaigns. Do not claim
+universal WhatsApp/call destinations, multi-currency launch, automated account
+provisioning, or an all-in-one CRM. Image export remains useful independently of
+Meta connection, but no ad format guarantees delivery or conversion.
 
-- **Frontend:** Next.js (App Router) + TypeScript + Tailwind.
-- **Backend:** Next.js server actions / route handlers.
-- **DB + Auth + Storage:** Supabase (Postgres, Auth, Storage).
-- **AI copy + brand analysis:** LLM provider (OpenAI/Anthropic) behind a
-  `lib/llm` wrapper.
-- **AI images:** image model behind a swappable `lib/imageGen` interface
-  (OpenAI `gpt-image` / Imagen / Flux via fal.ai).
-- **Ads:** Meta Marketing API via `facebook-nodejs-business-sdk` — usable now on
-  Solaride's own account.
-- **Google Ads / WhatsApp:** later phases.
+## Acceptance Principles
 
-## Data model (Postgres / Supabase, RLS on `owner_id = auth.uid()`)
+- Demonstrate a complete customer task with realistic populated and empty states,
+  keyboard interaction, mobile layouts, and actionable failure recovery.
+- Separate a local implementation from tested behavior, deployed behavior and
+  independently verified provider access.
+- Never turn a partial result, uncertain remote mutation or unavailable quota
+  check into a success claim.
+- Keep identity, authorization, creative approval and financial consent separate.
+- Measure quality, latency, cost and conversion with attributable evidence;
+  avoid fixed performance promises based on model choice or a single demo.
+- Preserve existing work and remote recovery evidence across navigation and retries.
 
-```
-profiles         (id=auth uid, email, created_at)
-businesses       (id, owner_id, name, vertical='solar', website, description,
-                  brand_voice, primary_color, secondary_color, font,
-                  languages[], locations[], target_audience, usps[], offers[],
-                  logo_url, created_at)
-brand_assets     (id, business_id, type['logo'|'product_photo'|'past_ad'],
-                  url, notes, created_at)
-meta_credentials (id, business_id, ad_account_id, page_id, access_token,
-                  token_type['system_user'|'oauth'], created_at)
-creatives        (id, business_id, brief, angle, image_url, headline,
-                  primary_text, cta, variant_group, status['draft'|'approved'],
-                  created_at)
-campaigns        (id, business_id, objective, daily_budget, status,
-                  meta_campaign_id, creative_ids[], launched_at)
-campaign_results (id, campaign_id, impressions, clicks, leads, spend, cpl,
-                  fetched_at)
-```
+## Explicit Non-Goals Today
 
-## Meta API access setup (parallel with the build)
+No in-product billing, team roles, Google Ads integration, video generation,
+autonomous winner scaling, scheduled activation, instant lead notifications,
+automatic WhatsApp messaging, durable queued creative workers, or general
+multi-key token rotation. These require separate product/security/operating design.
+See [Roadmap](ROADMAP.md) for priorities rather than treating this list as a promise.
 
-For Solaride's own account — **no App Review needed**:
+## Design Records
 
-1. Create a **Business-type app** at developers.facebook.com; add the
-   **Marketing API** product.
-2. **Business Settings → System Users** → create a System User → assign
-   Solaride's **ad account** and **Page** → generate a **long-lived token** with
-   `ads_management`, `ads_read`, `business_management`.
-3. Store token + `ad_account_id` + `page_id` in `meta_credentials`
-   (token_type `system_user`).
-4. Start **Meta Business Verification** now (background; needed only for the
-   multi-customer phase).
-
-### Env vars (never hardcode)
-
-```
-SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-LLM_API_KEY
-IMAGE_API_KEY
-META_APP_ID, META_APP_SECRET
-META_SYSTEM_USER_TOKEN        # Solaride, single-tenant, seeded into meta_credentials
-META_AD_ACCOUNT_ID, META_PAGE_ID
-```
-
-## Phases
-
-### Phase 0 — Brand Brain + Creative Studio (the heart)
-
-1. Auth & onboarding (Supabase Auth).
-2. **Brand Brain:** business profile CRUD; asset upload (logo/product photos/
-   past ads) → Storage; **"autofill from website"** (scrape URL → LLM extracts
-   voice/USPs/colors/description).
-3. **Creative Studio:** brief → generate **3–5 complete ad variants** (image +
-   headline + primary text + CTA + angle) using brand brain + **solar template
-   library**; regenerate/edit; approve.
-4. **Fallback export:** download an "ad pack" (images + copy) for manual launch
-   — kept as a safety net.
-
-**Acceptance:** from a filled brand brain + one brief, ≥3 on-brand solar ad
-variants in <60s; approve/regenerate works.
-
-### Phase 1 — Live Meta launch on Solaride
-
-5. Read Solaride's `meta_credentials`; create an **Advantage+** campaign
-   (objective: Leads) with approved creatives + daily budget via Marketing API;
-   store `meta_campaign_id`.
-6. **Results:** pull insights (impressions, clicks, leads, spend, CPL) →
-   `campaign_results` → **plain-language summary**
-   ("14 leads at ₹19 each; 'festive offer' won").
-7. **Validation gate:** run real campaigns on Solaride and compare CPL/leads
-   against the current ₹20K/mo baseline. *If AI creatives don't beat the current
-   ads, stop and rethink before going further.*
-
-### Phase 2 — Multi-customer (needs the reviews)
-
-8. **Meta App Review** for Advanced Access + **Facebook Login for Business**
-   OAuth so external customers connect their own ad accounts (token_type
-   `oauth`); multi-tenant token handling.
-9. **Google Ads:** create MCC, apply for **Basic Access**, add Google
-   integration.
-10. **WhatsApp result digests**, **lead inbox**, and the **learning loop** (seed
-    new creatives from the winning one).
-
-## Build order for the agent
-
-1. Scaffold Next.js + Tailwind + Supabase + auth.
-2. `db/schema.sql` (tables + RLS) and apply; seed Solaride's `meta_credentials`.
-3. Brand Brain (CRUD + assets + website autofill).
-4. **Creative Studio** (LLM copy + image gen + variants + approve). ← most
-   effort; creative quality is do-or-die.
-5. Meta launch (Advantage+) + results + plain-language summary, tested live on
-   Solaride.
-6. Dashboard polish.
-7. *(Phase 2)* App Review + OAuth multi-tenant, Google, WhatsApp, learning loop.
-
-## Suggested repo structure
-
-```
-/app            # Next.js routes (dashboard, brand, studio, campaigns)
-/lib/supabase   # client + RLS-aware queries
-/lib/llm        # copy generation + website→brand extraction
-/lib/imageGen   # provider-abstracted image generation
-/lib/meta       # Marketing API wrapper
-/lib/templates  # solar creative templates/prompts
-/components
-/db/schema.sql  # tables + RLS policies
-```
-
-## Access-review timeline (background tasks, do not block the build)
-
-- **Meta own-account (Solaride):** available now — system-user token, Standard
-  Access, no review.
-- **Meta Business Verification:** start now; days–weeks; needed for Phase 2.
-- **Meta App Review (Advanced Access):** needed for Phase 2 (external accounts).
-- **Google Basic Access:** apply via MCC/API Center; days–weeks; needed for
-  Google integration only.
+The [creative plan](CREATIVE-GENERATION-PLAN.md),
+[Meta connection plan](META-INSTANT-CONNECT-PLAN.md), and
+[product design plan](PRODUCT-DESIGN-ROADMAP.md) explain decisions and historical
+acceptance criteria. Earlier solar-only architecture, plaintext credential shapes,
+global-token fallback, guessed SDK/provider choices and approval timelines are not
+current implementation instructions. Use [Data Model](DATA_MODEL.md) and
+[Configuration](CONFIGURATION.md) for the actual persistence and integration model.

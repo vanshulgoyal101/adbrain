@@ -1,292 +1,224 @@
-# AdBrain — Features (living document)
+# Features and Workflows
 
-> The single source of truth for **what exists** and **what's proposed** in AdBrain.
-> Update this whenever a feature ships or a new idea is worth tracking.
-> For the **prioritized "what next, and why"** backlog, see [ROADMAP.md](./ROADMAP.md).
->
-> **Legend:** ✅ Built · 🚧 In progress · 📋 Proposed · 🔒 Blocked (needs access/prereq)
->
-> _Last updated: 2026-09-05_
+Current source behavior, reviewed 2026-09-18. This guide replaces the older mixed
+inventory of shipped features and proposals. Deployment evidence lives in
+[release receipts](releases/) and [QA records](qa/); priorities belong in
+[Roadmap](ROADMAP.md). Start at [the documentation index](README.md).
 
-## Product experience program
+## Product Model
 
-### Workflow reliability audit (local dev, 2026-09-18)
+A user owns a business. Most workspace pages select that user's oldest business
+as the primary business. The schema supports multiple business rows, but the UI
+is not an agency workspace, team-role system, or general business switcher.
+An application's business ID, Meta business ID, ad account ID, and Facebook Page
+ID are different identifiers. Never infer one from another.
 
-This pass fixes concrete incomplete behaviors across the existing workflows;
-it is not a claim that every platform feature or external provider is verified.
-These changes are local and have not been committed or deployed by this pass.
-
-| Area | Corrected behavior |
-| --- | --- |
-| Campaign planning | Rejects blank rationale instead of silently dropping interests; validates bounded, answerable, nonduplicate questions and exact repeated questions; propagates cancellation with a 45-second deadline; checks monthly quota and records returned model usage, including invalid responses |
-| Lead sync | Counts inserted rows rather than fetched duplicates; reports unreadable forms; fails if every form fails; database read failures no longer return a successful empty inbox |
-| Lead digest | Labels the actual seven-day/ten-contact scope, includes email contacts, and no longer recommends increasing spend merely because no leads were imported |
-| Studio and instructions | Success requires an affected row; instruction mutations are business-scoped; transport errors preserve editor content; approval changes invalidate campaign views |
-| Brand assets | Failed record saves attempt storage cleanup; failed logo assignment is visible; matching logo references are cleared before deletion; files are removed only after confirmed record deletion; refresh reconciles untouched logo fields without clobbering manual edits |
-| Brand autofill | Preserves edits made during extraction, discards results after a website change, bounds the request duration, and blocks saving while extraction is pending |
-| Spend guardrails | Requires complete settings; zero/fractional caps cannot silently disable limits; only explicit null removes the cap; unsaved edits clear the Saved indicator |
-| Asset reuse and ZIP export | Clipboard/download errors are visible; image extensions follow MIME type; HTML cannot download as an image; failed or incomplete creative selection lookups cannot silently produce a partial ZIP |
-
-Verification: focused mocked API/component regressions, lint and typecheck pass.
-Production compilation passed. Chromium checks at 1440/390px verified autofill
-edit preservation, zero-cap rejection with no write, and clipboard failure feedback,
-without horizontal overflow or page errors. Existing-account reads were real;
-AI responses and images were fixtures and browser writes were blocked. This is
-not real-provider or production-mutation verification. Temporary browser sessions
-and the validation server were closed.
-
-Final assembled workspace verification: 1,195 tests passed, one skipped across
-131 files; coverage 75.85% statements, 68.14% branches, 75.46% functions and
-78.27% lines. Production build passed with 53 static-generation entries.
-The earlier three authentication failures from concurrent login work were
-resolved before this final run; concurrent edits were preserved throughout.
-
-Remaining limits: monthly quota preflight is not an atomic reservation, usage
-persistence remains best-effort, storage and database changes are not one atomic
-transaction, and semantic rephrasings can evade exact repeated-question checks.
-No migrations, paid model calls, live ad mutations, credentials, or deployment
-changes were made. Existing legacy image-generation URLs were not invoked.
-
-### AI campaign audiences (local dev, 2026-09-18)
-
-Campaign planning now proposes explicit ages, a 17-80 km city radius, service
-areas, up to five commercial interest names, and a reviewable rationale using
-Brand Brain, approved creatives, instructions and available campaign results.
-The manual builder's AI modes call the planner before review; saving an
-incomplete draft does not call the model. Recommendations survive save/reopen
-and remain editable. Manual age/location choices are preserved.
-
-Preflight resolves interests through Meta search and requires NORMAL targeting
-option status. Resolved IDs are bound to the review hash and sent to every ad
-set, including age-test variants. Missing geography, unresolved interests,
-incomplete ages and unsupported city radii block creation instead of silently
-broadening delivery. Existing campaigns are not modified.
-
-The payload requests original audiences (`advantage_audience: 0`), all genders,
-and Meta's supported residents-and-recent-visitors location mode. Interest
-targeting is a signal, not verified ownership or purchase intent, and Meta may
-expand detailed targeting for lead optimization. AI recommendations are starting
-hypotheses, not a proven best audience. The planner rejects declared special
-categories; it is not an independent compliance classifier. Sensitive-trait
-inference is prohibited in the prompt. Restricted-category workflows, additional
-demographics, custom/lookalike audiences, and live provider verification remain
-outside this change. No migration is required; targeting lives in draft JSON.
-
-Verification: mocked unit/component workflows and 1440/390px Chromium checks;
-no paid AI calls, live Meta mutations, activation, or deployment.
-
-### Verified development changes (2026-09-16)
-
-These changes are implemented on `dev`, not yet promoted to production. See the
-[security and quality audit](qa/security-quality-audit-2026-09-16.md) for evidence,
-release requirements and limits.
-
-| Status | Feature | Contract |
+| Page | Job | Important boundary |
 | --- | --- | --- |
-| Built on dev | Public guide library | `/guides`, creative-size reference and Meta readiness checklist; static HTML, related links, per-page metadata and sitemap registration |
-| Built on dev | Shared outbound URL/media protection | Connection-time DNS and redirect checks; bounded text/images; compositor receives validated inline rasters |
-| Built on dev | Auth and settings hardening | Safe auth return paths, validated request types, safe error messages, sign-out failure/retry state |
-| Built on dev | Dependency and PostgreSQL CI gates | High-severity audit gate, fresh/upgrade DB execution and concurrency checks |
-| Migration required | Trusted usage and rate enforcement | Server-only writes/RPC; atomic shared limiter; all-row tenant-scoped quota aggregate; production fails closed if unavailable |
+| `/dashboard` | Next action, onboarding progress, activity, results | Uses stored state; not proof of live provider health |
+| `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
+| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation |
+| `/studio` | Generate, inspect, approve, regenerate, delete, export | Approval does not publish an ad |
+| `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
+| `/campaigns` | Draft, review, create paused, activate/pause, sync, report | Live Meta writes require verified binding and capability |
+| `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
+| `/settings` | Meta connection and spend guardrails | Disconnect does not pause running ads |
 
-Production already uses GPT Image 2.5 Flare through OpenRouter. Saved campaign
-drafts and durable Meta operations were released in September; real customer
-Meta consent remains externally unverified. Older dated tables below are historical
-inventory, not fresh release evidence.
+## Sign In
 
-The product-design plan is tracked in
-[PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). The current focus is
-making AdBrain feel like a coherent, trustworthy marketing workspace rather
-than a collection of AI features.
+Magic link, Google OAuth, and email/password use Supabase Auth. Provider setup and
+email delivery are external prerequisites. Pending states prevent competing form
+submissions; failures preserve the form and permit retry. Destinations must be
+safe local paths. The app has no built-in team invitation, self-service signup,
+password-reset, or subscription entitlement workflow.
 
-| Status | Workstream | Outcome |
-| --- | --- | --- |
-| 🚧 | Product shell and visual foundation | Shared tokens, typography, lifecycle navigation, page hierarchy, responsive grid, and mature feedback states |
-| 📋 | Home command center | Next-best-action, workflow statuses, activation progress, and business-oriented reporting |
-| 📋 | Brand Brain as a product asset | Sectioned editing, readiness, saved previews, and visible impact on generated ads |
-| 📋 | Creative review workspace | Canvas, inspector, platform previews, generation states, and explicit approval lifecycle |
-| 📋 | Launch confidence | Final campaign review, budget/targeting summary, paused-by-default safety, and plain-language results |
-| 📋 | Commercial maturity | Billing, support, activity history, accessibility, responsive polish, and product analytics |
+## Brand Brain
 
----
+Save business name, industry, website, description, voice, audience, languages,
+service areas, selling points, offers, brand colors/font/logo, and contact fields.
+The industry is free text, not a solar-only enum. The reusable fact record drives
+copy, image prompts, and campaign audience suggestions.
 
-## North Star & principles
+Website autofill fetches a public website and proposes extracted facts. It does
+not prove those claims are true or authorize scraping private pages. The UI
+preserves fields edited during extraction, discards a response when the website
+changes, and prevents save while extraction is pending. Review suggestions before
+saving. Network, validation, extraction, and storage failures are distinct from
+an empty brand.
 
-**North Star:** a non-technical local-business owner gets **more leads at a lower
-cost** with **near-zero effort** — fill the brand once, type a goal, approve,
-done. Every feature must move that number. The engine is **industry-agnostic**
-(each business sets its own `vertical`); Solaride (solar) is just one customer.
+Assets have types `logo`, `product_photo`, and `past_ad`. Uploading a logo and
+selecting it as the business logo are separate persistence steps. Storage and
+database writes are not one transaction: failed row creation attempts file
+cleanup; a failed logo assignment is visible; deletion clears matching logo
+references and confirms row deletion before file removal. Manual edits are not
+silently overwritten by a refresh.
 
-**What we deliberately DON'T build (so the product stays simple):**
-- Manual targeting micro-optimisation: AI proposes a reviewable starting audience; actual lead quality must validate it.
-- A full CRM / analytics suite — keep lead tracking **lightweight**; integrate, don't rebuild.
-- New ad channels (Google, etc.) before Meta is nailed.
-- Dashboards a busy owner won't read — results are **one plain-language line** (and WhatsApp), not charts.
+Instruction files have a title, Markdown body, and active flag. Active instructions
+are included by generation/planning call sites; an instruction is guidance to a
+model, not deterministic enforcement. Never put credentials or sensitive lead
+details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELINE.md).
 
-## Roadmap focus
+## Create and Review Creatives
 
-| Horizon | Bets |
-| --- | --- |
-| **Now** | Guided onboarding · Weekly WhatsApp results digest · Instant new-lead alerts |
-| **Next** | AI-vs-baseline benchmark · Auto-optimisation · Lead → revenue (ROI) · Festival campaign suggestions |
-| **Later** | Self-serve multi-customer · Agency / white-label · Video creatives · Google Ads |
+1. Enter a goal in Create. Brand-aware and seasonal starters are suggestions,
+   not an automatic campaign scheduler.
+2. The interviewer can ask up to three new decisions, or finish immediately when
+   saved facts suffice. Questions offer contextual choices or text input.
+3. Review and edit the complete brief. Changing it changes the generation input.
+4. Explicitly generate. Studio accepts 1-6 variants; Create's standard batch is
+   three. Portrait is the API default; square, story, and landscape also exist.
+5. Inspect each image and copy, then approve selected creatives. Human review is
+   required for factual claims, language quality, and visual correctness.
 
-## Recently shipped (2026-08-13)
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Ad-copy slop scanner (quality gate) | deterministic check (clichés, shouting, em-dash/exclaim overuse, word cap, banned claims) — `lib/creative/slopScan.ts`; wired into generation with a single auto-retry (`generateGuardedCopy`) |
-| ✅ | Creative-quality eval (LLM-as-judge) | offline harness scoring hand-labeled ad creatives vs gold (MAE ≤ 0.15) — `evals/creative/fixtures.jsonl` + `scripts/eval-creative.mjs` (`npm run eval:creative`) |
-| ✅ | CI pipeline + secret scanning | `.github/workflows/ci.yml` (lint · typecheck · test · build) + gitleaks (`.gitleaks.toml`) on every push/PR |
-| ✅ | Seasonal campaign suggestions | date-aware Ad Assistant chips (festivals/national days/shopping seasons for India) — `lib/seasonal.ts` |
-| ✅ | Onboarding checklist | dashboard "Get set up" steps (brand → create → approve → launch) from real state; hides when complete — `lib/onboarding.ts` |
-| ✅ | Spend-health signal | plain-language badge per campaign ("No leads yet" / "Cheap leads" / "On track" / "Pricey leads") from real results — `spendHealth()` in `lib/campaign/budget.ts` |
-| ✅ | Self-contained posters | poster overlay uses a drawn SVG checkmark (no runtime web-font fetch); Meta parsers are array-safe |
-| ✅ | Ad Assistant (guided chat) | `/create` tab: type a request → one-tap Q&A (options · "Surprise me" · "Let AI decide") → finished ad. `lib/creative/interview.ts` + `api/creatives/assistant` + `components/ad-assistant.tsx` |
-| ✅ | Industry-agnostic engine | universal `AD_ANGLES` + prompts driven by `brand.vertical`; Brand Brain has an Industry field |
-| ✅ | General marketing/SEO | rebranded to "AI ad creative for any local business" |
-| ✅ | Pause / resume campaigns | from the dashboard — `PATCH /api/campaigns/[id]` → Meta + local mirror + audit |
-| ✅ | Privacy & Terms pages | `/privacy`, `/terms` with metadata + WebPage/Breadcrumb JSON-LD |
-| ✅ | Per-user rate limiting | on generate/regenerate/plan/autofill (429 + Retry-After); Postgres-backed, cross-instance, in-memory fallback |
-| ✅ | SSRF redirect hardening | autofill re-validates every redirect hop (`fetchPublicUrlText`) |
-| ✅ | Dev-bypass prod guard | disabled unless `NODE_ENV !== production` |
-| 📋 | Token-column hardening (migration) | `db/migrations/001_harden_meta_credentials.sql` revokes client SELECT on `meta_credentials` + adds `meta_connection_status` RPC. **Precheck: switch `credentials.ts` reads to the admin client before applying** |
+Variants are saved independently. A partial batch returns saved creatives and
+failures rather than pretending every variant succeeded. A disconnected browser
+should check saved results using the same generation ID before starting another
+paid request. Browser recovery metadata is scoped to user/business in session
+storage; it is not cross-device durable generation idempotency.
 
-## 1. Auth & access
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Email magic-link sign-in | Supabase Auth |
-| ✅ | Google OAuth sign-in | via `/auth/callback` |
-| 📋 | Branded auth domain | keep sign-in on `adbrain.vanshul.com` instead of bouncing through `<ref>.supabase.co` (Pro custom domain, or self-hosted Google OAuth + `signInWithIdToken`) — see ROADMAP |
-| ✅ | Route guard | `src/proxy.ts` + `updateSession`; protects app routes |
-| ✅ | Offline developer login | `NEXT_PUBLIC_DEV_AUTH_BYPASS`; real session when backend up, cookie fallback offline |
-| 📋 | Team / multi-user per business | roles (owner/editor/viewer) |
-| ✅ | Connect Meta ad account (Facebook Login) | `/settings` → OAuth → pick account+page; DB-first creds. **Live use needs Meta App Review** |
+Regeneration uses the creative's saved language/format, updates that creative,
+and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
+change existing remote ads. Deleting a local creative is not a request to delete
+a Meta ad already created from it.
 
-## 2. Brand Brain
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Business profile CRUD | voice, USPs, colours, offers, locations, audience |
-| ✅ | Asset uploads | logo / product photos / past ads → Storage |
-| ✅ | Autofill from website | scrape + LLM extract; SSRF-guarded (`lib/security/ssrf.ts`) |
-| ✅ | Per-customer instruction files | Markdown, injected into every prompt |
-| 📋 | Brand voice fine-tuning | learn tone from approved creatives |
-| ✅ | Multi-language creatives (Hindi/Punjabi/Hinglish) | pick a language per generation in the Studio |
+ZIP export includes selected copy and available images. Inaccessible selections
+fail; unavailable/over-limit images can be omitted with a note and
+`X-Images-Skipped`. A successful ZIP response need not contain every image.
+The route does not require approved status even though review-first is the
+recommended workflow.
 
-## 3. Creative Studio
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Generate 3–6 ad variants | copy + image per marketing angle |
-| ✅ | Designed-poster compositing | logo lockup + headline + benefit checklist (✓) + contact/CTA bar drawn over the AI photo via `next/og` (Satori). `lib/creative/design.ts` (pure spec) + `render.tsx`. Brand-colour themed, 4:5 portrait default (square/story/landscape supported). `AD_DESIGN_OVERLAY` toggles it |
-| ✅ | Solar angle library | savings, subsidy, trust, urgency, etc. |
-| ✅ | Regenerate a single variant | with inline error surfacing |
-| ✅ | Approve / unapprove / delete | draft ↔ approved workflow |
-| ✅ | Image persistence to Storage | `lib/creative/persist.ts` (creatives bucket) |
-| ✅ | Ad-pack export (ZIP) | images + copy.txt |
-| ✅ | Assets library | browse/reuse/download all AI-generated images (`/assets`) |
-| 📋 | Video creatives | when models are good/cheap enough |
-| 📋 | Creative winner detection | promote the best-performing variant |
-| 📋 | Festival / seasonal campaign suggestions | ✅ shipped as date-aware Ad Assistant chips (`lib/seasonal.ts`); deeper in-planner suggestions still open |
-| 📋 | Language badge + regenerate-in-language | finish localisation (needs `creatives.language`) |
+## Connect Meta
 
-## 4. Campaigns & targeting
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Manual campaign builder | pick creatives + budget + targeting |
-| ✅ | Guided AI planner (Copilot-style Q&A) | structured questions with clickable options |
-| ✅ | Location typeahead (include & exclude) | Meta `adgeolocation`; cities/regions/countries |
-| ✅ | Radius + age controls | Meta min radius 17 km enforced |
-| ✅ | "Let AdBrain decide" per field | AI fills from brand + goal |
-| Built on dev | Residents and recent visitors | Meta supports `location_types: [home, recent]`; resident-only delivery is not promised |
-| ✅ | Budget helper | daily ₹ → "~X leads/week" + presets |
-| Built on dev | Reviewed audience launch (PAUSED) | explicit ages, geography and provider-resolved interests; zero spend until activated |
-| ✅ | Sync existing campaigns from Meta | manual button + auto-sync on page load |
-| ✅ | Delete a campaign | removes it from Meta + AdBrain (with confirm) |
-| ✅ | Results refresh + plain-language summary | insights → friendly sentence |
-| ✅ | Learning loop | past results (angle/area/CPL) feed the planner |
-| ✅ | AI picks ad type | instant form / Click-to-WhatsApp / Call, with fallback |
-| ✅ | Audience A/B (multiple ad sets) | opt-in age split into 2 ad sets ("Advanced") |
-| 🔒 | True A/B split tests | Meta Experiments API |
-| 📋 | Scheduled activation | launch at a chosen date/time |
-| 📋 | Auto-optimisation | pause losers, scale winners on CPL |
-| ✅ | Spend guardrails & alerts | weekly cap + block activation over cap + approaching/over banner + optional auto-pause at the cap (`lib/campaign/spend.ts`, `/settings`, `spend_limits`) |
-| 📋 | AI-vs-baseline benchmark | new AI ads vs the owner's previous ads (CPL lift) — the proof |
-| ✅ | Auto-sync on page load | silent sync when Campaigns opens; scheduled cron 📋 when hosted |
+Settings opens the shared connection flow. The owner authorizes Meta, discovery
+finds eligible account/Page pairs, and a verified selection is committed. Partial
+discovery must not auto-select. Existing selection replacement requires explicit
+confirmation. Account currency, permissions, billing, and restrictions can block
+individual capabilities after authentication succeeds.
 
-## 5. Leads
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Lead inbox | pulled from Meta instant forms, deduped |
-| ✅ | WhatsApp-style digest | copy-ready summary of recent leads |
-| 📋 | New-lead notifications | email / WhatsApp on arrival |
-| 📋 | Speed-to-lead alert | ping the owner within seconds — solar conversion is a speed game |
-| 📋 | Lead → deal → revenue (ROI) | mark won + value; show return, not just cost per lead |
-| 📋 | CRM / follow-up automation | statuses, reminders (lightweight, not a full CRM) |
+Capabilities are independent: read insights, read leads, create paused, activate.
+An `unknown` capability is not permission to proceed. Expired/revoked credentials
+require reconnect; other blockers may require action in Meta. Details are in
+[Meta Connection](META_CONNECT.md).
 
-## 6. Results & optimisation
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Campaign insights | impressions/clicks/leads/spend/CPL |
-| ✅ | Plain-language summaries | LLM, jargon-free |
-| ✅ | Performance context for planner | ranked past-campaign history |
-| ✅ | Markdown performance report export | download per business (`/api/campaigns/report`) |
-| 📋 | Weekly WhatsApp results digest | "14 leads at ₹19 each this week" — retention + the plain-language moat |
-| 📋 | Trends dashboard | CPL/leads over time |
+Disconnect revokes the app's stored binding; **it does not stop remote delivery**.
+Pause intended campaigns before disconnecting, or manage them in Meta afterward.
 
-## 7. Observability & security
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Append-only audit log | tamper-resistant; who/what/when/why |
-| ✅ | Dashboard activity + stats | recent events, creative counts |
-| ✅ | RLS on every table | `owns_business` |
-| ✅ | SSRF guard | blocks private/loopback/link-local hosts |
-| ✅ | Generic error responses | no internal detail leakage (`lib/api.ts`) |
-| ✅ | Input bounds on API routes | id caps, query length caps |
+## Prepare a Campaign
 
-## 8. AI infrastructure
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Provider-agnostic LLM rotation | Gemini / Groq / OpenRouter / Cerebras; production demo path uses OpenRouter Qwen |
-| ✅ | Multi-key rotation + cooldown | parks 429'd keys |
-| ✅ | JSON mode + robust parsing | fences/prose salvage |
-| ✅ | Token usage capture + accounting | per-provider spend, `usageSnapshot()`; creative generation also persists `llm_usage_events` per business |
-| ✅ | Response cache + single-flight | opt-in `{cache}`, zero-cost identical calls |
-| ✅ | Configurable Gemini thinking headroom | `GEMINI_THINKING_HEADROOM` (0 for paid non-thinking) |
-| ✅ | Provider-abstracted image gen | OpenRouter image generation with 1K/medium source settings and Pollinations fallback; final poster is composited and persisted |
-| ✅ | Detailed AI cost telemetry | Text/image events persist provider, model, tokens/cost, latency, dimensions, route, and fallback/cache metadata without raw prompts or image bytes |
-| ✅ | Meta launch boundary validation | Active lead-form validation, safe instant-form CTA mapping, URL validation, explicit destination failures, and customer-safe Graph API errors |
-| 📋 | Paid image provider | Evaluate fal.ai / OpenAI Images before charging customers; preserve timeout/fallback behaviour |
+Both manual and guided workflows produce a saved, editable draft. Drafts can be
+incomplete: zero budget, empty creative selection, and no lead form are allowed
+at save time. They cannot pass preflight in that state. Saving does not invoke
+AI; preparing AI-mode audience choices can.
 
-## 9. Marketing & SEO
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Rich landing page | hero, how-it-works, features, FAQ, footer |
-| ✅ | Full metadata + OG/Twitter | `metadataBase`, canonical, robots |
-| ✅ | JSON-LD | Organization, WebSite, SoftwareApplication, FAQPage |
-| ✅ | sitemap.xml / robots.txt / manifest | + dynamic OG image |
+Drafts expire seven days after creation, start at version 1, and are capped at
+50 active editable drafts. Updates require the expected version; edits in another
+tab produce a conflict rather than a silent overwrite. Updates do not extend the
+original expiry. Drafts tied to a creation operation have additional edit/delete
+restrictions.
 
-## 10. Platform & DX
-| Status | Feature | Notes |
-| --- | --- | --- |
-| ✅ | Next 16 App Router + TS + Tailwind v4 | |
-| ✅ | zod-validated env | `lib/env.ts` |
-| ✅ | Vitest suite (611 tests / 69 files) | pure core, API + server-action contracts, DB schema invariants, jsdom component + a11y tests; CI coverage ratchet |
-| ✅ | CI: lint + typecheck + test + build + gitleaks | `.github/workflows/ci.yml` on every push/PR |
-| ✅ | Live in production on `adbrain.vanshul.com` | Vercel + custom domain + prod env |
-| 📋 | Billing / subscription | Not required for the first validation demos; choose Razorpay for India-first INR/UPI or Stripe for international-first sales. Requires verified webhooks, entitlements, usage limits, cancellation, refunds, and support workflow. See [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md). |
-| 🔒 | Google Ads integration | needs MCC/Basic Access — Phase 2 |
+The planner uses brand, approved creatives, active instructions, and available
+performance history. It asks for missing facts rather than inventing provider
+IDs. Audience recommendations remain editable; manual choices are preserved.
+Current reviewed creation uses **instant-form lead campaigns**, not a supported
+general WhatsApp/call destination workflow just because lower-level code contains
+those concepts.
 
-## 11. Growth & business model
-| Status | Feature | Notes |
-| --- | --- | --- |
-| 📋 | Guided onboarding wizard | first brand → first creatives → first paused campaign in one flow (activation) |
-| 🔒 | Self-serve customer onboarding | needs multi-tenant OAuth (Phase 2) |
-| 📋 | Referrals | solar SMBs invite other SMBs |
-| 📋 | Agency / white-label | resellers manage many brands under one login |
-| 📋 | Pricing tiers + billing | monetisation once multi-customer |
+### Targeting and Budget
 
-## 12. Solar vertical depth
-| Status | Feature | Notes |
-| --- | --- | --- |
-| 📋 | Savings calculator in the funnel | qualify + raise lead intent (Solaride already has one) |
-| 📋 | Subsidy eligibility helper | PM Surya Ghar guidance — India solar-specific |
-| 📋 | Bill-based lead qualification | ask the monthly bill in the form → prioritise hot leads |
+- Ages must resolve to explicit bounds between 18 and 65, minimum no greater
+  than maximum; Meta's upper endpoint represents its supported 65+ range.
+- Include/exclude city, region, or country locations; city radii must be 17-80 km
+  at preflight. Draft schemas accept 5-80 km so a saved legacy/incomplete value
+  can be edited, not so an invalid radius can launch.
+- Up to five interest names and a nonempty rationale can be saved. Meta resolves
+  IDs and eligibility; unresolved interests block creation.
+- Missing geography does not silently broaden to nationwide. Nationwide must be
+  an explicit, reviewable choice.
+- Creation requires an INR account and a positive daily budget. API currency
+  values are whole rupees; the Meta adapter converts to minor units.
+- Optional age-split testing creates two ad sets. A 200-rupee daily input then
+  means 400 rupees/day total, not 200 split between them. It is not a randomized
+  Meta Experiments A/B test.
+- Lead estimates and interest recommendations are heuristics, not delivery or
+  conversion guarantees. Restricted-category support is not established by an
+  AI declaration check.
+
+### Review, Create, Activate
+
+Preflight validates ownership, approved creative content, active lead form,
+connection capability, INR currency, resolved targeting, and budget. Its hash
+binds the reviewed inputs, selected assets, resolved IDs, and creative content.
+Creation reruns preflight and rejects a stale draft, hash, or connection generation.
+
+The durable creation operation uses an idempotency key and checkpoints external
+IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
+`needs_reconciliation` state. A created campaign is paused. Activation requires a
+fresh confirmation digest, connection recheck, provider verification, and spend
+guardrail check. See [API Reference](API_REFERENCE.md) for payloads and states.
+
+Pause and delete verify account/Page binding too. Missing legacy binding requires
+reconciliation, not guessing. Meta writes and local mirrors are not atomic: a
+provider action can succeed while the subsequent database write fails. Keep the
+record and investigate; do not treat an HTTP failure as proof of no remote effect.
+
+## Sync, Results, and Leads
+
+Campaign sync verifies remote account/Page association, budgets, and supported
+statuses before importing. It handles one provider page per request; the UI asks
+for continuation and accumulates skipped counts. Unsupported/deleted/archived
+statuses are not imported as paused. A completed scan does not prune local rows
+for campaigns absent from Meta.
+
+Results refresh fetches insights, attempts to store them and produces a
+plain-language summary; it can also trigger spend-limit auto-pause. It is not a
+read-only diagnostic. A null stored result needs investigation. Reports
+are Markdown exports of stored performance, not a live refresh. They escape
+campaign names (including pipes/newlines), count impressions/clicks as delivery,
+and do not declare a lead winner when nobody has leads.
+
+Lead sync reads active Page forms, normalizes contact fields, and ignores duplicate
+`(business_id, meta_lead_id)` rows. `imported` counts new inserts, not fetched rows.
+Some unreadable forms produce a partial result with `failedForms`; all forms
+failing returns an error. Zero imports can mean duplicates or no leads, not a
+broken campaign. Existing duplicates are not updated by this sync strategy.
+
+The copy-ready digest summarizes the last seven days with at most ten contacts,
+including email where available. It is not a WhatsApp send, CRM, notification
+service, or revenue attribution system.
+
+## Spend Guardrails
+
+Settings accept a positive whole-rupee weekly cap or explicit `null` for no cap,
+an alert percentage from 1-100, and an auto-pause flag. Zero is invalid, not
+unlimited. Unsaved changes invalidate the Saved indicator.
+
+Activation compares projected weekly commitment against the cap; unavailable
+spend data blocks activation. Scheduled enforcement can pause bound active
+campaigns when the cap is reached. Stored insights may be stale and the configured
+job runs daily. These are application guardrails, not Meta account spending limits
+or guaranteed protection from overspend. Use provider-side limits as well.
+
+## Public Surface and Operations
+
+Landing/legal pages and `/guides` provide public metadata, structured data,
+sitemap, and social images. Workspace pages are authenticated and noindex; robots
+rules are indexing hints, not access control. No search-ranking guarantee follows
+from metadata correctness.
+
+Owner activity records, AI usage events, and structured product telemetry serve
+different purposes. See [Observability](OBSERVABILITY.md) for privacy, access, and
+best-effort persistence; do not call an owner-insertable audit log tamper-proof.
+
+## Known Limits
+
+- Public customer Meta consent/app review must be verified separately from code
+  and an operator's existing system-user connection.
+- Generation quota is a non-atomic preflight; telemetry can undercount failures.
+- Generation recovery is not durable job scheduling or exactly-once billing.
+- Database, Storage, and Meta do not share a transaction.
+- Remote campaign disappearance does not automatically delete local mirrors.
+- Billing/subscriptions, team roles, self-service agency management, Google Ads,
+  video generation, automated outreach, scheduled campaign activation, and general
+  winner-based budget optimisation remain outside current product workflows.
+- AI output validation is not independent factual, legal, or advertising-policy
+  certification. Review output and measure real lead quality.

@@ -1,113 +1,117 @@
-# 🚀 AdBrain Meta Tier 2 Approval - Quick Start Guide
+# Developer Quick Start
 
-## Status
-- ✅ App submission completed (Aug 22)
-- ❌ **Rejected**: Insufficient API call volume (Aug 24)
-- ⏳ **Action Required**: Generate 15 days of API traffic, then re-submit
+This is the installation guide. Historical Meta review preparation is not an
+installation prerequisite or a guarantee of approval. See the
+[documentation index](README.md) for product usage and deeper references.
 
-## Your Task (Next 15 Days)
+## Prerequisites
 
-### Option 1: Browser (Recommended - Most Reliable)
-**Time per day**: 5-10 minutes
+- Node.js 22.13 or newer on the Node 22 line, and npm. Earlier Node 22 releases
+  do not meet all current lint dependency engine requirements.
+- An isolated Supabase project with Auth, Postgres, and Storage.
+- Optional model credentials for AI; optional Meta credentials for connections.
+  Neither is needed for the mocked unit suite.
+- Local PostgreSQL binaries for database integration tests; see
+  [Testing](TESTING.md).
 
-Each day, simply:
-1. Go to https://adbrain.vanshul.com/login
-2. Login: `<REVIEWER_EMAIL>` / `<REVIEWER_PASSWORD>`
-3. Navigate to /settings
-4. Click "Sync Campaigns" 
-5. Create 1-2 test campaigns (optional but helps)
-6. Log out
+## Install and Configure
 
-That's it! Every action triggers Meta API calls behind the scenes.
+From the repository root:
 
-### Option 2: Automated Script
-**One-time setup**, then automatic daily execution
-
-```bash
-# Make executable
-chmod +x ~/Development/copilot/adbrain/scripts/daily-adbrain-test.sh
-
-# Test it
-~/Development/copilot/adbrain/scripts/daily-adbrain-test.sh
-
-# Add to crontab for automatic daily execution
-crontab -e
-
-# Add this line to run every day at noon:
-0 12 * * * ~/Development/copilot/adbrain/scripts/daily-adbrain-test.sh >> /tmp/adbrain-meta.log 2>&1
+```sh
+npm ci
+cp .env.example .env.local
 ```
 
-## Timeline
+Set these to an **isolated development project**, not production:
 
-| Period | Action | Expected Outcome |
-|--------|--------|------------------|
-| **Days 1-15** | Use app daily (5-10 min) | Meta logs your API calls |
-| **Day 16** | Log in once more | Ensure final day of activity recorded |
-| **Day 17+** | Open Meta App Dashboard | Check your API call history |
-| **Day 17** | Click "Request again" on Tier request | Meta re-scans your history |
-| **Days 17-22** | Wait for Meta review | Typically 1-7 days |
-| **By Day 23** | ✅ Approval expected | Tier 2 access granted |
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR-DEV-PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR-DEV-PUBLIC-KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR-DEV-SERVER-KEY
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+IMAGE_PROVIDER=pollinations
+IMAGE_PROVIDER_FALLBACK=none
+PRODUCT_LOGGING_DATABASE_ENABLED=false
+```
 
-## Why This Works
+These are placeholders. Keep `.env.local` out of Git. The public key relies on
+RLS; the service-role key bypasses RLS and must never reach a browser. Review
+[Configuration](CONFIGURATION.md) before adding provider credentials. Configuring
+image generation does not prove it is free or available.
 
-When you use AdBrain:
-- ✅ App calls `GET /adaccounts` → Meta logs this call
-- ✅ App calls `GET /campaigns` → Meta logs this call
-- ✅ App calls `POST /campaigns` (when creating) → Meta logs this call
-- ✅ App calls `GET /leads` → Meta logs this call
+## Prepare the Database
 
-After 15 days of legitimate usage, Meta's system sees the volume and approves.
+For a **fresh** development project, review and apply [the schema](../db/schema.sql)
+using the project's SQL tools. For an existing database, follow
+[Data Model](DATA_MODEL.md); do not casually replay the fresh schema.
 
-## Credentials
+`npm run db:push` is a mutation command, not a prerequisite checker. Verify the
+target, backup plan, and authorization first. This workspace's `.env.local` may
+point at production. A localhost web server does not isolate the backend.
 
-| Item | Value |
-|------|-------|
-| App URL | https://adbrain.vanshul.com |
-| Login Email | <REVIEWER_EMAIL> |
-| Login Password | <REVIEWER_PASSWORD> |
-| Test Ad Account | <TEST_AD_ACCOUNT_ID> |
-| Test Page | <TEST_PAGE_ID> |
+## Configure Authentication
 
-## When You're Done (Day 17+)
+In the isolated Supabase project, set the site URL and allowed redirects,
+including `http://localhost:3000/auth/callback`. Google requires provider setup;
+email delivery depends on Supabase mail configuration. Password login needs an
+existing account/password; the app does not supply signup or password-reset UI.
 
-1. **Open**: https://developers.facebook.com/apps/<YOUR_META_APP_ID>/
-2. **Go to**: Settings → App Roles → Marketing API Access Tier
-3. **Find**: Your rejected request (should say "Rejected")
-4. **Click**: "Request again" button
-5. **Wait**: Meta reviews (1-7 days usually)
-6. **Check Status**: You'll get notification when approved
+Magic links and OAuth complete through `/auth/callback`. Password sign-in uses a
+validated local destination. External, protocol-relative, backslash, and
+control-character redirects fall back to `/dashboard`.
 
-## Troubleshooting
+The development bypass requires `NODE_ENV !== "production"` and
+`NEXT_PUBLIC_DEV_AUTH_BYPASS=true`. It is a UI convenience, not real API
+authentication. Most API routes still require a Supabase user. Never enable it
+in a deployment.
 
-### "Can't log in"
-→ Use magic link instead of password (check email for link)
+## Run and Verify
 
-### "Settings page shows 'No Meta connection'"
-→ This is normal - app falls back to test credentials automatically
-→ Just sync campaigns anyway - API calls are still made
+```sh
+npm run dev
+# Open http://localhost:3000/login
+```
 
-### "After 15 days, still not approved"
-→ Click "Request again" one more time
-→ Contact Meta support with your App ID: <YOUR_META_APP_ID>
-→ Include: Screenshot of API call history from App Dashboard
+Use `npm run dev -- --port 3941` for another port. Do not run multiple Next dev
+servers in the same checkout. Stop temporary validation servers when finished.
+First verify login and a saved Brand Brain. Do not generate ads or connect a real
+ad account merely to prove the page renders.
 
-## Files Created For You
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-1. **[docs/META_APPROVAL_ACTION_PLAN.md](../docs/META_APPROVAL_ACTION_PLAN.md)**
-   - Detailed 20-page guide with everything explained
+Local tests do not prove email delivery, real consent, provider quality, or
+production deployment. Browser scripts can sign in to the configured backend;
+read [Testing](TESTING.md) before invoking them.
 
-2. **[scripts/daily-adbrain-test.sh](../scripts/daily-adbrain-test.sh)**
-   - Automated script (run daily)
+## Enable Workflows Deliberately
 
-3. **[scripts/generate-meta-traffic-final.mjs](../scripts/generate-meta-traffic-final.mjs)**
-   - Advanced Node.js script (optional)
+1. Add a text key pool and explicitly select an image provider. Set provider-side
+   billing limits before authorizing generation.
+2. Save the business profile, assets, and instructions.
+3. Review a brief in Create, authorize a small generation batch, then approve
+   creatives separately.
+4. Configure Meta credentials, rollout, and the environment's encryption key.
+   Connect in Settings and verify account/Page identity.
+5. Save a campaign draft, inspect preflight, and create paused only when intended.
+   Activation is a separate spending decision.
 
-## Questions?
+## Troubleshooting Setup
 
-Refer to the comprehensive guide: [META_APPROVAL_ACTION_PLAN.md](../docs/META_APPROVAL_ACTION_PLAN.md)
+| Symptom | Check |
+| --- | --- |
+| Environment validation fails | Required URL/key and numeric bounds; restart after edits |
+| Login loops | Supabase callback allowlist, cookies, account, provider setup |
+| UI works but API returns 401 | Development bypass is not real authentication |
+| AI returns 503 before starting | Usage RPC, service role, schema availability |
+| Image provider fails | Image and text configuration differ; unsupported provider names fail |
+| Meta disabled in production | Explicit rollout and app configuration; unset rollout fails closed |
+| Connected but cannot read leads | Lead capability, Page token, form access, `leads_retrieval` |
 
----
-
-**Start Date**: August 24, 2026  
-**Target Approval**: September 8-14, 2026  
-**Contact**: Meta Developer Support (if issues arise)
+See [Operations](OPERATIONS.md) for incidents and [Release Workflow](RELEASING.md)
+for publication. Do not use a direct production CLI deploy as a setup shortcut.

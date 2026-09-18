@@ -1,5 +1,10 @@
 # Meta Instant Connect and Guided Activation
 
+> Historical specification and coordination record. Use [Meta Connect](META_CONNECT.md),
+> [API Reference](API_REFERENCE.md), and [Data Model](DATA_MODEL.md) for the current
+> implementation. Baseline weaknesses and proposed endpoints below are not current
+> setup instructions; dated verification establishes only its stated scope.
+
 Status: partially implemented locally; customer journey and release acceptance remain incomplete.
 Current assessment and next milestone: [verification verdict](meta-connect-workers/VERIFICATION-2026-09-07.md).
 This document records the original specification, not a fresh implementation backlog.

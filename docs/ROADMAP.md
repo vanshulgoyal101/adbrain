@@ -1,115 +1,60 @@
-# AdBrain — Roadmap
+# Roadmap
 
-The prioritized backlog: what to build next, ranked by **value to shipping a
-product a stranger can pay for and trust**. Status markers and the full feature
-inventory live in [FEATURES.md](./FEATURES.md); architecture in
-[ARCHITECTURE.md](./ARCHITECTURE.md). The product-design transformation,
-acceptance criteria, and delivery sequence live in
-[PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). This file answers
-"what next, and why".
+Priorities describe future work and unresolved evidence, not shipped commitments
+or estimated delivery dates. [Features](FEATURES.md) is the current capability
+inventory; [QA](qa/) and [releases](releases/) record dated verification. Review
+this backlog against the checked-out source and current remote state before starting.
 
-## Current Release Priorities (2026-09-16)
+## Release and Customer Gates
 
-1. Review the tested security/quality batches on `dev` and coordinate the trusted
-	usage/rate-limit migration before production promotion. See the
-	[audit and cutover notes](qa/security-quality-audit-2026-09-16.md).
-2. Complete real Meta consent and account/Page selection with the intended owner.
-	Existing local transaction tests do not establish live provider consent.
-3. Verify the public guide routes, submit the sitemap through an owner-controlled
-	search console, and measure index coverage and relevant queries after release.
-	No keyword stuffing, synthetic reviews or rank guarantees.
-4. Add permissioned, measured customer examples when there is evidence. Keep paid
-	generation and campaign activation separately authorized.
+| Priority | Gap | Acceptance evidence |
+| --- | --- | --- |
+| First | Dependency-complete promotion and migration coordination | Exact reviewed SHA, passing gates, authorized schema/env changes, deployed workflow receipt |
+| First | Real intended-customer Meta consent | Successful owner-controlled consent/selection/capabilities, current provider approvals; mocks insufficient |
+| First | Repeatable creative quality and cost | Consented representative fixtures, bounded paid evaluations, actual provider usage and human review |
+| First | Honest performance proof | Permissioned campaign baseline, comparable measurement window and attributable outcomes |
+| First | Operational readiness | Monitored jobs, alert ownership, recovery and deletion drills, support escalation |
 
-## Meta onboarding
+## Reliability and Workflow
 
-The [Meta Instant Connect implementation plan](META-INSTANT-CONNECT-PLAN.md)
-defines contextual business linking, secure credential storage, deterministic
-asset selection, resumable campaign preparation, and eligibility-gated account
-provisioning. It includes proposed schema/API contracts, code sketches, external
-Meta approval gates, rollout phases, and acceptance tests. Draft persistence and
-durable campaign operations were released in September; the plan is no longer
-entirely prospective. Real customer consent remains an external verification gate.
+| Work | Why / dependency |
+| --- | --- |
+| Durable generation jobs and server idempotency | Avoid duplicate paid work and recover across request/process termination; tab recovery alone is insufficient |
+| Atomic quota reservation and stronger budget controls | Current token check and best-effort ledger can race/undercount; image costs need separate treatment |
+| Campaign reconciliation tooling | Make uncertain external operations inspectable and safely repairable without blind manual edits |
+| Scheduled insight/lead synchronization | Daily spend enforcement exists but reads stored snapshots; it is not fresh provider sync |
+| Snapshot persistence hardening | Refresh currently can return a null stored result despite fetched metrics |
+| Media retention and privacy operations | Public URLs, row/object non-atomicity and orphan cleanup need explicit policy/tooling |
+| Operational alerts and incident views | Structured privacy-aware events exist; alert delivery and a cross-account support UI do not |
+| Guided onboarding completion | Validate first-run brand -> creative -> paused campaign across real customer states |
+| Visual/accessibility regression depth | Extend populated/empty/error, keyboard and mobile evidence; do not reclassify already delivered UI as wholly absent |
 
-## September Product Audit
+## Commercial and Growth
 
-The [customer-focused marketing audit](./PRODUCT-AUDIT-2026-09.md) records the
-latest source-verified risks and acceptance gates. The public direction is
-**"Reach the right customers"**, supported by multiple industry examples rather
-than a solar identity. Prioritize business-bound Meta credentials, explicit
-geography, launch preflight/recovery, and enquiry follow-up before expanding
-acquisition. Industry-neutral branding does not imply multi-currency support.
+| Work | Gate |
+| --- | --- |
+| Pricing, billing and entitlements | Demonstrated repeatable value, measured costs, payment/webhook/refund/cancellation/support design |
+| Lead notifications and follow-up | Reliable sync/webhooks, consent, channel configuration, retry/delivery tracking |
+| Lead-to-deal and revenue attribution | Explicit lifecycle/data model and trustworthy outcome evidence |
+| Trend and per-creative analysis | Defined insight windows, historical data quality and attribution |
+| Teams and agency workspaces | Membership roles, shared ownership/RLS, audit and business selection design |
+| Scheduled activation / optimization | Durable execution, financial consent and strong stop/recovery controls |
+| Google Ads, video and other channels | Customer demand, access approval, evaluated providers and separate contracts |
+| Branded auth domain | Verified provider configuration, DNS/plan costs and migration strategy; do not bypass Auth casually |
 
-> **Legend:** effort is a rough T-shirt size (S ≈ hours, M ≈ a day or two,
-> L ≈ several days / needs external process).
+## Already Implemented, Still Bounded
 
-_Last reviewed: 2026-09-05. **Live in production at adbrain.vanshul.com.** Recently
-shipped: industry-agnostic `vertical` fix, cross-instance rate limiting,
-Facebook-Login ad-account connect, Google sign-in, **spend guardrails**._
+Industry-neutral profiles, paid OpenRouter images, explicit image fallback,
+creative interview/recovery, versioned drafts, durable campaign operations,
+encrypted business-bound Meta access, local spend controls, daily spend cron,
+structured logging and server-only usage/rate-limit persistence are implemented
+in source. This does not establish that every migration is deployed or every
+customer/provider path has been verified. Consult the dedicated references.
 
-> **Current product-design priority:** Phase A, Public proof reset, followed by
-> Phase B, Workspace shell and density reset, in
-> [PRODUCT-DESIGN-ROADMAP.md](./PRODUCT-DESIGN-ROADMAP.md). The prior plan
-> overstated UI progress; visual work is not considered delivered until the
-> populated and empty states pass desktop/mobile screenshot review.
+## Sequencing
 
-> **Product truth:** backend capability is ahead of customer experience. Do not
-> prioritize billing, more AI features, or more dashboard metrics until the
-> public proof, workspace density, creative review, launch, and results loop
-> pass the evidence gates in the design plan.
-
----
-
-## 🔴 High value — unblock selling & prove the thesis
-
-| Task | Why it matters | Depends on | Effort |
-| --- | --- | --- | --- |
-| **Billing / subscriptions** | There is no way to take money today — every "plan" in the code is a *campaign* plan. Razorpay/Stripe + a `subscriptions` table + plan-gating + a usage meter (LLM/image cost). Without it, "product" isn't true. | pricing decision (Razorpay vs Stripe, tiers) | L |
-| **Demo cost controls** | Before taking money, expose durable per-business AI usage, enforce a generation budget, and measure real copy/image cost across representative demos. See [DEMO-RUNBOOK.md](./DEMO-RUNBOOK.md). | paid/provider-backed usage measurement | M |
-| **Meta App Review** | Until approved, only test users can connect their own ad accounts via Facebook Login. This is the gate between "works for Solaride" and "sellable to others". Weeks of lead time — **start now, in parallel**. | live app + privacy/data-deletion URLs | L |
-| **AI-vs-baseline benchmark** | The proof the whole pitch rests on — "our AI ads beat your old ads" (CPL lift vs the owner's previous campaigns). Currently a claim we can't show. | historical insights import | M |
-| **Instant new-lead alerts** | Local lead-gen is a speed game; leads that sit in the inbox are wasted spend. Push email/WhatsApp within seconds of arrival. | lead webhook or cron; a send channel | M |
-| **Guided onboarding wizard** | A single guided flow (brand → first creatives → first paused campaign) is where SMB activation lives or dies. There's a checklist today, not a wizard. | — | M |
-| **Product shell and visual foundation reset** | The current UI still reads as a sparse internal dashboard. Establish the visual contract, realistic fixtures, shared states, and screenshot gates before claiming a redesign. | design direction | L |
-| **Home command center** | Replace record-count reporting with a useful work queue, outcome hierarchy, and clear activation progress. | shell reset | M |
-
-## 🟠 Moderate value — production hardening & retention
-
-| Task | Why it matters | Depends on | Effort |
-| --- | --- | --- | --- |
-| **Scheduled sync (cron)** | Insights/leads only refresh when a page is opened. Digests, alerts and auto-pause all want a background job (Vercel Cron + a `CRON_SECRET`-guarded endpoint using the service-role key). | service-role key set | M |
-| **Error/crash monitoring** | Great *audit* log, but no exception tracking (Sentry). In prod you'd be blind to real failures customers hit. | — | S |
-| **Branded auth domain (no `*.supabase.co`)** | Sign-in currently bounces the browser through the raw project host (`<ref>.supabase.co`) — for Google *and* for magic-link `verify` links. It looks untrustworthy next to a phishing warning, and on some networks (e.g. Safari + iCloud Private Relay) the browser shows a scary "connection is not private" interstitial instead of a login screen. Two routes: **(a)** Supabase **Pro custom domain** (`auth.adbrain.vanshul.com`) — near-zero code, also removes free-tier auto-pausing, ~$10/mo; **(b)** free but more code — run Google OAuth ourselves (`/api/auth/google/{start,callback}` reusing the HMAC-signed-state pattern from `lib/meta/oauth.ts`) and finish with `signInWithIdToken`, plus proxy `/auth/v1/verify` for magic links. Prefer (a) once on a paid plan. | (a) Pro plan; (b) Google Console redirect URI | (a) S · (b) M |
-| **Weekly WhatsApp results digest** | "14 leads at ₹19 each this week" — the retention hook and the plain-language moat. | scheduled sync + send channel | M |
-| **Lead → deal → revenue (ROI)** | Show return, not just cost per lead — what justifies the subscription at renewal. Mark lead won + value. | — | M |
-| **Paid image evaluation follow-up** | Flare is the current OpenRouter image model. Matched samples favored cost with comparable quality; broader product fidelity and conversion evidence remain open. Do not repeat paid evaluations without a bounded authorization. | representative fixtures + approved budget | M |
-| **Long ops → job/queue** | Creative generation (LLM + image + compositing) runs inline; on serverless this risks function timeouts under load. | queue choice | M |
-| **Trends dashboard** | CPL/leads over time — turns raw snapshots into a story owners revisit. | historical results | M |
-
-## 🟢 Lower value — growth & depth (after the above)
-
-| Task | Why it matters | Depends on | Effort |
-| --- | --- | --- | --- |
-| **Team / multi-user per business** | Roles (owner/editor/viewer); needed for agencies. | — | M |
-| **Agency / white-label** | Resellers manage many brands under one login — a likely revenue channel. | multi-user | L |
-| **Referrals** | SMBs invite other SMBs — cheap growth loop. | billing | S |
-| **Auto-optimisation** | Pause losers, scale winners on CPL — automates the results loop. | scheduled sync | M |
-| **Scheduled activation** | Launch a paused campaign at a chosen date/time. | cron | S |
-| **Creative winner detection** | Promote the best-performing variant automatically. | per-creative metrics | M |
-| **Video creatives** | When models are good/cheap enough. | paid provider | L |
-| **Industry-specific evidence** | Permissioned examples and useful campaign briefs across representative local-business categories; deepen verticals only when customer demand supports it. | validated customer workflows | M |
-
----
-
-## Suggested near-term sequence
-
-1. **Public proof reset** — show real creative output, brand transformation, paused-launch safety, and honest customer context in the first viewport.
-2. **Workspace shell and density reset** — make all signed-in routes feel like one product at desktop and mobile sizes.
-3. **Home command center and fixtures** — replace sparse reporting with work queue, pipeline, and realistic populated/first-run states.
-4. **Brand Brain asset** — prove that brand inputs visibly change the resulting ad.
-5. **Create and Review workspace** — make comparison, approval, editing, and export one serious creative workflow.
-6. **Launch and Results loop** — connect approved work to safe launch, leads, performance, and a next decision.
-7. **Browser evidence and accessibility** — validate the primary journey with screenshots, keyboard, responsive, and recovery checks.
-8. **Start Meta App Review** in parallel; it remains an external lead-time item.
-9. **Add monitoring and scheduled sync** after the customer workflow is understandable and testable.
-10. **Validate pricing, usage, paid image reliability, and billing** only after repeatable customer value is demonstrated.
+Resolve customer-access and release gates, make core workflows recoverable and
+observable, measure real value and costs, then introduce commercial automation.
+Run legitimate Meta review work in parallel without synthetic traffic promises.
+Extend channels and autonomous optimization only after the current loop is
+understandable, supportable and safe to operate.

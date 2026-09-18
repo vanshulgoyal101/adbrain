@@ -1,5 +1,10 @@
 # Creative generation: coherent concepts, explicit failures
 
+> Design and implementation history, with dated local evidence below. Use
+> [AI Pipeline](AI_PIPELINE.md), [Features](FEATURES.md), and
+> [API Reference](API_REFERENCE.md) for current behavior and parameters. Historical
+> proposals and measurements are not deployment or provider-quality guarantees.
+
 ## Create harness revision (2026-09-18, local)
 
 The interview now uses `interview-v2`. This is a local implementation, not a

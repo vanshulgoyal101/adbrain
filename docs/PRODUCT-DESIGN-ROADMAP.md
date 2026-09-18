@@ -1,5 +1,9 @@
 # AdBrain Product Transformation Plan
 
+> Dated design intent and acceptance history. [Features](FEATURES.md) describes
+> current source behavior and [Roadmap](ROADMAP.md) tracks remaining priorities.
+> Treat the original baseline below as historical, not a current product audit.
+
 > This is the execution plan for turning AdBrain from a functional internal
 > tool into a customer-ready advertising workspace. It is stricter than a
 > component backlog: a workstream is not complete because tokens, wrappers, or

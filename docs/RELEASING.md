@@ -1,8 +1,33 @@
 # Release Workflow
 
 This is AdBrain's deployment reference. It applies to this repository, not every
-repository in the surrounding workspace. Last verified: 2026-09-07. Recheck remote
+repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
 settings before a release; the historical receipts below are not current status.
+
+## Latest Application Release: 2026-09-18
+
+[PR #10](https://github.com/vanshulgoyal101/adbrain/pull/10) released the platform
+reliability fixes and privacy-safe product telemetry at merge
+`24377334270d5b53b3184ca3e193f4ffe38ccf34`. Dev CI `35314945214`, PR CI
+`35315177817`, and main CI `35315358874` passed. Local validation passed 1,227
+tests with one skipped, lint, types, dependency audit, fresh/upgrade PostgreSQL
+checks, and the production build. Vercel deployment
+`dpl_HY85RoBDfAS6tJURAxa4oXHtEejX` was Ready with the canonical production alias;
+GitHub deployment `6518963623` confirmed the exact merge SHA.
+
+Authenticated production checks verified invalid spend/interview/planner inputs,
+anonymous rejection, request IDs, and a real allowlisted telemetry event in the
+runtime log. Brand autofill edit preservation, zero-cap rejection, asset-copy
+failure feedback, and Create brief review passed at 1440/390px with fixture AI
+responses/images and business mutations blocked. No page errors or horizontal
+overflow were observed. This does not certify live media, paid AI quality,
+customer Meta consent, or live ad mutations. Browser sessions were closed.
+
+The product-events migration was published but **not applied remotely**.
+`PRODUCT_LOGGING_DATABASE_ENABLED` was absent in production, so durable logging
+and retention remain off. No production flags, credentials, paid generation, or
+ad state were changed. The application merge was fast-forwarded back to `dev`;
+the subsequent documentation-only synchronization is recorded in its PR.
 
 ## Non-Negotiable Rules
 
@@ -23,24 +48,26 @@ settings before a release; the historical receipts below are not current status.
 | Control | Verified setting |
 | --- | --- |
 | CI triggers | Pushes and PRs targeting `main` or `dev` |
-| Build job | `npm ci`, lint, typecheck, coverage, production build |
+| Build job (current source) | `npm ci`, dependency audit, lint, typecheck, coverage, local PostgreSQL tests, production build |
 | Secret job | Gitleaks with repository configuration |
 | Main protection | PR required; strict, up-to-date `build` and `secrets` checks |
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
-| Vercel Git deployment | `main: true`, `dev: false` |
+| Vercel Git deployment (current source) | `*: false`, `main: true`, `dev: false`, pilot branch disabled |
 
 These controls are split between [.github/workflows/ci.yml](../.github/workflows/ci.yml),
 [vercel.json](../vercel.json), and GitHub branch-protection settings. GitHub does
 not enforce that every release originated on `dev`; the promotion procedure does.
 Direct CLI deployments are not blocked by Git branch protection.
 
-**Other branch names default to Vercel deployment enabled.** Before pushing a
-feature or release branch, inspect its deployment rules and preview credentials.
-Disable that branch's Git deployment first if isolation is not verified. Do not
-assume a preview URL implies a preview database, harmless cron behavior, or safe
-provider credentials. Re-enabling previews is a separate environment change.
+**The current checked-in wildcard disables other Git branch deployments.** Earlier
+configurations did not, and historical receipts below describe that failure mode.
+Before pushing a feature or release branch, inspect effective remote deployment
+rules and preview credentials rather than relying on an old receipt or local JSON
+alone. Do not assume a preview URL implies a preview database, harmless cron
+behavior, or safe provider credentials. Re-enabling previews is a separate
+environment change; direct CLI deployments remain a separate path.
 
 Gitleaks PR scans need the built-in `GITHUB_TOKEN`. The secrets job has read-only
 contents and pull-request permissions; comments are disabled. Do not remove the
