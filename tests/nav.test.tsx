@@ -4,13 +4,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Nav } from "@/components/nav";
 
 const pathname = vi.fn();
+const linkState = vi.hoisted(() => ({ pending: false }));
+vi.mock("next/link", async (importOriginal) => ({
+  ...await importOriginal<typeof import("next/link")>(),
+  useLinkStatus: () => linkState,
+}));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname() }));
 
 const ACTIVE = "bg-blue-50";
 
-beforeEach(() => pathname.mockReturnValue("/dashboard"));
+beforeEach(() => { pathname.mockReturnValue("/dashboard"); linkState.pending = false; });
 
 describe("<Nav>", () => {
+  it("acknowledges pending navigation without changing the link label or icon dimensions", () => {
+    linkState.pending = true;
+    render(<Nav />);
+    const link = screen.getByRole("link", { name: "Home" });
+    expect(screen.getByText("Home")).toHaveAttribute("aria-busy", "true");
+    expect(link.querySelector("svg")).toHaveClass("h-4", "w-4", "animate-spin");
+  });
+
   it("links to every section of the app", () => {
     render(<Nav />);
     const expected: [string, string][] = [

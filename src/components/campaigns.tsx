@@ -94,6 +94,13 @@ function toDraftLocation(place: GeoPick, radiusKm: number) {
   } as const;
 }
 
+async function fetchDraftForms(signal?: AbortSignal): Promise<LeadForm[]> {
+  const response = await fetch("/api/campaigns/lead-forms", { cache: "no-store", signal });
+  const data = await response.json() as { forms?: LeadForm[]; error?: string };
+  if (!response.ok || data.error || !Array.isArray(data.forms)) throw new Error(data.error ?? "Could not load Page forms. Your draft is saved.");
+  return data.forms;
+}
+
 export function Campaigns({
   business,
   approved,
@@ -117,6 +124,9 @@ export function Campaigns({
   const [budget, setBudget] = useState(200);
   const [leadFormId, setLeadFormId] = useState(leadForms[0]?.id ?? "");
   const [availableForms, setAvailableForms] = useState(leadForms);
+  const [formsLoading, setFormsLoading] = useState(false);
+  const [formsError, setFormsError] = useState(leadFormError);
+  const [formsRetry, setFormsRetry] = useState(0);
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
   const [name, setName] = useState(`${business.name} — leads`);
   const [targeting, setTargeting] = useState<TargetingValue>(defaultTargeting);
@@ -202,14 +212,27 @@ export function Campaigns({
   }
 
   async function refreshDraftForms(signal?: AbortSignal) {
-    const response = await fetch("/api/campaigns/lead-forms", { cache: "no-store", signal });
-    const data = await response.json() as { forms?: LeadForm[]; error?: string };
+    const forms = await fetchDraftForms(signal);
     if (signal?.aborted) return;
-    if (!response.ok || data.error || !Array.isArray(data.forms)) throw new Error(data.error ?? "Could not load Page forms. Your draft is saved.");
-    const forms = data.forms;
     setAvailableForms(forms);
     setLeadFormId(current => forms.some(form => form.id === current) ? current : "");
   }
+
+  useEffect(() => {
+    if (!showComposer || !connectedForDraft) return;
+    const controller = new AbortController();
+    startTransition(() => { setFormsLoading(true); setFormsError(null); });
+    void fetchDraftForms(controller.signal).then(forms => {
+      if (controller.signal.aborted) return;
+      setAvailableForms(forms);
+      setLeadFormId(current => forms.some(form => form.id === current) ? current : "");
+    }).catch(() => {
+      if (!controller.signal.aborted) setFormsError("Page forms are temporarily unavailable.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setFormsLoading(false);
+    });
+    return () => controller.abort();
+  }, [showComposer, connectedForDraft, business.id, formsRetry]);
 
   useEffect(() => {
     startTransition(() => setCampaigns(initialCampaigns));
@@ -249,10 +272,7 @@ export function Campaigns({
         const connection = await client.status(business.id, controller.signal);
         if (controller.signal.aborted) return;
         setConnectedForDraft(connection.authorization === "connected" && Boolean(connection.selected));
-        if (!saved.request) {
-          if (connection.authorization === "connected" && connection.selected) await refreshDraftForms(controller.signal);
-          return;
-        }
+        if (!saved.request) return;
         const review = await client.preflight(business.id, draft.draftId, draft.version, controller.signal);
         if (!controller.signal.aborted) setPrepareReview({ status: "ready", draft, connection, review });
       } catch (reason) {
@@ -328,16 +348,14 @@ export function Campaigns({
     setShowComposer(true);
   }
 
-  async function finishDraftConnection(connection: ConnectionDTO) {
+  function finishDraftConnection(connection: ConnectionDTO) {
     setConnectedForDraft(true);
     setReviewConnection(connection);
     setConnectOpen(false);
     setPrepareReview(null);
     setShowComposer(true);
-    try {
-      await refreshDraftForms();
-      setNotice("Meta connected. Your draft is ready to finish.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load Page forms."); }
+    setFormsRetry(current => current + 1);
+    setNotice("Meta connected. Review your lead form before continuing.");
   }
 
   function acceptOperation(next: OperationDTO) {
@@ -1119,9 +1137,13 @@ export function Campaigns({
                   </span>
                 </div>
 
-                {leadFormError && (
+                {formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
+                {formsError && (
                   <Alert variant="warning">
-                    Couldn’t load lead forms: {leadFormError}
+                    Couldn’t load lead forms: {formsError}
+                    <Button variant="outline" onClick={() => setFormsRetry(current => current + 1)} disabled={formsLoading}>
+                      <RefreshCw className="h-4 w-4" aria-hidden="true" /> Retry lead forms
+                    </Button>
                   </Alert>
                 )}
 

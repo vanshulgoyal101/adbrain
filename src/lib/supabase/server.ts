@@ -1,13 +1,14 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "@/lib/types";
-import { observeIdentity } from "@/lib/observability/context";
+import { observeVerifiedUser } from "@/lib/observability/context";
 
 /**
  * Supabase client for Server Components, Server Actions, and Route Handlers.
  * Reads/writes the session cookie. Enforces RLS via the anon key + user JWT.
  */
-export async function createClient() {
+export const createClient = cache(async function createClient() {
   const cookieStore = await cookies();
 
   const client = createServerClient<Database>(
@@ -34,8 +35,8 @@ export async function createClient() {
   const getUser = client.auth.getUser.bind(client.auth);
   client.auth.getUser = async (...args: Parameters<typeof getUser>) => {
     const result = await getUser(...args);
-    observeIdentity(result.error ? null : result.data.user?.id ?? null);
+    observeVerifiedUser(result.error ? null : result.data.user);
     return result;
   };
   return client;
-}
+});

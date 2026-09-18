@@ -11,11 +11,11 @@ import { buildWorkQueue, missingBrandContext } from "@/lib/work-queue";
 import { describeAuditEvent } from "@/lib/audit-labels";
 import { formatDateShort } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
-import type { AuditLog, Business, Campaign, Creative } from "@/lib/types";
+import type { AuditLog, Business, Campaign, CreativePreview } from "@/lib/types";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
-  creatives: Creative[];
+  creatives: CreativePreview[];
   campaigns: Campaign[];
   audit: AuditLog[];
   metaReady: boolean;

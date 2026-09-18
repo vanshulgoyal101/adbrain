@@ -19,6 +19,84 @@ Use supported Node 22 (22.13+ with the current lint dependency graph), install w
 otherwise. Configure adequate Node runtime duration and memory for generation;
 declaring `maxDuration` in a route does not override hosting-plan limits.
 
+### Runtime Placement and Workspace Loading
+
+The checked-in Vercel region is `hnd1` (Tokyo), colocated geographically with
+AdBrain's Supabase project in `ap-northeast-1`. On 2026-09-18, before this change
+was deployed, the live project still used `iad1` (Northern Virginia). Each
+sequential database round trip therefore crossed regions. The region change
+requires the normal protected release; editing this file or `vercel.json` does
+not change the running deployment.
+
+The server Supabase client, verified-user lookup, business list, and campaign
+list use React request-scoped memoization. Layout and page reads share work
+within one server render, not across users or requests. Route handlers and
+actions must not depend on React render memoization for correctness. RLS,
+server authentication, and the dynamic router freshness policy remain intact.
+Studio loads independent reads concurrently. Campaigns renders saved data
+without waiting for Meta; connected campaign setup loads lead forms on demand,
+supports retry, and cancels its request when closed. A returned form is not
+automatically selected. Creation still requires the existing server preflight.
+
+Before releasing a region change, verify the current database region and the
+host's allowed regions. After release, confirm the effective function region in
+deployment metadata and repeat authenticated page timings with the same account,
+device, and network, distinguishing cold from warm requests. Measure complete
+responses as well as time to first byte; a streamed loading shell is not a
+completed page. Do not invoke generation, campaign sync, results refresh, or
+spend enforcement as a latency probe.
+
+The pre-change single-request sample for Create, Brand Brain, Studio, and
+Settings was respectively 2.24s, 1.63s, 1.39s, and 1.99s for complete production
+HTML responses. This is a diagnostic baseline, not a percentile benchmark or a
+measured improvement. Local validation covered all eight workspace sections at
+1440px and 390px, with mutations blocked; connected form loading and retry were
+component-tested. Production improvement must be measured after deployment.
+
+### Action Latency Controls
+
+The second local performance pass removes additional work from interactive paths:
+
+- Home and Assets read only the five creative preview fields they render. Studio
+  retains full creative details. An authenticated, read-only comparison of 29
+  creatives returned 16,570 rather than 43,205 JSON bytes (62% smaller), with
+  identical preview fields. This measures database response size, not page speed.
+- Campaign results use an embedded, newest-first child query limited to one row
+  per matching campaign, rather than downloading history to discard older rows.
+  A read-only comparison matched existing latest results. Query errors still
+  fail closed; this does not remove PostgREST's parent-row limits.
+- Lead sync reads forms in batches of three, retaining ordered processing and
+  partial-failure reporting. Each credentials-bound Meta client shares one Page
+  token lookup; a failed lookup is cleared for retry. Tokens are not cached
+  globally or shared across clients.
+- Location search cancels superseded requests through the server's Meta call.
+  Successful results have a component-local 60-second cache capped at 20 queries.
+  Campaign reconnect leaves form fetching to the composer effect, avoiding a
+  duplicate request. Navigation icons show pending transitions without resizing.
+- Audit logging reuses an already verified actor only inside the current event
+  context, not for authorization. Best-effort audit and usage inserts have
+  three-second request deadlines; failures remain logged, not guaranteed durable.
+  Quota reads remain required and fail closed.
+- Results refresh verifies persistence before starting independent summary,
+  spend enforcement, and audit work together. Optional AI summaries receive a
+  five-second cancellation signal and retain their factual metrics fallback.
+  Enforcement remains awaited and is never bypassed for a faster response.
+- Generation and regeneration load instructions and references concurrently.
+  Inline generated images are reused for composition instead of downloading the
+  new Storage upload. Raster validation remains in place; URL-based generators
+  still compose from the stored photo to avoid a second generation request.
+
+Local evidence on 2026-09-18: 1,250 tests passed and one opt-in live test was
+skipped; coverage thresholds, lint, TypeScript, and the 54-page production build
+passed. The final URL-provider compatibility adjustment passed all 33 focused
+generation/raster tests. Browser checks covered eight sections at 1440px and
+390px, repeated-query cache reuse, location selection, and soft navigation with
+no page errors or horizontal overflow. Browser writes were blocked; images and
+location responses were fixtures. Connected form behavior was component-tested
+because the local test account was disconnected. Temporary servers were stopped.
+No paid generation, Meta mutation, migration, or deployment was performed. These
+checks do not certify every live-provider action or production latency.
+
 ## 2. Prepare Database and Storage
 
 For a new isolated installation, review [schema.sql](../db/schema.sql). For an

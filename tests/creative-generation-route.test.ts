@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   generateOneVariant: vi.fn(),
   insert: vi.fn(),
   render: vi.fn(),
+  instructions: vi.fn(),
+  references: vi.fn(),
   schemaError: null as unknown,
   used: 0 as number | null,
 }));
@@ -41,7 +43,7 @@ vi.mock("@/lib/creative/generate", async (importOriginal) => ({
   generateOneVariant: mocks.generateOneVariant,
 }));
 vi.mock("@/lib/creative/references", () => ({
-  creativeReferences: async () => ["https://example.com/product.png"],
+  creativeReferences: mocks.references,
 }));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://cdn.example/photo.png",
@@ -53,7 +55,7 @@ vi.mock("@/lib/llm/persist", () => ({
   persistLLMUsage: async () => {},
 }));
 vi.mock("@/lib/supabase/queries", () => ({
-  getActiveInstructionsText: async () => "No discounts",
+  getActiveInstructionsText: mocks.instructions,
 }));
 vi.mock("@/lib/security/rate-limit", () => ({
   rateLimitResponse: async () => null,
@@ -97,6 +99,8 @@ beforeEach(() => {
   mocks.schemaError = null;
   mocks.used = 0;
   mocks.render.mockResolvedValue("https://cdn.example/finished.png");
+  mocks.instructions.mockResolvedValue("No discounts");
+  mocks.references.mockResolvedValue(["https://example.com/product.png"]);
   mocks.generateVariants.mockImplementation(async (params) => {
     try {
       await params.onVariant(variant);
@@ -109,6 +113,18 @@ beforeEach(() => {
 });
 
 describe("creative generation route", () => {
+  it("loads independent context together and composites the in-memory source", async () => {
+    let resolveInstructions!: (value: string) => void;
+    mocks.instructions.mockReturnValue(new Promise<string>(resolve => { resolveInstructions = resolve; }));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = POST(request());
+    await vi.waitFor(() => expect(mocks.references).toHaveBeenCalled());
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+    resolveInstructions("No discounts");
+    expect((await response).status).toBe(200);
+    expect(mocks.render).toHaveBeenCalledWith(expect.anything(), "business", expect.any(String), variant.angleId, variant.design, "https://cdn.example/photo.png", variant.imageUrl);
+  });
+
   it("does not expose upstream error bodies from regeneration", async () => {
     mocks.generateOneVariant.mockRejectedValueOnce(new Error("token=private-test-secret and private prompt"));
     const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");

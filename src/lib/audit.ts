@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { currentVerifiedActor } from "@/lib/observability/context";
 
 export type AuditEntityType =
   | "business"
@@ -29,9 +30,7 @@ export interface AuditEvent {
 export async function logEvent(event: AuditEvent): Promise<void> {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = currentVerifiedActor() ?? (await supabase.auth.getUser()).data.user;
 
     recordProductEvent({ kind: "workflow", name: event.action, outcome: "success", businessId: event.businessId,
       attributes: { entityType: event.entityType } });
@@ -45,7 +44,7 @@ export async function logEvent(event: AuditEvent): Promise<void> {
       meta_object_id: event.metaObjectId ?? null,
       reason: event.reason ?? null,
       details: (event.details ?? {}) as unknown as Json,
-    });
+    }).abortSignal(AbortSignal.timeout(3_000));
     if (error) recordProductEvent({ kind: "system", name: "audit.persist", outcome: "failed", businessId: event.businessId, attributes: { errorCode: "AUDIT_WRITE_FAILED" } });
   } catch {
     recordProductEvent({ kind: "system", name: "audit.persist", outcome: "failed", attributes: { errorCode: "AUDIT_WRITE_FAILED" } });

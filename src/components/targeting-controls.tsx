@@ -92,6 +92,7 @@ function LocationPicker({
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
+  const searchCache = React.useRef(new Map<string, { results: GeoPick[]; expiresAt: number }>());
   // Set when the user dismisses the list, so a slow in-flight search can't pop
   // it back open underneath them. Cleared as soon as they type again.
   const dismissed = React.useRef(false);
@@ -116,20 +117,37 @@ function LocationPicker({
 
   React.useEffect(() => {
     const q = query.trim();
+    const cacheKey = q.toLowerCase();
+    const cached = searchCache.current.get(cacheKey);
+    const fresh = cached && cached.expiresAt > Date.now();
+    const controller = new AbortController();
     let cancelled = false;
     const t = setTimeout(async () => {
       if (q.length < 2) {
-        if (!cancelled) setResults([]);
+        if (!cancelled) { setResults([]); setLoading(false); }
+        return;
+      }
+      if (fresh) {
+        setResults(cached.results);
+        setLoading(false);
+        if (!dismissed.current) setOpen(true);
         return;
       }
       setLoading(true);
       try {
         const res = await fetch(
           `/api/meta/geo-search?q=${encodeURIComponent(q)}`,
+          { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) },
         );
         const data = (await res.json()) as { results?: GeoPick[] };
+        if (!res.ok || !Array.isArray(data.results)) throw new Error("Location search failed.");
         if (!cancelled) {
-          setResults(data.results ?? []);
+          if (searchCache.current.size >= 20) {
+            const oldest = searchCache.current.keys().next().value;
+            if (oldest !== undefined) searchCache.current.delete(oldest);
+          }
+          searchCache.current.set(cacheKey, { results: data.results, expiresAt: Date.now() + 60_000 });
+          setResults(data.results);
           if (!dismissed.current) setOpen(true);
         }
       } catch {
@@ -137,9 +155,10 @@ function LocationPicker({
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 300);
+    }, fresh ? 0 : 300);
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(t);
     };
   }, [query]);

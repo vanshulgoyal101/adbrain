@@ -36,6 +36,7 @@ export async function summarizeInsights(
         temperature: 0.4,
         maxTokens: 120,
         cache: true,
+        signal: AbortSignal.timeout(5_000),
       },
     );
     return res.text.trim();

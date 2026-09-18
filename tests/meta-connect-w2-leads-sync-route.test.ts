@@ -54,6 +54,21 @@ beforeEach(() => {
 });
 
 describe("lead sync connection boundary", () => {
+  it("reads at most three forms concurrently and preserves form order", async () => {
+    const forms = ["first", "second", "third", "fourth"].map(id => ({ id, name: id }));
+    mocks.listLeadForms.mockResolvedValue(forms);
+    const resolveReads = new Map<string, (leads: { id: string; field_data: [] }[]) => void>();
+    mocks.listLeadsForForm.mockImplementation((formId: string) => new Promise(resolve => resolveReads.set(formId, resolve)));
+    const { POST } = await import("@/app/api/leads/sync/route");
+    const response = POST();
+    await vi.waitFor(() => expect(mocks.listLeadsForForm).toHaveBeenCalledTimes(3));
+    for (const formId of ["third", "second", "first"]) resolveReads.get(formId)!([{ id: formId, field_data: [] }]);
+    await vi.waitFor(() => expect(mocks.listLeadsForForm).toHaveBeenCalledTimes(4));
+    resolveReads.get("fourth")!([{ id: "fourth", field_data: [] }]);
+    expect((await response).status).toBe(200);
+    expect(mocks.upsert.mock.calls[0][0].map((lead: { form_id: string }) => lead.form_id)).toEqual(forms.map(form => form.id));
+  });
+
   it("counts only inserted leads, not duplicates fetched from Meta", async () => {
     mocks.listLeadForms.mockResolvedValue([{ id: "form-1", name: "Enquiries" }]);
     mocks.listLeadsForForm.mockResolvedValue([{ id: "lead-1", field_data: [] }, { id: "lead-2", field_data: [] }]);

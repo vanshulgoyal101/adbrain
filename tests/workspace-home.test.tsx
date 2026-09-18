@@ -7,12 +7,19 @@ import type { Business, Creative } from "@/lib/types";
 const queries = vi.hoisted(() => ({
   getPrimaryBusiness: vi.fn(),
   getCreatives: vi.fn(),
+  getCreativePreviews: vi.fn(),
   getAuditLog: vi.fn(),
   getCampaigns: vi.fn(),
   getSpendEvaluation: vi.fn(),
   getMetaConnection: vi.fn(),
+  getUser: vi.fn(),
+  businessLLMUsageSummary: vi.fn(),
 }));
 vi.mock("@/lib/supabase/queries", () => queries);
+vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
+vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test" }) }));
+vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));
+vi.mock("@/components/demo-llm-usage", () => ({ DemoLlmUsage: () => <div>Usage loaded</div> }));
 vi.mock("@/lib/meta/credentials", () => ({
   getMetaConnection: queries.getMetaConnection,
 }));
@@ -42,6 +49,21 @@ const empty = {
 };
 
 describe("Home workspace", () => {
+  it("loads Studio creatives and demo usage concurrently", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getUser.mockResolvedValue({ email: "demo@example.test" });
+    queries.businessLLMUsageSummary.mockResolvedValue({});
+    let resolveCreatives!: (value: Creative[]) => void;
+    queries.getCreatives.mockReturnValue(new Promise<Creative[]>((resolve) => { resolveCreatives = resolve; }));
+    const { default: StudioPage } = await import("@/app/(app)/studio/page");
+    const page = StudioPage({ searchParams: Promise.resolve({}) });
+    await vi.waitFor(() => expect(queries.businessLLMUsageSummary).toHaveBeenCalledWith(business.id));
+    expect(queries.getCreatives).toHaveBeenCalledWith(business.id);
+    resolveCreatives([]);
+    render(await page);
+    expect(screen.getByText("Studio loaded")).toBeInTheDocument();
+  });
+
   it("shows a first-run action without fabricated metrics", () => {
     render(<WorkspaceHome {...empty} />);
     expect(
@@ -69,7 +91,7 @@ describe("Home workspace", () => {
   it("loads independent dashboard reads concurrently", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     let resolveCreatives!: (value: Creative[]) => void;
-    queries.getCreatives.mockReturnValue(
+    queries.getCreativePreviews.mockReturnValue(
       new Promise<Creative[]>((resolve) => {
         resolveCreatives = resolve;
       }),

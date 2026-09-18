@@ -7,6 +7,8 @@ import { useMounted } from "@/lib/use-mounted";
 const complete = vi.fn();
 const generateImage = vi.fn();
 const downloadImage = vi.fn();
+const renderCompositeAd = vi.fn();
+vi.mock("@/lib/creative/render", () => ({ renderCompositeAd }));
 
 vi.mock("@/lib/llm", () => ({
   complete,
@@ -35,6 +37,7 @@ beforeEach(() => {
     url: "https://img.example/a.jpg",
     prompt: "a photo",
   });
+  renderCompositeAd.mockResolvedValue(new Uint8Array([1, 2, 3]));
 });
 
 const brand = { name: "Solaride", vertical: "solar energy" } as never;
@@ -155,6 +158,20 @@ describe("persistCreativeImage", () => {
       "https://src.example/a.jpg",
     );
     expect(url).toBe("https://cdn.example/stored.jpg");
+  });
+
+  it("composes from the available image without downloading the newly uploaded photo", async () => {
+    const { renderAndPersistDesign } = await import("@/lib/creative/persist");
+    const source = "data:image/png;base64,AQID";
+    await renderAndPersistDesign(storage({ error: null }) as never, "b1", "grp", "value", {} as never, "https://cdn.example/photo.png", source);
+    expect(renderCompositeAd).toHaveBeenCalledWith({ backgroundUrl: source });
+    expect(downloadImage).not.toHaveBeenCalled();
+  });
+
+  it("uses the saved photo for URL-based generators instead of requesting generation again", async () => {
+    const { renderAndPersistDesign } = await import("@/lib/creative/persist");
+    await renderAndPersistDesign(storage({ error: null }) as never, "b1", "grp", "value", {} as never, "https://cdn.example/photo.png", "https://generator.example/image");
+    expect(renderCompositeAd).toHaveBeenCalledWith({ backgroundUrl: "https://cdn.example/photo.png" });
   });
 
   it("reports failed uploads instead of returning an unpersisted URL", async () => {

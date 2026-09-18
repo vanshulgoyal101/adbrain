@@ -421,7 +421,13 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["campaign_results"]["Insert"]
         >;
-        Relationships: [];
+        Relationships: [{
+          foreignKeyName: "campaign_results_campaign_id_fkey";
+          columns: ["campaign_id"];
+          isOneToOne: false;
+          referencedRelation: "campaigns";
+          referencedColumns: ["id"];
+        }];
       };
       ad_instructions: {
         Row: {
@@ -839,6 +845,7 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type Business = Database["public"]["Tables"]["businesses"]["Row"];
 export type BrandAsset = Database["public"]["Tables"]["brand_assets"]["Row"];
 export type Creative = Database["public"]["Tables"]["creatives"]["Row"];
+export type CreativePreview = Pick<Creative, "id" | "headline" | "image_url" | "status" | "angle">;
 export type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 export type CampaignResult =
   Database["public"]["Tables"]["campaign_results"]["Row"];

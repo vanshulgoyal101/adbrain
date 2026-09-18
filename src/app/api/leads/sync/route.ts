@@ -45,28 +45,34 @@ async function handlePOST() {
         const availableForms = await meta.listLeadForms();
         const imported: LeadInsert[] = [];
         const failed: { id: string; name: string }[] = [];
-        for (const form of availableForms) {
-          let leads;
-          try {
-            leads = await meta.listLeadsForForm(form.id);
-          } catch {
-            failed.push({ id: form.id, name: form.name });
-            continue;
-          }
-          for (const lead of leads) {
-            const parsed = parseLeadFields(lead.field_data);
-            imported.push({
-              business_id: business.id,
-              meta_lead_id: lead.id,
-              form_id: form.id,
-              form_name: form.name,
-              full_name: parsed.fullName,
-              phone: parsed.phone,
-              email: parsed.email,
-              city: parsed.city,
-              field_data: parsed.fields as unknown as Json,
-              created_time: lead.created_time ?? null,
-            });
+        for (let offset = 0; offset < availableForms.length; offset += 3) {
+          const batch = await Promise.all(availableForms.slice(offset, offset + 3).map(async (form) => {
+            try {
+              return { form, leads: await meta.listLeadsForForm(form.id) };
+            } catch {
+              return { form, leads: null };
+            }
+          }));
+          for (const { form, leads } of batch) {
+            if (!leads) {
+              failed.push({ id: form.id, name: form.name });
+              continue;
+            }
+            for (const lead of leads) {
+              const parsed = parseLeadFields(lead.field_data);
+              imported.push({
+                business_id: business.id,
+                meta_lead_id: lead.id,
+                form_id: form.id,
+                form_name: form.name,
+                full_name: parsed.fullName,
+                phone: parsed.phone,
+                email: parsed.email,
+                city: parsed.city,
+                field_data: parsed.fields as unknown as Json,
+                created_time: lead.created_time ?? null,
+              });
+            }
           }
         }
         return { forms: availableForms, rows: imported, failedForms: failed };

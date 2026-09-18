@@ -107,6 +107,28 @@ describe("<TargetingControls> automatic mode", () => {
 });
 
 describe("<TargetingControls> location search", () => {
+  it("reuses recent successful searches and refetches expired entries", async () => {
+    view(manual());
+    await search("jai");
+    await search("ajm");
+    await search("jai");
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_001);
+    await search("ajm");
+    await search("jai");
+    expect(global.fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("aborts obsolete searches when typing continues", async () => {
+    global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+    view(manual());
+    await search("jai");
+    const signal = vi.mocked(fetch).mock.calls[0][1]!.signal!;
+    expect(signal.aborted).toBe(false);
+    fireEvent.change(screen.getByPlaceholderText(INCLUDE_PLACEHOLDER), { target: { value: "jaip" } });
+    expect(signal.aborted).toBe(true);
+  });
+
   it("ignores a query too short to be meaningful", async () => {
     view(manual());
     await search("j");
@@ -122,7 +144,7 @@ describe("<TargetingControls> location search", () => {
 
     await vi.advanceTimersByTimeAsync(400);
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith("/api/meta/geo-search?q=jai"),
+      expect(global.fetch).toHaveBeenCalledWith("/api/meta/geo-search?q=jai", expect.objectContaining({ signal: expect.any(AbortSignal) })),
     );
   });
 
@@ -132,6 +154,7 @@ describe("<TargetingControls> location search", () => {
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
         "/api/meta/geo-search?q=new%20delhi",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     );
   });

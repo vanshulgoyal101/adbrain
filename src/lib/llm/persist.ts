@@ -154,7 +154,7 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
         metadata: event.metadata ?? {},
         request_id: event.requestId,
       })),
-    );
+    ).abortSignal(AbortSignal.timeout(3_000));
     if (error) recordProductEvent({ kind: "system", name: "ai.usage.persist", outcome: "failed", attributes: { errorCode: "USAGE_WRITE_FAILED" } });
   } catch {
     recordProductEvent({ kind: "system", name: "ai.usage.persist", outcome: "failed", attributes: { errorCode: "USAGE_WRITE_FAILED" } });

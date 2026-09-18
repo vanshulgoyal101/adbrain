@@ -79,7 +79,7 @@ async function handlePOST(
     return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results.") }, { status: 502 });
   }
 
-  const { data: result } = await supabase
+  const { data: result, error: resultError } = await supabase
     .from("campaign_results")
     .insert({
       campaign_id: id,
@@ -92,19 +92,22 @@ async function handlePOST(
     .select("*")
     .single();
 
-  const summary = await summarizeInsights(campaign.objective, insights);
+  if (resultError || !result) {
+    return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh." }, { status: 503 });
+  }
 
-  await logEvent({
-    businessId: campaign.business_id,
-    action: "campaign.refresh",
-    entityType: "campaign",
-    entityId: id,
-    metaObjectId: campaign.meta_campaign_id,
-    details: { ...insights },
-  });
-
-  // Fresh spend arrived — enforce the weekly cap if auto-pause is on.
-  const autoPaused = await enforceAutoPause(campaign.business_id);
+  const [summary, autoPaused] = await Promise.all([
+    summarizeInsights(campaign.objective, insights),
+    enforceAutoPause(campaign.business_id),
+    logEvent({
+      businessId: campaign.business_id,
+      action: "campaign.refresh",
+      entityType: "campaign",
+      entityId: id,
+      metaObjectId: campaign.meta_campaign_id,
+      details: { ...insights },
+    }),
+  ]);
 
   return NextResponse.json({ result, summary, insights, autoPaused });
 }

@@ -93,8 +93,10 @@ async function handlePOST(
     );
 
   try {
-    const instructions = await getActiveInstructionsText(business.id);
-    const referenceImages = await creativeReferences(supabase, business.id);
+    const [instructions, referenceImages] = await Promise.all([
+      getActiveInstructionsText(business.id),
+      creativeReferences(supabase, business.id),
+    ]);
     const settings = savedGenerationSettings(creative.generation);
     const variant = await generateOneVariant(
       business,
@@ -128,6 +130,7 @@ async function handlePOST(
       angle.id,
       variant.design,
       photoUrl,
+      variant.imageUrl,
     );
 
     const { data: updated, error } = await supabase

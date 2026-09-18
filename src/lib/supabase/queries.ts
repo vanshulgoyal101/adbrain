@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import {
   DEV_AUTH_COOKIE,
   DEV_USER,
@@ -24,12 +25,13 @@ import type {
   Campaign,
   CampaignResult,
   Creative,
+  CreativePreview,
   Lead,
 } from "@/lib/types";
 
 /** Current authenticated user, or null. A real Supabase session always wins;
  * the dev bypass cookie is only a fallback when there's no real session. */
-export async function getUser(): Promise<AppUser | null> {
+export const getUser = cache(async function getUser(): Promise<AppUser | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -41,17 +43,17 @@ export async function getUser(): Promise<AppUser | null> {
     if (store.get(DEV_AUTH_COOKIE)?.value === "1") return DEV_USER;
   }
   return null;
-}
+});
 
 /** All businesses owned by the current user (RLS-scoped). */
-export async function getBusinesses(): Promise<Business[]> {
+export const getBusinesses = cache(async function getBusinesses(): Promise<Business[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("businesses")
     .select("*")
     .order("created_at", { ascending: true });
   return data ?? [];
-}
+});
 
 /** The user's first business (v1 is single-business per user). */
 export async function getPrimaryBusiness(): Promise<Business | null> {
@@ -69,6 +71,16 @@ export async function getBusinessById(id: string): Promise<Business | null> {
     .eq("id", id)
     .maybeSingle();
   return data ?? null;
+}
+
+export async function getCreativePreviews(businessId: string): Promise<CreativePreview[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("creatives")
+    .select("id, headline, image_url, status, angle")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false });
+  return data ?? [];
 }
 
 /** Creatives for a business, newest first. */
@@ -110,7 +122,7 @@ export async function getApprovedCreatives(
 }
 
 /** Campaigns for a business, newest first. */
-export async function getCampaigns(businessId: string): Promise<Campaign[]> {
+export const getCampaigns = cache(async function getCampaigns(businessId: string): Promise<Campaign[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("campaigns")
@@ -119,7 +131,7 @@ export async function getCampaigns(businessId: string): Promise<Campaign[]> {
     .order("created_at", { ascending: false });
   if (error) throw new Error("Campaigns could not be loaded.");
   return data ?? [];
-}
+});
 
 /** Latest result row per campaign, keyed by campaign id. */
 export async function getLatestResults(
@@ -128,14 +140,17 @@ export async function getLatestResults(
   if (!campaignIds.length) return {};
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("campaign_results")
-    .select("*")
-    .in("campaign_id", campaignIds)
-    .order("fetched_at", { ascending: false });
+    .from("campaigns")
+    .select("id, campaign_results!inner(*)")
+    .in("id", campaignIds)
+    .order("fetched_at", { referencedTable: "campaign_results", ascending: false })
+    .order("id", { referencedTable: "campaign_results", ascending: false })
+    .limit(1, { referencedTable: "campaign_results" });
   if (error) throw new Error("Campaign spend could not be loaded.");
   const map: Record<string, CampaignResult> = {};
   for (const row of data ?? []) {
-    if (!map[row.campaign_id]) map[row.campaign_id] = row;
+    const latest = row.campaign_results[0];
+    if (latest) map[row.id] = latest;
   }
   return map;
 }
