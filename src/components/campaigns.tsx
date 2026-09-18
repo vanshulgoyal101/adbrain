@@ -696,9 +696,14 @@ export function Campaigns({
     }
   }
 
-  function adsLink(metaId: string) {
-    const acct = adAccountId.replace("act_", "");
-    return `https://www.facebook.com/adsmanager/manage/campaigns?act=${acct}&selected_campaign_ids=${metaId}`;
+  function adsLink(campaign: Campaign) {
+    const account = (campaign.meta_ad_account_id ?? adAccountId).replace(/^act_/, "").trim();
+    const url = new URL("https://adsmanager.facebook.com/adsmanager/manage/campaigns/");
+    if (/^\d+$/.test(account)) {
+      url.searchParams.set("act", account);
+      if (campaign.meta_campaign_id) url.searchParams.set("selected_campaign_ids", campaign.meta_campaign_id);
+    }
+    return url.toString();
   }
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -1279,7 +1284,7 @@ export function Campaigns({
                         </span>
                         {c.meta_campaign_id && (
                           <a
-                            href={adsLink(c.meta_campaign_id)}
+                            href={adsLink(c)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline"
