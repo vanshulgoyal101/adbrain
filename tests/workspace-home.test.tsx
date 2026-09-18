@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
+import { Suspense } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceHome } from "@/components/workspace-home";
 import type { Business, Creative } from "@/lib/types";
@@ -49,10 +50,12 @@ const empty = {
 };
 
 describe("Home workspace", () => {
-  it("loads Studio creatives and demo usage concurrently", async () => {
+  it("loads Studio without waiting for the concurrent demo usage report", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getUser.mockResolvedValue({ email: "demo@example.test" });
-    queries.businessLLMUsageSummary.mockResolvedValue({});
+    let resolveUsage!: (value: object) => void;
+    const usage = new Promise<object>((resolve) => { resolveUsage = resolve; });
+    queries.businessLLMUsageSummary.mockReturnValue(usage);
     let resolveCreatives!: (value: Creative[]) => void;
     queries.getCreatives.mockReturnValue(new Promise<Creative[]>((resolve) => { resolveCreatives = resolve; }));
     const { default: StudioPage } = await import("@/app/(app)/studio/page");
@@ -60,8 +63,17 @@ describe("Home workspace", () => {
     await vi.waitFor(() => expect(queries.businessLLMUsageSummary).toHaveBeenCalledWith(business.id));
     expect(queries.getCreatives).toHaveBeenCalledWith(business.id);
     resolveCreatives([]);
-    render(await page);
+    const content = (await page).props.children[1];
+    render(content.props.children[0]);
     expect(screen.getByText("Studio loaded")).toBeInTheDocument();
+    const boundary = content.props.children[1];
+    expect(boundary.type).toBe(Suspense);
+    expect(boundary.props.fallback).toBeNull();
+    const report = boundary.props.children;
+    expect(report.props.usage).toBe(usage);
+    resolveUsage({});
+    render(await report.type(report.props));
+    expect(screen.getByText("Usage loaded")).toBeInTheDocument();
   });
 
   it("shows a first-run action without fabricated metrics", () => {

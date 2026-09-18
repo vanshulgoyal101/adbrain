@@ -77,6 +77,8 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-slate-100 text-slate-600",
 };
 
+const LEAD_FORMS_FRESH_MS = 60_000;
+
 type PrepareReviewState =
   | { status: "checking"; draft: DraftDTO; connection: ConnectionDTO }
   | { status: "ready"; draft: DraftDTO; connection: ConnectionDTO; review: ReviewDTO }
@@ -127,6 +129,7 @@ export function Campaigns({
   const [formsLoading, setFormsLoading] = useState(false);
   const [formsError, setFormsError] = useState(leadFormError);
   const [formsRetry, setFormsRetry] = useState(0);
+  const formsFreshnessRef = useRef<{ ownerId: string; businessId: string; retry: number; fetchedAt: number } | null>(null);
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
   const [name, setName] = useState(`${business.name} — leads`);
   const [targeting, setTargeting] = useState<TargetingValue>(defaultTargeting);
@@ -220,10 +223,15 @@ export function Campaigns({
 
   useEffect(() => {
     if (!showComposer || !connectedForDraft) return;
+    const freshness = formsFreshnessRef.current;
+    if (freshness?.ownerId === business.owner_id && freshness.businessId === business.id &&
+      freshness.retry === formsRetry && Date.now() - freshness.fetchedAt < LEAD_FORMS_FRESH_MS) return;
+    formsFreshnessRef.current = null;
     const controller = new AbortController();
     startTransition(() => { setFormsLoading(true); setFormsError(null); });
     void fetchDraftForms(controller.signal).then(forms => {
       if (controller.signal.aborted) return;
+      formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
       setLeadFormId(current => forms.some(form => form.id === current) ? current : "");
     }).catch(() => {
@@ -232,7 +240,7 @@ export function Campaigns({
       if (!controller.signal.aborted) setFormsLoading(false);
     });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, formsRetry]);
+  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry]);
 
   useEffect(() => {
     startTransition(() => setCampaigns(initialCampaigns));
