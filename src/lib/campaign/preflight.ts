@@ -9,6 +9,7 @@ export interface PreflightCreative {
   imageUrl: string | null;
   headline: string | null;
   primaryText?: string | null;
+  description?: string | null;
   cta?: string | null;
 }
 
@@ -129,6 +130,7 @@ export function buildCreativeReviewPayload(creatives: PreflightCreative[]) {
     imageUrl: creative.imageUrl,
     headline: creative.headline,
     primaryText: creative.primaryText ?? "",
+    description: creative.description ?? null,
     cta: creative.cta ?? null,
   }));
 }
@@ -179,8 +181,11 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   const location = draft.targeting.location;
   const radii = [location?.radiusKm, ...(location?.included ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm), ...(location?.excluded ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm)];
-  if (radii.some((radius) => radius !== undefined && (radius < 17 || radius > 80))) {
+  if (location?.cityScope !== "city_only" && radii.some((radius) => radius !== undefined && (radius < 17 || radius > 80))) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Meta city targeting requires a 17-80 km radius. Review the saved radius."));
+  }
+  if (location?.cityScope === "city_only" && [...(input.geo.location?.cities ?? []), ...(input.geo.excludedLocation?.cities ?? [])].some((city) => city.radius !== undefined || city.distance_unit !== undefined)) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "City-only targeting unexpectedly includes a radius. Review the locations again."));
   }
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every selected service area or explicitly review nationwide targeting."));

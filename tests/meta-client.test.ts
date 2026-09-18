@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { friendlyMetaError, MetaClient, MetaError } from "@/lib/meta/client";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { decodeCampaignInsights } from "@/lib/meta/insights";
 
 const creds = {
   adAccountId: "act_123",
@@ -11,6 +12,22 @@ const creds = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MetaClient Page-token lookup", () => {
+  it("does not send a provider request after the worker deadline expires", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(new MetaClient(creds, AbortSignal.abort(new Error("Execution stopped"))).getPageAccessToken()).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("aborts an in-flight provider read when the worker stops", async () => {
+    const controller = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      controller.abort();
+      expect(options?.signal?.aborted).toBe(true);
+      throw new DOMException("Execution stopped", "AbortError");
+    });
+    await expect(new MetaClient(creds, controller.signal).searchGeoLocations("Jaipur")).rejects.toThrow("Execution stopped");
+  });
+
   it.each([
     [{ id: "999", has_whatsapp_business_number: true, whatsapp_number: "+91 98765-43210" }, "+919876543210"],
     [{ id: "999", has_whatsapp_business_number: false, whatsapp_number: "+919876543210" }, null],
@@ -89,6 +106,48 @@ describe("MetaClient.verifyCampaignActivation", () => {
 });
 
 describe("campaign object binding", () => {
+  it.each([false, true])("selects canonical lead counts independent of action order (reverse=%s)", reverse => {
+    const actions = [
+      { action_type: "offsite_conversion.fb_pixel_lead", value: "99" },
+      { action_type: "onsite_conversion.lead_grouped", value: "4" },
+      { action_type: "lead", value: "5" },
+    ];
+    expect(decodeCampaignInsights({ data: [{ spend: "100.50", actions: reverse ? actions.reverse() : actions }] }, "instant_form"))
+      .toMatchObject({ leads: 5, spend: 100.5, cpl: 20.1 });
+  });
+
+  it("uses grouped leads only when the aggregate is absent, never substring matches", () => {
+    expect(decodeCampaignInsights({ data: [{ actions: [{ action_type: "onsite_conversion.lead_grouped", value: "4" }] }] }, "instant_form").leads).toBe(4);
+    expect(decodeCampaignInsights({ data: [{ actions: [{ action_type: "unrelated_lead_event", value: "99" }] }] }, "instant_form").leads).toBe(0);
+  });
+
+  it("does not reject fractional metrics for unrelated actions", () => {
+    expect(decodeCampaignInsights({ data: [{ actions: [{ action_type: "unrelated", value: "1.25" }, { action_type: "lead", value: "0" }, { action_type: "onsite_conversion.lead_grouped", value: "4" }] }] }, "instant_form").leads).toBe(0);
+  });
+
+  it.each([
+    {}, { data: null }, { data: [{}, {}] }, { data: [], paging: { next: "more" } },
+    { data: [{ spend: "NaN" }] }, { data: [{ spend: "-1" }] }, { data: [{ spend: "" }] },
+    { data: [{ impressions: "1.5" }] }, { data: [{ clicks: "9007199254740992" }] },
+    { data: [{ actions: [{ action_type: "lead", value: "1.5" }] }] },
+    { data: [{ date_start: "2026-09-20", date_stop: "2026-09-19" }] },
+    { data: [{ actions: [{ action_type: "lead", value: "2" }, { action_type: "lead", value: "3" }] }] },
+  ])("rejects malformed or ambiguous snapshots: %j", payload => {
+    expect(() => decodeCampaignInsights(payload, "instant_form")).toThrow();
+  });
+
+  it("accepts explicit empty insights as no delivery", () => {
+    expect(decodeCampaignInsights({ data: [] }, "whatsapp")).toMatchObject({ spend: 0, leads: 0, conversations: 0, cpl: null, costPerConversation: null });
+  });
+
+  it("rejects a malformed provider response after verified binding", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ destination_type: "ON_AD", promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json({}));
+    await expect(new MetaClient(creds).getCampaignInsights("camp_1")).rejects.toThrow("incomplete or invalid");
+  });
+
   it("counts WhatsApp conversation starts separately without summing overlapping messaging actions", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
@@ -144,7 +203,7 @@ describe("MetaClient.updateCampaignStatus", () => {
   it("reads a verified Page binding and ad-set budget for sync", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "set", status: "ACTIVE", daily_budget: "50000", promoted_object: { page_id: "999" } }] })));
     expect(await new MetaClient(creds).readBoundCampaign({ id: "campaign", account_id: "123", name: "Our Page", status: "PAUSED", objective: "OUTCOME_LEADS" }))
-      .toEqual({ dailyBudgetRupees: 500, adSetId: "set" });
+      .toEqual({ dailyBudgetRupees: 500, adSetId: "set", destination: "unknown" });
     expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
   });
 
@@ -271,6 +330,21 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     expect(payloads.map((payload) => [payload.age_min, payload.age_max])).toEqual([[25, 39], [40, 65]]);
     for (const payload of payloads) expect(payload).toMatchObject({ flexible_spec: [{ interests }], excluded_geo_locations: { cities: [{ key: "city-2", radius: 20 }] }, targeting_automation: { advantage_audience: 0 } });
   });
+  it("does not add a radius to city-only locations in any ad set", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
+    await new MetaClient(creds).createLeadCampaign({
+      name: "City coverage", dailyBudgetRupees: 200, leadFormId: "form-1", link: "https://example.com", creatives: [],
+      location: { cities: [{ key: "city-1" }] }, excludedLocation: { cities: [{ key: "city-2" }] },
+      variants: [{ ageMin: 25, ageMax: 39 }, { ageMin: 40, ageMax: 65 }],
+    });
+    const adsets = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/adsets"));
+    expect(adsets).toHaveLength(2);
+    for (const [, init] of adsets) {
+      const targeting = JSON.parse(new URLSearchParams(String(init?.body)).get("targeting")!);
+      expect(targeting.geo_locations.cities).toEqual([{ key: "city-1" }]);
+      expect(targeting.excluded_geo_locations.cities).toEqual([{ key: "city-2" }]);
+    }
+  });
   it("rejects missing geography before any provider mutation", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     await expect(new MetaClient(creds).createLeadCampaign({
@@ -305,13 +379,16 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
       ageMin: 28,
       ageMax: 58,
       interests: [{ id: "12345", name: "Solar energy" }],
-      creatives: [{ imageUrl: "https://example.com/image.png", headline: "Headline", message: "Message" }],
+      creatives: [{ imageUrl: "https://example.com/image.png", headline: "Headline", message: "Message", description: "Discuss your rooftop plans." }],
       onCheckpoint: (checkpoint) => {
         checkpoints.push(`${checkpoint.phase}:${checkpoint.externalId}`);
       },
     });
 
     expect(result).toMatchObject({ campaignId: "campaign-1", adSetId: "adset-1", adIds: ["ad-1"] });
+    const creativeCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/adcreatives"));
+    const story = JSON.parse(new URLSearchParams(String(creativeCall?.[1]?.body)).get("object_story_spec")!);
+    expect(story.link_data.description).toBe("Discuss your rooftop plans.");
     const adsetCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/adsets"));
     const payload = new URLSearchParams(String(adsetCall?.[1]?.body));
     expect(JSON.parse(payload.get("targeting")!)).toEqual({

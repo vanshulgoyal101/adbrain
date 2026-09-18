@@ -26,6 +26,7 @@ export const targetingInputSchema = z
     location: z
       .object({
         mode: z.enum(["ai", "manual"]).optional(),
+        cityScope: z.enum(["city_only", "radius"]).optional(),
         included: z.array(targetingItemSchema).max(50).optional(),
         excluded: z.array(targetingItemSchema).max(50).optional(),
         includedNames: z.array(boundedText(200)).max(50).optional(),

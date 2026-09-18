@@ -30,12 +30,15 @@ export function buildPerformanceReport(input: {
   rows: ReportRow[];
 }): string {
   const { businessName, generatedAt, rows } = input;
-  const delivered = rows.filter((r) => r.leads > 0 || r.spend > 0 || r.impressions > 0 || r.clicks > 0);
-  const leadCampaigns = delivered.filter(campaign => campaign.conversations == null);
-  const messagingCampaigns = delivered.filter(campaign => campaign.conversations != null);
+  const delivered = rows.filter((r) => r.leads > 0 || (r.conversations ?? 0) > 0 || r.spend > 0 || r.impressions > 0 || r.clicks > 0);
+  const destination = (row: ReportRow) => row.destination;
+  const leadCampaigns = delivered.filter(campaign => destination(campaign) === "instant_form");
+  const messagingCampaigns = delivered.filter(campaign => destination(campaign) === "whatsapp");
+  const unavailableCampaigns = delivered.filter(campaign => !["instant_form", "whatsapp"].includes(destination(campaign)));
+  const conversationsComplete = messagingCampaigns.every(campaign => campaign.conversations != null);
   const totalLeads = leadCampaigns.reduce((sum, campaign) => sum + campaign.leads, 0);
   const leadSpend = leadCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
-  const conversations = messagingCampaigns.reduce((sum, campaign) => sum + campaign.conversations!, 0);
+  const conversations = messagingCampaigns.reduce((sum, campaign) => sum + (campaign.conversations ?? 0), 0);
   const conversationSpend = messagingCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
   const totalSpend = delivered.reduce((s, r) => s + r.spend, 0);
   const blendedCpl = totalLeads > 0 ? leadSpend / totalLeads : null;
@@ -52,11 +55,12 @@ export function buildPerformanceReport(input: {
   lines.push(`- Total leads: ${totalLeads}`);
   lines.push(`- Total spend: ${money(totalSpend)}`);
   if (messagingCampaigns.length) {
-    lines.push(`- WhatsApp conversations started: ${conversations}`);
+    lines.push(`- WhatsApp conversations started: ${conversationsComplete ? conversations : "Unavailable (refresh required)"}`);
     lines.push(`- WhatsApp spend: ${money(conversationSpend)}`);
-    lines.push(`- Cost per WhatsApp conversation: ${conversations > 0 ? money(conversationSpend / conversations) : "—"}`);
+    lines.push(`- Cost per WhatsApp conversation: ${conversationsComplete && conversations > 0 ? money(conversationSpend / conversations) : "—"}`);
     lines.push("- Lead totals and blended lead cost exclude WhatsApp campaigns. Conversations are not verified leads or sales.");
   }
+  if (unavailableCampaigns.length) lines.push(`- Campaigns excluded from outcome comparisons: ${unavailableCampaigns.length} (destination unknown, mixed, or unsupported). Their spend remains in total spend.`);
   lines.push(
     `- Blended cost per lead: ${blendedCpl != null ? money(blendedCpl) : "—"}`,
   );
@@ -82,9 +86,9 @@ export function buildPerformanceReport(input: {
     lines.push(
       `| ${markdownText(r.name)} | ${markdownText(r.angles.join("/") || "—")} | ${markdownText(r.area ?? "—")} | ${
         r.dailyBudget != null ? money(r.dailyBudget) : "—"
-      } | ${r.impressions} | ${r.clicks} | ${r.conversations == null ? r.leads : "—"} | ${
-        r.conversations == null && r.cpl != null ? money(r.cpl) : "—"
-      } | ${r.conversations ?? "—"} | ${r.costPerConversation != null ? money(r.costPerConversation) : "—"} | ${markdownText(r.status)} |`,
+      } | ${r.impressions} | ${r.clicks} | ${destination(r) === "instant_form" ? r.leads : "—"} | ${
+        destination(r) === "instant_form" && r.cpl != null ? money(r.cpl) : "—"
+      } | ${destination(r) === "whatsapp" ? r.conversations ?? "—" : "—"} | ${destination(r) === "whatsapp" && r.conversations != null && r.costPerConversation != null ? money(r.costPerConversation) : "—"} | ${markdownText(r.status)} |`,
     );
   }
   lines.push("");

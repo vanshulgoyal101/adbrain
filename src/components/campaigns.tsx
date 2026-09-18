@@ -1,6 +1,7 @@
 "use client";
 
-import { startTransition, useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -33,7 +34,6 @@ import { Input, Label } from "@/components/ui/input";
 import {
   TargetingControls,
   defaultTargeting,
-  type GeoPick,
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
@@ -57,6 +57,9 @@ import type {
   ReviewDTO,
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
+import { campaignDestination } from "@/lib/campaign/outcomes";
+import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
+import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import type { LeadForm } from "@/lib/meta/client";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
@@ -85,18 +88,6 @@ type PrepareReviewState =
   | { status: "ready"; draft: DraftDTO; connection: ConnectionDTO; review: ReviewDTO }
   | { status: "blocked"; draft: DraftDTO; connection: ConnectionDTO; message: string };
 
-function toDraftLocation(place: GeoPick, radiusKm: number) {
-  if (place.type !== "city" && place.type !== "region" && place.type !== "country") {
-    return null;
-  }
-  return {
-    key: place.key,
-    name: place.name,
-    type: place.type,
-    radiusKm,
-  } as const;
-}
-
 async function fetchDraftForms(signal?: AbortSignal): Promise<LeadForm[]> {
   const response = await fetch("/api/campaigns/lead-forms", { cache: "no-store", signal });
   const data = await response.json() as { forms?: LeadForm[]; error?: string };
@@ -108,6 +99,7 @@ export function Campaigns({
   business,
   approved,
   initialCampaigns,
+  initialNextCursor = null,
   initialResults,
   leadForms,
   leadFormError,
@@ -117,6 +109,7 @@ export function Campaigns({
   business: Business;
   approved: Creative[];
   initialCampaigns: Campaign[];
+  initialNextCursor?: string | null;
   initialResults: Record<string, CampaignResult>;
   leadForms: LeadForm[];
   leadFormError: string | null;
@@ -140,12 +133,12 @@ export function Campaigns({
   const [excludedNames, setExcludedNames] = useState("");
   const [abTest, setAbTest] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [preparing, setPreparing] = useState(false);
-  const [preparationStage, setPreparationStage] = useState("");
-  const preparationRef = useRef<{ controller: AbortController; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
+  const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
+    nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
+    businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
+  });
   const [showComposer, setShowComposer] = useState(initialCampaigns.length === 0);
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectionIntent, setConnectionIntent] = useState<ConnectIntent>({ kind: "setup" });
@@ -153,6 +146,12 @@ export function Campaigns({
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
+  const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
+    setPrepareReview(null);
+    const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
+    if (timedOut) setError(`Campaign preparation timed out. ${message}`);
+    else setNotice(`Campaign preparation stopped. ${message}`);
+  });
   const reviewPanelRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!prepareReview || prepareReview.status === "checking") return;
@@ -172,15 +171,11 @@ export function Campaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   const [creationMode, setCreationMode] = useState("manual");
-  const [campaignQuery, setCampaignQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
   );
   const totalDailyBudget = effectiveDailyBudget(budget, abTest ? 2 : 1);
-  const [results, setResults] =
-    useState<Record<string, CampaignResult>>(initialResults);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -214,16 +209,7 @@ export function Campaigns({
     setIncludedNames((input.targeting.location?.includedNames ?? []).join("\n"));
     setExcludedNames((input.targeting.location?.excludedNames ?? []).join("\n"));
     setShowComposer(true);
-    setTargeting({
-      gender: input.targeting.gender ?? "all",
-      locationMode: input.targeting.location?.mode ?? defaultTargeting.locationMode,
-      included: input.targeting.location?.included ?? [], excluded: input.targeting.location?.excluded ?? [],
-      radiusKm: input.targeting.location?.radiusKm ?? defaultTargeting.radiusKm,
-      ageMode: input.targeting.age?.mode ?? defaultTargeting.ageMode,
-      ageMin: input.targeting.age?.min ?? defaultTargeting.ageMin,
-      ageMax: input.targeting.age?.max ?? defaultTargeting.ageMax,
-      audience: input.targeting.audience,
-    });
+    setTargeting(targetingToEditor(input.targeting));
   }
 
   async function refreshDraftForms(signal?: AbortSignal) {
@@ -253,10 +239,6 @@ export function Campaigns({
     });
     return () => controller.abort();
   }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination]);
-
-  useEffect(() => {
-    startTransition(() => setCampaigns(initialCampaigns));
-  }, [initialCampaigns]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -394,43 +376,6 @@ export function Campaigns({
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
   }
 
-  useEffect(() => () => {
-    const pending = preparationRef.current;
-    preparationRef.current = null;
-    if (pending) { clearTimeout(pending.timer); pending.controller.abort(); }
-  }, [business.id, business.owner_id]);
-
-  function stopPreparation(timedOut = false) {
-    const pending = preparationRef.current;
-    if (!pending) return;
-    preparationRef.current = null;
-    clearTimeout(pending.timer);
-    pending.controller.abort();
-    setPreparing(false);
-    setPreparationStage("");
-    setPrepareReview(null);
-    const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
-    if (timedOut) setError(`Campaign preparation timed out. ${message}`);
-    else setNotice(`Campaign preparation stopped. ${message}`);
-  }
-
-  function beginPreparation() {
-    const controller = new AbortController();
-    const timer = setTimeout(() => stopPreparation(true), 60_000);
-    preparationRef.current = { controller, timer };
-    setPreparing(true);
-    return controller.signal;
-  }
-
-  function finishPreparation(signal: AbortSignal) {
-    const pending = preparationRef.current;
-    if (pending?.controller.signal !== signal) return;
-    clearTimeout(pending.timer);
-    preparationRef.current = null;
-    setPreparing(false);
-    setPreparationStage("");
-  }
-
   async function loadPrepareReview(
     draft: DraftDTO,
     connection: ConnectionDTO,
@@ -472,10 +417,11 @@ export function Campaigns({
         campaigns?: Campaign[];
         error?: string;
         nextCursor?: string | null;
+        pageCursor?: string | null;
         skipped?: number;
       };
       if (res.ok && Array.isArray(data.campaigns)) {
-        setCampaigns(data.campaigns);
+        replaceCampaignPage(data.campaigns, data.pageCursor ?? null);
         syncSkippedRef.current = (cursor ? syncSkippedRef.current : 0) + (data.skipped ?? 0);
         syncCursorRef.current = data.nextCursor ?? null;
         if (!data.nextCursor) setLastSynced(new Date());
@@ -494,10 +440,11 @@ export function Campaigns({
 
   // Auto-sync from Meta once when the page opens, so campaigns stay fresh.
   const autoSynced = useRef(false);
+  const autoSyncFromMeta = useEffectEvent(() => void syncFromMeta({ silent: true }));
   useEffect(() => {
     if (metaReady && !autoSynced.current) {
       autoSynced.current = true;
-      void syncFromMeta({ silent: true });
+      autoSyncFromMeta();
     }
   }, [metaReady]);
 
@@ -523,33 +470,13 @@ export function Campaigns({
       dailyBudgetRupees: Math.max(0, budget),
       leadFormId: destination === "whatsapp" ? null : leadFormId || null,
       destination,
-      targeting: {
-        gender: targeting.gender ?? "all",
-        location: {
-          mode: targeting.locationMode,
-          included: targeting.included
-            .map((place) => toDraftLocation(place, targeting.radiusKm))
-            .filter((place): place is NonNullable<typeof place> => place !== null),
-          excluded: targeting.excluded
-            .map((place) => toDraftLocation(place, targeting.radiusKm))
-            .filter((place): place is NonNullable<typeof place> => place !== null),
-          radiusKm: targeting.radiusKm,
-          ...(plannedAreas.length ? { includedNames: plannedAreas } : {}),
-          ...(plannedExclusions.length ? { excludedNames: plannedExclusions } : {}),
-        },
-        age: {
-          mode: targeting.ageMode,
-          min: targeting.ageMin,
-          max: targeting.ageMax,
-        },
-        ...(targeting.audience ? { audience: { ...targeting.audience, interestNames: targeting.audience.interestNames.map((name) => name.trim()).filter(Boolean) } } : {}),
-      },
+      targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
     };
   }
 
   async function recommendAudience(input: DraftInput, signal: AbortSignal): Promise<DraftInput> {
-    setPreparationStage("Recommending audience...");
+    setPreparationStage(signal, "Recommending audience...");
     const response = await fetch("/api/campaigns/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -561,17 +488,7 @@ export function Campaigns({
     if (!response.ok || !data.ready) throw new Error(data.error ?? data.questions?.map((question) => question.question).join(" ") ?? "Could not recommend an audience.");
     const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
     if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
-    setTargeting({
-      gender: recommended.gender,
-      locationMode: recommended.location?.mode ?? "ai",
-      included: recommended.location?.included ?? [],
-      excluded: recommended.location?.excluded ?? [],
-      radiusKm: recommended.location?.radiusKm ?? defaultTargeting.radiusKm,
-      ageMode: recommended.age?.mode ?? "manual",
-      ageMin: recommended.age?.min ?? defaultTargeting.ageMin,
-      ageMax: recommended.age?.max ?? defaultTargeting.ageMax,
-      audience: recommended.audience,
-    });
+    setTargeting(targetingToEditor(recommended));
     setIncludedNames((recommended.location?.includedNames ?? []).join("\n"));
     setExcludedNames((recommended.location?.excludedNames ?? []).join("\n"));
     setPrepareReview(null);
@@ -579,7 +496,7 @@ export function Campaigns({
   }
 
   async function requestAudienceRecommendation(field?: "location" | "age") {
-    if (unresolvedRecovery() || preparationRef.current) return;
+    if (unresolvedRecovery() || isPreparing()) return;
     setError(null);
     setNotice(null);
     setPrepareReview(null);
@@ -604,7 +521,7 @@ export function Campaigns({
   }
 
   async function prepareManualCampaign(reviewAfterSave = true) {
-    if (preparationRef.current) return;
+    if (isPreparing()) return;
     if (unresolvedRecovery()) {
       setError("Check the existing campaign operation before preparing another campaign.");
       return;
@@ -627,7 +544,7 @@ export function Campaigns({
         input = await recommendAudience(input, signal);
       }
       signal.throwIfAborted();
-      setPreparationStage("Saving draft...");
+      setPreparationStage(signal, "Saving draft...");
       const client = createMetaConnectClient();
       const previous = preparedDraftRef.current;
       const draft = previous && !recoveryRef.current?.request
@@ -638,7 +555,7 @@ export function Campaigns({
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
       if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
-      setPreparationStage("Checking Meta connection...");
+      setPreparationStage(signal, "Checking Meta connection...");
       const connection = await client.status(business.id, signal);
       signal.throwIfAborted();
       setConnectedForDraft(connection.authorization === "connected" && Boolean(connection.selected));
@@ -647,7 +564,7 @@ export function Campaigns({
         setConnectOpen(true);
         return;
       }
-      setPreparationStage("Checking campaign readiness...");
+      setPreparationStage(signal, "Checking campaign readiness...");
       await loadPrepareReview(draft, connection, signal);
     } catch (reason) {
       if (!signal.aborted) setError(reason instanceof Error ? reason.message : "Could not save the campaign draft.");
@@ -987,7 +904,7 @@ export function Campaigns({
                 <br />
                 Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatCurrency(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatCurrency(prepareReview.review.totalDailyBudgetRupees)}
                 <br />
-                Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · Gender: {{ all: "All genders", men: "Men", women: "Women" }[prepareReview.draft.input.targeting.gender ?? "all"]} · City radius: {prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km
+                Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · Gender: {{ all: "All genders", men: "Men", women: "Women" }[prepareReview.draft.input.targeting.gender ?? "all"]} · City coverage: {prepareReview.draft.input.targeting.location?.cityScope === "city_only" ? "City only (no added radius)" : `${prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km radius`}
                 <br />
                 Interests: {prepareReview.review.audienceInterests?.map((interest) => interest.name).join(", ") || (prepareReview.draft.input.targeting.audience?.interestNames.length ? "Needs resolution" : "No interest narrowing")}
                 <br />
@@ -1294,7 +1211,7 @@ export function Campaigns({
                     budget={totalDailyBudget}
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
-                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; city radius ${targeting.radiusKm} km${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
+                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
 
@@ -1368,11 +1285,11 @@ export function Campaigns({
             </div>
           )}
         </div>
-        {campaigns.length > 0 && <div className="mb-5 flex flex-wrap gap-3">
+        {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-3">
           <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
           <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
-        {campaigns.length === 0 ? (
+        {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
           <Card>
             <CardContent className="flex flex-col items-center gap-1 py-10 text-center">
               <Rocket className="h-6 w-6 text-slate-300" />
@@ -1388,6 +1305,7 @@ export function Campaigns({
           <div className="flex flex-col border-t border-slate-200">
             {visibleCampaigns.map((c) => {
               const r = results[c.id];
+              const outcome = campaignDestination(c, r);
               return (
                 <Card key={c.id} className="rounded-none border-x-0 border-t-0">
                   <CardContent className="flex flex-col gap-3 px-0 py-5">
@@ -1477,14 +1395,14 @@ export function Campaigns({
                       <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">
                         <Stat label="Impressions" value={formatNumber(r.impressions)} />
                         <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label={r.conversations != null ? "WhatsApp conversations" : "Leads"} value={formatNumber(r.conversations ?? r.leads)} />
+                        <Stat label={outcome === "whatsapp" ? "WhatsApp conversations" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
                         <Stat
-                          label={r.conversations != null ? "Cost / conversation" : "Cost / lead"}
-                          value={r.conversations != null ? (r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : r.cpl != null ? formatCurrency(r.cpl) : "—"}
+                          label={outcome === "whatsapp" ? "Cost / conversation" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
+                          value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatCurrency(r.cpl) : "—"}
                         />
                       </div>
                     )}
-                    {r && r.conversations == null &&
+                    {r && outcome === "instant_form" &&
                       (() => {
                         const h = spendHealth(
                           { spend: r.spend, leads: r.leads, cpl: r.cpl },
@@ -1525,6 +1443,12 @@ export function Campaigns({
             })}
           </div>
         )}
+        {(nextListCursor || listLoading) && <div className="mt-4 flex justify-center">
+          <Button variant="outline" disabled={listLoading} onClick={() => void loadCampaignPage(true)}>
+            {listLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {listLoading ? "Loading campaigns..." : "Load more campaigns"}
+          </Button>
+        </div>}
       </div>
     </div>
   );

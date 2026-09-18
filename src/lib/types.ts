@@ -289,6 +289,7 @@ export interface Database {
       };
       campaigns: {
         Row: {
+          destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
           id: string;
           business_id: string;
           name: string | null;
@@ -311,6 +312,7 @@ export interface Database {
           business_id: string;
           name?: string | null;
           objective: string;
+          destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
           daily_budget?: number | null;
           status?: CampaignStatus;
           meta_campaign_id?: string | null;
@@ -399,6 +401,9 @@ export interface Database {
       };
       campaign_results: {
         Row: {
+          destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
+          period_start?: string | null;
+          period_end?: string | null;
           id: string;
           campaign_id: string;
           impressions: number;
@@ -414,6 +419,9 @@ export interface Database {
           id?: string;
           campaign_id: string;
           impressions?: number;
+          destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
+          period_start?: string | null;
+          period_end?: string | null;
           clicks?: number;
           leads?: number;
           spend?: number;
@@ -544,6 +552,14 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      enqueue_campaign_operation: {
+        Args: { p_operation_id: string; p_input: Json; p_request_hash: string };
+        Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
+      };
+      claim_next_campaign_job: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
+      };
       prune_product_events: {
         Args: Record<string, never>;
         Returns: number;

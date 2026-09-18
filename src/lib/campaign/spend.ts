@@ -112,11 +112,17 @@ export function wouldExceedCap(
   activeCampaigns: CampaignSpend[],
   newDailyBudgetRupees: number,
   capRupees: number | null,
-): { exceeds: boolean; projectedAfter: number } {
+): { verified: true; exceeds: boolean; projectedAfter: number } | { verified: false; exceeds: true; projectedAfter: null } {
+  const positiveFinite = (value: number | null) => value !== null && Number.isFinite(value) && value > 0;
+  if (!positiveFinite(newDailyBudgetRupees)
+    || (capRupees !== null && (!positiveFinite(capRupees)
+      || activeCampaigns.some(campaign => isActive(campaign) && !positiveFinite(campaign.dailyBudget))))) {
+    return { verified: false, exceeds: true, projectedAfter: null };
+  }
   const projectedAfter =
     projectedWeeklySpend(activeCampaigns) + num(newDailyBudgetRupees) * WEEK_DAYS;
-  if (!capRupees || capRupees <= 0) return { exceeds: false, projectedAfter };
-  return { exceeds: projectedAfter > capRupees, projectedAfter };
+  if (!Number.isFinite(projectedAfter)) return { verified: false, exceeds: true, projectedAfter: null };
+  return { verified: true, exceeds: capRupees !== null && projectedAfter > capRupees, projectedAfter };
 }
 
 /**

@@ -81,6 +81,22 @@ and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
 change existing remote ads. Deleting a local creative is not a request to delete
 a Meta ad already created from it.
 
+New creative concepts require a headline, primary text, and a separate Meta link
+description. Copy is directed toward one brief-specific argument, supported facts,
+and a clear next step rather than repeating the complete brand profile. Generation
+and regeneration load up to 12 recent creatives from the same business; earlier
+concepts in a batch are also included. Exact normalized headline or first-eight-word
+hook reuse triggers the existing single repair attempt before image generation.
+Recent ads guide variety only and are not evidence for commercial claims. History
+lookup failures stop generation before paid calls. This does not guarantee semantic
+uniqueness across simultaneous requests or better campaign performance.
+
+Descriptions are stored in the existing generation receipt, visible in Create and
+Studio, included in copy exports and campaign review hashes, and sent to Meta as
+the link description. Legacy creatives are not automatically rewritten. Meta
+decides which placements display descriptions; filling the field does not guarantee
+it appears in every preview. No live ads change when this generation behavior changes.
+
 ZIP export includes selected copy and available images. Inaccessible selections
 fail; unavailable/over-limit images can be omitted with a note and
 `X-Images-Skipped`. A successful ZIP response need not contain every image.
@@ -189,11 +205,26 @@ not supported by this editor.
   a fresh location decision replaces prior suggested areas. Age-only decisions
   preserve chosen geography. Geographic resolution prefers exact names and
   qualified city/region labels, without assuming India when no country is given.
+- Manual location search separates loading, no-match, and failed lookups. Retry
+  preserves selected places; editing a query immediately removes stale choices.
+  Results show region labels and support arrow-key selection with Enter. Escape,
+  Tab, and leaving the picker dismiss results, including late responses.
+- Targeting help opens on hover, focus, click, or touch; explanations are linked
+  to their triggers for assistive technology. Escape and outside clicks dismiss
+  help, and positioning keeps it inside horizontal viewport edges.
 - Ages must resolve to explicit bounds between 18 and 65, minimum no greater
   than maximum; Meta's upper endpoint represents its supported 65+ range.
-- Include/exclude city, region, or country locations; city radii must be 17-80 km
-  at preflight. Draft schemas accept 5-80 km so a saved legacy/incomplete value
-  can be edited, not so an invalid radius can launch.
+- City coverage offers City only (no added radius) or City + radius. New manual
+  drafts default to City only; guided planning defaults to it unless surrounding
+  service areas justify a radius. Existing saved drafts without a scope retain
+  their radius behavior. The scope applies to both included and excluded cities,
+  is preserved during audience recommendations, and is bound to campaign review.
+  States and countries are unchanged. City-only payloads send the Meta city key
+  without radius/distance units; review blocks a contradictory resolved radius.
+  This requests Meta's city area, not a verified municipal-boundary polygon.
+  Real-account acceptance and returned coverage must be verified before rollout.
+- City + radius requires 17-80 km at preflight. Draft schemas accept 5-80 km so a
+  saved legacy/incomplete value can be edited, not so an invalid radius can launch.
 - Up to five interest names and a nonempty rationale can be saved. Meta resolves
   IDs and eligibility; unresolved interests block creation.
 - Missing geography does not silently broaden to nationwide. Nationwide must be

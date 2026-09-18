@@ -84,6 +84,7 @@ export async function generateVariants(params: {
   language?: string;
   format?: AdFormat;
   referenceImages?: string[];
+  recentCopy?: ConceptInput["recentCopy"];
   onVariant?: (variant: GeneratedVariant) => Promise<void>;
   onFailure?: (angle: AdAngle, error: unknown) => Promise<void>;
 }): Promise<GeneratedVariant[]> {
@@ -109,19 +110,20 @@ export async function generateVariants(params: {
       : AD_ANGLES
   ).slice(0, count);
 
+  const recentCopy = [...(params.recentCopy ?? []).slice(0, 12)];
+  let planning = Promise.resolve();
   const outcomes = await Promise.allSettled(
     angles.map(async (angle) => {
       try {
-        const variant = await generateOneVariant(
-          brand,
-          brief,
-          angle,
-          instructions,
-          language,
-          format,
-          referenceImages,
-          signal,
-        );
+        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages };
+        const planned = planning.then(async () => {
+          input.recentCopy = recentCopy.slice(0, 12);
+          const result = await generateConcept(input, signal);
+          recentCopy.unshift(result.concept);
+          return result;
+        });
+        planning = planned.then(() => undefined, () => undefined);
+        const variant = await renderVariant(input, signal, await planned);
         await params.onVariant?.(variant);
         return variant;
       } catch (error) {
@@ -225,6 +227,7 @@ export async function generateOneVariant(
   format?: AdFormat,
   referenceImages?: string[],
   signal: AbortSignal = AbortSignal.timeout(240_000),
+  recentCopy: ConceptInput["recentCopy"] = [],
 ): Promise<GeneratedVariant> {
   brand = boundedBrand(brand);
   brief = brief.slice(0, MAX_BRIEF_CHARS);
@@ -237,9 +240,19 @@ export async function generateOneVariant(
     language,
     format,
     referenceImages,
+    recentCopy,
   };
+  return renderVariant(input, signal, await generateConcept(input, signal));
+}
+
+async function renderVariant(
+  input: ConceptInput,
+  signal: AbortSignal,
+  planned: { concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] },
+): Promise<GeneratedVariant> {
+  const { brand, angle, format, referenceImages } = input;
   const dims = formatDimensions(format ?? "portrait");
-  const { concept, usage } = await generateConcept(input, signal);
+  const { concept, usage } = planned;
   const image = await generateImage({
     prompt: conceptImagePrompt(concept, input),
     width: dims.width,

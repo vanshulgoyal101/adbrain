@@ -92,6 +92,8 @@ decrypt old tokens; rotation requires a reviewed migration. See
 | Variable | Default / bounds | Meaning |
 | --- | --- | --- |
 | `CRON_SECRET` | Empty disables cron routes with 404 | Scheduled request Bearer secret |
+| `CAMPAIGN_EXECUTION_MODE` | Unset/`inline` for compatibility; `worker` opts in | Web enqueue vs synchronous creation; unknown nonempty values block creation |
+| `CAMPAIGN_WORKER_TARGET` | Required by standalone worker | Exact Supabase URL origin, explicitly confirms worker target |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | Empty list | Production: disabled; nonproduction: any signed-in user when empty |
 | `TRAFFIC_GENERATOR_MAX_ROUNDS` | `20`, integer 1-100 | Internal runner round cap |
 

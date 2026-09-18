@@ -20,11 +20,11 @@ export async function resolveDraftTargeting(
   const excludedNames = location?.excludedNames ?? [];
   const empty = { targeting: {}, matched: [], unresolved: [] };
   const [namedIncluded, namedExcluded] = await Promise.all([
-    includedNames.length ? resolve(includedNames, { radiusKm: location?.radiusKm }) : empty,
-    excludedNames.length ? resolve(excludedNames, { radiusKm: location?.radiusKm }) : empty,
+    includedNames.length ? resolve(includedNames, { radiusKm: location?.radiusKm, cityScope: location?.cityScope }) : empty,
+    excludedNames.length ? resolve(excludedNames, { radiusKm: location?.radiusKm, cityScope: location?.cityScope }) : empty,
   ]);
-  const targeting = mergeGeo(geoItemsToTargeting(included, location?.radiusKm ?? 25), namedIncluded.targeting);
-  const excludedTargeting = mergeGeo(geoItemsToTargeting(excluded, location?.radiusKm ?? 25), namedExcluded.targeting);
+  const targeting = mergeGeo(geoItemsToTargeting(included, location?.radiusKm ?? 25, location?.cityScope), namedIncluded.targeting);
+  const excludedTargeting = mergeGeo(geoItemsToTargeting(excluded, location?.radiusKm ?? 25, location?.cityScope), namedExcluded.targeting);
   const labels = [...included.map((place) => place.name), ...namedIncluded.matched.map((place) => place.label)];
   const unresolvedNames = [...namedIncluded.unresolved, ...namedExcluded.unresolved];
   if (includedNames.length && !namedIncluded.matched.length) unresolvedNames.push(...includedNames);

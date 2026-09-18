@@ -20,6 +20,13 @@ beforeEach(() => {
 });
 
 describe("creative export resource budget", () => {
+  it("includes saved descriptions in exported copy", async () => {
+    mocks.lookup.mockResolvedValue({ data: ids.map((id) => ({ id, generation: { concept: { description: "Discuss your rooftop plans." } } })), error: null });
+    const { POST } = await import("@/app/api/creatives/export/route");
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.file).toHaveBeenCalledWith("copy.txt", expect.stringContaining("Description: Discuss your rooftop plans."));
+  });
+
   it("stops fetching once the aggregate image budget is exhausted", async () => {
     mocks.download.mockResolvedValue({ bytes: { byteLength: 20 * 1024 * 1024 }, contentType: "image/png" });
     const { POST } = await import("@/app/api/creatives/export/route");

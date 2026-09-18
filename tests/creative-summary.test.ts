@@ -26,6 +26,18 @@ describe("summarizeInsights", () => {
     vi.restoreAllMocks();
   });
 
+  it("does not turn unavailable WhatsApp results into zero leads", async () => {
+    const { summarizeInsights } = await loadSummary();
+    expect(await summarizeInsights("Messaging", { ...base, destination: "whatsapp", spend: 300 }))
+      .toMatch(/WhatsApp conversation metrics are unavailable/);
+  });
+
+  it.each(["unknown", "mixed", "call"] as const)("does not compare %s results as leads", async destination => {
+    const { summarizeInsights } = await loadSummary();
+    expect(await summarizeInsights("Other", { ...base, destination, spend: 300, leads: 4 }))
+      .toBe("INR 300 spent. Comparable outcome metrics are unavailable for this campaign destination.");
+  });
+
   it("short-circuits with a no-delivery message when nothing spent or shown", async () => {
     const { summarizeInsights } = await loadSummary();
     const out = await summarizeInsights("Test", { ...base });

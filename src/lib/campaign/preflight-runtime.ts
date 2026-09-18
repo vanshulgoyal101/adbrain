@@ -4,6 +4,7 @@ import { draftRecordFromRow } from "@/lib/campaign/draft-store";
 import type { PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { createClient } from "@/lib/supabase/server";
 import { resolveDraftTargeting } from "./draft-targeting";
+import { savedCreativeDescription } from "@/lib/creative/concept";
 
 export type CampaignSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -25,7 +26,7 @@ export function buildCampaignPreflightLoaders(
     findCreatives: async (businessId, creativeIds) => {
       const { data } = await supabase
         .from("creatives")
-        .select("id, business_id, status, image_url, headline, primary_text, cta")
+        .select("id, business_id, status, image_url, headline, primary_text, cta, generation")
         .in("id", creativeIds)
         .eq("business_id", businessId);
       return (data ?? []).map((creative) => ({
@@ -35,6 +36,7 @@ export function buildCampaignPreflightLoaders(
         imageUrl: creative.image_url,
         headline: creative.headline,
         primaryText: creative.primary_text,
+        description: savedCreativeDescription(creative.generation),
         cta: creative.cta,
       }));
     },

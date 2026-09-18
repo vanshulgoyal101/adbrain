@@ -92,3 +92,32 @@ describe("withMetaConnection capability boundary", () => {
     expect(adminRpc).not.toHaveBeenCalled();
   });
 });
+
+describe("campaign worker authorization", () => {
+  function arrange(overrides: Record<string, unknown> = {}, draftOverrides: Record<string, unknown> = {}) {
+    const rows: Record<string, unknown> = {
+      campaign_operations: { state: "running", lease_until: "2099-01-01T00:00:00Z", business_id: "business-1", draft_id: "draft-1", draft_version: 3, payload: { execution: "worker" }, ...overrides },
+      businesses: { id: "business-1", owner_id: "user-1" },
+      campaign_drafts: { business_id: "business-1", owner_id: "user-1", version: 3, ...draftOverrides },
+    };
+    adminFrom.mockImplementation((table: string) => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: rows[table], error: null }) }) }) }));
+  }
+
+  it("authorizes the current owner from an active worker claim", async () => {
+    arrange();
+    const { requireCampaignWorkerActor } = await import("@/lib/meta/connection-access");
+    expect(await requireCampaignWorkerActor("operation-1")).toMatchObject({ businessId: "business-1", userId: "user-1" });
+  });
+
+  it.each([{ state: "pending" }, { state: "succeeded" }, { lease_until: "2000-01-01T00:00:00Z" }, { lease_until: "invalid" }, { payload: {} }])("rejects an unclaimed or non-worker operation: %j", async overrides => {
+    arrange(overrides);
+    const { requireCampaignWorkerActor } = await import("@/lib/meta/connection-access");
+    await expect(requireCampaignWorkerActor("operation-1")).rejects.toThrow();
+  });
+
+  it.each([{ owner_id: "other-owner" }, { business_id: "other-business" }, { version: 4 }])("rejects changed draft ownership or version: %j", async overrides => {
+    arrange({}, overrides);
+    const { requireCampaignWorkerActor } = await import("@/lib/meta/connection-access");
+    await expect(requireCampaignWorkerActor("operation-1")).rejects.toThrow("ownership or version changed");
+  });
+});

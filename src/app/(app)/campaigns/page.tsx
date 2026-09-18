@@ -9,7 +9,7 @@ import {
 } from "@/lib/meta/credentials";
 import {
   getApprovedCreatives,
-  getCampaigns,
+  getCampaignPage,
   getLatestResults,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
@@ -41,12 +41,13 @@ export default async function CampaignsPage() {
   }
 
   // Nothing here depends on anything else, so pay for one round-trip, not three.
-  const [approved, campaigns, connection] = await Promise.all([
+  const [approved, page, connection] = await Promise.all([
     getApprovedCreatives(business.id),
-    getCampaigns(business.id),
+    getCampaignPage(business.id),
     getMetaConnection(business.id),
   ]);
   const metaReady = connection.ready;
+  const campaigns = page.campaigns;
 
   const results = await getLatestResults(campaigns.map((c) => c.id));
 
@@ -62,6 +63,7 @@ export default async function CampaignsPage() {
           business={business}
           approved={approved}
           initialCampaigns={campaigns}
+          initialNextCursor={page.nextCursor}
           initialResults={results}
           leadForms={[]}
           leadFormError={null}

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   claimPersistedOperation,
+  createOperationCheckpoint,
   operationToDTO,
   type OperationClaimRepository,
 } from "@/lib/campaign/operation-store";
@@ -40,6 +41,18 @@ class MemoryOperationRepository implements OperationClaimRepository {
 }
 
 describe("persisted operation claim port", () => {
+  it("retains a returned Meta ID for reconciliation after its checkpoint write fails", async () => {
+    const initial = claimOperation(null, request, 0, 60_000, "operation").operation;
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { message: "unavailable" } });
+    const database = { rpc } as unknown as Parameters<typeof createOperationCheckpoint>[0];
+    const checkpoint = createOperationCheckpoint(database, initial);
+    expect(await checkpoint.checkpoint({ ...initial, externalIds: ["remote-campaign"] })).toBeNull();
+    await checkpoint.checkpoint({ ...initial, state: "needs_reconciliation", phase: "reconcile" });
+    expect(rpc).toHaveBeenLastCalledWith("fail_campaign_operation", expect.objectContaining({
+      p_external_ids: ["remote-campaign"], p_state: "needs_reconciliation",
+    }));
+  });
+
   it("never executes an expired row when persisting the claim failed", async () => {
     const repository = new MemoryOperationRepository();
     repository.persistReclaim = false;

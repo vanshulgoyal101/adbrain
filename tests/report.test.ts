@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildPerformanceReport, type ReportRow } from "@/lib/campaign/report";
+import { campaignDestination, destinationFromAdSets } from "@/lib/campaign/outcomes";
 
 const row = (over: Partial<ReportRow>): ReportRow => ({
+  destination: "instant_form",
   name: "C",
   angles: [],
   area: null,
@@ -17,10 +19,31 @@ const row = (over: Partial<ReportRow>): ReportRow => ({
 
 describe("buildPerformanceReport", () => {
   const generatedAt = new Date("2026-08-12T00:00:00Z");
+  it("does not reinterpret unavailable WhatsApp or unknown outcomes as leads", () => {
+    const md = buildPerformanceReport({ businessName: "Brand", generatedAt, rows: [
+      row({ destination: "instant_form", leads: 10, spend: 200 }),
+      row({ destination: "whatsapp", leads: 90, spend: 500 }),
+      row({ destination: "unknown", leads: 900, spend: 300 }),
+    ] });
+    expect(md).toContain("Total leads: 10");
+    expect(md).toContain("Total spend: ₹1,000");
+    expect(md).toContain("Blended cost per lead: ₹20");
+    expect(md).toContain("WhatsApp conversations started: Unavailable");
+    expect(md).toContain("Cost per WhatsApp conversation: —");
+    expect(md).toContain("Campaigns excluded from outcome comparisons: 1");
+  });
+
+  it("resolves legacy evidence without guessing from an engagement objective", () => {
+    expect(campaignDestination({ objective: "OUTCOME_ENGAGEMENT" })).toBe("unknown");
+    expect(campaignDestination({ raw: { metaResult: { destination: "whatsapp" } } })).toBe("whatsapp");
+    expect(campaignDestination({ destination: "instant_form" }, { conversations: 4 })).toBe("instant_form");
+    expect(destinationFromAdSets([{ destination_type: "WHATSAPP" }, { destination_type: "ON_AD" }])).toBe("mixed");
+    expect(destinationFromAdSets([{}])).toBe("unknown");
+  });
   it("separates WhatsApp spend and conversations from blended lead cost", () => {
     const md = buildPerformanceReport({ businessName: "Solaride", generatedAt, rows: [
       row({ name: "Forms", leads: 10, spend: 200, cpl: 20 }),
-      row({ name: "Chats", conversations: 5, costPerConversation: 100, spend: 500 }),
+      row({ destination: "whatsapp", name: "Chats", conversations: 5, costPerConversation: 100, spend: 500 }),
     ] });
     expect(md).toContain("Blended cost per lead: ₹20");
     expect(md).toContain("Total spend: ₹700");

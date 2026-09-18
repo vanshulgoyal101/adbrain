@@ -123,6 +123,35 @@ describe("campaign activation generation fence", () => {
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
+  it.each([null, 0, -1, NaN, Infinity])("blocks capped activation when another active budget is %s", async dailyBudget => {
+    mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: 7000, alertPct: 80, autoPause: false });
+    mocks.getCampaignSpend.mockResolvedValue([{ id: "other", status: "active", dailyBudget, spend: 0 }]);
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(503);
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, NaN, Infinity])("does not interpret invalid cap %s as unlimited", async weeklyCapRupees => {
+    mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees, alertPct: 80, autoPause: false });
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(503);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("allows pausing even when spend evidence cannot be loaded", async () => {
+    mocks.getSpendLimits.mockRejectedValue(new Error("Unavailable"));
+    mocks.getCampaignSpend.mockRejectedValue(new Error("Unavailable"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.getSpendLimits).not.toHaveBeenCalled();
+    expect(mocks.getCampaignSpend).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+  });
+
   it("does not activate when fresh provider verification fails", async () => {
     mocks.verifyCampaignActivation.mockRejectedValueOnce(new Error("Provider data changed"));
     const { PATCH } = await import("@/app/api/campaigns/[id]/route");

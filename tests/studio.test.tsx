@@ -58,6 +58,13 @@ beforeEach(() => {
 });
 
 describe("<Studio> generation", () => {
+  it("shows the saved description in the card and enlarged preview", async () => {
+    render(<Studio business={business} initialCreatives={[creative({ generation: { concept: { description: "Discuss your rooftop plans." } } })]} />);
+    expect(screen.getByText(/Discuss your rooftop plans/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preview Cut your power bill" }));
+    expect(within(await screen.findByRole("dialog")).getByText("Discuss your rooftop plans.")).toBeInTheDocument();
+  });
+
   it("keeps successful creatives visible and reports a partial batch failure", async () => {
     global.fetch = vi.fn().mockResolvedValue(okJson({ creatives: [creative()], failures: [{ angle: "Trust", error: "Image unavailable" }] }));
     render(<Studio business={business} initialCreatives={[]} />);

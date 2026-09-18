@@ -1,9 +1,11 @@
 import type { Blocker } from "@/lib/meta/connect-contracts";
-import type { OperationDTO } from "@/lib/campaign/connect-contracts";
+import type { OperationDTO, CreateCampaignRequest } from "@/lib/campaign/connect-contracts";
 import type { Database, Json } from "@/lib/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { createClient } from "@/lib/supabase/server";
 import {
   claimOperation,
+  type OperationCheckpointPort,
   type OperationRecord,
 } from "@/lib/campaign/operations";
 
@@ -27,6 +29,85 @@ export type OperationClaimResult =
   | { kind: "conflict"; operation: OperationRecord };
 
 type OperationRow = Database["public"]["Tables"]["campaign_operations"]["Row"];
+
+type OperationDatabase = Awaited<ReturnType<typeof createClient>>;
+
+export async function enqueueCampaignOperation(database: OperationDatabase, input: CreateCampaignRequest, requestHash: string) {
+  const { data, error } = await database.rpc("enqueue_campaign_operation", {
+    p_operation_id: crypto.randomUUID(), p_input: input as unknown as Json, p_request_hash: requestHash,
+  });
+  if (error || !data?.[0]) throw new Error("Campaign queue is unavailable.");
+  return operationRecordFromRow(data[0]);
+}
+
+export function createOperationRepository(
+  database: OperationDatabase,
+  draftId: string,
+  draftVersion: number,
+  connectionGeneration: number,
+): OperationClaimRepository {
+  const findByBusinessKey = async (request: OperationRequest) => {
+    const { data, error } = await database.from("campaign_operations").select("*")
+      .eq("business_id", request.businessId).eq("kind", "campaign_create")
+      .eq("idempotency_key", request.idempotencyKey).maybeSingle();
+    if (error) throw new Error("Campaign operation storage is unavailable.");
+    return data ? operationRecordFromRow(data) : null;
+  };
+  const persistClaim = async (operation: OperationRecord) => {
+    const { data, error } = await database.rpc("claim_campaign_operation", {
+      p_operation_id: operation.operationId, p_business_id: operation.businessId,
+      p_draft_id: draftId, p_draft_version: draftVersion,
+      p_connection_generation: connectionGeneration, p_kind: "campaign_create",
+      p_idempotency_key: operation.idempotencyKey, p_request_hash: operation.requestHash,
+      p_lease_until: new Date(operation.leaseUntil ?? Date.now() + 60_000).toISOString(),
+      p_payload: {} as Json, p_now: new Date().toISOString(),
+    });
+    return error || !data?.[0] ? null : operationRecordFromRow(data[0]);
+  };
+  return { findByBusinessKey, insert: persistClaim, reclaim: persistClaim };
+}
+
+export function createOperationCheckpoint(database: OperationDatabase, initial: OperationRecord): OperationCheckpointPort {
+  let latest = initial;
+  const phaseRank: Record<OperationRecord["phase"], number> = {
+    campaign: 0, adset: 1, creative: 2, ad: 3, reconcile: 4, complete: 5,
+  };
+  function merge(operation: OperationRecord): OperationRecord {
+    return {
+      ...operation,
+      externalIds: [...new Set([...operation.externalIds, ...latest.externalIds])],
+      phase: operation.state === "running" && phaseRank[latest.phase] > phaseRank[operation.phase] ? latest.phase : operation.phase,
+      campaignId: operation.campaignId ?? latest.campaignId,
+    };
+  }
+  return {
+    checkpoint: async operation => {
+      const durable = merge(operation);
+      latest = durable;
+      const result = durable.state === "succeeded"
+        ? await database.rpc("finish_campaign_operation", {
+          p_operation_id: durable.operationId, p_business_id: durable.businessId,
+          p_connection_generation: durable.connectionGeneration, p_campaign_id: durable.campaignId!,
+          p_result: { externalIds: durable.externalIds, campaignId: durable.campaignId }, p_now: new Date().toISOString(),
+        })
+        : durable.state === "failed" || durable.state === "needs_reconciliation"
+          ? await database.rpc("fail_campaign_operation", {
+            p_operation_id: durable.operationId, p_business_id: durable.businessId,
+            p_connection_generation: durable.connectionGeneration, p_state: durable.state,
+            p_external_ids: durable.externalIds, p_campaign_id: durable.campaignId, p_error: durable.sanitizedError,
+          })
+          : await database.rpc("checkpoint_campaign_operation", {
+            p_operation_id: durable.operationId, p_business_id: durable.businessId,
+            p_connection_generation: durable.connectionGeneration, p_phase: durable.phase,
+            p_lease_until: durable.leaseUntil === null ? null : new Date(durable.leaseUntil).toISOString(),
+            p_external_ids: durable.externalIds, p_now: new Date().toISOString(),
+          });
+      if (result.error || !result.data?.[0]) return null;
+      latest = merge(operationRecordFromRow(result.data[0]));
+      return latest;
+    },
+  };
+}
 
 function stringArray(value: Json): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];

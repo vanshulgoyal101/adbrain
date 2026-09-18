@@ -140,6 +140,21 @@ beforeEach(() => {
 });
 
 describe("guided planner route", () => {
+  it.each(["city_only", "radius"])("preserves owner city scope %s in an AI recommendation", async (cityScope) => {
+    const audienceDraft = {
+      businessId: business.id, name: "Leads", goal: "Leads", mode: "manual", creativeIds: [creativeId],
+      dailyBudgetRupees: 500, leadFormId: null, abTest: false,
+      targeting: { location: { mode: "ai", cityScope, radiusKm: 35 } },
+    };
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Leads", audienceDraft }) }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.targeting.location.cityScope).toBe(cityScope);
+    if (cityScope === "city_only") expect(body.targeting.location).not.toHaveProperty("radiusKm");
+    else expect(body.targeting.location.radiusKm).toBe(25);
+  });
+
   it.each([{ used: null, status: 503 }, { used: 1000, status: 429 }])("blocks planning when usage is $used", async ({ used, status }) => {
     mocks.usage.mockResolvedValue(used);
     const { POST } = await import("@/app/api/campaigns/plan/route");

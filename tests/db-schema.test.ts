@@ -1,6 +1,39 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { applyMigration, databaseConfig, migrationChecksum } from "../scripts/database-migrations.mjs";
+
+describe("database migration safety", () => {
+  const remote = { PGHOST: "db.example.invalid", PGUSER: "postgres.project", PGDATABASE: "postgres" };
+  it("refuses remote full-schema application and unconfirmed remote migrations", () => {
+    expect(() => databaseConfig(remote, { localOnly: true })).toThrow("loopback");
+    expect(() => databaseConfig(remote)).toThrow("exact --target");
+    expect(() => databaseConfig({})).toThrow("Explicit");
+  });
+  it("requires verified TLS remotely and disables it only for local databases", () => {
+    const target = "db.example.invalid:5432/postgres@postgres.project";
+    expect(databaseConfig(remote, { target }).ssl).toEqual({ rejectUnauthorized: true });
+    expect(() => databaseConfig({ ...remote, PGSSLMODE: "no-verify" }, { target })).toThrow("certificate");
+    expect(databaseConfig({ ...remote, PGHOST: "127.0.0.1" }, { localOnly: true }).ssl).toBe(false);
+  });
+  it("skips an identical migration and refuses checksum drift", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    query.mockImplementation(async (sql: string) => ({ rows: sql.startsWith("select checksum") ? [{ checksum: migrationChecksum("select 1") }] : [] }));
+    expect(await applyMigration({ query }, "20260919_test.sql", "select 1")).toBe("already_applied");
+    expect(query).not.toHaveBeenCalledWith("select 1");
+    await expect(applyMigration({ query }, "20260919_test.sql", "select 2")).rejects.toThrow("checksum changed");
+    expect(query).toHaveBeenLastCalledWith("rollback");
+  });
+  it("rolls back a failed migration without recording success", async () => {
+    const query = vi.fn().mockImplementation(async (sql: string) => {
+      if (sql === "invalid sql") throw new Error("failure");
+      return { rows: [] };
+    });
+    await expect(applyMigration({ query }, "20260919_test.sql", "invalid sql")).rejects.toThrow("failure");
+    expect(query).toHaveBeenLastCalledWith("rollback");
+    expect(query.mock.calls.some(([sql]) => sql.startsWith("insert into private.schema_migrations"))).toBe(false);
+  });
+});
 
 /**
  * Database schema invariants (db/schema.sql).

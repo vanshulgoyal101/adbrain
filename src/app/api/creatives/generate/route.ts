@@ -23,7 +23,7 @@ import {
   failedVariantUsage,
 } from "@/lib/creative/receipt";
 import type { Creative } from "@/lib/types";
-import { creativeReferences } from "@/lib/creative/references";
+import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -171,9 +171,10 @@ async function handlePOST(req: Request) {
   const inserted: Creative[] = [];
   const failures: { angle: string; error: string }[] = [];
   try {
-    const [instructions, referenceImages] = await Promise.all([
+    const [instructions, referenceImages, recentCopy] = await Promise.all([
       getActiveInstructionsText(businessId),
       creativeReferences(supabase, businessId),
+      recentCreativeCopy(supabase, businessId),
     ]);
     await generateVariants({
       brand: business,
@@ -183,6 +184,7 @@ async function handlePOST(req: Request) {
       language,
       format: body.format,
       referenceImages,
+      recentCopy,
       onVariant: async (variant) => {
         await persistLLMUsage(
           variantUsageEvents(variant, {

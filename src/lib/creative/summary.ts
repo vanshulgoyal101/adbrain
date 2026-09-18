@@ -6,8 +6,15 @@ export async function summarizeInsights(
   campaignName: string,
   insights: CampaignInsights,
 ): Promise<string> {
-  if (insights.conversations !== undefined) {
+  const destination = insights.destination ?? (insights.conversations !== undefined ? "whatsapp" : "instant_form");
+  if (destination === "whatsapp" && insights.conversations == null) {
+    return `WhatsApp conversation metrics are unavailable. INR ${insights.spend.toFixed(0)} spent. Refresh results before comparing outcomes.`;
+  }
+  if (destination === "whatsapp") {
     return `${insights.conversations} WhatsApp conversations started, INR ${insights.spend.toFixed(0)} spent.${insights.costPerConversation != null ? ` INR ${insights.costPerConversation.toFixed(0)} per conversation.` : ""} Conversations are not verified leads or sales.`;
+  }
+  if (destination !== "instant_form") {
+    return `INR ${insights.spend.toFixed(0)} spent. Comparable outcome metrics are unavailable for this campaign destination.`;
   }
   if (insights.impressions === 0 && insights.spend === 0) {
     return "No delivery yet — this campaign hasn't spent or shown to anyone. It may be paused or still in review.";
