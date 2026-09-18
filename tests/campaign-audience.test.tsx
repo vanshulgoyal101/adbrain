@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, Creative } from "@/lib/types";
+import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(),
+  dialog: { current: null as null | { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: () => null }));
+vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
 vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => null }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
 
@@ -71,6 +73,41 @@ describe("campaign Ads Manager links", () => {
 });
 
 describe("campaign sync feedback", () => {
+  it("loads lead forms once when a connection completes", async () => {
+    view(false);
+    await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms")).toHaveLength(1));
+    expect(screen.getByText(/Review your lead form before continuing/)).toBeInTheDocument();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("loads forms only when setup opens, retries failures, and cancels on close", async () => {
+    const requests: AbortSignal[] = [];
+    const forms = vi.fn().mockResolvedValueOnce(Response.json({ error: "Unavailable" }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ forms: [{ id: "form-2", name: "New enquiry", status: "ACTIVE" }] }));
+    vi.stubGlobal("fetch", vi.fn((url: string, options?: RequestInit) => {
+      if (url === "/api/campaigns/lead-forms") {
+        requests.push(options!.signal as AbortSignal);
+        return forms();
+      }
+      return Promise.resolve(Response.json({ campaigns: [], nextCursor: null }));
+    }));
+    const campaign = { id: "campaign-1", name: "Saved campaign", status: "paused" } as Campaign;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    await screen.findByText("Campaign sync completed.");
+    expect(forms).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    await screen.findByText(/Page forms are temporarily unavailable/);
+    fireEvent.click(screen.getByRole("button", { name: "Retry lead forms" }));
+    await screen.findByRole("option", { name: "New enquiry" });
+    expect(screen.getByLabelText("Lead form")).toHaveValue("");
+    expect(forms).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    expect(requests.every(signal => signal.aborted)).toBe(true);
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("keeps skipped counts across pages and clears stale continuation warnings", async () => {
     const sync = vi.fn()
       .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "next/page", skipped: 2 }))

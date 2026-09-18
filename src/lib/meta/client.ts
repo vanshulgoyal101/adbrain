@@ -344,6 +344,8 @@ export function metaClientFromEnv(): MetaClient | null {
  * a live ad account.
  */
 export class MetaClient {
+  private pageAccessToken: Promise<string> | null = null;
+
   constructor(private readonly creds: MetaCredentials) {}
 
   private async graph<T>(
@@ -352,10 +354,14 @@ export class MetaClient {
       method?: string;
       token?: string;
       form?: Record<string, string>;
+      signal?: AbortSignal;
     } = {},
   ): Promise<T> {
     const method = opts.method ?? "GET";
     const token = opts.token ?? this.creds.accessToken;
+    const signal = opts.signal
+      ? AbortSignal.any([opts.signal, AbortSignal.timeout(15_000)])
+      : AbortSignal.timeout(15_000);
 
     let res: Response;
     if (method === "POST") {
@@ -367,13 +373,13 @@ export class MetaClient {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
-        signal: AbortSignal.timeout(15_000),
+        signal,
       });
     } else {
       const sep = path.includes("?") ? "&" : "?";
       res = await fetch(
         `${GRAPH}/${path}${sep}access_token=${encodeURIComponent(token)}`,
-        { method, signal: AbortSignal.timeout(15_000) },
+        { method, signal },
       );
     }
 
@@ -390,14 +396,19 @@ export class MetaClient {
     return json as T;
   }
 
-  async getPageAccessToken(): Promise<string> {
-    const data = await this.graph<{ access_token?: string }>(
-      `${this.creds.pageId}?fields=access_token`,
-    );
-    if (!data.access_token) {
-      throw new MetaError("Could not retrieve page access token.");
+  getPageAccessToken(): Promise<string> {
+    if (!this.pageAccessToken) {
+      this.pageAccessToken = this.graph<{ access_token?: string }>(
+        `${this.creds.pageId}?fields=access_token`,
+      ).then(data => {
+        if (!data.access_token) throw new MetaError("Could not retrieve page access token.");
+        return data.access_token;
+      }).catch(error => {
+        this.pageAccessToken = null;
+        throw error;
+      });
     }
-    return data.access_token;
+    return this.pageAccessToken;
   }
 
   /** Active instant lead forms on the page. */
@@ -426,7 +437,7 @@ export class MetaClient {
   /** Search Meta's location database for a place name. */
   async searchGeoLocations(
     query: string,
-    opts: { types?: string[]; limit?: number } = {},
+    opts: { types?: string[]; limit?: number; signal?: AbortSignal } = {},
   ): Promise<GeoSearchResult[]> {
     const types = opts.types ?? ["city", "region", "country"];
     const params = new URLSearchParams({
@@ -437,6 +448,7 @@ export class MetaClient {
     });
     const data = await this.graph<{ data: GeoSearchResult[] }>(
       `search?${params.toString()}`,
+      { signal: opts.signal },
     );
     return data.data ?? [];
   }

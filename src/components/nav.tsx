@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
@@ -11,6 +11,8 @@ import {
   Settings,
   Sparkles,
   Wand2,
+  Loader2,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,16 @@ const navClass = (active: boolean) =>
       ? "bg-blue-50 text-blue-700"
       : "text-slate-700 hover:bg-slate-100 hover:text-slate-950",
   );
+
+function NavLabel({ label, icon: Icon }: { label: string; icon: LucideIcon }) {
+  const { pending } = useLinkStatus();
+  return <>
+    {pending
+      ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+      : <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
+    <span aria-busy={pending}>{label}</span>
+  </>;
+}
 
 export function Nav({
   orientation = "vertical",
@@ -66,8 +78,7 @@ export function Nav({
             aria-current={active ? "page" : undefined}
             className={navClass(active)}
           >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {label}
+            <NavLabel label={label} icon={Icon} />
           </Link>
         );
       })}
@@ -85,8 +96,7 @@ export function Nav({
             aria-current={active ? "page" : undefined}
             className={navClass(active)}
           >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {label}
+            <NavLabel label={label} icon={Icon} />
           </Link>
         );
       })}

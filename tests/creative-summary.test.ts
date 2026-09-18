@@ -57,6 +57,7 @@ describe("summarizeInsights", () => {
   });
 
   it("uses the LLM sentence when a provider succeeds", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
     process.env.GOOGLE_AI_API_KEYS = "";
@@ -84,5 +85,7 @@ describe("summarizeInsights", () => {
       cpl: 150,
     });
     expect(out).toBe("Doing great — 8 leads at ₹150 each.");
+    expect(timeout).toHaveBeenCalledWith(5_000);
+    expect(vi.mocked(fetch).mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
   });
 });

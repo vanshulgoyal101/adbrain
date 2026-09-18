@@ -2,7 +2,7 @@ import { WorkspaceHome } from "@/components/workspace-home";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import {
   getCampaigns,
-  getCreatives,
+  getCreativePreviews,
   getAuditLog,
   getPrimaryBusiness,
   getSpendEvaluation,
@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   const business = await getPrimaryBusiness();
   const [creatives, audit, campaigns, spend, metaConnection] = business
     ? await Promise.all([
-        getCreatives(business.id),
+        getCreativePreviews(business.id),
         getAuditLog(business.id, 8),
         getCampaigns(business.id),
         getSpendEvaluation(business.id),

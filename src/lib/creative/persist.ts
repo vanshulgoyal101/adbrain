@@ -51,9 +51,11 @@ export async function renderAndPersistDesign(
   angleId: string,
   design: AdDesignSpec,
   photoUrl: string,
+  renderSourceUrl = photoUrl,
 ): Promise<string> {
   if (!getEnv().AD_DESIGN_OVERLAY) return photoUrl;
-  const bytes = await renderCompositeAd({ ...design, backgroundUrl: photoUrl });
+  const backgroundUrl = renderSourceUrl.startsWith("data:") ? renderSourceUrl : photoUrl;
+  const bytes = await renderCompositeAd({ ...design, backgroundUrl });
   const url = await persistCreativeImageBytes(
     supabase,
     businessId,

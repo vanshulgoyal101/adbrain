@@ -35,7 +35,7 @@ async function handleGET(req: Request) {
   }
 
   try {
-    const matches = await meta.searchGeoLocations(q, { limit: 8 });
+    const matches = await meta.searchGeoLocations(q, { limit: 8, signal: req.signal });
     const results = matches.map((m) => ({
       key: m.key,
       name: m.name,

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { eventContext, newEventContext, observeIdentity, observeVerifiedUser } from "@/lib/observability/context";
 
 /**
  * Server-side library behaviour that guards money and data:
@@ -10,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getUser = vi.fn();
 const insert = vi.fn();
+const auditAbortSignal = vi.fn();
 const updateEq = vi.fn();
 const updateCampaignStatus = vi.fn();
 const metaClientForBusiness = vi.fn();
@@ -45,7 +47,8 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
   getUser.mockResolvedValue({ data: { user: { id: "u1", email: "o@x.com" } } });
-  insert.mockResolvedValue({ error: null });
+  insert.mockReturnValue({ abortSignal: auditAbortSignal });
+  auditAbortSignal.mockResolvedValue({ error: null });
   updateEq.mockResolvedValue({ error: null });
   updateCampaignStatus.mockResolvedValue(undefined);
   metaClientForBusiness.mockResolvedValue({ updateCampaignStatus });
@@ -68,6 +71,22 @@ beforeEach(() => {
 });
 
 describe("logEvent", () => {
+  it("reuses only the actor verified in this request without repeating authentication", async () => {
+    const { logEvent } = await import("@/lib/audit");
+    await eventContext.run(newEventContext(), async () => {
+      observeVerifiedUser({ id: "verified-owner", email: "verified@example.test" });
+      await logEvent({ businessId: "b1", action: "x", entityType: "creative" });
+      expect(getUser).not.toHaveBeenCalled();
+      expect(insert).toHaveBeenCalledWith(expect.objectContaining({ actor_id: "verified-owner" }));
+      observeIdentity(null);
+      await logEvent({ businessId: "b1", action: "x", entityType: "creative" });
+      expect(getUser).toHaveBeenCalledOnce();
+    });
+    getUser.mockClear();
+    await eventContext.run(newEventContext(), () => logEvent({ businessId: "b1", action: "x", entityType: "creative" }));
+    expect(getUser).toHaveBeenCalledOnce();
+  });
+
   it("records who did what, with the actor from the session", async () => {
     const { logEvent } = await import("@/lib/audit");
     await logEvent({
@@ -100,7 +119,7 @@ describe("logEvent", () => {
   });
 
   it("never throws when the insert fails — logging must not break the caller", async () => {
-    insert.mockRejectedValue(new Error("db down"));
+    auditAbortSignal.mockRejectedValue(new Error("db down"));
     const { logEvent } = await import("@/lib/audit");
     await expect(
       logEvent({ businessId: "b1", action: "x", entityType: "campaign" }),

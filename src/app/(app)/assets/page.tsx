@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   getBrandAssets,
-  getCreatives,
+  getCreativePreviews,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 
@@ -38,7 +38,7 @@ export default async function AssetsPage() {
   }
 
   const [creatives, brandAssets] = await Promise.all([
-    getCreatives(business.id),
+    getCreativePreviews(business.id),
     getBrandAssets(business.id),
   ]);
 

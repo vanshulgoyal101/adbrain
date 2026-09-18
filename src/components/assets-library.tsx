@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Download, ExternalLink, ImageIcon, Link2 } from "lucide-react";
 import { Badge, Card, CardContent } from "@/components/ui/card";
-import type { BrandAsset, Creative } from "@/lib/types";
+import type { BrandAsset, CreativePreview } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { cn } from "@/lib/utils";
 
@@ -129,7 +129,7 @@ export function AssetsLibrary({
   creatives,
   brandAssets,
 }: {
-  creatives: Creative[];
+  creatives: CreativePreview[];
   brandAssets: BrandAsset[];
 }) {
   const generated = creatives.filter((c) => c.image_url);

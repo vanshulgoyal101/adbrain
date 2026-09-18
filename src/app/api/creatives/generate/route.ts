@@ -171,8 +171,10 @@ async function handlePOST(req: Request) {
   const inserted: Creative[] = [];
   const failures: { angle: string; error: string }[] = [];
   try {
-    const instructions = await getActiveInstructionsText(businessId);
-    const referenceImages = await creativeReferences(supabase, businessId);
+    const [instructions, referenceImages] = await Promise.all([
+      getActiveInstructionsText(businessId),
+      creativeReferences(supabase, businessId),
+    ]);
     await generateVariants({
       brand: business,
       brief,
@@ -204,6 +206,7 @@ async function handlePOST(req: Request) {
           variant.angleId,
           variant.design,
           photoUrl,
+          variant.imageUrl,
         );
         const { data, error } = await supabase
           .from("creatives")

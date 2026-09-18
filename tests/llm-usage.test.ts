@@ -19,14 +19,15 @@ function result(
   };
 }
 
-const { rpc, insert, browserFrom, adminFrom } = vi.hoisted(() => ({
-  rpc: vi.fn(), insert: vi.fn(), browserFrom: vi.fn(), adminFrom: vi.fn(),
+const { rpc, insert, abortSignal, browserFrom, adminFrom } = vi.hoisted(() => ({
+  rpc: vi.fn(), insert: vi.fn(), abortSignal: vi.fn(), browserFrom: vi.fn(), adminFrom: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc, from: browserFrom }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: adminFrom }) }));
 
 afterEach(() => {
   resetUsage();
+  vi.restoreAllMocks();
   vi.resetAllMocks();
 });
 
@@ -47,7 +48,8 @@ describe("persistent quota accounting", () => {
 
   it("writes generated usage only through the trusted server client", async () => {
     adminFrom.mockReturnValue({ insert });
-    insert.mockResolvedValue({ error: null });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
     await persistLLMUsage([{
       businessId: "owned-business", userId: "owner", route: "test", provider: "test",
       model: "test", usage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 }, requestId: "request",
@@ -55,6 +57,19 @@ describe("persistent quota accounting", () => {
     expect(adminFrom).toHaveBeenCalledWith("llm_usage_events");
     expect(insert).toHaveBeenCalledWith([expect.objectContaining({ business_id: "owned-business", total_tokens: 14 })]);
     expect(browserFrom).not.toHaveBeenCalled();
+  });
+
+  it("bounds best-effort ledger writes without failing the completed operation", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockRejectedValue(new DOMException("Timed out", "TimeoutError"));
+    await expect(persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "test", provider: "test",
+      model: "test", usage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 }, requestId: "request",
+    }])).resolves.toBeUndefined();
+    expect(timeout).toHaveBeenCalledWith(3_000);
+    expect(abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 });
 

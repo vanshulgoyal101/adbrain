@@ -15,7 +15,7 @@ export default async function StudioPage({
 }: {
   searchParams: Promise<{ status?: string; creative?: string }>;
 }) {
-  const business = await getPrimaryBusiness();
+  const [business, user] = await Promise.all([getPrimaryBusiness(), getUser()]);
 
   if (!business) {
     return (
@@ -42,14 +42,13 @@ export default async function StudioPage({
     );
   }
 
-  const creatives = await getCreatives(business.id);
-  const user = await getUser();
   const showDemoUsage =
     user?.email?.toLowerCase() === getEnv().DEMO_USER_EMAIL.toLowerCase();
-  const usage = showDemoUsage
-    ? await businessLLMUsageSummary(business.id)
-    : null;
-  const params = await searchParams;
+  const [creatives, usage, params] = await Promise.all([
+    getCreatives(business.id),
+    showDemoUsage ? businessLLMUsageSummary(business.id) : Promise.resolve(null),
+    searchParams,
+  ]);
   const filter = params.creative
     ? "all"
     : params.status === "draft" || params.status === "approved"

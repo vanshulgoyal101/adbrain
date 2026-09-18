@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   summarizeInsights: vi.fn(),
   enforceAutoPause: vi.fn(),
   logEvent: vi.fn(),
+  saveResult: vi.fn(),
 }));
 
 const campaign = {
@@ -36,7 +37,7 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       return {
         insert: () => ({
-          select: () => ({ single: async () => ({ data: { id: "result-1" } }) }),
+          select: () => ({ single: mocks.saveResult }),
         }),
       };
     },
@@ -67,9 +68,31 @@ beforeEach(() => {
   );
   mocks.summarizeInsights.mockResolvedValue("Summary");
   mocks.enforceAutoPause.mockResolvedValue([]);
+  mocks.saveResult.mockResolvedValue({ data: { id: "result-1" }, error: null });
 });
 
 describe("campaign refresh binding boundary", () => {
+  it("runs spend enforcement and audit without waiting for the optional summary", async () => {
+    let resolveSummary!: (summary: string) => void;
+    mocks.summarizeInsights.mockReturnValue(new Promise<string>(resolve => { resolveSummary = resolve; }));
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    await vi.waitFor(() => expect(mocks.enforceAutoPause).toHaveBeenCalledWith("business-1"));
+    expect(mocks.logEvent).toHaveBeenCalled();
+    resolveSummary("Summary");
+    expect((await response).status).toBe(200);
+  });
+
+  it("does not summarize or enforce against an unsaved result", async () => {
+    mocks.saveResult.mockResolvedValue({ data: null, error: { message: "Private database error" } });
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(503);
+    expect(mocks.summarizeInsights).not.toHaveBeenCalled();
+    expect(mocks.enforceAutoPause).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain("Private database error");
+  });
+
   it("uses the stored account, page, and generation for insight reads", async () => {
     const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
     const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });

@@ -4,11 +4,9 @@ import { Campaigns } from "@/components/campaigns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { type LeadForm } from "@/lib/meta/client";
 import {
   getMetaConnection,
 } from "@/lib/meta/credentials";
-import { requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import {
   getApprovedCreatives,
   getCampaigns,
@@ -17,23 +15,6 @@ import {
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Campaigns" };
-
-/** Meta can be slow or down; a failure here must not take the page with it. */
-async function loadLeadForms(
-  businessId: string,
-): Promise<{ forms: LeadForm[]; error: string | null }> {
-  try {
-    const context = await requireOwnedBusiness(businessId);
-    const forms = await withMetaConnection(
-      context,
-      { purpose: "create_paused" },
-      (meta) => meta.listLeadForms(),
-    );
-    return { forms, error: null };
-  } catch (err) {
-    return { forms: [], error: (err as Error).message };
-  }
-}
 
 export default async function CampaignsPage() {
   const business = await getPrimaryBusiness();
@@ -67,14 +48,7 @@ export default async function CampaignsPage() {
   ]);
   const metaReady = connection.ready;
 
-  // Results need the campaign ids; lead forms need the connection. Independent.
-  const [results, leadFormData] = await Promise.all([
-    getLatestResults(campaigns.map((c) => c.id)),
-    metaReady
-      ? loadLeadForms(business.id)
-      : Promise.resolve({ forms: [] as LeadForm[], error: null }),
-  ]);
-  const { forms: leadForms, error: leadFormError } = leadFormData;
+  const results = await getLatestResults(campaigns.map((c) => c.id));
 
   return (
     <div>
@@ -89,8 +63,8 @@ export default async function CampaignsPage() {
           approved={approved}
           initialCampaigns={campaigns}
           initialResults={results}
-          leadForms={leadForms}
-          leadFormError={leadFormError}
+          leadForms={[]}
+          leadFormError={null}
           metaReady={metaReady}
           adAccountId={connection.adAccountId ?? ""}
         />

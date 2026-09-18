@@ -9,6 +9,39 @@ const creds = {
 
 afterEach(() => vi.restoreAllMocks());
 
+describe("MetaClient Page-token lookup", () => {
+  it("propagates search cancellation to the provider request", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      controller.abort();
+      expect(options?.signal?.aborted).toBe(true);
+      throw new DOMException("Cancelled", "AbortError");
+    });
+    await expect(new MetaClient(creds).searchGeoLocations("Jaipur", { signal: controller.signal })).rejects.toThrow("Cancelled");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("shares concurrent and subsequent lookups only within one client", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ access_token: "page-token" }));
+    const client = new MetaClient(creds);
+    expect(await Promise.all([client.getPageAccessToken(), client.getPageAccessToken(), client.getPageAccessToken()])).toEqual(["page-token", "page-token", "page-token"]);
+    await client.getPageAccessToken();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    await new MetaClient({ ...creds, pageId: "another-page" }).getPageAccessToken();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache failed token lookups", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({}))
+      .mockResolvedValueOnce(Response.json({ access_token: "page-token" }));
+    const client = new MetaClient(creds);
+    await expect(client.getPageAccessToken()).rejects.toThrow("page access token");
+    await expect(client.getPageAccessToken()).resolves.toBe("page-token");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("MetaClient.verifyCampaignActivation", () => {
   const campaign = { id: "camp_1", account_id: "123", status: "PAUSED" };
   const adSet = { id: "set_1", status: "ACTIVE", daily_budget: "25000", promoted_object: { page_id: "999" } };
