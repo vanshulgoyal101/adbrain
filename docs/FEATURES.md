@@ -107,7 +107,9 @@ Pause intended campaigns before disconnecting, or manage them in Meta afterward.
 
 Both manual and guided workflows produce a saved, editable draft. Drafts can be
 incomplete: zero budget, empty creative selection, and no lead form are allowed
-at save time. They cannot pass preflight in that state. Saving does not invoke
+at save time. Preflight requires approved creatives, positive budget, resolved
+targeting, and either an active form or a verified Page-linked WhatsApp Business
+number for the selected destination. Saving does not invoke
 AI; preparing AI-mode audience choices can.
 
 Drafts expire seven days after creation, start at version 1, and are capped at
@@ -119,12 +121,74 @@ restrictions.
 The planner uses brand, approved creatives, active instructions, and available
 performance history. It asks for missing facts rather than inventing provider
 IDs. Audience recommendations remain editable; manual choices are preserved.
-Current reviewed creation uses **instant-form lead campaigns**, not a supported
-general WhatsApp/call destination workflow just because lower-level code contains
-those concepts.
+Reviewed creation supports **instant-form leads**. WhatsApp setup is draft-only;
+publishing is blocked in server preflight pending real-provider verification. Old
+drafts without a destination remain instant-form campaigns. Call campaigns are
+not supported by this editor.
+
+### WhatsApp Campaigns
+
+- **Publishing is unavailable.** Draft editing and reporting for existing campaigns
+  are available; even a valid recipient cannot currently pass creation preflight.
+  On 2026-09-19, Solaride's Page omitted its current WhatsApp linkage/number fields
+  with both Page and system-user tokens. An existing ad set's historical recipient
+  is not accepted as proof of the current linkage. No test campaign was created.
+- Select WhatsApp chat in either manual or guided setup. No lead form is required
+  or loaded for WhatsApp planning/review; the selected destination is preserved.
+- Link a WhatsApp Business number to the selected Facebook Page in Meta first.
+  Review reads that Page's `has_whatsapp_business_number` and `whatsapp_number`
+  using its Page token. Missing, unreadable, or invalid evidence blocks creation.
+  A normal Page contact phone number is not sufficient.
+- Review displays and hashes the verified number. Creation rechecks it before
+  any mutation. WhatsApp never silently falls back to a form.
+- The unreleased WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
+  a recipient-bound promoted object and `wa.me` creative link. Campaigns, ad sets,
+  and ads are created PAUSED; activation remains a separate confirmation.
+- Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
+  pause, and activation safeguards. Refresh detects all-WhatsApp ad sets and
+  stores `onsite_conversion.messaging_conversation_started_7d` separately from
+  leads. Overlapping messaging actions are not summed. Mixed-destination
+  campaigns are not attributed wholly to WhatsApp.
+- Campaign cards show conversations and cost per conversation; planner history
+  and summaries distinguish conversations from verified leads/sales. This does
+  not import chat messages, phone contacts, transcripts, or WhatsApp inbox leads.
+  Leads-tab sync remains instant-form only.
+- Apply `db/migrations/20260918_whatsapp_results.sql` before deploying the new
+  reporting code, with separate migration authorization. Existing results stay
+  unchanged (new columns are null); refresh results to populate conversations.
+- Meta Page field references were checked; mocked provider tests do not certify
+  actual account eligibility, delivery, or Graph v21 payload acceptance. Perform
+  an explicitly authorized real-account PAUSED creation test before rollout.
+  No live Solaride campaign is modified by this implementation.
 
 ### Targeting and Budget
 
+- Every campaign must have detailed interest targeting before creation. AI plans
+  require one to five relevant commercial interests grounded in the business and
+  offer. Preparing a draft with missing/empty interests requests AI recommendations
+  even when location and age are manual. Existing nonempty suggestions remain
+  editable and reusable; saving an incomplete draft does not invoke AI.
+- Missing or unresolvable interests block creation rather than silently falling
+  back to a broad audience. Meta validates the interest IDs before review and
+  creation; each ad set receives them as detailed-targeting signals. This does not
+  create custom audiences or guarantee that Meta will never expand delivery beyond
+  those signals. Restricted-category and sensitive-trait safeguards still apply.
+- Gender can be set to All genders (default), Men, or Women under Audience &
+  location. It is saved and restored with the draft, displayed in review, and
+  applied to every ad set for both instant-form and WhatsApp campaigns. AI
+  audience recommendations preserve the owner's selection; changing it requires
+  a fresh review. Older drafts without this field keep All genders. The editor's
+  existing special-ad-category restrictions still apply.
+- Location and age "Let AdBrain decide" actions request a cancellable audience
+  recommendation immediately after creative selection. Returned areas, ages,
+  radius, interests, and rationale remain editable; the action does not save or
+  create a campaign. Failures retain existing inputs. Budget, creative selection,
+  destination, and lead form remain owner-controlled in audience-only planning.
+- Planned and excluded area entries use one place per line, preserving commas
+  inside names. Manual areas and radius edits are retained; explicitly requesting
+  a fresh location decision replaces prior suggested areas. Age-only decisions
+  preserve chosen geography. Geographic resolution prefers exact names and
+  qualified city/region labels, without assuming India when no country is given.
 - Ages must resolve to explicit bounds between 18 and 65, minimum no greater
   than maximum; Meta's upper endpoint represents its supported 65+ range.
 - Include/exclude city, region, or country locations; city radii must be 17-80 km

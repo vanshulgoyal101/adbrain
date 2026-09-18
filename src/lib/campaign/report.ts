@@ -31,9 +31,14 @@ export function buildPerformanceReport(input: {
 }): string {
   const { businessName, generatedAt, rows } = input;
   const delivered = rows.filter((r) => r.leads > 0 || r.spend > 0 || r.impressions > 0 || r.clicks > 0);
-  const totalLeads = delivered.reduce((s, r) => s + r.leads, 0);
+  const leadCampaigns = delivered.filter(campaign => campaign.conversations == null);
+  const messagingCampaigns = delivered.filter(campaign => campaign.conversations != null);
+  const totalLeads = leadCampaigns.reduce((sum, campaign) => sum + campaign.leads, 0);
+  const leadSpend = leadCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
+  const conversations = messagingCampaigns.reduce((sum, campaign) => sum + campaign.conversations!, 0);
+  const conversationSpend = messagingCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
   const totalSpend = delivered.reduce((s, r) => s + r.spend, 0);
-  const blendedCpl = totalLeads > 0 ? totalSpend / totalLeads : null;
+  const blendedCpl = totalLeads > 0 ? leadSpend / totalLeads : null;
 
   const lines: string[] = [];
   lines.push(`# AdBrain Performance Report — ${markdownText(businessName)}`);
@@ -46,12 +51,18 @@ export function buildPerformanceReport(input: {
   lines.push(`- Campaigns: ${rows.length} (${delivered.length} with delivery)`);
   lines.push(`- Total leads: ${totalLeads}`);
   lines.push(`- Total spend: ${money(totalSpend)}`);
+  if (messagingCampaigns.length) {
+    lines.push(`- WhatsApp conversations started: ${conversations}`);
+    lines.push(`- WhatsApp spend: ${money(conversationSpend)}`);
+    lines.push(`- Cost per WhatsApp conversation: ${conversations > 0 ? money(conversationSpend / conversations) : "—"}`);
+    lines.push("- Lead totals and blended lead cost exclude WhatsApp campaigns. Conversations are not verified leads or sales.");
+  }
   lines.push(
     `- Blended cost per lead: ${blendedCpl != null ? money(blendedCpl) : "—"}`,
   );
   lines.push("");
 
-  const best = [...delivered].filter((campaign) => campaign.leads > 0).sort(rank)[0];
+  const best = [...leadCampaigns].filter((campaign) => campaign.leads > 0).sort(rank)[0];
   if (best) {
     lines.push(
       `**Best so far:** "${markdownText(best.name)}"${
@@ -64,16 +75,16 @@ export function buildPerformanceReport(input: {
   lines.push("## Campaigns");
   lines.push("");
   lines.push(
-    "| Campaign | Angle | Area | Budget/day | Impressions | Clicks | Leads | Cost/lead | Status |",
+    "| Campaign | Angle | Area | Budget/day | Impressions | Clicks | Leads | Cost/lead | WhatsApp conversations | Cost/conversation | Status |",
   );
-  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const r of [...rows].sort(rank)) {
     lines.push(
       `| ${markdownText(r.name)} | ${markdownText(r.angles.join("/") || "—")} | ${markdownText(r.area ?? "—")} | ${
         r.dailyBudget != null ? money(r.dailyBudget) : "—"
-      } | ${r.impressions} | ${r.clicks} | ${r.leads} | ${
-        r.cpl != null ? money(r.cpl) : "—"
-      } | ${markdownText(r.status)} |`,
+      } | ${r.impressions} | ${r.clicks} | ${r.conversations == null ? r.leads : "—"} | ${
+        r.conversations == null && r.cpl != null ? money(r.cpl) : "—"
+      } | ${r.conversations ?? "—"} | ${r.costPerConversation != null ? money(r.costPerConversation) : "—"} | ${markdownText(r.status)} |`,
     );
   }
   lines.push("");

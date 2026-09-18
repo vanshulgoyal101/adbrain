@@ -22,6 +22,7 @@ const targetingItemSchema = z.object({
 
 export const targetingInputSchema = z
   .object({
+    gender: z.enum(["all", "men", "women"]).optional(),
     location: z
       .object({
         mode: z.enum(["ai", "manual"]).optional(),
@@ -57,6 +58,7 @@ export const draftInputSchema = z
     creativeIds: z.array(uuid).max(50),
     dailyBudgetRupees: moneyRupees,
     leadFormId: metaId.nullable(),
+    destination: z.enum(["instant_form", "whatsapp"]).optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
   })
@@ -98,6 +100,8 @@ export const reviewDtoSchema = z.object({
   blockers: z.array(blockerSchema).max(20),
   planHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   creativeHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  destination: z.enum(["instant_form", "whatsapp"]).optional(),
+  whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).nullable().optional(),
   currency: z.literal("INR"),
   perAdSetDailyBudgetRupees: moneyRupees,
   adSetCount: z.number().int().positive().max(50),

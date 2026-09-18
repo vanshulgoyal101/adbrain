@@ -28,6 +28,18 @@ const jaipurUs: GeoSearchResult = {
 };
 
 describe("pickBestGeoMatch", () => {
+  it("matches a requested region before a differently named city", () => {
+    const region: GeoSearchResult = { key: "rajasthan", name: "Rajasthan", type: "region", country_code: "IN" };
+    expect(pickBestGeoMatch([jaipurCity, region], "Rajasthan")).toEqual(region);
+  });
+
+  it("uses a qualified city and region rather than an unrelated India preference", () => {
+    const texas: GeoSearchResult = { key: "austin", name: "Austin", region: "Texas", type: "city", country_code: "US" };
+    const namesake: GeoSearchResult = { ...texas, key: "namesake", region: "Other region", country_code: "IN" };
+    expect(pickBestGeoMatch([namesake, texas], "Austin, Texas", "IN")).toEqual(texas);
+    expect(pickBestGeoMatch([texas, namesake], "Austin")).toEqual(texas);
+  });
+
   it("returns null for no matches", () => {
     expect(pickBestGeoMatch([], "Jaipur")).toBeNull();
   });

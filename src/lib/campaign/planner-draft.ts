@@ -11,7 +11,7 @@ export const plannerPlanSchema = z
     age_min: z.number().finite().int().min(18).max(65),
     age_max: z.number().finite().int().min(18).max(65),
     radius_km: z.number().finite().int().min(17).max(80).default(25),
-    interests: z.array(z.string().trim().min(1).max(100)).max(5).default([]),
+    interests: z.array(z.string().trim().min(1).max(100)).min(1).max(5),
     special_ad_category: z.enum(["none", "housing", "employment", "financial_products_services", "issues_elections_politics", "unknown"]),
     locations: z.array(z.string().trim().min(1).max(200)).max(50),
     excluded_locations: z.array(z.string().trim().min(1).max(200)).max(50),
@@ -65,13 +65,13 @@ export function plannerPlanToDraftInput(input: {
   if (!parsed.success) return { ok: false, error: "Planner returned an invalid campaign draft." };
 
   const plan: PlannerPlanInput = parsed.data;
-  if (plan.destination !== "instant_form") return { ok: false, error: "This campaign editor supports instant lead forms. Choose an instant-form campaign." };
+  if (plan.destination === "call") return { ok: false, error: "Choose an instant lead form or WhatsApp campaign. Call campaigns are not supported." };
   const approved = new Set(input.approvedCreativeIds);
   const creativeIds = [...new Set(plan.creative_ids)];
   if (creativeIds.some((id) => !approved.has(id))) return { ok: false, error: "Planner did not choose an approved creative." };
 
   const leadForms = new Set(input.leadFormIds);
-  if (plan.lead_form_id !== null && !leadForms.has(plan.lead_form_id)) {
+  if (plan.destination === "instant_form" && plan.lead_form_id !== null && !leadForms.has(plan.lead_form_id)) {
     return { ok: false, error: "Planner chose a lead form that is not available." };
   }
 
@@ -88,7 +88,8 @@ export function plannerPlanToDraftInput(input: {
     mode: "guided" as const,
     creativeIds,
     dailyBudgetRupees: plan.daily_budget_rupees,
-    leadFormId: plan.lead_form_id,
+    leadFormId: plan.destination === "whatsapp" ? null : plan.lead_form_id,
+    destination: plan.destination,
     targeting: {
       location: {
         radiusKm: plan.radius_km,

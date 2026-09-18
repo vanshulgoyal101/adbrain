@@ -44,6 +44,7 @@ export interface PlannerAnswer {
 }
 
 export interface PlannerInput {
+  destination?: "instant_form" | "whatsapp";
   brand: BrandContext;
   instructions?: string;
   approved: { id: string; angle: string | null; headline: string | null }[];
@@ -53,7 +54,7 @@ export interface PlannerInput {
   performance?: string;
 }
 
-export const PLANNER_PROMPT_VERSION = "campaign-planner-v2";
+export const PLANNER_PROMPT_VERSION = "campaign-planner-v3";
 
 const questionSchema = z.object({
   id: z.string().trim().min(1).max(80),
@@ -113,11 +114,13 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "don't get out-of-area calls), daily budget, and which offer/angle to push. " +
         "(3) Never fabricate facts, prices, or guarantees. (4) Keep the audience " +
         "evidence-based: choose an explicit age range (65 means 65+), a 17-80 km city radius, and " +
-        "up to five relevant general commercial interest names. Use interests=[] " +
-        "when interest narrowing has no defensible benefit. Never invent Meta IDs. " +
+        "one to five relevant general commercial interest names for detailed targeting in every plan. " +
+        "Ground them in the advertised product, offer and business evidence, not a fixed industry template. " +
+        "Never return an empty interests list in a ready plan. If relevant interests cannot be justified, " +
+        "ask for the missing product or audience context instead of inventing interests. Never invent Meta IDs. " +
         "Explain the age, radius and interests in rationale as a testable hypothesis, " +
         "not a guaranteed best audience. Do not infer health conditions, religion, " +
-        "ethnicity, financial hardship or other sensitive traits. Include all genders. " +
+        "ethnicity, financial hardship or other sensitive traits. Do not infer or recommend gender; preserve an explicit owner selection and otherwise include all genders. " +
         "Classify special_ad_category from the actual advertised offer, not audience " +
         "traits. For housing, employment, financial products/services (including credit), " +
         "issues/elections/politics, or an uncertain category, do not propose " +
@@ -129,8 +132,9 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "service areas or exclusions. Use the saved audience, offer, geography and " +
         "actual performance evidence to decide; ask only for missing business facts. " +
         "Never infer location-level performance from campaign totals. Ask when " +
-        "it matters. (6) This editor creates instant-form campaigns only; set " +
-        "`destination` to \"instant_form\". (7) If no lead forms are provided, set " +
+        "it matters. (6) This editor supports instant forms and WhatsApp chats; preserve " +
+        `the selected destination: ${input.destination ?? "instant_form"}. For WhatsApp, set lead_form_id=null; never ask for a form or invent a phone number. ` +
+        "(7) If no lead forms are provided, set " +
         "`lead_form_id` to null. Do not block planning on Meta login or invent a " +
         "form ID; the owner will connect Meta and choose a form before creation. " +
         "Never repeat an answered question or duplicate question IDs/options. " +
@@ -152,7 +156,7 @@ ${input.performance ? `\nPAST CAMPAIGNS & RESULTS (learn from these to improve â
 USER GOAL: ${input.goal}
 ${input.answers ? `\nANSWERS SO FAR:\n${input.answers}\n` : ""}
 If you have enough info, return:
-{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string|null, "creative_ids": string[], "age_min": number, "age_max": number, "radius_km": number, "interests": string[], "special_ad_category": "none"|"housing"|"employment"|"financial_products_services"|"issues_elections_politics"|"unknown", "locations": string[], "excluded_locations": string[], "destination": "instant_form", "rationale": string}}
+{"ready": true, "plan": {"name": string, "daily_budget_rupees": number, "lead_form_id": string|null, "creative_ids": string[], "age_min": number, "age_max": number, "radius_km": number, "interests": string[], "special_ad_category": "none"|"housing"|"employment"|"financial_products_services"|"issues_elections_politics"|"unknown", "locations": string[], "excluded_locations": string[], "destination": "${input.destination ?? "instant_form"}", "rationale": string}}
 If you need more info, return:
 {"ready": false, "questions": [{"id": string, "question": string, "help": string, "type": "single"|"multi"|"text", "options": string[], "allowText": boolean}]}`,
     },

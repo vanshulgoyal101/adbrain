@@ -51,6 +51,15 @@ export function buildCampaignPreflightLoaders(
         ? { id: form.id, businessId, active: form.status.toUpperCase() === "ACTIVE" }
         : null;
     },
+    findWhatsAppNumber: async () => {
+      const connection = await getConnectionStatus(authorizedBusiness);
+      if (connection.capabilities.canCreatePaused.state !== "available") return null;
+      try {
+        return await withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => meta.getWhatsAppNumber());
+      } catch {
+        return null;
+      }
+    },
     getConnection: async () => {
       const connection = await getConnectionStatus(authorizedBusiness);
       return {

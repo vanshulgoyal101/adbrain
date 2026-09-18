@@ -56,10 +56,12 @@ function reviveSession(raw: unknown): ChatSession | null {
 /** A Copilot-style guided interview that plans + creates a paused campaign. */
 export function CampaignChat({
   businessId,
+  destination = "instant_form",
   onCreated,
   onDraftReady,
 }: {
   businessId: string;
+  destination?: "instant_form" | "whatsapp";
   onCreated?: (campaign: Campaign) => void;
   onDraftReady?: (draft: DraftDTO) => void;
 }) {
@@ -90,7 +92,7 @@ export function CampaignChat({
       const res = await fetch("/api/campaigns/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: goalText, answers: merged }),
+        body: JSON.stringify({ goal: goalText, answers: merged, destination }),
       });
       const data = (await res.json()) as {
         ready?: boolean;

@@ -19,7 +19,7 @@ const draft: DraftRecord = {
     creativeIds: ["c123c123-c123-4123-8123-c123c123c123"],
     dailyBudgetRupees: 500,
     leadFormId: "form-1",
-    targeting: { age: { mode: "manual", min: 18, max: 65 } },
+    targeting: { age: { mode: "manual", min: 18, max: 65 }, audience: { interestNames: ["Solar energy"], rationale: "Test solar interest." } },
     abTest: false,
   },
   expiresAt: "2026-09-14T10:00:00.000Z",
@@ -51,13 +51,22 @@ function loaders(overrides: Partial<PreflightLoaders> = {}): PreflightLoaders {
       },
       canCreatePaused: true,
     }),
-    resolveGeo: async () => ({ resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false }),
+    resolveGeo: async () => ({ resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "12345", name: "Solar energy" }] }),
     hash: () => "a".repeat(64),
     ...overrides,
   };
 }
 
 describe("campaign preflight orchestration", () => {
+  it("does not load forms for WhatsApp, even when an old form ID remains", async () => {
+    const result = await prepareCampaignReview(loaders({
+      findDraft: async () => ({ ...draft, input: { ...draft.input, destination: "whatsapp" } }),
+      findForm: async () => { throw new Error("WhatsApp must not load forms"); },
+      findWhatsAppNumber: async () => "+919876543210",
+    }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
+    expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: false, planHash: null, destination: "whatsapp", whatsappNumber: "+919876543210" } });
+  });
+
   it("loads exact owned inputs and returns a reviewed plan", async () => {
     const calls: string[] = [];
     const result = await prepareCampaignReview({

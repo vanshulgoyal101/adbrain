@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { friendlyMetaError, MetaClient, MetaError } from "@/lib/meta/client";
+import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 
 const creds = {
   adAccountId: "act_123",
@@ -10,6 +11,20 @@ const creds = {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MetaClient Page-token lookup", () => {
+  it.each([
+    [{ id: "999", has_whatsapp_business_number: true, whatsapp_number: "+91 98765-43210" }, "+919876543210"],
+    [{ id: "999", has_whatsapp_business_number: false, whatsapp_number: "+919876543210" }, null],
+    [{ id: "other", has_whatsapp_business_number: true, whatsapp_number: "+919876543210" }, null],
+    [{ id: "999", has_whatsapp_business_number: true, whatsapp_number: "123<script>" }, null],
+    [{ id: "999", has_whatsapp_business_number: true }, null],
+  ])("requires Page-owned WhatsApp Business number evidence: %j", async (page, expected) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
+      .mockResolvedValueOnce(Response.json(page));
+    expect(await new MetaClient(creds).getWhatsAppNumber()).toBe(expected);
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it("propagates search cancellation to the provider request", async () => {
     const controller = new AbortController();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
@@ -74,6 +89,17 @@ describe("MetaClient.verifyCampaignActivation", () => {
 });
 
 describe("campaign object binding", () => {
+  it("counts WhatsApp conversation starts separately without summing overlapping messaging actions", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ destination_type: "WHATSAPP", promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ spend: "150", actions: [
+        { action_type: "onsite_conversion.messaging_conversation_started_7d", value: "3" },
+        { action_type: "onsite_conversion.total_messaging_connection", value: "5" },
+      ] }] }));
+    expect(await new MetaClient(creds).getCampaignInsights("camp_1")).toMatchObject({ leads: 0, cpl: null, conversations: 3, costPerConversation: 50 });
+  });
+
   it.each(["delete", "insights"])("allows bound campaign %s after verification", async (operation) => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
@@ -167,6 +193,56 @@ describe("MetaClient.updateCampaignStatus", () => {
 });
 
 describe("MetaClient.createLeadCampaign checkpoints", () => {
+  it("rejects unsupported gender values in saved targeting and before provider mutation", async () => {
+    expect(targetingInputSchema.safeParse({ gender: "invalid" }).success).toBe(false);
+    expect(targetingInputSchema.safeParse({}).success).toBe(true);
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(new MetaClient(creds).createLeadCampaign({
+      name: "Invalid gender", dailyBudgetRupees: 200, leadFormId: "form-1", link: "https://example.com", creatives: [],
+      location: { countries: ["IN"] }, ageMin: 25, ageMax: 65, gender: "invalid" as "all",
+    })).rejects.toThrow("gender demographic");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["all", "men", "women", undefined] as const)("maps gender %s across all age variants", async (gender) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
+    await new MetaClient(creds).createLeadCampaign({
+      name: "Demographics", dailyBudgetRupees: 200, leadFormId: "form-1", link: "https://example.com", creatives: [],
+      location: { countries: ["IN"] }, gender, variants: [{ ageMin: 25, ageMax: 39 }, { ageMin: 40, ageMax: 65 }],
+    });
+    const adsets = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/adsets"));
+    expect(adsets).toHaveLength(2);
+    for (const [, init] of adsets) {
+      const targeting = JSON.parse(new URLSearchParams(String(init?.body)).get("targeting")!);
+      expect(targeting.genders).toEqual(gender === "men" ? [1] : gender === "women" ? [2] : undefined);
+    }
+  });
+
+  it("creates WhatsApp ads paused with the verified recipient and no form", async () => {
+    const client = new MetaClient(creds);
+    vi.spyOn(client, "getWhatsAppNumber").mockResolvedValue("+919876543210");
+    vi.spyOn(client, "uploadAdImage").mockResolvedValue("image-hash");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
+    await client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", link: "https://example.com", creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Contact us" }], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 });
+    const forms = fetchMock.mock.calls.map(([, init]) => new URLSearchParams(String(init?.body)));
+    expect(forms[0].get("objective")).toBe("OUTCOME_ENGAGEMENT");
+    expect(forms[1].get("destination_type")).toBe("WHATSAPP");
+    expect(forms[1].get("optimization_goal")).toBe("CONVERSATIONS");
+    expect(JSON.parse(forms[1].get("promoted_object")!)).toEqual({ page_id: "999", whatsapp_phone_number: "+919876543210" });
+    const story = JSON.parse(forms[2].get("object_story_spec")!);
+    expect(story.link_data.link).toBe("https://wa.me/919876543210");
+    expect(story.link_data.call_to_action.value).not.toHaveProperty("lead_gen_form_id");
+    expect([forms[0], forms[1], forms[3]].every(form => form.get("status") === "PAUSED")).toBe(true);
+  });
+
+  it.each([undefined, "+919876543211"])("blocks missing or changed WhatsApp recipient before mutation: %s", async (whatsappNumber) => {
+    const client = new MetaClient(creds);
+    vi.spyOn(client, "getWhatsAppNumber").mockResolvedValue("+919876543210");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber, link: "https://example.com", creatives: [], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 })).rejects.toThrow(/WhatsApp/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     { location: { cities: [{ key: "city-1", radius: 5, distance_unit: "kilometer" }] }, ageMin: 25, ageMax: 55 },
     { location: { countries: ["IN"] }, ageMin: 55, ageMax: 25 },

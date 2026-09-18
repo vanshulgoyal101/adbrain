@@ -88,6 +88,7 @@ async function handlePOST(
       leads: insights.leads,
       spend: insights.spend,
       cpl: insights.cpl,
+      ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null } : {}),
     })
     .select("*")
     .single();

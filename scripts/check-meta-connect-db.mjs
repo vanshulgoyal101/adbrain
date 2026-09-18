@@ -55,6 +55,13 @@ async function verify(database, source) {
     await db.query(bootstrap);
     await db.query(source);
     console.log(`PASS ${database}: schema executes`);
+    await check(`${database}: nullable WhatsApp result fields and nonnegative checks exist`, async () => {
+      const { rows } = await db.query("select column_name, is_nullable from information_schema.columns where table_schema='public' and table_name='campaign_results' and column_name in ('conversations', 'cost_per_conversation') order by column_name");
+      assert.deepEqual(rows, [{ column_name: "conversations", is_nullable: "YES" }, { column_name: "cost_per_conversation", is_nullable: "YES" }]);
+      const checks = await db.query("select pg_get_constraintdef(oid) as definition from pg_constraint where conrelid='public.campaign_results'::regclass and contype='c'");
+      assert.ok(checks.rows.some(row => /conversations >= 0/.test(row.definition)));
+      assert.ok(checks.rows.some(row => /cost_per_conversation >=/.test(row.definition)));
+    });
     if (database === "ordered_upgrade") {
       await check("ordered_upgrade: legacy OAuth privileges and owner policy survive", async () => {
         const { rows } = await db.query(`select
@@ -382,8 +389,9 @@ try {
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
   const trustedUsageMigration = await readFile(join(root, "db/migrations/20260916_trusted_usage_and_rate_limits.sql"), "utf8");
   const productEventsMigration = await readFile(join(root, "db/migrations/20260918_product_events.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}`);
+  const whatsappMigration = await readFile(join(root, "db/migrations/20260918_whatsapp_results.sql"), "utf8");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

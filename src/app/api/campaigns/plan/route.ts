@@ -49,6 +49,7 @@ async function handlePOST(req: Request) {
   const parsed = z.object({
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
+    destination: z.enum(["instant_form", "whatsapp"]).optional(),
     answers: z.union([z.string().max(12_000), z.array(z.object({
       question: z.string().max(1_000), answer: z.string().max(2_000),
     })).max(30)]).optional(),
@@ -70,6 +71,7 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ error: "No business found" }, { status: 400 });
   }
   const audienceDraft = parsed.data.audienceDraft;
+  const destination = audienceDraft?.destination ?? parsed.data.destination ?? "instant_form";
   if (audienceDraft && audienceDraft.businessId !== business.id) {
     return NextResponse.json({ error: "Business access is not allowed." }, { status: 403 });
   }
@@ -97,7 +99,7 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ error: friendlyMetaError(err, "Could not load lead forms.") }, { status: 502 });
   }
   try {
-    if (!audienceDraft) leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.listLeadForms());
+    if (!audienceDraft && destination === "instant_form") leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.listLeadForms());
   } catch {
     leadForms = [];
   }
@@ -114,6 +116,7 @@ async function handlePOST(req: Request) {
     const performance = await getPerformanceContext(business.id);
     const requestId = currentRequestId();
     result = await runPlanner({
+      destination,
       brand: business,
       instructions,
       performance,
@@ -168,7 +171,8 @@ async function handlePOST(req: Request) {
       daily_budget_rupees: audienceDraft.dailyBudgetRupees,
       creative_ids: audienceDraft.creativeIds,
       lead_form_id: null,
-    } : result.plan,
+      destination,
+    } : { ...result.plan, destination, ...(destination === "whatsapp" ? { lead_form_id: null } : {}) },
     approvedCreativeIds: approved.map((creative) => creative.id),
     leadFormIds: leadForms.map((form) => form.id),
   });
@@ -181,9 +185,9 @@ async function handlePOST(req: Request) {
   if (audienceDraft) {
     const targeting = {
       ...draftResult.draft.targeting,
+      gender: audienceDraft.targeting.gender ?? "all",
       location: audienceDraft.targeting.location?.mode === "manual" ? audienceDraft.targeting.location : {
         ...draftResult.draft.targeting.location,
-        ...(audienceDraft.targeting.location?.includedNames?.length ? { includedNames: audienceDraft.targeting.location.includedNames } : {}),
         ...(audienceDraft.targeting.location?.excludedNames?.length ? { excludedNames: audienceDraft.targeting.location.excludedNames } : {}),
         ...(audienceDraft.targeting.location?.excluded?.length ? { excluded: audienceDraft.targeting.location.excluded } : {}),
       },

@@ -124,12 +124,31 @@ describe("<AdAssistant> draft persistence", () => {
     await user.click(await screen.findByRole("button", { name: "Team at work" }));
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers[0]).toMatchObject({ field: "visual", questionId: "scene", options: ["Team at work", "Service space"] });
     const brief = await screen.findByRole("textbox", { name: "Creative brief" });
+    const history = screen.getByRole("region", { name: "Conversation history" });
+    expect(history).toHaveClass("scrollbar-stable", "overflow-y-auto");
+    expect(history).toHaveAttribute("tabindex", "0");
     await user.clear(brief);
     await user.type(brief, "Show only the service space, no people.");
     first.unmount();
     render(<AdAssistant business={business} />);
     expect(await screen.findByRole("textbox", { name: "Creative brief" })).toHaveValue("Show only the service space, no people.");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends an AI decision with its field and shows the returned brief before generation", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ ready: false, question: { id: "area", field: "location", question: "Which service area?", options: ["Jaipur", "Ajmer"], aiCanDecide: true } }))
+      .mockResolvedValueOnce(Response.json({ ready: true, brief: "Target the saved Jaipur service area." }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Campaign goal" }), { target: { value: "Local enquiries" } });
+    fireEvent.click(screen.getByRole("button", { name: /start creating/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Let AI decide" }));
+    expect(await screen.findByRole("textbox", { name: "Creative brief" })).toHaveValue("Target the saved Jaipur service area.");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers[0]).toMatchObject({ field: "location", questionId: "area", answer: "Let the AI decide the best option based on the brand." });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.every(([url]) => url === "/api/creatives/assistant")).toBe(true);
   });
 
   it("carries a specific recommended next query and full reviewed context into another request", async () => {

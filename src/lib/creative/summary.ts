@@ -6,6 +6,9 @@ export async function summarizeInsights(
   campaignName: string,
   insights: CampaignInsights,
 ): Promise<string> {
+  if (insights.conversations !== undefined) {
+    return `${insights.conversations} WhatsApp conversations started, INR ${insights.spend.toFixed(0)} spent.${insights.costPerConversation != null ? ` INR ${insights.costPerConversation.toFixed(0)} per conversation.` : ""} Conversations are not verified leads or sales.`;
+  }
   if (insights.impressions === 0 && insights.spend === 0) {
     return "No delivery yet — this campaign hasn't spent or shown to anyone. It may be paused or still in review.";
   }

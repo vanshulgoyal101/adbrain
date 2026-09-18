@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
-import { checkReviewFreshness, runPreflight } from "@/lib/campaign/preflight";
+import { buildCanonicalReviewPayload, checkReviewFreshness, runPreflight } from "@/lib/campaign/preflight";
 import { claimOperation, finishOperation, markNeedsReconciliation, recordExternalId } from "@/lib/campaign/operations";
 
 const selected = {
@@ -20,7 +20,7 @@ const draft = {
   creativeIds: ["22222222-2222-4222-8222-222222222222"],
   dailyBudgetRupees: 500,
   leadFormId: "form-1",
-  targeting: { age: { mode: "manual" as const, min: 18, max: 65 } },
+  targeting: { age: { mode: "manual" as const, min: 18, max: 65 }, audience: { interestNames: ["Solar energy"], rationale: "Reach people interested in solar energy." } },
   abTest: true,
 };
 
@@ -32,13 +32,43 @@ function input(over: Partial<Parameters<typeof runPreflight>[0]> = {}) {
     connection: { generation: 4, selected, canCreatePaused: true },
     creatives: [{ id: draft.creativeIds[0], businessId: draft.businessId, approved: true, imageUrl: "https://image.test/ad.png", headline: "Local help" }],
     form: { id: "form-1", businessId: draft.businessId, active: true },
-    geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false },
+    geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "12345", name: "Solar energy" }] },
     hash: () => "a".repeat(64),
     ...over,
   };
 }
 
 describe("campaign preflight", () => {
+  it.each([undefined, { interestNames: [], rationale: "Broad audience" }])("blocks missing detailed targeting: %j", (audience) => {
+    const review = runPreflight(input({ draft: { ...draft, targeting: { ...draft.targeting, audience } } }));
+    expect(review.canCreatePaused).toBe(false);
+    expect(review.planHash).toBeNull();
+    expect(review.blockers.some((item) => item.message.includes("detailed targeting"))).toBe(true);
+  });
+
+  it("invalidates review when gender changes", () => {
+    const hashes = (["all", "men", "women"] as const).map(gender => runPreflight(input({
+      draft: { ...draft, targeting: { ...draft.targeting, gender } },
+      hash: payload => createHash("sha256").update(payload).digest("hex"),
+    })).planHash);
+    expect(hashes.every(Boolean)).toBe(true);
+    expect(new Set(hashes).size).toBe(3);
+  });
+
+  it("blocks WhatsApp publishing even with a verified number and retains its draft review data", () => {
+    const base = input({ draft: { ...draft, destination: "whatsapp", leadFormId: null }, form: null,
+      whatsappNumber: "+919876543210", hash: payload => createHash("sha256").update(payload).digest("hex") });
+    const review = runPreflight(base);
+    expect(review.canCreatePaused).toBe(false);
+    expect(review.planHash).toBeNull();
+    expect(review.blockers).toContainEqual(expect.objectContaining({ message: expect.stringContaining("WhatsApp publishing is not yet available") }));
+    expect(review.destination).toBe("whatsapp");
+    expect(review.whatsappNumber).toBe("+919876543210");
+    expect(runPreflight({ ...base, whatsappNumber: null }).canCreatePaused).toBe(false);
+    expect(buildCanonicalReviewPayload({ ...base, whatsappNumber: "+919876543211" })).not.toEqual(buildCanonicalReviewPayload(base));
+    expect(runPreflight({ ...base, draft: { ...draft, destination: "instant_form" }, form: input().form }).canCreatePaused).toBe(true);
+  });
+
   it.each(["imageUrl", "headline", "primaryText", "cta"] as const)("invalidates review when creative %s changes", (field) => {
     const original = input({ hash: payload => createHash("sha256").update(payload).digest("hex") });
     const review = runPreflight(original);
@@ -49,7 +79,7 @@ describe("campaign preflight", () => {
 
   it("binds resolved geographic IDs and exclusions, not just their labels", () => {
     const reviewFor = (key: string, excludedKey: string) => runPreflight(input({
-      geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key }] }, excludedLocation: { regions: [{ key: excludedKey }] } },
+      geo: { resolvedAreaLabel: "Jaipur", unresolvedNames: [], explicitlyNationwide: false, location: { cities: [{ key }] }, excludedLocation: { regions: [{ key: excludedKey }] }, audienceInterests: [{ id: "12345", name: "Solar energy" }] },
       hash: (payload) => createHash("sha256").update(payload).digest("hex"),
     }));
     const review = reviewFor("123", "456");

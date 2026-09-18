@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { buildPlannerMessages, formatAnswers, runPlanner } from "@/lib/campaign/planner";
 import { complete } from "@/lib/llm";
+import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 
 vi.mock("@/lib/llm", () => ({ complete: vi.fn(), parseJSON: JSON.parse }));
 beforeEach(() => vi.clearAllMocks());
@@ -38,6 +39,17 @@ describe("planner response validation", () => {
 });
 
 describe("campaign planner prompt", () => {
+  it("preserves WhatsApp and needs no lead form for a guided draft", () => {
+    const messages = buildPlannerMessages({ destination: "whatsapp", brand: { name: "Solaride" }, approved: [], leadForms: [], goal: "WhatsApp enquiries" });
+    expect(messages[0].content).toContain("selected destination: whatsapp");
+    expect(messages[0].content).toContain("detailed targeting in every plan");
+    const creativeId = "22222222-2222-4222-8222-222222222222";
+    expect(plannerPlanToDraftInput({ businessId: "11111111-1111-4111-8111-111111111111", goal: "WhatsApp enquiries", approvedCreativeIds: [creativeId], leadFormIds: [], plan: {
+      name: "WhatsApp", daily_budget_rupees: 200, lead_form_id: null, creative_ids: [creativeId], age_min: 25, age_max: 65,
+      special_ad_category: "none", locations: ["Jaipur"], excluded_locations: [], interests: ["Solar energy"], destination: "whatsapp", rationale: "Test local enquiries",
+    } })).toMatchObject({ ok: true, draft: { destination: "whatsapp", leadFormId: null } });
+  });
+
   it("includes creative ids, lead form ids, goal, and the no-invent rule", () => {
     const msgs = buildPlannerMessages({
       brand: { name: "Solaride", locations: ["Hisar"] },

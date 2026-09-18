@@ -5,17 +5,19 @@ export function CampaignLaunchReview({
   selectedCount,
   budget,
   leadFormName,
+  destination = "instant_form",
   audience,
 }: {
   selectedCount: number;
   budget: number;
   leadFormName?: string;
+  destination?: "instant_form" | "whatsapp";
   audience: string;
 }) {
   const isReady =
     selectedCount > 0 &&
     budget > 0 &&
-    !!leadFormName &&
+    destination === "instant_form" && !!leadFormName &&
     audience.trim().length > 0 &&
     audience !== "Choose an area";
 
@@ -57,7 +59,7 @@ export function CampaignLaunchReview({
         <div>
           <dt className="text-xs text-slate-500">Lead destination</dt>
           <dd className={cn("mt-1 break-words font-medium", leadFormName ? "text-slate-900" : "text-amber-700")}>
-            {leadFormName ?? "Choose a lead form"}
+            {destination === "whatsapp" ? "WhatsApp chat (number verification pending)" : leadFormName ?? "Choose a lead form"}
           </dd>
         </div>
         <div>
