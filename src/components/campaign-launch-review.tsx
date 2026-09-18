@@ -32,7 +32,7 @@ export function CampaignLaunchReview({
         </span>
         <div>
           <p id="launch-review-title" className="font-semibold text-slate-950">
-            {isReady ? "Ready to create paused campaign" : "Review before creation"}
+            {isReady ? "Ready for campaign review" : "Review before creation"}
           </p>
           <p className="mt-0.5 text-sm text-slate-600">
             {isReady

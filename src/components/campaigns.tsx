@@ -18,6 +18,7 @@ import {
   Search,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,8 @@ export function Campaigns({
   const [abTest, setAbTest] = useState(false);
   const [creating, setCreating] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const [preparationStage, setPreparationStage] = useState("");
+  const preparationRef = useRef<{ controller: AbortController; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
@@ -149,6 +152,12 @@ export function Campaigns({
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
+  const reviewPanelRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!prepareReview || prepareReview.status === "checking") return;
+    reviewPanelRef.current?.focus({ preventScroll: true });
+    reviewPanelRef.current?.scrollIntoView?.({ block: "start", behavior: "instant" });
+  }, [prepareReview]);
   const preparedDraftRef = useRef<DraftDTO | null>(null);
   const operationRef = useRef<{ reviewKey: string; idempotencyKey: string } | null>(null);
   const operationControllerRef = useRef<AbortController | null>(null);
@@ -381,9 +390,47 @@ export function Campaigns({
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
   }
 
+  useEffect(() => () => {
+    const pending = preparationRef.current;
+    preparationRef.current = null;
+    if (pending) { clearTimeout(pending.timer); pending.controller.abort(); }
+  }, [business.id, business.owner_id]);
+
+  function stopPreparation(timedOut = false) {
+    const pending = preparationRef.current;
+    if (!pending) return;
+    preparationRef.current = null;
+    clearTimeout(pending.timer);
+    pending.controller.abort();
+    setPreparing(false);
+    setPreparationStage("");
+    setPrepareReview(null);
+    const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
+    if (timedOut) setError(`Campaign preparation timed out. ${message}`);
+    else setNotice(`Campaign preparation stopped. ${message}`);
+  }
+
+  function beginPreparation() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => stopPreparation(true), 60_000);
+    preparationRef.current = { controller, timer };
+    setPreparing(true);
+    return controller.signal;
+  }
+
+  function finishPreparation(signal: AbortSignal) {
+    const pending = preparationRef.current;
+    if (pending?.controller.signal !== signal) return;
+    clearTimeout(pending.timer);
+    preparationRef.current = null;
+    setPreparing(false);
+    setPreparationStage("");
+  }
+
   async function loadPrepareReview(
     draft: DraftDTO,
     connection: ConnectionDTO,
+    signal?: AbortSignal,
   ): Promise<void> {
     setPrepareReview({ status: "checking", draft, connection });
     try {
@@ -391,9 +438,12 @@ export function Campaigns({
         business.id,
         draft.draftId,
         draft.version,
+        signal,
       );
+      signal?.throwIfAborted();
       setPrepareReview({ status: "ready", draft, connection, review });
     } catch (reason: unknown) {
+      if (signal?.aborted) throw reason;
       setPrepareReview({
         status: "blocked",
         draft,
@@ -492,13 +542,16 @@ export function Campaigns({
     };
   }
 
-  async function recommendAudience(input: DraftInput): Promise<DraftInput> {
+  async function recommendAudience(input: DraftInput, signal: AbortSignal): Promise<DraftInput> {
+    setPreparationStage("Recommending audience...");
     const response = await fetch("/api/campaigns/plan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
+      signal,
     });
     const data = await response.json() as { ready?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[] };
+    signal.throwIfAborted();
     if (!response.ok || !data.ready) throw new Error(data.error ?? data.questions?.map((question) => question.question).join(" ") ?? "Could not recommend an audience.");
     const recommended = targetingInputSchema.parse(data.targeting);
     if (!recommended.audience) throw new Error("The audience recommendation is incomplete. Try again.");
@@ -519,20 +572,21 @@ export function Campaigns({
   }
 
   async function requestAudienceRecommendation() {
-    if (unresolvedRecovery() || preparing) return;
+    if (unresolvedRecovery() || preparationRef.current) return;
     setError(null);
     setNotice(null);
-    setPreparing(true);
+    const signal = beginPreparation();
     try {
-      await recommendAudience(manualDraftInput());
+      await recommendAudience(manualDraftInput(), signal);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not recommend an audience.");
+      if (!signal.aborted) setError(reason instanceof Error ? reason.message : "Could not recommend an audience.");
     } finally {
-      setPreparing(false);
+      finishPreparation(signal);
     }
   }
 
   async function prepareManualCampaign(reviewAfterSave = true) {
+    if (preparationRef.current) return;
     if (unresolvedRecovery()) {
       setError("Check the existing campaign operation before preparing another campaign.");
       return;
@@ -544,36 +598,43 @@ export function Campaigns({
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
+      if (reviewAfterSave && connectedForDraft && !input.leadFormId) throw new Error("Choose a lead form before preparing campaign review.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Complete the campaign details first.");
       return;
     }
-    setPreparing(true);
+    const signal = beginPreparation();
     try {
       if (reviewAfterSave && (input.targeting.age?.mode === "ai" || (input.targeting.location?.mode === "ai" && !input.targeting.audience))) {
-        input = await recommendAudience(input);
+        input = await recommendAudience(input, signal);
       }
+      signal.throwIfAborted();
+      setPreparationStage("Saving draft...");
       const client = createMetaConnectClient();
       const previous = preparedDraftRef.current;
       const draft = previous && !recoveryRef.current?.request
-        ? await client.updateDraft(previous.draftId, previous.version, input)
-        : await client.saveDraft(input);
+        ? await client.updateDraft(previous.draftId, previous.version, input, signal)
+        : await client.saveDraft(input, signal);
+      signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
       if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
-      const connection = await client.status(business.id);
+      setPreparationStage("Checking Meta connection...");
+      const connection = await client.status(business.id, signal);
+      signal.throwIfAborted();
       setConnectedForDraft(connection.authorization === "connected" && Boolean(connection.selected));
       if (connection.authorization !== "connected" || !connection.selected) {
         setConnectionIntent({ kind: "setup" });
         setConnectOpen(true);
         return;
       }
-      await loadPrepareReview(draft, connection);
+      setPreparationStage("Checking campaign readiness...");
+      await loadPrepareReview(draft, connection, signal);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save the campaign draft.");
+      if (!signal.aborted) setError(reason instanceof Error ? reason.message : "Could not save the campaign draft.");
     } finally {
-      setPreparing(false);
+      finishPreparation(signal);
     }
   }
 
@@ -890,6 +951,7 @@ export function Campaigns({
         </Alert>
       )}
       {prepareReview && (
+        <section ref={reviewPanelRef} tabIndex={-1} aria-label="Campaign review result" className="scroll-mt-24 outline-none">
         <Alert variant={prepareReview.status === "ready" ? "success" : prepareReview.status === "blocked" ? "error" : "warning"}>
           {prepareReview.status === "checking" && "Checking the saved campaign draft before review."}
           {prepareReview.status === "blocked" && (
@@ -920,7 +982,7 @@ export function Campaigns({
                 {prepareReview.review.canCreatePaused && prepareReview.review.planHash && !operation && !recoveryPending && (
                   <Button size="sm" onClick={() => void createPreparedCampaign()} disabled={creating}>
                     {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                    Create paused campaign
+                    Send to Meta (paused)
                   </Button>
                 )}
                 {operation && (operation.state === "pending" || operation.state === "running") && (
@@ -939,6 +1001,7 @@ export function Campaigns({
             </>
           )}
         </Alert>
+        </section>
       )}
       <MetaConnectDialog
         businessId={business.id}
@@ -1224,6 +1287,14 @@ export function Campaigns({
               </>
             )}
             </fieldset>
+            {preparing && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p role="status" className="text-sm text-slate-600">{preparationStage}</p>
+                <Button variant="outline" onClick={() => stopPreparation()}>
+                  <X className="h-4 w-4" aria-hidden="true" /> Stop preparation
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

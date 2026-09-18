@@ -212,14 +212,118 @@ describe("campaign sync feedback", () => {
 });
 
 describe("campaign audience workflow", () => {
+  it("surfaces failed eligibility checks without offering a Meta submission", async () => {
+    mocks.preflight.mockResolvedValueOnce({
+      canCreatePaused: false, planHash: null, currency: "INR", selected,
+      perAdSetDailyBudgetRupees: 200, totalDailyBudgetRupees: 200,
+      blockers: [{ code: "FORM_UNAVAILABLE", message: "Choose an active Page form." }],
+    });
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Choose an active Page form.");
+    await waitFor(() => expect(screen.getByRole("region", { name: "Campaign review result" })).toHaveFocus());
+    expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).not.toBeInTheDocument();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("requires a lead form before starting AI work for a connected campaign", async () => {
+    view(true);
+    await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    expect(await screen.findByText("Choose a lead form before preparing campaign review.")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")).toHaveLength(0);
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("stops a stalled planner immediately and ignores its result during a retry", async () => {
+    const pending: { resolve: (response: Response) => void; signal: AbortSignal }[] = [];
+    vi.stubGlobal("fetch", vi.fn((_url: string, options: RequestInit) => new Promise<Response>(resolve => {
+      pending.push({ resolve, signal: options.signal as AbortSignal });
+    })));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    expect(screen.getByText("Recommending audience...")).toBeInTheDocument();
+    const stop = screen.getByRole("button", { name: "Stop preparation" });
+    expect(stop).toBeEnabled();
+    fireEvent.click(stop);
+    expect(pending[0].signal.aborted).toBe(true);
+    expect(screen.getByRole("button", { name: "Prepare campaign review" })).toBeEnabled();
+    expect(screen.getByText(/Campaign preparation stopped/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await act(async () => { pending[0].resolve(Response.json({ ready: true, targeting: recommended })); });
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Stop preparation" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Prepare campaign review" })).toBeDisabled();
+    await act(async () => { pending[1].resolve(Response.json({ ready: true, targeting: recommended })); });
+    await screen.findByText("Campaign review");
+    expect(mocks.saveDraft).toHaveBeenCalledOnce();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["saveDraft", "Saving draft..."],
+    ["status", "Checking Meta connection..."],
+    ["preflight", "Checking campaign readiness..."],
+  ] as const)("stops during %s without accepting a late response", async (method, stage) => {
+    let complete!: (value: unknown) => void;
+    mocks[method].mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText(stage);
+    const signal = mocks[method].mock.calls[0].at(-1) as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Stop preparation" }));
+    expect(signal.aborted).toBe(true);
+    await act(async () => { complete({}); });
+    expect(screen.getByRole("button", { name: "Prepare campaign review" })).toBeEnabled();
+    expect(screen.queryByText("Campaign review")).not.toBeInTheDocument();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+    if (method === "saveDraft") expect(mocks.status).not.toHaveBeenCalled();
+  });
+
+  it("times out a stalled preparation and preserves editable inputs", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    view();
+    await act(async () => {});
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+      fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+      const signal = vi.mocked(fetch).mock.calls[0][1]!.signal as AbortSignal;
+      await act(async () => { vi.advanceTimersByTime(60_000); });
+      expect(signal.aborted).toBe(true);
+      expect(screen.getByText(/Campaign preparation timed out/)).toBeInTheDocument();
+      expect(screen.getByLabelText("Campaign name")).toHaveValue("Solar installer — leads");
+      expect(screen.getByRole("button", { name: "Prepare campaign review" })).toBeEnabled();
+      expect(mocks.saveDraft).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("aborts preparation when leaving the view", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const current = view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    const signal = vi.mocked(fetch).mock.calls[0][1]!.signal as AbortSignal;
+    current.unmount();
+    expect(signal.aborted).toBe(true);
+  });
+
   it("plans once before review and preserves the AI audience through reopen and edit", async () => {
     const first = view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
     await screen.findByText("Campaign review");
+    await waitFor(() => expect(screen.getByRole("region", { name: "Campaign review result" })).toHaveFocus());
+    expect(screen.getByRole("button", { name: "Send to Meta (paused)" })).toBeEnabled();
     expect(mocks.saveDraft).toHaveBeenCalledWith(expect.objectContaining({
       creativeIds: [creative.id], dailyBudgetRupees: 200, leadFormId: "form-1", targeting: recommended,
-    }));
+    }), expect.any(AbortSignal));
     expect(screen.getByText(/Ages: 30-65\+/)).toHaveTextContent("Interests: Solar energy");
     expect(mocks.createCampaign).not.toHaveBeenCalled();
     first.unmount();
@@ -231,7 +335,7 @@ describe("campaign audience workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledWith(saved.draftId, 1, expect.objectContaining({
       targeting: expect.objectContaining({ audience: { interestNames: ["Solar energy", "Home improvement"], rationale: recommended.audience!.rationale } }),
-    })));
+    }), expect.any(AbortSignal)));
     expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")).toHaveLength(1);
   });
 

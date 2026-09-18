@@ -54,7 +54,8 @@ describe("<CampaignLaunchReview>", () => {
         audience="Jaipur"
       />,
     );
-    expect(screen.getByText(/ready to create paused campaign/i)).toBeInTheDocument();
+    expect(screen.getByText(/ready for campaign review/i)).toBeInTheDocument();
+    expect(screen.queryByText(/ready to create paused campaign/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Meta eligibility and audience checks still apply/i)).toBeInTheDocument();
   });
 });
