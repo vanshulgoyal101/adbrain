@@ -73,6 +73,75 @@ describe("campaign Ads Manager links", () => {
 });
 
 describe("campaign sync feedback", () => {
+  it("caches empty results but never shares freshness across businesses or owners", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ forms: [] })));
+    const props = { approved: [creative], initialCampaigns: [], initialResults: {}, leadForms: [], leadFormError: null, metaReady: true, adAccountId: "" };
+    const current = render(<Campaigns {...props} business={business} />);
+    await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
+    const formCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms");
+    expect(formCalls()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(formCalls()).toHaveLength(1);
+    current.rerender(<Campaigns {...props} business={{ ...business, id: "other-business" }} />);
+    await waitFor(() => expect(formCalls()).toHaveLength(2));
+    current.rerender(<Campaigns {...props} business={{ ...business, id: "other-business", owner_id: "other-owner" }} />);
+    await waitFor(() => expect(formCalls()).toHaveLength(3));
+  });
+
+  it("does not cache a cancelled response or a failure on reopen", async () => {
+    let completeFirst!: (response: Response) => void;
+    const forms = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { completeFirst = resolve; }))
+      .mockResolvedValueOnce(Response.json({ error: "Unavailable" }, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ forms: [{ id: "form-2", name: "Fresh form", status: "ACTIVE" }] }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url === "/api/campaigns/lead-forms"
+      ? forms() : Promise.resolve(Response.json({ campaigns: [], nextCursor: null }))));
+    view(true);
+    await screen.findByText("Loading lead forms...");
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    await act(async () => { completeFirst(Response.json({ forms: [{ id: "old", name: "Cancelled form", status: "ACTIVE" }] })); });
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    await screen.findByText(/Page forms are temporarily unavailable/);
+    expect(screen.queryByRole("option", { name: "Cancelled form" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    await screen.findByRole("option", { name: "Fresh form" });
+    expect(forms).toHaveBeenCalledTimes(3);
+    expect(screen.getByLabelText("Lead form")).toHaveValue("");
+  });
+
+  it("reuses successful forms on reopen and refreshes after one minute", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    try {
+      view(true);
+      await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
+      const formCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms");
+      expect(formCalls()).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+      fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+      expect(screen.getByRole("option", { name: "Enquiries" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Lead form")).toHaveValue("");
+      expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument();
+      expect(formCalls()).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+      clock.mockReturnValue(1_060_000);
+      fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+      await waitFor(() => expect(formCalls()).toHaveLength(2));
+      expect(mocks.preflight).not.toHaveBeenCalled();
+      expect(mocks.createCampaign).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
+
+  it("refreshes fresh forms after reconnecting", async () => {
+    view(true);
+    await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
+    await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 2 } as ConnectionDTO); });
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms")).toHaveLength(2));
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("loads lead forms once when a connection completes", async () => {
     view(false);
     await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });

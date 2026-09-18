@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Building2 } from "lucide-react";
 import { Studio } from "@/components/studio";
 import { DemoLlmUsage } from "@/components/demo-llm-usage";
@@ -9,6 +10,10 @@ import { businessLLMUsageSummary } from "@/lib/llm/persist";
 import { getEnv } from "@/lib/env";
 
 export const metadata = { title: "Creative Studio" };
+
+async function StudioUsage({ usage }: { usage: ReturnType<typeof businessLLMUsageSummary> }) {
+  return <DemoLlmUsage usage={await usage} />;
+}
 
 export default async function StudioPage({
   searchParams,
@@ -44,9 +49,9 @@ export default async function StudioPage({
 
   const showDemoUsage =
     user?.email?.toLowerCase() === getEnv().DEMO_USER_EMAIL.toLowerCase();
-  const [creatives, usage, params] = await Promise.all([
+  const usage = showDemoUsage ? businessLLMUsageSummary(business.id) : null;
+  const [creatives, params] = await Promise.all([
     getCreatives(business.id),
-    showDemoUsage ? businessLLMUsageSummary(business.id) : Promise.resolve(null),
     searchParams,
   ]);
   const filter = params.creative
@@ -64,7 +69,6 @@ export default async function StudioPage({
         <h1 className="mt-2 text-3xl font-semibold text-slate-950">Review</h1>
       </header>
       <div className="mt-6">
-        {usage && <DemoLlmUsage usage={usage} />}
         <Studio
           key={`${business.id}:${filter}:${params.creative ?? ""}`}
           business={business}
@@ -72,6 +76,7 @@ export default async function StudioPage({
           initialFilter={filter}
           initialCreativeId={params.creative ?? null}
         />
+        {usage && <Suspense fallback={null}><StudioUsage usage={usage} /></Suspense>}
       </div>
     </div>
   );
