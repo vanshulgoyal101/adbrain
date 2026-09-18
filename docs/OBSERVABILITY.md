@@ -1,5 +1,21 @@
 # Product and Account Logging
 
+## Production Database Rollout: 2026-09-18
+
+The owner authorized database logging and retention enablement. The exact
+`20260918_product_events.sql` migration was applied transactionally to the
+verified AdBrain production project after focused tests and disposable PostgreSQL
+fresh/upgrade checks passed. RLS, browser privilege denial, service access and
+the retention function were verified after application. No business records,
+campaigns, provider credentials or encryption keys were changed.
+
+`PRODUCT_LOGGING_DATABASE_ENABLED=true` is configured for Production only. It
+takes effect with the next protected production release; the release PR records
+the exact deployment and post-deployment event/retention verification. Do not
+infer persistence from the saved flag alone. Rollback is to disable the sink and
+redeploy a verified build, preserving the additive table and existing evidence.
+External alerting and hosting-log retention remain separate operator concerns.
+
 ## What Is Recorded
 
 All API/auth handlers and the five server actions emit structured JSON with
