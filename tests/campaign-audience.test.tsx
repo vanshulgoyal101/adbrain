@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
-import type { Business, Creative } from "@/lib/types";
+import type { Business, Campaign, Creative } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(),
@@ -47,6 +47,27 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/campaigns/plan"
     ? { ready: true, targeting: recommended }
     : { forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] })));
+});
+
+describe("campaign Ads Manager links", () => {
+  it.each([
+    ["act_2398686420592052", "act_999", "2398686420592052"],
+    ["2398686420592052", "act_999", "2398686420592052"],
+    [null, "act_999", "999"],
+    [null, "", null],
+    ["invalid", "act_999", null],
+  ])("uses the bound account %s with connection %s", async (boundAccount, connectionAccount, expectedAccount) => {
+    const campaign = { id: "campaign-1", name: "Saved campaign", status: "paused", meta_campaign_id: "120252972379040526", meta_ad_account_id: boundAccount } as Campaign;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId={connectionAccount ?? ""} />);
+    const link = await screen.findByRole("link", { name: "Ads Manager" });
+    const url = new URL(link.getAttribute("href")!);
+    expect(url.origin).toBe("https://adsmanager.facebook.com");
+    expect(url.pathname).toBe("/adsmanager/manage/campaigns/");
+    expect(url.searchParams.get("act")).toBe(expectedAccount);
+    expect(url.searchParams.get("selected_campaign_ids")).toBe(expectedAccount ? campaign.meta_campaign_id : null);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
 });
 
 describe("campaign sync feedback", () => {
