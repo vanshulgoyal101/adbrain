@@ -254,8 +254,7 @@ export function LeadInbox({
             <span className="ml-auto text-xs font-normal text-slate-500">Last 7 days · Up to 10 contacts</span>
           </summary>
           <pre
-            className="max-h-72 overflow-y-scroll whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700"
-            style={{ scrollbarGutter: "stable" }}
+            className="scrollbar-stable max-h-72 overflow-y-scroll whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700"
           >
             {digest}
           </pre>

@@ -372,8 +372,7 @@ export function Studio({
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
           <section aria-label="Creative board" className="min-w-0">
             <ul
-              className="flex gap-3 overflow-x-auto p-1 lg:grid lg:max-h-[75vh] lg:grid-cols-2 lg:overflow-y-scroll"
-              style={{ scrollbarGutter: "stable" }}
+              className="scrollbar-stable flex gap-3 overflow-x-auto p-1 lg:grid lg:max-h-[75vh] lg:grid-cols-2 lg:overflow-y-scroll"
             >
               {visibleItems.map((creative) => (
                 <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
@@ -739,8 +738,7 @@ function CreativePreview({
         role="dialog"
         aria-modal="true"
         aria-labelledby="creative-preview-title"
-        className="max-h-[92vh] w-full max-w-5xl overflow-y-scroll rounded-t-xl bg-white shadow-2xl sm:rounded-xl"
-        style={{ scrollbarGutter: "stable" }}
+        className="scrollbar-stable max-h-[92vh] w-full max-w-5xl overflow-y-scroll rounded-t-xl bg-white shadow-2xl sm:rounded-xl"
       >
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
           <div>

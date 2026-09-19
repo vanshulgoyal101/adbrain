@@ -531,8 +531,7 @@ export function Campaigns({
     }
     setError(null);
     setNotice(null);
-    setOperation(null);
-    operationRef.current = null;
+    setPrepareReview(null);
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
@@ -555,6 +554,8 @@ export function Campaigns({
         : await client.saveDraft(input, signal);
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
+      setOperation(null);
+      operationRef.current = null;
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
       if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
@@ -950,14 +951,18 @@ export function Campaigns({
         onClose={() => setConnectOpen(false)}
         onBeforeStart={connectionIntent.kind === "setup" ? async () => {
               if (unresolvedRecovery()) throw new Error("Check the existing operation before connecting again.");
-              setOperation(null);
-              operationRef.current = null;
+              setPrepareReview(null);
               const client = createMetaConnectClient();
               const previous = preparedDraftRef.current;
-              const input = creationMode === "guided" && previous ? previous.input : manualDraftInput(false);
-              const draft = previous ? await client.updateDraft(previous.draftId, previous.version, input) : await client.saveDraft(input);
+              const input = manualDraftInput(false);
+              const draft = previous && !recoveryRef.current?.request
+                ? await client.updateDraft(previous.draftId, previous.version, input)
+                : await client.saveDraft(input);
               preparedDraftRef.current = draft;
               saveRecovery({ draft, request: null, operationId: null });
+              setOperation(null);
+              operationRef.current = null;
+              setRecoveryPending(false);
               const prepareIntent = { kind: "prepare_campaign" as const, draftId: draft.draftId, draftVersion: draft.version };
               setConnectionIntent(prepareIntent);
               return prepareIntent;
@@ -1017,11 +1022,11 @@ export function Campaigns({
           </fieldset>
           {destinationRecoveryLocked && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {destination === "whatsapp" && <Alert variant="warning">WhatsApp drafts only. Publishing is not yet available.</Alert>}
-          <div hidden={creationMode !== "guided"}><CampaignChat
+          {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
-          /></div>
+          />}
         </>
       )}
 

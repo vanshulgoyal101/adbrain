@@ -232,8 +232,7 @@ function LocationPicker({
             id={listId}
             role="listbox"
             aria-label={tone === "include" ? "Locations to include" : "Locations to exclude"}
-            className="absolute z-30 mt-1 max-h-60 w-full overflow-y-scroll rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
-            style={{ scrollbarGutter: "stable" }}
+            className="scrollbar-stable absolute z-30 mt-1 max-h-60 w-full overflow-y-scroll rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
           >
             {results.map((r, index) => (
               <li key={`${r.type}:${r.key}`} role="presentation">

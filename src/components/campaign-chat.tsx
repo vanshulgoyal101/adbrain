@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2, RotateCcw, Send, Sparkles } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ interface ChatSession {
   started: boolean;
   turns: Turn[];
   collected: Answer[];
+  pending?: { goal: string; answers: Answer[] } | null;
 }
 
 function reviveSession(raw: unknown): ChatSession | null {
@@ -50,24 +51,28 @@ function reviveSession(raw: unknown): ChatSession | null {
     started: s.started === true,
     turns: s.turns,
     collected: Array.isArray(s.collected) ? s.collected : [],
+    pending: s.pending && typeof s.pending.goal === "string" && Array.isArray(s.pending.answers)
+      && s.pending.answers.every((answer) => answer && typeof answer.question === "string" && typeof answer.answer === "string")
+      ? s.pending : null,
   };
 }
 
-/** A Copilot-style guided interview that plans + creates a paused campaign. */
-export function CampaignChat({
-  businessId,
-  destination = "instant_form",
-  onCreated,
-  onDraftReady,
-}: {
+type CampaignChatProps = {
   businessId: string;
   destination?: "instant_form" | "whatsapp";
   onCreated?: (campaign: Campaign) => void;
   onDraftReady?: (draft: DraftDTO) => void;
-}) {
+};
+
+export function CampaignChat(props: CampaignChatProps) {
+  return <CampaignChatSession key={`${props.businessId}:${props.destination ?? "instant_form"}`} {...props} />;
+}
+
+function CampaignChatSession({ businessId, destination = "instant_form", onCreated, onDraftReady }: CampaignChatProps) {
+  const sessionKey = `adbrain:campaign-chat:${businessId}${destination === "whatsapp" ? ":whatsapp" : ""}`;
   // Keeps the interview alive across tab changes; a finished one is discarded.
   const [session, setSession, clearSession] = useSessionDraft<ChatSession>(
-    `adbrain:campaign-chat:${businessId}`,
+    sessionKey,
     { goal: "", started: false, turns: [], collected: [] },
     reviveSession,
   );
@@ -76,7 +81,12 @@ export function CampaignChat({
   const [draft, setDraft] = useState<Record<string, { picked: string[]; text: string }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const sessionRef = useRef(session);
+  const done = turns.at(-1)?.role === "summary";
+
+  useLayoutEffect(() => { sessionRef.current = session; }, [session]);
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   const activeQuestions =
     turns.length && turns[turns.length - 1].role === "questions" && !done
@@ -84,15 +94,19 @@ export function CampaignChat({
       : null;
   const answerable = (activeQuestions ?? []).filter((q) => q.id !== "note");
 
-  async function send(goalText: string, newAnswers: Answer[]) {
+  async function send(goalText: string, answers: Answer[]) {
+    if (requestRef.current) return;
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     setError(null);
-    const merged = [...collected, ...newAnswers];
+    setSession((current) => ({ ...current, pending: { goal: goalText, answers } }));
     try {
       const res = await fetch("/api/campaigns/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: goalText, answers: merged, destination }),
+        body: JSON.stringify({ goal: goalText, answers, destination }),
+        signal: controller.signal,
       });
       const data = (await res.json()) as {
         ready?: boolean;
@@ -102,29 +116,43 @@ export function CampaignChat({
         draft?: DraftDTO;
         error?: string;
       };
+      if (controller.signal.aborted) return;
       if (!res.ok) {
         setError(data.error ?? "Planning failed.");
         return;
       }
-      setSession((s) => ({ ...s, collected: merged }));
+      if (data.ready !== false && !(data.ready === true && (data.draft || data.campaign))) {
+        setError("Planning returned an incomplete response.");
+        return;
+      }
+      setSession((s) => ({ ...s, collected: answers, pending: null }));
       if (data.ready === false) {
         setSession((s) => ({
           ...s,
           turns: [...s.turns, { role: "questions", questions: data.questions ?? [] }],
         }));
       } else if (data.ready) {
-        setSession((s) => ({
-          ...s,
-          turns: [...s.turns, { role: "summary", text: data.draft ? "Draft saved. Review the account, audience, budget, and blockers before creating the paused campaign." : data.summary ?? "Campaign created." }],
-        }));
+        const completed: ChatSession = {
+          ...sessionRef.current,
+          collected: answers,
+          pending: null,
+          turns: [...sessionRef.current.turns, { role: "summary", text: data.draft ? "Draft saved. Review the account, audience, budget, and blockers before creating the paused campaign." : data.summary ?? "Campaign created." }],
+        };
+        setSession(completed);
+        try { sessionStorage.setItem(sessionKey, JSON.stringify(completed)); }
+        catch { clearSession(); }
         if (data.draft) onDraftReady?.(data.draft);
         else if (data.campaign) onCreated?.(data.campaign);
-        setDone(true);
       }
     } catch {
-      setError("Planning failed — check your connection.");
+      if (!controller.signal.aborted) {
+        setError("Planning failed — check your connection.");
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        requestRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -169,14 +197,13 @@ export function CampaignChat({
       answers.map((a) => a.answer).join(" • ") || "(let AdBrain decide)";
     setSession((s) => ({ ...s, turns: [...s.turns, { role: "user", text: readable }] }));
     setDraft({});
-    send(goal.trim(), answers);
+    send(goal.trim(), [...collected, ...answers]);
   }
 
   function reset() {
     clearSession();
     setSession({ goal: "", started: false, turns: [], collected: [] });
     setDraft({});
-    setDone(false);
     setError(null);
   }
 
@@ -284,6 +311,14 @@ export function CampaignChat({
               </div>
             )}
             {error && <Alert variant="error">{error}</Alert>}
+            {session.pending && !loading && !done && (
+              <div>
+                <Alert variant="warning">A draft may already have been saved. Check Saved drafts before retrying.</Alert>
+                <Button variant="outline" className="mt-2" onClick={() => { if (session.pending) void send(session.pending.goal, session.pending.answers); }}>
+                  <RotateCcw className="h-4 w-4" /> Retry
+                </Button>
+              </div>
+            )}
 
             {activeQuestions && answerable.length > 0 && !loading && (
               <div className="flex items-center gap-2">

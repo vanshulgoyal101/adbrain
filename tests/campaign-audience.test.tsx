@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: (props: { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> }) => { mocks.dialog.current = props; return null; } }));
-vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => null }));
+vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => <div data-testid="guided-campaign-chat" /> }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
 
 const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-1", name: "Solar installer", locations: ["Jaipur"] } as Business;
@@ -52,6 +52,62 @@ beforeEach(() => {
 });
 
 describe("campaign Ads Manager links", () => {
+  it("unmounts the planner when switching to manual setup or closing the composer", () => {
+    view();
+    expect(screen.queryByTestId("guided-campaign-chat")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+    expect(screen.getByTestId("guided-campaign-chat")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Choose settings" }));
+    expect(screen.queryByTestId("guided-campaign-chat")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    expect(screen.queryByTestId("guided-campaign-chat")).toBeNull();
+  });
+
+  it("removes the old send action while saving a replacement review and after a save failure", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByRole("button", { name: "Send to Meta (paused)" });
+    let rejectSave!: (reason: Error) => void;
+    mocks.updateDraft.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
+    await act(async () => { rejectSave(new Error("Draft save unavailable")); });
+    await screen.findByText("Draft save unavailable");
+    expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it.each(["validation", "save", "reconnect"])("preserves resolved recovery when new preparation fails at %s", async (failure) => {
+    mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "failed", checkpoints: [], externalIds: {}, error: null });
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    await screen.findByText(/The operation failed before completion/);
+    if (failure === "reconnect") {
+      mocks.saveDraft.mockRejectedValueOnce(new Error("Draft save unavailable"));
+      mocks.updateDraft.mockRejectedValueOnce(new Error("Draft save unavailable"));
+      await act(async () => { await expect(mocks.dialog.current!.onBeforeStart!()).rejects.toThrow("Draft save unavailable"); });
+      expect(mocks.updateDraft).not.toHaveBeenCalled();
+    } else if (failure === "save") {
+      mocks.saveDraft.mockRejectedValueOnce(new Error("Draft save unavailable"));
+      fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+      await screen.findByText("Draft save unavailable");
+    } else {
+      fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "" } });
+      fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+      await screen.findByText("Choose a lead form before preparing campaign review.");
+    }
+    const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
+    fireEvent.click(destination);
+    expect(destination).toBeChecked();
+    expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
+    expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["succeeded", "failed", "pending", "running", "needs_reconciliation", "missing", "unavailable"])("uses recovered %s operation state to control destination selection", async (state) => {
     mocks.createCampaign.mockRejectedValue(new Error("Request interrupted"));
     const first = view();
