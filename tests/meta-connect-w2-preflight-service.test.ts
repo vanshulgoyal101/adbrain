@@ -64,7 +64,7 @@ describe("campaign preflight orchestration", () => {
       findForm: async () => { throw new Error("WhatsApp must not load forms"); },
       findWhatsAppNumber: async () => "+919876543210",
     }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
-    expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: false, planHash: null, destination: "whatsapp", whatsappNumber: "+919876543210" } });
+    expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: true, planHash: "a".repeat(64), destination: "whatsapp", whatsappNumber: "+919876543210" } });
   });
 
   it("loads exact owned inputs and returns a reviewed plan", async () => {

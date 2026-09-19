@@ -174,16 +174,15 @@ the draft is handed to review.
 The planner uses brand, approved creatives, active instructions, and available
 performance history. It asks for missing facts rather than inventing provider
 IDs. Audience recommendations remain editable; manual choices are preserved.
-Reviewed creation supports **instant-form leads**. WhatsApp setup is draft-only;
-publishing is blocked in server preflight pending real-provider verification. Old
-drafts without a destination remain instant-form campaigns. Call campaigns are
-not supported by this editor.
+Reviewed creation supports **instant-form leads and WhatsApp chats** when the
+selected destination passes server preflight. Old drafts without a destination
+remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 ### WhatsApp Campaigns
 
-- **Publishing is unavailable.** Draft editing and reporting for existing campaigns
-  are available; even a valid recipient cannot currently pass creation preflight.
-  On 2026-09-19, Solaride's Page omitted its current WhatsApp linkage/number fields
+- **Publishing requires a verified Page-linked number.** Eligible reviews offer
+  Send to Meta (paused); missing or unreadable linkage still blocks publishing.
+  In the earlier 2026-09-19 read-only check, Solaride's Page omitted its linkage/number fields
   with both Page and system-user tokens. An existing ad set's historical recipient
   is not accepted as proof of the current linkage. No test campaign was created.
 - Select WhatsApp chat in either manual or guided setup. No lead form is required
@@ -194,7 +193,7 @@ not supported by this editor.
   A normal Page contact phone number is not sufficient.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
-- The unreleased WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
+- The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
   a recipient-bound promoted object and `wa.me` creative link. Campaigns, ad sets,
   and ads are created PAUSED; activation remains a separate confirmation.
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,

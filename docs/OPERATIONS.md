@@ -68,7 +68,7 @@ separate approval for migrations, hosting, credentials, and environment changes.
 	and exits, but **can create paused Meta objects if the queue is nonempty**;
 	it is not a read-only health check. Unknown web execution modes fail closed.
 4. Verify a separately authorized PAUSED provider workflow and operation polling.
-	Existing WhatsApp publishing blockers remain in force. Local mocks do not
+	WhatsApp still requires verified Page linkage and a fresh reviewed number. Local mocks do not
 	prove provider acceptance, worker-host uptime, or sustained throughput.
 5. Establish alerts for process exit, oldest pending age, expired running leases,
 	`needs_reconciliation`, and queue/execution errors before general rollout.
