@@ -1,6 +1,7 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   Building2,
@@ -48,6 +49,21 @@ function NavLabel({ label, icon: Icon }: { label: string; icon: LucideIcon }) {
   </>;
 }
 
+function NavItem({ href, label, icon, active }: {
+  href: string; label: string; icon: LucideIcon; active: boolean;
+}) {
+  const [intent, setIntent] = useState(false);
+  function warmRoute() {
+    if (!active) setIntent(true);
+  }
+  return (
+    <Link href={href} prefetch={intent && !active ? true : null} aria-current={active ? "page" : undefined} className={navClass(active)}
+      onMouseEnter={warmRoute} onFocus={warmRoute} onTouchStart={warmRoute}>
+      <NavLabel label={label} icon={icon} />
+    </Link>
+  );
+}
+
 export function Nav({
   orientation = "vertical",
 }: {
@@ -72,14 +88,7 @@ export function Nav({
       {primaryItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={navClass(active)}
-          >
-            <NavLabel label={label} icon={Icon} />
-          </Link>
+          <NavItem key={href} href={href} label={label} icon={Icon} active={active} />
         );
       })}
       {orientation === "vertical" && (
@@ -90,14 +99,7 @@ export function Nav({
       {workspaceItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={navClass(active)}
-          >
-            <NavLabel label={label} icon={Icon} />
-          </Link>
+          <NavItem key={href} href={href} label={label} icon={Icon} active={active} />
         );
       })}
     </nav>

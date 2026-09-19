@@ -443,6 +443,20 @@ describe("friendlyMetaError", () => {
       "Try again later.",
     );
   });
+
+  it.each(["bid_strategy is incompatible with daily_budget", "Invalid bidding strategy"])("distinguishes bidding configuration from budget amounts: %s", (message) => {
+    expect(friendlyMetaError(new MetaError(message))).toContain("Meta rejected the bidding strategy.");
+  });
+
+  it("distinguishes billing events from budget amounts", () => {
+    expect(friendlyMetaError(new MetaError("billing_event is invalid for this daily_budget"))).toContain("Meta rejected the billing event");
+  });
+
+  it("retains budget guidance for budget validation failures", () => {
+    expect(friendlyMetaError(new MetaError("daily_budget is below the minimum"))).toBe(
+      "Meta rejected the budget settings. Check the daily budget and try again.",
+    );
+  });
 });
 
 describe("MetaClient input boundaries", () => {

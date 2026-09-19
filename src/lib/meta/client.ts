@@ -132,7 +132,13 @@ export function friendlyMetaError(
   if (/targeting|geo|location|age_min|age_max|audience/.test(normalized)) {
     return "Meta rejected the audience settings. Review the locations and age range, then try again.";
   }
-  if (/budget|daily_budget|billing_event|bid_strategy/.test(normalized)) {
+  if (/bid_strategy|bid strategy|bidding strategy/.test(normalized)) {
+    return "Meta rejected the bidding strategy. Changing the daily budget alone may not fix this; the campaign bidding configuration needs review.";
+  }
+  if (/billing_event|billing event/.test(normalized)) {
+    return "Meta rejected the billing event for this campaign. The billing and optimization settings need review before trying again.";
+  }
+  if (/budget|daily_budget/.test(normalized)) {
     return "Meta rejected the budget settings. Check the daily budget and try again.";
   }
   if (/image|creative|adcreative|ad image/.test(normalized)) {

@@ -11,6 +11,9 @@ const queries = vi.hoisted(() => ({
   getCreativePreviews: vi.fn(),
   getAuditLog: vi.fn(),
   getCampaigns: vi.fn(),
+  getCampaignPage: vi.fn(),
+  getApprovedCreatives: vi.fn(),
+  getLatestResults: vi.fn(),
   getSpendEvaluation: vi.fn(),
   getMetaConnection: vi.fn(),
   getUser: vi.fn(),
@@ -20,6 +23,10 @@ vi.mock("@/lib/supabase/queries", () => queries);
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test" }) }));
 vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));
+vi.mock("@/components/campaigns", () => ({ Campaigns: () => <div>Campaigns loaded</div> }));
+vi.mock("@/components/meta-connection", () => ({ MetaConnectionPanel: () => <div>Connection loaded</div> }));
+vi.mock("@/components/spend-guardrails", () => ({ SpendGuardrails: () => <div>Guardrails loaded</div> }));
+vi.mock("@/lib/meta/oauth", () => ({ metaOAuthConfigured: () => true }));
 vi.mock("@/components/demo-llm-usage", () => ({ DemoLlmUsage: () => <div>Usage loaded</div> }));
 vi.mock("@/lib/meta/credentials", () => ({
   getMetaConnection: queries.getMetaConnection,
@@ -50,6 +57,54 @@ const empty = {
 };
 
 describe("Home workspace", () => {
+  it("streams connection settings independently of slow spend evaluation", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    let resolveSpend!: (value: object) => void;
+    queries.getSpendEvaluation.mockReturnValue(new Promise(resolve => { resolveSpend = resolve; }));
+    const { default: SettingsPage } = await import("@/app/(app)/settings/page");
+    const page = await SettingsPage({ searchParams: Promise.resolve({}) });
+    const [, connectionBoundary, spendBoundary] = page.props.children;
+    expect(connectionBoundary.type).toBe(Suspense);
+    expect(spendBoundary.type).toBe(Suspense);
+    const spendSection = spendBoundary.props.children;
+    const spend = spendSection.type(spendSection.props);
+    const connectionSection = connectionBoundary.props.children;
+    render(await connectionSection.type(connectionSection.props));
+    expect(screen.getByText("Connection loaded")).toBeInTheDocument();
+    resolveSpend({ limits: {}, evaluation: {} });
+    render(await spend);
+    expect(screen.getByText("Guardrails loaded")).toBeInTheDocument();
+  });
+
+  it("keeps spend failures local instead of replacing settings or showing editable defaults", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getSpendEvaluation.mockRejectedValue(new Error("Unavailable"));
+    const { default: SettingsPage } = await import("@/app/(app)/settings/page");
+    const page = await SettingsPage({ searchParams: Promise.resolve({}) });
+    const section = page.props.children[2].props.children;
+    render(await section.type(section.props));
+    expect(screen.getByRole("alert")).toHaveTextContent("Your saved limits have not changed.");
+    expect(screen.queryByText("Guardrails loaded")).not.toBeInTheDocument();
+  });
+
+  it("starts campaign results before unrelated creatives and connection reads finish", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCampaignPage.mockResolvedValue({ campaigns: [{ id: "campaign-1" }], nextCursor: null });
+    queries.getLatestResults.mockResolvedValue({});
+    let resolveApproved!: (value: Creative[]) => void;
+    let resolveConnection!: (value: { ready: boolean }) => void;
+    queries.getApprovedCreatives.mockReturnValue(new Promise<Creative[]>((resolve) => { resolveApproved = resolve; }));
+    queries.getMetaConnection.mockReturnValue(new Promise<{ ready: boolean }>((resolve) => { resolveConnection = resolve; }));
+    const { default: CampaignsPage } = await import("@/app/(app)/campaigns/page");
+    const page = CampaignsPage();
+    await vi.waitFor(() => expect(queries.getLatestResults).toHaveBeenCalledWith(["campaign-1"]));
+    resolveApproved([]);
+    resolveConnection({ ready: false });
+    render(await page);
+    expect(screen.getByText("Campaigns loaded")).toBeInTheDocument();
+  });
+
   it("loads Studio without waiting for the concurrent demo usage report", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getUser.mockResolvedValue({ email: "demo@example.test" });

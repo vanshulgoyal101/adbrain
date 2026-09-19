@@ -60,6 +60,10 @@ export function useCampaignList(input: {
     if (!mounted.current) { mounted.current = true; return; }
     controllerRef.current?.abort();
     startTransition(() => setListLoading(true));
+    if (lastFilters.current.businessId !== businessId || lastFilters.current.status !== statusFilter || !campaignQuery.trim()) {
+      startTransition(reload);
+      return;
+    }
     const timer = setTimeout(reload, 250);
     return () => clearTimeout(timer);
   }, [businessId, campaignQuery, statusFilter]);

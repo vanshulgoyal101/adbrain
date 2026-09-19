@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Building2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -67,18 +68,6 @@ export default async function SettingsPage({
     );
   }
 
-  const [connectionResult, params, spend] = await Promise.all([
-    getMetaConnection(business.id)
-      .then((connection) => ({ connection, error: null }))
-      .catch(() => ({
-        connection: null,
-        error: "Meta connection status is temporarily unavailable. Your campaign draft is preserved.",
-      })),
-    searchParams,
-    getSpendEvaluation(business.id),
-  ]);
-  const { limits, evaluation } = spend;
-
   return (
     <div className="max-w-2xl space-y-6">
       <PageHeader
@@ -86,20 +75,52 @@ export default async function SettingsPage({
         title="Settings"
         description="Manage publishing connections and the safety limits that protect your advertising budget."
       />
-      {connectionResult.connection ? (
-        <MetaConnectionPanel
-          businessId={business.id}
-          connection={connectionResult.connection}
-          oauthConfigured={metaOAuthConfigured()}
-          notice={noticeFrom(params)}
-        />
-      ) : (
-        <Alert variant="error">
-          {connectionResult.error}
-          <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
-        </Alert>
-      )}
-      <SpendGuardrails limits={limits} evaluation={evaluation} />
+      <Suspense fallback={<SettingsLoading label="Meta connection" />}>
+        <ConnectionSettings businessId={business.id} searchParams={searchParams} />
+      </Suspense>
+      <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
+        <SpendSettings businessId={business.id} />
+      </Suspense>
     </div>
+  );
+}
+
+function SettingsLoading({ label }: { label: string }) {
+  return <section role="status" aria-label={`Loading ${label}`} className="min-h-64 space-y-5 rounded-lg border border-slate-200 bg-white p-6">
+    <h2 className="font-semibold text-slate-900">{label}</h2>
+    <div aria-hidden="true" className="space-y-4 motion-safe:animate-pulse">
+      <div className="h-4 w-3/4 rounded bg-slate-100" />
+      <div className="h-10 rounded bg-slate-100" />
+      <div className="h-10 w-32 rounded bg-slate-100" />
+    </div>
+  </section>;
+}
+
+async function ConnectionSettings({ businessId, searchParams }: {
+  businessId: string;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [result, params] = await Promise.all([
+    getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
+    searchParams,
+  ]);
+  return result.connection ? (
+    <MetaConnectionPanel businessId={businessId} connection={result.connection}
+      oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} />
+  ) : (
+    <Alert variant="error">
+      Meta connection status is temporarily unavailable. Your campaign draft is preserved.
+      <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
+    </Alert>
+  );
+}
+
+async function SpendSettings({ businessId }: { businessId: string }) {
+  const spend = await getSpendEvaluation(businessId).catch(() => null);
+  return spend ? <SpendGuardrails limits={spend.limits} evaluation={spend.evaluation} /> : (
+    <Alert variant="error">
+      Spend limits could not be loaded. Your saved limits have not changed.
+      <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
+    </Alert>
   );
 }

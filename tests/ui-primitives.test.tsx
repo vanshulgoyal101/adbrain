@@ -9,6 +9,16 @@ import { InfoHint } from "@/components/ui/info-hint";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
+import WorkspaceLoading from "@/app/(app)/loading";
+
+describe("workspace loading", () => {
+  it("announces loading once and hides reduced-motion-safe placeholders from assistive technology", () => {
+    const { container } = render(<WorkspaceLoading />);
+    expect(screen.getByRole("status", { name: "Loading workspace" })).toHaveTextContent("Loading workspace...");
+    expect(container.querySelector('[aria-hidden="true"]')).toHaveClass("motion-safe:animate-pulse");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+});
 
 describe("<Button>", () => {
   it("renders its label and fires onClick", async () => {
