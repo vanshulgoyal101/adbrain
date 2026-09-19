@@ -51,6 +51,12 @@ submissions; failures preserve the form and permit retry. Destinations must be
 safe local paths. The app has no built-in team invitation, self-service signup,
 password-reset, or subscription entitlement workflow.
 
+The sign-in page uses the workspace typography, shared form controls and brand
+asset, with persistent Home and legal navigation. Email/password share one form;
+password visibility can be toggled without submitting. Magic links validate only
+the email address. The email confirmation can return to sign-in with the address
+and safe destination preserved, focus restored, and the password cleared.
+
 ## Brand Brain
 
 Save business name, industry, website, description, voice, audience, languages,

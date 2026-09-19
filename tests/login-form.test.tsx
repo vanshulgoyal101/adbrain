@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "@/components/login-form";
+import LoginPage from "@/app/login/page";
 
 const mocks = vi.hoisted(() => ({
   redirect: "/studio?view=drafts",
@@ -29,6 +30,17 @@ function fillLogin() {
 }
 
 describe("login completion and recovery", () => {
+  it("keeps home and legal navigation available around sign in", () => {
+    render(<LoginPage />);
+    expect(screen.getByRole("heading", { name: "Sign in to AdBrain" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "AdBrain home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Skip to sign in" })).toHaveAttribute("href", "#sign-in");
+    for (const [name, href] of [["Privacy", "/privacy"], ["Terms", "/terms"], ["Data deletion", "/data-deletion"]]) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+    }
+  });
+
   it.each(["https://evil.example", "//evil.example", "/\\evil.example", "javascript:alert(1)", "/\n/evil.example"])("rejects unsafe password destination %s", async redirect => {
     mocks.redirect = redirect;
     fillLogin();
@@ -78,5 +90,38 @@ describe("login completion and recovery", () => {
     expect(await screen.findByText("Check your email")).toBeInTheDocument();
     const callback = new URL(mocks.signInWithOtp.mock.calls[0][0].options.emailRedirectTo);
     expect(callback.searchParams.get("redirect")).toBe("/dashboard");
+  });
+
+  it("returns from email confirmation with the address and destination intact", async () => {
+    fillLogin();
+    fireEvent.click(screen.getByRole("button", { name: "Send magic link" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("owner@example.test");
+    fireEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
+    expect(screen.getByLabelText("Email")).toHaveValue("owner@example.test");
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(mocks.signInWithOtp).toHaveBeenCalledOnce();
+    const callback = new URL(mocks.signInWithOtp.mock.calls[0][0].options.emailRedirectTo);
+    expect(callback.searchParams.get("redirect")).toBe("/studio?view=drafts");
+  });
+
+  it("validates email without requiring a password for a magic link", async () => {
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "not-an-email" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send magic link" }));
+    expect(mocks.signInWithOtp).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send magic link" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
+  });
+
+  it("toggles password visibility without submitting or changing it", () => {
+    fillLogin();
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText("Password")).toHaveValue("test-password");
+    fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
   });
 });
