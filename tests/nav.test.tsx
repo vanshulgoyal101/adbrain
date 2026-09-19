@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Nav } from "@/components/nav";
 
@@ -7,6 +7,7 @@ const pathname = vi.fn();
 const linkState = vi.hoisted(() => ({ pending: false }));
 vi.mock("next/link", async (importOriginal) => ({
   ...await importOriginal<typeof import("next/link")>(),
+  default: ({ href, prefetch, ...props }: React.ComponentProps<"a"> & { prefetch?: boolean | null }) => <a href={href} data-prefetch={String(prefetch)} {...props} />,
   useLinkStatus: () => linkState,
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname() }));
@@ -16,6 +17,22 @@ const ACTIVE = "bg-blue-50";
 beforeEach(() => { pathname.mockReturnValue("/dashboard"); linkState.pending = false; });
 
 describe("<Nav>", () => {
+  it.each(["mouseEnter", "focus", "touchStart"] as const)("enables full destination prefetch on %s while leaving other links at their default", (event) => {
+    render(<Nav />);
+    const link = screen.getByRole("link", { name: "Campaigns" });
+    expect(link).toHaveAttribute("data-prefetch", "null");
+    fireEvent[event](link);
+    fireEvent.focus(link);
+    expect(link).toHaveAttribute("data-prefetch", "true");
+    expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute("data-prefetch", "null");
+  });
+
+  it("does not warm the current section", () => {
+    render(<Nav />);
+    fireEvent.mouseEnter(screen.getByRole("link", { name: "Home" }));
+    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("data-prefetch", "null");
+  });
+
   it("acknowledges pending navigation without changing the link label or icon dimensions", () => {
     linkState.pending = true;
     render(<Nav />);

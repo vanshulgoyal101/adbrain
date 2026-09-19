@@ -24,6 +24,25 @@ ID are different identifiers. Never infer one from another.
 | `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
 | `/settings` | Meta connection and spend guardrails | Disconnect does not pause running ads |
 
+## Workspace Responsiveness
+
+Sidebar links retain Next.js automatic prefetching and request full destination
+prefetch after hover, keyboard focus, or touch intent. Current-section links do
+not request full prefetch. Next.js owns cache reuse and invalidation; navigation
+still shows its pending indicator. A responsive, reduced-motion-aware skeleton
+replaces the spinner-only page fallback while the workspace shell stays usable.
+
+Campaign results start loading as soon as the campaign page is available, without
+waiting for approved creatives or connection metadata. Campaign status selection
+and clearing search fetch immediately; typed searches retain a 250 ms debounce
+and obsolete requests are cancelled.
+
+Settings connection controls and spend guardrails stream independently, with
+section-local loading and error states. Unavailable spend data does not become
+editable default limits. These changes do not bypass authorization, publishing
+preflight, or spending checks, and do not eliminate database or provider latency.
+Source behavior is not a production latency benchmark or deployment receipt.
+
 ## Sign In
 
 Magic link, Google OAuth, and email/password use Supabase Auth. Provider setup and

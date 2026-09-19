@@ -40,16 +40,17 @@ export default async function CampaignsPage() {
     );
   }
 
-  // Nothing here depends on anything else, so pay for one round-trip, not three.
+  const campaignData = getCampaignPage(business.id).then(async (page) => ({
+    ...page,
+    results: await getLatestResults(page.campaigns.map((campaign) => campaign.id)),
+  }));
   const [approved, page, connection] = await Promise.all([
     getApprovedCreatives(business.id),
-    getCampaignPage(business.id),
+    campaignData,
     getMetaConnection(business.id),
   ]);
   const metaReady = connection.ready;
   const campaigns = page.campaigns;
-
-  const results = await getLatestResults(campaigns.map((c) => c.id));
 
   return (
     <div>
@@ -64,7 +65,7 @@ export default async function CampaignsPage() {
           approved={approved}
           initialCampaigns={campaigns}
           initialNextCursor={page.nextCursor}
-          initialResults={results}
+          initialResults={page.results}
           leadForms={[]}
           leadFormError={null}
           metaReady={metaReady}

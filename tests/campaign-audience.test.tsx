@@ -215,6 +215,16 @@ describe("campaign Ads Manager links", () => {
 });
 
 describe("campaign sync feedback", () => {
+  it("requests a status selection immediately without the search typing delay", async () => {
+    const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], results: {}, nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[first]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("combobox", { name: "Campaign status" }), { target: { value: "active" } });
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("status=active"), { signal: expect.any(AbortSignal) });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Loading campaigns..." })).not.toBeInTheDocument());
+  });
+
   it("loads another page and can recover from an empty server-side search", async () => {
     const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
     const second = { id: "second", name: "Second campaign", status: "active" } as Campaign;
@@ -232,6 +242,7 @@ describe("campaign sync feedback", () => {
     await screen.findByText("No matching campaigns");
     expect(screen.getByRole("searchbox", { name: "Search campaigns" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(String(vi.mocked(fetch).mock.lastCall![0])).not.toContain("query=");
     await screen.findByText("First campaign");
     expect(String(vi.mocked(fetch).mock.lastCall![0])).not.toContain("cursor=");
   });
