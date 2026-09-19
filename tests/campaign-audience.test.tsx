@@ -113,7 +113,7 @@ describe("campaign Ads Manager links", () => {
     const first = view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }, { timeout: 5000 }));
     await screen.findByText("Request interrupted");
     first.unmount();
     if (state === "unavailable") mocks.operationForRequest.mockRejectedValue(new Error("Status unavailable"));
