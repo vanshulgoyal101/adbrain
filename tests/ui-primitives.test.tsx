@@ -126,8 +126,20 @@ describe("form primitives", () => {
   it("renders a textarea that accepts multiline text", async () => {
     render(<Textarea aria-label="Notes" />);
     const area = screen.getByLabelText("Notes");
+    expect(area).toHaveClass("scrollbar-stable", "overflow-y-scroll", "resize-y", "min-w-0");
     await userEvent.type(area, "line one{enter}line two");
     expect(area).toHaveValue("line one\nline two");
+  });
+
+  it("preserves textarea refs, fixed sizing overrides and native constraints", () => {
+    const ref = { current: null as HTMLTextAreaElement | null };
+    render(<Textarea ref={ref} aria-label="Fixed notes" rows={4} maxLength={100} disabled className="resize-none" />);
+    expect(ref.current).toBe(screen.getByLabelText("Fixed notes"));
+    expect(ref.current).toHaveClass("resize-none", "scrollbar-stable", "overflow-y-scroll");
+    expect(ref.current).not.toHaveClass("resize-y");
+    expect(ref.current).toHaveAttribute("rows", "4");
+    expect(ref.current).toHaveAttribute("maxlength", "100");
+    expect(ref.current).toBeDisabled();
   });
 
   it("respects the disabled state", () => {

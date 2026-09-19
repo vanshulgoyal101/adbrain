@@ -7,7 +7,7 @@ import type { Business, Campaign, Creative } from "@/lib/types";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 
 const mocks = vi.hoisted(() => ({
-  drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(),
+  drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
   dialog: { current: null as null | { onConnected: (connection: ConnectionDTO) => void; onBeforeStart?: () => Promise<unknown> } },
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -52,6 +52,51 @@ beforeEach(() => {
 });
 
 describe("campaign Ads Manager links", () => {
+  it.each(["succeeded", "failed", "pending", "running", "needs_reconciliation", "missing", "unavailable"])("uses recovered %s operation state to control destination selection", async (state) => {
+    mocks.createCampaign.mockRejectedValue(new Error("Request interrupted"));
+    const first = view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    await screen.findByText("Request interrupted");
+    first.unmount();
+    if (state === "unavailable") mocks.operationForRequest.mockRejectedValue(new Error("Status unavailable"));
+    else mocks.operationForRequest.mockResolvedValue(state === "missing" ? null : {
+      operationId: "44444444-4444-4444-8444-444444444444", state, checkpoints: [], externalIds: {}, error: null,
+    });
+    view();
+    if (state === "unavailable") await screen.findByText("Status unavailable");
+    else await screen.findByRole("region", { name: "Campaign review result" });
+    const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
+    if (state === "succeeded" || state === "failed") {
+      expect(destination).toBeEnabled();
+      fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+      fireEvent.click(destination);
+      expect(destination).toBeChecked();
+      expect(screen.queryByRole("region", { name: "Campaign review result" })).toBeNull();
+    } else {
+      expect(destination).toBeDisabled();
+      expect(screen.getByText("Destination is locked until the previous campaign request is resolved.")).toBeVisible();
+    }
+    expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows switching to WhatsApp after a confirmed failed creation", async () => {
+    mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "failed", checkpoints: [], externalIds: {}, error: null });
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    await waitFor(() => expect(mocks.createCampaign).toHaveBeenCalledTimes(1));
+    const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
+    await waitFor(() => expect(destination).toBeEnabled());
+    fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+    fireEvent.click(destination);
+    expect(destination).toBeChecked();
+    expect(screen.getByText("WhatsApp drafts only. Publishing is not yet available.")).toBeVisible();
+    expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
+  });
+
   it("saves and restores city coverage without invoking AI or creating ads", async () => {
     const first = view();
     expect(screen.getByRole("radio", { name: "City only" })).toBeChecked();

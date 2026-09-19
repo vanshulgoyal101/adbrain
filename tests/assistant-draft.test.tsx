@@ -8,7 +8,10 @@ import type { Business } from "@/lib/types";
 const business = { id: "biz-1", name: "Cedar Ridge Chiro" } as Business;
 
 describe("<AdAssistant> draft persistence", () => {
-  beforeEach(() => sessionStorage.clear());
+  beforeEach(() => {
+    sessionStorage.clear();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
+  });
   afterEach(() => {
     sessionStorage.clear();
     vi.useRealTimers();
@@ -59,6 +62,7 @@ describe("<AdAssistant> draft persistence", () => {
     expect(screen.queryByText("Brief preview")).toBeNull();
 
     const goal = screen.getByRole("textbox", { name: "Campaign goal" });
+    expect(goal).toHaveClass("scrollbar-stable", "overflow-y-scroll", "resize-y");
     const start = screen.getByRole("button", { name: /start creating/i });
     expect(start).toBeDisabled();
 
@@ -125,7 +129,7 @@ describe("<AdAssistant> draft persistence", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers[0]).toMatchObject({ field: "visual", questionId: "scene", options: ["Team at work", "Service space"] });
     const brief = await screen.findByRole("textbox", { name: "Creative brief" });
     const history = screen.getByRole("region", { name: "Conversation history" });
-    expect(history).toHaveClass("scrollbar-stable", "overflow-y-auto");
+    expect(history).toHaveClass("scrollbar-stable", "overflow-y-scroll");
     expect(history).toHaveAttribute("tabindex", "0");
     await user.clear(brief);
     await user.type(brief, "Show only the service space, no people.");
@@ -149,6 +153,27 @@ describe("<AdAssistant> draft persistence", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers[0]).toMatchObject({ field: "location", questionId: "area", answer: "Let the AI decide the best option based on the brand." });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls.every(([url]) => url === "/api/creatives/assistant")).toBe(true);
+  });
+
+  it.each([{ scrollTop: 0, follows: false }, { scrollTop: 790, follows: true }])("respects the reader's position when a delayed response arrives: %j", async ({ scrollTop, follows }) => {
+    let complete!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { complete = resolve; })));
+    render(<AdAssistant business={business} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Campaign goal" }), { target: { value: "Local enquiries" } });
+    fireEvent.click(screen.getByRole("button", { name: /start creating/i }));
+    const history = screen.getByRole("region", { name: "Conversation history" });
+    Object.defineProperties(history, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, writable: true, value: scrollTop },
+    });
+    const scroll = vi.mocked(history.scrollTo);
+    scroll.mockClear();
+    fireEvent.scroll(history);
+    await act(async () => complete(Response.json({ ready: false, question: { id: "area", field: "location", question: "Which service area?", options: ["Jaipur", "Ajmer"] } })));
+    expect(screen.getByText("Which service area?")).toBeInTheDocument();
+    if (follows) expect(scroll).toHaveBeenCalledWith({ top: 1000, behavior: "instant" });
+    else expect(scroll).not.toHaveBeenCalled();
   });
 
   it("carries a specific recommended next query and full reviewed context into another request", async () => {
