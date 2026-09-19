@@ -30,7 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import {
   TargetingControls,
   defaultTargeting,
@@ -167,6 +167,7 @@ export function Campaigns({
   const recoveryKey = recoveryStorageKey(business.owner_id, business.id);
   const recoveryRef = useRef<CampaignRecovery | null>(null);
   const [recoveryPending, setRecoveryPending] = useState(false);
+  const destinationRecoveryLocked = recoveryPending || Boolean(operation && !["succeeded", "failed"].includes(operation.state));
   const [savedDrafts, setSavedDrafts] = useState<DraftDTO[]>([]);
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
@@ -264,6 +265,7 @@ export function Campaigns({
           const found = await client.operationForRequest(business.id, saved.request.idempotencyKey, controller.signal);
           if (controller.signal.aborted) return;
           setOperation(found);
+          setRecoveryPending(!found);
           setRetryAllowed(!found);
           if (found?.state === "succeeded") setNotice("Paused campaign created. Review it before activating spend.");
         }
@@ -364,6 +366,7 @@ export function Campaigns({
   function acceptOperation(next: OperationDTO) {
     if (recoveryRef.current) saveRecovery({ ...recoveryRef.current, operationId: next.operationId });
     setOperation(next);
+    setRecoveryPending(false);
     setRetryAllowed(false);
     if (next.state === "succeeded") {
       setNotice("Paused campaign created. Review it before activating spend.");
@@ -528,8 +531,7 @@ export function Campaigns({
     }
     setError(null);
     setNotice(null);
-    setOperation(null);
-    operationRef.current = null;
+    setPrepareReview(null);
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
@@ -552,6 +554,8 @@ export function Campaigns({
         : await client.saveDraft(input, signal);
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
+      setOperation(null);
+      operationRef.current = null;
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
       if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
@@ -947,14 +951,18 @@ export function Campaigns({
         onClose={() => setConnectOpen(false)}
         onBeforeStart={connectionIntent.kind === "setup" ? async () => {
               if (unresolvedRecovery()) throw new Error("Check the existing operation before connecting again.");
-              setOperation(null);
-              operationRef.current = null;
+              setPrepareReview(null);
               const client = createMetaConnectClient();
               const previous = preparedDraftRef.current;
-              const input = creationMode === "guided" && previous ? previous.input : manualDraftInput(false);
-              const draft = previous ? await client.updateDraft(previous.draftId, previous.version, input) : await client.saveDraft(input);
+              const input = manualDraftInput(false);
+              const draft = previous && !recoveryRef.current?.request
+                ? await client.updateDraft(previous.draftId, previous.version, input)
+                : await client.saveDraft(input);
               preparedDraftRef.current = draft;
               saveRecovery({ draft, request: null, operationId: null });
+              setOperation(null);
+              operationRef.current = null;
+              setRecoveryPending(false);
               const prepareIntent = { kind: "prepare_campaign" as const, draftId: draft.draftId, draftVersion: draft.version };
               setConnectionIntent(prepareIntent);
               return prepareIntent;
@@ -1008,16 +1016,17 @@ export function Campaigns({
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          <fieldset disabled={preparing || creating || recoveryPending || Boolean(operation && !["succeeded", "failed"].includes(operation.state))} className="mb-4 flex flex-wrap gap-2">
+          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={destinationRecoveryLocked ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
             {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
+          {destinationRecoveryLocked && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {destination === "whatsapp" && <Alert variant="warning">WhatsApp drafts only. Publishing is not yet available.</Alert>}
-          <div hidden={creationMode !== "guided"}><CampaignChat
+          {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
-          /></div>
+          />}
         </>
       )}
 
@@ -1164,8 +1173,8 @@ export function Campaigns({
                 <div className="flex flex-col gap-2">
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
                   <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    <div><Label htmlFor="planned-areas">Planned areas</Label><textarea id="planned-areas" rows={2} placeholder="One place per line" value={includedNames} onChange={(event) => { setIncludedNames(event.target.value); setTargeting({ ...targeting, locationMode: "manual" }); setPrepareReview(null); }} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" /></div>
-                    <div><Label htmlFor="planned-exclusions">Excluded areas</Label><textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" /></div>
+                    <div><Label htmlFor="planned-areas">Planned areas</Label><Textarea id="planned-areas" rows={2} placeholder="One place per line" value={includedNames} onChange={(event) => { setIncludedNames(event.target.value); setTargeting({ ...targeting, locationMode: "manual" }); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
+                    <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
                   </div>
                   <Label>Audience &amp; location</Label>
                   <TargetingControls
@@ -1182,7 +1191,7 @@ export function Campaigns({
                   {targeting.audience && <div className="space-y-3 border-t border-slate-200 pt-3">
                     <p className="text-sm text-slate-700">{targeting.audience.rationale}</p>
                     <div><Label htmlFor="audience-interests">Interests (up to 5, one per line)</Label>
-                      <textarea id="audience-interests" rows={3} value={targeting.audience.interestNames.join("\n")} onChange={(event) => setTargeting({ ...targeting, audience: { ...targeting.audience!, interestNames: event.target.value.split("\n") } })} className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm" />
+                      <Textarea id="audience-interests" rows={3} value={targeting.audience.interestNames.join("\n")} onChange={(event) => setTargeting({ ...targeting, audience: { ...targeting.audience!, interestNames: event.target.value.split("\n") } })} className="mt-1 rounded-md p-2" />
                     </div>
                     <p className="text-xs text-slate-500">Interest signals are not verified ownership or purchase intent. Meta may expand detailed targeting for lead optimization.</p>
                   </div>}

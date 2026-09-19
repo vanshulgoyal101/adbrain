@@ -36,6 +36,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas |
 | `test:workspace-browser` | Playwright suite; explicitly loads `.env.local` if present, can access real accounts |
 | `test:workspace-ux` | Workspace audit script; also loads `.env.local`, not an automatically isolated test |
+| `test:scroll-layout` | Offline React/CSS fixtures in Chromium and WebKit; no server, credentials or external requests |
 | `env:doctor` | Shell diagnostics for configuration/tooling; not proof of provider authorization |
 | `env:doctor:strict` | Strict diagnostic variant |
 | `db:push` | Applies schema to configured database; requires explicit target verification/authorization |
@@ -101,6 +102,21 @@ loopback Supabase targets. Do not replace its isolated settings with production
 secrets to bypass setup problems.
 
 ## Browser Verification
+
+For isolated scrollbar and conversation layout regressions:
+
+```sh
+npx playwright install chromium webkit
+npm run test:scroll-layout
+```
+
+[The layout check](../scripts/check-scroll-layout.mjs) bundles the real shared
+Textarea and Create assistant with application CSS. It checks 1440/390/320px
+viewports, overflow thresholds, persistent painted scrollbar tracks/thumbs,
+keyboard scrolling, vertical resizing, and reader position during delayed
+responses. Network requests are fulfilled with fixtures or blocked; server
+actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
+This does not replace authenticated workflow tests or real-device Safari testing.
 
 [Playwright configuration](../playwright.config.ts) uses one worker, base URL
 `http://localhost:3939`, and an existing production build via `npm run start`.

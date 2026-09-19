@@ -1,7 +1,7 @@
 "use client";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -116,6 +116,7 @@ export function AdAssistant({ business }: { business: Business }) {
     { type: "step"; answers: Answer[] } | { type: "generate"; brief: string; language?: string } | null
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const followConversationRef = useRef(true);
   const inFlightRef = useRef(false);
   const [generationId, setGenerationId] = useState<string | null>(null);
 
@@ -165,10 +166,10 @@ export function AdAssistant({ business }: { business: Business }) {
     });
   }, [restored, business.id, goal, started, turns, answers, phase, prepared, recentGoals, referenceBrief, generationId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = scrollRef.current;
-    if (!node) return;
-    node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
+    if (!node || !followConversationRef.current) return;
+    node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
   }, [turns, loading]);
 
   const lastTurn = turns[turns.length - 1];
@@ -339,6 +340,7 @@ export function AdAssistant({ business }: { business: Business }) {
     if (loading) return;
     const g = goal.trim();
     if (!g) return;
+    followConversationRef.current = true;
     setStarted(true);
     setError(null);
     setTurns([{ role: "user", text: g }]);
@@ -387,7 +389,7 @@ export function AdAssistant({ business }: { business: Business }) {
                 onChange={(e) => setGoal(e.target.value)}
                 rows={6}
                 maxLength={500}
-                className="mt-3 resize-y rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
+                className="mt-3 rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
                 placeholder="Who do you want to reach, and what would you like them to do?"
               />
               <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label="Campaign goal length">{goal.length}/500</p>
@@ -437,7 +439,12 @@ export function AdAssistant({ business }: { business: Business }) {
           role="region"
           aria-label="Conversation history"
           tabIndex={0}
-          className="scrollbar-stable flex max-h-[62vh] flex-col gap-3 overflow-y-auto pr-1"
+          onScroll={(event) => {
+            if (event.target !== event.currentTarget) return;
+            const node = event.currentTarget;
+            followConversationRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
+          }}
+          className="scrollbar-stable flex max-h-[62vh] flex-col gap-3 overflow-y-scroll pr-1"
         >
           {turns.map((turn, i) => (
             <TurnView

@@ -384,8 +384,7 @@ export function MetaConnectDialog({
         event.preventDefault();
         close();
       }}
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,32rem)] overflow-y-scroll rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/40"
-      style={{ scrollbarGutter: "stable" }}
+      className="scrollbar-stable m-auto max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,32rem)] overflow-y-scroll rounded-lg border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-950/40"
     >
       <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
         <div>

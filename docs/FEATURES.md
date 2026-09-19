@@ -134,6 +134,18 @@ tab produce a conflict rather than a silent overwrite. Updates do not extend the
 original expiry. Drafts tied to a creation operation have additional edit/delete
 restrictions.
 
+Starting a replacement review invalidates the old send action immediately.
+A failed validation, save, or reconnect does not erase a confirmed operation's
+status; recovery is replaced only after the new draft is saved.
+
+Guided interviews are kept separately per business and destination. Switching
+destination, choosing manual setup, or closing setup aborts the browser request
+and ignores late responses. Failed or interrupted requests retain their answer
+payload for an explicit retry, including after reopening the interview. This
+does not undo server work or guarantee exactly-once AI billing or draft saves;
+check Saved drafts before retrying. Completed interviews remain completed after
+the draft is handed to review.
+
 The planner uses brand, approved creatives, active instructions, and available
 performance history. It asks for missing facts rather than inventing provider
 IDs. Audience recommendations remain editable; manual choices are preserved.
