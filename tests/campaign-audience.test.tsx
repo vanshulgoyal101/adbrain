@@ -149,7 +149,7 @@ describe("campaign Ads Manager links", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
     fireEvent.click(destination);
     expect(destination).toBeChecked();
-    expect(screen.getByText("WhatsApp drafts only. Publishing is not yet available.")).toBeVisible();
+    expect(screen.queryByText("WhatsApp drafts only. Publishing is not yet available.")).not.toBeInTheDocument();
     expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
   });
 
@@ -172,7 +172,7 @@ describe("campaign Ads Manager links", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
-  it("saves and restores WhatsApp drafts without a form and reviews the verified number", async () => {
+  it("saves, restores and submits a reviewed WhatsApp draft without a form", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
       canCreatePaused: true, blockers: [], planHash: "a".repeat(64), currency: "INR",
@@ -192,6 +192,9 @@ describe("campaign Ads Manager links", () => {
     await waitFor(() => expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked());
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    await waitFor(() => expect(mocks.createCampaign).toHaveBeenCalledTimes(1));
   });
 
   it.each([
@@ -402,10 +405,20 @@ describe("campaign sync feedback", () => {
 });
 
 describe("campaign audience workflow", () => {
-  it("clearly marks WhatsApp setup as draft-only", () => {
+  it("withholds WhatsApp submission when the Page-linked number is unverified", async () => {
+    mocks.preflight.mockImplementation(async () => ({
+      draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
+      canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.", action: null }],
+      planHash: null, currency: "INR", perAdSetDailyBudgetRupees: 200,
+      totalDailyBudgetRupees: 200, adSetCount: 1, resolvedAreaLabel: "Jaipur",
+      selected, destination: "whatsapp", whatsappNumber: null,
+    }));
     view();
     fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
-    expect(screen.getByText("WhatsApp drafts only. Publishing is not yet available.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    expect(await screen.findByText("Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 

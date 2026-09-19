@@ -165,7 +165,6 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("FORBIDDEN", "Every selected creative must belong to this business and be approved with an image and headline."));
   }
   if (draft.destination === "whatsapp") {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "WhatsApp publishing is not yet available. You can save this draft or choose an instant form."));
     if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
     }

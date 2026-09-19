@@ -296,19 +296,29 @@ describe("durable campaign create route", () => {
     }));
   });
 
-  it("blocks WhatsApp creation even with a forged review hash and verified recipient", async () => {
+  it.each(["valid", "forged", "changed number", "missing number"])("checks the WhatsApp review before creation: %s", async (scenario) => {
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
     const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
     const forms = vi.fn().mockRejectedValue(new Error("WhatsApp must not load forms"));
-    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => "+919876543210", createLeadCampaign: create, listLeadForms: forms, resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }));
+    let whatsappNumber: string | null = "+919876543210";
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => whatsappNumber, createLeadCampaign: create, listLeadForms: forms, resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
     const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
     const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
-    expect(reviewed.data).toMatchObject({ canCreatePaused: false, planHash: null, whatsappNumber: "+919876543210" });
+    expect(reviewed.data).toMatchObject({ canCreatePaused: true, planHash: expect.any(String), whatsappNumber: "+919876543210" });
+    if (scenario === "changed number") whatsappNumber = "+919876543211";
+    if (scenario === "missing number") whatsappNumber = null;
     const { POST } = await import("@/app/api/campaigns/create/route");
-    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: "a".repeat(64), connectionGeneration, idempotencyKey }));
-    expect(response.status).toBeGreaterThanOrEqual(400);
-    expect(create).not.toHaveBeenCalled();
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: scenario === "forged" ? "a".repeat(64) : reviewed.data.planHash, connectionGeneration, idempotencyKey }));
+    if (scenario === "valid") {
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.state).toBe("succeeded");
+      expect(create).toHaveBeenCalledOnce();
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, leadFormId: undefined, gender: "women" }));
+    } else {
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(create).not.toHaveBeenCalled();
+      expect(mocks.rpc).not.toHaveBeenCalled();
+    }
     expect(forms).not.toHaveBeenCalled();
   });
 

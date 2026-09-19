@@ -302,6 +302,16 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each(["missing", "unreadable"])("blocks a %s WhatsApp linkage at execution before mutation", async (outcome) => {
+    const client = new MetaClient(creds);
+    const lookup = vi.spyOn(client, "getWhatsAppNumber");
+    if (outcome === "missing") lookup.mockResolvedValue(null);
+    else lookup.mockRejectedValue(new MetaError("WhatsApp linkage unavailable"));
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", link: "https://example.com", creatives: [], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 })).rejects.toThrow(/WhatsApp/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     { location: { cities: [{ key: "city-1", radius: 5, distance_unit: "kilometer" }] }, ageMin: 25, ageMax: 55 },
     { location: { countries: ["IN"] }, ageMin: 55, ageMax: 25 },

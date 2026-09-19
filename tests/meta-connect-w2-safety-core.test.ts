@@ -66,18 +66,26 @@ describe("campaign preflight", () => {
     expect(new Set(hashes).size).toBe(3);
   });
 
-  it("blocks WhatsApp publishing even with a verified number and retains its draft review data", () => {
+  it("allows WhatsApp publishing with a verified number and binds it to the review", () => {
     const base = input({ draft: { ...draft, destination: "whatsapp", leadFormId: null }, form: null,
       whatsappNumber: "+919876543210", hash: payload => createHash("sha256").update(payload).digest("hex") });
     const review = runPreflight(base);
-    expect(review.canCreatePaused).toBe(false);
-    expect(review.planHash).toBeNull();
-    expect(review.blockers).toContainEqual(expect.objectContaining({ message: expect.stringContaining("WhatsApp publishing is not yet available") }));
+    expect(review.canCreatePaused).toBe(true);
+    expect(review.planHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(review.blockers).toEqual([]);
     expect(review.destination).toBe("whatsapp");
     expect(review.whatsappNumber).toBe("+919876543210");
     expect(runPreflight({ ...base, whatsappNumber: null }).canCreatePaused).toBe(false);
     expect(buildCanonicalReviewPayload({ ...base, whatsappNumber: "+919876543211" })).not.toEqual(buildCanonicalReviewPayload(base));
+    expect(runPreflight({ ...base, whatsappNumber: "+919876543211" }).planHash).not.toBe(review.planHash);
     expect(runPreflight({ ...base, draft: { ...draft, destination: "instant_form" }, form: input().form }).canCreatePaused).toBe(true);
+  });
+
+  it.each([undefined, null, "", "9876543210", "+01234567", "+91invalid"])("blocks WhatsApp without a verified E.164 number: %s", (whatsappNumber) => {
+    const review = runPreflight(input({ draft: { ...draft, destination: "whatsapp", leadFormId: null }, form: null, whatsappNumber }));
+    expect(review.canCreatePaused).toBe(false);
+    expect(review.planHash).toBeNull();
+    expect(review.blockers).toContainEqual(expect.objectContaining({ message: expect.stringContaining("selected Facebook Page") }));
   });
 
   it.each(["imageUrl", "headline", "primaryText", "description", "cta"] as const)("invalidates review when creative %s changes", (field) => {
