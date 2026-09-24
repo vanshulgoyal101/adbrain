@@ -760,6 +760,19 @@ export interface Database {
         Args: { p_business_id: string; p_user_id: string };
         Returns: boolean;
       };
+      meta_funding_latest_record: {
+        Args: { p_business_id: string; p_environment: "test" | "live" };
+        Returns: Json;
+      };
+      meta_billing_event_record: {
+        Args: { p_business_id: string; p_environment: "test" | "live"; p_record: Json;
+          p_actor_id: string; p_source: string; p_source_reference: string };
+        Returns: string;
+      };
+      meta_billing_charge_observations: {
+        Args: { p_business_id: string; p_environment: "test" | "live"; p_charge_id: string };
+        Returns: Json;
+      };
       meta_revoke_subject: {
         Args: { p_subject_id: string };
         Returns: number;

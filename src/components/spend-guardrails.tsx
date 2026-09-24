@@ -138,7 +138,8 @@ export function SpendGuardrails({
         <p className="text-xs leading-5 text-slate-500">
           Checks are periodic, not real-time. Reporting delays and unsuccessful
           pause requests can allow spending beyond this cap. Use Meta account
-          spending limits for an additional control.
+          spending limits where supported; prepaid accounts need campaign budgets
+          instead. These guardrails do not verify available funds or payment setup.
         </p>
 
         <Button onClick={save} disabled={saving}>

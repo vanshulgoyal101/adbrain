@@ -92,6 +92,160 @@ async function verify(database, source) {
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
 
+    await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
+      const profileId = randomUUID();
+      const evidenceId = randomUUID();
+      const record = {
+        version: 1, businessId, environment: "test", connectionGeneration: 1, evidenceId,
+        verifiedAt: new Date(Date.now() - 60_000).toISOString(),
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(), revokedAt: null,
+        setup: { method: "upi_auto_reload", accountId: "act_123", expectedOwnerBusinessId: "456",
+          ownerBusinessId: "456", currency: "INR", country: "IN", accountActive: true,
+          billingMode: "available_funds", paymentMethod: "verified", recurringAuthorisation: "verified",
+          spendControls: "verified", ownerAcceptedMetaInitiatedPayments: true },
+      };
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role service_role");
+        await session.query(`insert into public.meta_billing_profiles
+          (id,business_id,environment,ad_account_id,owner_business_id,created_by)
+          values ($1,$2,'test','act_123','456',$3)`, [profileId, businessId, ownerId]);
+        const insertEvidence = (input, source = "test_fixture", targetProfile = profileId) => session.query(`insert into public.meta_funding_evidence
+          (id,profile_id,verified_by,source,source_reference,record) values ($1,$2,$3,$4,$5,$6)`,
+        [input.evidenceId, targetProfile, ownerId, source, randomUUID(), input]);
+        await insertEvidence(record);
+        const latestRecord = async () => (await session.query("select public.meta_funding_latest_record($1,'test') as record", [businessId])).rows[0].record;
+        assert.deepEqual(await latestRecord(), record);
+        assert.equal((await session.query("select public.meta_funding_latest_record($1,'test') as record", [randomUUID()])).rows[0].record, null);
+        await insertEvidence({ ...record, evidenceId: randomUUID(), verifiedAt: new Date(Date.now() - 120_000).toISOString() });
+        assert.equal((await latestRecord()).evidenceId, evidenceId);
+        await assert.rejects(insertEvidence(record), { code: "23505" });
+        for (const override of [{ businessId: randomUUID() }, { environment: "live" },
+          { connectionGeneration: -1 }, { revokedAt: new Date().toISOString() },
+          { setup: { ...record.setup, accountId: "act_999" } },
+          { setup: { ...record.setup, ownerBusinessId: "789" } },
+          { setup: { ...record.setup, accessToken: "not-a-real-token" } },
+          { verifiedAt: new Date(Date.now() + 60_000).toISOString() },
+          { expiresAt: record.verifiedAt },
+        ]) {
+          await assert.rejects(insertEvidence({ ...record, ...override, evidenceId: randomUUID() }), { code: "23514" });
+        }
+        for (const table of ["meta_billing_profiles", "meta_funding_evidence", "meta_funding_revocations"]) {
+          await assert.rejects(session.query(`delete from public.${table}`), { code: "42501" });
+        }
+        await assert.rejects(session.query("update public.meta_billing_profiles set ad_account_id='act_999'"), { code: "42501" });
+        await assert.rejects(session.query("update public.meta_funding_evidence set record='{}'"), { code: "42501" });
+        await session.query(`insert into public.meta_funding_revocations(evidence_id,revoked_by,reason)
+          values ($1,$2,'mandate_revoked')`, [evidenceId, ownerId]);
+        await assert.rejects(session.query("update public.meta_funding_revocations set reason='operator_hold'"), { code: "42501" });
+        assert.equal((await session.query("select record from public.meta_funding_evidence where id=$1", [evidenceId])).rows[0].record.revokedAt, null);
+        assert.equal((await session.query("select count(*)::int as total from public.meta_funding_revocations where evidence_id=$1", [evidenceId])).rows[0].total, 1);
+        assert.ok(Date.parse((await latestRecord()).revokedAt) >= Date.parse(record.verifiedAt));
+        const delayedRecord = { ...record, evidenceId: randomUUID(), verifiedAt: new Date(Date.now() - 30_000).toISOString() };
+        await insertEvidence(delayedRecord);
+        assert.equal((await latestRecord()).evidenceId, delayedRecord.evidenceId);
+        assert.ok((await latestRecord()).revokedAt, "A pre-revocation snapshot cannot restore readiness");
+        const liveProfile = randomUUID();
+        await session.query(`insert into public.meta_billing_profiles
+          (id,business_id,environment,ad_account_id,owner_business_id,created_by)
+          values ($1,$2,'live','act_123','456',$3)`, [liveProfile, businessId, ownerId]);
+        await assert.rejects(insertEvidence({ ...record, environment: "live", evidenceId: randomUUID() }, "test_fixture", liveProfile), { code: "23514" });
+        await session.query("set role authenticated");
+        await assert.rejects(session.query("select public.meta_funding_latest_record($1,'test')", [businessId]), { code: "42501" });
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+        assert.equal((await session.query("select id from public.meta_billing_profiles")).rowCount, 2);
+        await assert.rejects(session.query(`insert into public.meta_billing_profiles
+          (business_id,environment,ad_account_id,owner_business_id,created_by)
+          values ($1,'test','act_999','456',$2)`, [businessId, ownerId]), { code: "42501" });
+        for (const table of ["meta_funding_evidence", "meta_funding_revocations"]) {
+          await assert.rejects(session.query(`select * from public.${table}`), { code: "42501" });
+        }
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [randomUUID()]);
+        assert.equal((await session.query("select id from public.meta_billing_profiles")).rowCount, 0);
+        await session.query("set role anon");
+        await assert.rejects(session.query("select public.meta_funding_latest_record($1,'test')", [businessId]), { code: "42501" });
+        await assert.rejects(session.query("select * from public.meta_billing_profiles"), { code: "42501" });
+      } finally { await session.end(); }
+    });
+
+    await check(`${database}: Meta charge observations dedupe atomically and quarantine conflicts`, async () => {
+      const observation = {
+        version: 1, businessId, environment: "test", accountId: "act_123", sourceEventId: "event_1",
+        chargeId: "charge_1", status: "succeeded", amountPaise: 100000, taxPaise: null, currency: "INR",
+        occurredAt: new Date(Date.now() - 60000).toISOString(), payloadHash: "a".repeat(64),
+      };
+      const record = async (input, source = "test_fixture") => {
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("set role service_role");
+          return (await session.query("select public.meta_billing_event_record($1,$2,$3,$4,$5,$6) as outcome",
+            [businessId, input.environment, input, ownerId, source, randomUUID()])).rows[0].outcome;
+        } finally { await session.end(); }
+      };
+      const outcomes = await Promise.all(Array.from({ length: 4 }, () => record(observation)));
+      assert.equal(outcomes.filter(outcome => outcome === "recorded").length, 1);
+      assert.equal(outcomes.filter(outcome => outcome === "duplicate").length, 3);
+      assert.equal(await record({ ...observation, sourceEventId: "pending_1", status: "pending" }), "recorded");
+      const conflict = { ...observation, amountPaise: 100001 };
+      assert.equal(await record(conflict), "conflict");
+      assert.equal(await record(conflict), "conflict");
+      assert.equal((await db.query("select count(*)::int as total from public.meta_billing_event_conflicts")).rows[0].total, 1);
+      assert.equal(await record({ ...observation, chargeId: "charge_other" }), "conflict");
+      for (const override of [{ accountId: "act_999" }, { businessId: randomUUID() },
+        { environment: "live" }, { amountPaise: 0 }, { amountPaise: -1 }, { amountPaise: 0.5 },
+        { amountPaise: 9007199254740992 }, { amountPaise: "100000" }, { taxPaise: -1 },
+        { taxPaise: 100001 }, { currency: "USD" }, { sourceEventId: null }, { payloadHash: 12345 },
+        { occurredAt: "infinity" }, { occurredAt: new Date(Date.now() + 60000).toISOString() },
+        { accessToken: "not-a-real-token" },
+      ]) await assert.rejects(record({ ...observation, ...override }), { code: "23514" });
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role service_role");
+        const read = async (tenant, environment, charge) => (await session.query(
+          "select public.meta_billing_charge_observations($1,$2,$3) as observations", [tenant, environment, charge])).rows[0].observations;
+        const stored = await read(businessId, "test", "charge_1");
+        assert.equal(stored.events.length, 2);
+        assert.equal(stored.events.find(event => event.sourceEventId === "event_1").amountPaise, 100000);
+        assert.equal(stored.hasConflicts, true);
+        assert.deepEqual(await read(businessId, "test", "charge_other"), { events: [], hasConflicts: true });
+        assert.deepEqual(await read(randomUUID(), "test", "charge_1"), { events: [], hasConflicts: false });
+        assert.deepEqual(await read(businessId, "live", "charge_1"), { events: [], hasConflicts: false });
+        for (const table of ["meta_billing_events", "meta_billing_event_conflicts"]) {
+          await assert.rejects(session.query(`delete from public.${table}`), { code: "42501" });
+          await assert.rejects(session.query(`update public.${table} set source='operator_review'`), { code: "42501" });
+          const grants = await session.query("select has_table_privilege('service_role',$1,'INSERT') as allowed", [`public.${table}`]);
+          assert.equal(grants.rows[0].allowed, false);
+        }
+        for (const role of ["anon", "authenticated"]) {
+          await session.query(`set role ${role}`);
+          await assert.rejects(session.query("select * from public.meta_billing_events"), { code: "42501" });
+          await assert.rejects(session.query("select * from public.meta_billing_event_conflicts"), { code: "42501" });
+          await assert.rejects(session.query("select public.meta_billing_charge_observations($1,'test','charge_1')", [businessId]), { code: "42501" });
+          await assert.rejects(session.query("select public.meta_billing_event_record($1,'test',$2,$3,'test_fixture',$4)",
+            [businessId, observation, ownerId, randomUUID()]), { code: "42501" });
+        }
+      } finally { await session.end(); }
+    });
+
+    await check(`${database}: concurrent customers cannot claim the same managed ad account`, async () => {
+      const businessIds = [randomUUID(), randomUUID()];
+      for (const tenantId of businessIds) await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Funding isolation fixture')", [tenantId, ownerId]);
+      const assignments = await Promise.allSettled(businessIds.map(async tenantId => {
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("set role service_role");
+          await session.query(`insert into public.meta_billing_profiles(business_id,environment,ad_account_id,owner_business_id,created_by)
+            values ($1,'test','act_777','456',$2)`, [tenantId, ownerId]);
+        } finally { await session.end(); }
+      }));
+      assert.equal(assignments.filter(result => result.status === "fulfilled").length, 1);
+      assert.equal(assignments.filter(result => result.status === "rejected" && result.reason.code === "23505").length, 1);
+    });
+
     await check(`${database}: worker queue has server-only atomic claims and never replays interrupted mutations`, async () => {
       for (const role of ["anon", "authenticated"]) {
         const privileges = await db.query("select has_function_privilege($1, 'public.claim_next_campaign_job()', 'EXECUTE') as claim, has_function_privilege($1, 'public.enqueue_campaign_operation(uuid,jsonb,text)', 'EXECUTE') as enqueue", [role]);
@@ -430,8 +584,10 @@ try {
   const whatsappMigration = await readFile(join(root, "db/migrations/20260918_whatsapp_results.sql"), "utf8");
   const reportingMigration = await readFile(join(root, "db/migrations/20260919_campaign_reporting_identity.sql"), "utf8");
   const workerMigration = await readFile(join(root, "db/migrations/20260919_campaign_worker.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}`);
+  const billingMigration = await readFile(join(root, "db/migrations/20260924_managed_billing.sql"), "utf8");
+  const billingEventsMigration = await readFile(join(root, "db/migrations/20260924_meta_billing_events.sql"), "utf8");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);
