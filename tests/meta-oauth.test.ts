@@ -132,15 +132,17 @@ describe("Meta signed requests", () => {
 
 describe("token exchange", () => {
   it("uses an app access token when inspecting a user token", async () => {
+    const dataAccessExpiresAt = Math.floor(Date.now() / 1_000) + 86_400;
+    const tokenExpiresAt = dataAccessExpiresAt + 86_400;
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "meta-user" })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ permission: "ads_read", status: "granted" }] })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { is_valid: true, app_id: "123456", user_id: "meta-user", expires_at: 1_800_000_000, data_access_expires_at: 1_790_000_000 } })));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { is_valid: true, app_id: "123456", user_id: "meta-user", expires_at: tokenExpiresAt, data_access_expires_at: dataAccessExpiresAt } })));
     const { inspectMetaToken } = await import("@/lib/meta/oauth");
     const inspection = await inspectMetaToken("user-token");
     expect(inspection.metaUserId).toBe("meta-user");
-    expect(inspection.dataAccessExpiresAt).toBe(new Date(1_790_000_000_000).toISOString());
+    expect(inspection.dataAccessExpiresAt).toBe(new Date(dataAccessExpiresAt * 1_000).toISOString());
     expect(String(fetchMock.mock.calls[2][0])).not.toContain("access_token=");
     expect(fetchMock.mock.calls[2][1]?.headers).toEqual({ Authorization: "Bearer 123456|shhh-secret" });
     expect(fetchMock.mock.calls.every(([, init]) => init?.redirect === "error" && init.cache === "no-store" && init.signal instanceof AbortSignal)).toBe(true);

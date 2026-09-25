@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetaConnectionPanel } from "@/components/meta-connection";
+import { ManagedBilling } from "@/components/managed-billing";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
@@ -104,14 +105,19 @@ async function ConnectionSettings({ businessId, searchParams }: {
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
   ]);
-  return result.connection ? (
-    <MetaConnectionPanel businessId={businessId} connection={result.connection}
-      oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} />
-  ) : (
-    <Alert variant="error">
-      Meta connection status is temporarily unavailable. Your campaign draft is preserved.
-      <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
-    </Alert>
+  return (
+    <>
+      {result.connection ? (
+        <MetaConnectionPanel businessId={businessId} connection={result.connection}
+          oauthConfigured={metaOAuthConfigured()} notice={noticeFrom(params)} />
+      ) : (
+        <Alert variant="error">
+          Meta connection status is temporarily unavailable. Your campaign draft is preserved.
+          <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
+        </Alert>
+      )}
+      <ManagedBilling connection={result.connection} />
+    </>
   );
 }
 
