@@ -55,6 +55,46 @@ fees are an AdBrain expense, not a change to the original quote. Allocation is
 neither earned revenue nor a bank payout: revenue recognition and owner withdrawal
 must wait for the agreed service, tax, refund and reserve policy.
 
+### First package proposal and economics
+
+Recommendation for owner/CA review, not an approved customer offer: INR 10,000
+pre-tax for one business, one current offer, one service area, up to two creative
+variants and one capped lead campaign with a closing spend/enquiry report. Use
+the existing instant-form destination for the first Solaride test unless the
+owner explicitly chooses another destination. Campaign duration and media limits
+must fit the reviewed allocation; no guaranteed enquiries or sales.
+
+Recommend defining the INR 8,000 advertising allocation as Meta costs including
+applicable Meta tax, with net media and tax itemized. This interpretation is NOT
+yet owner-approved. Do not describe it as INR 8,000 delivered media, deduct gateway
+fees from it, or enable checkout before CA/gateway approval and funding proof.
+
+Illustrative cash sensitivity only: assume 18% customer tax on the full base,
+18% Meta tax, and a gateway charge of 2% plus 18% tax on that charge. These are
+scenario inputs, not verified tax treatment or a negotiated provider quote.
+
+| INR 10,000 base scenario | Cash amount (INR) |
+| --- | ---: |
+| Customer total under the illustrative tax assumption | 11,800.00 |
+| Service allocation | 2,000.00 |
+| Gateway cash cost on the customer total | 278.48 |
+| Net media within a tax-inclusive INR 8,000 Meta allocation | 6,779.66 |
+| Service cash remaining before delivery costs, with tax-inclusive Meta allocation | 1,721.52 |
+| Cash remaining if INR 8,000 net media is promised and Meta tax is funded from the fee | 281.52 |
+
+The comparison excludes input-tax-credit recovery, fixed overhead, refunds and
+disputes; it is not an accounting profit calculation. At a proposed 10% of base
+cash-contribution target, the tax-inclusive scenario permits at most INR 721.52
+of generation, support and other variable delivery costs before reserve expenses.
+Measure real operator time and generation cost in the pilot. If those costs exceed
+the ceiling, revise package size/scope or propose a new fee version before selling.
+
+Proposed refund principle for review: no ad delivery before cleared funding and
+explicit approval; return unspent advertising allocation after final Meta charges
+are reconciled, and refund unearned service amounts under disclosed milestones.
+Do not promise instant refunds of money already loaded into a Meta account. Exact
+milestones, refund timing, dispute handling and gateway terms remain launch gates.
+
 ### Changing pricing later
 
 The implementation accepts an explicit versioned server policy in basis points
@@ -127,14 +167,94 @@ recommendation and proposed operator-assisted pilot.
 
 Public Meta documentation establishes automatic payment options in India. Support
 confirmation is not required merely to establish that these options exist. Actual
-account/bank eligibility and setup still need verification. No route has been
-selected or verified for Solaride, and no recurring mandate has been authorised.
+bank/recurring-method eligibility and setup still need verification. The September
+24 live billing check confirms Solaride 101 uses available funds in INR, making
+UPI auto-reload the candidate route. No recurring mandate has been authorised.
 
 | Route | Automatic movement | Remaining prerequisites |
 | --- | --- | --- |
 | UPI auto-reload | Meta replenishes an available-funds account when its balance reaches the configured threshold | Eligible India account and UPI instrument; one-time authorisation in Meta and the UPI app; verified reload amount, threshold and provider limits |
 | Automatic card billing | Meta charges eligible cards at billing thresholds and the monthly bill date | Compatible billing mode and Indian bank/card; RBI-compliant recurring authorisation; settlement float and charge reconciliation |
 | Monthly invoicing / credit | Credit allocation supports advertising but is not a cash payment | Meta eligibility, credit approval and a separately verified automatic invoice-payment mechanism; public direct-debit documentation does not establish India support |
+
+### Live Solaride billing check: September 24
+
+The owner-authenticated Meta billing page for Solaride 101 (account ending 2052)
+showed INR 0.00 available funds, no saved payment method and no recent spending.
+The page explicitly says it deducts from available funds as ads run and pauses
+ads when funds run out. This confirms the account's billing mode, not recurring
+payment eligibility. Meta's displayed daily spending limit is not a customer
+allocation cap or an AdBrain-configured account spending limit.
+
+Both payment selectors offer UPI. Add payment method led to an empty Add to balance
+amount form. Add funds offered cards, UPI and net banking, and prefilled INR 96,150
+as its current maximum. That amount was cleared; it was not an approved top-up.
+With UPI selected and the amount empty, no Save UPI checkbox or auto-reload setting
+was visible. No amount was submitted during that initial inspection. The balance's
+More options menu offered only View history. This does not prove auto-reload is
+unavailable: its enrollment may occur later in the funding flow.
+
+The owner subsequently approved entering INR 100 and inspecting the next screen
+only, explicitly excluding payment, mandate authorization and ad activation.
+The Other amount option and UPI selection were verified before advancing. Meta
+accepted INR 100 within its displayed INR 40 to INR 96,150 range and generated an
+unpaid, expiring UPI QR payment request. The Complete payment screen offered no
+Save UPI or recurring authorization option. No QR was scanned, payment authorized
+or bank details entered. The flow was left without paying. A fresh billing reload
+confirmed no open payment dialog, INR 0.00, no saved methods and no recent spending.
+Closing the dialog is not evidence that the unpaid request was cancelled; it had
+an expiry. Do not pay it later under this inspection-only approval.
+
+Next account-specific question for Meta: Solaride 101 is an India/INR available-
+funds account, but Add funds > UPI goes directly to a one-off QR request without
+Save UPI for recurring charges. Is UPI auto-reload enabled for this account, and
+what exact eligibility or enrollment prerequisite is missing? The public setup
+article alone does not answer this account-specific discrepancy. Do not fund the
+account merely to assume that a recurring option will appear after payment.
+
+The owner clicked Next Step in the support form, which displayed Meta's Beta
+Product Testing terms, AI terms and Privacy Policy. After supplying the direct
+account URL and selecting Solaride 101 explicitly, a support chat was opened using
+the existing contact email, with the optional phone field blank. The assistant
+identified itself as automated assistance for the owner and requested guidance
+only, with no billing, payment, mandate or ad changes authorized.
+
+The AI-enabled support chat reported that this account is eligible for auto-reload
+but needs a saved primary payment method first. That is a support statement, not
+observed recurring enrollment or a verified bank mandate. Its follow-up claimed
+that an initial payment is required, but also said Save UPI must be selected before
+payment and that paying a one-off QR alone likely would not save a recurring method.
+It said a card is not required. These statements do not explain the missing option
+or establish that a manual top-up will unlock it; do not pay merely to test that
+assumption.
+
+Asked to diagnose the discrepancy, the automated support agent said its tools and
+documentation could not do so. Human billing escalation was requested, but it said
+no specialist was available. It also could not provide a case/reference number or
+support-inbox link. It acknowledged the issue as unresolved and said the conversation
+is automatically saved; no independently verified escalation ticket was obtained.
+The chat remains open for the owner. No payment, mandate or account change was
+authorized or performed during the support conversation. The next required evidence
+is a usable recurring-UPI enrollment path, or a separately verified compatible
+automatic-billing route, not another generic setup article or ordinary top-up.
+
+Meta's [setup instructions](https://www.facebook.com/business/help/791384133101786)
+specify Add funds, an amount and UPI, then Save UPI for future recurring charges,
+authorization in the external UPI app, followed by reload amount and balance
+threshold settings. Inspect further only with an explicitly approved initial
+amount and scope. The owner must handle bank authorization directly. Stop if the
+flow offers only a one-off payment; a successful manual top-up would not satisfy
+the automatic-funding requirement. Do not substitute prepaid card auto-reload,
+which Meta's [supported methods](https://www.facebook.com/business/help/333798826401061)
+exclude in India.
+
+All five campaign toggles were Off during the same inspection. Two other ad sets
+were On beneath Off campaigns. Recheck delivery state immediately before any
+authorized funding, leave unpublished drafts untouched, and obtain separate ad
+activation approval. No initial deposit, mandate, reload amount or threshold is
+approved by the owner's earlier acceptance of the automatic-payment product model.
+
+### Automatic funding boundaries
 
 India UPI auto-reload is distinct from recurring card billing. Meta's prepaid
 card auto-reload documentation excludes India; eligible postpaid recurring card
@@ -150,8 +270,11 @@ reviewed references and SDK. That is a research result, not proof that no privat
 facility exists. `funding_id` selects a funding arrangement, not an amount to send.
 Do not automate Ads Manager, store payment credentials/OTP, or invent a gateway
 recipient. One-time mandate authorisation is different from repeated manual
-top-ups. The owner has not yet accepted that onboarding step or Meta-controlled
-charge timing as satisfying the requested automation; keep both as decision gates.
+top-ups. On 2026-09-24 the owner accepted one-time authorisation followed by
+Meta-controlled recurring charges, with AdBrain tracking the customer's allocation.
+An exact 80% deposit at checkout is not required under this accepted model. This
+product decision does not authorise a bank mandate, payment, account creation or
+ad activation. Actual account/method eligibility and authorisation remain gates.
 Repeated operator-assisted top-ups remain outside the approved product scope.
 
 **Spending and cash must remain separate.** Available-funds accounts cannot set a
@@ -343,7 +466,7 @@ approval policy; edits to balances are forbidden.
 
 | Phase | Deliverable | Gate |
 | --- | --- | --- |
-| 0: funding feasibility | Choose UPI auto-reload or eligible automatic card billing; verify account model and onboarding | Owner accepts Meta-triggered timing and one-time mandate setup; actual Solaride account eligibility; invoice path stays gated |
+| 0: funding feasibility | Choose UPI auto-reload or eligible automatic card billing; verify account model and onboarding | Owner accepted Meta-triggered timing and one-time setup on 2026-09-24; actual Solaride eligibility and mandate still unverified; invoice path stays gated |
 | 1: local foundations | Versioned INR quote, offline signature checks, funding/provisioning assessments and read-only Settings | Exact allocation, fail-closed assessments, unknown ownership/capacity and connection regressions pass |
 | 2: managed funding foundations | Durable billing profiles, observed charge inbox and reconciliation; provisioning orchestration | Isolated database, authenticated fresh evidence, consent, quota checks and ambiguous-outcome recovery; no unsupported transfer API |
 | 3: durable ledger | Server-only posting RPCs, RLS, treasury/customer reservations and refund accounting | Fresh/upgrade PostgreSQL; tenant isolation, concurrent capture/refund/reservation, restart/replay and overspend tests |
