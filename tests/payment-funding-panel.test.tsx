@@ -224,6 +224,53 @@ describe("production checkout with synthetic responses", () => {
     await screen.findByText("Payment terms changed. Review the current terms before continuing.");
     expect(opened).not.toHaveBeenCalled();
   });
+  it("QA recovers a lost verification response on reload without reopening checkout or replaying callbacks", async () => {
+    const view = await mountLive();
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    fetchMock.mockRejectedValueOnce(new Error("Synthetic verification response lost"));
+    const proof = { razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) };
+    act(() => {
+      options.handler(proof);
+      options.handler(proof);
+      options.modal.ondismiss();
+    });
+    await screen.findByText("Synthetic verification response lost");
+    expect(screen.queryByText("Payment confirmed")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([path]) => path.endsWith("verify"))).toHaveLength(1);
+    view.unmount();
+    fetchMock.mockImplementation(async () => Response.json({ policy: null, orders: [captured] }));
+    render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText("Payment confirmed");
+    expect(screen.getByText("Payment receipt")).toBeInTheDocument();
+    expect(screen.getByText(/does not authorize ad activation/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pay INR|Continue saved/ })).not.toBeInTheDocument();
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([path, requestOptions]) => path.endsWith("orders") && requestOptions.method === "POST")).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([path]) => path.endsWith("verify"))).toHaveLength(1);
+  });
+
+  it("QA requires renewed acceptance when a status refresh changes collection terms", async () => {
+    await mountLive();
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    fetchMock.mockImplementation(async () => Response.json({
+      policy: { ...livePolicy, hash: "b".repeat(64), invoiceTerms: "Updated synthetic invoice terms" }, orders: [],
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Check payment status" }));
+    await screen.findByText("Updated synthetic invoice terms");
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+    expect(fetchMock.mock.calls.every(([, requestOptions]) => requestOptions.method === "GET")).toBe(true);
+    expect(opened).not.toHaveBeenCalled();
+
+    fetchMock.mockImplementation(async () => Response.json(liveOrder));
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    const [, createRequest] = fetchMock.mock.calls.find(([path, requestOptions]) => path.endsWith("orders") && requestOptions.method === "POST")!;
+    expect(JSON.parse(createRequest.body)).toMatchObject({ termsHash: "b".repeat(64), acceptTerms: true });
+  });
+
   it("rejects test-mode confirmations in the live view", async () => {
     fetchMock.mockImplementation(async () => Response.json({ policy: livePolicy, orders: [{ ...captured, environment: "test" }] }));
     render(<ProductionCheckout businessId={businessId} />);
