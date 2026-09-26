@@ -4,21 +4,26 @@ AdBrain combines a business profile, reviewed AI creative generation, and
 owner-scoped Meta campaign management. Campaign creation is paused by default;
 activation is a separate operation with financial consequences.
 
-This documentation describes the checked-out source as of 2026-09-18. Local
-implementation, automated tests, production deployment, and real-provider
-approval are separate kinds of evidence. Consult release receipts for deployment
-status, not an undated feature claim.
+This is the entry point for product, engineering and operations documentation.
+References explain the checked-out source; plans describe intended work; dated
+receipts establish what was tested or deployed. These are different claims.
+Never infer production availability from a feature branch or a passing local test.
+
+The documentation is being rebuilt against current source and release evidence
+starting September 26, 2026. The [current dispatch](ORCHESTRATION.md#current-dispatch)
+tracks section ownership and review. This index is not a blanket certification
+that every linked guide has already been refreshed.
 
 ## Start Here
 
 | Reader | Read first | Then read |
 | --- | --- | --- |
-| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Operating brief](OPERATING-BRIEF.md) |
+| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](ROADMAP.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](FEATURES.md) | [Demo runbook](DEMO-RUNBOOK.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
 | Debugging engineer | [Observability](OBSERVABILITY.md) | [Verification records](qa/) |
-| Product planner | [Product vision](SPEC.md) | [Roadmap](ROADMAP.md) |
+| Product planner | [Product scope](SPEC.md) | [Roadmap](ROADMAP.md) and [payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
 
@@ -39,6 +44,28 @@ status, not an undated feature claim.
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
 | [Demo runbook](DEMO-RUNBOOK.md) | How do we demonstrate real value without unintended spending or false claims? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
+| [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
+| [Operating brief](OPERATING-BRIEF.md) | Which outcome, risk decisions and evidence should guide operation of the product? |
+| [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
+
+## Plans and Records
+
+Keep current instructions in the reference library above. Use the following
+documents for intent, context or evidence, not as alternative setup guides.
+
+| Material | Purpose |
+| --- | --- |
+| [Product scope](SPEC.md) and [roadmap](ROADMAP.md) | Intended customer outcomes, priorities and explicitly unfinished work |
+| [Creative generation plan](CREATIVE-GENERATION-PLAN.md), [Meta connection plan](META-INSTANT-CONNECT-PLAN.md), [product design roadmap](PRODUCT-DESIGN-ROADMAP.md) | Design rationale and proposals; implementation claims require current source |
+| [Original operating assessment](OPERATING-BRIEF-HISTORY-2026-09-26.md) and [product audit](PRODUCT-AUDIT-2026-09.md) | Dated assessments; findings may be superseded by later fixes |
+| [Earlier roadmap and pilot](ROADMAP-HISTORY-2026-09-26.md) and [payment design/receipts](PAYMENTS-HISTORY-2026-09-26.md) | Preserved decisions, investigations and transaction evidence; use current guides for readiness and sequencing |
+| [QA receipts](qa/) and [release records](releases/) | Candidate-specific acceptance, provider checks and deployment evidence |
+| [Project history](how-we-got-here.md) and [orchestration history](ORCHESTRATION-HISTORY-2026-09-26.md) | Historical context, not current work assignments or operational authority |
+
+Preserve evidence at its existing path when other records link to it. Consolidate
+duplicate guidance into its owning reference; retain a short redirect when a
+published document moves. Historical receipts should not be rewritten to appear
+current.
 
 ## Terminology
 
@@ -82,13 +109,25 @@ responses in documentation or screenshots. Use synthetic examples.
 
 ## Maintaining These Docs
 
-Update the owning reference alongside any changed schema, route, environment
-field, workflow or migration. Keep runtime behavior here and dated test/deployment
-evidence in records. Preserve old receipts, but label superseded assumptions in
-design plans so they cannot be mistaken for current setup instructions.
+Use one canonical guide per subject. Link to shared definitions instead of
+copying setup commands, environment tables or release rules across documents.
 
-Validate examples against actual handler schemas, not unused exported types or
-comments. Check local links/anchors, API and configuration inventories, command
-coverage and migration coverage. Do not state live deployment, provider approval,
-or measured quality solely from source inspection. Documentation cannot cure a
-known implementation gap: describe the limitation and put the fix on the roadmap.
+1. Identify the reader and the task. Start with the supported workflow, then
+  explain prerequisites, limits, failure recovery and relevant source locations.
+2. Verify claims against deciding code: handler validation, authorization,
+  provider adapters, database constraints and focused tests. Types or comments
+  alone are not proof of runtime behavior.
+3. Mark branch-only, migration-dependent, test-only and planned capabilities
+  explicitly. Date external account evidence and link deployment receipts.
+4. Use synthetic examples. Identify commands that write data, contact providers,
+  spend money or require approval before presenting them as executable steps.
+5. Update the owning guide in the same change as a public route, schema,
+  configuration, dependency boundary or customer workflow change.
+6. Check relative links and anchors, command names, API/configuration inventories
+  and migration prerequisites. Review factual changes independently; a prose-only
+  change does not need a duplicate application build or provider test.
+
+Write concise, task-oriented prose with descriptive headings and examples that
+match current schemas. Explain important trade-offs and limitations without
+copying implementation line by line. A known implementation gap belongs in both
+the relevant workflow's limitations and the roadmap, not behind a success claim.
