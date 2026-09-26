@@ -92,6 +92,58 @@ async function verify(database, source) {
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
 
+    await check(`${database}: lead sync pages commit atomically, deduplicate and reject foreign/stale bindings`, async () => {
+      await db.query("update public.meta_connections set ad_account_id='act_sync', page_id='page_sync' where business_id=$1", [businessId]);
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role service_role");
+        const start = async (owner = ownerId, sync = null, generation = 1) => (await session.query(
+          "select * from public.lead_sync_start($1,$2,$3,$4,'act_sync','page_sync')", [businessId, owner, sync, generation])).rows[0];
+        const run = await start();
+        assert.equal((await start()).id, run.id);
+        const save = async (version, rows, progress = run.progress) => (await session.query(
+          "select public.lead_sync_checkpoint($1,$2,$3,1,'act_sync','page_sync',$4,$5,$6) as saved",
+          [businessId, ownerId, run.id, version, JSON.stringify(rows), JSON.stringify(progress)])).rows[0].saved;
+        const first = await save(0, [{ meta_lead_id: 'sync-lead', full_name: 'Original' }]);
+        assert.equal(first.imported, 1);
+        assert.equal(first.run.version, 1);
+        await assert.rejects(save(0, [{ meta_lead_id: 'stale-lead' }]), { code: '40001' });
+        const duplicate = await save(1, [{ meta_lead_id: 'sync-lead', full_name: 'Overwrite' }]);
+        assert.equal(duplicate.imported, 0);
+        assert.equal((await session.query("select full_name from public.leads where business_id=$1 and meta_lead_id='sync-lead'", [businessId])).rows[0].full_name, 'Original');
+        await assert.rejects(save(2, [{ meta_lead_id: 'rolled-back' }, { meta_lead_id: null }]));
+        assert.equal(Number((await start(ownerId, run.id)).version), 2);
+        assert.equal((await session.query("select count(*)::int as count from public.leads where meta_lead_id in ('rolled-back','stale-lead')")).rows[0].count, 0);
+        const competing = client(database);
+        await competing.connect();
+        try {
+          await competing.query("set role service_role");
+          const attempts = await Promise.allSettled([
+            save(2, [{ meta_lead_id: 'race-first' }]),
+            competing.query("select public.lead_sync_checkpoint($1,$2,$3,1,'act_sync','page_sync',2,$4,$5)",
+              [businessId, ownerId, run.id, JSON.stringify([{ meta_lead_id: 'race-second' }]), JSON.stringify(run.progress)]),
+          ]);
+          assert.equal(attempts.filter(attempt => attempt.status === 'fulfilled').length, 1);
+          assert.equal(attempts.find(attempt => attempt.status === 'rejected').reason.code, '40001');
+        } finally { await competing.end(); }
+        const otherBusinessId = randomUUID();
+        await db.query("insert into public.businesses(id, owner_id, name) values ($1,$2,'Other synthetic business')", [otherBusinessId, ownerId]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_sync','page_sync')", [otherBusinessId]);
+        await assert.rejects(session.query("select * from public.lead_sync_start($1,$2,$3,1,'act_sync','page_sync')", [otherBusinessId, ownerId, run.id]), { code: 'P0002' });
+        await assert.rejects(start(randomUUID(), run.id), { code: '42501' });
+        await assert.rejects(start(ownerId, randomUUID()), { code: 'P0002' });
+        await db.query("update public.meta_connections set generation=2 where business_id=$1", [businessId]);
+        await assert.rejects(start(ownerId, run.id, 2), { code: '40001' });
+        await session.query("set role authenticated");
+        await assert.rejects(start(), { code: '42501' });
+        await assert.rejects(session.query("select * from public.lead_sync_runs"), { code: '42501' });
+      } finally {
+        await session.end();
+        await db.query("update public.meta_connections set generation=1, ad_account_id=null, page_id=null where business_id=$1", [businessId]);
+      }
+    });
+
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
       const profileId = randomUUID();
       const evidenceId = randomUUID();
@@ -586,11 +638,13 @@ try {
   const workerMigration = await readFile(join(root, "db/migrations/20260919_campaign_worker.sql"), "utf8");
   const billingMigration = await readFile(join(root, "db/migrations/20260924_managed_billing.sql"), "utf8");
   const billingEventsMigration = await readFile(join(root, "db/migrations/20260924_meta_billing_events.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}`);
+  const leadSyncMigration = await readFile(join(root, "db/migrations/20260926_lead_sync_progress.sql"), "utf8");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${leadSyncMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${leadSyncMigration}\n${leadSyncMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);
+  if (!started) console.error(await readFile(join(directory, "postgres.log"), "utf8").catch(() => "No PostgreSQL startup log available."));
 } finally {
   if (started) execFileSync(join(bin, "pg_ctl"), ["-D", cluster, "-m", "immediate", "-w", "stop"], { stdio: "pipe" });
   await rm(directory, { recursive: true, force: true });

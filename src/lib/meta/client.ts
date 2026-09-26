@@ -1,4 +1,5 @@
 import { getEnv } from "@/lib/env";
+import { z } from "zod";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
@@ -24,6 +25,46 @@ export interface MetaLead {
   id: string;
   created_time: string;
   field_data: { name: string; values: string[] }[];
+}
+
+export interface MetaLeadPage<T> {
+  data: T[];
+  after: string | null;
+}
+
+const formPageSchema = z.object({ id: z.string().min(1).max(200), name: z.string().max(1000), status: z.string() });
+const leadPageSchema = z.object({
+  id: z.string().min(1).max(200),
+  created_time: z.string().refine(value => !value || Number.isFinite(Date.parse(value))).optional().default(""),
+  field_data: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]),
+});
+
+function parseLeadPage<T>(value: unknown, schema: z.ZodType<T>, previous?: string | null): MetaLeadPage<T> {
+  const page = z.object({
+    data: z.array(schema).max(200),
+    paging: z.object({ next: z.string().optional(), cursors: z.object({ after: z.string().min(1).max(4096) }).partial().optional() }).optional(),
+  }).safeParse(value);
+  if (!page.success) throw new MetaError("Malformed Meta lead page.");
+  const after = page.data.paging?.next ? page.data.paging.cursors?.after : null;
+  if (after === undefined || (after !== null && (after === previous || !/^[A-Za-z0-9_+/=-]+$/.test(after)))) {
+    throw new MetaError("Invalid Meta lead page cursor.");
+  }
+  return { data: page.data.data, after };
+}
+
+async function collectLeadPages<T>(read: (after: string | null) => Promise<MetaLeadPage<T>>): Promise<T[]> {
+  const values: T[] = [];
+  const seen = new Set<string>();
+  let after: string | null = null;
+  for (let count = 0; count < 100; count++) {
+    const page = await read(after);
+    values.push(...page.data);
+    if (!page.after) return values;
+    if (seen.has(page.after)) throw new MetaError("Repeated Meta lead page cursor.");
+    seen.add(page.after);
+    after = page.after;
+  }
+  throw new MetaError("Meta lead page limit exceeded; use resumable sync.");
 }
 
 export interface CreativeInput {
@@ -433,12 +474,19 @@ export class MetaClient {
 
   /** Active instant lead forms on the page. */
   async listLeadForms(): Promise<LeadForm[]> {
+    const forms = await collectLeadPages(after => this.listLeadFormsPage({ after }));
+    return forms.filter(form => form.status === "ACTIVE");
+  }
+
+  async listLeadFormsPage(opts: { after?: string | null } = {}): Promise<MetaLeadPage<LeadForm>> {
     const pageToken = await this.getPageAccessToken();
-    const data = await this.graph<{ data: LeadForm[] }>(
-      `${this.creds.pageId}/leadgen_forms?fields=id,name,status`,
+    const params = new URLSearchParams({ fields: "id,name,status", limit: "200" });
+    if (opts.after) params.set("after", opts.after);
+    const data = await this.graph<unknown>(
+      `${encodeURIComponent(this.creds.pageId)}/leadgen_forms?${params}`,
       { token: pageToken },
     );
-    return (data.data ?? []).filter((f) => f.status === "ACTIVE");
+    return parseLeadPage(data, formPageSchema, opts.after);
   }
 
   /** Instant-form leads for a given lead form (newest first). */
@@ -446,12 +494,18 @@ export class MetaClient {
     formId: string,
     opts: { limit?: number } = {},
   ): Promise<MetaLead[]> {
+    return collectLeadPages(after => this.listLeadsForFormPage(formId, { ...opts, after }));
+  }
+
+  async listLeadsForFormPage(formId: string, opts: { limit?: number; after?: string | null } = {}): Promise<MetaLeadPage<MetaLead>> {
     const pageToken = await this.getPageAccessToken();
-    const data = await this.graph<{ data: MetaLead[] }>(
-      `${formId}/leads?fields=id,created_time,field_data&limit=${opts.limit ?? 200}`,
+    const params = new URLSearchParams({ fields: "id,created_time,field_data", limit: String(Math.min(200, Math.max(1, opts.limit ?? 200))) });
+    if (opts.after) params.set("after", opts.after);
+    const data = await this.graph<unknown>(
+      `${encodeURIComponent(formId)}/leads?${params}`,
       { token: pageToken },
     );
-    return data.data ?? [];
+    return parseLeadPage(data, leadPageSchema, opts.after);
   }
 
   /** Search Meta's location database for a place name. */
