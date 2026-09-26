@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMounted } from "@/lib/use-mounted";
+import { LLMError } from "@/lib/llm/types";
 
 const complete = vi.fn();
 const generateImage = vi.fn();
@@ -49,6 +50,27 @@ beforeEach(() => {
 const brand = { name: "Solaride", vertical: "solar energy" } as never;
 
 describe("generateVariants", () => {
+  it.each([false, true])("retains truncated usage once in failure receipts (prior repair: %s)", async (priorRepair) => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 17 };
+    const earlierUsage = { promptTokens: 3, completionTokens: 2, totalTokens: 5 };
+    if (priorRepair) complete.mockResolvedValueOnce({ ...completion({}), usage: earlierUsage });
+    complete.mockRejectedValueOnce(new LLMError("Output token budget exhausted", {
+      provider: "google", model: "gemini-3.6-flash", usage, retryable: false,
+    }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const onFailure = vi.fn();
+    expect(await generateVariants({ brand, brief: "x", count: 1, onFailure })).toEqual([]);
+    expect(onFailure).toHaveBeenCalledTimes(1);
+    const events = failedVariantUsage(onFailure.mock.calls[0][1], {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events.map((event) => event.usage)).toEqual(priorRepair ? [earlierUsage, usage] : [usage]);
+    expect(events.at(-1)).toMatchObject({ provider: "google", model: "gemini-3.6-flash", status: "error", attempt: priorRepair ? 2 : 1 });
+    expect(complete).toHaveBeenCalledTimes(priorRepair ? 2 : 1);
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+
   it("repairs repeated copy using history and earlier siblings before image generation", async () => {
     const fresh = { ...concept, headline: "A useful rooftop", primary_text: "Start with a conversation about your roof." };
     complete.mockResolvedValueOnce(completion(concept))

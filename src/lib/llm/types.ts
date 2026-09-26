@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 export type ChatRole = "system" | "user" | "assistant";
 
 export interface ChatMessage {
@@ -20,6 +22,7 @@ export interface CompletionOptions {
   promptVersion?: string;
   /** Ask the provider to return strict JSON. */
   json?: boolean;
+  responseSchema?: z.ZodType;
   /**
    * Reuse a cached response for an identical request instead of calling the
    * provider. Pass `true` for the default TTL, or an object to override it.
@@ -74,16 +77,20 @@ export class LLMError extends Error {
   readonly provider: string;
   readonly status?: number;
   readonly retryable: boolean;
+  readonly model?: string;
+  readonly usage?: TokenUsage;
 
   constructor(
     message: string,
-    opts: { provider: string; status?: number; retryable: boolean },
+    opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage },
   ) {
     super(message);
     this.name = "LLMError";
     this.provider = opts.provider;
     this.status = opts.status;
     this.retryable = opts.retryable;
+    this.model = opts.model;
+    this.usage = opts.usage;
   }
 }
 

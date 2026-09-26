@@ -105,6 +105,32 @@ round-robins keys within each provider, skips missing pools, and parks HTTP-429
 keys for 60 seconds. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
+The text adapters use pinned `ai@7.0.116`, `@ai-sdk/google@4.0.82`, and
+`@ai-sdk/openai-compatible@3.0.57`. These packages use Apache-2.0 licenses,
+require Node >=22, and accept the project's Zod 4 version. Package-distributed
+licenses remain in the installed dependency tree. The issue-local resolved
+dependency audit on September 26, 2026 reported zero vulnerabilities; this is
+not a guarantee against future advisories.
+
+The SDK receives direct configured provider models and keys, never a gateway
+model string. No AI Gateway account, new service, model change, or image adapter
+is required. SDK retries are explicitly zero; the facade alone rotates keys and
+providers. Caller cancellation or the adapter's 90-second deadline stops further
+attempts. Truncated output is a terminal error, including Gemini truncation.
+System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
+provider-reported usage retain their facade semantics. SDK-recomputed totals are
+not substituted for the provider's original counts.
+
+Existing concept, interview, and planner schemas use SDK structured output.
+Gemini receives its native JSON schema; compatible providers retain their
+existing `json_object` mode with SDK validation, since native schema support is
+model-specific. Invalid structured text and its usage return to those task
+validators for their existing bounded repair/accounting paths, not another
+provider attempt. Explicit `completeJSON` schema requests reject invalid results
+with a sanitized error. Calls without a schema retain tolerant `parseJSON`
+behavior. Mocked transport tests establish adapter compatibility, not live model
+quality or provider capability certification.
+
 Cerebras currently uses the registry's fixed `llama-3.3-70b`; it has no model
 environment override. Configuring OpenRouter for text also supplies image keys,
 but image routing remains independently selected. `parseJSON` can remove fences
@@ -115,10 +141,15 @@ Cache is opt-in, in-process only, default TTL ten minutes and maximum 500 entrie
 It shares identical in-flight requests within that process and marks cache hits.
 It is not a distributed billing guarantee or durable job lock. Current key inputs
 are prompt version, messages, optional provider/model options, temperature,
-maxTokens, and JSON mode. It does **not** independently fingerprint the full
+maxTokens, JSON mode, and the optional response schema. It does **not** independently fingerprint the full
 effective environment/routing configuration; restart/clear cache after routing
 changes and review key semantics before extending cached tasks. Extraction and
 summary opt in; concept generation intentionally seeks fresh variation.
+
+Rollback the SDK integration as one dependency-complete change: adapters,
+facade/schema call sites, tests, `package.json`, and `package-lock.json` together,
+then reinstall from that lockfile through the normal reviewed release process.
+There are no new migrations, environment variables, accounts, or credentials.
 
 ## Images and Fallback
 

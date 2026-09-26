@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { complete } from "@/lib/llm";
+import { LLMError } from "@/lib/llm/types";
 import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
 import {
   buildInterviewMessages,
@@ -36,6 +37,16 @@ describe("formatInterviewAnswers", () => {
 
 describe("bounded interview harness", () => {
   const question = { id: "visual-1", field: "visual", question: "Which scene should we show?", options: ["Team at work", "Finished installation"] };
+
+  it("records known terminal failure usage once without a repair attempt", async () => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 17 };
+    const failure = new LLMError("Output token budget exhausted", { provider: "google", model: "gemini-3.6-flash", usage, retryable: false });
+    vi.mocked(complete).mockRejectedValue(failure);
+    const onAttempt = vi.fn();
+    await expect(runInterview({ brand, goal: "ad" }, { onAttempt })).rejects.toBe(failure);
+    expect(onAttempt).toHaveBeenCalledExactlyOnceWith({ text: "", provider: "google", model: "gemini-3.6-flash", usage }, 1, false);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
 
   it("accepts an actionable first request without compulsory questions", async () => {
     vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Show a solar installation with a factual enquiry CTA." }));

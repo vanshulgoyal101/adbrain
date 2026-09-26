@@ -16,12 +16,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("task-aware LLM routing", () => {
   it("uses the standard pool for creative calls", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ choices: [{ message: { content: "standard" } }] }),
-      text: async () => "",
-    });
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: "standard" } }] }));
     vi.stubGlobal("fetch", fetchMock);
     const { complete } = await import("@/lib/llm");
     const result = await complete([{ role: "user", content: "x" }]);
@@ -29,12 +24,7 @@ describe("task-aware LLM routing", () => {
   });
 
   it("keeps budget tasks off OpenRouter even when it is first globally", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ choices: [{ message: { content: "budget" } }] }),
-      text: async () => "",
-    });
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: "budget" } }] }));
     vi.stubGlobal("fetch", fetchMock);
     const { complete } = await import("@/lib/llm");
     const result = await complete(
