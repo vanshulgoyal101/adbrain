@@ -144,6 +144,9 @@ function operationSuccessRow() {
   });
 }
 
+vi.mock("@/lib/campaign/trusted-write", () => ({
+  saveCampaign: async () => ({ data: { id: "11111111-1111-4111-8111-111111111111" }, error: null }),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },

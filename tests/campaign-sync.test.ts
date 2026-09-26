@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
 }));
 const connection = { generation: 4, authorization: "connected", selected: { adAccountId: "act_123", pageId: "page_1", currency: "INR" } };
 
+vi.mock("@/lib/campaign/trusted-write", () => ({
+  saveCampaign: (actor: { businessId: string }, values: Record<string, unknown>, id?: string) =>
+    id ? mocks.update(values) : mocks.insert({ ...values, business_id: actor.businessId }),
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
   auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
   from: () => {
