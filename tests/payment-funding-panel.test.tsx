@@ -13,7 +13,11 @@ describe("managed billing settings", () => {
     expect(screen.getByText("Not enabled")).toBeInTheDocument();
     expect(screen.getByText("20%")).toBeInTheDocument();
     expect(screen.getByText("80%")).toBeInTheDocument();
-    expect(screen.getByText("Solaride Energy")).toBeInTheDocument();
+    expect(screen.getByText("Current operator")).toBeInTheDocument();
+    expect(screen.getByText("Vanshul Goyal")).toBeInTheDocument();
+    expect(screen.getByText("Future account ownership")).toBeInTheDocument();
+    expect(screen.getByText("Solaride arrangement not yet formalized")).toBeInTheDocument();
+    expect(screen.queryByText("Solaride Energy")).not.toBeInTheDocument();
     expect(screen.getByText("act_123")).toBeInTheDocument();
     expect(screen.getByText("Not verified")).toBeInTheDocument();
     expect(screen.getByText(/No funding method selected/)).toBeInTheDocument();
