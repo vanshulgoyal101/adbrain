@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createRazorpayTestClient, getRazorpayTestConfig, TestPaymentError, TEST_PAYMENT_AMOUNT_PAISE } from "./razorpay-test";
 import { capturedPaymentMatchesOrder, verifyRazorpayCheckoutSignature, verifyRazorpayWebhookSignature } from "./razorpay-verification";
+import { CheckoutRequestError, paymentReply as reply, readPaymentBody as readBody, paymentJsonBody as jsonBody } from "./checkout-request";
 
 const savedOrderSchema = z.object({
   id: z.uuid(), business_id: z.uuid(), user_id: z.uuid(), account_id: z.string(), key_id: z.string(),
@@ -15,14 +16,6 @@ const savedOrderSchema = z.object({
 });
 type SavedOrder = z.infer<typeof savedOrderSchema>;
 type TestConfig = ReturnType<typeof getRazorpayTestConfig>;
-
-class CheckoutRequestError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
-}
-
-function reply(data: unknown, status = 200) {
-  return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
-}
 
 function orderResponse(order: SavedOrder, config: TestConfig) {
   return {
@@ -40,38 +33,6 @@ async function persistedOrder(request: PromiseLike<{ data: unknown; error: unkno
   const parsed = savedOrderSchema.safeParse(data);
   if (error || !parsed.success) throw new CheckoutRequestError(503, "Test payment storage is unavailable. Check the local migration before retrying.");
   return parsed.data;
-}
-
-async function readBody(request: Request, maximum = 4096): Promise<Buffer> {
-  if (Number(request.headers.get("content-length")) > maximum) throw new CheckoutRequestError(413, "Request body is too large.");
-  const reader = request.body?.getReader();
-  if (!reader) throw new CheckoutRequestError(400, "Request body is required.");
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  let expired = false;
-  const timer = setTimeout(() => { expired = true; void reader.cancel().catch(() => undefined); }, 5000);
-  try {
-    for (;;) {
-      const next = await reader.read();
-      if (expired) throw new CheckoutRequestError(408, "Request body timed out.");
-      if (next.done) return Buffer.concat(chunks);
-      length += next.value.byteLength;
-      if (length > maximum) throw new CheckoutRequestError(413, "Request body is too large.");
-      chunks.push(next.value);
-    }
-  } finally {
-    clearTimeout(timer);
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
-  }
-}
-
-async function jsonBody(request: Request): Promise<unknown> {
-  try { return JSON.parse((await readBody(request)).toString("utf8")); }
-  catch (error) {
-    if (error instanceof CheckoutRequestError) throw error;
-    throw new CheckoutRequestError(400, "Invalid JSON request.");
-  }
 }
 
 async function verifyProviderPayment(input: {

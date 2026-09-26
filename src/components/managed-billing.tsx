@@ -3,12 +3,14 @@ import type { MetaConnection } from "@/lib/meta/credentials";
 import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { META_FUNDING_METHODS } from "@/lib/payments/meta-funding";
 import { TestCheckout } from "@/components/test-checkout";
+import { ProductionCheckout } from "@/components/production-checkout";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
 const methodIcons = { upi_auto_reload: WalletCards, recurring_card: CreditCard, monthly_invoicing: Landmark };
 
-export function ManagedBilling({ connection, testBusinessId }: { connection: BillingConnection | null; testBusinessId?: string }) {
+export function ManagedBilling({ connection, testBusinessId, liveBusinessId }: { connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string }) {
+  if (liveBusinessId) return <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />;
   const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
@@ -36,12 +38,12 @@ export function ManagedBilling({ connection, testBusinessId }: { connection: Bil
       </dl>
 
       <div className="border-y border-slate-200 py-4">
-        <h3 className="text-sm font-medium text-slate-700">Planned pre-tax allocation</h3>
+        <h3 className="text-sm font-medium text-slate-700">Planned annual total: INR 10,000</h3>
         <dl className="mt-3 grid grid-cols-2 gap-4">
           <div><dt className="text-sm text-slate-500">Service fee</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{feePercent}%</dd></div>
           <div><dt className="text-sm text-slate-500">Advertising</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{100 - feePercent}%</dd></div>
         </dl>
-        <p className="mt-3 text-xs leading-5 text-slate-500">Tax policy pending approval. Gateway charges borne by AdBrain. No customer funds collected.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">Meta allocation includes applicable Meta tax. Service, invoice and refund terms await approval. Gateway charges borne by AdBrain. No customer funds collected.</p>
       </div>
 
       <div>

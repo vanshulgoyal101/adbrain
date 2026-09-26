@@ -5,7 +5,7 @@ CONTRACT-BC: **DRAFT, not accepted**. Current proposal: C-draft-3 under board O-
 O-2 is the original assignment; the O-1 filename is retained. The final
 [O-4 checkpoint](#o-4-checkpoint-c-draft-3) supersedes older availability statements
 and the identified B-1/C-draft-2 mappings below. Earlier checks remain historical.
-Latest assignment: [Issue 27 accounting repair](#issue-27-accounting-repair). DEV-C is parked,
+Latest assignment: [Issue 45 production payments](#issue-45-production-payments). DEV-C is parked,
 not accepted; its prior implementation and evidence remain preserved.
 Previous checkpoint: [O-6 D-1 agreement](#o-6-d-1-agreement-and-regression-preparation).
 D-1 supersedes this document's earlier conflicting interface choices. C-draft-3
@@ -13,6 +13,147 @@ is not a competing final interface decision. Prior missing-input blockers are hi
 Deliverable: spend half of the joint contract and bounded shared-interface requests.
 The earlier DEV-C scope did not authorize collector, enforcement, SQL, provider
 or production changes; the current issue-specific authorization is recorded below.
+
+## Issue 45 Production Payments
+
+Dev 2, September 26, 2026. [Issue 45](https://github.com/vanshulgoyal101/adbrain/issues/45)
+candidate in `/tmp/adbrain-issue-45`, branch `feature/issue-45-production-payments`,
+based on `672eb132ad57bb3ba31f118afaffddaa878b4923`. The issue handoff records the
+exact commit containing this receipt. This is author-verified source, not
+independent acceptance, a production deployment or enabled customer collection.
+#34/#35 and the completed #41 source were not edited.
+
+Implementation covers a distinct immutable `inr-annual-total-v1` quote, approved
+terms digest/acceptance, durable order claims, hosted checkout integration,
+server-verified capture, queued signed webhooks, persisted reconciliation and
+bounded operator refunds. Existing pre-tax quote-v1 and local-only test payment
+guards remain intact. Test rows never become live money. Captured allocation
+always returns `spendablePaise: 0` and `canActivateCampaign: false`; no campaign
+spend-authority path was changed. Receipts are explicitly not tax invoices.
+
+Reuse: official pinned Razorpay SDK 2.9.8, existing constant-time signature
+helpers, Zod, integer-paise allocation conventions, Billing UI controls and the
+existing PostgreSQL harness. Shared bounded request parsing is extracted without
+changing test behavior. SDK calls have a 15-second deadline, zero redirects,
+a 1 MiB response bound and no automatic financial-write retry. Official
+[order receipt lookup](https://razorpay.com/docs/api/orders/fetch-all/) and
+[normal refund](https://razorpay.com/docs/api/refunds/create-normal/) contracts
+were checked against installed types/transport. No new runtime dependency.
+
+### Author Evidence
+
+- `npm test -- tests/payment-*.test.ts tests/payment-funding-panel.test.tsx tests/security-headers.test.ts --maxWorkers=1 --silent --reporter=dot`:
+  426 passed across nine files, zero skips/failures, scrubbed Node 24 environment.
+- `LC_ALL=C node scripts/check-meta-connect-db.mjs`: disposable PostgreSQL 17
+  fresh/upgrade/replay passed, including real competing order/refund claims,
+  unique capture effects, refund-before-capture, sticky dispute/conflict holds,
+  wrong-owner/key/quote/funding rejection, over-refund prevention, uncertain
+  refund replay and denied browser/direct service-role table access.
+- Touched-scope ESLint, TypeScript, editor diagnostics and whitespace checks pass.
+- Real Billing component and app CSS rendered with synthetic responses at actual
+  `innerWidth` 1440/390/320: no horizontal overflow or clipped button text;
+  dismissal stays unconfirmed, confirmation/receipt/terms render correctly.
+  Browser zoom was accounted for; synthetic controls used forced fixture clicks.
+  Unit tests separately cover reload without reopening, test-data rejection,
+  terms revalidation and unavailable recovery storage. No real hosted Checkout
+  or provider transaction was exercised. Ignored fixture: `test-results/payment-browser/`
+  in the issue worktree; trusted generated copy: `test-results/payment-45-browser/`
+  in the shared workspace. No server was needed or left running.
+
+### API Delta For Integration
+
+All authenticated writes require the exact `https://adbrain.vanshul.com` origin.
+Customer order access proves current ownership; financial RPCs independently
+check tenant/merchant/key binding. Inputs are strict; browser amounts are rejected.
+Responses are `no-store`. Configuration-disabled routes return 404; malformed
+inputs/signatures 400, auth/authority failures 401/403, policy/recovery conflicts
+409, storage/provider uncertainty 503. Signed webhook storage failure is never
+acknowledged; durable but unreconciled notifications return 202 with `queued: true`.
+
+| Route | Contract |
+| --- | --- |
+| `GET /api/payments/live/orders?businessId=<uuid>` | Owned recent orders, server annual quote and current approved policy or null. Does not open checkout |
+| `POST /api/payments/live/orders` | `{businessId,idempotencyKey,termsHash,acceptTerms:true}`. Claims immutable intent before SDK create; repeated/different request keys recover the existing unsettled business order |
+| `POST /api/payments/live/verify` | `{orderId,paymentId,providerOrderId,signature}`. Stored-order HMAC plus server-fetched order/payment evidence; authorization/paid-order alone cannot confirm capture |
+| `POST /api/payments/live/reconcile` | `{orderId}`. Owned receipt/order/payment/refund recovery; never recreates an uncertain provider operation |
+| `POST /api/payments/live/webhook` | Bounded raw-body HMAC, merchant/live identity and coherent payment references. Durable capture/refund/dispute events survive unmatched/out-of-order delivery |
+| `GET /api/payments/live/operator?after=<event-id>` | Approved operator only; up to 25 pending events and `next` cursor |
+| `POST /api/payments/live/operator` | Operator actions below; financial mutation additionally requires current refund authority |
+
+Operator request shapes (documentation only; these are not authorization to execute):
+`{action:"event",eventId}` reprocesses one stored notification;
+`{action:"reconcile",orderId,refundId?}` fetches authoritative state, including a
+known provider refund ID when bounded enumeration cannot locate it;
+`{action:"refund",orderId,idempotencyKey,approvalReference,termsHash,reason,amountPaise}`
+persists a reviewed refund approval and holds the order before the SDK call.
+Refunds require integer INR paise from 100 through the remaining captured amount,
+at most 1,000,000. Unknown results retain the original refund ID for reconciliation.
+
+### Schema And Configuration Delta
+
+Additive migration:
+[20260926_production_payment_orders.sql](../../db/migrations/20260926_production_payment_orders.sql),
+SHA256 `ce87ccde7bc4de7a733b1749a210f27a44bce81a627a6530cb6e5914613bdaa8`.
+It depends on existing businesses/auth, Meta connection generation, and
+[managed billing evidence](../../db/migrations/20260924_managed_billing.sql).
+Runtime also uses the existing trusted rate limiter. DevOps owns the complete
+dependency manifest, target preflight, backup/restore, compatible rollback and
+canonical schema integration. No production migration was applied.
+
+Private tables: `production_payment_orders`, `production_payment_events`,
+`production_payment_event_conflicts`, `production_payment_effects`, `production_payment_refunds`, and
+`production_payment_operators`. Browser and direct service-role table writes are
+revoked; financial transitions use restricted security-definer RPCs with fixed
+search paths. Order/terms/approval identities persist before provider writes;
+effects deduplicate by merchant and payment/refund identity, not just webhook ID.
+Refund and dispute holds cannot be cleared by delayed capture. Operator authority
+is empty by default and requires separately approved actor/reference/expiry setup;
+there is no public provisioning endpoint.
+
+Conflicting webhook identities persist even before their payment/order is linked,
+so late binding inherits review holds. The maintained documentation checker found
+zero errors and six unchanged missing historical-artifact warnings in this receipt.
+
+[Configuration placeholders](../../.env.example) remain empty/false. Recovery
+requires `PAYMENTS_LIVE_ENABLED`, production Node/Vercel/main, an exact matching
+`PAYMENTS_LIVE_PROJECT_ID`/`VERCEL_PROJECT_ID` and
+`PAYMENTS_LIVE_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_URL`. Only explicit live
+key/account/webhook identities are accepted; populated generic key aliases must
+match and test aliases must be absent. `PAYMENTS_LIVE_WEBHOOK_ID` is an immutable
+webhook configuration UUID, not its secret. Keys/secrets stay server-side.
+
+`PAYMENTS_LIVE_COLLECTION_ENABLED` additionally requires
+`PAYMENTS_LIVE_POLICY_JSON`: version, approvalReference, approvedAt, expiresAt,
+finite serviceScope, invoiceTerms, refundTerms and automaticFundingApprovalReference.
+All text/UUID/time fields must validate; content is hashed and stored immutably.
+No policy text is invented by the application. New orders also require current,
+unrevoked, connected-generation-matched live automatic funding evidence.
+`PAYMENTS_LIVE_REFUNDS_ENABLED` is separate from collection. Suspend collection
+without disabling recovery/webhooks. The exact CSP is build-time configuration,
+so changing its enablement needs the approved deployment/rebuild.
+
+### Remaining Gates And Limits
+
+Local implementation/author checks are complete; remaining work is independent
+financial QA, exact-head required CI, shared integration and target-specific
+release preparation. This is not a launch-date estimate or a claim that shipping
+disabled software completes the customer outcome. Merchant activation was already
+verified and is not a newly introduced blocker.
+
+Enabled collection still needs approved finite commercial/invoice/tax/refund
+terms, a supported automatic Meta funding arrangement, exact-target schema and
+secure key/webhook/operator setup approval, plus separately authorized bounded
+live capture/refund/bank-settlement verification. No live keys, webhooks, charges,
+refunds, mandates, Meta funding, ad activation or production schema were changed.
+
+Limits: one unsettled order per business; no automatic renewal or year-round ad
+delivery promise. Refund enumeration is bounded and reconciles incrementally;
+an unresolved result remains held and can use an explicitly supplied provider
+refund ID. Holds are deliberately not auto-cleared, including a won dispute.
+There is no automatic bank-settlement verification, Meta transfer API or spend
+permission. A rollback after live collection must preserve these payment recovery
+and webhook capabilities; an older application without them is not an accepted
+financial recovery plan. QA/DevOps own independent acceptance and release execution.
 
 ## Issue 27 Accounting Repair
 

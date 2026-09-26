@@ -54,4 +54,17 @@ describe("SECURITY_HEADERS", () => {
       expect(value.length).toBeGreaterThan(0);
     }
   });
+
+  it("permits explicit live checkout only on the production main target", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_GIT_COMMIT_REF", "main");
+    expect(getSecurityHeaders("https://project.supabase.co", false, true).some(header => header.value.includes("checkout.razorpay.com"))).toBe(true);
+    expect(getSecurityHeaders("https://project.supabase.co", false, false).some(header => header.value.includes("razorpay.com"))).toBe(false);
+    vi.stubEnv("VERCEL_ENV", "preview");
+    expect(getSecurityHeaders("https://project.supabase.co", false, true).some(header => header.value.includes("razorpay.com"))).toBe(false);
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_GIT_COMMIT_REF", "feature/payments");
+    expect(getSecurityHeaders("https://project.supabase.co", false, true).some(header => header.value.includes("razorpay.com"))).toBe(false);
+  });
 });

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 
@@ -272,6 +272,132 @@ async function verify(database, source, integrityMigration) {
         await assert.rejects(get(ownerId), { code: "42501" });
       } finally { await session.end(); }
       assert.equal((await db.query("select count(*)::int as count from private.razorpay_test_events where order_id=$1 and event_id='event_1'",[order.id])).rows[0].count,1);
+    });
+
+    await check(`${database}: production payment claims and financial effects survive competing clients and restart recovery`, async () => {
+      const payerBusinessId = randomUUID();
+      const evidenceId = randomUUID();
+      const profileId = randomUUID();
+      const requestKey = randomUUID();
+      const webhookId = randomUUID();
+      const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+        serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+        metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+      const policy = { version: "synthetic-policy-v1", approvalReference: randomUUID(), automaticFundingApprovalReference: randomUUID(),
+        approvedAt: new Date(Date.now() - 60000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        serviceScope: "Synthetic finite scope", invoiceTerms: "Synthetic invoice policy", refundTerms: "Synthetic refund policy" };
+      const terms = JSON.stringify(policy);
+      const termsHash = createHash("sha256").update(terms).digest("hex");
+      const funding = { version: 1, businessId: payerBusinessId, environment: "live", connectionGeneration: 1, evidenceId,
+        verifiedAt: policy.approvedAt, expiresAt: policy.expiresAt, revokedAt: null,
+        setup: { method: "recurring_card", accountId: "act_4567891", expectedOwnerBusinessId: "456", ownerBusinessId: "456",
+          currency: "INR", country: "IN", accountActive: true, billingMode: "automatic", paymentMethod: "verified",
+          recurringAuthorisation: "verified", spendControls: "verified", ownerAcceptedMetaInitiatedPayments: true } };
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic payments fixture')", [payerBusinessId,ownerId]);
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id) values ($1,1,'connected','act_4567891')", [payerBusinessId]);
+      await db.query("insert into public.meta_billing_profiles(id,business_id,environment,ad_account_id,owner_business_id,created_by) values ($1,$2,'live','act_4567891','456',$3)", [profileId,payerBusinessId,ownerId]);
+      await db.query("insert into public.meta_funding_evidence(id,profile_id,verified_by,source,source_reference,verified_at,record) values ($1,$2,$3,'operator_review',$4,now(),$5)", [evidenceId,profileId,ownerId,randomUUID(),funding]);
+      const asService = async run => {
+        const session = client(database);
+        await session.connect();
+        try { await session.query("set role service_role"); return await run(session); }
+        finally { await session.end(); }
+      };
+      const claim = (overrides = {}) => asService(async session => {
+        const input = { business: payerBusinessId, owner: ownerId, request: requestKey, key: "rzp_live_fixture", quote, terms, hash: termsHash, funding: evidenceId, ...overrides };
+        return (await session.query("select public.production_payment_order_claim($1,$2,$3,$4,'acc_fixture',$5,$6,$7,$8,$9) as result",
+          [input.business,input.owner,input.request,randomUUID(),input.key,input.quote,input.terms,input.hash,input.funding])).rows[0].result;
+      });
+      await assert.rejects(claim({ owner: otherOwnerId }), { code: "23514" });
+      await assert.rejects(claim({ key: "rzp_test_fixture" }), { code: "23514" });
+      await assert.rejects(claim({ hash: "0".repeat(64) }), { code: "23514" });
+      await assert.rejects(claim({ funding: randomUUID() }), { code: "23514" });
+      await assert.rejects(claim({ quote: { ...quote, totalPaise: 1 } }), { code: "23514" });
+      const competingClaims = await Promise.all(Array.from({ length: 4 }, () => claim()));
+      assert.equal(competingClaims.filter(result => result.claimed).length,1);
+      assert.equal(new Set(competingClaims.map(result => result.order.id)).size,1);
+      const order = competingClaims[0].order;
+      assert.equal(order.environment,"live");
+      assert.equal(order.amount_paise,1000000);
+      assert.deepEqual(order.quote,quote);
+      assert.deepEqual(order.terms,policy);
+      assert.equal(order.terms_hash,termsHash);
+      assert.equal((await claim({ request: randomUUID() })).order.id,order.id);
+      await assert.rejects(claim({ hash: "1".repeat(64) }), { code: "23514" });
+      const result = providerOrderId => asService(async session => (await session.query(
+        "select public.production_payment_order_result($1,'acc_fixture','rzp_live_fixture',$2) as result", [order.id,providerOrderId])).rows[0].result);
+      assert.equal((await result(null)).state,"needs_reconciliation");
+      assert.equal((await claim()).claimed,false);
+      assert.equal((await result("order_production")).state,"created");
+      assert.equal((await result(null)).provider_order_id,"order_production");
+      const refundRequest = randomUUID();
+      const refundApproval = randomUUID();
+      const claimRefund = (amount = 500, request = refundRequest) => asService(async session => (await session.query(
+        "select public.production_payment_refund_claim($1,'acc_fixture','rzp_live_fixture',$2,$3,$4,$5,$6,$7,'Synthetic approved refund') as result",
+        [order.id,ownerId,request,randomUUID(),amount,termsHash,refundApproval])).rows[0].result);
+      await assert.rejects(claimRefund(),{ code: "42501" });
+      await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')",[ownerId,randomUUID()]);
+      await assert.rejects(claimRefund(),{ code: "23514" });
+      const earlyRefund = await asService(async session => (await session.query(
+        "select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',false,100,false,$2,'rfnd_early',100,'processed') as result",
+        [order.id,"d".repeat(64)])).rows[0].result);
+      assert.equal(earlyRefund.captured_paise,0);
+      assert.equal(earlyRefund.refunded_paise,100);
+      assert.equal(earlyRefund.refund_hold,true);
+      await asService(session => session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',true,0,false,$2)",[order.id,"e".repeat(64)]));
+      const refundClaims = await Promise.all(Array.from({length: 4},() => claimRefund()));
+      assert.equal(refundClaims.filter(value => value.claimed).length,1);
+      const refundOperation = refundClaims[0].refund;
+      await assert.rejects(claimRefund(501),{ code: "23514" });
+      await assert.rejects(claimRefund(500,randomUUID()),{ code: "23514" });
+      await asService(session => session.query("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture',null)",[refundOperation.id]));
+      assert.equal((await claimRefund()).refund.state,"needs_reconciliation");
+      assert.equal((await claimRefund()).claimed,false);
+      await asService(session => session.query("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture','rfnd_requested')",[refundOperation.id]));
+      await asService(session => session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',true,500,false,$2,'rfnd_requested',500,'processed')",[order.id,"f".repeat(64)]));
+      await asService(session => session.query("select public.production_payment_refund_observed($1,'acc_fixture','rfnd_requested',500,'processed')",[refundOperation.id]));
+      assert.equal((await claimRefund()).refund.state,"processed");
+      await assert.rejects(claimRefund(1000000,randomUUID()),{ code: "23514" });
+      const receive = (event, kind, hash = "a".repeat(64), payment = "pay_production") => asService(async session => (await session.query(
+        "select public.production_payment_event_receive('acc_fixture','rzp_live_fixture',$1,$2,$3,$4,'order_production',$5,$6) as result",
+        [webhookId,event,hash,payment,kind === "refund" ? "rfnd_production" : null,kind])).rows[0].result);
+      const observe = (captured, refunded = 0, refundId = null, refundAmount = null, refundStatus = null) => asService(async session => (await session.query(
+        "select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',$2,$3,false,$4,$5,$6,$7) as result",
+        [order.id,captured,refunded,"b".repeat(64),refundId,refundAmount,refundStatus])).rows[0].result);
+      const pending = await receive("event_refund_first","refund");
+      assert.equal(pending.processed_at,null);
+      const afterRefund = await observe(false,1000,"rfnd_production",1000,"processed");
+      assert.equal(afterRefund.refunded_paise,1600);
+      assert.equal(afterRefund.captured_paise,1000000);
+      assert.equal(afterRefund.refund_hold,true);
+      await Promise.all([receive("event_capture_1","capture"), receive("event_capture_2","capture")]);
+      const race = await Promise.all([observe(true),observe(true,1000,"rfnd_production",1000,"processed"),observe(true)]);
+      assert.ok(race.every(value => value.captured_paise === 1000000 && value.refunded_paise === 1600 && value.refund_hold));
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[order.id])).rows[0].count,1);
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='refund'",[order.id])).rows[0].count,3);
+      assert.equal((await receive("event_capture_1","capture","c".repeat(64))).conflicted,true);
+      await asService(session => session.query("select public.production_payment_event_receive('acc_fixture','rzp_live_fixture',$1,'event_capture_1',$2,'pay_unmatched','order_unmatched',null,'capture')",
+        [webhookId,"d".repeat(64)]));
+      const unmatchedConflict = await db.query("select payment_id,provider_order_id from private.production_payment_event_conflicts where account_id='acc_fixture' and event_id='event_capture_1' and payload_hash=$1",["d".repeat(64)]);
+      assert.deepEqual(unmatchedConflict.rows,[{ payment_id: "pay_unmatched", provider_order_id: "order_unmatched" }]);
+      assert.equal((await observe(true)).state,"review_required");
+      await receive("event_dispute","dispute");
+      assert.equal((await observe(true)).review_required,true);
+      await asService(async session => {
+        const get = async user => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,user])).rows[0].result;
+        assert.equal(await get(otherOwnerId),null);
+        assert.equal((await get(ownerId)).id,order.id);
+        for (const table of ["production_payment_orders","production_payment_events","production_payment_event_conflicts","production_payment_effects","production_payment_refunds","production_payment_operators"]) {
+          await assert.rejects(session.query(`select * from private.${table}`), { code: "42501" });
+          await assert.rejects(session.query(`delete from private.${table}`), { code: "42501" });
+        }
+        await session.query("set role authenticated");
+        await assert.rejects(get(ownerId), { code: "42501" });
+        await session.query("set role anon");
+        await assert.rejects(get(ownerId), { code: "42501" });
+      });
+      await db.query("update public.businesses set owner_id=$2 where id=$1",[payerBusinessId,otherOwnerId]);
+      assert.equal(await asService(async session => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result),null);
     });
 
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
@@ -781,11 +907,12 @@ try {
   const billingMigration = await readFile(join(root, "db/migrations/20260924_managed_billing.sql"), "utf8");
   const billingEventsMigration = await readFile(join(root, "db/migrations/20260924_meta_billing_events.sql"), "utf8");
   const testPaymentsMigration = await readFile(join(root, "db/migrations/20260926_razorpay_test_orders.sql"), "utf8");
+  const productionPaymentsMigration = await readFile(join(root, "db/migrations/20260926_production_payment_orders.sql"), "utf8");
   const integrityMigration = await readFile(join(root, "db/migrations/20260926_campaign_integrity.sql"), "utf8");
   const draftAuthorityMigration = await readFile(join(root, "db/migrations/20260926_draft_authority.sql"), "utf8");
   const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}`, integrityMigration);
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}`, integrityMigration);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

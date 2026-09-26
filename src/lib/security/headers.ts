@@ -12,9 +12,11 @@ export function getSecurityHeaders(
     ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
     : "https://*.supabase.co",
   testCheckout = false,
+  liveCheckout = false,
 ): { key: string; value: string }[] {
   const trustedSupabaseOrigin = supabaseHost.replace(/\/$/, "");
-  const allowCheckout = testCheckout && process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV;
+  const allowCheckout = (testCheckout && process.env.NODE_ENV !== "production" && !process.env.VERCEL_ENV)
+    || (liveCheckout && process.env.NODE_ENV === "production" && process.env.VERCEL_ENV === "production" && process.env.VERCEL_GIT_COMMIT_REF === "main");
   return [
     {
       key: "Content-Security-Policy",
