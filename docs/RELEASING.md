@@ -8,11 +8,20 @@ are evidence, not a continuing grant of operational authority.
 
 ## Current Release Boundary
 
-Verified September 26: [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36)
+Latest September 26 release: [PR #47](https://github.com/vanshulgoyal101/adbrain/pull/47)
+deployed trusted campaign/audit safeguards and the combined enquiry workflow as
+`f639cc398146fedb271fc3d57a64186525a61bbf`. Six pinned migrations committed with
+zero preflight violations and unchanged original row counts; required PR/main CI,
+exact Vercel deployment and authenticated follow-up save/reload/filter smoke passed.
+See the [production receipt](qa/ops-environment-2026-09-26.md#enquiry-production-release)
+for the scoped encrypted recovery artifact, transition and provider-evidence limits.
+Payment checkout remains outside this release.
+
+Earlier September 26: [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36)
 released SDK/query candidate `4c8dd56` as production `6291dc2`. Shared dev
 `672eb13` also preserves the earlier local backlog; its 71 differing paths were
 not all promoted. DB-A migrations and dependent callers, local test checkout,
-and #34/#35 enquiry candidates remain outside that release. See the exact
+and #34/#35 enquiry candidates were outside that earlier release. See the exact
 [CI/deployment/smoke receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
 
 The deployment-policy investigation is complete and #33 is closed. Corrected

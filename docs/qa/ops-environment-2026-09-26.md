@@ -6,6 +6,68 @@ production rollout approval or packet closure**. Governing backlog:
 [release rules](../RELEASING.md) and the latest
 [DB-A developer handoff](db-a-dev-a-handoff-2026-09-26.md).
 
+## Enquiry Production Release
+
+September 26, 2026. [PR 47](https://github.com/vanshulgoyal101/adbrain/pull/47)
+released the accepted selective source `273cbf80422f8c89b851dfc2fcfa85bff878104f`
+as main `f639cc398146fedb271fc3d57a64186525a61bbf`. Required PR CI
+`36257726770` and exact main CI `36258615242` passed build and secrets.
+Vercel `dpl_4Kg61CyGCmT5AFvNPL8tWLcjUeC7` was READY at
+`2026-09-26T17:21:45.964Z`, exact main SHA, Node 24.x, with the canonical
+`adbrain.vanshul.com` alias. No payment checkout/SDK was included.
+
+The two enquiry migrations alone were not substituted into the accepted assembly:
+the sync route uses the trusted audit helper and its DB-A
+`append_verified_audit_event` RPC. The reviewed six-migration dependency set was
+retained without restoring older audit authority or weakening grants.
+
+Production project `kmzuxrvfrwwpwmoovwcp` was verified ACTIVE_HEALTHY in
+`ap-northeast-1`, PostgreSQL 17.6. All nine exact preflight violation counts were
+zero at `17:13:55Z`; there were no active SQL sessions, and the one campaign
+operation was succeeded. The six hashes in the
+[existing manifest](#backlog-integration-and-migration-approval-packet) were
+verified from immutable Git objects and again in the browser before execution.
+They committed at `17:18:07Z` through the authenticated Management API as one
+transaction with an advisory migration lock, bounded table locks/timeouts,
+checksum/replay guards, snapshot row-count checks and a schema-cache notification.
+Direct PostgreSQL credentials were unavailable; no credentials were changed.
+
+Independent post-commit reads confirmed all six ledger hashes, enquiry objects,
+denied browser campaign/result/draft writes and retained trusted campaign writes.
+All release constraints are validated. The sole unvalidated public constraint,
+`llm_usage_nonnegative`, was already present in the before-state and was not changed.
+All original row counts were preserved: 4 businesses, 66 campaigns, 2 result rows,
+1 draft, 1 operation, 201 audit rows, 0 leads and 0 spend-limit rows. No data repair
+or unsafe grant restoration occurred. The brief schema/code transition is complete.
+
+Before migration, a repeatable-read snapshot captured the eight affected tables
+and relevant columns, grants, policies, triggers, functions, indexes, constraints
+and migration ledger. The encrypted 36,025-byte artifact is at
+`~/.local/share/adbrain/recovery/2026-09-26T17-15-49-203Z-273cbf8/enquiry-snapshot.json.gz.aes256gcm`,
+SHA-256 `229cdea0ee68479651651590bb649e6fee5317783a56b7a712b08c6dd8a6a7fa`.
+Its AES-256-GCM key is stored separately under the matching `recovery-keys`
+directory. Files are mode 0600 in private directories; decrypt/decompress/hash
+round-trip passed. No raw rows or keys were printed. This is a scoped migration
+recovery artifact, not a complete Auth/Storage/off-machine backup or a restore
+rehearsal. Retain trusted-write-compatible rollback/forward fixes; do not restore
+old unsafe grants. Platform backup/PITR metadata still listed no restore point.
+
+Real headless Chrome on the canonical domain passed an authenticated owner
+workflow: open one synthetic enquiry, save status and note with one UI PATCH 200,
+reload and confirm both values, then verify new/qualified filtering. No page
+errors occurred. The exact synthetic row was deleted in `finally`; existing rows
+were untouched. Screenshot in the payment integration worktree:
+`test-results/devops-enquiry-production-41d7ed92-b26e-4a16-ba98-cf7f566e10ed/enquiries.png`.
+The first exact-label locator timed out; form-scoped controls passed without an
+application change. The integrated browser stayed hidden with unrevealed streamed
+content, so it was not used as successful UI evidence.
+
+No live Meta lead import, campaign creation/activation, payment, refund, bank or
+funding operation was invoked. Existing accepted import/SQL evidence remains
+separate from this deployed follow-up smoke. QA was notified that owner-controlled
+non-financial smoke can resume. The temporary transfer server and Chrome process
+were stopped; the encrypted recovery artifact is intentionally retained.
+
 ## Local Rollback Compatibility
 
 September 26, DevOps author evidence. The selected immutable fallback is
