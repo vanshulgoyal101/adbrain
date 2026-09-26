@@ -6,6 +6,73 @@ production rollout approval or packet closure**. Governing backlog:
 [release rules](../RELEASING.md) and the latest
 [DB-A developer handoff](db-a-dev-a-handoff-2026-09-26.md).
 
+## Local Rollback Compatibility
+
+September 26, DevOps author evidence. The selected immutable fallback is
+`ce89976815a58cc17ac580130fdc1798ef62910e`: production main plus the reviewed
+DB-A trusted-write changes and audit provenance label, before enquiry expansion.
+The published selective candidate `273cbf80422f8c89b851dfc2fcfa85bff878104f` and
+Dev/QA's combined enquiry source were not edited. The local SQL compatibility
+gap below is now tested; this is **not production rollback authorization**.
+
+The existing [PostgreSQL harness](../../scripts/check-meta-connect-db.mjs) now
+supports `--rollback-only`. It builds an owned synthetic database over a temporary
+Unix socket, bootstraps the pinned main schema, and applies the six immutable
+candidate migration blobs listed in the packet below. Every hash is asserted;
+the existing transactional migration runner confirms each replay is already
+applied. No optional payment migration is applied by this mode. The original
+default harness path is retained.
+
+| Immutable input | SHA-256 of `db/schema.sql` |
+| --- | --- |
+| Baseline main `6291dc2d2691bfc8a235b2aa1b103f119b26b83e` | `f88476b073353512d46d0e754f662bd26eb521419072fe0b1cb11a369fb171fb` |
+| Fallback `ce89976815a58cc17ac580130fdc1798ef62910e` | `367142e957b9f49222e97e93de619f1bafc5c963b0cf2b67167211eb54d02e02` |
+| Candidate canonical reference `273cbf80422f8c89b851dfc2fcfa85bff878104f` | `a2d36597e12482906a5b26f021fa5d932b476f95c79d9612d95add9e6747d7c6` |
+
+These are source-file hashes, not a production catalog fingerprint or backup.
+The test database uses baseline main plus the six migration blobs, not a replay
+of the whole migration directory or the candidate's full schema file.
+
+Reproduce from this checkpoint with Node 24 and PostgreSQL 17 installed, using an
+environment-file-free worktree and full Git history including the preserved
+preflight branch. `META_TEST_PG_BIN` may select the approved local
+PostgreSQL binaries; otherwise the harness uses its existing Homebrew default.
+
+```sh
+env -i HOME="$HOME" PATH="$PATH" TMPDIR=/tmp LC_ALL=C LANG=C \
+   node scripts/check-meta-connect-db.mjs --rollback-only
+```
+
+Result: all six migration apply/replay checks and six SQL contract groups passed:
+post-revocation permissions; scoped trusted campaign/result writes and integrity;
+owner/wrong-owner reads and browser/anonymous denials; draft update/delete version
+and owner fences; verified audit identity/provenance; and legacy lead reads/imports
+with follow-up/checkpoint preservation and same-business campaign deletion.
+The wrong-owner draft update correctly raises SQLSTATE `42501`, not an empty
+success. No grants were reopened. Existing qualified status, note, source data
+and unfinished sync state survived legacy duplicate-ignore import; new rows
+received the expected follow-up defaults.
+
+The probes execute PostgreSQL equivalents of the pinned fallback's query/RPC
+contracts. Trusted-write, audit and draft call-site source is asserted identical
+between fallback and candidate; existing author unit evidence is reused. This
+does not execute Next handlers through Auth/PostgREST, call Meta, prove complete
+fallback feature parity or rehearse an actual deployment rollback. The fallback
+lacks the new paging/follow-up UI and checkpoint-resume implementation. Preserve
+those rows and keep affected mutations/sync quiesced until a reviewed transition
+or roll-forward; do not label an unfinished sync complete because code rolled back.
+
+Focused harness lint, editor diagnostics and whitespace checks passed. The
+owned PostgreSQL cluster was stopped and its directory removed in the harness
+cleanup. No production connection/export/apply, provider/bank operation, paid
+backup purchase, credential change or maintenance activation occurred.
+
+Remaining gates: independent review of this bounded evidence; exact-candidate
+QA/CI; a built and verified compatible rollback deployment; tested quiescence or
+reviewed expand/adopt/contract transition; a current production restore point and
+restore proof; and explicit exact-target migration authorization. Local synthetic
+compatibility supplies none of those operational approvals or backup guarantees.
+
 ## Backlog Integration and Migration Approval Packet
 
 September 26, DevOps integration/preflight assignment. This is a source-pinned

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 
@@ -43,6 +43,147 @@ async function check(label, run) {
     failures.push(label);
     console.error(`FAIL ${label}: ${error.message}`);
   }
+}
+
+async function verifyRollback() {
+  const fallback = "ce89976815a58cc17ac580130fdc1798ef62910e";
+  const candidate = "273cbf80422f8c89b851dfc2fcfa85bff878104f";
+  const baseline = "6291dc2d2691bfc8a235b2aa1b103f119b26b83e";
+  const source = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], { cwd: root, encoding: "utf8" });
+  const migrations = [
+    ["20260926_campaign_integrity.sql", "f982ef1782a0166cbd4ebae7f696ce0a748bc1e744132d539fe385e4cf6717cf"],
+    ["20260926_draft_authority.sql", "0d8e5fff0eaa7e1a728fec0087eac513c0cd7cf609dd4522097e720b1d18ebd2"],
+    ["20260926_trusted_campaign_writes.sql", "c0cbe8418fd608dba782ccbe384fdb3205150d682236ccd221ef8f6892038306"],
+    ["20260926_validate_campaign_integrity.sql", "8d6149ba4d4f3fcf4c13d6369c518fe24832d6b8a03425a0cfd1257521b27224"],
+    ["20260926_lead_sync_progress.sql", "e769403c7cc39e7dff7ad11c8a9224a1c0a64535314bd435ace6ed0a54d5c7c5"],
+    ["20260926_lead_follow_up.sql", "92fe5ec785017b262614fee5a49446898a852170c79268ca58bd77fca48271af"],
+  ];
+  const admin = client();
+  await admin.connect();
+  try { await admin.query("create database rollback_compatibility"); }
+  finally { await admin.end(); }
+  const db = client("rollback_compatibility");
+  await db.connect();
+  try {
+    await db.query(bootstrap);
+    const schema = source(baseline, "db/schema.sql");
+    console.log(`Rollback fallback ${fallback}; baseline schema SHA256 ${createHash("sha256").update(schema).digest("hex")}`);
+    await db.query(schema);
+    for (const [name, checksum] of migrations) {
+      const sql = source(candidate, `db/migrations/${name}`);
+      assert.equal(createHash("sha256").update(sql).digest("hex"), checksum, name);
+      assert.equal(await applyMigration(db, name, sql), "applied");
+      assert.equal(await applyMigration(db, name, sql), "already_applied");
+      console.log(`PASS rollback: applied immutable ${name} ${checksum}`);
+    }
+    await check("rollback: post-revocation grants keep old main writes denied", async () => {
+      const { rows } = await db.query(`select
+        has_table_privilege('authenticated','public.campaigns','UPDATE') as campaign_write,
+        has_table_privilege('authenticated','public.campaign_results','INSERT') as result_write,
+        has_table_privilege('authenticated','public.campaign_drafts','UPDATE') as draft_write,
+        has_table_privilege('service_role','public.campaigns','UPDATE') as trusted_write`);
+      assert.deepEqual(rows, [{ campaign_write: false, result_write: false, draft_write: false, trusted_write: true }]);
+    });
+    for (const path of ["src/lib/campaign/trusted-write.ts", "src/lib/audit.ts", "src/app/api/campaign-drafts/[id]/route.ts"]) {
+      assert.equal(source(fallback, path), source(candidate, path), path);
+    }
+    const ownerId = randomUUID();
+    const otherOwnerId = randomUUID();
+    const businessId = randomUUID();
+    const otherBusinessId = randomUUID();
+    const campaignId = randomUUID();
+    const otherCampaignId = randomUUID();
+    const draftId = randomUUID();
+    await db.query("insert into auth.users(id,email) values ($1,'fallback@example.invalid'),($2,'other@example.invalid')", [ownerId, otherOwnerId]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Fallback'),($3,$4,'Other')", [businessId, ownerId, otherBusinessId, otherOwnerId]);
+    await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200)", [otherCampaignId, otherBusinessId]);
+    await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_fixture','page_fixture')", [businessId]);
+    const session = client("rollback_compatibility");
+    await session.connect();
+    try {
+      await check("rollback: scoped service campaign/result writes and integrity constraints", async () => {
+        await session.query("set role service_role");
+        const owner = async userId => session.query("select id from public.businesses where id=$1 and owner_id=$2", [businessId, userId]);
+        assert.equal((await owner(ownerId)).rowCount, 1);
+        assert.equal((await owner(otherOwnerId)).rowCount, 0);
+        await session.query("insert into public.campaigns(id,business_id,objective,daily_budget) values ($1,$2,'leads',200) returning *", [campaignId, businessId]);
+        assert.equal((await session.query("update public.campaigns set status='paused',business_id=$1 where business_id=$1 and id=$2 returning *", [businessId, campaignId])).rowCount, 1);
+        assert.equal((await session.query("update public.campaigns set status='paused',business_id=$1 where business_id=$1 and id=$2 returning *", [businessId, otherCampaignId])).rowCount, 0);
+        const membership = async id => session.query("select id from public.campaigns where business_id=$1 and id=$2", [businessId, id]);
+        assert.equal((await membership(campaignId)).rowCount, 1);
+        assert.equal((await membership(otherCampaignId)).rowCount, 0);
+        assert.equal((await session.query("insert into public.campaign_results(campaign_id,spend,impressions) values ($1,10,100) returning *", [campaignId])).rowCount, 1);
+        await assert.rejects(session.query("insert into public.campaign_results(campaign_id,spend) values ($1,-1)", [campaignId]), { code: "23514" });
+      });
+      await check("rollback: owner and wrong-owner reads, browser and anonymous mutation denials", async () => {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        assert.equal((await session.query("select * from public.campaigns where business_id=$1", [businessId])).rowCount, 1);
+        assert.equal((await session.query("select * from public.campaign_results where campaign_id=$1", [campaignId])).rowCount, 1);
+        await assert.rejects(session.query("update public.campaigns set status='active' where id=$1", [campaignId]), { code: "42501" });
+        await assert.rejects(session.query("insert into public.campaign_results(campaign_id,spend) values ($1,1)", [campaignId]), { code: "42501" });
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
+        assert.equal((await session.query("select * from public.campaigns where business_id=$1", [businessId])).rowCount, 0);
+        assert.equal((await session.query("select * from public.campaign_results where campaign_id=$1", [campaignId])).rowCount, 0);
+        await session.query("set role anon");
+        await assert.rejects(session.query("select * from public.campaigns"), { code: "42501" });
+      });
+      await check("rollback: fallback draft RPC arguments preserve owner and version fences", async () => {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        await session.query("insert into public.campaign_drafts(id,business_id,owner_id,input) values ($1,$2,$3,'{}')", [draftId, businessId, ownerId]);
+        const update = async version => session.query("select * from public.update_campaign_draft_if_version($1,$2,$3,$4,'{}',now())", [draftId, businessId, ownerId, version]);
+        assert.equal(Number((await update(1)).rows[0].version), 2);
+        assert.equal((await update(1)).rowCount, 0);
+        await assert.rejects(session.query("update public.campaign_drafts set version=99 where id=$1", [draftId]), { code: "42501" });
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
+        assert.equal((await session.query("select * from public.campaign_drafts where id=$1 and owner_id=$2", [draftId, ownerId])).rowCount, 0);
+        await assert.rejects(update(2), { code: "42501" });
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId])).rowCount, 0);
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,1)", [draftId])).rowCount, 0);
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId])).rowCount, 1);
+      });
+      await check("rollback: fallback audit RPC derives trusted identity and denies spoofing", async () => {
+        const append = actor => session.query("select public.append_verified_audit_event($1,$2,'campaign.refresh','campaign',null,null,null,'{}') as id", [businessId, actor]);
+        await session.query("set role service_role");
+        const eventId = (await append(ownerId)).rows[0].id;
+        const { rows } = await session.query("select actor_id,actor_label,authority from public.audit_log where id=$1", [eventId]);
+        assert.deepEqual(rows, [{ actor_id: ownerId, actor_label: "fallback@example.invalid", authority: "server" }]);
+        await assert.rejects(append(otherOwnerId), { code: "42501" });
+        await assert.rejects(append(null), { code: "23514" });
+        for (const role of ["service_role", "authenticated", "anon"]) {
+          await session.query(`set role ${role}`);
+          await assert.rejects(session.query("insert into public.audit_log(action,entity_type) values ('forged','campaign')"), { code: "42501" });
+          if (role !== "service_role") await assert.rejects(append(ownerId), { code: "42501" });
+        }
+      });
+      await check("rollback: legacy lead query/import preserves follow-up and unfinished sync evidence", async () => {
+        await session.query("set role service_role");
+        const run = (await session.query("select * from public.lead_sync_start($1,$2,null,1,'act_fixture','page_fixture')", [businessId, ownerId])).rows[0];
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        await session.query("insert into public.leads(business_id,campaign_id,meta_lead_id,full_name,workflow_status,follow_up_note,field_data) values ($1,$2,'retained','Original','qualified','Keep this note','{\"source\":\"fixture\"}')", [businessId, campaignId]);
+        const before = (await session.query("select * from public.leads where business_id=$1 order by created_time desc nulls last limit 200", [businessId])).rows[0];
+        const legacyImport = (business, metaId) => session.query("insert into public.leads(business_id,meta_lead_id,full_name,field_data) values ($1,$2,'Incoming','{}') on conflict(business_id,meta_lead_id) do nothing returning *", [business, metaId]);
+        assert.equal((await legacyImport(businessId, "retained")).rowCount, 0);
+        assert.deepEqual((await session.query("select * from public.leads where id=$1", [before.id])).rows[0], before);
+        const inserted = (await legacyImport(businessId, "new")).rows[0];
+        assert.equal(inserted.workflow_status, "new");
+        assert.equal(inserted.follow_up_note, "");
+        await assert.rejects(legacyImport(otherBusinessId, "foreign"), { code: "42501" });
+        await assert.rejects(session.query("insert into public.leads(business_id,campaign_id,meta_lead_id) values ($1,$2,'foreign-campaign')", [businessId, otherCampaignId]), { code: "23503" });
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
+        assert.equal((await session.query("select * from public.leads where business_id=$1 order by created_time desc nulls last limit 200", [businessId])).rowCount, 0);
+        await session.query("set role service_role");
+        assert.deepEqual((await session.query("select * from public.lead_sync_runs where id=$1", [run.id])).rows[0], run);
+        assert.equal((await session.query("delete from public.campaigns where business_id=$1 and id=$2 returning id", [businessId, otherCampaignId])).rowCount, 0);
+        assert.equal((await session.query("delete from public.campaigns where business_id=$1 and id=$2 returning id", [businessId, campaignId])).rowCount, 1);
+        const retained = (await session.query("select business_id,campaign_id,workflow_status,follow_up_note from public.leads where id=$1", [before.id])).rows[0];
+        assert.deepEqual(retained, { business_id: businessId, campaign_id: null, workflow_status: "qualified", follow_up_note: "Keep this note" });
+      });
+    } finally { await session.end(); }
+  } finally { await db.end(); }
 }
 
 async function verify(database, source, integrityMigration) {
@@ -769,6 +910,9 @@ try {
   await admin.connect();
   await admin.query("create role anon; create role authenticated; create role service_role bypassrls");
   await admin.end();
+  if (process.argv.includes("--rollback-only")) {
+    await verifyRollback();
+  } else {
   const schema = await readFile(join(root, "db/schema.sql"), "utf8");
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
@@ -786,6 +930,7 @@ try {
   const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
   await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
   await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}`, integrityMigration);
+  }
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);
