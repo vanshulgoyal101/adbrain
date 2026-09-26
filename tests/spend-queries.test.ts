@@ -36,6 +36,21 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
 
 beforeEach(() => { mocks.failedTable = ""; mocks.failAfter = ""; mocks.pageSize = 1000; vi.clearAllMocks(); });
 
+describe("instruction query failures", () => {
+  it.each(["getAdInstructions", "getActiveInstructionsText"] as const)("%s rejects unavailable instructions with a safe error", async (queryName) => {
+    mocks.failedTable = "ad_instructions";
+    const queries = await import("@/lib/supabase/queries");
+    await expect(queries[queryName]("business")).rejects.toThrow("Ad instructions could not be loaded.");
+    expect(mocks.eq).toHaveBeenCalledWith("business_id", "business");
+  });
+
+  it("keeps empty instructions valid when the query succeeds", async () => {
+    const { getAdInstructions, getActiveInstructionsText } = await import("@/lib/supabase/queries");
+    expect(await getAdInstructions("business")).toEqual([]);
+    expect(await getActiveInstructionsText("business")).toBe("");
+  });
+});
+
 describe("spend query failures", () => {
   it("rejects a later-page failure instead of returning a partial spend total", async () => {
     mocks.pageSize = 1;

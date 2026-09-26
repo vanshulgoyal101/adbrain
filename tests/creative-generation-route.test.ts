@@ -116,6 +116,26 @@ beforeEach(() => {
 });
 
 describe("creative generation route", () => {
+  it("stops before paid generation when saved instructions cannot be loaded", async () => {
+    mocks.instructions.mockRejectedValueOnce(new Error("private database detail"));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain("private database detail");
+  });
+
+  it("stops before paid regeneration when saved instructions cannot be loaded", async () => {
+    mocks.instructions.mockRejectedValueOnce(new Error("private database detail"));
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "creative" }) });
+    expect(response.status).toBe(502);
+    expect(mocks.generateOneVariant).not.toHaveBeenCalled();
+    expect(mocks.render).not.toHaveBeenCalled();
+    expect(await response.text()).not.toContain("private database detail");
+  });
+
   it("stops before paid generation when recent copy cannot be loaded", async () => {
     mocks.recentCopy.mockRejectedValueOnce(new Error("History unavailable"));
     const { POST } = await import("@/app/api/creatives/generate/route");
