@@ -78,7 +78,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
-| POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |
+| POST | `/api/leads/sync` | Optional `{syncId}` -> leads/imported/failedForms/sync | Bounded provider pages + atomic deduplicated inserts/checkpoints |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
@@ -97,6 +97,40 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
+
+### Lead Sync
+
+An empty POST starts an import or resumes the current binding's unfinished run.
+`{syncId: "<uuid>"}` resumes that exact run; business, owner, Page, ad account and
+connection generation are derived and checked server-side, including each save.
+Foreign/missing runs return 404; a stale writer or changed binding returns 409.
+After reconnecting, use an empty POST to start under the new binding.
+
+`sync` is `{id, state: "complete" | "partial", hasMore}`. Continue with the same
+ID while `hasMore` is true. Partial work is never an up-to-date claim. Successful
+pages stay saved when discovery, another form, a later page or a subsequent save
+fails. Provider failures retain their continuation; unavailable forms appear in
+`failedForms`. All attempted reads failing returns 502; save/read uncertainty
+returns 503 with known progress, not an empty successful inbox.
+
+`imported` counts newly inserted rows verified during this request, never fetched
+duplicates or a cumulative total. Existing source, campaign attribution and
+owner-managed follow-up values are not overwritten. `leads` is a compatibility
+snapshot of at most 200 saved rows, not the complete inbox/list API.
+
+Each request allows at most 24 form/lead page calls (200 items per page), at most
+three concurrent lead reads, and a 40-second provider deadline. Checkpoint and
+snapshot calls have three-second timeouts. Form discovery and pending forms are
+interleaved; failed forms remain queued without blocking other accessible forms.
+Only opaque cursors are saved; provider `paging.next` URLs are never followed.
+Legacy array helpers throw after 100 pages instead of silently truncating.
+
+Apply [the sync migration](../db/migrations/20260926_lead_sync_progress.sql) after
+the existing Meta connection and leads tables, before deploying this route. It
+adds service-only progress/RPCs and does not modify existing lead columns. The
+combined schema and follow-up migration are integrated separately with issue #35.
+Application rollback may leave this additive migration installed. Production
+migration execution requires separate approval.
 
 ### Authentication Handlers
 

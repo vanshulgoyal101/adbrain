@@ -40,6 +40,29 @@ export type ProductEventRow = {
   attributes: Json;
 };
 
+export type LeadSyncScopeArgs = {
+  p_business_id: string;
+  p_owner_id: string;
+  p_sync_id: string | null;
+  p_generation: number;
+  p_ad_account_id: string;
+  p_page_id: string;
+};
+
+export type LeadSyncRow = {
+  id: string;
+  business_id: string;
+  owner_id: string;
+  generation: number;
+  ad_account_id: string;
+  page_id: string;
+  state: "partial" | "complete";
+  version: number;
+  progress: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -495,6 +518,12 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
         Relationships: [];
       };
+      lead_sync_runs: {
+        Row: LeadSyncRow;
+        Insert: Omit<LeadSyncRow, "id" | "version" | "state" | "progress" | "created_at" | "updated_at"> & Partial<LeadSyncRow>;
+        Update: Partial<LeadSyncRow>;
+        Relationships: [];
+      };
       leads: {
         Row: {
           id: string;
@@ -552,6 +581,14 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      lead_sync_start: {
+        Args: LeadSyncScopeArgs;
+        Returns: LeadSyncRow[];
+      };
+      lead_sync_checkpoint: {
+        Args: LeadSyncScopeArgs & { p_sync_id: string; p_version: number; p_rows: Json; p_progress: Json };
+        Returns: Json;
+      };
       enqueue_campaign_operation: {
         Args: { p_operation_id: string; p_input: Json; p_request_hash: string };
         Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
