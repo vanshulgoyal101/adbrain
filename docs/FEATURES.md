@@ -249,9 +249,12 @@ for continuation and accumulates skipped counts. Unsupported/deleted/archived
 statuses are not imported as paused. A completed scan does not prune local rows
 for campaigns absent from Meta.
 
-Results refresh fetches insights, attempts to store them and produces a
-plain-language summary; it can also trigger spend-limit auto-pause. It is not a
-read-only diagnostic. A null stored result needs investigation. Reports
+Results refresh fetches insights and saves a snapshot before producing a
+plain-language summary or checking spend-limit auto-pause. Failed persistence
+returns 503 before summary, auto-pause and audit logging; do not present it as a
+successful refresh with a null result. Resolve storage availability before an
+explicit retry. Successful refresh can pause delivery, so it is not a read-only
+diagnostic. Reports
 are Markdown exports of stored performance, not a live refresh. They escape
 campaign names (including pipes/newlines), count impressions/clicks as delivery,
 and do not declare a lead winner when nobody has leads.

@@ -442,9 +442,12 @@ failure is not a successful import; partial writes before an error can exist.
 
 Refresh returns `{result,summary,insights,autoPaused}`. **This can invoke an LLM
 summary and pause live campaigns through spend enforcement**; it is not a harmless
-read-only smoke test. The current handler does not explicitly fail the response
-on an insight-row insert error, so `result` can be null. Verify persistence rather
-than claiming every successful refresh stored a snapshot.
+read-only smoke test. At this source baseline, a snapshot write error or missing
+saved row returns 503 (`Could not save refreshed results. Retry the refresh.`)
+before summary generation, auto-pause and audit logging. Success requires a saved
+result, not a nullable snapshot. Resolve storage availability before retrying;
+the next successful refresh can still trigger those later side effects. See the
+[deciding handler](../src/app/api/campaigns/%5Bid%5D/refresh/route.ts).
 
 Lead sync returns `{leads,imported,failedForms}`; each failed form has `id,name`.
 `imported` is actual new inserts, duplicates are ignored, partial unreadable forms
