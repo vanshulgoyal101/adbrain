@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 export type ChatRole = "system" | "user" | "assistant";
 
 export interface ChatMessage {
@@ -20,6 +22,7 @@ export interface CompletionOptions {
   promptVersion?: string;
   /** Ask the provider to return strict JSON. */
   json?: boolean;
+  responseSchema?: z.ZodType;
   /**
    * Reuse a cached response for an identical request instead of calling the
    * provider. Pass `true` for the default TTL, or an object to override it.

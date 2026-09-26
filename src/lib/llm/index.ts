@@ -178,7 +178,16 @@ export async function completeJSON<T>(
   options: CompletionOptions = {},
 ): Promise<T> {
   const result = await complete(messages, { ...options, json: true });
-  const parsed = parseJSON<T>(result.text);
+  let parsed: T;
+  try {
+    const value = parseJSON<T>(result.text);
+    parsed = options.responseSchema ? options.responseSchema.parse(value) as T : value;
+  } catch (error) {
+    if (!options.responseSchema) throw error;
+    throw new LLMError("LLM JSON output did not match the task schema", {
+      provider: result.provider, retryable: false,
+    });
+  }
   if (parsed && typeof parsed === "object") {
     Object.defineProperty(parsed, "__completion", {
       value: result,

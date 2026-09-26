@@ -255,6 +255,7 @@ export async function runInterview(
       task: "creative brief interview",
       promptVersion: INTERVIEW_PROMPT_VERSION,
       json: true,
+      responseSchema: resultSchema,
       temperature: attempt ? 0.2 : 0.5,
       maxTokens: 2400,
       cache: false,

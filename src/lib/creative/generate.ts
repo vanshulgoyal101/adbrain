@@ -6,6 +6,7 @@ import {
 } from "@/lib/creative/design";
 import {
   buildConceptMessages,
+  creativeConceptSchema,
   conceptImagePrompt,
   validateConcept,
   type CreativeConcept,
@@ -177,6 +178,7 @@ async function generateConcept(
     const env = getEnv();
     const completion = await complete(messages, {
       json: true,
+      responseSchema: creativeConceptSchema,
       temperature: attempt === 0 ? 0.8 : 0.4,
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,

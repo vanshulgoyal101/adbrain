@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 function setEnv(overrides: Record<string, string>) {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -24,23 +25,14 @@ function mockFetchByHost(handlers: Record<string, () => Response | Promise<Respo
 }
 
 const ok = (content: string) =>
-  ({
-    ok: true,
-    status: 200,
-    json: async () => ({ choices: [{ message: { content } }] }),
-    text: async () => "",
-  }) as unknown as Response;
+  Response.json({ choices: [{ message: { content } }] });
 
 const httpError = (status: number) =>
-  ({
-    ok: false,
-    status,
-    json: async () => ({ error: { message: `HTTP ${status}` } }),
-    text: async () => `HTTP ${status}`,
-  }) as unknown as Response;
+  new Response(`HTTP ${status}`, { status });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("LLM provider fallthrough", () => {
@@ -95,4 +87,46 @@ describe("LLM 429 cooldown", () => {
       .mock.calls.length;
     expect(callsAfterSecond).toBe(1);
   });
+});
+
+describe("SDK facade safety", () => {
+  beforeEach(() => {
+    setEnv({ GROQ_API_KEYS: "first-key,second-key", OPENROUTER_API_KEYS: "fallback-key" });
+  });
+
+  it.each(["caller", "deadline"] as const)("stops all key/provider fallthrough on %s cancellation", async (kind) => {
+    const controller = new AbortController();
+    if (kind === "deadline") vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      controller.abort(new DOMException("Stopped", kind === "deadline" ? "TimeoutError" : "AbortError"));
+      throw controller.signal.reason;
+    }));
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "test" }], {
+      signal: kind === "caller" ? controller.signal : undefined,
+    })).rejects.toThrow(kind === "deadline" ? "deadline exceeded" : "Stopped");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['```json\n{"value":1}\n```', 'Result: {"value":1}'])
+    ("preserves tolerant completeJSON parsing and non-enumerable completion metadata", async (text) => {
+      vi.stubGlobal("fetch", vi.fn(async () => ok(text)));
+      const { completeJSON } = await import("@/lib/llm");
+      const result = await completeJSON<{ value: number }>([{ role: "user", content: "test" }]);
+      expect(result).toEqual({ value: 1 });
+      expect(Object.keys(result)).toEqual(["value"]);
+      expect(Object.getOwnPropertyDescriptor(result, "__completion")?.value).toMatchObject({ provider: "groq", text });
+    });
+
+  it.each(['{"value":"private-invalid-output"}', "private-malformed-output"])
+    ("rejects explicit schema-invalid JSON without fallback or raw error content", async (text) => {
+      vi.stubGlobal("fetch", vi.fn(async () => ok(text)));
+      const { completeJSON } = await import("@/lib/llm");
+      const failure = await completeJSON([{ role: "user", content: "test" }], {
+        responseSchema: z.object({ value: z.number() }),
+      }).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ retryable: false, message: "LLM JSON output did not match the task schema" });
+      expect(String(failure)).not.toContain("private-");
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
 });

@@ -176,6 +176,7 @@ export async function runPlanner(
   signal.throwIfAborted();
   const completion = await complete(buildPlannerMessages(input), {
     json: true,
+    responseSchema: plannerResultSchema,
     cache: false,
     signal,
     promptVersion: PLANNER_PROMPT_VERSION,
