@@ -10,8 +10,9 @@ checkout and DB-A-dependent changes. Deployment evidence belongs in the
 
 ## Production Payment Candidate
 
-Separate integration `b7e5ac1` adds the following server-only configuration beyond
-the baseline below. It is disabled, unreleased and blocked on peer fixes/QA/CI;
+Repaired integration `954e44a` adds the following server-only configuration beyond
+the baseline below. It is disabled and unreleased; QA accepted the repair deltas
+conditional on integrated CI. Live setup and financial prerequisites remain separate;
 see the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
 Deciding code: [production gate](../src/lib/payments/production-config.ts).
 

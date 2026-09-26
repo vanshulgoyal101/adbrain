@@ -11,8 +11,9 @@ environment. Deciding sources: [route handlers](../src/app/api/),
 
 ## Production Payment Candidate
 
-Integration `b7e5ac1` adds five route modules beyond this guide's original baseline.
-They are default-disabled (404), unreleased and blocked on peer fixes/QA/CI.
+Repaired integration `954e44a` adds five route modules beyond this guide's original baseline.
+They are default-disabled (404) and unreleased. QA accepted the three repair
+deltas conditional on exact integrated CI; this is not live collection approval.
 See the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet)
 and [exact request/response contracts](qa/dev2-devc-contract-o1.md#api-delta-for-integration).
 
@@ -27,7 +28,8 @@ and [exact request/response contracts](qa/dev2-devc-contract-o1.md#api-delta-for
 Authenticated writes require the exact production origin. Amounts here are integer
 INR paise, not the rupee amounts of campaign budgets. Disabled routes never grant
 collection authority; captured allocations grant no campaign spend/activation.
-The peer-review blockers in the packet must be repaired before acceptance.
+Saved checkout is withheld when current funding is invalid or unavailable;
+replaying an order also requires its original funding evidence to remain valid.
 
 ## Conventions
 

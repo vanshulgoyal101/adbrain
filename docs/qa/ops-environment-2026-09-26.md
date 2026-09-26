@@ -8,6 +8,53 @@ production rollout approval or packet closure**. Governing backlog:
 
 ## Separate Payment Integration and Rollout Packet
 
+### Repaired Integration
+
+September 26, 2026. Runtime assembly `954e44a829e2bd23e5afdd27067509273cda8529`
+contains exact UI repair `7ba82db36a2cc3b2b5f941bd951d2ea2a1aa791f` and backend
+`49d05e85e30130dcc84509f411bb0b25abd91ecb`, including `119bcef55a4bfd1f95f8a5054d0b18e2c3398cfd`.
+It also includes current dev `5e7f7d6cd96cf1130664ef791e4bb7f3656e9a07` and the
+completed enquiry release below. [PR 46](https://github.com/vanshulgoyal101/adbrain/pull/46)
+pins the final published head and its required integrated CI; the earlier green
+CI for `64a5861` does not certify this repaired candidate. Dev CI `36259384746`
+passed for `5e7f7d6`.
+
+[QA accepted the exact repair deltas](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848198762),
+conditional on integrated CI, with all three original defects closed. Consent
+must match the current policy; saved checkout and SQL replay revalidate the
+original funding evidence; a distinct failed attempt no longer overrides valid
+captured evidence. Contradictions for the same captured payment remain held.
+No new payment logic or dependency was introduced during integration.
+
+The canonical schema preserves the accepted enquiry prefix and exact managed
+billing SQL, followed by the repaired payment migration. Current payment SQL
+SHA-256 is `8983ba31e8fc9af8b6a580feb1869a0bc8715c3d5a17ab0103bc9601fd42c47b`;
+canonical schema SHA-256 is `dcb48f003a826445910932723e0f3443ec06f3cfd9ac6b1ec60fdd449cb089b2`.
+These supersede the initial payment/schema hashes below. Other dependency hashes
+and ordering are unchanged. No payment migration was applied to production.
+
+Author checks passed: 70 tests in the two affected payment suites, typecheck,
+touched lint, and merged PostgreSQL fresh/upgrade/replay/concurrency checks.
+Two existing TestCheckout act warnings remain. The parity guard caught a literal
+SQL copy error before database execution; the corrected copy and full maintained
+SQL check passed. Existing broader author/browser and independent QA evidence
+is reused, not represented as new provider verification.
+
+At `2026-09-26T17:36:10.785Z`, read-only Vercel metadata reconfirmed the same
+project, main, Node 24.x, protected previews, 29 production-only environment
+entries, zero preview entries and zero branch overrides. Committed deployment
+rules retain default-deny `**`, with only main enabled. Current release authority
+permits the required PR and dev integration; it supersedes the old permission
+holds below. All payment flags remain off. Live terms, funding, target-specific
+setup and separately consented financial verification remain outside this
+default-disabled integration.
+
+### Initial Preparation (Historical)
+
+The following initial-source findings, hashes and permission statements are
+historical. Use the repaired integration above and current release policy for
+the active candidate; retain this original packet as evidence of preparation.
+
 September 26, DevOps. **Preparatory, default-disabled source; blocked on payment
 fixes, independent acceptance and exact-candidate CI. Not migration, deployment
 or financial authorization.** This packet does not amend the six-migration
