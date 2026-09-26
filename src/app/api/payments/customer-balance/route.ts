@@ -7,10 +7,14 @@ import { customerCostEvidenceSchema, customerRefundAllocationSchema } from "@/li
 import { getProductionPaymentConfig } from "@/lib/payments/production-config";
 import { paymentJsonBody, paymentReply } from "@/lib/payments/checkout-request";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { observeRoute } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+export const GET = observeRoute("/api/payments/customer-balance", "GET", handleGET);
+export const POST = observeRoute("/api/payments/customer-balance", "POST", handlePOST);
+
+async function handleGET(request: Request) {
   try {
     const url = new URL(request.url);
     const businessId = z.uuid().parse(url.searchParams.get("businessId"));
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   try {
     const config = getProductionPaymentConfig();
     if (new URL(request.url).origin !== config.origin || request.headers.get("origin") !== config.origin) return paymentReply({ error: "Same-origin request required." }, 403);
