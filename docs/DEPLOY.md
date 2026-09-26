@@ -1,25 +1,52 @@
 # Deployment Setup
 
-AdBrain needs a dynamic Node/Next.js host, Supabase Auth/Postgres/Storage, and
-explicit provider configuration. It is not a static export. The canonical
-production origin is `https://adbrain.vanshul.com`; this guide describes setup,
-not verification of the current remote deployment. For publishing changes, follow
-[Release Workflow](RELEASING.md), which takes precedence over this checklist.
+Use this runbook to prepare a target and verify a deployment. Authorization and
+promotion rules live in [Release Workflow](RELEASING.md); configuration defaults
+live in [Configuration](CONFIGURATION.md). AdBrain requires a dynamic Node/Next.js
+host and Supabase Auth/Postgres/Storage, not a static export.
+
+Source reference: dev `672eb13`. Last verified production: `6291dc2`, canonical
+`https://adbrain.vanshul.com`, Node 24.x, hnd1, from
+[PR #36's receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
+This is evidence for that release, not a live status monitor. DB-A-dependent
+callers, their migrations and local test checkout were excluded from production.
+
+| Target | Safe starting point | Do not assume |
+| --- | --- | --- |
+| Disposable local | Isolated checkout, explicitly identified local database and synthetic Auth/data | Loopback cannot be a tunnel to production; a demo label is not isolation |
+| Hosted nonproduction | Independently configured credentials, data and provider accounts, only if separately authorized | A Vercel preview automatically has a preview database or safe keys |
+| Production | Exact approved release subset, schema compatibility and rollback, protected main PR | A passing dev build authorizes every dev feature or a migration |
 
 ## 1. Establish the Target
 
 Identify the exact Vercel project, Git branch, Supabase project, site origin,
 provider accounts, and owner approving the change. Verify credentials without
 printing them. A preview deployment is not an isolated database. The checked-in
-Git deployment rules enable only `main` with a wildcard disabled rule; inspect
-effective remote settings before any branch push or environment change.
+Git rules use `**: false` with `main: true`, `dev: false` and the pilot branch
+disabled. Single-star `*` does not cover slash-containing branches. Inspect the
+candidate rules and hosted environment scope before publication; verify observed
+suppression afterward. Preview SSO and absent preview credentials are separate
+controls, not consequences of JSON.
 
-Use supported Node 22 (22.13+ with the current lint dependency graph), install with
-`npm ci`, and keep framework build/output defaults unless a reviewed change needs
-otherwise. Configure adequate Node runtime duration and memory for generation;
+Use Node 24, matching CI and verified production, install with `npm ci` in the
+target's own checkout, and keep framework build/output defaults unless a reviewed
+change requires otherwise. Configure adequate Node runtime duration and memory for generation;
 declaring `maxDuration` in a route does not override hosting-plan limits.
 
+The build/start contract is `npm run build`, then `npm start` on a Node host.
+Next loads its environment during build/runtime; standalone worker/migration
+scripts require explicitly supplied environment. Never copy the shared checkout's
+production `.env.local` into a new target. For temporary local validation, use
+`npm run dev` so the configured 1536 MiB heap limit applies; reuse an owned healthy
+server and stop only the server you start. Do not contend for another worker's
+checkout, `.next`, port or database.
+
 ### Runtime Placement and Workspace Loading
+
+**Historical performance/design receipt, September 18.** The measurements and
+pre-deployment statements in this subsection and Action Latency Controls below
+describe that work, not current rollout status. The verified September 26 release
+already runs in hnd1. Preserve these observations without extrapolating a speedup.
 
 The checked-in Vercel region is `hnd1` (Tokyo), colocated geographically with
 AdBrain's Supabase project in `ap-northeast-1`. On 2026-09-18, before this change
@@ -55,6 +82,7 @@ component-tested. Production improvement must be measured after deployment.
 
 ### Action Latency Controls
 
+**Historical local evidence, September 18; not a setup checklist.**
 The second local performance pass removes additional work from interactive paths:
 
 - Home and Assets read only the five creative preview fields they render. Studio
@@ -99,15 +127,51 @@ checks do not certify every live-provider action or production latency.
 
 ## 2. Prepare Database and Storage
 
-For a new isolated installation, review [schema.sql](../db/schema.sql). For an
-existing installation, inventory applied migrations and follow the
-[migration map](DATA_MODEL.md#migration-map). Repeated DDL is not inherently safe:
-grants, policies and functions can change even when tables already exist.
+Choose one path before running SQL. Neither path loads `.env.local` automatically.
 
-`npm run db:push` writes to the configured database. It is **not** a routine
-deployment prerequisite to run blindly. Obtain explicit migration approval,
-verify target, backup/compatibility, and local fresh/upgrade tests first. No
-production credentials are required for `npm run test:meta-db`.
+| Path | Command | Effect |
+| --- | --- | --- |
+| Fresh disposable database | `npm run db:push` | Applies the entire schema in a transaction; rejects non-loopback hosts |
+| Review one incremental migration | `npm run db:migrate -- --migration 20260919_campaign_reporting_identity.sql` | Prints filename and SHA-256; no database connection without `--apply` |
+| Approved incremental application | Same named command with `--apply` and, for remote targets, exact `--target` | Connects, serializes changes and records the immutable checksum |
+| Disposable SQL verification | `npm run test:meta-db` | Starts its own PostgreSQL harness for fresh and ordered-upgrade checks, not the configured production database |
+
+For fresh local setup, review [schema.sql](../db/schema.sql), confirm the target
+is genuinely disposable and supply `PGHOST`, `PGDATABASE`, `PGUSER`, the actual
+`PGPORT` and private authentication. `PGPORT` defaults to 5432 when omitted;
+set it explicitly to avoid ambiguity. The full-schema tool rejects remote hosts,
+but cannot detect a loopback tunnel to production. Repeated DDL can change grants,
+policies and functions even when tables already exist; do not use it for upgrades.
+
+For an existing target, compare actual schema and `private.schema_migrations`
+with the [migration map](DATA_MODEL.md#migration-map). Historical objects may
+predate the ledger. Missing ledger entries do not authorize replaying the folder.
+Preview the one reviewed file first. Application is a separate approved action:
+
+```sh
+# Example identity only; supply approved PG* values privately before application.
+npm run db:migrate -- --migration 20260919_campaign_reporting_identity.sql --target 'db.example.invalid:5432/app@migration_operator' --apply
+```
+
+The remote confirmation must equal `PGHOST:PGPORT/PGDATABASE@PGUSER`. Remote TLS
+certificate verification is mandatory; `PGSSLROOTCERT` can supply a CA file.
+Insecure `PGSSLMODE` values are rejected, not workarounds. Passwords must not go
+into shell history, repository files or tickets. The runner uses a transaction,
+an advisory lock, a 5-second lock timeout and a 60-second statement timeout.
+Matching applied checksums skip work; changed checksums fail. Add a new migration
+instead of editing history. A failure rolls back the transaction; inspect the
+state before retrying, especially after an ambiguous connection failure.
+
+Before approved rollout: backup/restore readiness, production data preflight,
+dependency ordering, compatible web/worker revision and a rollback floor must be
+known. DB-A grant revocations and trusted-write callers require coordinated
+deployment/quiescence; do not apply one side while incompatible callers run.
+The [DB-A handoff](qa/db-a-dev-a-handoff-2026-09-26.md) carries this deferred
+rollout, and documentation work does not approve it.
+
+Sources: [full-schema tool](../scripts/apply-schema.mjs),
+[migration CLI](../scripts/migrate-db.mjs),
+[target/transaction guards](../scripts/database-migrations.mjs).
 
 Verify quota aggregation and trusted rate-limit RPCs, encrypted connection
 storage, campaign operations, generation receipts, and public media buckets.
@@ -156,11 +220,14 @@ An AdBrain login smoke test does not verify this second authorization flow.
 
 ## 5. Validate and Promote
 
-Run required local/CI gates on the dependency-complete release. Promote through
-the protected `main` PR workflow and verify hosting success for the resulting
-merge SHA. Do not use a direct production CLI deploy to bypass checks.
+Assemble the dependency-complete subset against current main. Reuse matching
+author/QA evidence; let required CI validate changed assembled inputs. Do not
+repeat completed full suites just to rewrite a receipt. Promote through the
+protected main PR and verify the resulting merge SHA, not merely the branch name.
+Never use a direct production CLI deploy to bypass checks.
 
-After an authorized deployment, verify:
+For a new target, verify all relevant items below. For an ordinary release,
+scope the smoke to the changed workflow and its meaningful dependencies:
 
 - Public homepage, legal routes, guide pages, sitemap/robots/manifest/social image.
 - Expected production security headers and CSP behavior with real origins.
@@ -173,6 +240,10 @@ After an authorized deployment, verify:
 
 Paid generation, real consent, campaign creation and activation each need their
 own evidence and authorization. A homepage HTTP 200 proves none of them.
+Use a real authenticated session without exposing cookies or credentials. Read
+the page's mount behavior first: Campaigns can auto-sync on load. If the smoke
+must be read-only, block mutations before navigation and disclose the fixture
+boundary. A streamed loading shell is not successful hydration or working filters.
 
 ## 6. Scheduled Jobs and Rollback
 

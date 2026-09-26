@@ -6,6 +6,34 @@ production rollout approval or packet closure**. Governing backlog:
 [release rules](../RELEASING.md) and the latest
 [DB-A developer handoff](db-a-dev-a-handoff-2026-09-26.md).
 
+## Issue 42 Documentation Handoff
+
+DevOps rebuilt QUICK_START, CONFIGURATION, DEPLOY, RELEASING, OPERATIONS and
+OBSERVABILITY from source `672eb132ad57bb3ba31f118afaffddaa878b4923` in the isolated
+`/tmp/adbrain-docs-42`, branch `docs/issue-42-operations-guides`. The commit carrying
+this section identifies the exact candidate; its SHA is handed off on
+[issue #42](https://github.com/vanshulgoyal101/adbrain/issues/42). September 6's
+release body is unchanged apart from a reference-only banner. Existing headings
+and dated release/operational outcomes remain preserved.
+
+Source checks covered the environment parser/direct consumers, package/CI runtime,
+Next's installed installation guide, local launcher, database target/ledger guards,
+worker claims and shutdown, refresh persistence and telemetry schema/store/ingestion.
+The release boundary remains production `6291dc2` versus dev-only dependencies;
+this documentation is not another release or approval for a migration/live checkout.
+
+Author validation: per-guide command/link/source checks and whitespace passed.
+QA's existing `scripts/check-docs.mjs` from `/tmp/adbrain-docs-43` was reused with
+`--root /tmp/adbrain-docs-42` and the seven owned guide paths: zero errors/warnings;
+all 60 inventoried environment keys are mentioned. Mention coverage is not proof
+of every runtime contract. No parallel checker, dependency install, application
+suite, server, provider call, migration or deployment was needed.
+
+Next owner: QA #43 for independent factual/reader-workflow acceptance, then the
+coordinator for cross-guide reconciliation. API/data guide migration mention gaps
+reported by the checker belong to #40's separately owned rewrite, not a reason
+to edit that packet here. No QA, hosted-CI or production acceptance is claimed.
+
 ## O-11 SDK and Query Release
 
 **Shipped through protected [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36).**
