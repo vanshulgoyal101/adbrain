@@ -247,11 +247,12 @@ export async function getAdInstructions(
   businessId: string,
 ): Promise<AdInstruction[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("ad_instructions")
     .select("*")
     .eq("business_id", businessId)
     .order("created_at", { ascending: true });
+  if (error) throw new Error("Ad instructions could not be loaded.");
   return data ?? [];
 }
 
