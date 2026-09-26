@@ -5,6 +5,102 @@ CONTRACT-BC: **DRAFT / not accepted**. QA case proposal: QA-BC-cases-1.
 The O-1 filename is retained as directed by the coordinator. This is a new
 artifact/contract receipt, not a change to historical candidate acceptance.
 
+## Issue 43 Documentation QA
+
+September 26, 2026. QA owns the testing/brand guides, design-history annotation
+and reusable checker on `docs/issue-43-validation`, based on
+`672eb132ad57bb3ba31f118afaffddaa878b4923`. This section supersedes earlier
+assignment/status paragraphs, not their dated evidence. Production remains the
+separately recorded `6291dc2` release; no deployment or feature acceptance here.
+
+The checker reuses pinned `markdown-it@15.0.2` (MIT), `github-slugger@2.0.0`
+(ISC), existing TypeScript AST and HTML parsing. It performs no app imports,
+environment loading, snippet execution or external requests. Six Node 24 fixture
+tests pass, including reference/encoded/parenthesized links, duplicate headings,
+JSON/command failures, historical classification, source inventory, fences and
+symlink CLI invocation. Focused ESLint/editor checks pass; dependency audit found
+zero vulnerabilities. All pre-existing lockfile package entries are unchanged.
+Only seven documentation-tool dependency entries were added.
+
+Run `npm run docs:check`, `npm run docs:check -- --all --json`, or
+`node --test scripts/check-docs.test.mjs` after installing the candidate lockfile.
+`--root /path/to/worktree` supports read-only peer review. No CI wiring changed;
+DevOps owns the integrated required gates. External URLs, dynamic environment
+access, CLI flags, SQL semantics, route authorization and deployment are not
+automatically certified. Mention gaps are review leads, not contract validation.
+
+Baseline inventory: 63 Markdown documents (23 current, 40 historical), 40 API
+routes, 60 environment keys and 16 migrations. All 23 current guides pass with
+zero errors/warnings. The isolated `--all` run has 104 historical warnings,
+including unavailable ignored evidence; records were not rewritten to remove
+them. The coordinator's shared checkout has 66 documents after three archives,
+and its full check has zero errors/warnings where retained evidence is available.
+Different artifact availability does not change historical acceptance.
+
+### Core Guide Coverage
+
+Q = owned author checks complete, independent review/integration still required.
+C = bounded independent review of the seven hashed coordinator drafts below.
+D2 = scoped approval at `1b0bb378bd5b660c40c3c58fd4402d327dfe6d0d`.
+O = scoped approval at `bd47fcf8bb32ec6c0649dceac7530525e555b71b`.
+P = #40 rewrite handoff pending; baseline mechanical checks are not acceptance.
+All approvals remain conditional on assembled documentation checks/required CI.
+
+| Core guide | Owner/source | Acceptance and factual sample |
+| --- | --- | --- |
+| [Root README](../../README.md) | C / #39 | Reviewed entry points, stack and feature/release limits |
+| [Documentation index](../README.md) | C / #39 | Reviewed canonical ownership, terminology and archive links |
+| [Orchestration](../ORCHESTRATION.md) | C / #39 | Reviewed current scope, authority and resolved publication hold |
+| [Specification](../SPEC.md) | C / #39 | Reviewed requirements versus implementation and commercial limits |
+| [Roadmap](../ROADMAP.md) | C / #39 | Reviewed released/dev/candidate separation and unresolved risks |
+| [Operating brief](../OPERATING-BRIEF.md) | C / #39 | Reviewed evidence layers, operator and payment boundaries |
+| [Payments](../PAYMENTS-PLAN.md) | C / #39 | Reviewed test gate/amount/allocation source; merchant evidence attributed, not replayed |
+| [Features](../FEATURES.md) | P / #40 | Awaiting rewrite |
+| [API reference](../API_REFERENCE.md) | P / #40 | Awaiting rewrite; no missing route-path mentions in baseline |
+| [Data model](../DATA_MODEL.md) | P / #40 | Awaiting rewrite; ten migration mentions/prerequisites handed to owner |
+| [Demo runbook](../DEMO-RUNBOOK.md) | P / #40 | Awaiting rewrite |
+| [Architecture](../ARCHITECTURE.md) | D2 / #41 | Reviewed trust, operation, query-cache and consistency boundaries |
+| [AI pipeline](../AI_PIPELINE.md) | D2 / #41 | Reviewed SDK/retry/accounting and generation GET example against handler |
+| [Meta connection](../META_CONNECT.md) | D2 / #41 | Reviewed consent/capabilities, uncertain activation and #34 migration boundary |
+| [Meta approval](../META_APPROVAL_ACTION_PLAN.md) | D2 / #41 | Reviewed evidence limits; no synthetic-traffic approval promise |
+| [Quick start](../QUICK_START.md) | O / #42 | Reviewed isolated setup and command side effects |
+| [Configuration](../CONFIGURATION.md) | O / #42 | Compared defaults with env schema; 60 inventoried keys mentioned |
+| [Deployment](../DEPLOY.md) | O / #42 | Compared preview/apply CLI; reviewed target and DB-A compatibility |
+| [Releasing](../RELEASING.md) | O / #42 | Reviewed corrected policy and exact release evidence; no hosted re-audit |
+| [Operations](../OPERATIONS.md) | O / #42 | Reviewed worker/cron mutations, recovery and spend limits |
+| [Observability](../OBSERVABILITY.md) | O / #42 | Compared telemetry bounds, retention SQL and query fields with source |
+| [Testing](../TESTING.md) | Q / #43 | Preserved all three #35 candidate commands; isolation and required gates explicit |
+| [Brand identity](../BRAND-IDENTITY.md) | Q / #43 | Compared tokens, typography, components and assets; no UI changes |
+
+Historical annotations: Q preserves the full Product Design Roadmap body; D2
+preserves both creative/Meta plan bodies; O preserves the September 6 release
+body. Other audits, QA/release receipts and worker history remain evidence, not
+current operating instructions. No application suite, build, browser, database,
+provider, credential or deployment operation was performed for this packet.
+
+Published reviews: [D2/PR44](https://github.com/vanshulgoyal101/adbrain/pull/44#issuecomment-5847055559),
+[O/#42](https://github.com/vanshulgoyal101/adbrain/issues/42#issuecomment-5847063028),
+[migration coverage/#40](https://github.com/vanshulgoyal101/adbrain/issues/40#issuecomment-5847055718).
+Reviews are AI-assisted on the same account, not second-human approvals.
+
+### Coordinator Draft Fingerprints
+
+Uncommitted content reviewed, SHA-256 (not a production manifest):
+
+```text
+README.md 04422cd441b2b1df4b44b8c8d09b05fd56cc543ad8b3c47197f5a6e63795c66c
+docs/README.md 195396b39d651e3a42fa74b8026e6e0da70d5e4b2da447dae6ab2c6cd3034bca
+docs/ORCHESTRATION.md 4ea1996d96e651c32c13a8d7b82322d89304cfc49eb412bf54cf88c9aa997475
+docs/SPEC.md 5c486ec2134891dff9058b5eb36c9e8c4fe2d4dcebdf2265239792a790b319ba
+docs/ROADMAP.md d3b8a17025dbaff56c4afc53059b68457baf01c855be717a3af6f3ef99299af8
+docs/OPERATING-BRIEF.md 713199648f1d87dcd689c57a402a3294cc63b8f361cc7e2385b0c7311799160a
+docs/PAYMENTS-PLAN.md 41be963cc943db885b6ee687fc487a315222e34980661e9b54af140bf38d08d8
+```
+
+Next: Dev delivers #40; QA reviews its factual delta and migration map. DevOps
+integrates the owned checker/guides with peers and runs the documentation check
+and required CI on that exact assembly. #39 is not fully accepted yet.
+
 ## O-11 Backlog Reconciliation Review
 
 QA **accepts the source-preservation/reconciliation scope**, conditional on
