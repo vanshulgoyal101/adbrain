@@ -7,6 +7,7 @@ import {
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign } from "./trusted-write";
+import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
 import {
   getCampaigns,
   getLatestResults,
@@ -25,10 +26,18 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
       getSpendLimits(businessId),
       getCampaigns(businessId),
     ]);
-    if (!limits.autoPause || !limits.weeklyCapRupees) return [];
+    let context;
+    try {
+      context = await requireOwnedBusiness(businessId);
+    } catch {
+      return [];
+    }
+    const customerBalance = await getCustomerBalance(context).catch(() => null);
+    const financialHold = !customerBalance || customerBalance.held;
+    if (!financialHold && (!limits.autoPause || !limits.weeklyCapRupees)) return [];
 
-    const results = await getLatestResults(campaigns.map((c) => c.id));
-    const toPause = campaignsToAutoPause(
+    const results = financialHold ? {} : await getLatestResults(campaigns.map((c) => c.id));
+    const toPause = financialHold ? campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id) : campaignsToAutoPause(
       campaigns.map((c) => ({
         id: c.id,
         status: c.status,
@@ -39,12 +48,6 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
     );
     if (!toPause.length) return [];
 
-    let context;
-    try {
-      context = await requireOwnedBusiness(businessId);
-    } catch {
-      return [];
-    }
     const paused: string[] = [];
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
@@ -70,6 +73,8 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
           },
           (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
         );
+        const reservation = customerBalance?.reservations.find(item => item.campaignId === id && item.state !== "closed");
+        if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => undefined);
         const { error } = await saveCampaign(context, { status: "paused" }, id);
         if (error) continue;
         paused.push(id);
@@ -79,7 +84,7 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
           entityType: "campaign",
           entityId: id,
           metaObjectId: campaign.meta_campaign_id,
-          reason: `Weekly spend cap of ₹${limits.weeklyCapRupees} reached`,
+          reason: financialHold ? "Customer advertising funds or attributed costs require reconciliation" : `Weekly spend cap of ₹${limits.weeklyCapRupees} reached`,
         });
       } catch (error) {
         if (!(error instanceof ConnectionAccessError)) {

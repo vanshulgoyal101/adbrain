@@ -17,6 +17,7 @@ import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts"
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload } from "@/lib/campaign/activation";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
+import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -135,14 +136,30 @@ async function handlePATCH(
             dailyBudgetRupees: campaign.daily_budget!,
             status: campaign.status,
           });
+          const reservation = await reserveCustomerCampaign(context, {
+            campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
+            connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
+            requestKey: parsed.data.confirmationDigest,
+          });
+          try {
+            await meta.enforceCampaignSpendCap(campaign.meta_campaign_id!, reservation.mediaLimitPaise);
+            await meta.updateCampaignStatus(campaign.meta_campaign_id!, "ACTIVE");
+            await confirmCustomerCampaign(context, id, reservation.reservationId, "active");
+          } catch (error) {
+            await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
+            throw error;
+          }
+          return;
         }
-        await meta.updateCampaignStatus(
-          campaign.meta_campaign_id!,
-          action === "active" ? "ACTIVE" : "PAUSED",
-        );
+        const reservation = await getCustomerBalance(context)
+          .then(balance => balance.reservations.find(item => item.campaignId === id && item.state !== "closed"))
+          .catch(() => undefined);
+        await meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED");
+        if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => undefined);
       },
     );
   } catch (err) {
+    if (err instanceof CustomerBalanceError) return apiError(err.message, 409);
     if (err instanceof ConnectionAccessError) {
       return apiError(
         err.message,

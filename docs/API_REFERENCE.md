@@ -98,6 +98,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |
 | GET/POST | `/api/payments/live/reconcile` | Owner-scoped recovery | Reconcile uncertain provider state |
 | GET/POST | `/api/payments/live/operator` | Operator-authorized refund/review | Financial action; separate authorization required |
+| GET/POST | `/api/payments/customer-balance` | Owner balance/review or operator accounting evidence | No provider charge, refund or ad activation |
 | GET/POST | `/api/payments/test/orders` | Test order read/create | Nonproduction only; isolated test gateway |
 | POST | `/api/payments/test/verify` | Test payment proof | Nonproduction only |
 | POST | `/api/payments/test/webhook` | Test signed event | Nonproduction only |
@@ -105,6 +106,27 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
+
+### Customer Advertising Allowance
+
+The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
+does not enable collection or authorize Meta spending. Test payments give no
+credit. Owners can review their balance with `GET /api/payments/customer-balance`
+using `businessId` and optional `campaignId`. Financial operators can submit
+strict `costs` or `refund-allocation` actions with
+`POST /api/payments/customer-balance`; authority is rechecked in SQL. See the
+[shared contracts](../src/lib/payments/customer-balance-contracts.ts).
+
+Cost evidence uses integer paise, immutable UUIDs and cumulative lifetime
+media/tax figures; stale or conflicting figures hold funds. Capturing payment
+does not earn service fees or activate ads. Review precedes an atomic reservation
+for one campaign. Before ACTIVE, the Meta cap must be written and read back
+within the reserved media allowance; unsupported or rejected caps block
+activation. Provider capability for the INR 8,000 tax-inclusive offer remains
+unverified. Pausing does not release a reservation: final reconciliation needs
+the exact reservation UUID, a settled activation outcome and fresh cumulative
+costs after confirmed pause. Uncertain outcomes retain a hold for audited
+recovery, never automatic expiry.
 
 ### Authentication Handlers
 

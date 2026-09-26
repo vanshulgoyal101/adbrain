@@ -11,8 +11,12 @@ const mocks = vi.hoisted(() => ({
   getCampaignSpend: vi.fn(),
   updateCampaignStatus: vi.fn(),
   verifyCampaignActivation: vi.fn(),
+  enforceCampaignSpendCap: vi.fn(),
   recheckMetaConnection: vi.fn(),
   deleteCampaign: vi.fn(),
+  reserveCustomerCampaign: vi.fn(),
+  confirmCustomerCampaign: vi.fn(),
+  getCustomerBalance: vi.fn(),
   dailyBudget: 500,
 }));
 
@@ -68,6 +72,12 @@ vi.mock("@/lib/supabase/queries", () => ({
   getCampaignSpend: mocks.getCampaignSpend,
 }));
 vi.mock("@/lib/audit", () => ({ logEvent: vi.fn() }));
+vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/payments/customer-balance")>(),
+  reserveCustomerCampaign: mocks.reserveCustomerCampaign,
+  confirmCustomerCampaign: mocks.confirmCustomerCampaign,
+  getCustomerBalance: mocks.getCustomerBalance,
+}));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {
@@ -80,6 +90,11 @@ function patch(body: unknown): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.dailyBudget = 500;
+  mocks.updateCampaignStatus.mockResolvedValue(undefined);
+  mocks.reserveCustomerCampaign.mockResolvedValue({ reservationId: "reservation-1", mediaLimitPaise: 677966 });
+  mocks.enforceCampaignSpendCap.mockResolvedValue(undefined);
+  mocks.confirmCustomerCampaign.mockResolvedValue(undefined);
+  mocks.getCustomerBalance.mockResolvedValue({ reservations: [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "active" }] });
   mocks.verifyCampaignActivation.mockResolvedValue(undefined);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
   mocks.deleteCampaign.mockResolvedValue({ error: null });
@@ -88,7 +103,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, verifyCampaignActivation: mocks.verifyCampaignActivation }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, verifyCampaignActivation: mocks.verifyCampaignActivation, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -116,6 +131,47 @@ describe("campaign activation generation fence", () => {
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
     expect(mocks.recheckMetaConnection).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, 4);
     expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused" });
+    expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
+    expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active");
+  });
+
+  it("blocks direct activation when customer allowance is insufficient or held", async () => {
+    const { CustomerBalanceError } = await import("@/lib/payments/customer-balance");
+    mocks.reserveCustomerCampaign.mockRejectedValueOnce(new CustomerBalanceError());
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("retains an uncertain reservation after a lost provider activation result", async () => {
+    mocks.updateCampaignStatus.mockRejectedValueOnce(new Error("Unconfirmed provider result"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(500);
+    expect(mocks.reserveCustomerCampaign).toHaveBeenCalledOnce();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+  });
+
+  it("never activates if Meta cannot honor the customer-funded cap", async () => {
+    mocks.enforceCampaignSpendCap.mockRejectedValueOnce(new Error("Minimum cap exceeds customer allowance"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(500);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+  });
+
+  it("allows pause with unavailable accounting and fences its confirmation to the original reservation", async () => {
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.getCustomerBalance.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "paused");
+    mocks.getCustomerBalance.mockRejectedValueOnce(new Error("Accounting unavailable"));
+    expect((await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) })).status).toBe(200);
   });
 
   it.each(["getSpendLimits", "getCampaignSpend"] as const)("blocks activation when %s fails", async (query) => {
