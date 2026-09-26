@@ -30,7 +30,8 @@ const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "curren
 export function ProductionCheckout({ businessId }: { businessId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [policy, setPolicy] = useState<z.infer<typeof policySchema> | null>(null);
-  const [accepted, setAccepted] = useState(false);
+  const [acceptedTermsHash, setAcceptedTermsHash] = useState<string | null>(null);
+  const accepted = policy !== null && acceptedTermsHash === policy.hash;
   const [loaded, setLoaded] = useState(false);
   const [working, setWorking] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -74,6 +75,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
   async function load(signal: AbortSignal) {
     const result = z.object({ policy: policySchema.nullable(), orders: z.array(orderSchema).max(20) })
       .parse(await api(`orders?businessId=${encodeURIComponent(businessId)}`, signal));
+    if (result.policy?.hash !== policy?.hash) setAcceptedTermsHash(null);
     setPolicy(result.policy); setOrder(result.orders[0] ?? null); setLoaded(true);
   }
   const restore = useEffectEvent(() => perform(load));
@@ -115,7 +117,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
         if (!ready) throw new Error("Saved payment could not be found. Do not start another payment.");
         setOrder(ready);
         if (!refreshed.policy || refreshed.policy.hash !== policy.hash) {
-          setAccepted(false);
+          setAcceptedTermsHash(null);
           throw new Error("Payment terms changed. Review the current terms before continuing.");
         }
       }
@@ -182,7 +184,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
         </dl>
       </details>}
       {canPay && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={accepted}
-        onChange={event => setAccepted(event.target.checked)} disabled={working || checkoutOpen} />I accept the service, invoice and refund terms.</label>}
+        onChange={event => setAcceptedTermsHash(event.target.checked ? policy?.hash ?? null : null)} disabled={working || checkoutOpen} />I accept the service, invoice and refund terms.</label>}
       <div className="flex flex-wrap gap-2">
         {canPay && <Button onClick={() => void pay()} disabled={!accepted || !scriptReady || scriptFailed || working || checkoutOpen} className="h-auto min-h-11 whitespace-normal">
           <CreditCard size={16} aria-hidden="true" />{order ? "Continue saved checkout" : "Pay INR 10,000"}</Button>}
