@@ -40,6 +40,29 @@ export type ProductEventRow = {
   attributes: Json;
 };
 
+export type LeadSyncScopeArgs = {
+  p_business_id: string;
+  p_owner_id: string;
+  p_sync_id: string | null;
+  p_generation: number;
+  p_ad_account_id: string;
+  p_page_id: string;
+};
+
+export type LeadSyncRow = {
+  id: string;
+  business_id: string;
+  owner_id: string;
+  generation: number;
+  ad_account_id: string;
+  page_id: string;
+  state: "partial" | "complete";
+  version: number;
+  progress: Json;
+  created_at: string;
+  updated_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -497,6 +520,12 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
         Relationships: [];
       };
+      lead_sync_runs: {
+        Row: LeadSyncRow;
+        Insert: Omit<LeadSyncRow, "id" | "version" | "state" | "progress" | "created_at" | "updated_at"> & Partial<LeadSyncRow>;
+        Update: Partial<LeadSyncRow>;
+        Relationships: [];
+      };
       leads: {
         Row: {
           id: string;
@@ -564,12 +593,20 @@ export interface Database {
           p_sort: string; p_limit: number; p_after_id?: string; p_after_key?: string; p_after_null?: boolean;
         };
         Returns: Json;
-        };
+      };
       append_verified_audit_event: {
         Args: { p_business_id: string; p_actor_id: string | null; p_action: string; p_entity_type: string;
           p_entity_id?: string | null; p_meta_object_id?: string | null; p_reason?: string | null;
           p_details?: Json; p_system_actor?: "cron" | "worker" | null };
         Returns: string;
+        };
+      lead_sync_start: {
+        Args: LeadSyncScopeArgs;
+        Returns: LeadSyncRow[];
+      };
+      lead_sync_checkpoint: {
+        Args: LeadSyncScopeArgs & { p_sync_id: string; p_version: number; p_rows: Json; p_progress: Json };
+        Returns: Json;
       };
       enqueue_campaign_operation: {
         Args: { p_operation_id: string; p_input: Json; p_request_hash: string };

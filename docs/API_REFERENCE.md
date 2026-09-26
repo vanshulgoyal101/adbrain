@@ -80,7 +80,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | GET | `/api/leads` | Bounded filters/cursor -> `{leads,nextCursor,total}` | Owned saved enquiries only |
 | PATCH | `/api/leads/[id]` | Status/note -> `{lead}` | Owned local follow-up only |
-| POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |
+| POST | `/api/leads/sync` | Optional `{syncId}` -> leads/imported/failedForms/sync | Bounded provider pages + atomic deduplicated inserts/checkpoints |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
@@ -153,6 +153,44 @@ verification. Reload checks the same order; dismissal or uncertain outcomes do
 not start another payment. Only server-confirmed capture enables a new test.
 Without a delivered webhook or retained callback, status may remain pending;
 this UI adds no background provider reconciliation endpoint.
+
+### Lead Sync
+
+An empty POST starts an import or resumes the current binding's unfinished run.
+`{syncId: "<uuid>"}` resumes that exact run; business, owner, Page, ad account and
+connection generation are derived and checked server-side, including each save.
+Foreign/missing runs return 404; a stale writer or changed binding returns 409.
+After reconnecting, use an empty POST to start under the new binding.
+
+`sync` is `{id, state: "complete" | "partial", hasMore}`. Continue with the same
+ID while `hasMore` is true. Partial work is never an up-to-date claim. Successful
+pages stay saved when discovery, another form, a later page or a subsequent save
+fails. Provider failures retain their continuation; unavailable forms appear in
+`failedForms`. All attempted reads failing returns 502; save/read uncertainty
+returns 503 with known progress, not an empty successful inbox.
+
+`imported` counts newly inserted rows verified during this request, never fetched
+duplicates or a cumulative total. Existing source, campaign attribution and
+owner-managed follow-up values are not overwritten. `leads` is a compatibility
+snapshot of at most 200 saved rows, not the complete inbox/list API.
+
+Each request allows at most 24 form/lead page calls (200 items per page), at most
+three concurrent lead reads, and a 40-second provider deadline. Checkpoint and
+snapshot calls have three-second timeouts. Form discovery and pending forms are
+interleaved; failed forms remain queued without blocking other accessible forms.
+Only opaque cursors are saved; provider `paging.next` URLs are never followed.
+Legacy array helpers throw after 100 pages instead of silently truncating.
+
+Apply [the sync migration](../db/migrations/20260926_lead_sync_progress.sql) after
+the existing Meta connection and leads tables, before deploying this route. It
+adds service-only progress/RPCs and does not modify existing lead columns. The
+combined #34/#35 candidate includes these objects and follow-up fields in
+[the canonical fresh schema](../db/schema.sql). Existing databases require both
+the sync and follow-up migrations before their respective callers. Fresh schema
+application and incremental upgrade are alternative setup paths, not a command
+to replay every migration over an initialized database.
+Application rollback may leave this additive migration installed. Production
+migration execution requires separate approval.
 
 ### Authentication Handlers
 
@@ -421,7 +459,7 @@ read-only smoke test. The current handler does not explicitly fail the response
 on an insight-row insert error, so `result` can be null. Verify persistence rather
 than claiming every successful refresh stored a snapshot.
 
-Lead sync returns `{leads,imported,failedForms}`; each failed form has `id,name`.
+Lead sync returns `{leads,imported,failedForms,sync}`; each failed form has `id,name`.
 `imported` is actual new inserts, duplicates are ignored, partial unreadable forms
 are reported, and all-form failure is 502. A failed count/reload after insert can
 mean data was saved even though the response failed. Report export returns
@@ -444,11 +482,15 @@ additive [follow-up migration](../db/migrations/20260926_lead_follow_up.sql) mus
 precede these routes; existing rows default to `new` and an empty note. Migration
 publication is not permission to apply it to production.
 
-The inbox consumes the optional #34 sync contract `{id,state,hasMore}` and sends
+The combined inbox consumes the #34 sync contract `{id,state,hasMore}` and sends
 `syncId` to resume recorded partial work. It refreshes its current list filters
 after sync/save. It does not claim up-to-date without explicit complete status
-and no remaining work/failures. Combined sync acceptance requires #34; legacy
-responses remain readable but do not certify completion.
+and no remaining work/failures. Independent combined-workflow acceptance remains
+a release gate; local author checks are not production verification. Legacy
+responses remain readable but do not certify completion. The existing focused
+database command now checks owner follow-up save -> checkpoint re-import ->
+filtered list recovery on both fresh and upgraded schemas, alongside cursor,
+tenant and atomic-progress checks.
 
 Spend settings are strict and complete:
 
