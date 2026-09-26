@@ -1,8 +1,11 @@
 # API and Mutation Reference
 
-This is the current application API, not a versioned public integration service.
-Paths are relative to the configured app origin. Examples use synthetic IDs;
-replace them only in an authorized isolated environment. Source: [route handlers](../src/app/api/),
+This is an application mutation/reference guide, not a versioned public integration
+service. Baseline: dev `672eb132ad57bb3ba31f118afaffddaa878b4923`. The
+[availability map](FEATURES.md#source-and-availability) separates it from released
+source and feature candidates. Paths are relative to the configured app origin.
+Examples use synthetic IDs; execute mutations only in an authorized isolated
+environment. Deciding sources: [route handlers](../src/app/api/),
 [campaign schemas](../src/lib/campaign/connect-contracts.ts),
 [connection schemas](../src/lib/meta/connect-contracts.ts).
 
@@ -48,6 +51,22 @@ Common statuses: 400 invalid/blocked input, 401 unauthenticated, 403 forbidden,
 422 semantic input rejection, 429 quota/rate limit, 502 provider failure, 503
 dependency unavailable. Exact mapping is route-specific; some legacy ownership
 failures use 400. A 404 does not reveal another tenant's existence.
+
+### Recovery Identities
+
+| Value | Scope and correct recovery |
+| --- | --- |
+| Generation UUID | Groups saved variants; GET before considering another paid POST, not durable deduplication |
+| Draft ID/version | Versioned local input; reload on conflict, save then review again |
+| `planHash` | Server review of current inputs, creative content and verified binding; never synthesize it |
+| Connection generation | Invalidates stale binding-dependent work after connection changes |
+| Attempt revision | Optimistic concurrency for one consent/discovery attempt, not a campaign version |
+| Creation idempotency key | Durable operation identity; retain it across ambiguous create responses |
+| Activation digest | Confirms current activation inputs; not a creation key or spend reservation |
+| Cursor | Continue only the matching list/provider scan; do not exchange campaign list, Meta discovery and enquiry cursors |
+
+A mutation timeout is ambiguous. Inspect persisted/provider evidence using the
+same identity; do not change a key or clear local recovery data to force progress.
 
 ## Route Inventory
 
@@ -282,17 +301,20 @@ count; filename is `adbrain-ad-pack.zip`. No raw HTML is accepted as an image.
 | `mode` | `manual` or `guided` |
 | `creativeIds` | UUID array, 0-50; preflight requires nonempty unique approved selections |
 | `dailyBudgetRupees` | Finite integer 0-10000000; preflight requires positive |
-| `leadFormId` | Null or trimmed string 1-128; preflight requires active bound form |
+| `leadFormId` | Null or trimmed string 1-128; instant-form preflight requires an active bound form |
+| `destination` | Optional `instant_form` or `whatsapp`; absent means instant form; WhatsApp requires verified Page-linked Business number instead of a form |
 | `targeting` | Strict object below; `{}` can be saved but is not launch-ready |
 | `abTest` | Required boolean; true produces two age-band ad sets |
 
 ### Targeting
 
-All three top-level targeting fields are optional for draft persistence:
+Top-level `gender`, `location`, `age` and `audience` are optional for persistence:
 
 | Field | Contract |
 | --- | --- |
+| `gender` | Optional `all`, `men`, `women`; omitted preserves the default all-genders behavior |
 | `location.mode` | Optional `ai` or `manual` |
+| `location.cityScope` | Optional `city_only` or `radius`; omitted legacy drafts retain radius behavior |
 | `location.included`, `location.excluded` | Optional arrays, maximum 50 objects each |
 | Location item `key` | Trimmed provider string 1-128 |
 | Location item `name` | Trimmed string, maximum 200 |
@@ -365,6 +387,7 @@ nonnegative-safe-integer}`. Review data includes:
 | `selected` | Verified Meta assets or null |
 | `resolvedAreaLabel`, `resolvedLocation`, `resolvedExcludedLocation` | Human label and provider-resolved geography |
 | `audienceInterests` | Resolved `{id,name}` entries, up to five |
+| `destination`, `whatsappNumber` | Optional destination and nullable verified international number; current review binds them to creation |
 
 Create body: `businessId`, `draftId` (UUIDs), `draftVersion`,
 `connectionGeneration` (nonnegative safe integers), `planHash` (64 lowercase hex),
@@ -375,7 +398,10 @@ The server reruns review, claims a 60-second operation lease, checkpoints remote
 IDs, and finalizes a paused local campaign. It returns an operation envelope, not
 the old direct campaign result. New execution returns 200 for success or 202 for
 an unresolved/failed execution result; terminal replays can return 200. Inspect
-the operation `state`, not just the HTTP status.
+the operation `state`, not just the HTTP status. In `CAMPAIGN_EXECUTION_MODE=worker`,
+the request enqueues the persisted operation and returns 202; queue failure is 503
+without inline fallback. Invalid configured mode is 503. This depends on the
+[operation/queue migrations](DATA_MODEL.md#migration-map) and a separately operated worker.
 
 | State | Client action |
 | --- | --- |
@@ -408,7 +434,8 @@ Remote success followed by local failure is possible; inspect before retrying.
 ## Sync, Insights, Leads, and Settings
 
 Campaign sync accepts optional query `after` of 1-2000 characters. Returns
-`{campaigns,skipped,nextCursor}`. It processes one provider page, verifies bindings
+`{campaigns,skipped,nextCursor,pageCursor}`. `nextCursor` continues Meta discovery;
+`pageCursor` continues the bounded saved list. It processes one provider page, verifies bindings
 and budgets, and imports only ACTIVE/PAUSED status. Local unsupported/unmatched
 records remain unchanged. No remote-deletion pruning occurs. Concurrent insert
 failure is not a successful import; partial writes before an error can exist.
@@ -438,6 +465,44 @@ unlimited. Success `{ok:true}` does not assert that Meta account limits changed.
 
 Geo search trims `q`, truncates to 100 characters, and returns an empty array below
 two characters. Up to eight results have `key,name,type,region,countryCode`.
+
+### Saved Campaign Pagination
+
+`GET /api/campaigns/list` requires an owned `businessId` UUID. Its opaque cursor
+continues descending creation-time/ID ordering; optional `query` is at most 200
+characters, and status is `draft`, `active`, `paused` or `completed`; omit it for
+all statuses (`status=all` is invalid).
+It returns at most 50 campaigns, latest stored results keyed by campaign ID, and
+`nextCursor` (null at the end). It does not run provider sync or refresh insights.
+The response has no global total. Changing filters starts a new first page.
+See [handler](../src/app/api/campaigns/list/route.ts).
+
+### Enquiry Candidates
+
+These contracts are **not in the baseline route inventory or recorded production
+release**. Sources: [#34 at 363859f](https://github.com/vanshulgoyal101/adbrain/tree/363859fc1195839822f60a92fda6109194a14268)
+and [#35 at 6732027](https://github.com/vanshulgoyal101/adbrain/tree/67320272380429b003b2131bf3b2b22641b0dd67).
+Their migrations and combined-workflow acceptance are separate prerequisites.
+
+| Candidate method/path | Contract | Failure/authority boundary |
+| --- | --- | --- |
+| #35 GET `/api/leads` | `query` trimmed <=200; `status`: all, new, contacted, qualified, booked, closed; `contact`: all, ready, missing; `sort`: newest, oldest, name; `limit` 1-100, default 50; optional opaque cursor | Session and server-selected primary business; 401 no user, 404 no business, 400 invalid filters/cursor, 503 unavailable data |
+| #35 PATCH `/api/leads/[id]` | Nonempty strict object containing `workflow_status` and/or `follow_up_note`; status one of five workflow values, note <=2000 characters | Update by local UUID AND owned business under RLS; 400 invalid/protected fields, 404 missing/foreign row, 503 failed save |
+| #34 POST `/api/leads/sync` | Optional `{syncId}`; empty request can recover current unfinished binding; response extends import counts/failures with `sync:{id,state,hasMore}` | Owned current Meta binding; service checkpoint state, never a client-supplied provider URL; incomplete import is not an up-to-date result |
+
+List success is `{leads,total,nextCursor}`; PATCH success is `{lead}`. Both use
+private/no-store responses. List totals cover the complete filtered set, not only
+the loaded page. Cursors bind business, search, status, contact and sort; timestamps
+retain microseconds, nulls sort last and UUIDs break ties. Changed scope rejects
+the old cursor. This is keyset pagination, not a frozen export snapshot.
+
+Import requests are bounded to 24 provider pages, 200 rows/page, three concurrent
+form workers and a 40-second provider budget. Checkpoint progress/deduplication
+must preserve local status/note, source and campaign association. The UI refreshes
+its filtered list after sync instead of replacing it with sync response rows.
+Partial failures retain continuation where available; legacy responses without
+explicit completion cannot prove complete import. Follow-up writes do not send
+outreach, change provider data or grant financial authority.
 
 ## Connection API
 
@@ -516,6 +581,8 @@ body (413 if exceeded), 60/minute/user. Normally 204; disabled logging also retu
 | ZIP export | 10 / 5 minutes |
 | Internal traffic | 10 / 10 minutes |
 | Client events | 60 / minute |
+| Test order creation | 10 / 5 minutes |
+| Test order status / verification | 60 / 5 minutes, independently per action |
 
 Shared DB enforcement returns 429/Retry-After for saturation and fails closed in
 production if unavailable. These are not blanket limits on every route. Quota

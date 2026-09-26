@@ -1,9 +1,27 @@
 # Features and Workflows
 
-Current source behavior, reviewed 2026-09-18. This guide replaces the older mixed
-inventory of shipped features and proposals. Deployment evidence lives in
-[release receipts](releases/) and [QA records](qa/); priorities belong in
-[Roadmap](ROADMAP.md). Start at [the documentation index](README.md).
+Use this guide to understand an owner's workflow, what an action changes, and
+how to recover when it fails. Product intent belongs in [Scope](SPEC.md) and
+[Roadmap](ROADMAP.md); setup and release authority belong in the
+[documentation index](README.md) and [Release Workflow](RELEASING.md).
+
+## Source and Availability
+
+This rewrite examines dev `672eb132ad57bb3ba31f118afaffddaa878b4923` and the
+separately identified enquiry candidates. It is not a declaration that all of
+that source is deployed. The September 26 [SDK/query release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release)
+records production `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
+
+| Boundary | What may be claimed |
+| --- | --- |
+| Recorded production release | AI SDK adapters and campaign-list Query integration are included; the receipt limits which workflows were exercised |
+| Additional dev source | Trusted campaign writes, integrity migrations and test checkout exist; they were excluded from that release |
+| [Import candidate #34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) | Resumable multi-page enquiry import requires its migration and independent acceptance |
+| [Inbox candidate #35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) | Server-paginated enquiries and persistent follow-up require their migration; combined import/inbox acceptance is separate |
+| External providers | Mocked consent, a green build, merchant account approval or saved metrics do not prove live delivery, payment settlement or provider eligibility |
+
+Do not demonstrate an unreleased database-dependent caller against production.
+Use [Demo Runbook](DEMO-RUNBOOK.md) to select a safe demonstration mode.
 
 ## Product Model
 
@@ -26,22 +44,17 @@ ID are different identifiers. Never infer one from another.
 
 ## Workspace Responsiveness
 
-Sidebar links retain Next.js automatic prefetching and request full destination
-prefetch after hover, keyboard focus, or touch intent. Current-section links do
-not request full prefetch. Next.js owns cache reuse and invalidation; navigation
-still shows its pending indicator. A responsive, reduced-motion-aware skeleton
-replaces the spinner-only page fallback while the workspace shell stays usable.
+Campaign lists begin with server-supplied data. Search/status keys include the
+owner and business; cursor pages are ordered and deduplicated. Status selection
+and clearing search fetch immediately, while typing uses a 250 ms debounce.
+Obsolete requests are aborted. Confirmed actions invalidate relevant list reads;
+there is no automatic focus/reconnect refetch, polling or mutation retry.
 
-Campaign results start loading as soon as the campaign page is available, without
-waiting for approved creatives or connection metadata. Campaign status selection
-and clearing search fetch immediately; typed searches retain a 250 ms debounce
-and obsolete requests are cancelled.
-
-Settings connection controls and spend guardrails stream independently, with
-section-local loading and error states. Unavailable spend data does not become
-editable default limits. These changes do not bypass authorization, publishing
-preflight, or spending checks, and do not eliminate database or provider latency.
-Source behavior is not a production latency benchmark or deployment receipt.
+Navigation and independently loading Settings sections remain dependent on server
+and provider latency. Unavailable spend evidence does not become editable zero
+limits. Read caching changes neither authorization nor spending authority and is
+not a production latency benchmark. See the
+[campaign-list hook](../src/lib/meta-connect-ui/use-campaign-list.ts).
 
 ## Sign In
 
@@ -51,11 +64,9 @@ submissions; failures preserve the form and permit retry. Destinations must be
 safe local paths. The app has no built-in team invitation, self-service signup,
 password-reset, or subscription entitlement workflow.
 
-The sign-in page uses the workspace typography, shared form controls and brand
-asset, with persistent Home and legal navigation. Email/password share one form;
-password visibility can be toggled without submitting. Magic links validate only
-the email address. The email confirmation can return to sign-in with the address
-and safe destination preserved, focus restored, and the password cleared.
+A development-login cookie does not authenticate ordinary APIs or grant access
+to a business. Remembered drafts and cached screens are not authorization. See
+[authentication handlers](API_REFERENCE.md#authentication-handlers).
 
 ## Brand Brain
 
@@ -95,32 +106,25 @@ details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELIN
 5. Inspect each image and copy, then approve selected creatives. Human review is
    required for factual claims, language quality, and visual correctness.
 
-Variants are saved independently. A partial batch returns saved creatives and
-failures rather than pretending every variant succeeded. A disconnected browser
-should check saved results using the same generation ID before starting another
-paid request. Browser recovery metadata is scoped to user/business in session
-storage; it is not cross-device durable generation idempotency.
+Variants are saved independently. A partial batch keeps successful creatives and
+reports failures. After interruption, check saved results with the same generation
+UUID before issuing another paid POST. Recovery GET counts saved rows: zero rows
+and `processing` do not prove a durable worker is still running. The UUID groups
+results; resubmitting it is not an exactly-once billing guarantee. Browser recovery
+is scoped session state, not cross-device durable scheduling. The preceding
+interview can itself use paid text AI. See the
+[generation handler](../src/app/api/creatives/generate/route.ts).
 
 Regeneration uses the creative's saved language/format, updates that creative,
 and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
 change existing remote ads. Deleting a local creative is not a request to delete
 a Meta ad already created from it.
 
-New creative concepts require a headline, primary text, and a separate Meta link
-description. Copy is directed toward one brief-specific argument, supported facts,
-and a clear next step rather than repeating the complete brand profile. Generation
-and regeneration load up to 12 recent creatives from the same business; earlier
-concepts in a batch are also included. Exact normalized headline or first-eight-word
-hook reuse triggers the existing single repair attempt before image generation.
-Recent ads guide variety only and are not evidence for commercial claims. History
-lookup failures stop generation before paid calls. This does not guarantee semantic
-uniqueness across simultaneous requests or better campaign performance.
-
-Descriptions are stored in the existing generation receipt, visible in Create and
-Studio, included in copy exports and campaign review hashes, and sent to Meta as
-the link description. Legacy creatives are not automatically rewritten. Meta
-decides which placements display descriptions; filling the field does not guarantee
-it appears in every preview. No live ads change when this generation behavior changes.
+Review headline, primary text and the separate link description. Prior creative
+history and repair checks guide variety, not factual correctness or guaranteed
+uniqueness across concurrent requests. [AI Pipeline](AI_PIPELINE.md) owns model,
+repair and provenance details. Meta decides which placements display descriptions;
+filling the field does not guarantee it appears. Legacy ads are not rewritten.
 
 ZIP export includes selected copy and available images. Inaccessible selections
 fail; unavailable/over-limit images can be omitted with a note and
@@ -180,99 +184,40 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 ### WhatsApp Campaigns
 
-- **Publishing requires a verified Page-linked number.** Eligible reviews offer
-  Send to Meta (paused); missing or unreadable linkage still blocks publishing.
-  In the earlier 2026-09-19 read-only check, Solaride's Page omitted its linkage/number fields
-  with both Page and system-user tokens. An existing ad set's historical recipient
-  is not accepted as proof of the current linkage. No test campaign was created.
-- Select WhatsApp chat in either manual or guided setup. No lead form is required
-  or loaded for WhatsApp planning/review; the selected destination is preserved.
-- Link a WhatsApp Business number to the selected Facebook Page in Meta first.
-  Review reads that Page's `has_whatsapp_business_number` and `whatsapp_number`
-  using its Page token. Missing, unreadable, or invalid evidence blocks creation.
-  A normal Page contact phone number is not sufficient.
-- Review displays and hashes the verified number. Creation rechecks it before
-  any mutation. WhatsApp never silently falls back to a form.
-- The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
-  a recipient-bound promoted object and `wa.me` creative link. Campaigns, ad sets,
-  and ads are created PAUSED; activation remains a separate confirmation.
-- Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
-  pause, and activation safeguards. Refresh detects all-WhatsApp ad sets and
-  stores `onsite_conversion.messaging_conversation_started_7d` separately from
-  leads. Overlapping messaging actions are not summed. Mixed-destination
-  campaigns are not attributed wholly to WhatsApp.
-- Campaign cards show conversations and cost per conversation; planner history
-  and summaries distinguish conversations from verified leads/sales. This does
-  not import chat messages, phone contacts, transcripts, or WhatsApp inbox leads.
-  Leads-tab sync remains instant-form only.
-- Apply `db/migrations/20260918_whatsapp_results.sql` before deploying the new
-  reporting code, with separate migration authorization. Existing results stay
-  unchanged (new columns are null); refresh results to populate conversations.
-- Meta Page field references were checked; mocked provider tests do not certify
-  actual account eligibility, delivery, or Graph v21 payload acceptance. Perform
-  an explicitly authorized real-account PAUSED creation test before rollout.
-  No live Solaride campaign is modified by this implementation.
+Choose WhatsApp in manual or guided setup; no instant form is required. Publishing
+requires a verified Business number linked to the selected Page. A Page contact
+phone or historical ad-set recipient is not proof. Review binds the number to its
+hash and creation rechecks it before mutation. Missing linkage blocks creation;
+there is no silent fallback to an instant form.
+
+The adapter creates paused objects. Reports distinguish conversations and cost
+per conversation from instant-form leads or sales; mixed destinations are not
+attributed wholly to WhatsApp. This does not import chat messages, transcripts
+or contacts into Enquiries. Real-account eligibility and payload acceptance need
+separate authorized provider evidence. See [Meta Connection](META_CONNECT.md) and
+[reporting migration prerequisites](DATA_MODEL.md#migration-map).
 
 ### Targeting and Budget
 
-- Every campaign must have detailed interest targeting before creation. AI plans
-  require one to five relevant commercial interests grounded in the business and
-  offer. Preparing a draft with missing/empty interests requests AI recommendations
-  even when location and age are manual. Existing nonempty suggestions remain
-  editable and reusable; saving an incomplete draft does not invoke AI.
-- Missing or unresolvable interests block creation rather than silently falling
-  back to a broad audience. Meta validates the interest IDs before review and
-  creation; each ad set receives them as detailed-targeting signals. This does not
-  create custom audiences or guarantee that Meta will never expand delivery beyond
-  those signals. Restricted-category and sensitive-trait safeguards still apply.
-- Gender can be set to All genders (default), Men, or Women under Audience &
-  location. It is saved and restored with the draft, displayed in review, and
-  applied to every ad set for both instant-form and WhatsApp campaigns. AI
-  audience recommendations preserve the owner's selection; changing it requires
-  a fresh review. Older drafts without this field keep All genders. The editor's
-  existing special-ad-category restrictions still apply.
-- Location and age "Let AdBrain decide" actions request a cancellable audience
-  recommendation immediately after creative selection. Returned areas, ages,
-  radius, interests, and rationale remain editable; the action does not save or
-  create a campaign. Failures retain existing inputs. Budget, creative selection,
-  destination, and lead form remain owner-controlled in audience-only planning.
-- Planned and excluded area entries use one place per line, preserving commas
-  inside names. Manual areas and radius edits are retained; explicitly requesting
-  a fresh location decision replaces prior suggested areas. Age-only decisions
-  preserve chosen geography. Geographic resolution prefers exact names and
-  qualified city/region labels, without assuming India when no country is given.
-- Manual location search separates loading, no-match, and failed lookups. Retry
-  preserves selected places; editing a query immediately removes stale choices.
-  Results show region labels and support arrow-key selection with Enter. Escape,
-  Tab, and leaving the picker dismiss results, including late responses.
-- Targeting help opens on hover, focus, click, or touch; explanations are linked
-  to their triggers for assistive technology. Escape and outside clicks dismiss
-  help, and positioning keeps it inside horizontal viewport edges.
-- Ages must resolve to explicit bounds between 18 and 65, minimum no greater
-  than maximum; Meta's upper endpoint represents its supported 65+ range.
-- City coverage offers City only (no added radius) or City + radius. New manual
-  drafts default to City only; guided planning defaults to it unless surrounding
-  service areas justify a radius. Existing saved drafts without a scope retain
-  their radius behavior. The scope applies to both included and excluded cities,
-  is preserved during audience recommendations, and is bound to campaign review.
-  States and countries are unchanged. City-only payloads send the Meta city key
-  without radius/distance units; review blocks a contradictory resolved radius.
-  This requests Meta's city area, not a verified municipal-boundary polygon.
-  Real-account acceptance and returned coverage must be verified before rollout.
-- City + radius requires 17-80 km at preflight. Draft schemas accept 5-80 km so a
-  saved legacy/incomplete value can be edited, not so an invalid radius can launch.
-- Up to five interest names and a nonempty rationale can be saved. Meta resolves
-  IDs and eligibility; unresolved interests block creation.
-- Missing geography does not silently broaden to nationwide. Nationwide must be
-  an explicit, reviewable choice.
-- Creation requires an INR account and a positive daily budget. API currency
-  values are whole rupees; the Meta adapter converts to minor units.
-- Optional age-split testing creates two ad sets. A 200-rupee daily input then
-  means 400 rupees/day total, not 200 split between them. It is not a randomized
-  Meta Experiments A/B test.
-- Lead estimates and interest recommendations are heuristics, not delivery or
-  conversion guarantees. Restricted-category support is not established by an
-  AI declaration check.
+Preflight requires approved creative content, positive INR daily budget, resolved
+geography/ages, eligible interest targeting and a valid destination. Missing
+geography or interests do not silently become broad targeting. Audience-only AI
+recommendations remain editable and do not themselves save/create a campaign.
+
+| Decision | Review boundary |
+| --- | --- |
+| Interests | Up to five names plus rationale; Meta resolves IDs/eligibility before creation |
+| Geography | Explicit included/excluded areas; nationwide must be chosen, not inferred from missing input |
+| City coverage | City-only and city-plus-radius are distinct; old drafts without a scope retain radius behavior |
+| Radius | Drafts can retain 5-80 km for editing; radius-mode preflight requires 17-80 km |
+| Age | Explicit ordered bounds 18-65; upper endpoint represents Meta's supported 65+ range |
+| Gender | All (default), men or women; changed selection requires fresh review |
+| Budget | Whole INR rupees per ad set; two INR 200/day age bands total INR 400/day |
+
+Age-split setup is not a randomized Meta experiment. Interest signals do not
+guarantee Meta never expands delivery; recommendations and lead estimates are not
+conversion guarantees. Restricted-category checks are not independent policy
+certification. [API targeting](API_REFERENCE.md#targeting) owns exact input bounds.
 
 ### Review, Create, Activate
 
@@ -283,9 +228,13 @@ Creation reruns preflight and rejects a stale draft, hash, or connection generat
 
 The durable creation operation uses an idempotency key and checkpoints external
 IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
-`needs_reconciliation` state. A created campaign is paused. Activation requires a
-fresh confirmation digest, connection recheck, provider verification, and spend
-guardrail check. See [API Reference](API_REFERENCE.md) for payloads and states.
+`needs_reconciliation` state. Optional worker mode queues that same operation and
+does not fall back to inline execution on queue failure. A created campaign is
+paused. Activation requires a fresh confirmation digest, connection recheck,
+provider verification and spend guardrail check. Creation idempotency does not
+extend to activation or paid generation. See the
+[creation handler](../src/app/api/campaigns/create/route.ts) and
+[API Reference](API_REFERENCE.md#review-and-durable-creation).
 
 Pause and delete verify account/Page binding too. Missing legacy binding requires
 reconciliation, not guessing. Meta writes and local mirrors are not atomic: a
@@ -307,15 +256,31 @@ are Markdown exports of stored performance, not a live refresh. They escape
 campaign names (including pipes/newlines), count impressions/clicks as delivery,
 and do not declare a lead winner when nobody has leads.
 
-Lead sync reads active Page forms, normalizes contact fields, and ignores duplicate
-`(business_id, meta_lead_id)` rows. `imported` counts new inserts, not fetched rows.
-Some unreadable forms produce a partial result with `failedForms`; all forms
-failing returns an error. Zero imports can mean duplicates or no leads, not a
-broken campaign. Existing duplicates are not updated by this sync strategy.
+At the dev baseline, instant-form sync reads provider-default form/lead pages,
+normalizes contact fields and ignores duplicate `(business_id, meta_lead_id)`
+rows. `imported` counts inserts, not fetched rows. `failedForms` signals partial
+failure; zero imports can mean duplicates or no new rows. This is not a complete,
+resumable provider scan. The inbox initially loads at most 200 records and filters
+that array. See [baseline sync](../src/app/api/leads/sync/route.ts).
 
-The copy-ready digest summarizes the last seven days with at most ten contacts,
-including email where available. It is not a WhatsApp send, CRM, notification
-service, or revenue attribution system.
+### Enquiry Candidates
+
+[#34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) adds durable
+multi-page checkpoints and explicit partial/complete results.
+[#35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) adds server-side
+search, status/contact filters, cursor pages and matching totals. Owners can save
+`new`, `contacted`, `qualified`, `booked` or `closed` status and a note up to 2000
+characters. Import must preserve those local follow-up fields.
+
+The candidate UI retains failed edits for retry, refreshes the list after a save,
+and offers sync continuation without replacing the list with a partial response.
+An ambiguous or partial response must not claim up-to-date. Both migrations and
+combined-workflow acceptance are prerequisites; these are not production claims.
+See [candidate API contracts](API_REFERENCE.md#enquiry-candidates).
+
+The digest summarizes recent loaded enquiries with at most ten contacts. It does
+not send outreach or constitute a complete customer export. WhatsApp campaign
+conversations are not instant-form contacts or verified revenue.
 
 ## Spend Guardrails
 
@@ -326,8 +291,10 @@ unlimited. Unsaved changes invalidate the Saved indicator.
 Activation compares projected weekly commitment against the cap; unavailable
 spend data blocks activation. Scheduled enforcement can pause bound active
 campaigns when the cap is reached. Stored insights may be stale and the configured
-job runs daily. These are application guardrails, not Meta account spending limits
-or guaranteed protection from overspend. Use provider-side limits as well.
+job runs daily. These are application guardrails, not a concurrent reservation
+ledger or Meta account spending limit. Do not promise zero overspend or blindly
+retry ambiguous activation. Use provider-side limits and
+[operational reconciliation](OPERATIONS.md) as well.
 
 ## Public Surface and Operations
 
@@ -337,8 +304,23 @@ rules are indexing hints, not access control. No search-ranking guarantee follow
 from metadata correctness.
 
 Owner activity records, AI usage events, and structured product telemetry serve
-different purposes. See [Observability](OBSERVABILITY.md) for privacy, access, and
-best-effort persistence; do not call an owner-insertable audit log tamper-proof.
+different purposes. Dev's trusted audit writes require their migration; older
+records may lack verified provenance. See [Observability](OBSERVABILITY.md) for
+privacy, authority and persistence limits.
+
+Dev also contains isolated Razorpay **test** checkout and test webhook handling.
+It does not collect live customer money or prove funding reached Meta. Merchant
+account approval is separate from implementing live checkout. See
+[Payment Plan](PAYMENTS-PLAN.md) and [test API contracts](API_REFERENCE.md#local-test-payments).
+
+### Deciding Sources
+
+Use [campaign schemas](../src/lib/campaign/connect-contracts.ts),
+[preflight](../src/lib/campaign/preflight-service.ts),
+[draft persistence](../src/lib/campaign/draft-store.ts) and the
+[campaign-list hook](../src/lib/meta-connect-ui/use-campaign-list.ts) to verify
+the workflow boundaries above. [Data Model](DATA_MODEL.md) owns migration and
+authorization details; [Roadmap](ROADMAP.md) owns planned scope.
 
 ## Known Limits
 
