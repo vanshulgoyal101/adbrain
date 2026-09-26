@@ -1,4 +1,5 @@
 import { complete, parseJSON, type ChatMessage, type CompletionResult } from "@/lib/llm";
+import { LLMError } from "@/lib/llm/types";
 import { z } from "zod";
 import { AD_LANGUAGES } from "@/lib/languages";
 import { AD_ANGLES, brandIndustry, type BrandContext } from "@/lib/templates/ads";
@@ -255,10 +256,16 @@ export async function runInterview(
       task: "creative brief interview",
       promptVersion: INTERVIEW_PROMPT_VERSION,
       json: true,
+      responseSchema: resultSchema,
       temperature: attempt ? 0.2 : 0.5,
       maxTokens: 2400,
       cache: false,
       signal,
+    }).catch(async (error: unknown) => {
+      if (error instanceof LLMError && error.model && error.usage) {
+        await options.onAttempt?.({ text: "", provider: error.provider, model: error.model, usage: error.usage }, attempt + 1, false);
+      }
+      throw error;
     });
     let value: unknown;
     try {

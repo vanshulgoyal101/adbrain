@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import type {
   ChatMessage,
   CompletionOptions,
@@ -43,6 +44,7 @@ export function cacheKey(
     temperature: options.temperature ?? null,
     maxTokens: options.maxTokens ?? null,
     json: options.json ?? false,
+    responseSchema: options.responseSchema ? z.toJSONSchema(options.responseSchema) : null,
   });
   return createHash("sha256").update(payload).digest("hex");
 }
