@@ -1,6 +1,40 @@
 # Product and Account Logging
 
+Use this guide to trace a request, interpret an event and diagnose missing
+telemetry without collecting customer content. Source baseline: dev `672eb13`;
+production evidence is pinned separately in the
+[release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
+Configuration defaults are not a readout of the currently deployed environment.
+
+## Start With the Right Evidence
+
+| Evidence | Useful for | Does not prove |
+| --- | --- | --- |
+| `X-Request-Id` and structured request/action event | Correlating one instrumented request, outcome and timing | A provider mutation did not occur after a timeout |
+| Product-event database row | Searching sanitized request/workflow signals | Complete, exactly-once or tamper-proof accounting |
+| Campaign draft/operation ledger | Original intent, version, phase and recorded remote IDs | Every remote side effect was saved locally |
+| `llm_usage_events` and provider invoices | Known token usage versus billed activity | Product-event estimates are invoices or atomic spending reservations |
+| Owner audit activity | Human-facing action history | Legacy/client-origin rows have trusted server provenance |
+| Hosting logs and alerts | Process failures, cold starts and delivery/retention health | App sanitization applies to every hosting/vendor log |
+
+For an incident, first identify deployment SHA, environment, safe request ID and
+authorized account scope. Search one bounded time window, then compare the durable
+operation/usage record and authorized provider evidence where necessary. Never
+replay a paid operation just to manufacture a missing log. See
+[Operations](OPERATIONS.md#first-response) for recovery decisions.
+
+Implementation owners: [event schema](../src/lib/observability/events.ts),
+[request context](../src/lib/observability/context.ts),
+[wrappers and scheduling](../src/lib/observability/logger.ts),
+[database sink](../src/lib/observability/store.ts),
+[browser collector](../src/components/product-telemetry.tsx), and
+[ingestion route](../src/app/api/events/route.ts).
+
 ## Production Database Rollout: 2026-09-18
+
+**Historical rollout checkpoint.** Preserve these outcomes; do not reapply this
+migration or assume its configuration must be enabled again. Later hosted evidence
+is recorded in release receipts. Current enablement procedures are below.
 
 The owner authorized database logging and retention enablement. The exact
 `20260918_product_events.sql` migration was applied transactionally to the
@@ -18,7 +52,7 @@ External alerting and hosting-log retention remain separate operator concerns.
 
 ## What Is Recorded
 
-All API/auth handlers and the five server actions emit structured JSON with
+Instrumented API/auth handlers and server actions emit structured JSON with
 `source=adbrain.product`, a versioned schema, unique event ID, server-generated
 request ID, timestamp, outcome and duration. Verified Supabase user UUIDs and
 authorized business UUIDs attach account context when available. Anonymous
@@ -45,12 +79,21 @@ as `X-Request-Id`. Immutable responses may not accept that header. Internal
 operation IDs and idempotency keys remain unchanged. Overlapping requests use
 isolated async contexts; one account cannot inherit another request's identity.
 
+HTTP statuses below 400 map to `success`, 4xx to `rejected`, and 5xx to `failed`;
+workflow events can also be `started` or `partial`. A successful request can
+contain a partial business result, so inspect the workflow outcome too. Durations
+are nonnegative integer milliseconds, not an end-to-end billing measurement.
+The `release` attribute is present only for a bounded hexadecimal
+`VERCEL_GIT_COMMIT_SHA`; a missing attribute does not identify a particular build.
+
 ## Privacy and Access
 
-The new product stream never copies request/response bodies, URL queries, raw
+The product stream's emitters must not copy request/response bodies, URL queries, raw
 paths containing object IDs, cookies, tokens, email addresses, IP addresses,
 user agents, prompts, creative copy, lead contact details, error messages or
-stack traces. An allowlist strips unknown metadata; malformed events produce a
+stack traces. An allowlist strips unknown metadata; supported label fields still
+must be populated with safe codes/templates, not arbitrary user strings. This is
+not a general-purpose secret-redaction engine. Malformed events produce a
 fixed `INVALID_EVENT` diagnostic without echoing the rejected data.
 
 User/business UUIDs are pseudonymous identifiers, not anonymous data. Limit
@@ -73,7 +116,8 @@ privacy notice and applicable consent requirements before production rollout.
 
 ## Enablement
 
-1. Review and separately approve
+1. Inspect the target's existing schema and configuration. For a new sink, review
+  and separately approve
    [the migration](../db/migrations/20260918_product_events.sql) for the intended
    database. Local verification does not authorize a production migration.
 2. Deploy through the protected release workflow. Structured runtime JSON is on
@@ -94,6 +138,23 @@ action summary is retained if the batch is full. Structured runtime events remai
 available even when the database is unavailable. Collection is best effort, not
 an exactly-once or tamper-proof audit ledger; a process crash can lose events.
 Do not retry business operations to compensate for missing logs.
+
+### Missing-Event Triage
+
+| Observation | Next check |
+| --- | --- |
+| No product JSON | Exact global flag, whether the path is instrumented, runtime log source and time window |
+| JSON but no database row | Database flag, service-role target, schema/grants and `PERSIST_FAILED` |
+| `SCHEDULE_FAILED` | Whether code ran inside a supported Next request/action lifecycle; scheduling is not guaranteed in arbitrary background code |
+| `INVALID_EVENT` | Caller metadata against the schema; fix the emitter without logging the rejected payload |
+| No browser page event | Build-time client flag, DNT/GPC, authenticated same-origin session, 2 KiB body/60-per-minute limit; there is no delivery retry |
+| Missing account identifiers | Authentication/ownership may not have completed; never fill the gap from a supplied client user ID |
+
+The three flags are independent: global product logging defaults on, the database
+sink defaults off, and optional client collection defaults on unless explicitly
+disabled or privacy preferences deny it. Disabling client collection does not
+disable server request logging. Disabling the database sink does not remove older
+rows or runtime log copies. See [Configuration](CONFIGURATION.md#observability).
 
 ## Retention and Health
 
@@ -121,6 +182,10 @@ Disable the database sink to stop new writes without disabling operational JSON.
 Run these only with an authorized operator connection, never browser credentials.
 Filter `attributes->>'environment' = 'production'` for production-only analysis
 when a database receives more than one environment. SQL below is read-only.
+Use a read-only transaction/session, a bounded statement timeout and the smallest
+time/account scope that answers the question. Do not paste query results containing
+account identifiers into public tickets. The examples are analysis patterns, not
+an instruction to open a production connection or an application endpoint.
 
 ### Request Failures and Latency
 
@@ -162,7 +227,8 @@ select created_at, request_id, user_id, business_id, kind, name,
        outcome, duration_ms, attributes
 from public.product_events
 where request_id = '00000000-0000-4000-8000-000000000000'
-order by created_at, event_id;
+order by created_at, event_id
+limit 200;
 ```
 
 Replace the placeholder with `X-Request-Id` or the API response's request ID.
@@ -192,6 +258,12 @@ failure, all-route coverage, client privacy controls, ingestion abuse, and schem
 parity. The disposable PostgreSQL harness verifies browser privilege denial,
 service access and bounded retention for fresh installs and repeated upgrades.
 Production persistence and external alert delivery require rollout verification.
+
+Validate a changed emitter with the existing observability/client-event tests,
+not a paid generation. A prose-only update needs source/link/example checks, not
+a new production event or a replay of historical suites. Route instrumentation
+coverage belongs to tests; avoid treating a historical route count as today's API
+inventory. The record below describes only its original candidate.
 
 ### Local Receipt: 2026-09-18
 

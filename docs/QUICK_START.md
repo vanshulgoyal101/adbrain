@@ -1,13 +1,20 @@
 # Developer Quick Start
 
-This is the installation guide. Historical Meta review preparation is not an
-installation prerequisite or a guarantee of approval. See the
-[documentation index](README.md) for product usage and deeper references.
+Install a development checkout without touching production or starting paid work.
+This guide describes dev source at `672eb13`; the production release at `6291dc2`
+excludes the DB-A changes and local test checkout. See the
+[release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
+
+**Do not follow environment-copy instructions in the shared working checkout.**
+Its existing `.env.local` targets production. Use a separate checkout and isolated
+credentials; a localhost URL does not isolate the backend. Historical Meta review
+preparation is not an installation prerequisite or proof of approval.
 
 ## Prerequisites
 
-- Node.js 22.13 or newer on the Node 22 line, and npm. Earlier Node 22 releases
-  do not meet all current lint dependency engine requirements.
+- Node.js 24 and npm, matching the [CI runtime](../.github/workflows/ci.yml).
+   Next.js alone permits older Node versions; that is not the tested requirement
+   for this dependency set. Use the committed lockfile, not fresh package versions.
 - An isolated Supabase project with Auth, Postgres, and Storage.
 - Optional model credentials for AI; optional Meta credentials for connections.
   Neither is needed for the mocked unit suite.
@@ -16,12 +23,20 @@ installation prerequisite or a guarantee of approval. See the
 
 ## Install and Configure
 
-From the repository root:
+In a new, isolated checkout, inspect the branch and install locked dependencies:
 
 ```sh
+git status --short --branch
+node --version
 npm ci
-cp .env.example .env.local
+test ! -e .env.local && cp -n .env.example .env.local
 ```
+
+`npm ci` downloads packages, runs their installation scripts and replaces that
+checkout's `node_modules`. Do not run it in another worker's checkout. The copy
+command intentionally does nothing when `.env.local` already exists; inspect its
+ownership and target privately rather than overwriting it. Never copy environment
+files from the shared checkout or put credentials in a command transcript.
 
 Set these to an **isolated development project**, not production:
 
@@ -30,25 +45,33 @@ NEXT_PUBLIC_SUPABASE_URL=https://YOUR-DEV-PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR-DEV-PUBLIC-KEY
 SUPABASE_SERVICE_ROLE_KEY=YOUR-DEV-SERVER-KEY
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-IMAGE_PROVIDER=pollinations
+IMAGE_PROVIDER=openrouter
 IMAGE_PROVIDER_FALLBACK=none
 PRODUCT_LOGGING_DATABASE_ENABLED=false
+PAYMENTS_TEST_ENABLED=false
 ```
 
-These are placeholders. Keep `.env.local` out of Git. The public key relies on
+These are placeholders, not a runnable backend or provider entitlement. Leave
+model, Meta and payment keys absent until their workflow is authorized. The image
+setting selects an adapter; it does not make generation free. Keep `.env.local`
+out of Git. The public key relies on
 RLS; the service-role key bypasses RLS and must never reach a browser. Review
 [Configuration](CONFIGURATION.md) before adding provider credentials. Configuring
 image generation does not prove it is free or available.
 
 ## Prepare the Database
 
-For a **fresh** development project, review and apply [the schema](../db/schema.sql)
-using the project's SQL tools. For an existing database, follow
-[Data Model](DATA_MODEL.md); do not casually replay the fresh schema.
+For a **fresh, disposable** development project, review
+[the schema](../db/schema.sql) and the [database procedure](DEPLOY.md).
+For an existing database, review incremental migrations and its actual migration
+ledger. Do not replay the fresh schema or infer missing migrations from filenames.
+The [data model](DATA_MODEL.md) explains the objects; [release policy](RELEASING.md)
+governs permission to change them. Preparing a schema is a separate mutation step,
+not an install command or approval to update production.
 
 `npm run db:push` is a mutation command, not a prerequisite checker. Verify the
-target, backup plan, and authorization first. This workspace's `.env.local` may
-point at production. A localhost web server does not isolate the backend.
+target, backup plan, and authorization first. This workspace's `.env.local` points
+at production. A localhost web server does not isolate the backend.
 
 ## Configure Authentication
 

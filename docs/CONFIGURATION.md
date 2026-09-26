@@ -3,13 +3,49 @@
 Sources: [environment schema](../src/lib/env.ts), [example](../.env.example),
 [rollout policy](../src/lib/meta/pilot-access.ts), and
 [logging implementation](../src/lib/observability/logger.ts).
-Defaults below are source defaults, **not production configuration**.
+Verified against dev `672eb13`. Defaults below are source defaults, **not
+production configuration**; the published `6291dc2` release excludes local test
+checkout and DB-A-dependent changes. Deployment evidence belongs in the
+[release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
+
+## Choose a Configuration Boundary
+
+| Task | Required configuration | Side effects and target |
+| --- | --- | --- |
+| Mocked unit tests | Synthetic public Supabase values when the tested path parses the environment | Do not inherit provider credentials; tests are not provider acceptance |
+| Authenticated local workspace | Isolated Supabase URL/public key, site origin and real local Auth session | Reads/writes the selected database; localhost does not imply a local backend |
+| Generation | Workspace configuration, a configured text pool, selected image provider and server usage/limit support | Can incur text/image charges; token quota is not a cash limit |
+| Meta connect and campaign work | Explicit rollout, app credentials, stable encryption key, server role and tenant binding | Consent/discovery contact Meta; creation and activation are distinct authorized actions |
+| Campaign worker | Exact target origin, worker mode, server role and queue schema | Claims jobs and can create external campaign assets; not a health probe |
+| Local payment tests | All test-payment gates below and the test-order schema | Calls Razorpay test APIs and writes local evidence, never advertising credit |
+| Database event sink | Explicit logging flag, server role and product-events schema | Writes sanitized events; this flag does not create its tables |
+
+### Loading and Secrets
+
+The shared checkout's `.env.local` targets production. Do not overwrite, source,
+copy or print it as setup. Use [Quick Start](QUICK_START.md) in an isolated checkout.
+Next loads environment files; a standalone shell or Node script does not inherit
+that behavior unless its command or implementation explicitly loads a file.
+In particular, the browser npm scripts use `--env-file-if-exists=.env.local`.
+Inspect the command before invoking it; "test" in its name is not isolation.
 
 `getEnv()` validates lazily and caches per process. Restart after changes.
 `NEXT_PUBLIC_*` values can be bundled into browser code and require a rebuild for
 deployment changes. Never use that prefix for secrets. Empty strings are not
 universally equivalent to missing values: omit optional numeric values instead
 of leaving blank assignments.
+
+| Classification | Variables | Handling |
+| --- | --- | --- |
+| Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; public Supabase key is safe only with correct RLS |
+| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
+| Provider secret | All four `*_API_KEYS` pools, `META_APP_SECRET`, `META_SYSTEM_USER_TOKEN`, `FALAI_API_KEY`, `OPENAI_API_KEY`, Razorpay key/webhook secrets | Can grant paid/external access; least privilege and target-specific storage |
+| Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay test key/account IDs, limits and rollout values | Not authentication secrets, but still avoid copying tenant/account details into examples |
+| Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD`; associated email addresses | Passwords are secrets; emails may be personal data; use synthetic examples |
+
+Generate/store secrets outside chat and command history. Changing credentials,
+targets, encryption keys or paid provider settings is an operational action, not
+documentation or release approval. See [release policy](RELEASING.md).
 
 ## Core Services
 
@@ -27,7 +63,9 @@ of leaving blank assignments.
 
 These settings are validated separately by the
 [Razorpay test adapter](../src/lib/payments/razorpay-test.ts), not `getEnv()`.
-There is no live-payment mode. The gate denies production Node mode, every Vercel
+This source has no live-payment mode. Merchant-account activation is a separate
+provider fact, recorded in [the payment plan](PAYMENTS-PLAN.md), not permission
+to turn a test flag into production checkout. The gate denies production Node mode, every Vercel
 environment and non-loopback Supabase URLs. Verify the actual local database;
 a tunnel's loopback address is not proof of isolation.
 
@@ -98,7 +136,8 @@ lower cost.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `META_APP_ID`, `META_APP_SECRET` | Empty | Server-side OAuth app credentials |
+| `META_APP_ID` | Empty | OAuth app identifier; not a secret |
+| `META_APP_SECRET` | Empty | Server-only OAuth app secret |
 | `META_LOGIN_CONFIG_ID` | Empty | Optional Facebook Login for Business configuration |
 | `META_TOKEN_ENCRYPTION_KEY` | Empty | Base64 32-byte encryption key for token store |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
@@ -153,6 +192,46 @@ The example includes `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_EMAIL`,
 seed/review scripts. They do not replace runtime variables. Operational scripts
 may require additional guards; inspect the exact script before execution.
 
-`npm run env:doctor` and `npm run env:doctor:strict` inspect configuration, not
-end-to-end provider readiness. Keep diagnostic output private. A passing doctor
-check does not authorize seeds, backfills, paid evaluations, or remote writes.
+`APP_URL` / `ADBRAIN_URL` are script-origin overrides, not aliases for the app's
+canonical site URL. PostgreSQL tooling uses its own `PGHOST`, `PGPORT`,
+`PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
+[Deployment](DEPLOY.md). Browser/evaluation harness overrides and paid-evaluation
+opt-ins belong to [Testing](TESTING.md), not a production environment template.
+
+### What the Doctor Actually Checks
+
+[env-doctor.sh](../scripts/env-doctor.sh) checks whether legacy traffic/reviewer
+variables are set in the **current shell**. It does not load `.env.local`, parse
+`getEnv()`, contact a provider, verify a token, test RLS or check the database.
+It can fail for an otherwise valid ordinary application setup because it expects
+traffic-runner credentials. Its output shows set/missing names, not values;
+keep even that configuration inventory private.
+
+```sh
+npm run env:doctor
+npm run env:doctor:strict
+```
+
+Strict mode also fails on absent recommended variables. These commands do not
+authorize populating production credentials or executing the scripts they check.
+Ignore any generic copy-environment suggestion when an environment file exists.
+
+### Local Launcher Modes
+
+[local-meta-qa.mjs](../scripts/local-meta-qa.mjs) obtains an existing local
+Supabase project's status through the `adbrain-qa` Colima socket and rejects
+non-loopback API/database URLs. It reads `.env.local` to clear inherited names;
+most modes replace provider credentials with empty/synthetic values. This is
+not an OS network sandbox, and a loopback tunnel is not proof of a local target.
+
+| Mode | Additional behavior |
+| --- | --- |
+| `setup` | Applies the full schema and creates local Auth/business/creative fixtures; destructive-risk setup, not a check |
+| `dev`, `build`, browser modes | Run their mapped command against that local project; normal dev binds using Next defaults on port 3939 |
+| `oauth-dev` | Copies actual Meta app credentials from `.env.local`; this is real-provider work requiring its own authorization |
+| `payments-dev` | Reads `.env` test credentials, enables test checkout/dev login, derives a local webhook secret if absent, binds 127.0.0.1:3939 and disables product logging |
+
+Do not use a mode as an environment inspector: the launcher immediately runs it.
+The supported command mapping, rather than its error-message list, is authoritative.
+Own the local project, server and generated fixtures before starting any mode;
+stop only processes you started. No launcher action is required to read this guide.

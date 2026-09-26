@@ -1,8 +1,38 @@
 # Release Workflow
 
-This is AdBrain's deployment reference. It applies to this repository, not every
-repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
-settings before a release; the historical receipts below are not current status.
+This is the canonical policy for publishing and promoting AdBrain code. Target
+setup and SQL mechanics are in [Deployment](DEPLOY.md); incident response is in
+[Operations](OPERATIONS.md). It applies to this repository, not every checkout
+or project in the workspace. Recheck remote controls for a release; dated receipts
+are evidence, not a continuing grant of operational authority.
+
+## Current Release Boundary
+
+Verified September 26: [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36)
+released SDK/query candidate `4c8dd56` as production `6291dc2`. Shared dev
+`672eb13` also preserves the earlier local backlog; its 71 differing paths were
+not all promoted. DB-A migrations and dependent callers, local test checkout,
+and #34/#35 enquiry candidates remain outside that release. See the exact
+[CI/deployment/smoke receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
+
+The deployment-policy investigation is complete and #33 is closed. Corrected
+feature/release/dev heads produced no deployment in the bounded hosted checks;
+main intentionally deployed. There is no blanket publication hold. Every new
+candidate must still retain the corrected config and satisfy the controls below.
+Do not replay a completed release because an older paragraph calls it pending.
+
+| Operation | Required authority and evidence |
+| --- | --- |
+| Local implementation/docs commits | Assigned scope and isolated ownership; preserve unpublished work |
+| Feature/dev publication | Correct candidate deployment policy, verified target/environment scope and applicable checks; not migration approval |
+| Production code promotion | Reviewed dependency-complete subset, protected main PR, green exact-head required checks and compatible rollback |
+| Schema/data/credential change | Separate explicit target-specific authorization, preflight, backup and compatibility plan |
+| Paid providers, ad activation, live payments or paid infrastructure | Separate financial/provider authorization; not implied by deployment or merchant activation |
+
+For an already-authorized operation, do not ask for approval again merely because
+CI finished. If the candidate, target or scope changes, reassess the changed part.
+Only DevOps executes shared integration and production; feature writers keep their
+own branches and the coordinator/QA retain their independent responsibilities.
 
 ## Publication Policy Repair: 2026-09-26
 
@@ -14,14 +44,18 @@ branch created previews. The corrected `**: false` rule passed nine local cases;
 the controlled repair branch produced no preview after dev/PR CI, while main
 deployed successfully at the exact repair merge. All four release CI runs passed.
 See [the current DevOps evidence](qa/ops-environment-2026-09-26.md#o-11-preview-policy-hold).
-The policy defect is resolved, but the checked #27/#28 candidates still have the
-old rule and remain held. Every candidate must carry the corrected configuration
-before its next push, including branches based on older production commits.
-Incorporate `1a04cd235d6eda7835fe181f55bf568e339cfb8b` or updated dev locally first;
-recheck the resulting committed rules. This repair does not authorize a feature
-promotion or change any review, CI, credential or production-approval requirement.
+The old #27/#28 heads described in the repair receipt were subsequently corrected
+and integrated through PR #36. The candidate-specific hold is satisfied for those
+exact heads, not automatically for other branches. Incorporate the correction or
+updated dev before publishing a branch based on older source, and check the
+resulting committed rules. Repair of a deployment policy is not itself approval
+for a feature, schema, credential or financial change.
 
 ## Latest Application Release: 2026-09-18
+
+**Historical receipt.** This heading is retained for existing links; the current
+verified September 26 release is identified above. The following outcomes describe
+September 18 only and must not be rewritten as new verification.
 
 [PR #10](https://github.com/vanshulgoyal101/adbrain/pull/10) released the platform
 reliability fixes and privacy-safe product telemetry at merge
@@ -67,6 +101,7 @@ documentation-only synchronization is recorded in its PR.
 | Control | Verified setting |
 | --- | --- |
 | CI triggers | Pushes and PRs targeting `main` or `dev` |
+| CI runtime in dev source | Node 24; use the committed package lock |
 | Build job (current source) | `npm ci`, dependency audit, lint, typecheck, coverage, local PostgreSQL tests, production build |
 | Secret job | Gitleaks with repository configuration |
 | Main protection | PR required; strict, up-to-date `build` and `secrets` checks |
@@ -132,6 +167,11 @@ and [the matched comparison](qa/flare-quality-2026-09-13.md).
    before their first push.
 5. Record unresolved gates honestly. Keep unverified features development-only.
 
+Keep the shared checkout on dev. When it is dirty, create an isolated release
+worktree instead of resetting, stashing or staging everything. Stage explicit
+paths and inspect the diff, including new files. A concurrent worker receipt is
+not permission to commit an incomplete application change from another owner.
+
 ## Production Promotion Checklist
 
 1. Identify the precise user-visible change and its dependency-complete commits.
@@ -141,9 +181,13 @@ and [the matched comparison](qa/flare-quality-2026-09-13.md).
    copying whole files from `dev` without reviewing the extra changes.
 3. Decide the preview deployment policy before pushing that branch. Verify schema
    compatibility, required environment variables, and rollback before promotion.
-4. Test the assembled release, not only its source branch. Run lint, typecheck,
-   coverage, build, and relevant browser/database checks. Real-provider behavior
-   needs real-provider evidence; local mocks cannot satisfy that gate.
+4. Validate the assembled release, not only its source branches. Required CI must
+   pass audit, lint, typecheck, coverage, database/build and secret gates on the
+   current candidate. Reuse existing local and QA evidence when source,
+   dependencies, configuration and runtime match. Test changed integration code
+   and review actual conflicts; do not rerun unchanged full suites or ask QA to
+   repeat acceptance just to transcribe green checks. Real-provider behavior
+   still needs real-provider evidence; local mocks cannot satisfy that gate.
 5. Open a PR to `main` listing included changes, deferred work, tests, schema/env
    prerequisites, deployment effects, and rollback. Inspect the complete PR diff.
 6. Require passing checks on the current PR head. If commits or the base change,
@@ -153,6 +197,19 @@ and [the matched comparison](qa/flare-quality-2026-09-13.md).
    A homepage HTTP 200 is not verification of an authenticated feature.
 8. Sync the production merge back into `dev`, leave the working branch on `dev`,
    and record the PR, SHAs, CI/deployment links, smoke results, and remaining gaps.
+
+When integrating multiple reviewed PRs, refresh dev after each merge. Preserve
+both dependency sets and use the package manager's lock semantics: a package can
+legitimately change from dev-only to runtime when a new runtime consumer needs it.
+Do not discard a dependency or silently change its version to resolve text
+conflicts. Publish and validate the assembled result before selective promotion.
+Keep unrelated migrations and their dependent callers together outside production
+until the schema rollout is approved; a code-only release must exclude both.
+
+Record local author checks, independent QA, hosted CI, provider evidence and
+production smoke separately. A release identifier plus its diff is sufficient
+for routine handoff; use source manifests for genuinely uncommitted candidates,
+not as a reason to repeat whole-tree scans after every status update.
 
 Useful read-only checks (run from this repository):
 
@@ -177,7 +234,8 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
    tunnel can still point at a remote database; verify what is behind the address.
 - `npm run db:migrate -- --migration <filename.sql>` previews one migration and
    its SHA-256 without connecting. Applying requires `--apply`, explicit `PGHOST`,
-   `PGPORT`, `PGDATABASE`, `PGUSER`, and a securely supplied password. Remote targets
+   `PGDATABASE`, `PGUSER`, a verified port (`PGPORT` defaults to 5432), and secure
+   authentication. Set the port explicitly for operations. Remote targets
    additionally require `--target 'host:port/database@user'` matching exactly.
    Remote TLS certificate verification is mandatory; use `PGSSLROOTCERT` when needed.
 - The runner serializes migrations under a transaction advisory lock and records
@@ -217,6 +275,9 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
 
 ## Publication Receipt: 2026-09-07
 
+**Historical evidence, not the current production state or permission to replay
+these operations.** Current promotion and rollback rules are above.
+
 Production `main` at `660b9ac` includes only release controls from
 [PR #1](https://github.com/vanshulgoyal101/adbrain/pull/1): CI configuration, this
 guide's initial version, and Vercel Git deployment controls. No pending Meta
@@ -244,6 +305,12 @@ and full new-history secret scanning passed. Hosted
 passed. These are dated receipts, not approval to release the Meta feature set.
 
 ## Current Meta Connect Work
+
+**Historical September 8-11 scope and infrastructure receipts.** The original
+heading is retained for stable links. "Current" and authorization statements
+below refer to those dated packets, not today's dispatch, deployed schema or
+permission for another migration. Use [Meta Connect](META_CONNECT.md) and the
+[current dispatch](ORCHESTRATION.md) for active work.
 
 ### Staging promotion authorized: 2026-09-11
 
