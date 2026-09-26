@@ -19,7 +19,7 @@ Deciding code: [production gate](../src/lib/payments/production-config.ts).
 | Configuration | Requirement |
 | --- | --- |
 | `PAYMENTS_LIVE_ENABLED` | Defaults false; recovery/webhooks need explicit true plus all target/identity checks |
-| `PAYMENTS_LIVE_COLLECTION_ENABLED`, `PAYMENTS_LIVE_POLICY_JSON` | Separate false-default collection flag and validated finite approved terms; not invented by the app |
+| `PAYMENTS_LIVE_COLLECTION_ENABLED`, `PAYMENTS_LIVE_POLICY_JSON` | Separate false-default collection flag; in #48, blank JSON selects the recorded `operator-managed-v1` offer. Explicit JSON must validate as approved operator terms or the legacy policy shape |
 | `PAYMENTS_LIVE_REFUNDS_ENABLED` | Separate false-default refund flag; approved operator and per-operation authority still required |
 | `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_LIVE_ACCOUNT_ID` | Explicit live identities; never reuse test credentials |
 | `RAZORPAY_LIVE_WEBHOOK_SECRET`, `PAYMENTS_LIVE_WEBHOOK_ID` | Distinct secret and immutable configuration UUID; neither replaces signature/merchant checks |
@@ -31,6 +31,24 @@ generic key aliases must exactly match the explicit live keys. Policy fields and
 operator prerequisites are listed in the [author contract](qa/dev2-devc-contract-o1.md#schema-and-configuration-delta).
 Do not enable these values as setup verification. CSP changes need an approved
 rebuild. Suspend collection independently from recovery after live operations.
+
+### Operator-Managed Offer
+
+Issue #48 pins the [actual September 26 approval](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848530300)
+in `OPERATOR_MANAGED_POLICY`: INR 10,000 total for 12 months, one business/offer/service
+area, up to two creatives and one capped Meta campaign. It retains the 2,000/8,000
+allocation, absorbed fees, no automatic renewal and the approved conditional refund
+policy. Blank `PAYMENTS_LIVE_POLICY_JSON` selects this exact version only when live
+collection is explicitly enabled; it does not enable collection by itself.
+
+The operator pays Meta separately. No automatic-funding approval UUID, funding
+evidence row or customer Meta connection is needed for this new mode. Do not invent
+those records. Existing legacy JSON/orders remain distinct and recoverable.
+Apply [the additive policy migration](../db/migrations/20260926_production_payment_policy_v2.sql)
+after the original payment schema; do not change an applied migration checksum.
+Future commercial changes require a new reviewed policy version and customer consent,
+not edits to stored terms. Invoice wording claims no GST registration; verify actual
+operator tax status in live invoice setup. Real charges/refunds remain separately scoped.
 
 ## Choose a Configuration Boundary
 

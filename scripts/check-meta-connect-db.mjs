@@ -9,6 +9,7 @@ import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -196,6 +197,8 @@ async function verify(database, source, integrityMigration) {
   try {
     await db.query(bootstrap);
     await db.query(source);
+    await db.query(operatorPaymentMigration);
+    await db.query(operatorPaymentMigration);
     if (integrityMigration) {
       await check(`${database}: invalid legacy evidence is preserved and blocks validation`, async () => {
         await db.query("begin");
@@ -635,6 +638,37 @@ async function verify(database, source, integrityMigration) {
         [replacementEvidence,profileId,ownerId,randomUUID(),{ ...funding, evidenceId: replacementEvidence, verifiedAt: new Date().toISOString() }]);
       assert.equal(await asService(fundingValid),true);
       assert.equal((await claim()).order.id,order.id);
+      const operatorBusinessId = randomUUID();
+      const operatorPolicy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+      const operatorTerms = JSON.stringify(operatorPolicy);
+      const operatorHash = createHash("sha256").update(operatorTerms).digest("hex");
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Operator-managed fixture')",[operatorBusinessId,ownerId]);
+      const operatorInput = { business: operatorBusinessId, funding: null, terms: operatorTerms, hash: operatorHash };
+      for (const invalid of [{ owner: otherOwnerId }, { key: "rzp_test_fixture" }, { funding: evidenceId },
+        { hash: "0".repeat(64) }, { quote: { ...quote, totalPaise: 1 } }]) {
+        await assert.rejects(claim({ ...operatorInput, ...invalid }),{ code: "23514" });
+      }
+      const alteredTerms = JSON.stringify({ ...operatorPolicy, refundTerms: "Service earned at capture" });
+      await assert.rejects(claim({ ...operatorInput, terms: alteredTerms, hash: createHash("sha256").update(alteredTerms).digest("hex") }),{ code: "23514" });
+      const operatorClaims = await Promise.all(Array.from({ length: 4 },() => claim(operatorInput)));
+      assert.equal(operatorClaims.filter(value => value.claimed).length,1);
+      const operatorOrder = operatorClaims[0].order;
+      assert.equal(operatorOrder.funding_evidence_id,null);
+      assert.deepEqual(operatorOrder.terms,operatorPolicy);
+      assert.equal((await claim({ ...operatorInput, request: randomUUID() })).order.id,operatorOrder.id);
+      assert.equal((await db.query("select count(*)::int as count from public.meta_connections where business_id=$1",[operatorBusinessId])).rows[0].count,0);
+      assert.equal((await db.query("select count(*)::int as count from public.meta_billing_profiles where business_id=$1",[operatorBusinessId])).rows[0].count,0);
+      await asService(session => session.query("select public.production_payment_order_result($1,'acc_fixture','rzp_live_fixture','order_operator')",[operatorOrder.id]));
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const observed = await asService(async session => (await session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_operator',true,0,false,$2) as result",[operatorOrder.id,"a".repeat(64)])).rows[0].result);
+        assert.equal(observed.captured_paise,1000000);
+        assert.equal(observed.review_required,false);
+      }
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[operatorOrder.id])).rows[0].count,1);
+      await db.query(operatorPaymentMigration);
+      assert.deepEqual((await claim()).order.terms,policy);
+      assert.equal((await claim()).order.funding_evidence_id,evidenceId);
+      await assert.rejects(claim({ ...operatorInput, business: payerBusinessId }),{ code: "23514" });
       const refundRequest = randomUUID();
       const refundApproval = randomUUID();
       const claimRefund = (amount = 500, request = refundRequest) => asService(async session => (await session.query(

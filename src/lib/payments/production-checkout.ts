@@ -22,9 +22,9 @@ const orderSchema = z.object({
   provider_order_id: identifier("order").nullable(), payment_id: identifier("pay").nullable(),
   captured_paise: amountSchema, refunded_paise: amountSchema, provider_refunded_paise: amountSchema,
   review_required: z.boolean(), refund_hold: z.boolean(), terms: productionPaymentPolicySchema, terms_hash: hashSchema,
-  funding_evidence_id: z.uuid(),
+  funding_evidence_id: z.uuid().nullable(),
   accepted_at: z.string(),
-});
+}).refine(order => "fundingMode" in order.terms ? order.funding_evidence_id === null : order.funding_evidence_id !== null);
 const refundOperationSchema = z.object({
   id: z.uuid(), order_id: z.uuid(), amount_paise: amountSchema,
   state: z.enum(["creating", "submitted", "needs_reconciliation", "processed", "failed"]), provider_refund_id: identifier("rfnd").nullable(),
@@ -65,9 +65,9 @@ function currentPolicy() {
 async function orderResponse(order: SavedOrder, config: Config) {
   const policy = currentPolicy();
   const checkoutAllowed = order.state === "created" && order.provider_order_id && order.account_id === config.accountId && order.key_id === config.keyId
-    && policy?.hash === order.terms_hash && await stored(createAdminClient().rpc("production_payment_funding_valid", {
-      p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id,
-    }), z.boolean()).catch(() => false);
+    && policy?.hash === order.terms_hash && ("fundingMode" in order.terms || await stored(createAdminClient().rpc("production_payment_funding_valid", {
+      p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id!,
+    }), z.boolean()).catch(() => false));
   return {
     orderId: order.id, environment: "live", status: order.state, amountPaise: order.amount_paise, currency: order.currency,
     capturedPaise: order.captured_paise, refundedPaise: order.refunded_paise, reviewRequired: order.review_required,
@@ -242,9 +242,9 @@ export async function handleProductionPayments(request: Request, action: Action)
       const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true) }), body);
       const { hash, ...policy } = getProductionCollectionPolicy();
       if (hash !== create.termsHash) throw new CheckoutRequestError(409, "Payment terms changed. Review the current terms before payment.");
-      const funding = await stored(database.rpc("meta_funding_latest_record", { p_business_id: input.businessId, p_environment: "live" }), z.object({ evidenceId: z.uuid() }));
+      const funding = "fundingMode" in policy ? null : await stored(database.rpc("meta_funding_latest_record", { p_business_id: input.businessId, p_environment: "live" }), z.object({ evidenceId: z.uuid() }));
       const claimed = await stored(database.rpc("production_payment_order_claim", { ...scope, p_business_id: input.businessId, p_user_id: user.id,
-        p_request_key: create.idempotencyKey, p_order_id: randomUUID(), p_quote: createAnnualPaymentQuote(), p_terms: JSON.stringify(policy), p_terms_hash: hash, p_funding_evidence_id: funding.evidenceId,
+        p_request_key: create.idempotencyKey, p_order_id: randomUUID(), p_quote: createAnnualPaymentQuote(), p_terms: JSON.stringify(policy), p_terms_hash: hash, p_funding_evidence_id: funding?.evidenceId ?? null,
       }), z.object({ claimed: z.boolean(), order: orderSchema }));
       if (!claimed.claimed) return paymentReply(await orderResponse(claimed.order, config));
       try {

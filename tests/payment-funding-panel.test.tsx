@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManagedBilling } from "@/components/managed-billing";
-import { META_FUNDING_METHODS } from "@/lib/payments/meta-funding";
+import { OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
 import { TestCheckout, type TestCheckoutOptions } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 
@@ -177,7 +177,7 @@ describe("test checkout", () => {
 });
 
 describe("production checkout with synthetic responses", () => {
-  const livePolicy = { hash: "a".repeat(64), serviceScope: "Synthetic finite service scope", invoiceTerms: "Synthetic invoice terms", refundTerms: "Synthetic refund terms" };
+  const livePolicy = { ...OPERATOR_MANAGED_POLICY, hash: "a".repeat(64) };
   const liveOrder = { ...createdOrder, environment: "live", capturedPaise: 0, refundedPaise: 0, refundReconciliationPending: false, receipt: null,
     checkout: { ...createdOrder.checkout, key: "rzp_live_fixture", name: "Vanshul Goyal", description: "AdBrain annual service" } };
   const captured = { ...liveOrder, status: "captured", capturedPaise: 1_000_000, checkout: null,
@@ -198,13 +198,16 @@ describe("production checkout with synthetic responses", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(OPERATOR_MANAGED_POLICY.serviceScope)).toBeInTheDocument();
+    expect(screen.getByText(OPERATOR_MANAGED_POLICY.refundTerms)).toBeInTheDocument();
+    expect(screen.getByText(/The operator pays Meta separately\. Advertising allocation/)).toBeInTheDocument();
     expect(options).toMatchObject({ key: "rzp_live_fixture", amount: 1_000_000, order_id: "order_fixture", retry: { enabled: false } });
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ businessId, termsHash: livePolicy.hash, acceptTerms: true });
     act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) }));
     await screen.findByText("Payment confirmed");
     expect(screen.queryByRole("button", { name: /Pay INR/ })).not.toBeInTheDocument();
     expect(screen.getByText("Payment receipt")).toBeInTheDocument();
-    expect(screen.getByText(/not a tax invoice/)).toBeInTheDocument();
+    expect(screen.getByText("This receipt is not a tax invoice. Payment confirmation does not authorize ad activation.")).toBeInTheDocument();
   });
   it("does not reopen checkout after dismissal and reload", async () => {
     const view = await mountLive();
@@ -308,12 +311,11 @@ describe("managed billing settings", () => {
     expect(screen.getByText("80%")).toBeInTheDocument();
     expect(screen.getByText("Current operator")).toBeInTheDocument();
     expect(screen.getByText("Vanshul Goyal")).toBeInTheDocument();
-    expect(screen.getByText("Future account ownership")).toBeInTheDocument();
-    expect(screen.getByText("Solaride arrangement not yet formalized")).toBeInTheDocument();
+    expect(screen.getByText("Operator-managed")).toBeInTheDocument();
     expect(screen.queryByText("Solaride Energy")).not.toBeInTheDocument();
     expect(screen.getByText("act_123")).toBeInTheDocument();
-    expect(screen.getByText("Not verified")).toBeInTheDocument();
-    expect(screen.getByText(/No funding method selected/)).toBeInTheDocument();
+    expect(screen.queryByText("Funding verification")).not.toBeInTheDocument();
+    expect(screen.getByText(/The operator pays Meta separately/)).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
@@ -324,10 +326,10 @@ describe("managed billing settings", () => {
     [{ ...connected, ready: false, pending: true, adAccountId: null }, "Account selection required"],
     [{ ...connected, ready: false, adAccountId: null }, "Not connected"],
     [connected, "Connected"],
-  ])("keeps funding unverified for connection state %j", (connection, label) => {
+  ])("keeps operator-managed payment independent of connection state %j", (connection, label) => {
     render(<ManagedBilling connection={connection} />);
     expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("Operator-managed")).toBeInTheDocument();
     if (!connection) {
       expect(screen.getByText("Unavailable")).toBeInTheDocument();
       expect(screen.queryByText("Not selected")).not.toBeInTheDocument();
@@ -336,17 +338,10 @@ describe("managed billing settings", () => {
     }
   });
 
-  it("uses official requirements links without exposing a payment execution action", () => {
-    const { container } = render(<ManagedBilling connection={connected} />);
-    const options = container.querySelectorAll("details");
-    expect(options).toHaveLength(3);
-    for (const option of options) option.open = true;
-    for (const method of META_FUNDING_METHODS) {
-      const link = screen.getByRole("link", { name: `Meta requirements for ${method.name}` });
-      expect(link).toHaveAttribute("href", method.documentationUrl);
-      expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    }
-    expect(screen.getByText(/Prepaid accounts have no Meta account spending limit/)).toBeInTheDocument();
-    expect(screen.getByText(/do not transfer exactly 80%/)).toBeInTheDocument();
+  it("shows the approved refund boundary without a funding-setup or payment action", () => {
+    render(<ManagedBilling connection={connected} />);
+    expect(screen.getByText(/Service allocation is earned only after/)).toBeInTheDocument();
+    expect(screen.queryByText("Funding options")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
