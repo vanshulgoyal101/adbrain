@@ -392,6 +392,34 @@ describe("campaign Ads Manager links", () => {
 });
 
 describe("campaign sync feedback", () => {
+  it("shows the intended audience, budget, destination and creative before activation", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
+      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery: {
+        campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED" },
+        adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: { geo_locations: { countries: ["IN"] } } }],
+        ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+      } });
+      return Response.json({ campaigns: [], nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    expect(await screen.findByText(/Targeting:.*"IN"/)).toBeInTheDocument();
+    expect(screen.getByText(/Ad set set-1:.*₹500.*destination ON_AD/)).toBeInTheDocument();
+    expect(screen.getByText(/Ad ad-1 .*creative creative-1/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request activation" })).toBeEnabled();
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+  });
+
+  it("labels the stored active state as a request, not confirmed delivery", () => {
+    const campaign = { id: "campaign-1", name: "Saved campaign", status: "active" } as Campaign;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    expect(screen.getAllByText("Requested active")).toHaveLength(2);
+    expect(screen.getByText(/1 requested active/)).toBeInTheDocument();
+  });
+
   it("requests a status selection immediately without the search typing delay", async () => {
     const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], results: {}, nextCursor: null })));

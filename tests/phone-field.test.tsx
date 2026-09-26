@@ -98,7 +98,21 @@ describe("<PhoneField>", () => {
     expect(
       (screen.getByLabelText(/country calling code/i) as HTMLSelectElement).value,
     ).toBe("US");
+    expect(screen.getByLabelText(/country calling code/i)).not.toHaveClass("focus:ring-2");
     expect(screen.getByDisplayValue("512 555 0134")).toBeInTheDocument();
+  });
+
+  it("keeps invalid feedback on the number and tabs through both controls", async () => {
+    const user = userEvent.setup();
+    render(<PhoneField name="phone" value="+91 98765 43210" onChange={vi.fn()} invalid />);
+    const country = screen.getByRole("combobox", { name: "Country calling code" });
+    const number = screen.getByRole("textbox");
+    expect(number).toHaveAttribute("aria-invalid", "true");
+    expect(number).not.toHaveClass("focus:ring-2");
+    await user.tab();
+    expect(country).toHaveFocus();
+    await user.tab();
+    expect(number).toHaveFocus();
   });
 
   it("keeps the number when the country changes", async () => {

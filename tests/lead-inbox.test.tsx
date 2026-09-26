@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadInbox } from "@/components/lead-inbox";
 import type { Lead } from "@/lib/types";
@@ -73,6 +74,17 @@ describe("<LeadInbox> Meta readiness", () => {
 });
 
 describe("<LeadInbox> table", () => {
+  it("keeps Clear search in the keyboard order and clears the query", async () => {
+    render(<LeadInbox businessName="Form Studio" initialLeads={[]} metaReady={false} />);
+    const search = screen.getByRole("searchbox", { name: "Search enquiries" });
+    await userEvent.type(search, "Asha");
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Clear search" })).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(search).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+  });
+
   it("searches contact and source details on the server and clears an empty result", async () => {
     setFetch({ ok: true, json: async () => ({ leads: [lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })] }) });
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })]} metaReady />);

@@ -139,6 +139,18 @@ Draft version, attempt revision, connection generation, review hash, activation
 digest, and idempotency key are different controls. Never substitute one for
 another or recompute server hashes in an integration. See [Architecture](ARCHITECTURE.md).
 
+[Activation review and PATCH](../src/app/api/campaigns/[id]/route.ts) verify
+stored child IDs, binding, generation, account/Page/budget and current Meta
+campaign, ad-set and ad settings. A fresh delivery snapshot joins the
+confirmation digest; changed, paused or unexpected children block #49 reservation
+and the parent ACTIVE request. The route requests ACTIVE on the parent only,
+checks intended children again, then mirrors a **requested** active state locally.
+Effective delivery/eligibility is not certified. #49 reservation remains uncertain
+when the parent request or post-request verification is ambiguous; reconcile
+before retrying. Creation idempotency does not make activation atomic with Meta.
+[Operations](OPERATIONS.md) owns incident procedures and
+[Release Policy](RELEASING.md) owns authorization for live changes.
+
 ## Recovery and Destructive Actions
 
 | Situation | Safe action |

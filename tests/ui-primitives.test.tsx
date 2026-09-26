@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoHint } from "@/components/ui/info-hint";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import WorkspaceLoading from "@/app/(app)/loading";
 
@@ -115,6 +116,17 @@ describe("<PageHeader>", () => {
 });
 
 describe("form primitives", () => {
+  it("uses the shared keyboard outline without an extra focus ring", async () => {
+    const user = userEvent.setup();
+    render(<><Input aria-label="Name" /><Textarea aria-label="Notes" /><Select aria-label="Region"><option>North</option></Select></>);
+    for (const label of ["Name", "Notes", "Region"]) {
+      const control = screen.getByLabelText(label);
+      expect(control).not.toHaveClass("focus:ring-2");
+      await user.tab();
+      expect(control).toHaveFocus();
+    }
+  });
+
   it("associates a label with its input and accepts typing", async () => {
     render(
       <>

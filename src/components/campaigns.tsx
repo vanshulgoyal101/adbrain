@@ -70,7 +70,8 @@ import {
   spendHealth,
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
-import { activationConfirmationPayload } from "@/lib/campaign/activation";
+import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
+import type { CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
@@ -145,6 +146,7 @@ export function Campaigns({
   const [activationReview, setActivationReview] = useState<Campaign | null>(null);
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
+  const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
@@ -735,8 +737,8 @@ export function Campaigns({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
 
-  async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO): Promise<string> {
-    const payload = activationConfirmationPayload(campaign, connection);
+  async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO, delivery: CampaignDeliverySnapshot): Promise<string> {
+    const payload = activationConfirmationPayload(campaign, connection, delivery);
     if (!crypto.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -746,12 +748,20 @@ export function Campaigns({
     try {
       const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}`, { cache: "no-store" });
       if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
-      const digest = await buildActivationDigest(campaign, connection);
+      const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
+      const review = await deliveryResponse.json() as { delivery?: unknown; error?: string };
+      if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
+      const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
+      const digest = await buildActivationDigest(campaign, connection, delivery);
       setReviewConnection(connection);
       setActivationDigest(digest);
+      setActivationDelivery(delivery);
       setActivationReview(campaign);
       setConnectOpen(false);
     } catch (reason) {
+      setActivationDigest(null);
+      setActivationDelivery(null);
+      setActivationReview(null);
       setError(reason instanceof Error ? reason.message : "Activation review is unavailable.");
     }
   }
@@ -762,7 +772,9 @@ export function Campaigns({
       setConnectOpen(true);
       return;
     }
-    if (next === "active" && (!activationDigest || !reviewConnection)) {
+    if (next === "active" && (!activationDigest || !reviewConnection || !activationDelivery
+      || activationDelivery.adSets.some(adSet => adSet.status !== "ACTIVE")
+      || activationDelivery.ads.some(ad => ad.status !== "ACTIVE"))) {
       setError("Review the current connection before activating this campaign.");
       return;
     }
@@ -782,10 +794,11 @@ export function Campaigns({
         setCampaigns((prev) =>
           prev.map((x) => (x.id === c.id ? { ...x, status: next } : x)),
         );
-        setNotice(next === "active" ? "Campaign resumed." : "Campaign paused.");
+        setNotice(next === "active" ? "Activation requested. Check Meta for effective delivery and eligibility." : "Campaign paused.");
         if (next === "active") {
           setActivationReview(null);
           setActivationDigest(null);
+          setActivationDelivery(null);
           setReviewConnection(null);
         }
       } else {
@@ -827,7 +840,7 @@ export function Campaigns({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-        <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
+        <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} requested active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
@@ -855,7 +868,7 @@ export function Campaigns({
       {activationReview && (
         <Alert variant="warning">
           <span className="block">
-            Review {activationReview.name ?? "this campaign"} before it can run. Confirming will send the explicit activation request.
+            Review {activationReview.name ?? "this campaign"} before it can run. AdBrain will request only the parent campaign to become active; it will not change any ad sets or ads.
           </span>
           {reviewConnection?.selected && (
             <span className="mt-2 block text-sm font-normal text-amber-900">
@@ -864,14 +877,32 @@ export function Campaigns({
               Effective daily total: {activationReview.daily_budget == null ? "Unavailable" : formatCurrency(activationReview.daily_budget)}
             </span>
           )}
+          {activationDelivery && <div className="mt-3 text-sm font-normal text-amber-900">
+            <p>Parent: {activationDelivery.campaign.id} · Requested {activationDelivery.campaign.status} · Effective {activationDelivery.campaign.effectiveStatus ?? "unconfirmed"}</p>
+            <ul className="mt-2 list-inside list-disc">
+              {activationDelivery.adSets.map(adSet => <li key={adSet.id}>
+                Ad set {adSet.id}: {adSet.dailyBudgetPaise ? `${formatCurrency(adSet.dailyBudgetPaise / 100)}/day` : "campaign-level budget"}, destination {adSet.destinationType ?? "not reported"}, requested {adSet.status}, effective {adSet.effectiveStatus ?? "unconfirmed"}
+                <pre className="ml-4 max-h-32 overflow-auto whitespace-pre-wrap break-all text-xs">Targeting: {JSON.stringify(adSet.targeting)}</pre>
+              </li>)}
+              {activationDelivery.ads.map(ad => <li key={ad.id}>Ad {ad.id} (set {ad.adSetId}, creative {ad.creativeId}): requested {ad.status}, effective {ad.effectiveStatus ?? "unconfirmed"}</li>)}
+            </ul>
+            {activationDelivery.adSets.some(adSet => adSet.status !== "ACTIVE") || activationDelivery.ads.some(ad => ad.status !== "ACTIVE")
+              ? <p className="mt-2">An intended child is paused. Activate only the listed children in Meta, then refresh this review. No child will be changed here.</p>
+              : <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>}
+            <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
+            <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!)}>Refresh review</Button>
+          </div>}
           <Button
             size="sm"
             className="ml-3"
-            disabled={!activationDigest || statusChangingId === activationReview.id}
+            disabled={!activationDigest || !activationDelivery
+              || activationDelivery.adSets.some(adSet => adSet.status !== "ACTIVE")
+              || activationDelivery.ads.some(ad => ad.status !== "ACTIVE")
+              || statusChangingId === activationReview.id}
             onClick={() => void setCampaignStatus(activationReview, "active", true)}
           >
             {statusChangingId === activationReview.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Confirm resume
+            Request activation
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setActivationReview(null)}>Cancel</Button>
         </Alert>
@@ -1297,7 +1328,7 @@ export function Campaigns({
         </div>
         {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-3">
           <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
-          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
+          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Requested active</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
         {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
           <Card>
@@ -1330,7 +1361,7 @@ export function Campaigns({
                             "bg-slate-100 text-slate-600"
                           }
                         >
-                          {c.status}
+                          {c.status === "active" ? "Requested active" : c.status}
                         </Badge>
                       </div>
                       <div className="flex min-w-0 flex-wrap items-center gap-3">

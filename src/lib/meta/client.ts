@@ -157,6 +157,14 @@ export class MetaError extends Error {
   }
 }
 
+export class CampaignDeliveryError extends MetaError {}
+
+export type CampaignDeliverySnapshot = {
+  campaign: { id: string; status: string; effectiveStatus: string | null };
+  adSets: Array<{ id: string; status: string; effectiveStatus: string | null; dailyBudgetPaise: number; pageId: string; destinationType: string | null; targeting: unknown }>;
+  ads: Array<{ id: string; status: string; effectiveStatus: string | null; adSetId: string; creativeId: string }>;
+};
+
 /** Convert raw Graph API text into stable customer-facing copy. */
 export function friendlyMetaError(
   error: unknown,
@@ -937,16 +945,19 @@ export class MetaClient {
     await this.graph(encodeURIComponent(id), { method: "DELETE" });
   }
 
-  async verifyCampaignActivation(
+  async readCampaignDelivery(
     campaignId: string,
-    expected: { dailyBudgetRupees: number; status: string },
-  ): Promise<void> {
-    const [campaign, adSets] = await Promise.all([
-      this.graph<{ id: string; account_id: string; status: string; daily_budget?: string; lifetime_budget?: string }>(
-        `${campaignId}?fields=id,account_id,status,daily_budget,lifetime_budget`,
+    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[] },
+  ): Promise<CampaignDeliverySnapshot> {
+    const [campaign, adSets, ads] = await Promise.all([
+      this.graph<{ id: string; account_id: string; status: string; effective_status?: string; daily_budget?: string; lifetime_budget?: string }>(
+        `${campaignId}?fields=id,account_id,status,effective_status,daily_budget,lifetime_budget`,
       ),
-      this.graph<{ data?: Array<{ id: string; status: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
-        `${campaignId}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object&limit=100`,
+      this.graph<{ data?: Array<{ id: string; status: string; effective_status?: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string }; destination_type?: string; targeting?: unknown }>; paging?: { next?: string } }>(
+        `${campaignId}/adsets?fields=id,status,effective_status,daily_budget,lifetime_budget,promoted_object,destination_type,targeting&limit=100`,
+      ),
+      this.graph<{ data?: Array<{ id: string; status: string; effective_status?: string; adset_id: string; creative?: { id?: string } }>; paging?: { next?: string } }>(
+        `${campaignId}/ads?fields=id,status,effective_status,adset_id,creative{id}&limit=100`,
       ),
     ]);
     const minorUnits = (value: string | undefined): number => {
@@ -956,22 +967,53 @@ export class MetaClient {
     };
     if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")
       || campaign.status !== expected.status.toUpperCase() || minorUnits(campaign.lifetime_budget) !== 0
-      || !Array.isArray(adSets.data) || adSets.data.length === 0 || adSets.paging?.next) {
-      throw new MetaError("Campaign details could not be verified. Refresh the campaign before activation.");
+      || !Array.isArray(adSets.data) || !Array.isArray(ads.data) || adSets.paging?.next || ads.paging?.next
+      || !expected.adSetIds.length || !expected.adIds.length
+      || new Set(expected.adSetIds).size !== expected.adSetIds.length || new Set(expected.adIds).size !== expected.adIds.length
+      || adSets.data.length !== expected.adSetIds.length || ads.data.length !== expected.adIds.length
+      || adSets.data.some(adSet => !expected.adSetIds.includes(adSet.id))
+      || ads.data.some(ad => !expected.adIds.includes(ad.id) || !expected.adSetIds.includes(ad.adset_id))) {
+      throw new CampaignDeliveryError("Campaign children changed or could not be verified. Reconcile the intended ads in Meta before reviewing again.");
     }
     let adSetBudget = 0;
     for (const adSet of adSets.data) {
       if (!["ACTIVE", "PAUSED"].includes(adSet.status) || adSet.promoted_object?.page_id !== this.creds.pageId
-        || minorUnits(adSet.lifetime_budget) !== 0) {
-        throw new MetaError("Campaign Page or delivery settings changed. Review the campaign in Meta before activation.");
+        || !adSet.targeting || minorUnits(adSet.lifetime_budget) !== 0) {
+        throw new CampaignDeliveryError("Campaign Page or ad-set delivery settings changed. Review the intended children in Meta before activation.");
       }
       adSetBudget += minorUnits(adSet.daily_budget);
+    }
+    if (ads.data.some(ad => !["ACTIVE", "PAUSED"].includes(ad.status) || !ad.creative?.id)) {
+      throw new CampaignDeliveryError("An intended ad has missing or changed delivery settings. Review it in Meta before activation.");
     }
     const campaignBudget = minorUnits(campaign.daily_budget);
     const total = campaignBudget > 0 && adSetBudget === 0 ? campaignBudget : campaignBudget === 0 ? adSetBudget : Number.NaN;
     if (!Number.isSafeInteger(total) || total <= 0 || total !== Math.round(expected.dailyBudgetRupees * 100)) {
-      throw new MetaError("Campaign budget changed in Meta. Refresh and review the budget before activation.");
+      throw new CampaignDeliveryError("Campaign budget changed in Meta. Refresh and review the budget before activation.");
     }
+    return {
+      campaign: { id: campaign.id, status: campaign.status, effectiveStatus: campaign.effective_status ?? null },
+      adSets: adSets.data.map(adSet => ({
+        id: adSet.id, status: adSet.status, effectiveStatus: adSet.effective_status ?? null,
+        dailyBudgetPaise: minorUnits(adSet.daily_budget), pageId: adSet.promoted_object!.page_id!,
+        destinationType: adSet.destination_type ?? null, targeting: adSet.targeting ?? null,
+      })).sort((left, right) => left.id.localeCompare(right.id)),
+      ads: ads.data.map(ad => ({
+        id: ad.id, status: ad.status, effectiveStatus: ad.effective_status ?? null,
+        adSetId: ad.adset_id, creativeId: ad.creative!.id!,
+      })).sort((left, right) => left.id.localeCompare(right.id)),
+    };
+  }
+
+  async verifyCampaignActivation(
+    campaignId: string,
+    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[] },
+  ): Promise<CampaignDeliverySnapshot> {
+    const snapshot = await this.readCampaignDelivery(campaignId, expected);
+    if (snapshot.adSets.some(adSet => adSet.status !== "ACTIVE") || snapshot.ads.some(ad => ad.status !== "ACTIVE")) {
+      throw new CampaignDeliveryError("An intended ad set or ad is paused. Activate only the intended children in Meta and review this campaign again.");
+    }
+    return snapshot;
   }
 
   async enforceCampaignSpendCap(campaignId: string, maximumPaise: number): Promise<void> {
