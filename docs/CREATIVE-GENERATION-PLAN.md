@@ -1,5 +1,11 @@
 # Creative generation: coherent concepts, explicit failures
 
+> Historical design and execution record. For current request flow, SDK adapters,
+> recovery and usage limits, read [AI Pipeline](AI_PIPELINE.md); for system
+> ownership read [Architecture](ARCHITECTURE.md). This September 26, 2026 redirect
+> does not revise the dated evidence below or turn a planned feature into a
+> deployed guarantee. Release scope belongs in the linked release receipts.
+
 > Design and implementation history, with dated local evidence below. Use
 > [AI Pipeline](AI_PIPELINE.md), [Features](FEATURES.md), and
 > [API Reference](API_REFERENCE.md) for current behavior and parameters. Historical
