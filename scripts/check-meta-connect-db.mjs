@@ -85,6 +85,12 @@ async function verify(database, source, integrityMigration) {
       await db.query(integrityMigration);
     }
     console.log(`PASS ${database}: schema executes`);
+    if (database === "ordered_upgrade") {
+      await check("ordered_upgrade: existing enquiry receives follow-up defaults", async () => {
+        const { rows } = await db.query("select workflow_status, follow_up_note, full_name from public.leads where meta_lead_id='legacy-follow-up'");
+        assert.deepEqual(rows, [{ workflow_status: "new", follow_up_note: "", full_name: "Legacy enquiry" }]);
+      });
+    }
     await check(`${database}: reporting identity is explicit and migration history is immutable`, async () => {
       const columns = await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='campaign_results' and column_name in ('destination', 'period_start', 'period_end') order by column_name");
       assert.deepEqual(columns.rows.map(row => row.column_name), ["destination", "period_end", "period_start"]);
@@ -199,6 +205,64 @@ async function verify(database, source, integrityMigration) {
       } finally { await session.query("rollback"); await session.end(); }
     });
 
+    await check(`${database}: enquiry paging, follow-up persistence and tenant isolation`, async () => {
+      await db.query(`insert into public.leads (business_id, meta_lead_id, full_name, phone, created_time)
+        select $1, 'inbox-' || number, case when number > 220 then null else 'Enquiry ' || lpad(number::text, 3, '0') end,
+          case when number % 2 = 0 then '+910000000000' else '  ' end,
+          case when number > 210 then null else '2026-09-01'::timestamptz + (number % 3) * interval '1 day' + (number % 2) * interval '1 microsecond' end
+        from generate_series(1, 225) number`, [businessId]);
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+        const page = async (sort = 'newest', after = null, query = '', status = 'all', contact = 'all') =>
+          (await session.query("select public.get_lead_page($1,$2,$3,$4,$5,50,$6,$7,$8) as page",
+            [businessId, query, status, contact, sort, after?.id ?? null, after?.key ?? '', after?.missing ?? false])).rows[0].page;
+        for (const sort of ['newest', 'oldest', 'name']) {
+          const seen = [];
+          let cursor = null;
+          for (let batch = 0; batch < 6; batch++) {
+            const result = await page(sort, cursor);
+            assert.equal(result.total, 225);
+            assert.ok(result.leads.length <= 50);
+            seen.push(...result.leads);
+            cursor = result.nextCursor;
+            if (!cursor) break;
+          }
+          assert.equal(cursor, null);
+          assert.equal(seen.length, 225);
+          assert.equal(new Set(seen.map(lead => lead.id)).size, 225);
+          const ordering = sort === 'name' ? 'lower(full_name) collate "C" asc nulls last'
+            : `created_time ${sort === 'newest' ? 'desc' : 'asc'} nulls last`;
+          const expected = await db.query(`select id from public.leads where business_id=$1 order by ${ordering}, id`, [businessId]);
+          assert.deepEqual(seen.map(lead => lead.id), expected.rows.map(lead => lead.id));
+          assert.equal(sort === 'name' ? seen.at(-1).full_name : seen.at(-1).created_time, null);
+          assert.ok(seen.every(lead => lead.workflow_status === 'new' && lead.follow_up_note === ''));
+        }
+        const found = await page('newest', null, 'Enquiry 219');
+        assert.equal(found.total, 1);
+        const leadId = found.leads[0].id;
+        await session.query("update public.leads set workflow_status='booked', follow_up_note='Synthetic follow-up' where id=$1", [leadId]);
+        await session.query(`insert into public.leads (business_id, meta_lead_id, full_name) values ($1, 'inbox-219', 'Enquiry 219')
+          on conflict (business_id, meta_lead_id) do update set full_name=excluded.full_name`, [businessId]);
+        const booked = await page('newest', null, '', 'booked');
+        assert.equal(booked.total, 1);
+        assert.equal(booked.leads[0].follow_up_note, 'Synthetic follow-up');
+        assert.equal((await page('newest', null, '', 'all', 'ready')).total, 112);
+        assert.equal((await page('newest', null, '', 'all', 'missing')).total, 113);
+        await assert.rejects(session.query("update public.leads set follow_up_note=repeat('x',2001) where id=$1", [leadId]), { code: '23514' });
+        await assert.rejects(session.query("update public.leads set workflow_status='invalid' where id=$1", [leadId]), { code: '23514' });
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [randomUUID()]);
+        await assert.rejects(page(), { code: '42501' });
+        assert.equal((await session.query("update public.leads set follow_up_note='foreign' where id=$1 returning id", [leadId])).rowCount, 0);
+        assert.equal((await session.query("select id from public.leads where business_id=$1", [businessId])).rowCount, 0);
+        await session.query("set role anon");
+        await assert.rejects(page(), { code: '42501' });
+      } finally {
+        await session.end();
+      }
+    });
     await check(`${database}: DB-A read isolation, delete denial and authentic audit identity`, async () => {
       const session = client(database);
       await session.connect();
@@ -273,6 +337,75 @@ async function verify(database, source, integrityMigration) {
       } finally { await session.end(); }
       assert.equal((await db.query("select count(*)::int as count from private.razorpay_test_events where order_id=$1 and event_id='event_1'",[order.id])).rows[0].count,1);
     });
+    await check(`${database}: lead sync checkpoints preserve owner follow-up and reject foreign/stale bindings`, async () => {
+      await db.query("update public.meta_connections set ad_account_id='act_sync', page_id='page_sync' where business_id=$1", [businessId]);
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role service_role");
+        const start = async (owner = ownerId, sync = null, generation = 1) => (await session.query(
+          "select * from public.lead_sync_start($1,$2,$3,$4,'act_sync','page_sync')", [businessId, owner, sync, generation])).rows[0];
+        const run = await start();
+        assert.equal((await start()).id, run.id);
+        const save = async (version, rows, progress = run.progress) => (await session.query(
+          "select public.lead_sync_checkpoint($1,$2,$3,1,'act_sync','page_sync',$4,$5,$6) as saved",
+          [businessId, ownerId, run.id, version, JSON.stringify(rows), JSON.stringify(progress)])).rows[0].saved;
+        const first = await save(0, [{ meta_lead_id: 'sync-lead', full_name: 'Original', form_id: 'form-original',
+          form_name: 'Original form', phone: '+910000000000', email: 'synthetic@example.invalid', city: 'Jaipur',
+          field_data: { synthetic: true }, created_time: '2026-09-01T00:00:00.000001Z' }]);
+        assert.equal(first.imported, 1);
+        assert.equal(first.run.version, 1);
+        await db.query("update public.leads set campaign_id=$1 where business_id=$2 and meta_lead_id='sync-lead'", [campaignId, businessId]);
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        const confirmed = (await session.query("update public.leads set workflow_status='qualified', follow_up_note='Synthetic saved note' where business_id=$1 and meta_lead_id='sync-lead' returning *", [businessId])).rows[0];
+        assert.equal(confirmed.workflow_status, 'qualified');
+        await session.query("set role service_role");
+        await assert.rejects(save(0, [{ meta_lead_id: 'stale-lead' }]), { code: '40001' });
+        const duplicate = await save(1, [{ meta_lead_id: 'sync-lead', full_name: 'Overwrite', form_id: 'changed-form',
+          phone: '+919999999999', email: 'changed@example.invalid', city: 'Changed', field_data: {},
+          created_time: '2026-09-02T00:00:00Z', workflow_status: 'new', follow_up_note: '' }]);
+        assert.equal(duplicate.imported, 0);
+        assert.deepEqual((await session.query("select * from public.leads where business_id=$1 and meta_lead_id='sync-lead'", [businessId])).rows[0], confirmed);
+        await session.query("set role authenticated");
+        const filtered = (await session.query("select public.get_lead_page($1,'Original','qualified') as page", [businessId])).rows[0].page;
+        assert.equal(filtered.total, 1);
+        assert.equal(filtered.leads[0].id, confirmed.id);
+        assert.equal(filtered.leads[0].follow_up_note, 'Synthetic saved note');
+        assert.equal(filtered.leads[0].campaign_id, campaignId);
+        await session.query("set role service_role");
+        await assert.rejects(save(2, [{ meta_lead_id: 'rolled-back' }, { meta_lead_id: null }]));
+        assert.equal(Number((await start(ownerId, run.id)).version), 2);
+        assert.equal((await session.query("select count(*)::int as count from public.leads where meta_lead_id in ('rolled-back','stale-lead')")).rows[0].count, 0);
+        const competing = client(database);
+        await competing.connect();
+        try {
+          await competing.query("set role service_role");
+          const attempts = await Promise.allSettled([
+            save(2, [{ meta_lead_id: 'race-first' }]),
+            competing.query("select public.lead_sync_checkpoint($1,$2,$3,1,'act_sync','page_sync',2,$4,$5)",
+              [businessId, ownerId, run.id, JSON.stringify([{ meta_lead_id: 'race-second' }]), JSON.stringify(run.progress)]),
+          ]);
+          assert.equal(attempts.filter(attempt => attempt.status === 'fulfilled').length, 1);
+          assert.equal(attempts.find(attempt => attempt.status === 'rejected').reason.code, '40001');
+        } finally { await competing.end(); }
+        const otherBusinessId = randomUUID();
+        await db.query("insert into public.businesses(id, owner_id, name) values ($1,$2,'Other synthetic business')", [otherBusinessId, ownerId]);
+        await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_sync','page_sync')", [otherBusinessId]);
+        await assert.rejects(session.query("select * from public.lead_sync_start($1,$2,$3,1,'act_sync','page_sync')", [otherBusinessId, ownerId, run.id]), { code: 'P0002' });
+        await assert.rejects(start(randomUUID(), run.id), { code: '42501' });
+        await assert.rejects(start(ownerId, randomUUID()), { code: 'P0002' });
+        await db.query("update public.meta_connections set generation=2 where business_id=$1", [businessId]);
+        await assert.rejects(start(ownerId, run.id, 2), { code: '40001' });
+        await session.query("set role authenticated");
+        await assert.rejects(start(), { code: '42501' });
+        await assert.rejects(session.query("select * from public.lead_sync_runs"), { code: '42501' });
+      } finally {
+        await session.end();
+        await db.query("update public.meta_connections set generation=1, ad_account_id=null, page_id=null where business_id=$1", [businessId]);
+      }
+    });
+  if (process.argv.includes("--leads-only")) return;
 
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
       const profileId = randomUUID();
@@ -780,15 +913,21 @@ try {
   const workerMigration = await readFile(join(root, "db/migrations/20260919_campaign_worker.sql"), "utf8");
   const billingMigration = await readFile(join(root, "db/migrations/20260924_managed_billing.sql"), "utf8");
   const billingEventsMigration = await readFile(join(root, "db/migrations/20260924_meta_billing_events.sql"), "utf8");
+  const leadFollowUpMigration = await readFile(join(root, "db/migrations/20260926_lead_follow_up.sql"), "utf8");
+  const leadSyncMigration = await readFile(join(root, "db/migrations/20260926_lead_sync_progress.sql"), "utf8");
+  const legacyLead = `insert into auth.users (id, email) values ('30000000-0000-4000-8000-000000000001', 'legacy@example.invalid');
+    insert into public.businesses (id, owner_id, name) values ('30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Legacy fixture');
+    insert into public.leads (business_id, meta_lead_id, full_name) values ('30000000-0000-4000-8000-000000000002', 'legacy-follow-up', 'Legacy enquiry');`;
   const testPaymentsMigration = await readFile(join(root, "db/migrations/20260926_razorpay_test_orders.sql"), "utf8");
   const integrityMigration = await readFile(join(root, "db/migrations/20260926_campaign_integrity.sql"), "utf8");
   const draftAuthorityMigration = await readFile(join(root, "db/migrations/20260926_draft_authority.sql"), "utf8");
   const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
   await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}`, integrityMigration);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);
+  if (!started) console.error(await readFile(join(directory, "postgres.log"), "utf8").catch(() => "No PostgreSQL startup log available."));
 } finally {
   if (started) execFileSync(join(bin, "pg_ctl"), ["-D", cluster, "-m", "immediate", "-w", "stop"], { stdio: "pipe" });
   await rm(directory, { recursive: true, force: true });
