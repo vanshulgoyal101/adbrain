@@ -77,16 +77,20 @@ export class LLMError extends Error {
   readonly provider: string;
   readonly status?: number;
   readonly retryable: boolean;
+  readonly model?: string;
+  readonly usage?: TokenUsage;
 
   constructor(
     message: string,
-    opts: { provider: string; status?: number; retryable: boolean },
+    opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage },
   ) {
     super(message);
     this.name = "LLMError";
     this.provider = opts.provider;
     this.status = opts.status;
     this.retryable = opts.retryable;
+    this.model = opts.model;
+    this.usage = opts.usage;
   }
 }
 

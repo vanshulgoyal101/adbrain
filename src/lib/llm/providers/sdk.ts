@@ -35,19 +35,6 @@ export async function sdkCompletion(
       };
     });
     signal.throwIfAborted();
-    if (result.finishReason === "length") {
-      const guidance = options.routing === "budget"
-        ? "The budget-model output was truncated; retry the task or shorten its input."
-        : "Increase the task token budget or reduce reasoning effort.";
-      throw new LLMError(`${provider}: ${options.task ?? "LLM task"} output token budget exhausted before completion. ${guidance}`, {
-        provider, retryable: false,
-      });
-    }
-    if (!result.text) {
-      throw new LLMError(`${provider}: empty response (finish reason: ${result.finishReason})`, {
-        provider, retryable: true,
-      });
-    }
     const body = (result.response as { body?: unknown } | undefined)?.body as {
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
@@ -56,14 +43,25 @@ export async function sdkCompletion(
     const promptTokens = provider === "google" ? body?.usageMetadata?.promptTokenCount : body?.usage?.prompt_tokens;
     const completionTokens = provider === "google" ? body?.usageMetadata?.candidatesTokenCount : body?.usage?.completion_tokens;
     const totalTokens = provider === "google" ? body?.usageMetadata?.totalTokenCount : body?.usage?.total_tokens;
-    return {
-      text: result.text,
-      usage: reported ? {
-        promptTokens: promptTokens ?? 0,
-        completionTokens: completionTokens ?? 0,
-        totalTokens: totalTokens ?? (promptTokens ?? 0) + (completionTokens ?? 0),
-      } : undefined,
-    };
+    const usage = reported ? {
+      promptTokens: promptTokens ?? 0,
+      completionTokens: completionTokens ?? 0,
+      totalTokens: totalTokens ?? (promptTokens ?? 0) + (completionTokens ?? 0),
+    } : undefined;
+    if (result.finishReason === "length") {
+      const guidance = options.routing === "budget"
+        ? "The budget-model output was truncated; retry the task or shorten its input."
+        : "Increase the task token budget or reduce reasoning effort.";
+      throw new LLMError(`${provider}: ${options.task ?? "LLM task"} output token budget exhausted before completion. ${guidance}`, {
+        provider, retryable: false, model: typeof model === "string" ? model : model.modelId, usage,
+      });
+    }
+    if (!result.text) {
+      throw new LLMError(`${provider}: empty response (finish reason: ${result.finishReason})`, {
+        provider, retryable: true,
+      });
+    }
+    return { text: result.text, usage };
   } catch (error) {
     options.signal?.throwIfAborted();
     if (deadline.aborted) {

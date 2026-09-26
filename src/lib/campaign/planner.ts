@@ -1,4 +1,5 @@
 import { complete, parseJSON, type ChatMessage, type CompletionResult } from "@/lib/llm";
+import { LLMError } from "@/lib/llm/types";
 import { z } from "zod";
 import { plannerPlanSchema } from "@/lib/campaign/planner-draft";
 import type { BrandContext } from "@/lib/templates/ads";
@@ -182,6 +183,11 @@ export async function runPlanner(
     promptVersion: PLANNER_PROMPT_VERSION,
     temperature: 0.4,
     maxTokens: 1500,
+  }).catch(async (error: unknown) => {
+    if (error instanceof LLMError && error.model && error.usage) {
+      await options.onCompletion?.({ text: "", provider: error.provider, model: error.model, usage: error.usage }, false);
+    }
+    throw error;
   });
   let value: unknown;
   try { value = parseJSON<unknown>(completion.text); } catch { value = null; }

@@ -94,6 +94,31 @@ describe("SDK facade safety", () => {
     setEnv({ GROQ_API_KEYS: "first-key,second-key", OPENROUTER_API_KEYS: "fallback-key" });
   });
 
+  it.each([false, true])("records truncated Gemini usage once across shared callers (schema: %s)", async (structured) => {
+    setEnv({ GOOGLE_AI_API_KEYS: "google-first,google-second", GROQ_API_KEYS: "fallback-key", GEMINI_MODEL: "gemini-3.6-flash" });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      candidates: [{ content: { parts: [{ text: '{"value":' }] }, finishReason: "MAX_TOKENS" }],
+      usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 2, thoughtsTokenCount: 7, totalTokenCount: 17 },
+    })));
+    const { complete } = await import("@/lib/llm");
+    const { resetUsage, usageSnapshot } = await import("@/lib/llm/usage");
+    resetUsage();
+    const messages = [{ role: "user" as const, content: "Return a value" }];
+    const options = { cache: true, json: true, responseSchema: structured ? z.object({ value: z.number() }) : undefined };
+    const results = await Promise.allSettled([complete(messages, options), complete(messages, options)]);
+    for (const result of results) {
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected") expect(result.reason).toMatchObject({
+        provider: "google", model: "gemini-3.6-flash", retryable: false,
+        usage: { promptTokens: 8, completionTokens: 2, totalTokens: 17 },
+      });
+    }
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(usageSnapshot().overall).toEqual({
+      calls: 1, cacheHits: 0, promptTokens: 8, completionTokens: 2, totalTokens: 17, savedTokens: 0,
+    });
+  });
+
   it.each(["caller", "deadline"] as const)("stops all key/provider fallthrough on %s cancellation", async (kind) => {
     const controller = new AbortController();
     if (kind === "deadline") vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);

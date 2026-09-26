@@ -156,6 +156,9 @@ async function callProviders(
         });
         return { text, provider: provider.name, model, usage };
       } catch (err) {
+        if (err instanceof LLMError && err.usage) {
+          recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
+        }
         options.signal?.throwIfAborted();
         if (err instanceof LLMError && !err.retryable && err.status === undefined) throw err;
         const message = err instanceof Error ? err.message : String(err);

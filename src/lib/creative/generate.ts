@@ -14,6 +14,7 @@ import {
 } from "@/lib/creative/concept";
 import { generateImage } from "@/lib/imageGen";
 import { complete, parseJSON } from "@/lib/llm";
+import { LLMError } from "@/lib/llm/types";
 import type { TokenUsage } from "@/lib/llm";
 import { getEnv } from "@/lib/env";
 import {
@@ -184,6 +185,12 @@ async function generateConcept(
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       cache: false,
       signal,
+    }).catch((error: unknown) => {
+      if (error instanceof LLMError && error.model && error.usage) {
+        usage.push({ provider: error.provider, model: error.model, usage: error.usage });
+        throw new CreativeValidationError([error.message], usage);
+      }
+      throw error;
     });
     if (completion.usage) {
       usage.push({
