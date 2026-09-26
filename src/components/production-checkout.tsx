@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { TestCheckoutOptions } from "@/components/test-checkout";
 
 const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{1,100}$`));
-const policySchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), serviceScope: z.string(), invoiceTerms: z.string(), refundTerms: z.string() });
+const policySchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), serviceScope: z.string(), invoiceTerms: z.string(), refundTerms: z.string(), fundingMode: z.literal("operator_managed").optional() });
 const orderSchema = z.object({
   orderId: z.uuid(), environment: z.literal("live"), amountPaise: z.literal(1_000_000), currency: z.literal("INR"),
   status: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded"]),
@@ -167,6 +167,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
         <div><dt className="text-slate-500">Meta costs, including applicable tax</dt><dd className="mt-1 font-semibold tabular-nums">{money(800_000)}</dd></div>
       </dl>
       <p className="text-sm text-slate-600">Merchant: Vanshul Goyal. Gateway fees absorbed by AdBrain. No automatic renewal.</p>
+      {policy?.fundingMode === "operator_managed" && <p className="text-sm text-slate-600">The operator pays Meta separately. Advertising allocation is not a confirmed Meta balance.</p>}
       <p role="status" aria-live="polite" className="min-h-6 text-sm font-medium text-slate-800">{working ? "Checking payment" : checkoutOpen ? "Checkout open"
         : order ? statusLabels[order.status] : loaded ? policy ? "Ready for payment" : "Collection is not enabled" : "Loading payment"}</p>
       {order && <p className="break-all text-xs text-slate-500">Payment reference: {order.orderId}</p>}

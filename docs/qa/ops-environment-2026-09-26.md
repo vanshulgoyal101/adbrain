@@ -8,6 +8,42 @@ production rollout approval or packet closure**. Governing backlog:
 
 ## Separate Payment Integration and Rollout Packet
 
+### Operator-Managed Checkout Candidate
+
+September 26, DevOps integration from clean #48 source
+`941583dcb241ef43c9b6b45d84ae6828716e9e5f` on accepted dev `cdcf574`.
+The exact additive [policy migration](../../db/migrations/20260926_production_payment_policy_v2.sql)
+has SHA-256 `8a4340415f046f23c5b31cb872b14f2290850c6ffbe108c5c0b22a32d802a06b`.
+It follows, without modifying, the original payment-order migration and is included
+verbatim at the end of the canonical fresh schema. The separate trusted-usage,
+managed-billing and Meta-billing prerequisites retain their original checksums.
+Existing historical orders retain funding evidence/terms; new operator-managed
+orders use null evidence and the exact approved terms. No payment migration or
+gateway configuration was applied to production in this integration.
+
+The maintained disposable PostgreSQL fresh/ordered-upgrade/concurrency and
+replay checks passed after canonical inclusion. Dev 2's exact-source focused
+policy, route and Billing tests, types/lint and offline mobile consent check are
+recorded in [#48](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848691420).
+Independent changed-scope QA and integrated hosted CI remain separate evidence.
+Customer balance/reservation and campaign admission are owned by #49, not included
+here; captured money is never ad-activation permission.
+
+Read-only production preflight at `2026-09-26T18:19:39Z` found no ledger entries
+for the managed-billing, Meta-billing, original payment-order or new policy
+migrations, and no production payment table or order-claim RPC. Existing Meta
+connections remain present. The production Vercel project remains main/Node 24.x,
+with 29 production-only variables, no preview or branch overrides. At
+`18:18:25Z`, **none** of the required live-payment variable names was configured.
+Private local configuration has test gateway aliases only, no live credentials.
+The signed-in Razorpay dashboard shows the approved site and a Generate Key action;
+no key, webhook or financial/provider operation was created. Live credential and
+signed webhook setup require an owner-controlled secure input path; do not print
+or fabricate values or mistake this inventory for completed payment enablement.
+Production payment SQL/configuration remain untouched. The previously approved
+operator-managed offer removes the old automatic-funding prerequisite below;
+the older paragraph is historical, not an active gate for #48.
+
 ### Repaired Integration
 
 September 26, 2026. Runtime assembly `954e44a829e2bd23e5afdd27067509273cda8529`
