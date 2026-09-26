@@ -25,7 +25,8 @@ Author evidence: 17 accounting/server/API tests, 26 activation-route tests,
 tests and 54 existing API-route regressions pass (180 total across scoped runs).
 The balance UI also checks immediate business-switch isolation. Existing campaign UI emits one
 React act warning. The existing `check-meta-connect-db.mjs --customer-only` harness
-passes eight groups on both fresh and upgrade paths, including concurrent
+passes ten groups on both fresh and upgrade paths, including active and paused
+provider campaign-ID rebind rejection, concurrent
 admission/refund exclusion, capture/cost replay, tenant/account denial, overlapping
 activation/pause and post-pause final-cost requirements. Final touched lint and
 TypeScript no-emit checks pass. All fixtures are synthetic; no remote database,
@@ -40,7 +41,7 @@ required exact-candidate CI and owns rollout. No branch push or PR is needed to
 consume the local commit from the shared Git object store.
 
 Migration SHA256:
-`794e0d1647a64264c537175ce7f3c4e8a89bf344390225e04e9e55cbbffe23c7`.
+`f333f70cb60e6c57a126e53694b0b8a5cf32e074a7846eb4657077749997fa13`.
 Documentation checks report zero errors and 11 unchanged historical artifact
 warnings in this isolated worktree. No browser-rendering or hosted CI claim is
 made by these author runs; Billing integration and independent acceptance remain

@@ -239,7 +239,7 @@ not pooled bank balances, order creation, test captures or automatic Meta fundin
 | --- | --- |
 | `customer_ad_costs` | Campaign-bound cumulative media/tax high-water values, actual tax-rate evidence, freshness/finalization and sticky conflict hold |
 | `customer_ad_cost_evidence` | Immutable actor/campaign/evidence UUID/input records; same UUID with different input rejects |
-| `customer_ad_reservations` | One current campaign reservation with rotating UUID, tenant/merchant/Meta-generation binding, tax-inclusive ceiling, finite media limit, daily budget, state and in-flight fence |
+| `customer_ad_reservations` | One current campaign reservation with rotating UUID, tenant/merchant/Meta account, generation and campaign-ID binding, tax-inclusive ceiling, finite media limit, daily budget, state and in-flight fence |
 | `customer_refund_allocations` | Verified refund split and explicitly attested service earnings; capture does not earn service fees |
 | `customer_refund_allocation_evidence` | Immutable operator/evidence UUID/input history for allocation changes |
 
@@ -253,8 +253,10 @@ financial history rather than allowing deletion to free credit.
 Reservations, cost/allocation changes and the refund insertion guard share the
 existing `production-payments:<merchant>` transaction lock. Campaign active/budget
 writes fail immediately on competing accounting locks, avoiding inverted row-lock
-waits. Concurrent admissions/refunds cannot claim the same allowance. Cumulative
-cost increases consume reserved headroom rather than being charged repeatedly;
+waits. Concurrent admissions/refunds cannot claim the same allowance. Campaigns
+with reservation or cost history cannot change their Meta campaign ID, even while
+paused; there is no implicit rebind or cap transfer. Cumulative cost increases
+consume reserved headroom rather than being charged repeatedly;
 tax, pending refund/dispute adjustments, stale costs and missing evidence stay
 distinct. Partial refunds hold new spend until their allocation matches verified
 refund totals. Service allocation and service-earned are different concepts.

@@ -25,6 +25,7 @@ create table if not exists private.customer_ad_reservations (
   account_id text not null,
   ad_account_id text not null,
   connection_generation bigint not null,
+  meta_campaign_id text not null check (length(meta_campaign_id) between 1 and 128),
   request_key text not null check (request_key ~ '^[a-f0-9]{64}$'),
   ceiling_paise bigint not null check (ceiling_paise between 1 and 9007199254740991),
   daily_budget_paise bigint not null check (daily_budget_paise between 1 and 9007199254740991),
@@ -125,7 +126,8 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||p_account_id,0));
   balance := public.customer_ad_balance(p_business_id,p_user_id,p_account_id);
   select * into campaign from public.campaigns where id=p_campaign_id and business_id=p_business_id for update;
-  if not found or not ((campaign.meta_ad_account_id=p_ad_account_id and campaign.meta_connection_generation=p_connection_generation
+  if not found or not ((campaign.meta_campaign_id is not null and campaign.meta_campaign_id<>''
+    and campaign.meta_ad_account_id=p_ad_account_id and campaign.meta_connection_generation=p_connection_generation
     and campaign.daily_budget*100=p_daily_budget_paise and p_daily_budget_paise>0 and p_request_key ~ '^[a-f0-9]{64}$'
     and exists(select 1 from public.meta_connections where business_id=p_business_id and authorization_status='connected'
       and ad_account_id=p_ad_account_id and generation=p_connection_generation)) is true) then
@@ -147,8 +149,8 @@ begin
     raise exception 'Insufficient customer advertising allowance' using errcode='23514';
   end if;
   if p_review_only then return jsonb_build_object('reservationId',p_campaign_id,'mediaLimitPaise',cost.media_paise+floor(available::numeric*10000/(10000+cost.tax_rate_bps)),'balance',balance); end if;
-  insert into private.customer_ad_reservations(campaign_id,business_id,account_id,ad_account_id,connection_generation,request_key,ceiling_paise,daily_budget_paise,media_limit_paise,state)
-    values(p_campaign_id,p_business_id,p_account_id,p_ad_account_id,p_connection_generation,p_request_key,available+cost.media_paise+cost.tax_paise,p_daily_budget_paise,
+  insert into private.customer_ad_reservations(campaign_id,business_id,account_id,ad_account_id,connection_generation,meta_campaign_id,request_key,ceiling_paise,daily_budget_paise,media_limit_paise,state)
+    values(p_campaign_id,p_business_id,p_account_id,p_ad_account_id,p_connection_generation,campaign.meta_campaign_id,p_request_key,available+cost.media_paise+cost.tax_paise,p_daily_budget_paise,
       cost.media_paise+floor(available::numeric*10000/(10000+cost.tax_rate_bps)),'uncertain')
     on conflict(campaign_id) do update set id=gen_random_uuid(),request_key=excluded.request_key,ceiling_paise=excluded.ceiling_paise,
       daily_budget_paise=excluded.daily_budget_paise,media_limit_paise=excluded.media_limit_paise,state='uncertain',activation_in_flight=true,updated_at=clock_timestamp()
@@ -285,10 +287,16 @@ create or replace function private.customer_ad_campaign_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare reservation private.customer_ad_reservations; cost private.customer_ad_costs; balance jsonb; owner_id uuid;
 begin
+  if tg_op='UPDATE' and new.meta_campaign_id is distinct from old.meta_campaign_id
+    and (exists(select 1 from private.customer_ad_reservations where campaign_id=new.id)
+      or exists(select 1 from private.customer_ad_costs where campaign_id=new.id)) then
+    raise exception 'Financially attributed Meta campaign cannot be rebound' using errcode='23514';
+  end if;
   if new.status<>'active' then return new; end if;
   if tg_op='UPDATE' and old.status='active' and new.daily_budget is not distinct from old.daily_budget
     and new.business_id=old.business_id and new.meta_ad_account_id is not distinct from old.meta_ad_account_id
-    and new.meta_connection_generation is not distinct from old.meta_connection_generation then return new; end if;
+    and new.meta_connection_generation is not distinct from old.meta_connection_generation
+    and new.meta_campaign_id is not distinct from old.meta_campaign_id then return new; end if;
   select * into reservation from private.customer_ad_reservations where campaign_id=new.id;
   if not found then raise exception 'Customer reservation required before activation or budget change' using errcode='23514'; end if;
   if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||reservation.account_id,0)) then
@@ -299,6 +307,7 @@ begin
   select business.owner_id into owner_id from public.businesses business where id=new.business_id;
   balance:=public.customer_ad_balance(new.business_id,owner_id,reservation.account_id);
   if not ((reservation.state in ('uncertain','active') and reservation.business_id=new.business_id and reservation.ad_account_id=new.meta_ad_account_id
+    and reservation.meta_campaign_id=new.meta_campaign_id
     and reservation.connection_generation=new.meta_connection_generation and new.daily_budget*100<=reservation.daily_budget_paise
     and not (balance->>'held')::boolean and cost.observed_at>=clock_timestamp()-interval '15 minutes'
     and ceil(new.daily_budget::numeric*100*7*(10000+cost.tax_rate_bps)/10000)<=reservation.ceiling_paise-cost.media_paise-cost.tax_paise) is true) then

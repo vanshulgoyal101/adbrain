@@ -240,6 +240,18 @@ async function verifyCustomerAllowance(db, database) {
     assert.equal((await balance()).remainingPaise,0);
   });
   const reservation = (await db.query("select * from private.customer_ad_reservations where business_id=$1",[business])).rows[0];
+  await check(`${database}: active campaign cannot change provider identity without a new cap`, async () => {
+    await db.query("update public.campaigns set status='active' where id=$1",[reservation.campaign_id]);
+    try {
+      await assert.rejects(db.query("update public.campaigns set meta_campaign_id='meta_rebound' where id=$1",[reservation.campaign_id]), {code:'23514'});
+    } finally {
+      await db.query("update public.campaigns set status='paused',meta_campaign_id=$2 where id=$1",[reservation.campaign_id,`meta_${reservation.campaign_id}`]);
+    }
+  });
+  await check(`${database}: paused reservation keeps its provider campaign identity`, async () => {
+    assert.equal(reservation.meta_campaign_id,`meta_${reservation.campaign_id}`);
+    await assert.rejects(db.query("update public.campaigns set meta_campaign_id='meta_rebound' where id=$1",[reservation.campaign_id]), {code:'23514'});
+  });
   await check(`${database}: uncertain activation and refunds cannot free or double-use funds`, async () => {
     assert.equal(Number(reservation.media_limit_paise),677966);
     await assert.rejects(reserve(reservation.campaign_id), {code:'23514'});
