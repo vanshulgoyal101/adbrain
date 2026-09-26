@@ -3,11 +3,15 @@ import type { MetaConnection } from "@/lib/meta/credentials";
 import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
+import { CustomerBalance } from "@/components/customer-balance";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
 export function ManagedBilling({ connection, testBusinessId, liveBusinessId }: { connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string }) {
-  if (liveBusinessId) return <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />;
+  if (liveBusinessId) return <>
+    <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
+    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} />
+  </>;
   const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
