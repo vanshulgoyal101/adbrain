@@ -7,13 +7,35 @@ this backlog against the checked-out source and current remote state before star
 
 ## Current Focus: One Verified Managed Customer
 
+September 26 operator clarification: AdBrain currently operates as Vanshul Goyal's
+unregistered business, not under Solaride. The permitted Razorpay merchant display
+name is Vanshul Goyal. Moving into Solaride remains a future legal/provider change;
+it must not be inferred from the earlier plans below. Existing Meta bindings are
+preserved and real collections remain disabled. The separate local Razorpay
+test-checkout work was not included in the identity-only production correction.
+
 Reset 2026-09-24: prioritize customer outcomes and business-model feasibility over
 additional infrastructure. The product goal is a local business turning its offer
 into approved ads and measurable enquiries with minimal advertising operations.
-The selected commercial model is one INR payment to AdBrain/Solaride Energy,
-20% pre-tax service fee and 80% advertising allocation, automatic Meta payment,
-and a separate Solaride-owned account per customer. Funding feasibility comes
-before checkout implementation, as requested by the owner.
+Latest owner clarification September 25: one INR 10,000 annual customer payment,
+INR 2,000 service allocation and INR 8,000 covering Meta media plus applicable
+Meta taxes, with automatic Meta payment and a separate Solaride-owned account
+per customer. Customer invoice tax treatment remains to be reviewed; do not
+silently add tax to the requested total. Proving outbound automatic funding is
+the highest priority, ahead of further campaign preparation or checkout code.
+
+September 26 exception: the owner confirmed no Razorpay account exists yet and
+authorized isolated Razorpay test-mode implementation in parallel with funding
+verification. A disabled-by-default local backend now creates durable test orders
+and verifies callbacks/webhooks; the gated Settings checkout UI supports mocked
+capture and reload recovery. Actual Razorpay provider testing remains pending
+account setup. This does not authorize live collection or change the funding, commercial
+or delivery gates. See the current [implementation receipt](PAYMENTS-PLAN.md#9-implementation-receipt).
+
+The [detailed payments implementation plan](PAYMENTS-PLAN.md#8-delivery-phases-and-acceptance-gates)
+maps existing foundations to milestones M0-M7, proposed API/data contracts,
+unattended delivery authorization, recovery tests and rollout gates. It is the
+build sequence for this priority, not authorization for live financial actions.
 
 ### Start Here: Execution Board
 
@@ -30,24 +52,27 @@ Solaride is the internal pilot, not evidence that an external customer can onboa
 
 | ID | High-level outcome | State | Concrete next tasks | Complete when |
 | --- | --- | --- | --- | --- |
-| P1 | One useful Solaride campaign ready to run | IN PROGRESS: ad wording approved; owner login/form access verified; revised Meta form saved as an unpublished draft | Review the saved form and ad visual; review targeting and existing unpublished ad changes; verify Pankaj's enquiry access/response window before a separately approved receipt test | Owner approves the remaining brief and creative; the intended Page, destination, ad and lead-handling path are verified, with campaign still off |
-| P2 | Solaride can pay Meta automatically | BLOCKED externally; investigate alongside P1 | Seek an account-specific human billing review, or assess an eligible automatic-card-billing route; do not repeat the exhausted AI-support conversation or pay the one-off QR to guess | A supported account/method is verified and, after separate owner approval, a mandate is active with actual automatic funding/charge evidence and spending controls |
-| P3 | A package worth selling | CAN START alongside P1/P2 | Decide whether the 80% covers Meta tax; obtain CA/gateway business-model review; define refunds and service scope; measure delivery/support costs against the fee | Owner-approved price, tax treatment, refund terms and contribution-margin target, with merchant onboarding requirements resolved |
+| P2 | Solaride can pay Meta automatically | HIGHEST PRIORITY: prove a usable route before more campaign work | Assess automatic postpaid agency billing for new customer accounts; resolve existing-account UPI enrollment only with account-specific evidence; no more one-off QR or generic AI-support loops | After specific owner authorization, one mandate and bounded automatic payment reconcile to the correct account without manual payment each time; limits and failure handling verified |
+| P1 | One useful Solaride campaign ready to run | PAUSED FOLLOW-UP: revised form ACTIVE; campaign, ad set and ad published OFF; creation already worked | After funding work, verify Pankaj's enquiry access/response window and authorized receipt test; check AdBrain sync | Lead handling and final launch review verified; no activation bundled with funding setup |
+| P3 | A package worth selling | Annual INR 10,000 model clarified; INR 8,000 includes Meta taxes | Obtain CA/gateway review of customer invoice tax; define annual scope, renewal, unused funds and refunds; verify fee economics | Legally viable approved terms and contribution margin; no automatic annual renewal assumed |
 | P4 | One real customer can connect the right assets | REQUIRED before an external paid pilot | Verify customer consent/app access, a Solaride-owned customer account plus the customer's Page, account capacity and offboarding responsibilities | The intended customer completes the real connection flow; correct ownership, permissions and destination work without global tokens or an admin credential backfill |
 | P5 | One customer payment safely funds the service | WAIT for P2 feasibility, P3 decisions and isolated gateway test access | Integrate one hosted checkout with existing quote helpers; verify capture/webhook retries, durable allocation, refund and campaign funding gates; prove one test-mode capture/refund | The exact order reconciles once, retries do not duplicate credit, failed/unverified payments cannot authorize spending, and a refund is verified |
 | P6 | Demonstrate value, then decide whether to expand | WAIT for campaign, funding and commercial gates; P4/P5 also required for the external paid pilot | Separately approve the pilot budget/activation; deliver the campaign; reconcile actual costs; measure qualified enquiries, owner effort and margin | A completed pilot report supports a continue/change/stop decision; an internal Solaride test alone is not proof of customer checkout or repeatable onboarding |
 
-P1 is first in the work queue, not a prerequisite for investigating P2. P1, P2 and
-P3 can progress together. P2 blocks checkout implementation and paid delivery, not
-creative review, campaign diagnostics, economics or customer-access preparation.
+P2 is now first in the work queue. Its ID is retained for existing references,
+not priority order. Campaign creation already worked; the latest Meta campaign
+was operational setup, not a new product capability. P3's tax/gateway questions
+can progress alongside funding because they affect the same money flow. Defer
+further campaign polish and generic billing frameworks until a usable route exists.
 An internal spend test requires P1, verified P2, agreed cost/measurement limits and
 separate activation approval. It does not complete the external customer journey.
 
 ### Solaride Pilot Brief
 
 Owner approved September 25: **free solar site survey with Meta instant-form
-enquiries**. This approves the offer and destination, not spending, paid generation,
-publishing a new form/ad, or activating an existing campaign.
+enquiries**. Subsequently authorized publishing the saved form and creating a new
+paused campaign: "publish it, create paused campaign dont hesitate". This does not
+authorize spending, funding, paid generation or activation.
 
 | Brief item | Decision / draft |
 | --- | --- |
@@ -57,7 +82,7 @@ publishing a new form/ad, or activating an existing campaign.
 | Initial customer segment | Owner-approved: homeowners, residential rooftop solar |
 | Primary outcome | Qualified survey requests, then surveys booked; form submissions alone are not success |
 | Follow-up | Owner named Pankaj Kumar; response window and lead-access/handoff still to verify. Contact number supplied privately is intentionally not recorded here |
-| Campaign state | Remain off; inspect existing objects and unpublished edits before deciding whether anything needs replacement |
+| Campaign state | New campaign, ad set and ad published OFF; existing campaigns and three older unpublished drafts preserved |
 
 **Approved headline (September 25):** Request Your Free Solar Site Survey
 
@@ -65,11 +90,11 @@ publishing a new form/ad, or activating an existing campaign.
 with a free site survey from Solaride. Share your details and our team will contact
 you to discuss your roof and arrange a suitable time.
 
-**Saved form-draft intro:** Request a free rooftop solar site survey in Chandigarh or
+**Published form intro:** Request a free rooftop solar site survey in Chandigarh or
 Panchkula. Share your contact details and a little about your property so our team
 can discuss the next step with you.
 
-**Saved form-draft fields:** name, phone number, city (Chandigarh / Panchkula /
+**Published form fields:** name, phone number, city (Chandigarh / Panchkula /
 Other / please review coverage), locality,
 and whether the enquirer owns the property or has permission to install solar.
 Flag Other for coverage review rather than promising a visit. Treat roof access as a qualification
@@ -79,7 +104,7 @@ documents, bank details or electricity-bill uploads in this initial form.
 **Saved contact-purpose disclosure:** Solaride will use these details to contact you
 about your site survey request and rooftop solar requirements. Submitting this
 form does not confirm an appointment. Review this wording alongside the actual
-privacy policy and Meta consent controls before publishing.
+privacy policy and Meta consent controls before any future revision.
 
 **Saved completion headline:** Thank you for your request
 
@@ -88,16 +113,18 @@ contact you to discuss your property and arrange the next step.
 
 The owner approved the ad headline and primary text above on September 25 and
 then explicitly authorized saving an unpublished Meta form draft with the proposed
-fields. This does not approve publication, spending or activation. Final form and
-image review and the actual lead-receipt workflow remain launch gates. Do not
+fields, followed by publication and a new paused campaign. The actual lead-receipt
+workflow, final launch review, funding and activation remain separate gates. Do not
 promise subsidy eligibility, a savings percentage, a confirmed appointment or a
 response time without evidence.
 
-### Saved Meta Form Draft
+### Published Form and Paused Campaign
 
-September 25: created only the authorized new draft on Solaride Energy Page
-`885223068001054`, named
+September 25: published the previously saved and reopened form on Solaride Energy
+Page `885223068001054`, named
 `Solaride | Free Survey | CHD-PKL | Homeowners | Sep 2026`.
+Authenticated AdBrain `GET /api/campaigns/lead-forms` returned HTTP 200 with form
+`2531491190682703` in `ACTIVE` status.
 
 - **Fields:** full name and phone; city choices `Chandigarh`, `Panchkula`,
 	`Other / please review coverage`; locality/sector with a request not to enter a
@@ -111,18 +138,44 @@ September 25: created only the authorized new draft on Solaride Energy Page
 - **Ending:** saved the message above, with an optional `Visit Solaride website`
 	action to `https://solaride.in/`. Messenger conversations are off; WhatsApp is
 	not the completion action. No response-time or confirmed-booking promise.
-- **Verification:** Meta showed `All changes to draft saved`; the named row
-	remained in Draft forms after a reload. Reopened it and verified the persisted
-	questions, intro, privacy URL, form settings and ending. The authenticated
-	AdBrain form API still returns the same four ACTIVE forms; this draft is not
-	among them. No published form ID is claimed.
+- **Verification:** the saved draft was reloaded and reopened to check its fields,
+	privacy URL, settings and ending before publication. The published form was
+	then selected on the new ad and its selection survived editor navigation.
 
-The draft was not published or attached to an ad. No existing form or ad draft
-was replaced, no test lead was submitted, and no campaign or payment setting was
-changed. Form publication, any provider receipt test, ad changes and activation
-remain separate approvals. The editor was closed after verification; the
-[Meta draft library](https://business.facebook.com/latest/instant_forms/draft_forms?asset_id=885223068001054&business_id=1158100643072508)
-is left open for owner review.
+Created directly in Ads Manager under Solaride 101 account `act_2398686420592052`:
+
+| Object | Name | Meta ID | Verified state after publication |
+| --- | --- | --- | --- |
+| Campaign | Solaride \| Free Survey \| CHD-PKL \| Sep 2026 | `120253256980050526` | Off; not In draft |
+| Ad set | Homeowners \| Chandigarh & Panchkula \| Free Survey | `120253256980060526` | Off; not In draft |
+| Ad | Solaride \| Free Survey \| CHD-PKL \| Sep 2026 | `120253256980040526` | Own switch off; delivery Campaign off; not In draft |
+
+- **Budget:** INR 200/day at campaign level, verified after publication and
+	reopening. This is a saved setup value, not spending approval or a hard daily
+	cap. Meta displays INR 350 maximum daily and INR 1,400 maximum weekly spend.
+- **Targeting:** Chandigarh and Panchkula, current-city-only selections shown as
+	0 miles, with no added radius or Mohali exclusion. Location-interest expansion
+	was turned off. Meta's city definitions are not verified municipal boundaries.
+	Minimum age 18, suggested ages 18-65+, all genders, Advantage+ placements.
+	Homeowners are addressed by the copy and property-permission questions, not a
+	verified exclusive homeownership demographic filter.
+- **Creative:** reused the Solaride website's installation-canopy image,
+	converted to JPEG, with the exact approved primary text/headline and `Learn more`
+	CTA. Original media selected; no AI variants selected. Music, visual touch-ups,
+	animation, overlays and text improvements all off. Preview images loaded;
+	this is not certification of every placement or device.
+- **Publication:** the ad-level Publish operation processed exactly three new
+	objects. The new ad changed from In draft to Campaign off. The campaign and
+	ad set were reopened and each showed Off. All three switches were individually
+	verified off; the three older drafts remained in `Review and publish (3)`.
+- **Application boundary:** this was direct Meta creation, not an AdBrain campaign
+	operation. AdBrain campaign-list import/sync is not yet verified. Do not insert
+	production database records manually to manufacture that linkage.
+
+[Open the paused campaign in Meta](https://adsmanager.facebook.com/adsmanager/manage/campaigns/edit/standalone?act=2398686420592052&business_id=1158100643072508&selected_campaign_ids=120253256980050526).
+No existing campaign/form/draft was replaced, no test lead or message was sent,
+and no payment, mandate, account funding or activation was performed. Pankaj's
+actual receipt/access and response commitment remain unverified.
 
 ### Existing Pilot Audit
 
@@ -162,20 +215,20 @@ a separate paid-launch gate; it does not block these non-spending preparations.
 
 | Order | Task | Owner | Output / boundary |
 | --- | --- | --- | --- |
-| 1 | Review the saved form draft and confirm follow-up response time/access | Owner reviews final form and response commitment; Copilot checks | Authorized unpublished form draft saved and reopened successfully; no response-time promise or verified lead handoff yet. Publication and receipt testing remain separately gated |
-| 2 | Finish live ad, targeting and unpublished-change review in the verified owner workspace | Copilot inspects and diagnoses | Owner session and application form access verified; remaining checks must not recreate the campaign or publish the three existing drafts just to make progress |
-| 3 | Prepare/review one evergreen creative and verify where an enquiry will arrive | Copilot prepares; owner approves claims and destination | Launch-ready creative and a consent-safe lead-receipt check; paid generation, production edits or provider test actions require their appropriate approval |
-| 4 | Investigate one viable funding alternative or obtain human account-specific review | Copilot researches/checks approved accounts; owner handles provider/bank consent | Written supported setup path or a clear no-go. No mandate, new account, billing-mode change, deposit or ad activation under general research permission |
-| 5 | Resolve the package's 80% tax meaning, gateway eligibility and refund terms | Copilot prepares comparison/questions; owner, CA and gateway confirm | Approved commercial specification; the INR 10,000 example and illustrative tax rates are not approved pricing/tax policy |
-| 6 | Measure creative/API costs and expected operator effort for this pilot | Copilot collects available cost evidence; owner supplies real time/cost assumptions | Contribution estimate with explicit assumptions; revise scope/price if the fee cannot cover delivery and reserves |
+| 1 | Verify a usable automatic funding route for a Solaride-owned INR account | Copilot verifies provider/account requirements; owner handles bank consent | Actual route, enrollment steps, limits and separate approval for a bounded payment test; no fabricated top-up API or manual-payment substitute |
+| 2 | Confirm annual INR 10,000 invoice, service scope and fee economics | Owner, CA and gateway confirm; Copilot implements reviewed rules | INR 2,000 service and INR 8,000 tax-inclusive Meta allocation are the product target; tax, renewal, unused-funds/refund rules and gateway eligibility still need review |
+| 3 | Prove one automatic Meta payment, then connect the annual checkout flow | Copilot integrates only the verified route; owner authorizes the exact financial test | Bank/Meta receipt matched once, with payment failure and spending limits tested; current general request is not a bank mandate or ad activation |
+| 4 | Confirm Pankaj's response time/access and test one enquiry when authorized | Owner/Pankaj and Copilot | Actual consent-safe receipt and handoff; no test lead submitted yet |
+| 5 | Verify AdBrain campaign visibility and complete launch review | Copilot checks normal sync/import when authorized | Direct Meta setup is not an AdBrain create receipt; preserve old drafts and keep all objects off |
+| 6 | Run a separately approved campaign schedule within the annual allocation | Owner approves; Copilot measures costs and results | INR 200/day paused setup is not permission for year-round delivery or an annual budget; report qualified enquiries and service effort |
 | 7 | Publish the already-fixed OAuth test fixture and verify the exact dev CI run when Git publication is authorized | Copilot | Small release-maintenance task, not a product milestone; no production promotion bundled with it |
 
-**The owner's next input:** review the saved Meta form and ad visual, confirm a realistic enquiry-response
-window and the handoff operator. The intended owner session is now verified. Offer, destination,
-service area, segment, follow-up owner and ad wording are already approved. No payment is needed to define
-or inspect that pilot. Copilot's next task is to turn the audit findings into an
-owner-approved creative/form and verify the real receipt path, not another billing
-adapter or another generic Meta AI chat.
+**Next deliverable:** establish how Solaride will pay Meta automatically for the
+annual package, with a concrete setup path, account eligibility and the exact
+human authorization required. Do not ask the owner to approve the 20/80 or
+tax-inclusive Meta allocation again. Bank consent, any test charge and ad activation
+remain separately scoped approvals. Existing campaign/form work stays off and
+does not take priority over resolving the money flow.
 
 **Funding decision rule:** when a provider-supported automatic route is demonstrated,
 request approval for its specific setup and limits. If no route can be demonstrated,
@@ -194,9 +247,9 @@ the selected end-to-end path. The broader backlog below does not override this q
 | --- | --- | --- |
 | Brand to approved creative | Existing implemented workflow; generation and review are available | One representative customer's approved creative and measured generation cost |
 | Customer access to the correct Page/account | The documented Gmail owner's `solar energy` workspace has a saved Solaride 101 account/Page binding; the September 18 repair verified provider access | Recheck current provider access; normal customer OAuth, customer-owned Page onboarding and remaining account capacity remain unproven |
-| Approved creative to deliverable campaign | September 24 Ads Manager check shows `new year` Off and its ad set Off with unpublished edits; exact stored object-ID selection returns one ad, matching the earlier successful creation record | Verify the ad's delivery/creative status and review unpublished changes; this does not resolve the later Holi publishing error or prove paid delivery |
+| Approved creative to deliverable campaign | September 25: new evergreen free-survey form ACTIVE; campaign `120253256980050526`, ad set and ad published with all switches OFF; INR 200/day saved | Verify AdBrain import, final launch review and enquiry handoff; direct Meta creation does not resolve the old Holi error or prove paid delivery |
 | Solaride automatically pays Meta | Solaride 101 has INR 0 available funds and no saved method; owner-approved INR 100 inspection produced only an unpaid one-off UPI QR, with no Save UPI/recurring option | Resolve account-specific auto-reload eligibility before separately approved funding/mandate setup; a one-off payment does not meet the requirement |
-| Customer pays AdBrain once | Quote/signature helpers only; no checkout | Gateway business-model/KYC approval and one isolated test-mode capture/refund before an authorised live pilot |
+| Customer pays AdBrain once | Local-only SDK, durable test orders and gated Settings checkout; no provider-tested or live collection | Gateway business-model/KYC approval and one isolated test-mode capture/refund before an authorised live pilot |
 | Customer receives attributable value | Reporting/lead tools exist | Approved capped pilot with attributable enquiries, actual spend, service cost and support effort recorded |
 
 No end-to-end managed-payment pilot has been verified in this work. Do not turn
@@ -239,26 +292,27 @@ QR payment likely would not save a recurring method without prior recurring cons
 Do not treat that chat as verified funding or authorize a top-up to guess whether
 the option appears. See the support outcome in [Payments Plan](PAYMENTS-PLAN.md).
 
-The browser is signed into the demo clinic. That workspace was also deliberately
+The earlier browser was signed into the demo clinic. That workspace was also deliberately
 bound to Solaride 101 by the earlier owner-authorized repair; a different workspace
 name does not imply a different external account. Keep the pilot in the intended
 Gmail owner's workspace. Do not copy clinic creatives, rebind credentials, transfer
-ownership or create another business. The owner will switch browser accounts.
+ownership or create another business. The owner subsequently switched accounts;
+the intended session and form access were verified on September 25.
 
 The local diagnostic cannot decrypt production tokens because its environment has
 no `META_TOKEN_ENCRYPTION_KEY`. This is not evidence of an expired or missing
 production connection. No global token fallback, key change or Meta API call was
 made. Use the existing authenticated production workflow for current provider
 checks. Normal customer OAuth remains unverified by the administrator-provisioned
-connection. Any new PAUSED creation, bank authorization and spending need separate
-approval.
+connection. The specific paused creation above was subsequently authorized and
+completed; bank authorization, funding and spending still require separate approval.
 
 The latest creatives in the correct workspace include Holi/summer copy, and its
 saved service locations are empty. Before a live pilot, approve a current offer,
 service area and evergreen creative. Do not automatically reuse seasonal copy,
 unsupported savings claims or another workspace's geography. Verify automatic
 billing eligibility and mandate separately from campaign permissions. See the
-[package sensitivity](PAYMENTS-PLAN.md#first-package-proposal-and-economics) before
+[package sensitivity](PAYMENTS-PLAN.md#annual-package-and-illustrative-economics) before
 committing to a net-media promise or implementing checkout.
 
 The billing foundations were pushed to dev at `abfbfe1`, not deployed to production.

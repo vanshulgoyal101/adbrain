@@ -13,6 +13,7 @@ status, not an undated feature claim.
 
 | Reader | Read first | Then read |
 | --- | --- | --- |
+| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Operating brief](OPERATING-BRIEF.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
 | Product or support | [Features and workflows](FEATURES.md) | [Demo runbook](DEMO-RUNBOOK.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
@@ -23,6 +24,7 @@ status, not an undated feature claim.
 
 | Guide | Questions it answers |
 | --- | --- |
+| [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](FEATURES.md) | What can owners do, and where are the limits? |
 | [API reference](API_REFERENCE.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |

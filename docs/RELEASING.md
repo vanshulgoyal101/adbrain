@@ -4,6 +4,23 @@ This is AdBrain's deployment reference. It applies to this repository, not every
 repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
 settings before a release; the historical receipts below are not current status.
 
+## Publication Policy Repair: 2026-09-26
+
+[PR #32](https://github.com/vanshulgoyal101/adbrain/pull/32) published the owner-approved
+configuration-only repair at `174d3585ed3357dbd10131b2ed68434763589d32` on main/dev.
+The old `*: false` rule did not match branch names containing `/`: Vercel uses
+minimatch and unmatched branches default to enabled. #27, #28 and the G-2 release
+branch created previews. The corrected `**: false` rule passed nine local cases;
+the controlled repair branch produced no preview after dev/PR CI, while main
+deployed successfully at the exact repair merge. All four release CI runs passed.
+See [the current DevOps evidence](qa/ops-environment-2026-09-26.md#o-11-preview-policy-hold).
+The policy defect is resolved, but the checked #27/#28 candidates still have the
+old rule and remain held. Every candidate must carry the corrected configuration
+before its next push, including branches based on older production commits.
+Incorporate `1a04cd235d6eda7835fe181f55bf568e339cfb8b` or updated dev locally first;
+recheck the resulting committed rules. This repair does not authorize a feature
+promotion or change any review, CI, credential or production-approval requirement.
+
 ## Latest Application Release: 2026-09-18
 
 [PR #10](https://github.com/vanshulgoyal101/adbrain/pull/10) released the platform
@@ -56,15 +73,17 @@ documentation-only synchronization is recorded in its PR.
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
-| Vercel Git deployment (current source) | `*: false`, `main: true`, `dev: false`, pilot branch disabled |
+| Vercel Git deployment (repaired source) | `**: false`, `main: true`, `dev: false`, pilot branch disabled |
 
 These controls are split between [.github/workflows/ci.yml](../.github/workflows/ci.yml),
 [vercel.json](../vercel.json), and GitHub branch-protection settings. GitHub does
 not enforce that every release originated on `dev`; the promotion procedure does.
 Direct CLI deployments are not blocked by Git branch protection.
 
-**The current checked-in wildcard disables other Git branch deployments.** Earlier
-configurations did not, and historical receipts below describe that failure mode.
+**A single `*` does not disable slash-containing Git branches.** Use `**` for
+the default-deny rule with the explicit `main: true` exception, and validate the
+exact branch's committed configuration and observed hosted behavior. Earlier
+receipts that inferred suppression from `*: false` are superseded by the repair above.
 Before pushing a feature or release branch, inspect effective remote deployment
 rules and preview credentials rather than relying on an old receipt or local JSON
 alone. Do not assume a preview URL implies a preview database, harmless cron
