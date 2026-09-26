@@ -87,7 +87,7 @@ function paymentService(config: Config, signal: AbortSignal) {
     if (!result) throw new CheckoutRequestError(404, "Payment reference not found for this merchant configuration.");
     return result;
   }
-  async function observe(paymentId: string, expected?: SavedOrder, refundId?: string | null, forceReview = false) {
+  async function observe(paymentId: string, expected?: SavedOrder, refundId?: string | null, forceReview = false, recoverFailedAttempt = true): Promise<z.infer<typeof recoverySchema>> {
     const payment = await provider.fetchPayment(paymentId);
     const remoteOrder = await provider.fetchOrder(payment.order_id);
     const localId = z.uuid().safeParse(remoteOrder.receipt);
@@ -112,6 +112,15 @@ function paymentService(config: Config, signal: AbortSignal) {
         || (payment.captured && payment.amount_refunded > 0 && ["captured", "refunded"].includes(payment.status)));
     const pending = amountMatches && refundMatches && !payment.captured && payment.amount_refunded === 0
       && ["created", "authorized", "failed"].includes(payment.status) && remoteOrder.status !== "paid" && remoteOrder.amount_paid === 0;
+    if (recoverFailedAttempt && amountMatches && refundMatches && !refund && !payment.captured && payment.status === "failed"
+      && payment.amount_refunded === 0 && payment.id !== order.payment_id
+      && remoteOrder.status === "paid" && remoteOrder.amount_paid === order.amount_paise && remoteOrder.amount_due === 0) {
+      const payments = await provider.fetchOrderPayments(payment.order_id);
+      const captures = payments.filter(candidate => candidate.captured || candidate.status === "refunded");
+      if (captures.length === 1 && captures[0].id !== payment.id) {
+        return observe(captures[0].id, order, null, forceReview, false);
+      }
+    }
     const snapshotHash = createHash("sha256").update(JSON.stringify({ payment, order: remoteOrder, refund })).digest("hex");
     order = await stored(database.rpc("production_payment_observe", {
       ...scope, p_order_id: order.id, p_payment_id: payment.id, p_capture_verified: capture,

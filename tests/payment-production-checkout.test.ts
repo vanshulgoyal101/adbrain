@@ -186,6 +186,28 @@ describe("live checkout service with synthetic provider evidence", () => {
     mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, status: "attempted", amount_paid: 0, amount_due: 1_000_000 });
     expect(await (await verify(callback())).json()).toMatchObject({ capturedPaise: 0, receipt: null, spendablePaise: 0 });
   });
+  it.each([true, false])("reconciles a distinct capture before completing a stale failed attempt (saved capture: %s)", async capturedLocally => {
+    if (capturedLocally) {
+      saved = { ...saved, state: "captured", captured_paise: 1_000_000, payment_id: payment.id };
+    }
+    mocks.fetchPayment.mockImplementation(async paymentId => paymentId === "pay_failed"
+      ? { ...payment, id: paymentId, captured: false, status: "failed" } : payment);
+    const response = await webhook(notification({ event: "payment.failed", payload: {
+      payment: { entity: { id: "pay_failed", order_id: "order_fixture" } },
+    } }));
+    expect(response.status).toBe(200);
+    expect(saved).toMatchObject({ state: "captured", captured_paise: 1_000_000, payment_id: payment.id, review_required: false });
+    expect(mocks.fetchPayment).toHaveBeenCalledWith(payment.id);
+    expect(mocks.rpc.mock.calls.filter(([name]) => name === "production_payment_observe").map(([, args]) => args))
+      .toEqual([expect.objectContaining({ p_payment_id: payment.id, p_capture_verified: true, p_review_required: false })]);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it("holds failed evidence about the already captured payment itself", async () => {
+    saved = { ...saved, state: "captured", captured_paise: 1_000_000, payment_id: payment.id };
+    mocks.fetchPayment.mockResolvedValue({ ...payment, captured: false, status: "failed" });
+    expect((await webhook(notification({ event: "payment.failed" }))).status).toBe(200);
+    expect(saved.review_required).toBe(true);
+  });
   it.each([{ amount: 1 }, { refund_status: "full" }, { captured: false }])("holds conflicting provider evidence: %j", async overrides => {
     mocks.fetchPayment.mockResolvedValue({ ...payment, ...overrides });
     expect(await (await verify(callback())).json()).toMatchObject({ status: "review_required", capturedPaise: 0, checkout: null });
