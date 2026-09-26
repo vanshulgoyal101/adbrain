@@ -6,6 +6,127 @@ production rollout approval or packet closure**. Governing backlog:
 [release rules](../RELEASING.md) and the latest
 [DB-A developer handoff](db-a-dev-a-handoff-2026-09-26.md).
 
+## Backlog Integration and Migration Approval Packet
+
+September 26, DevOps integration/preflight assignment. This is a source-pinned
+approval packet, **not authorization to apply SQL or a claim of production
+readiness**. Documentation assembly is separate from the application candidate.
+
+### Available Integration
+
+Integrated exact documentation inputs: #41 `1b0bb37`, QA-accepted #42 `bd47fcf`,
+and #43 tooling/guides `00e4729`. Existing package-lock entries, runtime dependencies
+and scripts are unchanged; seven documentation-only dependency entries are added.
+CI commit `d9ac374` adds checker fixtures and `docs:check` without removing any
+existing trigger, permission, audit, application, database, build or secret gate.
+Six coordinator guide fingerprints matched QA's review and were preserved with
+their archives in `b9109fd`. Newer Orchestration/instruction edits and peer receipts
+remain owned by their authors. The payments archive includes the legitimate
+pre-archive merchant-status update; it is not identical to the older tracked plan.
+
+The assembled current guides pass the maintained checker. #40 `7c968dc` awaits
+QA's factual decision; Dev still owns the final combined #34/#35 application/schema
+candidate. Do not infer either acceptance from the documentation check. These
+boundaries are a checkpoint, not a scheduling hold on other ready work.
+
+At `2026-09-26T14:39:47.803Z`, read-only Vercel metadata confirmed project
+`prj_LNNhyKmbQYXyBUNadG2hZJSLDjOw`, production branch main, Node 24.x, preview
+SSO protection, 29 production-only environment entries, zero preview entries and
+zero branch overrides. No settings or credentials changed. The candidate retains
+the corrected `**: false` rule. Saved metadata and local pattern tests alone do
+not constitute a fresh deployment-suppression experiment.
+
+### Pinned SQL Inputs
+
+Target is the previously verified AdBrain Supabase project
+`kmzuxrvfrwwpwmoovwcp`, PostgreSQL 17.6, ap-northeast-1. This task did not open a
+production database connection. Before execution, independently verify the actual
+operator endpoint/port/database/user and require the CLI's exact matching target;
+do not infer them from a browser URL or load the shared production environment.
+
+Proposed inputs below are hashed from immutable Git objects. The first four are
+from dev `672eb132ad57bb3ba31f118afaffddaa878b4923`; the sync input is from
+`363859fc1195839822f60a92fda6109194a14268`, follow-up from
+`67320272380429b003b2131bf3b2b22641b0dd67`. Reconcile these with Dev's final
+combined SHA; any changed bytes need an updated packet and applicable review.
+
+| Order / gate | Migration | SHA-256 |
+| --- | --- | --- |
+| DB-A 1 | `20260926_campaign_integrity.sql` | `f982ef1782a0166cbd4ebae7f696ce0a748bc1e744132d539fe385e4cf6717cf` |
+| DB-A 2 | `20260926_draft_authority.sql` | `0d8e5fff0eaa7e1a728fec0087eac513c0cd7cf609dd4522097e720b1d18ebd2` |
+| DB-A 3 | `20260926_trusted_campaign_writes.sql` | `c0cbe8418fd608dba782ccbe384fdb3205150d682236ccd221ef8f6892038306` |
+| After approved legacy resolution | `20260926_validate_campaign_integrity.sql` | `8d6149ba4d4f3fcf4c13d6369c518fe24832d6b8a03425a0cfd1257521b27224` |
+| Enquiry expansion, before combined callers | `20260926_lead_sync_progress.sql` | `e769403c7cc39e7dff7ad11c8a9224a1c0a64535314bd435ace6ed0a54d5c7c5` |
+| Enquiry expansion, before combined callers | `20260926_lead_follow_up.sql` | `92fe5ec785017b262614fee5a49446898a852170c79268ca58bd77fca48271af` |
+
+The last two files remain in their feature candidates, not this documentation
+assembly. Their integration and ordering belong to Dev's combined handoff.
+Reporting identity is already recorded as applied in the retained production
+catalog; do not replay it to fill ledger gaps. Existing worker/managed-billing,
+Meta billing-event and Razorpay test migrations are not included in this request.
+#45 live-payment schema/configuration and all funding/provider actions are excluded.
+
+### Preflight and Recovery Decision
+
+The existing [read-only preflight](../../db/preflight/20260926_campaign_integrity.sql)
+at `672eb13` has SHA-256
+`260a252cec8645fde0a4ae4cf75589fdbc1e40dfe25dc71612ae45fd36bb97c3`.
+It reports nine aggregate integrity categories, not customer records or a repair.
+Use a separately verified secure operator connection; the following bounded
+command is a proposed read-only execution, **not run by this task**:
+
+```sh
+PGOPTIONS='-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=5000' \
+  psql --no-psqlrc --set=ON_ERROR_STOP=1 \
+  --file=db/preflight/20260926_campaign_integrity.sql
+```
+
+Stop on nonzero counts, a missing object, timeout or unexplained catalog drift.
+Capture effective grants/RPC signatures, Data API exposed schemas, table/index
+sizes and active transaction/lock pressure as separate preflight evidence; the
+nine counts do not establish those facts. Do not repair, discard, relabel or
+quarantine historical rows without the owner's specific decision. Numerically
+valid historical snapshots are not automatically trusted provider-spend evidence.
+
+Retained production inspection returned no listed backup and PITR disabled. A
+usable current restore point, independently tested restore into an isolated target,
+recovery-key custody and separate Storage-object recovery evidence are required
+before risky schema work. No backup product, production export, retention change
+or restore was purchased, performed or authorized here. Choose the recovery
+capacity and approve its cost/target separately; the earlier pricing table is an
+estimate, not a purchase request embedded in SQL approval.
+
+### Compatibility and Approval Gates
+
+1. Dev supplies the exact combined application/schema candidate and focused
+   fresh/upgrade/import-to-follow-up evidence. QA accepts that exact scope;
+   DevOps assembles it against current main, excluding optional test/live payments.
+2. Approve either a tested maintenance/quiescence mechanism or separately reviewed
+   expansion/adoption/contraction migrations. The existing mixed migrations revoke
+   campaign/result writes and draft mutation grants; old session-write callers are
+   incompatible. There is no verified central maintenance switch in this packet.
+   Account for web routes, cron and any worker plus in-flight provider operations.
+3. Approve the verified database target, exact checksums/order, bounded window,
+   backup/restore evidence, legacy-data decision and operator. Production apply
+   remains explicitly unapproved. Migration approval does not authorize ad changes.
+4. Keep mutations stopped during incompatible schema/code transitions. Use the
+   existing transactional runner, ledger, advisory lock and timeout guards; never
+   run full schema or directory replay. Verify PostgREST signatures/grants and
+   owner/wrong-owner/anonymous/service behavior before reopening affected routes.
+5. Record a tested rollback floor. Before revocation, main `6291dc2` remains the
+   previous application artifact subject to compatibility checks. After revocation,
+   it is **not** an approved rollback: retain a tested trusted-write-compatible
+   artifact or forward fix. That exact artifact has not yet been supplied. Do not
+   restore unsafe grants, drop evidence or reissue uncertain provider operations.
+6. Require assembled hosted CI and exact deployment/alias verification for any
+   later approved promotion. Use authorized fixtures and prevent unintended
+   auto-sync during read-only smoke. A homepage 200 does not close these gates.
+
+Next decisions: Dev's combined SHA and rollout compatibility; QA's exact workflow
+acceptance; owner's target-specific migration, recovery and maintenance approval.
+Unblocked work is documentation/tooling integration and its required hosted CI,
+not another production release of the already-shipped SDK/query work.
+
 ## Issue 42 Documentation Handoff
 
 DevOps rebuilt QUICK_START, CONFIGURATION, DEPLOY, RELEASING, OPERATIONS and
