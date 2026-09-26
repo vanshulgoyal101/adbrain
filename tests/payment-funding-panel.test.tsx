@@ -8,6 +8,8 @@ import { ProductionCheckout } from "@/components/production-checkout";
 
 vi.mock("next/script", () => ({ default: ({ onReady, onError }: { onReady: () => void; onError: () => void }) =>
   <img alt="" data-testid="checkout-script" onLoad={onReady} onError={onError} /> }));
+vi.mock("@/components/customer-balance", () => ({ CustomerBalance: ({ businessId }: { businessId: string }) =>
+  <div data-testid="customer-balance" data-business-id={businessId} /> }));
 
 const connected = { adAccountId: "act_123", ready: true, expired: false, pending: false };
 
@@ -299,6 +301,22 @@ describe("production checkout with synthetic responses", () => {
 });
 
 describe("managed billing settings", () => {
+  it("shows the live business's checkout and allowance, updating both when the business changes", async () => {
+    const otherBusinessId = "33333333-3333-4333-8333-333333333333";
+    fetchMock.mockResolvedValue(Response.json({ policy: null, orders: [] }));
+    const view = render(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={otherBusinessId} />);
+    expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", otherBusinessId);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.includes(`businessId=${otherBusinessId}`))).toBe(true));
+    expect(screen.queryByRole("region", { name: "Razorpay test checkout" })).not.toBeInTheDocument();
+
+    view.rerender(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={businessId} />);
+    expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", businessId);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.includes(`businessId=${businessId}`))).toBe(true));
+
+    view.rerender(<ManagedBilling connection={connected} />);
+    expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
+  });
+
   it("renders checkout only when supplied a server-authorized test business", () => {
     render(<ManagedBilling connection={connected} testBusinessId={businessId} />);
     expect(screen.getByRole("region", { name: "Razorpay test checkout" })).toBeInTheDocument();

@@ -974,6 +974,29 @@ export class MetaClient {
     }
   }
 
+  async enforceCampaignSpendCap(campaignId: string, maximumPaise: number): Promise<void> {
+    if (!Number.isSafeInteger(maximumPaise) || maximumPaise <= 0) throw new MetaError("Invalid customer media allowance.");
+    await this.verifyCampaignBinding(campaignId);
+    const current = await this.graph<{ id: string; account_id: string; can_use_spend_cap?: boolean; spend_cap?: string }>(
+      `${encodeURIComponent(campaignId)}?fields=id,account_id,can_use_spend_cap,spend_cap`,
+    );
+    if (current.id !== campaignId || current.account_id !== this.creds.adAccountId.replace(/^act_/, "") || current.can_use_spend_cap !== true
+      || !/^\d+$/.test(current.spend_cap ?? "0") || !Number.isSafeInteger(Number(current.spend_cap ?? 0))) {
+      throw new MetaError("Meta cannot verify a finite campaign spending limit. Keep the campaign paused.");
+    }
+    const existing = Number(current.spend_cap ?? 0);
+    const target = existing > 0 ? Math.min(existing, maximumPaise) : maximumPaise;
+    if (existing !== target) {
+      const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(campaignId), { method: "POST", form: { spend_cap: String(target) } });
+      if (updated.success !== true) throw new MetaError("Campaign spending limit is unconfirmed. Reconcile before activation.");
+    }
+    const confirmed = await this.graph<{ id: string; account_id: string; spend_cap?: string }>(
+      `${encodeURIComponent(campaignId)}?fields=id,account_id,spend_cap`,
+    );
+    if (confirmed.id !== campaignId || confirmed.account_id !== current.account_id || !/^\d+$/.test(confirmed.spend_cap ?? "")
+      || Number(confirmed.spend_cap) !== target) throw new MetaError("Campaign spending limit changed. Keep the campaign paused.");
+  }
+
   /** Pause or resume a campaign after verifying its account and Page. */
   async updateCampaignStatus(
     campaignId: string,

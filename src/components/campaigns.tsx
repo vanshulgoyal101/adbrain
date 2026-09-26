@@ -744,6 +744,8 @@ export function Campaigns({
 
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO) {
     try {
+      const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
       const digest = await buildActivationDigest(campaign, connection);
       setReviewConnection(connection);
       setActivationDigest(digest);

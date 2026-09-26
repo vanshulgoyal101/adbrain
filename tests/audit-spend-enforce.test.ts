@@ -20,6 +20,10 @@ const withMetaConnection = vi.fn();
 const getCampaigns = vi.fn();
 const getLatestResults = vi.fn();
 const getSpendLimits = vi.fn();
+const getCustomerBalance = vi.fn();
+const confirmCustomerCampaign = vi.fn();
+
+vi.mock("@/lib/payments/customer-balance", () => ({ getCustomerBalance, confirmCustomerCampaign }));
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: (...args: unknown[]) => updateEq(...args) }));
@@ -46,6 +50,8 @@ vi.mock("@/lib/supabase/queries", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getCustomerBalance.mockResolvedValue({ held: false, reservations: [] });
+  confirmCustomerCampaign.mockResolvedValue(undefined);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
   getUser.mockResolvedValue({ data: { user: { id: "u1", email: "o@x.com" } } });
@@ -169,6 +175,25 @@ describe("enforceAutoPause", () => {
     const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
     await expect(enforceAutoPause("b1")).resolves.toEqual([]);
     expect(updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("pauses held customer funds even when the optional weekly guard is off", async () => {
+    setup({ autoPause: false, cap: null, spend: 100 });
+    getLatestResults.mockRejectedValueOnce(new Error("Reporting unavailable"));
+    getCustomerBalance.mockResolvedValue({ held: true, reservations: [{ campaignId: "c1", reservationId: "r1", state: "active" }] });
+    const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPause("b1")).resolves.toEqual(["c1"]);
+    expect(confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "b1", userId: "u1" }, "c1", "r1", "paused");
+    expect(getLatestResults).not.toHaveBeenCalled();
+    getLatestResults.mockReset();
+  });
+
+  it("does not treat unavailable customer costs as zero spend", async () => {
+    setup({ autoPause: false, cap: null, spend: 0 });
+    getCustomerBalance.mockRejectedValueOnce(new Error("Cost reconciliation unavailable"));
+    const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPause("b1")).resolves.toEqual(["c1"]);
+    expect(confirmCustomerCampaign).not.toHaveBeenCalled();
   });
 
   it("does nothing when there is no cap", async () => {

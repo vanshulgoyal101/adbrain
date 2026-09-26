@@ -44,6 +44,21 @@ server-only, and captured funds do not authorize campaign activation. The
 canonical schema appends the same policy SQL; verify the migration ledger for
 other targets rather than inferring their state from source.
 
+The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
+follows the payment policy and trusted campaign objects in the canonical fresh
+schema. It adds five private RLS-protected tables for cumulative campaign
+media/tax costs and evidence, campaign reservations, verified refund allocations
+and their evidence. Direct table access is denied even to the service role;
+service-only RPCs verify owner/operator authority and share the payment
+transaction lock with refunds. Existing payment orders supply captured/refunded
+allocations; test orders do not. Reservations pin the Meta campaign ID and
+connection generation, and financially attributed campaigns cannot rebind that
+provider ID while paused. Uncertain activation and cost evidence hold funds;
+final reconciliation releases only unused allowance. Source inclusion alone
+does not prove a target migration was applied. See the
+[allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission
+and recovery limitations.
+
 ## Table Dictionary
 
 ### Identity and Brand
