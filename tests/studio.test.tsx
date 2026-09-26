@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -58,6 +59,133 @@ beforeEach(() => {
 });
 
 describe("<Studio> generation", () => {
+  it("does not submit paid work when recovery identity cannot be persisted", async () => {
+    const original = Storage.prototype.setItem;
+    const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith("adbrain:studio-generation:")) throw new Error("Storage blocked");
+      original.call(this, key, value);
+    });
+    try {
+      render(<Studio business={business} initialCreatives={[]} />);
+      fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
+      fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("No generation was started");
+      expect(global.fetch).not.toHaveBeenCalled();
+    } finally { storage.mockRestore(); }
+  });
+
+  it("holds a synchronous submit guard while the response is pending", async () => {
+    let finish!: (value: unknown) => void;
+    global.fetch = vi.fn().mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
+    const form = screen.getByRole("button", { name: /generate ads/i }).closest("form")!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(global.fetch).toHaveBeenCalledOnce();
+    finish(okJson({ creatives: [creative()] }));
+    expect(await screen.findByRole("heading", { name: "Cut your power bill" })).toBeInTheDocument();
+  });
+
+  it("uses an existing business generation identity written by another tab", async () => {
+    render(<Studio business={business} initialCreatives={[]} />);
+    const intent = { generationId: "11111111-1111-4111-8111-111111111111", count: 3 };
+    localStorage.setItem("adbrain:studio-generation:b1", JSON.stringify(intent));
+    global.fetch = vi.fn().mockResolvedValue(okJson({ status: "complete", creatives: [creative(), creative({ id: "c2" }), creative({ id: "c3" })] }));
+    fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toContain(`generationId=${intent.generationId}`);
+    expect(vi.mocked(global.fetch).mock.calls[0][1]?.method).not.toBe("POST");
+    await waitFor(() => expect(localStorage.getItem("adbrain:studio-generation:b1")).toBeNull());
+  });
+
+  it.each(["POST completion", "POST rejection", "GET recovery"])("preserves a newer pending identity after late %s", async (outcome) => {
+    let finishFirst!: (value: unknown) => void;
+    let finishSecond!: (value: unknown) => void;
+    const saved = [creative(), creative({ id: "c2" }), creative({ id: "c3" })];
+    const fetchMock = vi.fn();
+    if (outcome === "GET recovery") fetchMock.mockRejectedValueOnce(new Error("Lost POST response"));
+    fetchMock
+      .mockReturnValueOnce(new Promise(resolve => { finishFirst = resolve; }))
+      .mockResolvedValueOnce(okJson({ status: "complete", creatives: saved }))
+      .mockReturnValueOnce(new Promise(resolve => { finishSecond = resolve; }));
+    global.fetch = fetchMock;
+    const first = render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.change(within(first.container).getByLabelText(/what are we advertising/i), { target: { value: "First offer" } });
+    fireEvent.click(within(first.container).getByRole("button", { name: /generate ads/i }));
+    const firstIntent = JSON.parse(localStorage.getItem("adbrain:studio-generation:b1")!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(outcome === "GET recovery" ? 2 : 1));
+
+    const second = render(<Studio business={business} initialCreatives={[]} />);
+    const recoverButton = within(second.container).getByRole("button", { name: /check saved results/i });
+    const secondForm = recoverButton.closest("form")!;
+    fireEvent.click(recoverButton);
+    await waitFor(() => expect(localStorage.getItem("adbrain:studio-generation:b1")).toBeNull());
+    fireEvent.change(secondForm.querySelector("textarea")!, { target: { value: "Second offer" } });
+    fireEvent.submit(secondForm);
+    const secondIntent = JSON.parse(localStorage.getItem("adbrain:studio-generation:b1")!);
+    expect(secondIntent.generationId).not.toBe(firstIntent.generationId);
+    expect(fetchMock.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(
+      outcome === "GET recovery" ? ["POST", "GET", "GET", "POST"] : ["POST", "GET", "POST"],
+    );
+
+    try {
+      await act(async () => {
+        finishFirst(outcome === "POST rejection"
+          ? { ok: false, status: 400, json: async () => ({ error: "Rejected first request" }) }
+          : okJson({ status: "complete", creatives: saved }));
+      });
+      expect(JSON.parse(localStorage.getItem("adbrain:studio-generation:b1")!)).toEqual(secondIntent);
+    } finally {
+      await act(async () => { finishSecond(okJson({ creatives: saved })); });
+    }
+    expect(localStorage.getItem("adbrain:studio-generation:b1")).toBeNull();
+  });
+
+  it.each(["getItem", "removeItem"] as const)("retains recovery identity when cleanup %s fails", async (operation) => {
+    let finish!: (value: unknown) => void;
+    const saved = [creative(), creative({ id: "c2" }), creative({ id: "c3" })];
+    const fetchMock = vi.fn()
+      .mockReturnValueOnce(new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue(okJson({ status: "complete", creatives: saved }));
+    global.fetch = fetchMock;
+    render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
+    const button = screen.getByRole("button", { name: /generate ads/i });
+    const form = button.closest("form")!;
+    fireEvent.click(button);
+    const stored = localStorage.getItem("adbrain:studio-generation:b1");
+    const failure = vi.spyOn(Storage.prototype, operation).mockImplementation(() => { throw new Error("Storage unavailable"); });
+    try {
+      await act(async () => { finish(okJson({ creatives: saved })); });
+      expect(form).toHaveTextContent(/check saved results/i);
+      expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+    } finally { failure.mockRestore(); }
+    expect(localStorage.getItem("adbrain:studio-generation:b1")).toBe(stored);
+  });
+
+  it("persists generation identity before POST and reconciles a lost response without another POST", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        const payload = JSON.parse(init.body as string);
+        expect(payload.generationId).toMatch(/^[0-9a-f-]{36}$/i);
+        expect(JSON.parse(localStorage.getItem("adbrain:studio-generation:b1")!)).toMatchObject({ generationId: payload.generationId, count: 3 });
+        throw new Error("Lost response after save");
+      }
+      return okJson({ status: "partial", creatives: [creative()] });
+    });
+    global.fetch = fetchMock;
+    const view = render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: "Solar installation" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
+    expect(await screen.findByRole("heading", { name: "Cut your power bill" })).toBeInTheDocument();
+    view.unmount();
+    render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /check saved results/i }));
+    expect(await screen.findByRole("heading", { name: "Cut your power bill" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
   it("shows the saved description in the card and enlarged preview", async () => {
     render(<Studio business={business} initialCreatives={[creative({ generation: { concept: { description: "Discuss your rooftop plans." } } })]} />);
     expect(screen.getByText(/Discuss your rooftop plans/)).toBeInTheDocument();
