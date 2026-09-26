@@ -18,6 +18,7 @@ records production `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
 | Additional dev source | Trusted campaign writes, integrity migrations and test checkout exist; they were excluded from that release |
 | [Import candidate #34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) | Resumable multi-page enquiry import requires its migration and independent acceptance |
 | [Inbox candidate #35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) | Server-paginated enquiries and persistent follow-up require their migration; combined import/inbox acceptance is separate |
+| [Separate payment integration](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet) `954e44a` | Includes the released enquiry baseline and default-disabled checkout/recovery/refunds. All three payment defects have scoped QA acceptance conditional on integrated CI; live prerequisites remain open. Payment code is not deployed or enabled collection |
 | External providers | Mocked consent, a green build, merchant account approval or saved metrics do not prove live delivery, payment settlement or provider eligibility |
 
 Do not demonstrate an unreleased database-dependent caller against production.

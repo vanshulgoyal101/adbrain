@@ -6,6 +6,174 @@ production rollout approval or packet closure**. Governing backlog:
 [release rules](../RELEASING.md) and the latest
 [DB-A developer handoff](db-a-dev-a-handoff-2026-09-26.md).
 
+## Separate Payment Integration and Rollout Packet
+
+### Repaired Integration
+
+September 26, 2026. Runtime assembly `954e44a829e2bd23e5afdd27067509273cda8529`
+contains exact UI repair `7ba82db36a2cc3b2b5f941bd951d2ea2a1aa791f` and backend
+`49d05e85e30130dcc84509f411bb0b25abd91ecb`, including `119bcef55a4bfd1f95f8a5054d0b18e2c3398cfd`.
+It also includes current dev `5e7f7d6cd96cf1130664ef791e4bb7f3656e9a07` and the
+completed enquiry release below. [PR 46](https://github.com/vanshulgoyal101/adbrain/pull/46)
+pins the final published head and its required integrated CI; the earlier green
+CI for `64a5861` does not certify this repaired candidate. Dev CI `36259384746`
+passed for `5e7f7d6`.
+
+[QA accepted the exact repair deltas](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848198762),
+conditional on integrated CI, with all three original defects closed. Consent
+must match the current policy; saved checkout and SQL replay revalidate the
+original funding evidence; a distinct failed attempt no longer overrides valid
+captured evidence. Contradictions for the same captured payment remain held.
+No new payment logic or dependency was introduced during integration.
+
+The canonical schema preserves the accepted enquiry prefix and exact managed
+billing SQL, followed by the repaired payment migration. Current payment SQL
+SHA-256 is `8983ba31e8fc9af8b6a580feb1869a0bc8715c3d5a17ab0103bc9601fd42c47b`;
+canonical schema SHA-256 is `dcb48f003a826445910932723e0f3443ec06f3cfd9ac6b1ec60fdd449cb089b2`.
+These supersede the initial payment/schema hashes below. Other dependency hashes
+and ordering are unchanged. No payment migration was applied to production.
+
+Author checks passed: 70 tests in the two affected payment suites, typecheck,
+touched lint, and merged PostgreSQL fresh/upgrade/replay/concurrency checks.
+Two existing TestCheckout act warnings remain. The parity guard caught a literal
+SQL copy error before database execution; the corrected copy and full maintained
+SQL check passed. Existing broader author/browser and independent QA evidence
+is reused, not represented as new provider verification.
+
+At `2026-09-26T17:36:10.785Z`, read-only Vercel metadata reconfirmed the same
+project, main, Node 24.x, protected previews, 29 production-only environment
+entries, zero preview entries and zero branch overrides. Committed deployment
+rules retain default-deny `**`, with only main enabled. Current release authority
+permits the required PR and dev integration; it supersedes the old permission
+holds below. All payment flags remain off. Live terms, funding, target-specific
+setup and separately consented financial verification remain outside this
+default-disabled integration.
+
+### Initial Preparation (Historical)
+
+The following initial-source findings, hashes and permission statements are
+historical. Use the repaired integration above and current release policy for
+the active candidate; retain this original packet as evidence of preparation.
+
+September 26, DevOps. **Preparatory, default-disabled source; blocked on payment
+fixes, independent acceptance and exact-candidate CI. Not migration, deployment
+or financial authorization.** This packet does not amend the six-migration
+[DB-A/enquiry request](#backlog-integration-and-migration-approval-packet).
+
+### Exact Source and Integration
+
+Implementation checkpoint: `b7e5ac12d8524a9bf98151fb5b5a9b928c30fd37`, branch
+`integration/payments-45-20260926`, worktree
+`/tmp/adbrain-payment-integration-20260926`. Documentation follows that checkpoint;
+the issue 42 handoff pins the final published head. Inputs are current dev
+`cafb2cf9de2b12ed16093939dfaf877cd8ba18c5`, accepted combined enquiries
+`c85ba252cf3dd4d9e039df9409bed484fd6967db`, QA recovery tests
+`90bec0f07c0400c8b8b6d2f41d963e9e66727266`, and payment source
+`5f0998f23acf184696b4a03f51ac1599f0729804`. Frozen selective candidate
+`273cbf80422f8c89b851dfc2fcfa85bff878104f`, shared dev and main are unchanged.
+
+Resolved only test-guide/harness overlaps. Payment types retain enquiry types;
+the canonical schema retains the entire accepted enquiry schema as its prefix,
+then the exact managed-billing and production-payment SQL in dependency order.
+Schema SHA-256: `a1653eca466d95057ec2275bcd51b61d5262bfcb164156c40f4bc15f76e0decd`.
+The existing harness now asserts exact canonical SQL inclusion/order and tests
+fresh installation without separately appending those two migrations. Upgrade
+replay retains payment and enquiry checks; `--rollback-only` is byte-preserved.
+That mode still tests only its original six-migration fallback, not payment rollback.
+
+All 24 other payment-author paths are identical. Existing Razorpay 2.9.8 SDK,
+signature helpers, parser, rate limiter, tests and SQL harness are reused; there
+is no new dependency or payment-business-logic rewrite. Current package/lock and
+CI are byte-identical to `cafb2cf`; accepted documentation remains present.
+
+### Separate SQL Dependencies
+
+Do not apply the full canonical schema remotely or replay the directory. An
+authorized executor must first inspect the exact target's catalog and migration
+ledger, compare immutable hashes and identify missing prerequisites. Existing
+Auth/users, businesses and `owns_business` are required before these dependencies:
+
+| Dependency or change | SHA-256 | Ordering and role |
+| --- | --- | --- |
+| [Meta connection generation](../../db/migrations/20260907_meta_instant_connect.sql) | `4cdedd4fb2757e50a73b7e3bd4c6ebbd915b0b9036a1f3d0ad3354d7ef330e49` | Existing connection authority required by payment claims |
+| [Trusted usage/rate limits](../../db/migrations/20260916_trusted_usage_and_rate_limits.sql) | `ab56d2ac3517475336b82ed3c9b6ec9802b7b78a3aba237ac2a524d3d539b516` | Existing runtime limiter, not payment SQL alone |
+| [Managed billing](../../db/migrations/20260924_managed_billing.sql) | `e909484f12beed08883954fd8c5a032597870adbed88bdddaffff9f1cc3f8b7d` | Profiles, immutable funding evidence/revocations and latest-record RPC; must precede payment SQL |
+| [Meta billing events](../../db/migrations/20260924_meta_billing_events.sql) | `6866a0ad47b85c7e1a8c1c8d41a4cdcf7ed2a93a41d14bc32065250f35b67a18` | Existing Billing UI dependency; follows managed billing |
+| [Production payment orders](../../db/migrations/20260926_production_payment_orders.sql) | `ce87ccde7bc4de7a733b1749a210f27a44bce81a627a6530cb6e5914613bdaa8` | Separate additive payment change after verified prerequisites |
+
+This inventory is not a request to reapply already-installed migrations. Missing
+prerequisites need explicit inclusion in the eventual exact-target approval.
+The inherited DB-A/enquiry callers still require their separate six-migration
+contract and transition gates. Local test-order SQL is a harness fixture, not a
+production-payment dependency or part of this requested apply set.
+
+### Configuration and Webhook Prerequisites
+
+Use the owning [configuration reference](../CONFIGURATION.md#production-payment-candidate)
+and [API contracts](../API_REFERENCE.md#production-payment-candidate), not copied
+credentials. A disabled deployment must keep live, collection and refund flags
+false and must not provision operators or provider webhooks. Six payment tables
+are private; only restricted RPCs perform financial transitions. Operator grants
+are empty by default. Test capture never supplies live money or spend authority.
+
+Any future enablement needs separate approval for the exact Vercel project,
+production/main deployment, Supabase target and merchant/account/key binding.
+Live key and webhook secrets must be distinct, server-only and securely supplied;
+test aliases must be absent and populated generic aliases must match. The webhook
+configuration UUID is an immutable identity, not a secret or a replacement for
+provider account verification. The application's production origin is fixed to
+`https://adbrain.vanshul.com`; webhook ingress is `/api/payments/live/webhook`.
+
+After authorized setup, independently verify signed raw-body delivery for the
+implemented capture/pending, refund and dispute event families, correct live
+merchant/key/webhook binding, durable event persistence before acknowledgment,
+queued-event recovery and replay/conflict handling. A delivered webhook alone
+does not prove captured money, a completed refund or bank settlement. Storage
+failure must not be acknowledged; reconciliation must reuse uncertain operations.
+No webhook was configured or provider delivery exercised by this integration.
+
+Collection additionally requires finite approved commercial/invoice/tax/refund
+terms and supported, current automatic Meta funding evidence. Refund permission
+is separate, including approved operator identity/reference/expiry and per-refund
+approval. Merchant activation is already verified; settlement and the automatic
+funding arrangement are not thereby proved. CSP enablement is build-time and needs
+an approved rebuild. Recovery/webhooks must remain available when collection is
+suspended after any live operation; an older application lacking them is not a
+valid payment rollback. Existing backup/restore proof, compatible rollback and
+tested transition requirements remain open. Do not reopen grants or discard rows.
+
+### Evidence and Remaining Owners
+
+Author-only integration checks: merged PostgreSQL fresh/upgrade/replay passed,
+including real competing payment/refund claims and enquiry checkpoint preservation;
+canonical completeness first failed as expected, then passed with exact SQL.
+The 69 selected schema/config/CSP tests and two adopted 503-recovery tests passed.
+Typecheck, touched lint, editor diagnostics, whitespace and staged secret scan
+passed. An initially incomplete shared dependency tree caused missing-module
+errors; an isolated lockfile install resolved them without changing source/lock
+or shared dependencies. The author's 426 tests and synthetic browser receipts
+are reused for unchanged code, not reclassified as independent or live evidence.
+
+Dev's [peer review](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848049686)
+reports P1 saved-checkout replay bypassing expired/revoked funding and P2 a late
+failed payment attempt placing an already-captured order on review hold. Dev 2
+owns fixes; this exact source is not accepted. QA owns final workflow acceptance
+after the repaired source is integrated. Recheck the payment migration hash and
+canonical parity if the repair changes SQL; do not carry this hash forward blindly.
+
+At `2026-09-26T16:51:02.908Z`, read-only Vercel metadata confirmed project
+`prj_LNNhyKmbQYXyBUNadG2hZJSLDjOw`, main, Node 24.x, protected previews, 29
+production-only environment entries, zero preview entries and zero branch overrides.
+No secret values were reported. Candidate deployment policy and required CI are
+unchanged. CI triggers only main/dev pushes and PRs targeting those branches;
+a separate integration-branch push alone does not run it. No new PR, shared-dev
+merge or workflow-policy change is authorized here. Coordinator/user must supply
+an authorized exact-candidate CI trigger; prior dev CI is not substitute evidence.
+
+No production DB connection/export/apply, release/acceptance merge, credential or
+webhook change, charge/refund, mandate, Meta funding or ad activation occurred.
+Publication is source preservation only; all live rollout approvals remain separate.
+
 ## Enquiry Production Release
 
 September 26, 2026. [PR 47](https://github.com/vanshulgoyal101/adbrain/pull/47)

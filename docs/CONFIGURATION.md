@@ -8,6 +8,30 @@ production configuration**; the published `6291dc2` release excludes local test
 checkout and DB-A-dependent changes. Deployment evidence belongs in the
 [release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
 
+## Production Payment Candidate
+
+Repaired integration `954e44a` adds the following server-only configuration beyond
+the baseline below. It is disabled and unreleased; QA accepted the repair deltas
+conditional on integrated CI. Live setup and financial prerequisites remain separate;
+see the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
+Deciding code: [production gate](../src/lib/payments/production-config.ts).
+
+| Configuration | Requirement |
+| --- | --- |
+| `PAYMENTS_LIVE_ENABLED` | Defaults false; recovery/webhooks need explicit true plus all target/identity checks |
+| `PAYMENTS_LIVE_COLLECTION_ENABLED`, `PAYMENTS_LIVE_POLICY_JSON` | Separate false-default collection flag and validated finite approved terms; not invented by the app |
+| `PAYMENTS_LIVE_REFUNDS_ENABLED` | Separate false-default refund flag; approved operator and per-operation authority still required |
+| `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_LIVE_ACCOUNT_ID` | Explicit live identities; never reuse test credentials |
+| `RAZORPAY_LIVE_WEBHOOK_SECRET`, `PAYMENTS_LIVE_WEBHOOK_ID` | Distinct secret and immutable configuration UUID; neither replaces signature/merchant checks |
+| `PAYMENTS_LIVE_PROJECT_ID`, `PAYMENTS_LIVE_SUPABASE_URL` | Exact matches to `VERCEL_PROJECT_ID` and `NEXT_PUBLIC_SUPABASE_URL` |
+| `NODE_ENV`, `VERCEL_ENV`, `VERCEL_GIT_COMMIT_REF`, `VERCEL_TARGET_ENV` | Production Node/Vercel/main; reject any explicit non-production target |
+
+Test-payment flags/aliases must not coexist with live configuration. Populated
+generic key aliases must exactly match the explicit live keys. Policy fields and
+operator prerequisites are listed in the [author contract](qa/dev2-devc-contract-o1.md#schema-and-configuration-delta).
+Do not enable these values as setup verification. CSP changes need an approved
+rebuild. Suspend collection independently from recovery after live operations.
+
 ## Choose a Configuration Boundary
 
 | Task | Required configuration | Side effects and target |

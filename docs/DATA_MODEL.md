@@ -12,6 +12,28 @@ payment migration is included in the core schema. [TypeScript rows](../src/lib/t
 are hand-authored, not proof of parity. SQL constraints, effective grants, runtime
 validation and the target's applied migrations must agree.
 
+## Production Payment Candidate
+
+Separate, unreleased integration `954e44a` preserves the accepted enquiry schema
+and appends exact [managed billing](../db/migrations/20260924_managed_billing.sql)
+then [production payment SQL](../db/migrations/20260926_production_payment_orders.sql)
+to the canonical fresh schema. Local-only test-order SQL remains separate.
+This does not apply either payment dependency to production or change the
+completed six-migration enquiry rollout. Current hashes, repaired-source QA
+acceptance and the integrated CI gate are in
+the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
+
+Private `production_payment_orders`, `production_payment_events`,
+`production_payment_event_conflicts`, `production_payment_effects`,
+`production_payment_refunds` and `production_payment_operators` retain financial
+identities and evidence. Direct browser/service-role table writes are revoked;
+restricted RPCs own transitions. Operator authority starts empty. Payment claims
+depend on existing Auth/business ownership, Meta generation and managed funding
+evidence; the service-only `production_payment_funding_valid` predicate also
+guards replay of the original funding identity. Runtime additionally needs the trusted limiter. The maintained SQL
+harness checks exact canonical inclusion/order, fresh installation and upgrade
+replay. Its separate six-migration rollback mode does not certify payment rollback.
+
 ## Relationships
 
 ```mermaid

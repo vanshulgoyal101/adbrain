@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  createAnnualPaymentQuote,
+  ANNUAL_PAYMENT_VERSION,
   createPaymentQuote,
   DEFAULT_PAYMENT_ALLOCATION_POLICY,
   PAYMENT_ALLOCATION_VERSION,
@@ -7,6 +9,20 @@ import {
 } from "@/lib/payments/allocation";
 
 describe("payment allocation", () => {
+  it("keeps the annual total contract separate from pre-tax quote-v1", () => {
+    const annual = createAnnualPaymentQuote();
+    expect(annual).toEqual({
+      version: ANNUAL_PAYMENT_VERSION, merchantDisplay: "Vanshul Goyal", currency: "INR",
+      totalPaise: 1_000_000, serviceAllocationPaise: 200_000, metaAllocationPaise: 800_000,
+      additionalCustomerTaxPaise: 0, metaTaxTreatment: "included-in-meta-allocation",
+      gatewayFees: "absorbed-by-adbrain", automaticRenewal: false,
+    });
+    expect(annual.serviceAllocationPaise + annual.metaAllocationPaise).toBe(annual.totalPaise);
+    expect(annual.version).not.toBe(PAYMENT_ALLOCATION_VERSION);
+    expect(Object.isFrozen(annual)).toBe(true);
+    expect(createPaymentQuote(1_000_000, 180_000).totalPaise).toBe(1_180_000);
+  });
+
   it("allocates INR 10,000 as INR 2,000 fee and INR 8,000 advertising", () => {
     expect(createPaymentQuote(1_000_000, 0)).toEqual({
       version: PAYMENT_ALLOCATION_VERSION,
