@@ -137,7 +137,7 @@ export function Campaigns({
   const [notice, setNotice] = useState<string | null>(null);
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
-    businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
+    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
   });
   const [showComposer, setShowComposer] = useState(initialCampaigns.length === 0);
   const [connectOpen, setConnectOpen] = useState(false);
