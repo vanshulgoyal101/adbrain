@@ -9,6 +9,26 @@ environment. Deciding sources: [route handlers](../src/app/api/),
 [campaign schemas](../src/lib/campaign/connect-contracts.ts),
 [connection schemas](../src/lib/meta/connect-contracts.ts).
 
+## Production Payment Candidate
+
+Integration `b7e5ac1` adds five route modules beyond this guide's original baseline.
+They are default-disabled (404), unreleased and blocked on peer fixes/QA/CI.
+See the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet)
+and [exact request/response contracts](qa/dev2-devc-contract-o1.md#api-delta-for-integration).
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| GET, POST | `/api/payments/live/orders` | Owned persisted orders/quote/policy; immutable intent and accepted terms before provider creation |
+| POST | `/api/payments/live/verify` | Stored-order signature plus authoritative capture verification |
+| POST | `/api/payments/live/reconcile` | Recover existing owned order/payment/refund state without recreating uncertain writes |
+| POST | `/api/payments/live/webhook` | Signed bounded raw body; durable event storage before acknowledgment |
+| GET, POST | `/api/payments/live/operator` | Approved operator queue, reconciliation and separately authorized refunds |
+
+Authenticated writes require the exact production origin. Amounts here are integer
+INR paise, not the rupee amounts of campaign budgets. Disabled routes never grant
+collection authority; captured allocations grant no campaign spend/activation.
+The peer-review blockers in the packet must be repaired before acceptance.
+
 ## Conventions
 
 - Workspace endpoints normally require the Supabase session cookie and enforce
