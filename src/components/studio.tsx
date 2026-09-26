@@ -23,8 +23,13 @@ import { AD_LANGUAGES } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { useSessionDraft } from "@/lib/use-session-draft";
+import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
 import { GenerationDetails } from "@/components/generation-details";
+import { z } from "zod";
+
+const studioGenerationSchema = z.object({ generationId: z.string().uuid(), count: z.number().int().min(1).max(6) });
+type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 
 export function Studio({
   business,
@@ -49,6 +54,12 @@ export function Studio({
   const [language, setLanguage] = useState("brand");
   const [format, setFormat] = useState("portrait");
   const [generating, setGenerating] = useState(false);
+  const [pendingGeneration, setPendingGeneration] = useState<StudioGeneration | null>(null);
+  const generationInFlight = useRef(false);
+  const generationMounted = useRef(true);
+  const generationKey = `adbrain:studio-generation:${business.id}`;
+  const mounted = useMounted();
+  const [restoredGenerationKey, setRestoredGenerationKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportOk, setExportOk] = useState(false);
@@ -79,6 +90,21 @@ export function Studio({
         ? 4
         : 3;
 
+  if (mounted && restoredGenerationKey !== generationKey) {
+    setRestoredGenerationKey(generationKey);
+    try {
+      const stored = localStorage.getItem(generationKey);
+      setPendingGeneration(stored ? studioGenerationSchema.parse(JSON.parse(stored)) : null);
+    } catch {
+      setError("Generation recovery storage is unavailable. No generation was started.");
+    }
+  }
+
+  useEffect(() => {
+    generationMounted.current = true;
+    return () => { generationMounted.current = false; };
+  }, [generationKey]);
+
   useEffect(() => {
     if (!previewCreative) return;
     function closeOnEscape(event: KeyboardEvent) {
@@ -90,13 +116,78 @@ export function Studio({
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
+    if (generationInFlight.current) return;
+    generationInFlight.current = true;
     setError(null);
-    if (!brief.trim()) {
-      setError("Describe what you want to advertise.");
-      return;
+    let intent: StudioGeneration | null = pendingGeneration;
+
+    function acceptResults(creatives: Creative[]) {
+      if (!generationMounted.current) return;
+      setItems(previous => [...new Map([...creatives, ...previous].map(creative => [creative.id, creative])).values()]);
+      if (creatives.length) {
+        setFilter("all");
+        setSearch("");
+        setSelectedId(creatives[0].id);
+      }
     }
-    setGenerating(true);
+
+    function clearIntent() {
+      if (!intent) return;
+      const completedIntent = intent;
+      const stored = localStorage.getItem(generationKey);
+      if (stored) {
+        const storedIntent = studioGenerationSchema.parse(JSON.parse(stored));
+        if (storedIntent.generationId !== completedIntent.generationId || storedIntent.count !== completedIntent.count) return;
+        localStorage.removeItem(generationKey);
+      }
+      if (generationMounted.current) setPendingGeneration(current =>
+        current?.generationId === completedIntent.generationId && current.count === completedIntent.count ? null : current);
+    }
+
+    async function recover(message = "Generation result is not confirmed. Check your connection, then check saved results. No new generation was started.") {
+      if (!intent) return;
+      try {
+        const response = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(intent.generationId)}&expectedCount=${intent.count}`, {
+          cache: "no-store", signal: AbortSignal.timeout(10_000),
+        });
+        if (response.ok) {
+          const result = await response.json() as { status?: string; creatives?: Creative[] };
+          acceptResults(result.creatives ?? []);
+          if (result.status === "complete" && (result.creatives?.length ?? 0) >= intent.count) {
+            clearIntent();
+            return;
+          }
+          if (result.creatives?.length) message = "Some ads are saved. The remaining results are not confirmed; no new generation was started.";
+        }
+      } catch {
+        if (!generationMounted.current) return;
+      }
+      if (generationMounted.current) setError(message);
+    }
+
     try {
+      try {
+        const stored = localStorage.getItem(generationKey);
+        if (stored) intent = studioGenerationSchema.parse(JSON.parse(stored));
+        if (!intent) {
+          if (!brief.trim()) {
+            setError("Describe what you want to advertise.");
+            return;
+          }
+          intent = { generationId: crypto.randomUUID(), count };
+          localStorage.setItem(generationKey, JSON.stringify(intent));
+        } else {
+          setPendingGeneration(intent);
+          setGenerating(true);
+          await recover();
+          return;
+        }
+      } catch {
+        setError("Generation recovery storage is unavailable. No generation was started.");
+        return;
+      }
+      setPendingGeneration(intent);
+      setGenerating(true);
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,6 +195,7 @@ export function Studio({
           businessId: business.id,
           brief,
           count,
+          generationId: intent.generationId,
           language,
           format,
         }),
@@ -114,20 +206,24 @@ export function Studio({
         failures?: { angle: string; error: string }[];
       };
       if (!res.ok) {
-        setError(data.error ?? "Generation failed.");
+        if ([400, 401, 403, 404, 409, 422, 429].includes(res.status)) {
+          clearIntent();
+          setError(data.error ?? "Generation was rejected.");
+        } else await recover(data.error);
         return;
       }
-      setItems((prev) => [...(data.creatives ?? []), ...prev]);
-      if (data.failures?.length) setError(`${data.creatives?.length ?? 0} ads saved; ${data.failures.length} failed. ${data.failures.map((failure) => `${failure.angle}: ${failure.error}`).join(" ")}`);
-      if (data.creatives?.length) {
-        setFilter("all");
-        setSearch("");
-        setSelectedId(data.creatives[0].id);
+      acceptResults(data.creatives ?? []);
+      if (!data.creatives?.length) {
+        await recover();
+        return;
       }
+      clearIntent();
+      if (data.failures?.length) setError(`${data.creatives?.length ?? 0} ads saved; ${data.failures.length} failed. ${data.failures.map((failure) => `${failure.angle}: ${failure.error}`).join(" ")}`);
     } catch {
-      setError("Generation failed — check your connection and try again.");
+      await recover();
     } finally {
-      setGenerating(false);
+      generationInFlight.current = false;
+      if (generationMounted.current) setGenerating(false);
     }
   }
 
@@ -204,7 +300,7 @@ export function Studio({
         ))}
       </ol>
       <details
-        open={items.length === 0}
+        open={items.length === 0 || Boolean(pendingGeneration)}
         className="border-b border-slate-200 pb-3"
       >
         <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-900">
@@ -269,8 +365,8 @@ export function Studio({
                 </select>
               </div>
               <Button type="submit" disabled={generating}>
-                {generating ? <Spinner /> : <Sparkles className="h-4 w-4" />}
-                {generating ? "Generating…" : "Generate ads"}
+                {generating ? <Spinner /> : pendingGeneration ? <RefreshCw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                {generating ? "Working..." : pendingGeneration ? "Check saved results" : "Generate ads"}
               </Button>
             </div>
           </form>
