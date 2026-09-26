@@ -4,6 +4,13 @@ Status: design and local foundations only. Date: 2026-09-24.
 No checkout, payment collection, bank transfer, Meta funding, account creation,
 production migration, or deployment is enabled by this work.
 
+Operator clarification, September 26: AdBrain currently operates as Vanshul
+Goyal's unregistered business, with Vanshul Goyal as the merchant display name.
+Any future Solaride arrangement requires formalization and reviewed gateway,
+bank and tax details. Existing Meta account bindings remain unchanged, and
+real collections remain disabled. This correction does not release the separate
+in-progress local test-checkout implementation.
+
 ## 1. Goal and Decisions
 
 Collect customer payments in India/INR, allocate 20% to AdBrain's service fee
@@ -12,7 +19,7 @@ The owner also requested investigation of creating customer ad accounts.
 
 Confirmed by the owner: India/INR, managed advertising with one customer payment,
 20/80 on the pre-tax package with gateway costs absorbed by AdBrain, and room to
-change pricing later. AdBrain will legally operate under Solaride Energy. Tax
+change pricing later. A future Solaride operating arrangement is not formalized. Tax
 treatment still requires CA review. Owner-provided Meta screenshots show Solaride's
 business portfolio as Verified and an ad-account creation limit of 3; that is not
 proof of unused slots, API permissions or approved agency billing. Solaride 101 is
@@ -25,7 +32,7 @@ needed in this document.
 
 | Decision | Recommendation | Required before live use |
 | --- | --- | --- |
-| Legal entity | Owner-confirmed: Solaride Energy operates AdBrain | Gateway KYC, settlement account and invoices must use the legally appropriate Solaride details |
+| Current operator | Vanshul Goyal's unregistered business; future Solaride arrangement not formalized | Gateway eligibility, KYC, settlement details and invoices must match the actual approved operator |
 | Gateway | Razorpay Standard Checkout; evaluate Cashfree if onboarding/use-case approval fails | Merchant KYC, business-model approval, settlement bank verification |
 | Pricing | Owner-approved: split the pre-tax package base 20/80; quote applicable tax separately | Indian CA-reviewed tax/invoicing policy |
 | Gateway costs | Absorb in AdBrain's economics; never silently subtract from the advertised 80% | Confirm pricing remains viable after fees, fee taxes, refunds and disputes |

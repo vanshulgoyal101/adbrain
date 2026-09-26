@@ -25,11 +25,11 @@ export function ManagedBilling({ connection }: { connection: BillingConnection |
       </div>
 
       <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-        <div><dt className="text-slate-500">Billing entity</dt><dd className="mt-1 font-medium text-slate-900">Solaride Energy</dd></div>
+        <div><dt className="text-slate-500">Current operator</dt><dd className="mt-1 font-medium text-slate-900">Vanshul Goyal</dd></div>
         <div><dt className="text-slate-500">Market</dt><dd className="mt-1 font-medium text-slate-900">India / INR</dd></div>
         <div><dt className="text-slate-500">Meta connection</dt><dd className="mt-1 font-medium text-slate-900">{connectionStatus}</dd></div>
         <div><dt className="text-slate-500">Selected ad account</dt><dd className="mt-1 break-all font-mono text-slate-900">{connection ? connection.adAccountId ?? "Not selected" : "Unavailable"}</dd></div>
-        <div><dt className="text-slate-500">Planned account ownership</dt><dd className="mt-1 font-medium text-slate-900">Solaride-owned, separate per customer</dd></div>
+        <div><dt className="text-slate-500">Future account ownership</dt><dd className="mt-1 font-medium text-slate-900">Solaride arrangement not yet formalized</dd></div>
         <div><dt className="text-slate-500">Funding verification</dt><dd className="mt-1 font-medium text-slate-900">Not verified</dd></div>
         <div><dt className="text-slate-500">New account capacity</dt><dd className="mt-1 font-medium text-slate-900">Not checked</dd></div>
       </dl>

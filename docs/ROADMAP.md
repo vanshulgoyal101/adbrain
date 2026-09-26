@@ -7,6 +7,12 @@ this backlog against the checked-out source and current remote state before star
 
 ## Current Focus: One Verified Managed Customer
 
+September 26 operator clarification: AdBrain currently operates as Vanshul
+Goyal's unregistered business. Solaride is a future arrangement requiring
+formalization, not the current AdBrain operator. Existing Meta bindings remain
+unchanged and real collections remain disabled. The separate local Razorpay
+test-checkout work is not included in this identity-only production correction.
+
 Reset 2026-09-24: prioritize customer outcomes and business-model feasibility over
 additional infrastructure. The product goal is a local business turning its offer
 into approved ads and measurable enquiries with minimal advertising operations.
