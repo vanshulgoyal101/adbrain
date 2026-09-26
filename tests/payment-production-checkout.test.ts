@@ -5,7 +5,7 @@ import { POST as verify } from "@/app/api/payments/live/verify/route";
 import { POST as webhook } from "@/app/api/payments/live/webhook/route";
 import { POST as reconcile } from "@/app/api/payments/live/reconcile/route";
 import { POST as operator } from "@/app/api/payments/live/operator/route";
-import { getProductionCollectionPolicy } from "@/lib/payments/production-config";
+import { getProductionCollectionPolicy, OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), getUser: vi.fn(), own: vi.fn(), rateLimit: vi.fn(), createOrder: vi.fn(), fetchOrder: vi.fn(),
   findOrder: vi.fn(), fetchPayment: vi.fn(), fetchOrderPayments: vi.fn(), createRefund: vi.fn(), fetchRefund: vi.fn(), fetchRefunds: vi.fn() }));
@@ -33,7 +33,9 @@ const initialOrder = { id: orderId, business_id: businessId, user_id: userId, ac
 const payment = { id: "pay_fixture", entity: "payment", order_id: "order_fixture", amount: 1_000_000, currency: "INR", status: "captured",
   captured: true, amount_refunded: 0, refund_status: null };
 const remoteOrder = { id: "order_fixture", entity: "order", receipt: orderId, amount: 1_000_000, amount_paid: 1_000_000, amount_due: 0, status: "paid", currency: "INR" };
-let saved = { ...initialOrder };
+let saved: Omit<typeof initialOrder, "terms" | "funding_evidence_id"> & {
+  terms: typeof policy | typeof OPERATOR_MANAGED_POLICY; funding_evidence_id: string | null;
+} = { ...initialOrder };
 let replay = false;
 let storageFailure: string | null = null;
 let fundingValid: unknown = true;
@@ -122,6 +124,29 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("live checkout service with synthetic provider evidence", () => {
+  it.each(["meta_funding_latest_record", "production_payment_funding_valid"])("creates and replays operator checkout without Meta onboarding or available %s", async unavailable => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(OPERATOR_MANAGED_POLICY.approvedAt));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    saved = { ...saved, terms: OPERATOR_MANAGED_POLICY, terms_hash: getProductionCollectionPolicy().hash, funding_evidence_id: null };
+    storageFailure = unavailable; fundingValid = false;
+    expect(await (await POST(request("orders", createBody()))).json()).toMatchObject({ orderId, checkout: { key: "rzp_live_fixture" }, spendablePaise: 0, canActivateCampaign: false });
+    replay = true;
+    expect(await (await POST(request("orders", createBody()))).json()).toMatchObject({ orderId, checkout: { key: "rzp_live_fixture" } });
+    expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
+      .toMatchObject({ policy: { fundingMode: "operator_managed" }, orders: [{ orderId, checkout: { key: "rzp_live_fixture" } }] });
+    expect(mocks.createOrder).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc.mock.calls.some(([name]) => ["meta_funding_latest_record", "production_payment_funding_valid"].includes(name))).toBe(false);
+    expect(mocks.rpc).toHaveBeenCalledWith("production_payment_order_claim", expect.objectContaining({ p_funding_evidence_id: null }));
+  });
+  it("retains legacy terms and reconciliation when the current offer becomes operator-managed", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(OPERATOR_MANAGED_POLICY.approvedAt));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    storageFailure = "production_payment_funding_valid";
+    expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
+      .toMatchObject({ policy: { fundingMode: "operator_managed" }, orders: [{ orderId, checkout: null, terms: policy }] });
+    expect(await (await reconcile(request("reconcile", { orderId }))).json()).toMatchObject({ orderId, status: "captured", terms: policy, spendablePaise: 0 });
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
   it.each(["false", "", "TRUE"])("defaults every route disabled for flag %s", async value => {
     vi.stubEnv("PAYMENTS_LIVE_ENABLED", value);
     for (const call of [POST(request("orders", {})), verify(callback()), webhook(notification()), reconcile(request("reconcile", { orderId })), operator(request("operator", {}))]) {

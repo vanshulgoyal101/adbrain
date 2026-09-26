@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getProductionCollectionPolicy, getProductionPaymentConfig } from "@/lib/payments/production-config";
+import { getProductionCollectionPolicy, getProductionPaymentConfig, OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
 import { getRazorpayTestConfig } from "@/lib/payments/razorpay-test";
 import { createProductionPaymentClient } from "@/lib/payments/razorpay-production";
 
@@ -45,6 +46,20 @@ const payment = { id: "pay_fixture", entity: "payment", order_id: "order_fixture
 const refund = { id: "rfnd_fixture", entity: "refund", payment_id: "pay_fixture", receipt, amount: 10_000, currency: "INR", status: "pending" };
 
 describe("production payment boundaries", () => {
+  it("selects the recorded operator-managed offer without invented funding approval", () => {
+    const migration = readFileSync(new URL("../db/migrations/20260926_production_payment_policy_v2.sql", import.meta.url), "utf8");
+    expect(migration).toContain(`$policy$${JSON.stringify(OPERATOR_MANAGED_POLICY)}$policy$`);
+    const approved = getProductionCollectionPolicy({ ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true" }, Date.parse(OPERATOR_MANAGED_POLICY.approvedAt));
+    expect(approved).toMatchObject(OPERATOR_MANAGED_POLICY);
+    expect(approved).not.toHaveProperty("automaticFundingApprovalReference");
+    expect(approved.refundTerms).toContain("earned only after");
+    expect(() => getProductionCollectionPolicy({ ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true" }, now)).toThrow("approved");
+  });
+  it.each([{ approvalReference: policy.approvalReference }, { refundTerms: "Service fee earned at capture" }, { automaticFundingApprovalReference: policy.approvalReference },
+    { fundingMode: "automatic" }, { serviceScope: "Different scope" }])("rejects unapproved operator-policy changes: %j", override => {
+    expect(() => getProductionCollectionPolicy({ ...collection, PAYMENTS_LIVE_POLICY_JSON: JSON.stringify({ ...OPERATOR_MANAGED_POLICY, ...override }) },
+      Date.parse(OPERATOR_MANAGED_POLICY.approvedAt))).toThrow("approved");
+  });
   it("defaults disabled and preserves the independent local test gate", () => {
     expect(() => getProductionPaymentConfig({})).toThrow("disabled");
     expect(() => getRazorpayTestConfig({ ...environment, PAYMENTS_TEST_ENABLED: "true" })).toThrow();

@@ -28,8 +28,27 @@ and [exact request/response contracts](qa/dev2-devc-contract-o1.md#api-delta-for
 Authenticated writes require the exact production origin. Amounts here are integer
 INR paise, not the rupee amounts of campaign budgets. Disabled routes never grant
 collection authority; captured allocations grant no campaign spend/activation.
-Saved checkout is withheld when current funding is invalid or unavailable;
-replaying an order also requires its original funding evidence to remain valid.
+Issue #48 adds `operator-managed-v1` with `fundingMode: "operator_managed"` and
+the [recorded owner approval](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848530300).
+New operator-managed creation, display and replay do not query automatic funding
+or require Meta onboarding. Stored `funding_evidence_id` is null for this mode;
+legacy policies retain their original non-null evidence and funding validation.
+The additive [policy migration](../db/migrations/20260926_production_payment_policy_v2.sql)
+must follow the original payment migration before this candidate serves traffic.
+
+Create remains `{businessId,idempotencyKey,termsHash,acceptTerms:true}`: fetch the
+current quote/policy, show the approved service/invoice/refund terms and obtain
+hash-bound acceptance. Server amount, tenant/merchant identity and capture/refund
+checks are unchanged. Test captures never create customer advertising credit.
+Old orders remain readable/reconcilable with their original terms; changing policy
+does not rewrite a saved unpaid order or authorize a replacement payment.
+
+Accounting consumers use the existing private order/effect IDs, business scope,
+quote, captured/refunded/provider-reported-refund amounts and review/refund holds
+through their service-only interfaces. The INR 2,000 service allocation is not
+earned at capture. Checkout still returns `spendablePaise: 0` and
+`canActivateCampaign: false`; customer accounting/reservations are a separate #49
+integration. This candidate does not establish a Meta balance or perform a transfer.
 
 ## Conventions
 

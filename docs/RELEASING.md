@@ -17,6 +17,14 @@ See the [production receipt](qa/ops-environment-2026-09-26.md#enquiry-production
 for the scoped encrypted recovery artifact, transition and provider-evidence limits.
 Payment checkout remains outside this release.
 
+Issue #48's operator-managed checkout is a separate default-disabled integration
+candidate; it removes the automatic Meta funding requirement for new orders without
+altering historical funding-bound orders. Do not serve payment callers before the
+ordered billing, payment-order and additive policy migrations are applied. New
+customer collection still requires live gateway/merchant/webhook configuration,
+the recorded offer, exact CI and changed-scope acceptance. Campaign spending
+remains fail-closed pending #49; code publication does not permit a charge.
+
 Earlier September 26: [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36)
 released SDK/query candidate `4c8dd56` as production `6291dc2`. Shared dev
 `672eb13` also preserves the earlier local backlog; its 71 differing paths were
