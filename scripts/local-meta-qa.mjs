@@ -26,9 +26,30 @@ Object.assign(env, {
   META_CONNECT_ROLLOUT: "enabled", META_CONNECT_PILOT_USER_ID: "",
   GOOGLE_AI_API_KEYS: "", GROQ_API_KEYS: "", OPENROUTER_API_KEYS: "", CEREBRAS_API_KEYS: "", FALAI_API_KEY: "", OPENAI_API_KEY: "",
   CRON_SECRET: "", IMAGE_PROVIDER: "none", IMAGE_PROVIDER_FALLBACK: "none",
+  PAYMENTS_TEST_ENABLED: "false", RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "",
+  RAZORPAY_TEST_KEY_ID: "", RAZORPAY_TEST_KEY_SECRET: "", RAZORPAY_TEST_ACCOUNT_ID: "", RAZORPAY_TEST_WEBHOOK_SECRET: "",
   WORKSPACE_CHECK_URL: "http://localhost:3939", META_CONNECT_UI_BASE_URL: "http://localhost:3939",
 });
 const mode = process.argv[2];
+if (mode === "payments-dev") {
+  const paymentFile = new URL("../.env", import.meta.url);
+  const payments = existsSync(paymentFile) ? parseEnv(readFileSync(paymentFile, "utf8")) : {};
+  const standardKeys = Boolean(payments.RAZORPAY_KEY_ID || payments.RAZORPAY_KEY_SECRET);
+  const legacyKeys = Boolean(payments.RAZORPAY_TEST_KEY_ID || payments.RAZORPAY_TEST_KEY_SECRET);
+  assert.ok(!standardKeys || !legacyKeys || (payments.RAZORPAY_KEY_ID === payments.RAZORPAY_TEST_KEY_ID
+    && payments.RAZORPAY_KEY_SECRET === payments.RAZORPAY_TEST_KEY_SECRET), "Conflicting Razorpay key pairs.");
+  const keyId = standardKeys ? payments.RAZORPAY_KEY_ID : payments.RAZORPAY_TEST_KEY_ID;
+  const keySecret = standardKeys ? payments.RAZORPAY_KEY_SECRET : payments.RAZORPAY_TEST_KEY_SECRET;
+  assert.ok(/^rzp_test_[A-Za-z0-9]+$/.test(keyId ?? "") && keySecret?.trim(), "Razorpay test credentials required.");
+  assert.ok(/^acc_[A-Za-z0-9]+$/.test(payments.RAZORPAY_TEST_ACCOUNT_ID ?? ""), "Verified Razorpay merchant account ID required.");
+  Object.assign(env, {
+    PAYMENTS_TEST_ENABLED: "true", RAZORPAY_KEY_ID: keyId, RAZORPAY_KEY_SECRET: keySecret,
+    NEXT_PUBLIC_DEV_AUTH_BYPASS: "true",
+    RAZORPAY_TEST_ACCOUNT_ID: payments.RAZORPAY_TEST_ACCOUNT_ID,
+    RAZORPAY_TEST_WEBHOOK_SECRET: payments.RAZORPAY_TEST_WEBHOOK_SECRET || derive("razorpay-test-webhook"),
+    PRODUCT_LOGGING_ENABLED: "false", PRODUCT_LOGGING_DATABASE_ENABLED: "false", NEXT_PUBLIC_PRODUCT_LOGGING_ENABLED: "false",
+  });
+}
 if (mode === "oauth-dev") {
   assert.ok(inherited.META_APP_ID && inherited.META_APP_SECRET, "Existing Meta app credentials required.");
   env.META_APP_ID = inherited.META_APP_ID;
@@ -60,6 +81,7 @@ if (mode === "setup") {
 } else {
   const commands = {
     dev: ["npm", ["run", "dev", "--", "--port", "3939"]],
+    "payments-dev": ["npm", ["run", "dev", "--", "--hostname", "127.0.0.1", "--port", "3939"]],
     "oauth-dev": ["npm", ["run", "dev", "--", "--port", "3939"]],
     "oauth-check": ["node", ["scripts/check-meta-oauth-entry.mjs"]],
     build: ["npm", ["run", "build"]],
@@ -71,7 +93,7 @@ if (mode === "setup") {
     "connection-recovery": ["npx", ["playwright", "test", "e2e/meta-recovery.spec.ts", "e2e/draft-connect.spec.ts", "e2e/campaign-recovery.spec.ts", "e2e/draft-lifecycle.spec.ts", "--workers=1"]],
     "draft-lifecycle": ["npx", ["playwright", "test", "e2e/draft-lifecycle.spec.ts", "--workers=1"]],
   };
-  assert.ok(commands[mode], "Choose setup, dev, oauth-dev, oauth-check, build, workspace, connect, e2e, recovery, draft-connect, or connection-recovery.");
+  assert.ok(commands[mode], "Choose setup, dev, payments-dev, oauth-dev, oauth-check, build, workspace, connect, e2e, recovery, draft-connect, or connection-recovery.");
   const [command, args] = commands[mode];
   const child = spawn(command, args, { cwd: root, env, stdio: mode === "oauth-dev" ? ["inherit", "pipe", "pipe"] : "inherit" });
   if (mode === "oauth-dev") {

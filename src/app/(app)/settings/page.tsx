@@ -11,6 +11,7 @@ import { SpendGuardrails } from "@/components/spend-guardrails";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
+import { isRazorpayTestEnabled } from "@/lib/payments/razorpay-test";
 
 export const metadata = { title: "Settings" };
 
@@ -116,7 +117,7 @@ async function ConnectionSettings({ businessId, searchParams }: {
           <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
         </Alert>
       )}
-      <ManagedBilling connection={result.connection} />
+      <ManagedBilling connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined} />
     </>
   );
 }

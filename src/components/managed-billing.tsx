@@ -2,12 +2,13 @@ import { ArrowUpRight, CreditCard, Landmark, WalletCards } from "lucide-react";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { META_FUNDING_METHODS } from "@/lib/payments/meta-funding";
+import { TestCheckout } from "@/components/test-checkout";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
 const methodIcons = { upi_auto_reload: WalletCards, recurring_card: CreditCard, monthly_invoicing: Landmark };
 
-export function ManagedBilling({ connection }: { connection: BillingConnection | null }) {
+export function ManagedBilling({ connection, testBusinessId }: { connection: BillingConnection | null; testBusinessId?: string }) {
   const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
@@ -25,11 +26,11 @@ export function ManagedBilling({ connection }: { connection: BillingConnection |
       </div>
 
       <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-        <div><dt className="text-slate-500">Billing entity</dt><dd className="mt-1 font-medium text-slate-900">Solaride Energy</dd></div>
+        <div><dt className="text-slate-500">Current operator</dt><dd className="mt-1 font-medium text-slate-900">Vanshul Goyal</dd></div>
         <div><dt className="text-slate-500">Market</dt><dd className="mt-1 font-medium text-slate-900">India / INR</dd></div>
         <div><dt className="text-slate-500">Meta connection</dt><dd className="mt-1 font-medium text-slate-900">{connectionStatus}</dd></div>
         <div><dt className="text-slate-500">Selected ad account</dt><dd className="mt-1 break-all font-mono text-slate-900">{connection ? connection.adAccountId ?? "Not selected" : "Unavailable"}</dd></div>
-        <div><dt className="text-slate-500">Planned account ownership</dt><dd className="mt-1 font-medium text-slate-900">Solaride-owned, separate per customer</dd></div>
+        <div><dt className="text-slate-500">Future account ownership</dt><dd className="mt-1 font-medium text-slate-900">Solaride arrangement not yet formalized</dd></div>
         <div><dt className="text-slate-500">Funding verification</dt><dd className="mt-1 font-medium text-slate-900">Not verified</dd></div>
         <div><dt className="text-slate-500">New account capacity</dt><dd className="mt-1 font-medium text-slate-900">Not checked</dd></div>
       </dl>
@@ -69,7 +70,8 @@ export function ManagedBilling({ connection }: { connection: BillingConnection |
       </div>
 
       <p className="text-sm leading-6 text-slate-600">No funding method selected. Meta-initiated charges do not transfer exactly 80% of each customer payment. Payment timing acceptance, account ownership, recurring authorisation and spend controls remain unverified.</p>
-      <p className="text-xs leading-5 text-slate-500">Checkout, outbound transfers and automatic account creation are not enabled. Existing Meta connections and campaign settings are unchanged.</p>
+      <p className="text-xs leading-5 text-slate-500">Live checkout, outbound transfers and automatic account creation are not enabled. Existing Meta connections and campaign settings are unchanged.</p>
+      {testBusinessId && <TestCheckout key={testBusinessId} businessId={testBusinessId} />}
     </section>
   );
 }

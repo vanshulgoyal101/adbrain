@@ -97,6 +97,60 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
+| POST | `/api/payments/test/orders` | Business UUID + idempotency UUID -> stored test order/checkout configuration | Local-only synthetic Razorpay test order; no real collection or ad credit |
+| GET | `/api/payments/test/orders` | `orderId` UUID -> owned test-order status | Local-only owner-scoped read |
+| POST | `/api/payments/test/verify` | Local order UUID, payment ID, signature -> verified test state | Provider read + durable test observation; no settlement/credit |
+| POST | `/api/payments/test/webhook` | Raw signed Razorpay notification | Test merchant/provider verification + durable observation; no session cookie required |
+
+### Local Test Payments
+
+These routes are disabled by default and unavailable in production Node mode or
+any Vercel environment. They require the explicitly enabled test configuration,
+loopback Supabase and optional test-order migration in the
+[payment implementation receipt](PAYMENTS-PLAN.md#9-implementation-receipt).
+The gated Settings checkout now consumes these APIs using Razorpay's hosted
+script and business-scoped session recovery. Money in this API is integer paise, unlike campaign
+budget inputs. Every response with an order keeps zero spendable funds and denies
+campaign activation.
+
+Creation accepts only `{businessId: UUID, idempotencyKey: UUID}`. The fixed test
+amount is 1,000,000 paise; browser amounts/pricing are rejected. It returns 201
+for a newly persisted provider order or 200 for the stored idempotent replay.
+`orderId` is the local UUID. When `status=created`, `checkout` contains the public
+test key, provider order ID, amount/currency and test-only description; otherwise
+it is null. Never retry unknown creation with a new idempotency key.
+
+Verification accepts `{orderId: UUID, paymentId: string, signature: string,
+providerOrderId?: string}`. New checkout callbacks send the provider order ID as
+well; older saved callbacks remain compatible. If supplied, it must match the
+server-owned order or verification returns 400 before provider access. The HMAC
+always uses the stored provider order ID, never trusts the callback as authority.
+Both authenticated mutation endpoints require a matching `Origin` header and are
+rate limited. The database checks business ownership. Verification checks HMAC
+against the stored provider order and fetches payment/order state with test keys.
+Authorization alone stays pending; refunds/inconsistent evidence are held.
+
+Webhook input is at most 65,536 bytes and read within five seconds. Verify the
+`X-Razorpay-Signature` on exact raw bytes and `account_id` against configuration.
+Supported events (`payment.captured`, `payment.authorized`, `payment.failed`,
+`refund.processed`, `order.paid`) require `X-Razorpay-Event-Id` and a payment
+reference. The receiver fetches current provider evidence and persists the
+observation before HTTP 200. Unmatched orders/provider/DB failures return 503;
+other signed events are explicitly ignored. No financial journal posting occurs.
+
+Test states are `creating`, `created`, `captured`, `needs_reconciliation`.
+An interrupted create can remain `creating`; there is no automatic reconciliation
+worker yet. Conflicting events and refund holds cannot be cleared by late capture
+replays. All routes use no-store responses. Misconfiguration returns 404;
+invalid signatures/inputs return 400, cross-origin mutations 403, unowned orders
+404, changed order/merchant bindings 409, oversized bodies 413, and unavailable
+verification/persistence 503. No endpoint issues refunds or moves real money.
+
+The UI persists its idempotency key before creation and callback proof before
+verification. Reload checks the same order; dismissal or uncertain outcomes do
+not start another payment. Only server-confirmed capture enables a new test.
+Without a delivered webhook or retained callback, status may remain pending;
+this UI adds no background provider reconciliation endpoint.
 
 ### Authentication Handlers
 
