@@ -118,6 +118,23 @@ responses. Network requests are fulfilled with fixtures or blocked; server
 actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
 This does not replace authenticated workflow tests or real-device Safari testing.
 
+For the saved-enquiry workflow, using installed Google Chrome and fully synthetic
+transport (no server, credentials or provider calls):
+
+```sh
+node scripts/check-workspace-ux.mjs --offline-leads
+LC_ALL=C LANG=C node scripts/check-meta-connect-db.mjs --leads-only
+npm test -- tests/leads.test.ts tests/lead-inbox.test.tsx
+```
+
+The browser check uses the real inbox/CSS at 1440/390/320px: paging, failed save
+and retry, reload persistence, filters, partial sync/resume and error recovery.
+Screenshots/receipt go to ignored `test-results/lead-inbox/`. The database check
+creates and removes its own Unix-socket PostgreSQL cluster for fresh/upgrade
+schemas, 225-row cursor ordering, defaults, re-import preservation and tenant
+denials. This is not combined #34 acceptance, a production migration or live
+Meta evidence.
+
 [Playwright configuration](../playwright.config.ts) uses one worker, base URL
 `http://localhost:3939`, and an existing production build via `npm run start`.
 It reuses an existing server; verify that server's credentials and build before
