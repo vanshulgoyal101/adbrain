@@ -93,6 +93,14 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |
 | POST | `/api/meta/connect` | Business/account/Page | Retired selection, 410 after validation |
 | POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections |
+| GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
+| POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
+| POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |
+| GET/POST | `/api/payments/live/reconcile` | Owner-scoped recovery | Reconcile uncertain provider state |
+| GET/POST | `/api/payments/live/operator` | Operator-authorized refund/review | Financial action; separate authorization required |
+| GET/POST | `/api/payments/test/orders` | Test order read/create | Nonproduction only; isolated test gateway |
+| POST | `/api/payments/test/verify` | Test payment proof | Nonproduction only |
+| POST | `/api/payments/test/webhook` | Test signed event | Nonproduction only |
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |

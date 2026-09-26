@@ -4,6 +4,22 @@ This is AdBrain's deployment reference. It applies to this repository, not every
 repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
 settings before a release; the historical receipts below are not current status.
 
+## Current Release Boundary
+
+Production `main` currently serves the enquiry workflow at `f639cc3`; payment
+collection is disabled. The selective operator-managed checkout candidate carries
+the accepted #48 payment source without #49's unfinished spend guard. Publish its
+code only through a protected main PR with required exact-head checks. Before
+enabling the payment callers, verify the AdBrain production target and apply the
+ordered `20260924_managed_billing.sql`, `20260924_meta_billing_events.sql`,
+`20260926_production_payment_orders.sql` and
+`20260926_production_payment_policy_v2.sql` migrations with preflight and
+recoverable backup. Do not replay the whole canonical schema or rewrite an
+applied migration checksum. Live credentials, merchant identity, webhook and tax
+status need independent verification; collection flags remain off until then.
+Neither code deployment nor capture activates Meta advertising. Real charges,
+refunds and ad spend need separate financial authorization.
+
 ## Latest Application Release: 2026-09-18
 
 [PR #10](https://github.com/vanshulgoyal101/adbrain/pull/10) released the platform
@@ -56,15 +72,15 @@ documentation-only synchronization is recorded in its PR.
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
-| Vercel Git deployment (current source) | `*: false`, `main: true`, `dev: false`, pilot branch disabled |
+| Vercel Git deployment (current source) | `**: false`, `main: true`, `dev: false`, pilot branch disabled |
 
 These controls are split between [.github/workflows/ci.yml](../.github/workflows/ci.yml),
 [vercel.json](../vercel.json), and GitHub branch-protection settings. GitHub does
 not enforce that every release originated on `dev`; the promotion procedure does.
 Direct CLI deployments are not blocked by Git branch protection.
 
-**The current checked-in wildcard disables other Git branch deployments.** Earlier
-configurations did not, and historical receipts below describe that failure mode.
+**The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
+single-star configurations did not, and historical receipts below describe that failure mode.
 Before pushing a feature or release branch, inspect effective remote deployment
 rules and preview credentials rather than relying on an old receipt or local JSON
 alone. Do not assume a preview URL implies a preview database, harmless cron
