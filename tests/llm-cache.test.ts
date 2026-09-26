@@ -6,6 +6,7 @@ import {
   withCache,
 } from "@/lib/llm/cache";
 import type { ChatMessage, CompletionResult } from "@/lib/llm/types";
+import { z } from "zod";
 
 const MESSAGES: ChatMessage[] = [
   { role: "system", content: "be brief" },
@@ -27,6 +28,13 @@ afterEach(() => {
 });
 
 describe("cacheKey", () => {
+  it("separates schema contracts without depending on schema object identity", () => {
+    const numeric = cacheKey(MESSAGES, { json: true, responseSchema: z.object({ value: z.number() }) });
+    expect(cacheKey(MESSAGES, { json: true, responseSchema: z.object({ value: z.number() }) })).toBe(numeric);
+    expect(cacheKey(MESSAGES, { json: true, responseSchema: z.object({ value: z.string() }) })).not.toBe(numeric);
+    expect(cacheKey(MESSAGES, { json: true })).not.toBe(numeric);
+  });
+
   it("is stable for identical requests", () => {
     expect(cacheKey(MESSAGES, { temperature: 0.3 })).toBe(
       cacheKey(MESSAGES, { temperature: 0.3 }),

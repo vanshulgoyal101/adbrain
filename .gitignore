@@ -15,6 +15,7 @@
 /test-results/
 /playwright-report/
 /.creative-evals/
+/.qa-artifacts/
 
 # next.js
 /.next/

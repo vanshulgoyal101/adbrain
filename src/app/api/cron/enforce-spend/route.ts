@@ -135,17 +135,18 @@ async function handleGET(request: Request) {
         const { error: updateError } = await admin.from("campaigns").update({ status: "paused" }).eq("id", id);
         if (updateError) { incomplete = true; continue; }
         paused.push(id);
-        await admin.from("audit_log").insert({
-          business_id: businessId,
-          actor_id: null,
-          actor_label: "cron",
-          action: "spend.auto_paused",
-          entity_type: "campaign",
-          entity_id: id,
-          meta_object_id: campaign.meta_campaign_id,
-          reason: `Weekly spend cap of ₹${limits.weeklyCapRupees} reached (cron sweep)`,
-          details: {} as unknown as Json,
+        const { error: auditError } = await admin.rpc("append_verified_audit_event", {
+          p_business_id: businessId,
+          p_actor_id: null,
+          p_system_actor: "cron",
+          p_action: "spend.auto_paused",
+          p_entity_type: "campaign",
+          p_entity_id: id,
+          p_meta_object_id: campaign.meta_campaign_id,
+          p_reason: `Weekly spend cap of ₹${limits.weeklyCapRupees} reached (cron sweep)`,
+          p_details: {} as unknown as Json,
         });
+        if (auditError) incomplete = true;
       } catch {
         incomplete = true;
       }

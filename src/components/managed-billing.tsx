@@ -2,12 +2,13 @@ import { ArrowUpRight, CreditCard, Landmark, WalletCards } from "lucide-react";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { META_FUNDING_METHODS } from "@/lib/payments/meta-funding";
+import { TestCheckout } from "@/components/test-checkout";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
 const methodIcons = { upi_auto_reload: WalletCards, recurring_card: CreditCard, monthly_invoicing: Landmark };
 
-export function ManagedBilling({ connection }: { connection: BillingConnection | null }) {
+export function ManagedBilling({ connection, testBusinessId }: { connection: BillingConnection | null; testBusinessId?: string }) {
   const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
@@ -69,7 +70,8 @@ export function ManagedBilling({ connection }: { connection: BillingConnection |
       </div>
 
       <p className="text-sm leading-6 text-slate-600">No funding method selected. Meta-initiated charges do not transfer exactly 80% of each customer payment. Payment timing acceptance, account ownership, recurring authorisation and spend controls remain unverified.</p>
-      <p className="text-xs leading-5 text-slate-500">Checkout, outbound transfers and automatic account creation are not enabled. Existing Meta connections and campaign settings are unchanged.</p>
+      <p className="text-xs leading-5 text-slate-500">Live checkout, outbound transfers and automatic account creation are not enabled. Existing Meta connections and campaign settings are unchanged.</p>
+      {testBusinessId && <TestCheckout key={testBusinessId} businessId={testBusinessId} />}
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { getSecurityHeaders } from "./src/lib/security/headers";
+import { isRazorpayTestEnabled } from "./src/lib/payments/razorpay-test";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 let supabaseHost: string | undefined;
@@ -40,7 +41,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      { source: "/:path*", headers: getSecurityHeaders(supabaseUrl) },
+      { source: "/:path*", headers: getSecurityHeaders(supabaseUrl, isRazorpayTestEnabled()) },
       { source: "/(api|auth|connect)/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
     ];
   },

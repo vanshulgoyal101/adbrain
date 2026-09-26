@@ -45,7 +45,7 @@ async function check(label, run) {
   }
 }
 
-async function verify(database, source) {
+async function verify(database, source, integrityMigration) {
   const admin = client();
   await admin.connect();
   await admin.query(`create database ${database}`);
@@ -55,6 +55,35 @@ async function verify(database, source) {
   try {
     await db.query(bootstrap);
     await db.query(source);
+    if (integrityMigration) {
+      await check(`${database}: invalid legacy evidence is preserved and blocks validation`, async () => {
+        await db.query("begin");
+        try {
+          const owner = randomUUID();
+          const business = randomUUID();
+          const foreignBusiness = randomUUID();
+          const campaign = randomUUID();
+          await db.query("insert into auth.users(id) values ($1)", [owner]);
+          await db.query("insert into public.businesses(id,owner_id,name) values ($1,$3,'Legacy'),($2,$3,'Foreign')", [business,foreignBusiness,owner]);
+          await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,-1)", [campaign,business]);
+          await db.query("insert into public.campaign_results(campaign_id,spend) values ($1,-1)", [campaign]);
+          await db.query("insert into public.leads(business_id,campaign_id,meta_lead_id) values ($1,$2,'legacy-cross-business')", [foreignBusiness,campaign]);
+          await db.query(integrityMigration);
+          for (const [table, constraint, code] of [
+            ["campaigns", "campaigns_budget_finite_nonnegative", "23514"],
+            ["campaign_results", "campaign_results_costs_finite_nonnegative", "23514"],
+            ["leads", "leads_same_business_campaign", "23503"],
+          ]) {
+            await db.query("savepoint validation");
+            await assert.rejects(db.query(`alter table public.${table} validate constraint ${constraint}`), { code });
+            await db.query("rollback to savepoint validation");
+          }
+          assert.equal(Number((await db.query("select spend from public.campaign_results where campaign_id=$1", [campaign])).rows[0].spend), -1);
+          assert.equal((await db.query("select campaign_id from public.leads where meta_lead_id='legacy-cross-business'")).rows[0].campaign_id, campaign);
+        } finally { await db.query("rollback"); }
+      });
+      await db.query(integrityMigration);
+    }
     console.log(`PASS ${database}: schema executes`);
     if (database === "ordered_upgrade") {
       await check("ordered_upgrade: existing enquiry receives follow-up defaults", async () => {
@@ -97,6 +126,84 @@ async function verify(database, source) {
     await db.query("insert into public.businesses (id, owner_id, name) values ($1, $2, 'Isolated DB test')", [businessId, ownerId]);
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
+
+    const otherOwnerId = randomUUID();
+    const otherBusinessId = randomUUID();
+    const campaignId = randomUUID();
+    const otherCampaignId = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [otherOwnerId]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Other fixture')", [otherBusinessId, otherOwnerId]);
+    await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200),($3,$4,200)", [campaignId, businessId, otherCampaignId, otherBusinessId]);
+    for (const [label, sql, parameters, code] of [
+      ["DB-01 owner cannot forge campaign state", "update public.campaigns set status='active', daily_budget=1, meta_campaign_id='forged' where id=$1", [campaignId], "42501"],
+      ["DB-01 owner cannot forge results", "insert into public.campaign_results(campaign_id,spend) values ($1,1)", [campaignId], "42501"],
+      ["DB-02 negative and reversed results reject", "insert into public.campaign_results(campaign_id,spend,impressions,period_start,period_end) values ($1,-1,-1,'2026-09-26','2026-09-01')", [campaignId], "23514"],
+      ["DB-03 lead campaign belongs to same business", "insert into public.leads(business_id,campaign_id,meta_lead_id) values ($1,$2,'cross-business')", [businessId, otherCampaignId], "23503"],
+      ["DB-04 owner cannot forge draft version or expiry", "update public.campaign_drafts set version=999, expires_at=now()+interval '100 days' where id=$1", [draftId], "42501"],
+      ["DB-05 owner cannot spoof audit actor", "insert into public.audit_log(business_id,actor_id,action,entity_type) values ($1,$2,'campaign.activate','campaign')", [businessId, otherOwnerId], "42501"],
+      ["DB-02 zero weekly cap rejects", "insert into public.spend_limits(business_id,weekly_cap_rupees,auto_pause) values ($1,0,true)", [businessId], "23514"],
+    ]) {
+      await check(`${database}: ${label}`, async () => {
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("begin");
+          if (!label.startsWith("DB-02 negative")) {
+            await session.query("set local role authenticated");
+            await session.query("select set_config('request.jwt.claim.sub',$1,true)", [ownerId]);
+          }
+          await assert.rejects(session.query(sql, parameters), { code });
+        } finally {
+          await session.query("rollback");
+          await session.end();
+        }
+      });
+    }
+
+    await check(`${database}: DB-A independent numeric bounds and relationship delete semantics`, async () => {
+      for (const values of ["impressions=-1", "clicks=-1", "leads=9007199254740992", "conversations=9007199254740992",
+        "spend='NaN'", "cpl='NaN'", "cost_per_conversation='NaN'", "cpl=-1",
+        "period_start='2026-09-26',period_end='2026-09-01'", "period_start='2026-09-26'", "fetched_at='infinity'"]) {
+        await db.query("begin");
+        try {
+          const result = await db.query("insert into public.campaign_results(campaign_id) values ($1) returning id", [campaignId]);
+          await assert.rejects(db.query(`update public.campaign_results set ${values} where id=$1`, [result.rows[0].id]), { code: "23514" });
+        } finally { await db.query("rollback"); }
+      }
+      await db.query("begin");
+      try {
+        await db.query("insert into public.leads(business_id,campaign_id,meta_lead_id) values ($1,$2,'owned-delete')", [businessId,campaignId]);
+        await db.query("delete from public.campaigns where id=$1", [campaignId]);
+        const lead = (await db.query("select business_id,campaign_id from public.leads where meta_lead_id='owned-delete'")).rows[0];
+        assert.deepEqual(lead, { business_id: businessId, campaign_id: null });
+      } finally { await db.query("rollback"); }
+    });
+
+    await check(`${database}: DB-A draft insertion and clocks are server assigned`, async () => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin");
+        await session.query("set local role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,true)", [ownerId]);
+        const row = (await session.query(`insert into public.campaign_drafts(business_id,owner_id,input,version,expires_at)
+          values ($1,$2,'{}',999,now()+interval '100 days') returning *, expires_at = now()+interval '7 days' as bounded`, [businessId,ownerId])).rows[0];
+        assert.equal(Number(row.version), 1);
+        assert.equal(row.bounded, true);
+        const updated = (await session.query("select * from public.update_campaign_draft_if_version($1,$2,$3,1,'{}','2000-01-01')", [row.id,businessId,ownerId])).rows[0];
+        assert.equal(Number(updated.version), 2);
+        assert.equal(updated.updated_at.getTime(), row.created_at.getTime());
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,1)", [row.id])).rowCount, 0);
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,2)", [row.id])).rowCount, 1);
+        await session.query("reset role");
+        const expiredId = randomUUID();
+        await session.query("insert into public.campaign_drafts(id,business_id,owner_id,input,expires_at) values ($1,$2,$3,'{}','2001-01-01')", [expiredId,businessId,ownerId]);
+        await session.query("set local role authenticated");
+        assert.equal((await session.query("select * from public.update_campaign_draft_if_version($1,$2,$3,1,'{}','2000-01-01')", [expiredId,businessId,ownerId])).rowCount, 0);
+        await session.query("select set_config('request.jwt.claim.sub',$1,true)", [otherOwnerId]);
+        await assert.rejects(session.query("select * from public.update_campaign_draft_if_version($1,$2,$3,1,'{}')", [draftId,businessId,ownerId]), { code: "42501" });
+      } finally { await session.query("rollback"); await session.end(); }
+    });
 
     await check(`${database}: enquiry paging, follow-up persistence and tenant isolation`, async () => {
       await db.query(`insert into public.leads (business_id, meta_lead_id, full_name, phone, created_time)
@@ -157,6 +264,81 @@ async function verify(database, source) {
       }
     });
     if (process.argv.includes("--leads-only")) return;
+
+    await check(`${database}: DB-A read isolation, delete denial and authentic audit identity`, async () => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        assert.equal((await session.query("select id from public.campaigns where id=$1", [campaignId])).rowCount, 1);
+        assert.equal((await session.query("select id from public.campaigns where id=$1", [otherCampaignId])).rowCount, 0);
+        for (const table of ["campaigns", "campaign_results", "audit_log", "campaign_drafts", "businesses"]) {
+          await assert.rejects(session.query(`delete from public.${table}`), { code: "42501" });
+        }
+        const append = actor => session.query("select public.append_verified_audit_event($1,$2,'campaign.pause','campaign') as id", [businessId, actor]);
+        await assert.rejects(append(ownerId), { code: "42501" });
+        await session.query("set role anon");
+        await assert.rejects(append(ownerId), { code: "42501" });
+        await session.query("set role service_role");
+        await assert.rejects(append(otherOwnerId), { code: "42501" });
+        await assert.rejects(append(null), { code: "23514" });
+        const eventId = (await append(ownerId)).rows[0].id;
+        const event = (await session.query("select * from public.audit_log where id=$1", [eventId])).rows[0];
+        assert.equal(event.actor_id, ownerId);
+        assert.equal(event.actor_label, "db-test@example.invalid");
+        assert.equal(event.authority, "server");
+        for (const mutation of ["delete from public.audit_log", "update public.audit_log set action='forged'",
+          "insert into public.audit_log(action,entity_type) values ('forged','campaign')"]) {
+          await assert.rejects(session.query(mutation), { code: "42501" });
+        }
+      } finally { await session.end(); }
+    });
+
+    await check(`${database}: Razorpay test orders isolate owners and claim once under concurrency`, async () => {
+      const requestKey = randomUUID();
+      const claim = async (userId, key = "rzp_test_fixture") => {
+        const session = client(database);
+        await session.connect();
+        try {
+          await session.query("set role service_role");
+          return (await session.query("select public.razorpay_test_order_claim($1,$2,$3,$4,$5,$6) as result",
+            [businessId,userId,requestKey,randomUUID(),"acc_fixture",key])).rows[0].result;
+        } finally { await session.end(); }
+      };
+      await assert.rejects(claim(randomUUID()), { code: "23514" });
+      await assert.rejects(claim(ownerId, "rzp_live_fixture"), { code: "23514" });
+      const claims = await Promise.all(Array.from({ length: 4 }, () => claim(ownerId)));
+      assert.equal(claims.filter(result => result.claimed).length, 1);
+      assert.equal(new Set(claims.map(result => result.order.id)).size, 1);
+      const order = claims[0].order;
+      assert.equal(order.amount_paise, 1000000);
+      assert.equal(order.environment, "test");
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role service_role");
+        await assert.rejects(session.query("select * from private.razorpay_test_orders"), { code: "42501" });
+        const get = async userId => (await session.query("select public.razorpay_test_order_get($1,$2) as result", [order.id,userId])).rows[0].result;
+        assert.equal(await get(randomUUID()), null);
+        await session.query("select public.razorpay_test_order_result($1,'order_fixture')", [order.id]);
+        const observe = async (event, hash, outcome, payment = "pay_fixture") => (await session.query(
+          "select public.razorpay_test_order_observe($1,'acc_fixture','rzp_test_fixture',$2,$3,$4,$5) as result",
+          [order.id,event,hash,payment,outcome])).rows[0].result;
+        assert.equal((await observe("event_1","a".repeat(64),"captured")).state,"captured");
+        assert.equal((await observe("event_1","a".repeat(64),"captured")).state,"captured");
+        assert.equal((await observe("event_2","b".repeat(64),"pending")).state,"captured");
+        assert.equal((await observe("event_1","c".repeat(64),"captured")).state,"needs_reconciliation");
+        assert.equal((await observe("event_3","d".repeat(64),"captured")).state,"needs_reconciliation");
+        assert.equal((await get(ownerId)).payment_id,"pay_fixture");
+        await session.query("set role authenticated");
+        await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(session.query("select public.razorpay_test_order_result($1,null)", [order.id]), { code: "42501" });
+        await session.query("set role anon");
+        await assert.rejects(get(ownerId), { code: "42501" });
+      } finally { await session.end(); }
+      assert.equal((await db.query("select count(*)::int as count from private.razorpay_test_events where order_id=$1 and event_id='event_1'",[order.id])).rows[0].count,1);
+    });
 
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
       const profileId = randomUUID();
@@ -477,8 +659,15 @@ async function verify(database, source) {
     await check(`${database}: two request keys cannot submit the same draft twice`, async () => {
       const results = await Promise.all([claim("draft-key-first", randomUUID(), draftId), claim("draft-key-second", randomUUID(), draftId)]);
       assert.equal(results.flat().length, 1);
-      const editable = await db.query("select * from public.update_campaign_draft_if_version($1, $2, $3, 2, '{}')", [draftId, businessId, ownerId]);
-      assert.equal(editable.rowCount, 0);
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+        const editable = await session.query("select * from public.update_campaign_draft_if_version($1, $2, $3, 2, '{}')", [draftId, businessId, ownerId]);
+        assert.equal(editable.rowCount, 0);
+        await assert.rejects(session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId]), { code: "23503" });
+      } finally { await session.end(); }
     });
     await check(`${database}: expired running operation requires reconciliation`, async () => {
       const [operation] = await claim("expired-key");
@@ -628,6 +817,11 @@ async function verify(database, source) {
         await session.end();
       }
     });
+    await check(`${database}: clean fixtures pass rollout preflight and final constraint validation`, async () => {
+      const results = await db.query(await readFile(join(root, "db/preflight/20260926_campaign_integrity.sql"), "utf8"));
+      assert.ok(results[1].rows.every(row => Number(row.rows) === 0));
+      await db.query(await readFile(join(root, "db/migrations/20260926_validate_campaign_integrity.sql"), "utf8"));
+    });
   } finally {
     await db.end();
   }
@@ -656,8 +850,12 @@ try {
   const legacyLead = `insert into auth.users (id, email) values ('30000000-0000-4000-8000-000000000001', 'legacy@example.invalid');
     insert into public.businesses (id, owner_id, name) values ('30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Legacy fixture');
     insert into public.leads (business_id, meta_lead_id, full_name) values ('30000000-0000-4000-8000-000000000002', 'legacy-follow-up', 'Legacy enquiry');`;
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}`);
+  const testPaymentsMigration = await readFile(join(root, "db/migrations/20260926_razorpay_test_orders.sql"), "utf8");
+  const integrityMigration = await readFile(join(root, "db/migrations/20260926_campaign_integrity.sql"), "utf8");
+  const draftAuthorityMigration = await readFile(join(root, "db/migrations/20260926_draft_authority.sql"), "utf8");
+  const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}`, integrityMigration);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

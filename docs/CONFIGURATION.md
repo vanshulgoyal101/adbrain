@@ -23,6 +23,34 @@ of leaving blank assignments.
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
 | `DEMO_USER_EMAIL` | `demo@adbrain.vanshul.com`, email | Demo identity; not a sandbox guarantee |
 
+## Local Test Payments
+
+These settings are validated separately by the
+[Razorpay test adapter](../src/lib/payments/razorpay-test.ts), not `getEnv()`.
+There is no live-payment mode. The gate denies production Node mode, every Vercel
+environment and non-loopback Supabase URLs. Verify the actual local database;
+a tunnel's loopback address is not proof of isolation.
+
+| Variable | Default / validation | Purpose |
+| --- | --- | --- |
+| `PAYMENTS_TEST_ENABLED` | Disabled unless exactly `true` | Local test APIs, Settings checkout and scoped CSP allowances |
+| `RAZORPAY_KEY_ID` | Required `rzp_test_` identifier when enabled; legacy alias `RAZORPAY_TEST_KEY_ID` | Public test key; never use a live key |
+| `RAZORPAY_KEY_SECRET` | Required nonempty server secret; legacy alias `RAZORPAY_TEST_KEY_SECRET` | SDK authentication and callback HMAC |
+| `RAZORPAY_TEST_ACCOUNT_ID` | Required `acc_` identifier | Expected test merchant identity |
+| `RAZORPAY_TEST_WEBHOOK_SECRET` | At least 16 characters; different from key secret | Raw webhook HMAC; server-only |
+
+The private test-order migration and real local Supabase login are also required.
+Use one complete key pair. If both standard and legacy pairs are populated they
+must match exactly; partial or conflicting pairs fail closed. The public key is
+returned by the order endpoint, so no `NEXT_PUBLIC_` Razorpay variable is needed.
+Never prefix a secret with `NEXT_PUBLIC_`. Environment files are ignored by Git;
+the existing production environment file must not be overwritten or used for QA.
+Restart `npm run dev` after changing configuration so the page and CSP agree.
+Open Settings > Managed billing; Checkout is absent when the gate fails. No
+credentials are needed for mocked component tests. See
+[setup and limitations](PAYMENTS-PLAN.md#9-implementation-receipt) before using
+provider test mode or exposing a webhook endpoint.
+
 ## Text Models
 
 Key pools split commas, trim whitespace, and discard empty entries. Empty pools

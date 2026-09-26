@@ -1,5 +1,8 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import Razorpay from "razorpay";
+import { createRazorpayTestClient, getRazorpayTestConfig } from "@/lib/payments/razorpay-test";
 import {
   capturedPaymentMatchesOrder,
   verifyRazorpayCheckoutSignature,
@@ -30,6 +33,153 @@ const capturedPayment = {
   amount_refunded: 0,
   refund_status: null,
 };
+
+const testEnvironment = {
+  NODE_ENV: "test", PAYMENTS_TEST_ENABLED: "true", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+  RAZORPAY_TEST_KEY_ID: "rzp_test_fixture", RAZORPAY_TEST_KEY_SECRET: keySecret,
+  RAZORPAY_TEST_ACCOUNT_ID: "acc_fixture", RAZORPAY_TEST_WEBHOOK_SECRET: webhookSecret,
+};
+
+const requireFromSdk = createRequire(createRequire(import.meta.url).resolve("razorpay"));
+const sdkAxios: {
+  defaults: { adapter: unknown };
+} = requireFromSdk("axios").default;
+const originalAdapter = sdkAxios.defaults.adapter;
+type TransportRequest = {
+  baseURL: string; url: string; method: string; data?: string;
+  auth: { username: string; password: string }; timeout: number; maxRedirects: number; signal: AbortSignal;
+};
+const sdkRequest = vi.fn<(config: TransportRequest) => Promise<unknown>>();
+
+beforeEach(() => {
+  sdkRequest.mockReset();
+  sdkRequest.mockRejectedValue(new Error("Unexpected SDK request"));
+  sdkAxios.defaults.adapter = sdkRequest;
+});
+afterEach(() => {
+  sdkAxios.defaults.adapter = originalAdapter;
+  vi.restoreAllMocks();
+});
+
+function respondWith(data: unknown) {
+  sdkRequest.mockImplementation(async config => ({ data, status: 200, statusText: "OK", headers: {}, config }));
+}
+
+describe("local-only Razorpay adapter", () => {
+  it.each([
+    { PAYMENTS_TEST_ENABLED: "false" }, { NODE_ENV: "production" }, { VERCEL_ENV: "preview" },
+    { RAZORPAY_TEST_KEY_ID: "rzp_live_fixture" }, { RAZORPAY_TEST_KEY_SECRET: "" },
+    { NEXT_PUBLIC_SUPABASE_URL: "https://production.supabase.co" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://localhost.evil.invalid" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://user:password@localhost:54321" },
+    { RAZORPAY_TEST_WEBHOOK_SECRET: keySecret }, { RAZORPAY_TEST_ACCOUNT_ID: "" },
+  ])("blocks unsafe configuration before network access: %j", override => {
+    expect(() => createRazorpayTestClient({ ...testEnvironment, ...override })).toThrow();
+    expect(sdkRequest).not.toHaveBeenCalled();
+  });
+
+  it("requires the explicit enable flag", () => {
+    expect(() => getRazorpayTestConfig({})).toThrow();
+  });
+
+  it("supports standard server-side key names without a public secret or legacy pair", () => {
+    expect(getRazorpayTestConfig({ ...testEnvironment,
+      RAZORPAY_TEST_KEY_ID: undefined, RAZORPAY_TEST_KEY_SECRET: undefined,
+      RAZORPAY_KEY_ID: "rzp_test_fixture", RAZORPAY_KEY_SECRET: keySecret,
+    })).toMatchObject({ keyId: "rzp_test_fixture", keySecret });
+    expect(getRazorpayTestConfig({ ...testEnvironment,
+      RAZORPAY_KEY_ID: "rzp_test_fixture", RAZORPAY_KEY_SECRET: keySecret,
+    })).toMatchObject({ keyId: "rzp_test_fixture", keySecret });
+  });
+
+  it.each([
+    { RAZORPAY_KEY_ID: "rzp_live_fixture", RAZORPAY_KEY_SECRET: keySecret },
+    { RAZORPAY_KEY_ID: "rzp_test_fixture" },
+    { RAZORPAY_KEY_SECRET: keySecret },
+  ])("rejects incomplete or live standard keys: %j", standard => {
+    expect(() => createRazorpayTestClient({ ...testEnvironment,
+      RAZORPAY_TEST_KEY_ID: undefined, RAZORPAY_TEST_KEY_SECRET: undefined, ...standard,
+    })).toThrow();
+    expect(sdkRequest).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { RAZORPAY_KEY_ID: "rzp_test_other", RAZORPAY_KEY_SECRET: keySecret },
+    { RAZORPAY_KEY_ID: "rzp_test_fixture", RAZORPAY_KEY_SECRET: "different-fixture-secret" },
+    { RAZORPAY_KEY_ID: "rzp_test_fixture" },
+  ])("does not silently combine or override conflicting key pairs: %j", standard => {
+    expect(() => createRazorpayTestClient({ ...testEnvironment, ...standard })).toThrow();
+    expect(sdkRequest).not.toHaveBeenCalled();
+  });
+
+  it("creates only the server-defined INR test order with partial payment disabled", async () => {
+    const receipt = "11111111-1111-4111-8111-111111111111";
+    const order = { id: "order_fixture", entity: "order", amount: 1_000_000,
+      amount_paid: 0, amount_due: 1_000_000, currency: "INR", status: "created", receipt };
+    respondWith(order);
+    await expect(createRazorpayTestClient(testEnvironment).createOrder(receipt)).resolves.toEqual(order);
+    expect(Razorpay.VERSION).toBe("2.9.8");
+    expect(sdkRequest).toHaveBeenCalledTimes(1);
+    const sent = sdkRequest.mock.calls[0][0];
+    expect(sent).toMatchObject({ baseURL: "https://api.razorpay.com", url: "/v1/orders", method: "post",
+      auth: { username: testEnvironment.RAZORPAY_TEST_KEY_ID, password: keySecret }, timeout: 15_000, maxRedirects: 0 });
+    expect(sent.signal).toBeInstanceOf(AbortSignal);
+    expect(JSON.parse(sent.data!)).toEqual({ amount: 1_000_000, currency: "INR", receipt, partial_payment: false });
+  });
+
+  it("does not retry an ambiguous provider mutation or expose provider error text", async () => {
+    sdkRequest.mockRejectedValue(new Error("sensitive-provider-detail"));
+    await expect(createRazorpayTestClient(testEnvironment).createOrder("11111111-1111-4111-8111-111111111111"))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+    expect(sdkRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches orders and payments through the SDK with separate per-request signals", async () => {
+    const client = createRazorpayTestClient(testEnvironment);
+    const order = { id: "order_stored1", entity: "order", amount: 1_000_000, amount_paid: 1_000_000,
+      amount_due: 0, currency: "INR", status: "paid", receipt: "fixture" };
+    respondWith(order);
+    await expect(client.fetchOrder(order.id)).resolves.toEqual(order);
+    respondWith(capturedPayment);
+    await expect(client.fetchPayment(capturedPayment.id)).resolves.toEqual(capturedPayment);
+    expect(sdkRequest.mock.calls.map(([sent]) => [sent.method, sent.url])).toEqual([
+      ["get", "/v1/orders/order_stored1"], ["get", "/v1/payments/pay_test1"],
+    ]);
+    expect(sdkRequest.mock.calls[0][0].signal).not.toBe(sdkRequest.mock.calls[1][0].signal);
+  });
+
+  it.each([302, 401, 429, 500])("sanitizes HTTP %i and never retries it", async status => {
+    sdkRequest.mockRejectedValue({ response: { status, data: { error: { description: "sensitive-provider-detail" } } } });
+    await expect(createRazorpayTestClient(testEnvironment).fetchPayment("pay_test1"))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+    expect(sdkRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the SDK request when its deadline expires", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    sdkRequest.mockImplementation(config => new Promise((_resolve, reject) => {
+      config.signal.addEventListener("abort", () => reject(config.signal.reason), { once: true });
+      controller.abort(new DOMException("Expired", "TimeoutError"));
+    }));
+    await expect(createRazorpayTestClient(testEnvironment).createOrder("11111111-1111-4111-8111-111111111111"))
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+    expect(timeout).toHaveBeenCalledWith(15_000);
+    expect(sdkRequest).toHaveBeenCalledTimes(1);
+    expect(sdkRequest.mock.calls[0][0].signal.aborted).toBe(true);
+  });
+
+  it("rejects malformed or mismatched provider evidence", async () => {
+    respondWith({ ...capturedPayment, id: "pay_other" });
+    await expect(createRazorpayTestClient(testEnvironment).fetchPayment("pay_test1"))
+      .rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+  });
+
+  it("rejects untrusted IDs before constructing a provider URL", async () => {
+    await expect(createRazorpayTestClient(testEnvironment).fetchPayment("../orders")).rejects.toThrow();
+    expect(sdkRequest).not.toHaveBeenCalled();
+  });
+});
 
 describe("Razorpay checkout signature", () => {
   it("verifies the stored order and provider payment ID", () => {

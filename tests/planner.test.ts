@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { buildPlannerMessages, formatAnswers, runPlanner } from "@/lib/campaign/planner";
 import { complete } from "@/lib/llm";
+import { LLMError } from "@/lib/llm/types";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 
 vi.mock("@/lib/llm", () => ({ complete: vi.fn(), parseJSON: JSON.parse }));
@@ -9,6 +10,15 @@ beforeEach(() => vi.clearAllMocks());
 describe("planner response validation", () => {
   const input = { brand: { name: "Business" }, approved: [], leadForms: [], goal: "Local enquiries" };
   const question = { id: "area", type: "text", question: "Which service area?" };
+  it("records known terminal failure usage once without another completion", async () => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 17 };
+    const failure = new LLMError("Output token budget exhausted", { provider: "google", model: "gemini-3.6-flash", usage, retryable: false });
+    vi.mocked(complete).mockRejectedValue(failure);
+    const onCompletion = vi.fn();
+    await expect(runPlanner(input, { onCompletion })).rejects.toBe(failure);
+    expect(onCompletion).toHaveBeenCalledExactlyOnceWith({ text: "", provider: "google", model: "gemini-3.6-flash", usage }, false);
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
   it.each([
     { ready: false, questions: [] },
     { ready: false, questions: [{ ...question, type: "single" }] },
