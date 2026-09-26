@@ -195,6 +195,57 @@ not start another payment. Only server-confirmed capture enables a new test.
 Without a delivered webhook or retained callback, status may remain pending;
 this UI adds no background provider reconciliation endpoint.
 
+### Customer Advertising Allowance
+
+Issue #49 candidate only; installing source does not enable delivery. Apply the
+[customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
+after the production-payment and trusted-campaign migrations. DevOps owns the
+canonical schema copy and target rollout; existing test payments never give credit.
+
+| Method | Path | Authority and result |
+| --- | --- | --- |
+| GET | `/api/payments/customer-balance?businessId=<uuid>` | Current business owner; `{balance}` with captured/refunded, service/ad allocations, media/tax costs, reservations, remaining paise and hold reason; no-store |
+| GET | `/api/payments/customer-balance?businessId=<uuid>&campaignId=<uuid>` | Same owner; checks stored campaign binding, budget and fresh costs without creating a reservation |
+| POST | `/api/payments/customer-balance` | Same-origin authenticated financial operator, verified again in SQL; explicit cost or refund-allocation evidence, never a provider charge/refund |
+
+GET returns 400 for invalid identifiers, 401/403/404 for failed access, 429 for
+rate limits, 503 for campaign access failure and 409 for unavailable/held accounting.
+Reads allow 60 requests per minute per user. POST allows 20 per five minutes;
+invalid structured input is 400, wrong origin 403, missing session 401 and rejected
+financial evidence/authority 409. Errors do not disclose underlying financial rows.
+
+POST strict actions are `{action:"costs",businessId,evidence}` and
+`{action:"refund-allocation",businessId,allocation}`. Exact fields are in
+[the shared contracts](../src/lib/payments/customer-balance-contracts.ts).
+Use integer paise and immutable evidence UUIDs. Cost evidence must identify the
+campaign, Meta account/generation, cumulative media and tax, actual tax-rate basis
+points and observation time. Do not submit a reporting-period total as lifetime
+cost or invent a zero/tax rate. Replaying identical evidence is idempotent;
+conflicting identity, decreasing fresh totals, stale or ambiguous data holds funds.
+Refund allocations must match verified provider refunds. Service remains unearned
+at capture; earning requires operator-attested delivery of agreed creatives/setup.
+
+Review precedes a separate execution-time atomic reservation. The initial
+one-campaign offer reserves all remaining advertising allocation and needs seven
+days of reviewed daily budget including the recorded tax rate. Weekly limits
+cannot override this boundary. Before ACTIVE, the Meta client sets and reads back
+a finite media cap within that reservation, retaining a lower existing cap.
+Meta documents a US$100 approximate-local-equivalent minimum and capability
+restrictions: unsupported/rejected limits block activation, never raise customer
+funding. Compatibility with the approved INR8000 tax-inclusive offer is not yet
+provider-verified. See the [official campaign reference](https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/).
+
+Pause remains available when accounting fails. It does not release money. A pause
+during in-flight activation cannot finalize the reservation; after the request
+settles, pause again and submit final cumulative costs observed after that confirmed
+pause. Final reconciliation closes the exact reservation UUID and releases only
+unused funds. Unknown outcomes retain credit reservations. Process death or failed
+outcome persistence leaves a hold requiring audited operator recovery; no automatic
+expiry/release or generic force-clear API is implemented. Conflicting cost evidence
+also remains held rather than silently reset. External Meta changes, late provider
+effects and actual tax liabilities still require operator reconciliation; these
+local checks are not provider-delivery certification.
+
 ### Lead Sync
 
 An empty POST starts an import or resumes the current binding's unfinished run.

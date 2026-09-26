@@ -1,5 +1,63 @@
 # DB-A and DEV-A Development Handoff
 
+## Issue 49 Customer Allowance Candidate
+
+Dev-owned isolated `feature/issue-49-customer-allowance`, based on accepted dev
+`cdcf5740c26c5175228d5f7f953354607efa6c39`. This section supersedes only the earlier
+#49 wrapper-only status, not historical acceptance/release receipts below.
+
+Delivered: additive private accounting/reservation SQL; verified capture and
+explicit refund allocation; fresh cumulative media/tax high-water evidence;
+atomic one-campaign reservation/refund exclusion; review and execution admission;
+finite Meta cap write/read-back; in-flight outcome and reservation UUID fences;
+pause preservation; owner/operator API; standalone `CustomerBalance({businessId})`.
+Dev2 can import the component from `@/components/customer-balance` into Billing.
+No shared checkout/config/order module or canonical schema was edited.
+
+Reuse: existing PostgreSQL advisory-lock/RPC patterns, Supabase, Zod, React,
+lucide and guarded Meta client. No new dependency or generic ledger/queue framework.
+The provider SDK is not swapped; a narrow documented campaign-cap method retains
+the existing transport and tenant binding. The approved offer/refund policy is
+unchanged, and automatic bank-to-Meta funding is not a prerequisite.
+
+Author evidence: 17 accounting/server/API tests, 26 activation-route tests,
+17 audit/pause/balance UI tests, four focused Meta-cap tests, 62 campaign UI
+tests and 54 existing API-route regressions pass (180 total across scoped runs).
+The balance UI also checks immediate business-switch isolation. Existing campaign UI emits one
+React act warning. The existing `check-meta-connect-db.mjs --customer-only` harness
+passes eight groups on both fresh and upgrade paths, including concurrent
+admission/refund exclusion, capture/cost replay, tenant/account denial, overlapping
+activation/pause and post-pause final-cost requirements. Final touched lint and
+TypeScript no-emit checks pass. All fixtures are synthetic; no remote database,
+provider mutation, live charge/refund, bank transfer or ad activation occurred.
+
+Integration: apply the new migration after production payment/trusted campaign
+objects, include its exact bytes in canonical schema under DevOps ownership, and
+integrate the balance component into Billing under Dev2 ownership. Existing legacy
+payment fixture funding records satisfy the old fixture schema only; they are not
+a runtime funding dependency. QA independently accepts changed paths; DevOps runs
+required exact-candidate CI and owns rollout. No branch push or PR is needed to
+consume the local commit from the shared Git object store.
+
+Migration SHA256:
+`794e0d1647a64264c537175ce7f3c4e8a89bf344390225e04e9e55cbbffe23c7`.
+Documentation checks report zero errors and 11 unchanged historical artifact
+warnings in this isolated worktree. No browser-rendering or hosted CI claim is
+made by these author runs; Billing integration and independent acceptance remain
+with their assigned owners.
+
+Limits: Meta's documented minimum cap may not support the approved tax-inclusive
+allowance. Unsupported/rejected caps remain blocked; no customer ceiling is raised.
+Actual provider/account cap compatibility and tax evidence remain unverified.
+Costs/earnings/finalization require truthful operator evidence. Financial-hold
+auto-pause is refresh-triggered, not a continuous scheduler. Process death before
+saving activation outcome or conflicting cost evidence leaves a sticky hold;
+audited recovery is still required, with no automatic force-clear. External Meta
+changes and late provider effects are not certified by local tests. Do not enable
+managed delivery on the strength of this author receipt alone. See the owning
+[API](../API_REFERENCE.md#customer-advertising-allowance) and
+[data model](../DATA_MODEL.md#customer-allowance-candidate) for the precise contract.
+
 Date: September 26, 2026. Status: local implementation slices, not packet closure
 or release approval. Source HEAD: `9da5b07b00e54fb552796cbcf01cc5fc7c2f02e7`,
 dirty `dev`. The local origin/dev reference advanced during this work; no fetch,
