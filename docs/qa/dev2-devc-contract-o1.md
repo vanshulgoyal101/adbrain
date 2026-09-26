@@ -16,6 +16,29 @@ or production changes; the current issue-specific authorization is recorded belo
 
 ## Issue 45 Production Payments
 
+### Backend Review Corrections
+
+The issue handoff pins the corrected head; earlier evidence below describes the
+original implementation. `119bcef` reconciles a unique distinct successful capture
+before completing a stale failed-attempt event; same-payment contradictions,
+duplicate captures and dispute/refund holds retain their existing guards.
+The funding correction adds service-only `production_payment_funding_valid(uuid,uuid)`,
+reuses the original funding predicate before saved-order replay and every checkout
+response, and withholds checkout on invalid/unavailable funding without hiding history
+or disabling reconciliation. Original funding evidence/order identities are immutable.
+
+Changed-scope checks: 39 server tests pass (both reported defects reproduced red
+first), types/lint/diagnostics and PostgreSQL fresh/upgrade/replay pass. SQL cases
+cover revocation, expiry, disconnection, account/generation changes, replacement
+evidence, same/new-key replay denial and retained history. No 426-test/browser replay,
+UI edits or live operations. Dev owns consent UI; DevOps owns canonical integration.
+The corrected migration SHA256 is
+`8983ba31e8fc9af8b6a580feb1869a0bc8715c3d5a17ab0103bc9601fd42c47b`,
+superseding the original digest below. Required integrated CI and targeted QA remain
+separate; current production authority is in the current dispatch, not old holds.
+
+### Original Implementation
+
 Dev 2, September 26, 2026. [Issue 45](https://github.com/vanshulgoyal101/adbrain/issues/45)
 candidate in `/tmp/adbrain-issue-45`, branch `feature/issue-45-production-payments`,
 based on `672eb132ad57bb3ba31f118afaffddaa878b4923`. The issue handoff records the

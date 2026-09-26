@@ -809,6 +809,7 @@ export interface Database {
         Args: { p_order_id: string; p_account_id: string; p_key_id: string; p_event_id: string; p_payload_hash: string; p_payment_id: string; p_outcome: string };
         Returns: Json;
       };
+      production_payment_funding_valid: { Args: { p_business_id: string; p_funding_evidence_id: string }; Returns: boolean };
       production_payment_order_claim: {
         Args: { p_business_id: string; p_user_id: string; p_request_key: string; p_order_id: string; p_account_id: string; p_key_id: string;
           p_quote: Json; p_terms: string; p_terms_hash: string; p_funding_evidence_id: string };
