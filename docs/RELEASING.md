@@ -34,6 +34,30 @@ CI finished. If the candidate, target or scope changes, reassess the changed par
 Only DevOps executes shared integration and production; feature writers keep their
 own branches and the coordinator/QA retain their independent responsibilities.
 
+### Current Pre-Customer Authority
+
+September 26 owner authorization, recorded in the
+[current dispatch](ORCHESTRATION.md#current-dispatch), permits DevOps to open the
+necessary dev/main PRs, run required CI, and execute the bounded AdBrain target
+preflight, recoverable migrations and protected enquiry release. This supersedes
+older approval-pending statements for that scope. Production validation with
+owner-controlled non-financial test data is authorized; no further generic
+PR/CI or migration permission round is required.
+
+Use focused changed-behavior checks, existing accepted SQL/QA evidence, required
+candidate CI and an actual production workflow smoke. Separate staging or backup
+infrastructure projects and elaborate independent rollback rehearsals are not
+required for this pre-customer increment. Verify the actual target and immutable
+SQL, preserve existing data/credentials, take a suitable recoverable snapshot for
+risky changes, and retain a compatible rollback or forward-fix path. A brief
+controlled maintenance window is permitted for an incompatible transition; it
+does not permit destructive resets, unsafe grants or bypassing branch protection.
+
+Enquiries ship independently of payment repairs. Payment collection remains off
+until its known defects and live prerequisites are resolved; disabled code is not
+enabled collection. Real charges/refunds, bank operations, Meta funding/ad spend
+and arbitrary paid infrastructure still require specific financial authorization.
+
 ## Publication Policy Repair: 2026-09-26
 
 [PR #32](https://github.com/vanshulgoyal101/adbrain/pull/32) published the owner-approved
