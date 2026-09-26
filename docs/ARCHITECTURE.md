@@ -1,9 +1,25 @@
 # Architecture
 
-This guide explains current code boundaries. Use [API Reference](API_REFERENCE.md)
-for request contracts, [Data Model](DATA_MODEL.md) for persistence, and
-[Features](FEATURES.md) for user workflows. Source baseline reviewed 2026-09-18;
-deployment is tracked separately in release receipts.
+Use this guide to locate the owner of a request, diagnose interrupted work, or
+change a workflow without bypassing its authorization and persistence checks.
+[API Reference](API_REFERENCE.md) owns wire contracts, [Data Model](DATA_MODEL.md)
+owns tables/migrations, and [Features](FEATURES.md) owns the customer workflow.
+
+### Source and Release Scope
+
+Reviewed against development commit `672eb132ad57bb3ba31f118afaffddaa878b4923`
+on September 26, 2026. The [SDK/query release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release)
+records production commit `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
+These are deliberately different baselines:
+
+| Layer | What this guide can establish |
+| --- | --- |
+| Released SDK/query integration | AI SDK adapters and the scoped TanStack campaign-list hook shipped in PR #36; the receipt describes the bounded deployed checks |
+| Current development source | Includes DB integrity/trusted-write changes and test-payment work excluded from that release; source presence does not establish applied production migrations |
+| Enquiry candidates | [#34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) adds resumable import; [#35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) adds saved follow-up/listing. Neither is part of this baseline or the cited production release |
+
+Use [Meta Connection](META_CONNECT.md#lead-import-and-follow-up) for the candidate
+boundary and concrete migration handoff. Documentation is not deployment approval.
 
 ## System Overview
 
@@ -36,11 +52,11 @@ policies. Route instrumentation therefore is not a complete mutation ledger.
 | [proxy](../src/proxy.ts) | Session refresh/request guard entry point |
 | [Supabase](../src/lib/supabase/) | Session/admin clients, query ownership and aggregation |
 | [creative](../src/lib/creative/) | Interview, guarded generation, design, raster persistence, receipts |
-| [LLM](../src/lib/llm/) | Routing, keys, cache, parsing, usage accounting |
+| [LLM](../src/lib/llm/) | Application facade owns routing/key cooldown/cache/accounting; AI SDK adapters own text transport and schema output |
 | [image generation](../src/lib/imageGen/) | Provider adapters and bounded raster validation |
 | [campaign](../src/lib/campaign/) | Drafts, planner, preflight, operations, targeting, activation, spend, reports |
 | [Meta](../src/lib/meta/) | OAuth, encrypted tokens, discovery, capability checks, verified provider access |
-| [Meta UI client](../src/lib/meta-connect-ui/) | Typed API transport and browser workflow recovery |
+| [Meta UI client](../src/lib/meta-connect-ui/) | Typed transport, query-owned campaign display reads, preparation cancellation and browser recovery; not mutation authority |
 | [security](../src/lib/security/) | Outbound network policy, shared limits, headers |
 | [observability](../src/lib/observability/) | Request context, structured events, post-response persistence |
 | [database](../db/) | Fresh schema and incremental migrations |
@@ -54,12 +70,20 @@ current patterns with older framework recipes without checking them.
 
 ## Identity and Tenant Ownership
 
-1. Supabase Auth issues the session; server routes verify `getUser()`.
-2. Most pages resolve the oldest owned business as the primary workspace.
-3. Ordinary reads/writes use session clients and `owns_business` RLS.
-4. Meta access first calls `requireOwnedBusiness`, returning an authorized context.
-5. `withMetaConnection` checks connection state, purpose-specific capability,
-   selected account/Page binding, and expected generation before creating a client.
+1. Supabase Auth provides the session; server handlers verify `getUser()` rather
+  than treating browser IDs or cached page data as authorization.
+2. [Queries](../src/lib/supabase/queries.ts) resolve the primary owned workspace.
+  Session-scoped queries still require DB/Storage policies; hidden UI is no policy.
+3. [Connection access](../src/lib/meta/connection-access.ts) authenticates ownership
+  and issues an opaque branded `AuthorizedBusiness` context. A caller cannot gain
+  provider authority by constructing a plain business-ID object.
+4. `withMetaConnection` checks authorization, purpose capability, optional expected
+  generation/binding, then rereads the token binding before decrypting credentials.
+  Pause/delete require the campaign's original binding and generation; they do not
+  need an activation capability, but still need management permission.
+5. Admin clients bypass RLS. Each trusted-write/RPC boundary must therefore enforce
+  its own actor, tenant and concurrency conditions. Development DB-A callers depend
+  on their corresponding migration grants/functions being installed.
 
 The development identity fallback is intentionally separate from real API auth.
 Global Meta environment credentials do not authorize a customer's publishing
@@ -71,11 +95,19 @@ Brand + active instructions + goal/history -> bounded interview -> editable
 brief -> per-angle concept/copy and image generation -> raster/design persistence
 -> draft creative rows -> explicit approval.
 
-Each saved variant is independent. A batch can partially succeed. `variant_group`
-links a client-known generation UUID to rows so GET reconciliation can recover
-completed work after an HTTP disconnect. There is no durable server generation
-queue or unique once-only charge guarantee. Regeneration overwrites one creative
-and resets approval. See [AI Pipeline](AI_PIPELINE.md).
+The [text facade](../src/lib/llm/index.ts) keeps provider selection, key rotation,
+cache policy and usage accounting outside the SDK. The
+[SDK adapter](../src/lib/llm/providers/sdk.ts) performs one physical text attempt
+with SDK retries disabled. Image generation remains a separate adapter boundary;
+installing a text SDK does not route raster generation through it.
+
+Each saved variant is independent. `variant_group` connects a client-known UUID
+to recoverable rows. [Studio](../src/components/studio.tsx) persists that identity
+before POST and reconciles GET results before offering a fresh attempt. Late
+responses may clear only their matching pending identity. This is recovery of
+saved results, not a durable generation queue, cross-tab admission lock, or
+once-only paid execution guarantee. Regeneration resets approval. See
+[AI Pipeline](AI_PIPELINE.md#variant-generation) for partial results and costs.
 
 ## Campaign Data Flow
 
@@ -149,10 +181,30 @@ not zero leads; mixed/unknown/call outcomes are excluded from lead comparisons.
 Legacy fallbacks use saved creation evidence, conversation metrics, or the old
 app-specific `leads` objective, not arbitrary Meta engagement objectives.
 
-Editor preparation cancellation, list requests, and targeting conversion have
-separate owners in `meta-connect-ui` hooks and `campaign/editor-targeting`.
-The composer is still sizeable; this change does not claim a complete editor
-state-machine rewrite or an application-wide scalability certification.
+### Campaign List Cache
+
+[useCampaignList](../src/lib/meta-connect-ui/use-campaign-list.ts) owns display
+reads through TanStack Query, not campaign mutations. Each mounted view creates
+its own `QueryClient`, seeded from server-provided rows; there is no global
+cross-owner SSR cache. Keys contain owner, business, trimmed search and status.
+Those keys isolate presentation state; the list route still authorizes every read.
+
+- The query function passes its `AbortSignal` to fetch and checks it after JSON
+  parsing. Old exact keys are removed on scope/filter changes; unmount clears the
+  client. Pages deduplicate by campaign ID and merge stored result snapshots.
+- Nonempty search settles after 250 ms; changing status settles the current search
+  immediately. Freshness is 30 seconds and cache GC is 60 seconds. Retries,
+  mount/focus/reconnect refetch and polling are disabled explicitly.
+- Append reads require another cursor and no current fetch. Explicit reload
+  cancels the active key, reduces cached pages to the first page, then refetches.
+- Mutation-result setters cancel stale reads, patch cached display data, and
+  invalidate the owner/business scope. The existing mutation handlers retain their
+  confirmation, ownership, provider and persistence responsibilities.
+
+Do not reuse this bounded display cache for complete spend/report calculations.
+[Preparation](../src/lib/meta-connect-ui/use-campaign-preparation.ts) and
+[targeting conversion](../src/lib/campaign/editor-targeting.ts) remain separate
+owners. This is not an application-wide query or editor state-machine rewrite.
 
 | Boundary | Failure mode | Recovery principle |
 | --- | --- | --- |
@@ -162,6 +214,7 @@ state-machine rewrite or an application-wide scalability certification.
 | Meta -> local campaign mirror | Provider succeeded, DB failed | Verify remote state, preserve evidence |
 | Storage -> database | File uploaded but row save failed | Best-effort cleanup; no distributed transaction |
 | Usage/event sink | Persistence unavailable | Preserve business result; report health; never rerun paid work merely to log it |
+| Candidate #34 lead import | Later provider page or checkpoint fails | Keep committed pages; resume recorded cursor with owner/binding and version checks |
 
 Not every endpoint uses one response envelope or one status mapping. New connection,
 draft, preflight, and operation APIs use typed envelopes; older routes retain
@@ -183,6 +236,8 @@ provider billing limit. See [Operations](OPERATIONS.md).
 Meta tokens live encrypted in a private schema and are accessed through server-only
 RPCs. Browser DTOs contain selected assets/capabilities, never tokens. OAuth uses
 signed state, browser binding, expiry, replay protection, and selection revisions.
+These controls protect the app boundary; they do not prove Meta has approved the
+app or granted usable access to a particular customer's assets.
 
 ## Background and Observability
 
@@ -190,9 +245,10 @@ Vercel invokes authenticated daily keepalive and spend-enforcement routes. These
 are bounded HTTP jobs, not a persistent worker fleet. UI polling and post-response
 `after` tasks do not constitute durable queues.
 
-The opt-in campaign worker is a separate persistent process, not a Vercel cron
-route. Its source is present locally; hosting, health checks and alert ownership
-must be established before enabling it on an environment.
+The opt-in [campaign worker](../scripts/campaign-worker.ts) is a separate persistent
+process, not a Vercel cron route. Its source is present; durable hosting, health
+checks and alert ownership must be established before enabling it. Do not start
+it merely to validate these docs: it can execute real campaign operations.
 
 Owner audit history, trusted AI usage, and structured product events are separate
 stores. Product telemetry uses request-local async context and safe metadata;
@@ -215,3 +271,8 @@ for diagnosis, not proof that every side effect was durably recorded.
 
 Keep deployment policy in [Release Workflow](RELEASING.md). Do not infer that all
 uncommitted work in a shared checkout is ready to publish together.
+
+For verification, start with [connection access tests](../tests/meta-connection-access.test.ts),
+[Studio recovery tests](../tests/studio.test.tsx), and the owning module's existing
+suite; [Testing](TESTING.md) owns execution commands and environment isolation.
+The [worker receipts](qa/) distinguish author checks from independent acceptance.
