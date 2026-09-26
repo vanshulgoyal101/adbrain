@@ -102,7 +102,7 @@ documentation-only synchronization is recorded in its PR.
 | --- | --- |
 | CI triggers | Pushes and PRs targeting `main` or `dev` |
 | CI runtime in dev source | Node 24; use the committed package lock |
-| Build job (current source) | `npm ci`, dependency audit, lint, typecheck, coverage, local PostgreSQL tests, production build |
+| Build job (current source) | `npm ci`, documentation-checker fixtures and `docs:check`, dependency audit, lint, typecheck, coverage, local PostgreSQL tests, production build |
 | Secret job | Gitleaks with repository configuration |
 | Main protection | PR required; strict, up-to-date `build` and `secrets` checks |
 | Administrators | Protection applies to admins too |

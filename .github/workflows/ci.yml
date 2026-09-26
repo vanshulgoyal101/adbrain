@@ -20,6 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node --test scripts/check-docs.test.mjs
+      - run: npm run docs:check
       - run: npm run audit:dependencies
       - run: npm run lint
       - run: npm run typecheck
