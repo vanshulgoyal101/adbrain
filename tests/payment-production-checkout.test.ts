@@ -28,6 +28,7 @@ const policy = { version: "synthetic-terms-v1", approvalReference: orderId, appr
 const initialOrder = { id: orderId, business_id: businessId, user_id: userId, account_id: "acc_fixture", key_id: "rzp_live_fixture", environment: "live",
   amount_paise: 1_000_000, currency: "INR", state: "created", provider_order_id: "order_fixture" as string | null, payment_id: null as string | null,
   captured_paise: 0, refunded_paise: 0, provider_refunded_paise: 0, review_required: false, refund_hold: false, terms: policy, terms_hash: "",
+  funding_evidence_id: businessId,
   accepted_at: "2026-09-26T00:00:00Z" };
 const payment = { id: "pay_fixture", entity: "payment", order_id: "order_fixture", amount: 1_000_000, currency: "INR", status: "captured",
   captured: true, amount_refunded: 0, refund_status: null };
@@ -35,6 +36,7 @@ const remoteOrder = { id: "order_fixture", entity: "order", receipt: orderId, am
 let saved = { ...initialOrder };
 let replay = false;
 let storageFailure: string | null = null;
+let fundingValid: unknown = true;
 let operatorAllowed = false;
 let refundReplay = false;
 let refundOperation = { id: businessId, order_id: orderId, amount_paise: 10000, state: "creating", provider_refund_id: null as string | null };
@@ -67,6 +69,7 @@ beforeEach(() => {
   })) vi.stubEnv(name, value);
   saved = { ...initialOrder, terms_hash: getProductionCollectionPolicy().hash };
   replay = false; storageFailure = null; events.length = 0;
+  fundingValid = true;
   operatorAllowed = false; refundReplay = false;
   refundOperation = { id: businessId, order_id: orderId, amount_paise: 10000, state: "creating", provider_refund_id: null };
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } } });
@@ -85,6 +88,7 @@ beforeEach(() => {
     if (name === storageFailure) return { data: null, error: { message: "private-storage-detail" } };
     let data: unknown = null;
     if (name === "meta_funding_latest_record") data = { evidenceId: businessId };
+    if (name === "production_payment_funding_valid") data = fundingValid;
     if (name === "production_payment_order_claim") data = { claimed: !replay, order: replay ? saved : { ...saved, state: "creating", provider_order_id: null } };
     if (name === "production_payment_order_result") {
       saved = { ...saved, provider_order_id: args.p_provider_order_id as string | null, state: args.p_provider_order_id ? "created" : "needs_reconciliation" }; data = saved;
@@ -186,6 +190,28 @@ describe("live checkout service with synthetic provider evidence", () => {
     mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, status: "attempted", amount_paid: 0, amount_due: 1_000_000 });
     expect(await (await verify(callback())).json()).toMatchObject({ capturedPaise: 0, receipt: null, spendablePaise: 0 });
   });
+  it.each([true, false])("reconciles a distinct capture before completing a stale failed attempt (saved capture: %s)", async capturedLocally => {
+    if (capturedLocally) {
+      saved = { ...saved, state: "captured", captured_paise: 1_000_000, payment_id: payment.id };
+    }
+    mocks.fetchPayment.mockImplementation(async paymentId => paymentId === "pay_failed"
+      ? { ...payment, id: paymentId, captured: false, status: "failed" } : payment);
+    const response = await webhook(notification({ event: "payment.failed", payload: {
+      payment: { entity: { id: "pay_failed", order_id: "order_fixture" } },
+    } }));
+    expect(response.status).toBe(200);
+    expect(saved).toMatchObject({ state: "captured", captured_paise: 1_000_000, payment_id: payment.id, review_required: false });
+    expect(mocks.fetchPayment).toHaveBeenCalledWith(payment.id);
+    expect(mocks.rpc.mock.calls.filter(([name]) => name === "production_payment_observe").map(([, args]) => args))
+      .toEqual([expect.objectContaining({ p_payment_id: payment.id, p_capture_verified: true, p_review_required: false })]);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+  it("holds failed evidence about the already captured payment itself", async () => {
+    saved = { ...saved, state: "captured", captured_paise: 1_000_000, payment_id: payment.id };
+    mocks.fetchPayment.mockResolvedValue({ ...payment, captured: false, status: "failed" });
+    expect((await webhook(notification({ event: "payment.failed" }))).status).toBe(200);
+    expect(saved.review_required).toBe(true);
+  });
   it.each([{ amount: 1 }, { refund_status: "full" }, { captured: false }])("holds conflicting provider evidence: %j", async overrides => {
     mocks.fetchPayment.mockResolvedValue({ ...payment, ...overrides });
     expect(await (await verify(callback())).json()).toMatchObject({ status: "review_required", capturedPaise: 0, checkout: null });
@@ -218,6 +244,19 @@ describe("live checkout service with synthetic provider evidence", () => {
     const response = await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ policy: null, orders: [{ orderId, checkout: null }] });
+  });
+  it.each(["invalid", "missing", "unavailable"])("withholds saved checkout but preserves history and replay when funding is %s", async condition => {
+    fundingValid = condition === "missing" ? null : false;
+    if (condition === "unavailable") storageFailure = "production_payment_funding_valid";
+    const response = await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ orders: [{ orderId, status: "created", checkout: null, spendablePaise: 0 }] });
+    expect(mocks.rpc).toHaveBeenCalledWith("production_payment_funding_valid", { p_business_id: businessId, p_funding_evidence_id: businessId });
+    replay = true;
+    expect(await (await POST(request("orders", createBody()))).json()).toMatchObject({ orderId, checkout: null });
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+    expect((await reconcile(request("reconcile", { orderId }))).status).toBe(200);
+    expect(saved.captured_paise).toBe(1_000_000);
   });
   it("rejects unsigned, wrong-merchant and test-environment webhook evidence", async () => {
     expect((await webhook(notification({}, "0".repeat(64)))).status).toBe(400);

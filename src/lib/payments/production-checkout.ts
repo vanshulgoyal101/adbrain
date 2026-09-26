@@ -22,6 +22,7 @@ const orderSchema = z.object({
   provider_order_id: identifier("order").nullable(), payment_id: identifier("pay").nullable(),
   captured_paise: amountSchema, refunded_paise: amountSchema, provider_refunded_paise: amountSchema,
   review_required: z.boolean(), refund_hold: z.boolean(), terms: productionPaymentPolicySchema, terms_hash: hashSchema,
+  funding_evidence_id: z.uuid(),
   accepted_at: z.string(),
 });
 const refundOperationSchema = z.object({
@@ -61,8 +62,12 @@ function currentPolicy() {
   }
 }
 
-function orderResponse(order: SavedOrder, config: Config) {
+async function orderResponse(order: SavedOrder, config: Config) {
   const policy = currentPolicy();
+  const checkoutAllowed = order.state === "created" && order.provider_order_id && order.account_id === config.accountId && order.key_id === config.keyId
+    && policy?.hash === order.terms_hash && await stored(createAdminClient().rpc("production_payment_funding_valid", {
+      p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id,
+    }), z.boolean()).catch(() => false);
   return {
     orderId: order.id, environment: "live", status: order.state, amountPaise: order.amount_paise, currency: order.currency,
     capturedPaise: order.captured_paise, refundedPaise: order.refunded_paise, reviewRequired: order.review_required,
@@ -70,8 +75,7 @@ function orderResponse(order: SavedOrder, config: Config) {
     refundHold: order.refund_hold, acceptedAt: order.accepted_at, terms: order.terms, termsHash: order.terms_hash,
     spendablePaise: 0, canActivateCampaign: false,
     receipt: order.captured_paise > 0 ? { reference: order.id, paymentId: order.payment_id, merchant: "Vanshul Goyal", amountPaise: order.captured_paise, currency: "INR", isTaxInvoice: false } : null,
-    checkout: order.state === "created" && order.provider_order_id && order.account_id === config.accountId && order.key_id === config.keyId
-      && policy?.hash === order.terms_hash ? {
+    checkout: checkoutAllowed ? {
         key: config.keyId, order_id: order.provider_order_id, amount: order.amount_paise, currency: order.currency,
         name: "Vanshul Goyal", description: "AdBrain annual service", retry: { enabled: false },
       } : null,
@@ -87,7 +91,7 @@ function paymentService(config: Config, signal: AbortSignal) {
     if (!result) throw new CheckoutRequestError(404, "Payment reference not found for this merchant configuration.");
     return result;
   }
-  async function observe(paymentId: string, expected?: SavedOrder, refundId?: string | null, forceReview = false) {
+  async function observe(paymentId: string, expected?: SavedOrder, refundId?: string | null, forceReview = false, recoverFailedAttempt = true): Promise<z.infer<typeof recoverySchema>> {
     const payment = await provider.fetchPayment(paymentId);
     const remoteOrder = await provider.fetchOrder(payment.order_id);
     const localId = z.uuid().safeParse(remoteOrder.receipt);
@@ -112,6 +116,15 @@ function paymentService(config: Config, signal: AbortSignal) {
         || (payment.captured && payment.amount_refunded > 0 && ["captured", "refunded"].includes(payment.status)));
     const pending = amountMatches && refundMatches && !payment.captured && payment.amount_refunded === 0
       && ["created", "authorized", "failed"].includes(payment.status) && remoteOrder.status !== "paid" && remoteOrder.amount_paid === 0;
+    if (recoverFailedAttempt && amountMatches && refundMatches && !refund && !payment.captured && payment.status === "failed"
+      && payment.amount_refunded === 0 && payment.id !== order.payment_id
+      && remoteOrder.status === "paid" && remoteOrder.amount_paid === order.amount_paise && remoteOrder.amount_due === 0) {
+      const payments = await provider.fetchOrderPayments(payment.order_id);
+      const captures = payments.filter(candidate => candidate.captured || candidate.status === "refunded");
+      if (captures.length === 1 && captures[0].id !== payment.id) {
+        return observe(captures[0].id, order, null, forceReview, false);
+      }
+    }
     const snapshotHash = createHash("sha256").update(JSON.stringify({ payment, order: remoteOrder, refund })).digest("hex");
     order = await stored(database.rpc("production_payment_observe", {
       ...scope, p_order_id: order.id, p_payment_id: payment.id, p_capture_verified: capture,
@@ -224,7 +237,7 @@ export async function handleProductionPayments(request: Request, action: Action)
       if (context.userId !== user.id) throw new CheckoutRequestError(401, "Session changed.");
       if (action === "read") {
         const orders = await stored(database.rpc("production_payment_orders_list", { p_business_id: input.businessId, p_user_id: user.id }), z.array(orderSchema).max(20));
-        return paymentReply({ quote: createAnnualPaymentQuote(), policy: currentPolicy(), orders: orders.map(order => orderResponse(order, config)) });
+        return paymentReply({ quote: createAnnualPaymentQuote(), policy: currentPolicy(), orders: await Promise.all(orders.map(order => orderResponse(order, config))) });
       }
       const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true) }), body);
       const { hash, ...policy } = getProductionCollectionPolicy();
@@ -233,11 +246,11 @@ export async function handleProductionPayments(request: Request, action: Action)
       const claimed = await stored(database.rpc("production_payment_order_claim", { ...scope, p_business_id: input.businessId, p_user_id: user.id,
         p_request_key: create.idempotencyKey, p_order_id: randomUUID(), p_quote: createAnnualPaymentQuote(), p_terms: JSON.stringify(policy), p_terms_hash: hash, p_funding_evidence_id: funding.evidenceId,
       }), z.object({ claimed: z.boolean(), order: orderSchema }));
-      if (!claimed.claimed) return paymentReply(orderResponse(claimed.order, config));
+      if (!claimed.claimed) return paymentReply(await orderResponse(claimed.order, config));
       try {
         const remote = await createProductionPaymentClient(process.env, signal).createOrder(claimed.order.id, hash);
         const saved = await stored(database.rpc("production_payment_order_result", { ...scope, p_order_id: claimed.order.id, p_provider_order_id: remote.id }), orderSchema);
-        return paymentReply(orderResponse(saved, config), 201);
+        return paymentReply(await orderResponse(saved, config), 201);
       } catch {
         await stored(database.rpc("production_payment_order_result", { ...scope, p_order_id: claimed.order.id, p_provider_order_id: null }), orderSchema).catch(() => undefined);
         return paymentReply({ orderId: claimed.order.id, status: "needs_reconciliation", error: "Creation is unconfirmed. Recover this reference; do not create another payment.", spendablePaise: 0, canActivateCampaign: false }, 503);
@@ -260,10 +273,10 @@ export async function handleProductionPayments(request: Request, action: Action)
       if (input.action === "event") {
         const event = await stored(database.rpc("production_payment_event_get", { ...scope, p_event_id: input.eventId }), eventSchema.nullable());
         if (!event) throw new CheckoutRequestError(404, "Pending event not found.");
-        return paymentReply({ order: orderResponse((await service.processEvent(event)).order, config) });
+        return paymentReply({ order: await orderResponse((await service.processEvent(event)).order, config) });
       }
       const recovered = await service.reconcile(input.orderId, input.action === "reconcile" ? input.refundId : undefined);
-      if (input.action === "reconcile") return paymentReply({ order: orderResponse(recovered.order, config), refunds: recovered.refunds });
+      if (input.action === "reconcile") return paymentReply({ order: await orderResponse(recovered.order, config), refunds: recovered.refunds });
       if (process.env.PAYMENTS_LIVE_REFUNDS_ENABLED !== "true") throw new CheckoutRequestError(409, "New refunds are disabled; reconciliation remains available.");
       const claimed = await stored(database.rpc("production_payment_refund_claim", { ...scope, p_order_id: input.orderId, p_actor_id: user.id,
         p_request_key: input.idempotencyKey, p_refund_id: randomUUID(), p_amount_paise: input.amountPaise, p_terms_hash: input.termsHash,
@@ -274,7 +287,7 @@ export async function handleProductionPayments(request: Request, action: Action)
         const refund = await createProductionPaymentClient(process.env, signal).createRefund(recovered.order.payment_id!, claimed.refund.id, claimed.refund.amount_paise);
         await stored(database.rpc("production_payment_refund_result", { ...scope, p_refund_id: claimed.refund.id, p_provider_refund_id: refund.id }), refundOperationSchema);
         const result = await service.observe(recovered.order.payment_id!, recovered.order, refund.id);
-        return paymentReply({ order: orderResponse(result.order, config), refunds: result.refunds }, 201);
+        return paymentReply({ order: await orderResponse(result.order, config), refunds: result.refunds }, 201);
       } catch {
         await stored(database.rpc("production_payment_refund_result", { ...scope, p_refund_id: claimed.refund.id, p_provider_refund_id: null }), refundOperationSchema).catch(() => undefined);
         return paymentReply({ refundId: claimed.refund.id, status: "needs_reconciliation", error: "Refund result is unconfirmed. Keep this reference; do not resubmit." }, 503);
@@ -289,9 +302,9 @@ export async function handleProductionPayments(request: Request, action: Action)
       const callback = parsed(z.strictObject({ orderId: z.uuid(), paymentId: identifier("pay"), providerOrderId: identifier("order"), signature: hashSchema }), input);
       if (saved.provider_order_id !== callback.providerOrderId || !verifyRazorpayCheckoutSignature({ storedOrderId: saved.provider_order_id,
         paymentId: callback.paymentId, signature: callback.signature, keySecret: config.keySecret })) throw new CheckoutRequestError(400, "Invalid checkout signature.");
-      return paymentReply(orderResponse((await service.observe(callback.paymentId, saved)).order, config));
+      return paymentReply(await orderResponse((await service.observe(callback.paymentId, saved)).order, config));
     }
-    return paymentReply(orderResponse((await service.reconcile(saved.id)).order, config));
+    return paymentReply(await orderResponse((await service.reconcile(saved.id)).order, config));
   } catch (error) {
     if (error instanceof CheckoutRequestError) return paymentReply({ error: error.message }, error.status);
     if (error instanceof ConnectionAccessError) return paymentReply({ error: "Business access could not be verified." }, error.code === "UNAUTHENTICATED" ? 401 : error.code === "UNAVAILABLE" ? 503 : 403);

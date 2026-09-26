@@ -1890,6 +1890,29 @@ alter table private.production_payment_events enable row level security;
 alter table private.production_payment_effects enable row level security;
 revoke all on private.production_payment_orders,private.production_payment_events,private.production_payment_effects from public,anon,authenticated,service_role;
 
+create or replace function public.production_payment_funding_valid(p_business_id uuid, p_funding_evidence_id uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare funding jsonb;
+begin
+  funding := public.meta_funding_latest_record(p_business_id,'live');
+  return ((funding->>'evidenceId' = p_funding_evidence_id::text
+    and funding->>'environment' = 'live' and funding->'revokedAt' = 'null'::jsonb
+    and (funding->>'verifiedAt')::timestamptz <= clock_timestamp()
+    and (funding->>'expiresAt')::timestamptz > clock_timestamp()
+    and funding#>>'{setup,accountActive}' = 'true'
+    and funding#>>'{setup,currency}' = 'INR' and funding#>>'{setup,country}' = 'IN'
+    and funding#>>'{setup,paymentMethod}' = 'verified' and funding#>>'{setup,recurringAuthorisation}' = 'verified'
+    and funding#>>'{setup,spendControls}' = 'verified' and funding#>>'{setup,ownerAcceptedMetaInitiatedPayments}' = 'true'
+    and ((funding#>>'{setup,method}' = 'upi_auto_reload' and funding#>>'{setup,billingMode}' = 'available_funds')
+      or (funding#>>'{setup,method}' = 'recurring_card' and funding#>>'{setup,billingMode}' in ('automatic','hybrid')))
+    and exists(select 1 from public.meta_connections connection where connection.business_id = p_business_id
+      and connection.authorization_status = 'connected' and connection.ad_account_id = funding#>>'{setup,accountId}'
+      and connection.generation::text = funding->>'connectionGeneration')) is true);
+end;
+$$;
+revoke all on function public.production_payment_funding_valid(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.production_payment_funding_valid(uuid,uuid) to service_role;
+
 create or replace function public.production_payment_order_claim(
   p_business_id uuid, p_user_id uuid, p_request_key uuid, p_order_id uuid,
   p_account_id text, p_key_id text, p_quote jsonb, p_terms text, p_terms_hash text, p_funding_evidence_id uuid
@@ -1897,7 +1920,6 @@ create or replace function public.production_payment_order_claim(
 declare
   saved private.production_payment_orders;
   policy jsonb;
-  funding jsonb;
   inserted boolean;
 begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:' || p_account_id,0));
@@ -1910,6 +1932,10 @@ begin
     if saved.user_id is distinct from p_user_id or saved.account_id is distinct from p_account_id or saved.key_id is distinct from p_key_id
       or saved.terms_hash is distinct from p_terms_hash or saved.quote is distinct from p_quote then
       raise exception 'Payment request scope changed' using errcode = '23514';
+    end if;
+    if saved.funding_evidence_id is distinct from p_funding_evidence_id
+      or not public.production_payment_funding_valid(p_business_id,saved.funding_evidence_id) then
+      raise exception 'Live automatic funding evidence unavailable' using errcode = '23514';
     end if;
     return jsonb_build_object('claimed',false,'order',to_jsonb(saved));
   end if;
@@ -1929,20 +1955,7 @@ begin
     and isfinite((policy->>'expiresAt')::timestamptz) and (policy->>'expiresAt')::timestamptz > clock_timestamp()) is true) then
     raise exception 'Payment policy is incomplete or expired' using errcode = '23514';
   end if;
-  funding := public.meta_funding_latest_record(p_business_id,'live');
-  if not ((funding->>'evidenceId' = p_funding_evidence_id::text
-    and funding->>'environment' = 'live' and funding->'revokedAt' = 'null'::jsonb
-    and (funding->>'verifiedAt')::timestamptz <= clock_timestamp()
-    and (funding->>'expiresAt')::timestamptz > clock_timestamp()
-    and funding#>>'{setup,accountActive}' = 'true'
-    and funding#>>'{setup,currency}' = 'INR' and funding#>>'{setup,country}' = 'IN'
-    and funding#>>'{setup,paymentMethod}' = 'verified' and funding#>>'{setup,recurringAuthorisation}' = 'verified'
-    and funding#>>'{setup,spendControls}' = 'verified' and funding#>>'{setup,ownerAcceptedMetaInitiatedPayments}' = 'true'
-    and ((funding#>>'{setup,method}' = 'upi_auto_reload' and funding#>>'{setup,billingMode}' = 'available_funds')
-      or (funding#>>'{setup,method}' = 'recurring_card' and funding#>>'{setup,billingMode}' in ('automatic','hybrid')))
-    and exists(select 1 from public.meta_connections connection where connection.business_id = p_business_id
-      and connection.authorization_status = 'connected' and connection.ad_account_id = funding#>>'{setup,accountId}'
-      and connection.generation::text = funding->>'connectionGeneration')) is true) then
+  if not public.production_payment_funding_valid(p_business_id,p_funding_evidence_id) then
     raise exception 'Live automatic funding evidence unavailable' using errcode = '23514';
   end if;
   insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,funding_evidence_id)

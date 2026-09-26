@@ -604,6 +604,37 @@ async function verify(database, source, integrityMigration) {
       assert.equal((await claim()).claimed,false);
       assert.equal((await result("order_production")).state,"created");
       assert.equal((await result(null)).provider_order_id,"order_production");
+      const fundingValid = async session => (await session.query(
+        "select public.production_payment_funding_valid($1,$2) as valid",[payerBusinessId,evidenceId])).rows[0].valid;
+      assert.equal(await asService(fundingValid),true);
+      const rejectsInvalidFunding = async (statement, parameters) => {
+        await db.query("begin");
+        try {
+          await db.query(statement,parameters);
+          await db.query("set local role service_role");
+          assert.equal(await fundingValid(db),false);
+          const history = (await db.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result;
+          assert.equal(history.id,order.id);
+          assert.equal(history.provider_order_id,"order_production");
+          assert.equal(history.funding_evidence_id,evidenceId);
+          for (const replayKey of [requestKey,randomUUID()]) {
+            await db.query("savepoint replay_check");
+            await assert.rejects(db.query("select public.production_payment_order_claim($1,$2,$3,$4,'acc_fixture','rzp_live_fixture',$5,$6,$7,$8)",
+              [payerBusinessId,ownerId,replayKey,randomUUID(),quote,terms,termsHash,evidenceId]),{ code: "23514" });
+            await db.query("rollback to savepoint replay_check");
+          }
+        } finally { await db.query("rollback"); }
+      };
+      await rejectsInvalidFunding("insert into public.meta_funding_revocations(evidence_id,revoked_by,reason) values ($1,$2,'mandate_revoked')",[evidenceId,ownerId]);
+      await rejectsInvalidFunding("update public.meta_funding_evidence set record=jsonb_set(record,'{expiresAt}',to_jsonb((now()-interval '1 second')::text)) where id=$1",[evidenceId]);
+      await rejectsInvalidFunding("update public.meta_connections set authorization_status='disconnected' where business_id=$1",[payerBusinessId]);
+      await rejectsInvalidFunding("update public.meta_connections set generation=generation+1 where business_id=$1",[payerBusinessId]);
+      await rejectsInvalidFunding("update public.meta_connections set ad_account_id='act_4567892' where business_id=$1",[payerBusinessId]);
+      const replacementEvidence = randomUUID();
+      await rejectsInvalidFunding("insert into public.meta_funding_evidence(id,profile_id,verified_by,source,source_reference,verified_at,record) values ($1,$2,$3,'operator_review',$4,now(),$5)",
+        [replacementEvidence,profileId,ownerId,randomUUID(),{ ...funding, evidenceId: replacementEvidence, verifiedAt: new Date().toISOString() }]);
+      assert.equal(await asService(fundingValid),true);
+      assert.equal((await claim()).order.id,order.id);
       const refundRequest = randomUUID();
       const refundApproval = randomUUID();
       const claimRefund = (amount = 500, request = refundRequest) => asService(async session => (await session.query(
@@ -667,8 +698,10 @@ async function verify(database, source, integrityMigration) {
         }
         await session.query("set role authenticated");
         await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(fundingValid(session), { code: "42501" });
         await session.query("set role anon");
         await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(fundingValid(session), { code: "42501" });
       });
       await db.query("update public.businesses set owner_id=$2 where id=$1",[payerBusinessId,otherOwnerId]);
       assert.equal(await asService(async session => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result),null);
