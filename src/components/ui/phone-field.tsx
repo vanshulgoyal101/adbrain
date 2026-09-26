@@ -40,7 +40,7 @@ export function PhoneField({
           onChange={(e) => onChange(formatPhone(e.target.value, national))}
           // The closed control shows only the flag + code (below); the native
           // text is hidden so a long country name can't spill out of it.
-          className="h-10 w-[6.75rem] appearance-none rounded-lg border border-slate-300 bg-white pl-9 pr-6 text-sm text-transparent outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          className="h-10 w-[6.75rem] appearance-none rounded-lg border border-slate-300 bg-white pl-9 pr-6 text-sm text-transparent outline-none focus:border-blue-500"
         >
           {COUNTRIES.map((c) => (
             // Name first so the browser's type-ahead still finds a country.

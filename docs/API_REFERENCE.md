@@ -72,7 +72,8 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |
-| PATCH | `/api/campaigns/[id]` | Pause/activation input -> plain status | Live Meta mutation + local mirror |
+| GET | `/api/campaigns/[id]` | Path ID -> `{delivery}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation |
+| PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery}` | Live parent Meta mutation + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
@@ -372,12 +373,18 @@ Pause: strict `{ "status": "paused" }`.
 Activation: strict `{status:"active", confirmationDigest:<64 lowercase hex>,
 connectionGeneration:<nonnegative-safe-integer>}`. The digest is derived from
 [the activation payload](../src/lib/campaign/activation.ts) after the owner reviews
-current assets/budget. It is not interchangeable with `planHash`.
+current assets/budget and exact Meta campaign/ad-set/ad delivery snapshot from
+`GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Legacy or
+incomplete stored child identity requires reconciliation; the route does not guess.
 
 Activation checks projected weekly cap (422 if exceeded; 503 if unreadable),
 stored binding/generation, live capability, positive budget/INR currency, digest,
-and remote campaign state. Success is `{ok:true,status}`. Missing legacy binding
-returns 409; reconcile rather than guessing it. Pause/delete also verify binding.
+and exact remote child membership, settings and requested ACTIVE states before
+the #49 customer reservation and again after requesting parent ACTIVE. Paused or
+unexpected children and stale review return 409 before reservation. Success is
+`{ok:true,status,delivery}`; `status:"active"` is a requested parent state,
+not proof of effective delivery or Meta eligibility. An uncertain post-request
+result holds the reservation for reconciliation. Pause/delete also verify binding.
 Deletion preserves the local row when remote deletion cannot be confirmed.
 Remote success followed by local failure is possible; inspect before retrying.
 
