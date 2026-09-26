@@ -23,19 +23,9 @@ describe("LLM rotation", () => {
     global.fetch = vi.fn().mockImplementation(async () => {
       call += 1;
       if (call === 1) {
-        return {
-          ok: false,
-          status: 429,
-          json: async () => ({}),
-          text: async () => "rate limited",
-        };
+        return new Response("rate limited", { status: 429 });
       }
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ choices: [{ message: { content: "ok" } }] }),
-        text: async () => "",
-      };
+      return Response.json({ choices: [{ message: { content: "ok" } }] });
     }) as unknown as typeof fetch;
 
     const result = await complete([{ role: "user", content: "hi" }]);
@@ -59,15 +49,10 @@ describe("LLM rotation", () => {
     const { complete, clearLLMCache } = await import("@/lib/llm");
     clearLLMCache();
 
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({
         choices: [{ message: { content: "cached-ok" } }],
         usage: { prompt_tokens: 20, completion_tokens: 6, total_tokens: 26 },
-      }),
-      text: async () => "",
-    });
+    }));
     global.fetch = fetchMock as unknown as typeof fetch;
 
     const msgs = [{ role: "user" as const, content: "cache me" }];

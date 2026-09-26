@@ -156,6 +156,9 @@ async function callProviders(
         });
         return { text, provider: provider.name, model, usage };
       } catch (err) {
+        if (err instanceof LLMError && err.usage) {
+          recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
+        }
         options.signal?.throwIfAborted();
         if (err instanceof LLMError && !err.retryable && err.status === undefined) throw err;
         const message = err instanceof Error ? err.message : String(err);
@@ -178,7 +181,16 @@ export async function completeJSON<T>(
   options: CompletionOptions = {},
 ): Promise<T> {
   const result = await complete(messages, { ...options, json: true });
-  const parsed = parseJSON<T>(result.text);
+  let parsed: T;
+  try {
+    const value = parseJSON<T>(result.text);
+    parsed = options.responseSchema ? options.responseSchema.parse(value) as T : value;
+  } catch (error) {
+    if (!options.responseSchema) throw error;
+    throw new LLMError("LLM JSON output did not match the task schema", {
+      provider: result.provider, retryable: false,
+    });
+  }
   if (parsed && typeof parsed === "object") {
     Object.defineProperty(parsed, "__completion", {
       value: result,

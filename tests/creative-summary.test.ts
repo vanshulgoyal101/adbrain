@@ -79,14 +79,9 @@ describe("summarizeInsights", () => {
     process.env.LLM_PROVIDER_ORDER = "google,groq,openrouter,cerebras";
     vi.resetModules();
 
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
+    global.fetch = vi.fn().mockImplementation(async () => Response.json({
         choices: [{ message: { content: "  Doing great — 8 leads at ₹150 each.  " } }],
-      }),
-      text: async () => "",
-    }) as unknown as typeof fetch;
+    })) as unknown as typeof fetch;
 
     const { summarizeInsights } = await import("@/lib/creative/summary");
     const out = await summarizeInsights("Festive", {

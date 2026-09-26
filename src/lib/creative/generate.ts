@@ -6,6 +6,7 @@ import {
 } from "@/lib/creative/design";
 import {
   buildConceptMessages,
+  creativeConceptSchema,
   conceptImagePrompt,
   validateConcept,
   type CreativeConcept,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/creative/concept";
 import { generateImage } from "@/lib/imageGen";
 import { complete, parseJSON } from "@/lib/llm";
+import { LLMError } from "@/lib/llm/types";
 import type { TokenUsage } from "@/lib/llm";
 import { getEnv } from "@/lib/env";
 import {
@@ -177,11 +179,18 @@ async function generateConcept(
     const env = getEnv();
     const completion = await complete(messages, {
       json: true,
+      responseSchema: creativeConceptSchema,
       temperature: attempt === 0 ? 0.8 : 0.4,
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       cache: false,
       signal,
+    }).catch((error: unknown) => {
+      if (error instanceof LLMError && error.model && error.usage) {
+        usage.push({ provider: error.provider, model: error.model, usage: error.usage });
+        throw new CreativeValidationError([error.message], usage);
+      }
+      throw error;
     });
     if (completion.usage) {
       usage.push({

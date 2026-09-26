@@ -40,7 +40,7 @@ it("does not treat truncated reasoning or JSON as successful output", async () =
       ),
   );
   await expect(
-    provider.complete([], {}, { apiKey: "test", model: "reasoning-model" }),
+    provider.complete([{ role: "user", content: "Plan" }], {}, { apiKey: "test", model: "reasoning-model" }),
   ).rejects.toMatchObject({
     retryable: false,
     message: expect.stringContaining("token budget exhausted"),
