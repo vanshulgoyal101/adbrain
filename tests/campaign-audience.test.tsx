@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
+import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { Campaigns } from "@/components/campaigns";
+import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
-import type { Business, Campaign, Creative } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +27,166 @@ const recommended: DraftInput["targeting"] = {
 };
 const selected = { adAccountId: "act_1", accountName: "Solar account", pageId: "page_1", pageName: "Solar Page", currency: "INR", timezoneName: "Asia/Kolkata", metaBusinessId: null };
 let saved: DraftDTO;
+
+describe("campaign list query cache", () => {
+  const first = { id: "first", business_id: business.id, name: "First campaign", status: "paused" } as Campaign;
+  const second = { id: "second", business_id: business.id, name: "Second campaign", status: "active" } as Campaign;
+  const metric = { campaign_id: first.id, impressions: 42 } as CampaignResult;
+  function input() {
+    return { ownerId: business.owner_id, businessId: business.id, initialCampaigns: [first],
+      initialResults: { [first.id]: metric }, initialNextCursor: "page-two" as string | null, onError: vi.fn() };
+  }
+
+  it("seeds SSR data without fetching and isolates simultaneous request clients", async () => {
+    const firstView = renderHook(useCampaignList, { initialProps: input() });
+    const otherView = renderHook(useCampaignList, { initialProps: { ...input(), initialCampaigns: [second], initialResults: {} } });
+    expect(firstView.result.current.campaigns).toEqual([first]);
+    expect(otherView.result.current.campaigns).toEqual([second]);
+    expect(firstView.result.current.results[first.id]).toEqual(metric);
+    expect(fetch).not.toHaveBeenCalled();
+    firstView.unmount();
+    otherView.unmount();
+    const newSession = renderHook(useCampaignList, { initialProps: { ...input(), initialCampaigns: [], initialResults: {} } });
+    expect(newSession.result.current.campaigns).toEqual([]);
+    expect(newSession.result.current.results).toEqual({});
+  });
+
+  it.each(["businessId", "ownerId"] as const)("isolates a changed %s and aborts the old request", async field => {
+    let finish!: (response: Response) => void;
+    let oldSignal!: AbortSignal;
+    const props = input();
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => {
+      if (!oldSignal) {
+        oldSignal = init.signal!;
+        return new Promise<Response>(resolve => { finish = resolve; });
+      }
+      return Promise.resolve(Response.json({ campaigns: [second], results: {}, nextCursor: null }));
+    }));
+    const view = renderHook(useCampaignList, { initialProps: props });
+    act(() => { void view.result.current.loadCampaignPage(true); });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    view.rerender({ ...props, [field]: "another-tenant" });
+    expect(view.result.current.campaigns).toEqual([]);
+    expect(view.result.current.results).toEqual({});
+    await waitFor(() => expect(oldSignal.aborted).toBe(true));
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([second]));
+    await act(async () => { finish(Response.json({ campaigns: [first], results: { [first.id]: metric }, nextCursor: "old-cursor" })); });
+    expect(view.result.current.campaigns).toEqual([second]);
+    expect(view.result.current.results).toEqual({});
+    expect(view.result.current.nextListCursor).toBeNull();
+  });
+
+  it("cancels immediately while a replacement search is debouncing", async () => {
+    let finish!: (response: Response) => void;
+    let oldSignal!: AbortSignal;
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => {
+      if (!oldSignal) {
+        oldSignal = init.signal!;
+        return new Promise<Response>(resolve => { finish = resolve; });
+      }
+      return Promise.resolve(Response.json({ campaigns: [second], results: {}, nextCursor: null }));
+    }));
+    const view = renderHook(useCampaignList, { initialProps: input() });
+    act(() => view.result.current.setCampaignQuery("first"));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    act(() => view.result.current.setCampaignQuery("second"));
+    expect(oldSignal.aborted).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(Response.json({ campaigns: [first], results: {}, nextCursor: null })); });
+    expect(view.result.current.campaigns).toEqual([]);
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([second]));
+    expect(String(vi.mocked(fetch).mock.lastCall![0])).toContain("query=second");
+  });
+
+  it("deduplicates page rows in stable order and starts manual refresh at the first cursor", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(String(url).includes("cursor=")
+      ? { campaigns: [{ ...first, name: "Updated first" }, second], results: { [first.id]: { ...metric, impressions: 99 } }, nextCursor: "page-three" }
+      : { campaigns: [second], results: {}, nextCursor: "fresh-cursor" })));
+    const view = renderHook(useCampaignList, { initialProps: input() });
+    await act(async () => { await view.result.current.loadCampaignPage(true); });
+    await waitFor(() => expect(view.result.current.campaigns.map(campaign => campaign.id)).toEqual([first.id, second.id]));
+    expect(view.result.current.campaigns[0].name).toBe("Updated first");
+    expect(view.result.current.results[first.id].impressions).toBe(99);
+    await act(async () => { await view.result.current.loadCampaignPage(); });
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([second]));
+    expect(String(vi.mocked(fetch).mock.lastCall![0])).not.toContain("cursor=");
+    expect(view.result.current.nextListCursor).toBe("fresh-cursor");
+  });
+
+  it("does not retry or refetch on focus/reconnect and permits an explicit retry", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ error: "Read unavailable" }, { status: 503 }))
+      .mockResolvedValue(Response.json({ campaigns: [second], results: {}, nextCursor: null })));
+    const props = input();
+    const view = renderHook(useCampaignList, { initialProps: props });
+    await act(async () => { await view.result.current.loadCampaignPage(true); });
+    await waitFor(() => expect(props.onError).toHaveBeenCalledWith("Read unavailable"));
+    expect(view.result.current.campaigns).toEqual([first]);
+    act(() => { focusManager.setFocused(false); onlineManager.setOnline(false); });
+    act(() => { focusManager.setFocused(true); onlineManager.setOnline(true); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await act(async () => { await view.result.current.loadCampaignPage(true); });
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([first, second]));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    focusManager.setFocused(undefined);
+  });
+
+  it("invalidates only this mounted tenant's reads after a confirmed action", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [{ ...first, status: "active" }], results: {}, nextCursor: null })));
+    const view = renderHook(useCampaignList, { initialProps: input() });
+    const other = renderHook(useCampaignList, { initialProps: { ...input(), businessId: "other-business", initialCampaigns: [second] } });
+    act(() => view.result.current.setCampaigns(current => current.map(campaign => ({ ...campaign, status: "active" }))));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(String(vi.mocked(fetch).mock.lastCall![0])).toContain(business.id);
+    expect(other.result.current.campaigns).toEqual([second]);
+    expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
+  it("keeps a filtered key when new unfiltered server data arrives", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [second], results: {}, nextCursor: null })));
+    const props = input();
+    const view = renderHook(useCampaignList, { initialProps: props });
+    act(() => view.result.current.setStatusFilter("active"));
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([second]));
+    view.rerender({ ...props, initialCampaigns: [{ ...first, name: "New SSR name" }], initialResults: {} });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(view.result.current.campaigns).toEqual([second]);
+    expect(vi.mocked(fetch).mock.calls.every(([url]) => String(url).includes("status=active"))).toBe(true);
+  });
+
+  it("aborts pending reads on unmount without reporting cancellation as failure", async () => {
+    let signal!: AbortSignal;
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => { signal = init.signal!; return new Promise<Response>(() => {}); }));
+    const props = input();
+    const view = renderHook(useCampaignList, { initialProps: props });
+    act(() => { void view.result.current.loadCampaignPage(true); });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    view.unmount();
+    expect(signal.aborted).toBe(true);
+    expect(props.onError).not.toHaveBeenCalled();
+  });
+
+  it("sets explicit freshness, retry and refetch options on the tenant/filter key", () => {
+    const mounted = vi.spyOn(QueryClient.prototype, "mount");
+    try {
+      renderHook(useCampaignList, { initialProps: input() });
+      const client = mounted.mock.contexts.at(-1);
+      if (!(client instanceof QueryClient)) throw new Error("Expected the mounted campaign query client.");
+      const cached = client.getQueryCache().findAll();
+      expect(cached).toHaveLength(1);
+      expect(cached[0].queryKey).toEqual(["campaign-list", business.owner_id, business.id, { query: "", status: "all" }]);
+      expect(cached[0].options).toMatchObject({ staleTime: 30_000, gcTime: 60_000, retry: false, retryOnMount: false,
+        refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false, refetchInterval: false, networkMode: "always" });
+    } finally { mounted.mockRestore(); }
+  });
+
+  it("keeps initial results usable through a Strict Mode effect remount", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [first], results: { [first.id]: metric }, nextCursor: "page-two" })));
+    const view = renderHook(useCampaignList, { initialProps: input(), wrapper: StrictMode });
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([first]));
+    expect(view.result.current.results[first.id]).toEqual(metric);
+    expect(view.result.current.nextListCursor).toBe("page-two");
+  });
+});
 
 function view(metaReady = false) {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
@@ -224,7 +387,7 @@ describe("campaign sync feedback", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[first]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
     expect(fetch).not.toHaveBeenCalled();
     fireEvent.change(screen.getByRole("combobox", { name: "Campaign status" }), { target: { value: "active" } });
-    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("status=active"), { signal: expect.any(AbortSignal) });
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("status=active"), { signal: expect.any(AbortSignal), credentials: "same-origin", cache: "no-store" });
     await waitFor(() => expect(screen.queryByRole("button", { name: "Loading campaigns..." })).not.toBeInTheDocument());
   });
 
