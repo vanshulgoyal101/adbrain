@@ -2,7 +2,7 @@
   "regions": ["hnd1"],
   "git": {
     "deploymentEnabled": {
-      "*": false,
+      "**": false,
       "main": true,
       "dev": false,
       "release/meta-connect-pilot": false
