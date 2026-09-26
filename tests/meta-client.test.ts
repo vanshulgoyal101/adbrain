@@ -11,6 +11,43 @@ const creds = {
 
 afterEach(() => vi.restoreAllMocks());
 
+describe("Meta lead pagination", () => {
+  it("preserves base64 cursor padding while keeping the request on Graph", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
+      .mockResolvedValueOnce(Response.json({ data: [], paging: { next: "https://untrusted.example", cursors: { after: "a+b/==" } } }))
+      .mockResolvedValueOnce(Response.json({ data: [] }));
+    await new MetaClient(creds).listLeadForms();
+    expect(new URL(String(fetchMock.mock.calls[2][0])).searchParams.get("after")).toBe("a+b/==");
+  });
+
+  it("rejects malformed lead timestamps before persistence", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "lead", created_time: "not-a-date" }] }));
+    await expect(new MetaClient(creds).listLeadsForFormPage("form")).rejects.toThrow("Malformed Meta lead page");
+  });
+
+  it("reads second form and lead pages through opaque cursors, never provider URLs", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "f1", name: "First", status: "ACTIVE" }], paging: { next: "https://untrusted.example/?access_token=secret", cursors: { after: "forms2" } } }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "f2", name: "Second", status: "ACTIVE" }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "lead1" }], paging: { next: "https://untrusted.example/", cursors: { after: "leads2" } } }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "lead2" }] }));
+    const client = new MetaClient(creds);
+    expect((await client.listLeadForms()).map(form => form.id)).toEqual(["f1", "f2"]);
+    expect((await client.listLeadsForForm("f2")).map(lead => lead.id)).toEqual(["lead1", "lead2"]);
+    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith("https://graph.facebook.com/v21.0/"))).toBe(true);
+    expect(String(fetchMock.mock.calls[2][0])).toContain("after=forms2");
+    expect(String(fetchMock.mock.calls[4][0])).toContain("after=leads2");
+  });
+
+  it.each([{ data: null }, { data: [], paging: { next: "https://example.com" } }])("rejects malformed or missing-cursor pages", async (page) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ access_token: "page-token" })).mockResolvedValueOnce(Response.json(page));
+    await expect(new MetaClient(creds).listLeadForms()).rejects.toThrow();
+  });
+});
+
 describe("MetaClient Page-token lookup", () => {
   it("does not send a provider request after the worker deadline expires", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
