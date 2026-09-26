@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { currentVerifiedActor } from "@/lib/observability/context";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AuditEntityType =
   | "business"
@@ -31,19 +32,19 @@ export async function logEvent(event: AuditEvent): Promise<void> {
   try {
     const supabase = await createClient();
     const user = currentVerifiedActor() ?? (await supabase.auth.getUser()).data.user;
+    if (!user) throw new Error("Verified audit actor required.");
 
     recordProductEvent({ kind: "workflow", name: event.action, outcome: "success", businessId: event.businessId,
       attributes: { entityType: event.entityType } });
-    const { error } = await supabase.from("audit_log").insert({
-      business_id: event.businessId,
-      actor_id: user?.id ?? null,
-      actor_label: user?.email ?? "system",
-      action: event.action,
-      entity_type: event.entityType,
-      entity_id: event.entityId ?? null,
-      meta_object_id: event.metaObjectId ?? null,
-      reason: event.reason ?? null,
-      details: (event.details ?? {}) as unknown as Json,
+    const { error } = await createAdminClient().rpc("append_verified_audit_event", {
+      p_business_id: event.businessId,
+      p_actor_id: user.id,
+      p_action: event.action,
+      p_entity_type: event.entityType,
+      p_entity_id: event.entityId ?? null,
+      p_meta_object_id: event.metaObjectId ?? null,
+      p_reason: event.reason ?? null,
+      p_details: (event.details ?? {}) as unknown as Json,
     }).abortSignal(AbortSignal.timeout(3_000));
     if (error) recordProductEvent({ kind: "system", name: "audit.persist", outcome: "failed", businessId: event.businessId, attributes: { errorCode: "AUDIT_WRITE_FAILED" } });
   } catch {

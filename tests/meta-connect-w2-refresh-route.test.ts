@@ -24,6 +24,7 @@ const campaign = {
   meta_connection_generation: 4,
 };
 
+vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaignResult: mocks.saveResult }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },

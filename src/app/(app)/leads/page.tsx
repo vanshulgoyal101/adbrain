@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
-import { getLeads, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getLeadPage } from "@/lib/leads/queries";
 
 export const metadata = { title: "Enquiries" };
 
@@ -34,8 +35,8 @@ export default async function LeadsPage() {
     );
   }
 
-  const [leads, metaConnection] = await Promise.all([
-    getLeads(business.id),
+  const [page, metaConnection] = await Promise.all([
+    getLeadPage(business.id),
     getMetaConnection(business.id),
   ]);
 
@@ -48,8 +49,11 @@ export default async function LeadsPage() {
       />
       <div className="mt-6">
         <LeadInbox
+          key={`${business.owner_id}:${business.id}`}
           businessName={business.name}
-          initialLeads={leads}
+          initialLeads={page.leads}
+          initialTotal={page.total}
+          initialNextCursor={page.nextCursor}
           metaReady={metaConnection.ready}
         />
       </div>

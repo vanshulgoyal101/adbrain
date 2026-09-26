@@ -6,7 +6,7 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
-import { createClient } from "@/lib/supabase/server";
+import { saveCampaign } from "./trusted-write";
 import {
   getCampaigns,
   getLatestResults,
@@ -39,7 +39,6 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
     );
     if (!toPause.length) return [];
 
-    const supabase = await createClient();
     let context;
     try {
       context = await requireOwnedBusiness(businessId);
@@ -71,7 +70,8 @@ export async function enforceAutoPause(businessId: string): Promise<string[]> {
           },
           (meta) => meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED"),
         );
-        await supabase.from("campaigns").update({ status: "paused" }).eq("id", id);
+        const { error } = await saveCampaign(context, { status: "paused" }, id);
+        if (error) continue;
         paused.push(id);
         await logEvent({
           businessId,

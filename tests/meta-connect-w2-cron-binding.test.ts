@@ -22,7 +22,7 @@ const boundCampaign = {
 
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: "cron-secret" }) }));
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ from: mocks.adminFrom }),
+  createAdminClient: () => ({ from: mocks.adminFrom, rpc: async () => ({ error: null }) }),
 }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},

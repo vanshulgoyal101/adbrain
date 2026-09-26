@@ -11,6 +11,7 @@ import {
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { createClient } from "@/lib/supabase/server";
+import { saveCampaignResult } from "@/lib/campaign/trusted-write";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -79,9 +80,8 @@ async function handlePOST(
     return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results.") }, { status: 502 });
   }
 
-  const { data: result, error: resultError } = await supabase
-    .from("campaign_results")
-    .insert({
+  const { data: result, error: resultError } = await saveCampaignResult(
+    { businessId: campaign.business_id, userId: user.id }, {
       campaign_id: id,
       destination: insights.destination ?? "unknown",
       period_start: insights.periodStart ?? null,
@@ -92,9 +92,7 @@ async function handlePOST(
       spend: insights.spend,
       cpl: insights.cpl,
       ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null } : {}),
-    })
-    .select("*")
-    .single();
+    }).catch(() => ({ data: null, error: new Error("Result storage unavailable.") }));
 
   if (resultError || !result) {
     return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh." }, { status: 503 });

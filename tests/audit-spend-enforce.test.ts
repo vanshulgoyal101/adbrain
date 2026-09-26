@@ -21,6 +21,8 @@ const getCampaigns = vi.fn();
 const getLatestResults = vi.fn();
 const getSpendLimits = vi.fn();
 
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert }) }));
+vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: (...args: unknown[]) => updateEq(...args) }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser },
@@ -77,7 +79,7 @@ describe("logEvent", () => {
       observeVerifiedUser({ id: "verified-owner", email: "verified@example.test" });
       await logEvent({ businessId: "b1", action: "x", entityType: "creative" });
       expect(getUser).not.toHaveBeenCalled();
-      expect(insert).toHaveBeenCalledWith(expect.objectContaining({ actor_id: "verified-owner" }));
+      expect(insert).toHaveBeenCalledWith("append_verified_audit_event", expect.objectContaining({ p_actor_id: "verified-owner" }));
       observeIdentity(null);
       await logEvent({ businessId: "b1", action: "x", entityType: "creative" });
       expect(getUser).toHaveBeenCalledOnce();
@@ -96,26 +98,23 @@ describe("logEvent", () => {
       entityId: "c1",
     });
     expect(insert).toHaveBeenCalledWith(
+      "append_verified_audit_event",
       expect.objectContaining({
-        business_id: "b1",
-        action: "campaign.create",
-        entity_type: "campaign",
-        entity_id: "c1",
-        actor_id: "u1",
-        actor_label: "o@x.com",
-        details: {},
+        p_business_id: "b1",
+        p_action: "campaign.create",
+        p_entity_type: "campaign",
+        p_entity_id: "c1",
+        p_actor_id: "u1",
+        p_details: {},
       }),
     );
   });
 
-  it("falls back to a system actor when there is no session", async () => {
+  it("does not invent a system actor when there is no session", async () => {
     getUser.mockResolvedValue({ data: { user: null } });
     const { logEvent } = await import("@/lib/audit");
     await logEvent({ businessId: "b1", action: "cron.sync", entityType: "campaign" });
-    expect(insert.mock.calls[0][0]).toMatchObject({
-      actor_id: null,
-      actor_label: "system",
-    });
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it("never throws when the insert fails — logging must not break the caller", async () => {

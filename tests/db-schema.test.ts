@@ -70,6 +70,15 @@ const OWNED_TABLES = [
 const ALL_TABLES = [...OWNED_TABLES, "profiles", "rate_limit_hits", "meta_connections"] as const;
 
 describe("schema: tables", () => {
+  it("includes resumable enquiry import in the canonical fresh schema", () => {
+    expect(SQL).toContain("create table if not exists public.lead_sync_runs");
+    for (const name of ["lead_sync_start", "lead_sync_checkpoint"]) {
+      expect(SQL).toContain(`create or replace function public.${name}`);
+    }
+    expect(SQL).toContain("alter table public.lead_sync_runs enable row level security");
+    expect(SQL).toContain("revoke all on public.lead_sync_runs from public, anon, authenticated");
+  });
+
   it("creates every expected table", () => {
     for (const t of ALL_TABLES) {
       expect(SQL).toContain(`create table if not exists public.${t}`);

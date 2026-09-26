@@ -851,6 +851,31 @@ grant select, insert, update, delete on public.campaign_operations to service_ro
 
 create unique index if not exists campaign_operations_draft_id_uidx on public.campaign_operations(draft_id);
 
+create or replace function public.initialize_owned_campaign_draft()
+returns trigger language plpgsql security invoker set search_path = pg_catalog, public as $$
+begin
+  if current_user = 'authenticated' then
+    if new.owner_id is distinct from auth.uid() or not public.owns_business(new.business_id) then
+      raise exception 'Draft owner mismatch' using errcode = '42501';
+    end if;
+    perform 1 from public.businesses where id = new.business_id for update;
+    if (select count(*) from public.campaign_drafts draft
+      where draft.business_id = new.business_id and draft.expires_at > now()
+        and not exists (select 1 from public.campaign_operations operation where operation.draft_id = draft.id)) >= 50 then
+      raise exception 'Draft limit reached' using errcode = '23514';
+    end if;
+    new.version := 1;
+    new.created_at := now();
+    new.updated_at := now();
+    new.expires_at := now() + interval '7 days';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.initialize_owned_campaign_draft() from public, anon, authenticated;
+create trigger initialize_owned_campaign_draft before insert on public.campaign_drafts
+  for each row execute function public.initialize_owned_campaign_draft();
+
 create or replace function public.update_campaign_draft_if_version(
   p_draft_id uuid,
   p_business_id uuid,
@@ -860,20 +885,45 @@ create or replace function public.update_campaign_draft_if_version(
   p_now timestamptz default now()
 )
 returns setof public.campaign_drafts
-language sql
-security invoker
-set search_path = public
-as $$
-  update public.campaign_drafts
-  set input = p_input, version = version + 1, updated_at = p_now
-  where id = p_draft_id and business_id = p_business_id and owner_id = p_owner_id
-    and version = p_expected_version and expires_at > p_now
-    and not exists (select 1 from public.campaign_operations where draft_id = p_draft_id)
-  returning *;
+language plpgsql security definer set search_path = pg_catalog, public as $$
+begin
+  if p_owner_id is distinct from auth.uid() or not public.owns_business(p_business_id) then
+    raise exception 'Draft owner mismatch' using errcode = '42501';
+  end if;
+  if p_expected_version < 1 or p_expected_version >= 9007199254740991
+    or p_input is null or jsonb_typeof(p_input) <> 'object' or octet_length(p_input::text) > 65536 then
+    raise exception 'Invalid draft input' using errcode = '23514';
+  end if;
+  perform 1 from public.campaign_drafts where id = p_draft_id
+    and business_id = p_business_id and owner_id = p_owner_id for update;
+  if not found then return; end if;
+  return query update public.campaign_drafts
+    set input = p_input, version = version + 1, updated_at = now()
+    where id = p_draft_id and version = p_expected_version and expires_at > now()
+      and not exists (select 1 from public.campaign_operations where draft_id = p_draft_id)
+    returning *;
+end;
 $$;
 
-revoke execute on function public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamptz) from public;
+revoke execute on function public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamptz) from public, anon, authenticated;
 grant execute on function public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamptz) to authenticated;
+
+create or replace function public.delete_campaign_draft_if_version(p_draft_id uuid, p_expected_version bigint)
+returns setof public.campaign_drafts
+language plpgsql security definer set search_path = pg_catalog, public as $$
+begin
+  perform 1 from public.campaign_drafts where id = p_draft_id and owner_id = auth.uid()
+    and public.owns_business(business_id) for update;
+  if not found then return; end if;
+  return query delete from public.campaign_drafts
+    where id = p_draft_id and version = p_expected_version
+    returning *;
+end;
+$$;
+revoke all on function public.delete_campaign_draft_if_version(uuid, bigint) from public, anon, authenticated;
+grant execute on function public.delete_campaign_draft_if_version(uuid, bigint) to authenticated;
+revoke all on public.campaign_drafts from public, anon, authenticated;
+grant select, insert on public.campaign_drafts to authenticated;
 
 create or replace function public.claim_campaign_operation(
   p_operation_id uuid, p_business_id uuid, p_draft_id uuid, p_draft_version bigint,
@@ -1093,6 +1143,46 @@ create policy "audit_log: insert own"
   on public.audit_log for insert
   with check (business_id is not null and public.owns_business(business_id));
 
+revoke all on public.campaigns, public.campaign_results, public.audit_log from public, anon, authenticated;
+grant select on public.campaigns, public.campaign_results, public.audit_log to authenticated;
+revoke delete, truncate on public.businesses from public, anon, authenticated;
+revoke all on public.audit_log from service_role;
+grant select on public.audit_log to service_role;
+alter table public.audit_log add column authority text not null default 'legacy_unverified'
+  check (authority in ('legacy_unverified', 'server'));
+
+create or replace function public.append_verified_audit_event(
+  p_business_id uuid, p_actor_id uuid, p_action text, p_entity_type text,
+  p_entity_id text default null, p_meta_object_id text default null,
+  p_reason text default null, p_details jsonb default '{}', p_system_actor text default null
+)
+returns uuid language plpgsql security definer set search_path = pg_catalog, public as $$
+declare
+  actor_label text;
+  event_id uuid;
+begin
+  if p_actor_id is not null then
+    perform 1 from public.businesses where id = p_business_id and owner_id = p_actor_id for share;
+    if not found or p_system_actor is not null then
+      raise exception 'Audit owner mismatch' using errcode = '42501';
+    end if;
+    select coalesce(email, 'owner') into actor_label from auth.users where id = p_actor_id;
+  else
+    if p_system_actor is null or p_system_actor not in ('cron', 'worker') then
+      raise exception 'Explicit system identity required' using errcode = '23514';
+    end if;
+    actor_label := p_system_actor;
+  end if;
+  insert into public.audit_log(business_id, actor_id, actor_label, action, entity_type,
+    entity_id, meta_object_id, reason, details, authority, created_at)
+  values (p_business_id, p_actor_id, actor_label, p_action, p_entity_type,
+    p_entity_id, p_meta_object_id, p_reason, p_details, 'server', now()) returning id into event_id;
+  return event_id;
+end;
+$$;
+revoke all on function public.append_verified_audit_event(uuid, uuid, text, text, text, text, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.append_verified_audit_event(uuid, uuid, text, text, text, text, text, jsonb, text) to service_role;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  leads: instant-form leads pulled from Meta into one inbox
 -- ════════════════════════════════════════════════════════════════════════
@@ -1125,6 +1215,169 @@ create policy "leads: all own"
   on public.leads for all
   using (public.owns_business(business_id))
   with check (public.owns_business(business_id));
+
+create table if not exists public.lead_sync_runs (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  generation bigint not null,
+  ad_account_id text not null,
+  page_id text not null,
+  state text not null default 'partial' check (state in ('partial', 'complete')),
+  version bigint not null default 0 check (version >= 0),
+  progress jsonb not null default '{"formsDone":false,"formsAfter":null,"formsSeen":[],"formIds":[],"pending":[],"discover":true}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (jsonb_typeof(progress) = 'object')
+);
+create index if not exists lead_sync_runs_business_idx on public.lead_sync_runs(business_id, created_at desc);
+alter table public.lead_sync_runs enable row level security;
+revoke all on public.lead_sync_runs from public, anon, authenticated;
+grant select, insert, update on public.lead_sync_runs to service_role;
+
+create or replace function public.lead_sync_start(
+  p_business_id uuid, p_owner_id uuid, p_sync_id uuid,
+  p_generation bigint, p_ad_account_id text, p_page_id text
+) returns setof public.lead_sync_runs
+language plpgsql security invoker set search_path = public
+as $$
+declare current_run public.lead_sync_runs;
+begin
+  perform 1 from public.businesses where id = p_business_id and owner_id = p_owner_id for update;
+  if not found then raise exception 'Business unavailable' using errcode = '42501'; end if;
+  perform 1 from public.meta_connections where business_id = p_business_id
+    and generation = p_generation and ad_account_id = p_ad_account_id and page_id = p_page_id
+    and authorization_status = 'connected' for share;
+  if not found then raise exception 'Meta binding changed' using errcode = '40001'; end if;
+  if p_sync_id is not null then
+    select * into current_run from public.lead_sync_runs
+      where id = p_sync_id and business_id = p_business_id and owner_id = p_owner_id for update;
+    if not found then raise exception 'Sync unavailable' using errcode = 'P0002'; end if;
+    if current_run.generation <> p_generation or current_run.ad_account_id <> p_ad_account_id or current_run.page_id <> p_page_id then
+      raise exception 'Sync binding changed; start a fresh sync' using errcode = '40001';
+    end if;
+  else
+    select * into current_run from public.lead_sync_runs
+      where business_id = p_business_id and owner_id = p_owner_id and generation = p_generation
+        and ad_account_id = p_ad_account_id and page_id = p_page_id and state = 'partial'
+      order by created_at desc limit 1 for update;
+    if not found then
+      insert into public.lead_sync_runs(business_id, owner_id, generation, ad_account_id, page_id)
+        values (p_business_id, p_owner_id, p_generation, p_ad_account_id, p_page_id) returning * into current_run;
+    end if;
+  end if;
+  return next current_run;
+end
+$$;
+
+create or replace function public.lead_sync_checkpoint(
+  p_business_id uuid, p_owner_id uuid, p_sync_id uuid,
+  p_generation bigint, p_ad_account_id text, p_page_id text,
+  p_version bigint, p_rows jsonb, p_progress jsonb
+) returns jsonb
+language plpgsql security invoker set search_path = public
+as $$
+declare current_run public.lead_sync_runs; inserted_count integer;
+begin
+  select * into current_run from public.lead_sync_start(p_business_id, p_owner_id, p_sync_id, p_generation, p_ad_account_id, p_page_id);
+  if current_run.version <> p_version or current_run.state <> 'partial' then
+    raise exception 'Sync progress changed; reload and resume' using errcode = '40001';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) > 200
+    or p_progress is null or jsonb_typeof(p_progress) <> 'object'
+    or jsonb_typeof(p_progress->'pending') is distinct from 'array'
+    or jsonb_typeof(p_progress->'formsDone') is distinct from 'boolean' then
+    raise exception 'Invalid sync checkpoint' using errcode = '22023';
+  end if;
+  insert into public.leads(business_id, meta_lead_id, form_id, form_name, full_name, phone, email, city, field_data, created_time)
+    select p_business_id, incoming.meta_lead_id, incoming.form_id, incoming.form_name,
+      incoming.full_name, incoming.phone, incoming.email, incoming.city, coalesce(incoming.field_data, '{}'), incoming.created_time
+    from jsonb_to_recordset(p_rows) as incoming(meta_lead_id text, form_id text, form_name text,
+      full_name text, phone text, email text, city text, field_data jsonb, created_time timestamptz)
+    on conflict (business_id, meta_lead_id) do nothing;
+  get diagnostics inserted_count = row_count;
+  update public.lead_sync_runs set progress = p_progress, version = version + 1, updated_at = now(),
+    state = case when (p_progress->>'formsDone')::boolean and jsonb_array_length(p_progress->'pending') = 0 then 'complete' else 'partial' end
+    where id = current_run.id returning * into current_run;
+  return jsonb_build_object('run', to_jsonb(current_run), 'imported', inserted_count);
+end
+$$;
+
+revoke all on function public.lead_sync_start(uuid, uuid, uuid, bigint, text, text) from public, anon, authenticated;
+revoke all on function public.lead_sync_checkpoint(uuid, uuid, uuid, bigint, text, text, bigint, jsonb, jsonb) from public, anon, authenticated;
+grant execute on function public.lead_sync_start(uuid, uuid, uuid, bigint, text, text) to service_role;
+grant execute on function public.lead_sync_checkpoint(uuid, uuid, uuid, bigint, text, text, bigint, jsonb, jsonb) to service_role;
+
+alter table public.leads
+  add column if not exists workflow_status text not null default 'new'
+    check (workflow_status in ('new', 'contacted', 'qualified', 'booked', 'closed')),
+  add column if not exists follow_up_note text not null default ''
+    check (char_length(follow_up_note) <= 2000);
+
+create index if not exists leads_inbox_cursor_idx
+  on public.leads (business_id, created_time desc nulls last, id);
+create index if not exists leads_workflow_idx
+  on public.leads (business_id, workflow_status);
+
+create or replace function public.get_lead_page(
+  p_business_id uuid, p_query text default '', p_status text default 'all',
+  p_contact text default 'all', p_sort text default 'newest', p_limit integer default 50,
+  p_after_id uuid default null, p_after_key text default '', p_after_null boolean default false
+) returns jsonb
+language plpgsql stable security invoker set search_path = public
+as $$
+declare result jsonb;
+begin
+  if not public.owns_business(p_business_id) then
+    raise insufficient_privilege using message = 'Business access denied';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 100 or p_query is null or char_length(p_query) > 200
+    or p_status is null or p_status not in ('all', 'new', 'contacted', 'qualified', 'booked', 'closed')
+    or p_contact is null or p_contact not in ('all', 'ready', 'missing')
+    or p_sort is null or p_sort not in ('newest', 'oldest', 'name')
+    or p_after_key is null or p_after_null is null then
+    raise invalid_parameter_value using message = 'Invalid enquiry filters';
+  end if;
+  with matching as materialized (
+    select lead as record,
+      case when p_sort = 'name' then coalesce(lower(lead.full_name), '')
+        else coalesce(to_char(lead.created_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US'), '') end collate "C" as sort_key,
+      case when p_sort = 'name' then lead.full_name is null else lead.created_time is null end as missing_key
+    from public.leads lead
+    where lead.business_id = p_business_id
+      and (p_status = 'all' or lead.workflow_status = p_status)
+      and (p_query = '' or strpos(lower(concat_ws(' ', lead.full_name, lead.phone, lead.email, lead.city, lead.form_name)), lower(p_query)) > 0)
+      and (p_contact = 'all' or
+        (coalesce(btrim(lead.phone), '') <> '' or coalesce(btrim(lead.email), '') <> '') = (p_contact = 'ready'))
+  ), candidates as (
+    select * from matching
+    where p_after_id is null or missing_key > p_after_null
+      or (missing_key = p_after_null and (
+        case when p_sort = 'newest' then sort_key < p_after_key collate "C"
+          else sort_key > p_after_key collate "C" end
+        or (sort_key = p_after_key collate "C" and (record).id > p_after_id)))
+  ), numbered as (
+    select *, row_number() over (order by missing_key,
+      case when p_sort = 'newest' then sort_key end desc,
+      case when p_sort <> 'newest' then sort_key end asc, (record).id) as position
+    from candidates
+    order by missing_key,
+      case when p_sort = 'newest' then sort_key end desc,
+      case when p_sort <> 'newest' then sort_key end asc, (record).id
+    limit p_limit + 1
+  )
+  select jsonb_build_object(
+    'leads', coalesce((select jsonb_agg(to_jsonb(record) order by position) from numbered where position <= p_limit), '[]'::jsonb),
+    'total', (select count(*) from matching),
+    'nextCursor', case when exists (select 1 from numbered where position > p_limit)
+      then (select jsonb_build_object('id', (record).id, 'key', sort_key, 'missing', missing_key)
+        from numbered where position = p_limit) else null end
+  ) into result;
+  return result;
+end;
+$$;
+revoke all on function public.get_lead_page(uuid, text, text, text, text, integer, uuid, text, boolean) from public, anon;
+grant execute on function public.get_lead_page(uuid, text, text, text, text, integer, uuid, text, boolean) to authenticated;
 
 -- ════════════════════════════════════════════════════════════════════════
 --  rate_limit_hits: shared (cross-instance) sliding-window rate limiting
@@ -1289,6 +1542,35 @@ create policy "spend_limits: all own"
   using (public.owns_business(business_id))
   with check (public.owns_business(business_id));
 
+alter table public.campaigns
+  add constraint campaigns_budget_finite_nonnegative
+    check (daily_budget is null or (daily_budget >= 0 and daily_budget < 'Infinity'::numeric));
+alter table public.campaign_results
+  add constraint campaign_results_metrics_safe
+    check (impressions between 0 and 9007199254740991
+      and clicks between 0 and 9007199254740991
+      and leads between 0 and 9007199254740991
+      and (conversations is null or conversations between 0 and 9007199254740991)),
+  add constraint campaign_results_costs_finite_nonnegative
+    check (spend >= 0 and spend < 'Infinity'::numeric
+      and (cpl is null or (cpl >= 0 and cpl < 'Infinity'::numeric))
+      and (cost_per_conversation is null or (cost_per_conversation >= 0 and cost_per_conversation < 'Infinity'::numeric))),
+  add constraint campaign_results_period_order
+    check ((period_start is null and period_end is null)
+      or (period_start is not null and period_end is not null
+        and isfinite(period_start) and isfinite(period_end) and period_start <= period_end)),
+  add constraint campaign_results_fetched_finite check (isfinite(fetched_at));
+alter table public.spend_limits
+  add constraint spend_limits_positive_cap check (weekly_cap_rupees is null or weekly_cap_rupees > 0);
+alter table public.campaigns add constraint campaigns_business_id_id_key unique (business_id, id);
+alter table public.leads
+  add constraint leads_same_business_campaign foreign key (business_id, campaign_id)
+    references public.campaigns(business_id, id) on delete set null (campaign_id);
+alter table public.campaign_operations
+  add constraint operations_same_business_campaign foreign key (business_id, campaign_id)
+    references public.campaigns(business_id, id) on delete set null (campaign_id),
+  add constraint operations_same_business_draft foreign key (business_id, draft_id)
+    references public.campaign_drafts(business_id, id) on delete restrict;
 
 
 

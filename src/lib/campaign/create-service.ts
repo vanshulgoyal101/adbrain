@@ -10,6 +10,7 @@ import { splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import type { CampaignSupabase } from "./preflight-runtime";
 import type { Json } from "@/lib/types";
+import { saveCampaign } from "./trusted-write";
 
 export async function executeReviewedCampaign(input: {
   database: CampaignSupabase;
@@ -83,8 +84,8 @@ export async function executeReviewedCampaign(input: {
   ], checkpoint, {
     finalize: async current => {
       if (!metaResult) return null;
-      const { data: campaign, error } = await database.from("campaigns").insert({
-        business_id: actor.businessId, name: draft.input.name,
+      const { data: campaign, error } = await saveCampaign(actor, {
+        name: draft.input.name,
         objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
         destination: metaResult.destination,
         daily_budget: effectiveDailyBudget(draft.input.dailyBudgetRupees, metaResult.adSetIds.length || 1),
@@ -93,7 +94,7 @@ export async function executeReviewedCampaign(input: {
         meta_ad_account_id: review.selected!.adAccountId, meta_page_id: review.selected!.pageId,
         meta_connection_generation: review.connectionGeneration, creative_ids: draft.input.creativeIds,
         raw: { source: "campaign_operation", metaResult } as unknown as Json,
-      }).select("id").single();
+      }, undefined, operationDatabase);
       return error || !campaign ? null : { ...current, campaignId: campaign.id };
     },
   });

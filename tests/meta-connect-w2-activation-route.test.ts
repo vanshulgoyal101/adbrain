@@ -20,6 +20,10 @@ class MockConnectionAccessError extends Error {
   code: "CONFLICT" | "UNAVAILABLE" = "CONFLICT";
 }
 
+vi.mock("@/lib/campaign/trusted-write", () => ({
+  saveCampaign: async () => ({ error: null }),
+  deleteVerifiedCampaign: (...args: unknown[]) => mocks.deleteCampaign(...args),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },
