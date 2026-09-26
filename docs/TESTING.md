@@ -5,6 +5,11 @@ transaction tests, browser fixtures, hosted CI, live provider checks, and produc
 deployment receipts separate. Current run counts belong in dated [QA records](qa/),
 not setup promises. Start with [Quick Start](QUICK_START.md).
 
+This guide describes checked-out source at `672eb13`, not a production rollout.
+Enquiry candidate commands are marked separately below. For release identity and
+provider evidence, use the dated [DevOps receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release),
+not an aggregate test count.
+
 ## Isolation First
 
 The existing `.env.local` can point at production. Plain localhost, a demo login,
@@ -12,8 +17,10 @@ or a blocked browser request does not isolate server-side Supabase/Meta/AI calls
 Use disposable local services or a separately authorized test environment. Never
 load production secrets into a test merely to make it pass.
 
-Unit tests use [tests/setup.ts](../tests/setup.ts), mocked dependencies and synthetic
-fixtures. Check each script before executing it: package scripts have very
+Unit tests use mocked dependencies and synthetic fixtures.
+[tests/setup.ts](../tests/setup.ts) registers DOM matchers; it does **not** block
+network access or replace production configuration. Check each script before
+executing it: package scripts have very
 different side effects. Do not invoke database seeding, image generation, or a
 spend-enforcement route as a generic smoke test.
 
@@ -29,6 +36,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `start` | Serves an existing production build; real routes remain live |
 | `lint` | ESLint, no automatic fixes by default |
 | `typecheck` | TypeScript no-emit check; Next generated types may need a build first |
+| `docs:check` | Read-only local Markdown, links, JSON examples, command names and source inventories; no application imports or external requests |
 | `audit:dependencies` | npm registry advisory check, fails at high severity; requires network |
 | `test` | One Vitest run in Node, components opt into jsdom |
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
@@ -40,17 +48,29 @@ tools beyond Node; inspect their prerequisites before executing.
 | `env:doctor` | Shell diagnostics for configuration/tooling; not proof of provider authorization |
 | `env:doctor:strict` | Strict diagnostic variant |
 | `db:push` | Applies schema to configured database; requires explicit target verification/authorization |
+| `db:migrate` | Migration runner; inspect its target and preview/apply flags before use; not an automatic test |
+| `worker:campaigns` | Executes queued campaign work against configured services; can mutate Meta and the database |
 | `seed:demo-clinic` | Writes demo data; use only on the approved target |
 | `generate:icons` | Regenerates local icon assets |
 | `eval:creative` | Sends fixture copy to Google judge model; consumes provider quota/cost |
 
 ### Focused Local Loop
 
+Use Node 24 and installed dependencies. From an environment-file-free worktree,
+run a selected mocked test with inherited service credentials removed:
+
 ```sh
-npm run test -- tests/spend.test.ts
-npm run lint
-npm run typecheck
+env -i PATH="$PATH" HOME="$HOME" TMPDIR=/tmp CI=1 RUN_PAID_CREATIVE_EVAL=0 \
+	NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co \
+	NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder-anon-key \
+	npm test -- tests/spend.test.ts --maxWorkers=1
 ```
+
+Keep the same synthetic environment for affected lint/type checks. Scrubbing
+variables is not an OS network sandbox: test doubles or the optional
+[unit network guard](../scripts/qa-unit-network-guard.mjs) must prevent unintended
+transport. Do not attach the blanket guard to browser/database tests that need
+their explicitly isolated services, or hide failures by changing assertions.
 
 Choose an existing test file for the behavior being changed. For a shared contract,
 run both its pure schema tests and affected route/component tests. Mock failure
@@ -60,7 +80,7 @@ instances, and HTTP 200 can represent partial work.
 ### CI Gates
 
 [CI](../.github/workflows/ci.yml) runs on push/PR to `dev`/`main` with placeholder
-Supabase configuration and Node 22:
+Supabase configuration and Node 24:
 
 ```sh
 npm ci
@@ -82,6 +102,11 @@ Concurrent builds share `.next` and coverage runs share output. Coordinate write
 or validate an isolated snapshot without environment files; do not delete another
 session's artifacts or interpret mixed outputs as evidence for your exact change.
 
+During editing, use the smallest check for the changed behavior. Reuse matching
+source/dependency/runtime evidence; do not repeat a full suite for prose or a
+second handoff. Required CI still runs on the assembled candidate. Coverage is
+not an acceptance verdict for tenant isolation, money movement or paid delivery.
+
 ## Database Verification
 
 [The harness](../scripts/check-meta-connect-db.mjs) defaults to Homebrew
@@ -89,6 +114,11 @@ PostgreSQL 17 binaries at `/opt/homebrew/opt/postgresql@17/bin`; override
 `META_TEST_PG_BIN` for another installation. It creates a temporary Unix-socket
 cluster, synthetic roles/auth/storage, and fresh/upgrade databases, then cleans
 up. It does not require production Supabase credentials.
+
+On macOS, a scrubbed environment may need `LC_ALL=C LANG=C` for PostgreSQL
+startup. A harness setup failure is not a failed application assertion. The
+harness creates and removes only its own temporary databases; never substitute
+a production database URL or run schema-push commands to repair its setup.
 
 Coverage includes grants/RLS, tenant isolation, token/attempt transitions,
 idempotent claim/lease behavior, draft fences, concurrent rate limiting, usage
@@ -117,6 +147,30 @@ keyboard scrolling, vertical resizing, and reader position during delayed
 responses. Network requests are fulfilled with fixtures or blocked; server
 actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
 This does not replace authenticated workflow tests or real-device Safari testing.
+
+### Enquiry Candidate Checks
+
+The following additions belong to [PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38)
+at `67320272380429b003b2131bf3b2b22641b0dd67`, not this guide's dev baseline
+`672eb132ad57bb3ba31f118afaffddaa878b4923`. Run them only from that candidate
+or an integration that includes its scripts, tests and migrations.
+
+For the saved-enquiry workflow, using installed Google Chrome and fully synthetic
+transport (no application server, credentials or provider calls):
+
+```sh
+node scripts/check-workspace-ux.mjs --offline-leads
+LC_ALL=C LANG=C node scripts/check-meta-connect-db.mjs --leads-only
+npm test -- tests/leads.test.ts tests/lead-inbox.test.tsx
+```
+
+The browser check uses the real inbox/CSS at 1440/390/320px: paging, failed save
+and retry, reload persistence, filters, partial sync/resume and error recovery.
+Screenshots/receipt go to ignored `test-results/lead-inbox/`. The database check
+creates and removes its own Unix-socket PostgreSQL cluster for fresh/upgrade
+schemas, 225-row cursor ordering, defaults, re-import preservation and tenant
+denials. This is not combined #34 acceptance, a production migration or live
+Meta evidence. Preserve this distinction when the two enquiry candidates integrate.
 
 [Playwright configuration](../playwright.config.ts) uses one worker, base URL
 `http://localhost:3939`, and an existing production build via `npm run start`.
@@ -149,14 +203,40 @@ without credentials. Do not repeatedly run a failing paid job until it passes.
 User participation is required for real Meta consent; connect verification is not
 authorization to create campaigns, activate spend, or delete assets.
 
+Razorpay test-mode evidence is a separate layer: mocked responses, provider test
+captures, production merchant activation and live collection are distinct facts.
+The local test gate rejects production/Vercel and remote Supabase targets. Use
+the [payment implementation receipt](PAYMENTS-PLAN.md#9-implementation-receipt)
+for approved setup and remaining live-workflow limits; do not enable a test flag
+to implement production payments.
+
 ## Documentation Checks
 
-When changing a route, environment field, migration, or lifecycle, update the
-corresponding reference in the same change. Check API inventory against exported
-handlers, configuration against `env.ts` plus direct environment reads, tables
-against SQL, and commands against `package.json`. Parse JSON examples and validate
-schema-bound examples against the actual imported schema when practical.
+```sh
+npm run docs:check
+npm run docs:check -- docs/TESTING.md docs/BRAND-IDENTITY.md
+npm run docs:check -- --all --json
+node --test scripts/check-docs.test.mjs
+```
 
-Check relative links/anchors and balanced code fences. Label dated experiments as
-history, preserve external verification gaps, and never paste a recent test count
-into a permanent product guarantee.
+[The checker](../scripts/check-docs.mjs) uses Markdown parsing rather than a
+link-shaped regular expression. It handles reference links, parentheses in Next
+route paths, images, HTML anchors, duplicate heading slugs and source line links.
+Current-guide broken links, unclosed fences, malformed JSON examples, missing node scripts and
+unknown `npm run` names fail the command. Historical records are inventoried but
+are checked only with `--all`; their diagnostics and unavailable private evidence
+are warnings, not rewritten or silently counted as current acceptance.
+
+The JSON report lists exported API methods, statically found environment keys
+(including conventional `env`/`environment` aliases and declarations in `.env.example`),
+migration filenames and lexical SQL table declarations. Missing mentions in the
+owning guides are review leads, not automatic failures or full schema coverage.
+The checker does not fetch external links, execute shell snippets, load `.env`,
+validate every CLI flag, follow dynamic environment access, run migrations, or
+prove that a JSON example passes a route's authorization and Zod contract.
+Inspect representative examples against those deciding implementations.
+
+Use `--root /path/to/worktree` to inspect another explicitly selected checkout
+without copying or changing it. Report the exact source and guide hashes from
+the output when reviewing in-progress docs. Never infer production availability
+from current source, and never copy credentials or real enquiry data into examples.

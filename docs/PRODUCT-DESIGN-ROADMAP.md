@@ -1,5 +1,13 @@
 # AdBrain Product Transformation Plan
 
+> Historical plan: the dated delivery and baseline statements below are retained
+> as design history, not current deployment status or an active assignment.
+> Use [Brand Identity](BRAND-IDENTITY.md) for the existing visual conventions,
+> [Features](FEATURES.md) for source behavior, and
+> [current dispatch](ORCHESTRATION.md#current-dispatch) for ownership.
+> Enquiry candidates #34/#35 require their own combined acceptance; the older
+> follow-up proposals below do not certify those implementations.
+
 > Dated design intent and acceptance history. [Features](FEATURES.md) describes
 > current source behavior and [Roadmap](ROADMAP.md) tracks remaining priorities.
 > Treat the original baseline below as historical, not a current product audit.
