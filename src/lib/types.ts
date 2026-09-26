@@ -510,6 +510,8 @@ export interface Database {
           field_data: Json;
           created_time: string | null;
           created_at: string;
+          workflow_status: "new" | "contacted" | "qualified" | "booked" | "closed";
+          follow_up_note: string;
         };
         Insert: {
           id?: string;
@@ -525,6 +527,8 @@ export interface Database {
           field_data?: Json;
           created_time?: string | null;
           created_at?: string;
+          workflow_status?: "new" | "contacted" | "qualified" | "booked" | "closed";
+          follow_up_note?: string;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: [];
@@ -552,6 +556,13 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      get_lead_page: {
+        Args: {
+          p_business_id: string; p_query: string; p_status: string; p_contact: string;
+          p_sort: string; p_limit: number; p_after_id?: string; p_after_key?: string; p_after_null?: boolean;
+        };
+        Returns: Json;
+      };
       enqueue_campaign_operation: {
         Args: { p_operation_id: string; p_input: Json; p_request_hash: string };
         Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];

@@ -78,6 +78,8 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
+| GET | `/api/leads` | Bounded filters/cursor -> `{leads,nextCursor,total}` | Owned saved enquiries only |
+| PATCH | `/api/leads/[id]` | Status/note -> `{lead}` | Owned local follow-up only |
 | POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
@@ -371,6 +373,28 @@ are reported, and all-form failure is 502. A failed count/reload after insert ca
 mean data was saved even though the response failed. Report export returns
 `text/markdown` with dated attachment filename and uses stored primary-business
 performance; it does not refresh Meta.
+
+The saved inbox uses `GET /api/leads`, not the sync response as its full list.
+Filters are `query` (up to 200 characters), `status` (`all`, `new`, `contacted`,
+`qualified`, `booked`, `closed`), `contact` (`all`, `ready`, `missing`), `sort`
+(`newest`, `oldest`, `name`), `limit` (1-100, default 50), and an opaque `cursor`.
+The server derives the primary business. Cursors are bound to business/filters;
+dates retain microsecond precision, null dates/names sort last, and UUID breaks
+ties. `total` counts all matching saved records, not just the returned page.
+Responses are private/no-store. Invalid filters return 400; unavailable reads 503.
+
+`PATCH /api/leads/[id]` accepts only `workflow_status` and/or `follow_up_note`
+(maximum 2000 characters). Empty updates and protected/source fields return 400;
+foreign/missing rows return 404. No outreach or provider write occurs. The
+additive [follow-up migration](../db/migrations/20260926_lead_follow_up.sql) must
+precede these routes; existing rows default to `new` and an empty note. Migration
+publication is not permission to apply it to production.
+
+The inbox consumes the optional #34 sync contract `{id,state,hasMore}` and sends
+`syncId` to resume recorded partial work. It refreshes its current list filters
+after sync/save. It does not claim up-to-date without explicit complete status
+and no remaining work/failures. Combined sync acceptance requires #34; legacy
+responses remain readable but do not certify completion.
 
 Spend settings are strict and complete:
 

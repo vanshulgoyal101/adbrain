@@ -56,6 +56,12 @@ async function verify(database, source) {
     await db.query(bootstrap);
     await db.query(source);
     console.log(`PASS ${database}: schema executes`);
+    if (database === "ordered_upgrade") {
+      await check("ordered_upgrade: existing enquiry receives follow-up defaults", async () => {
+        const { rows } = await db.query("select workflow_status, follow_up_note, full_name from public.leads where meta_lead_id='legacy-follow-up'");
+        assert.deepEqual(rows, [{ workflow_status: "new", follow_up_note: "", full_name: "Legacy enquiry" }]);
+      });
+    }
     await check(`${database}: reporting identity is explicit and migration history is immutable`, async () => {
       const columns = await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='campaign_results' and column_name in ('destination', 'period_start', 'period_end') order by column_name");
       assert.deepEqual(columns.rows.map(row => row.column_name), ["destination", "period_end", "period_start"]);
@@ -91,6 +97,66 @@ async function verify(database, source) {
     await db.query("insert into public.businesses (id, owner_id, name) values ($1, $2, 'Isolated DB test')", [businessId, ownerId]);
     await db.query("insert into public.campaign_drafts (id, business_id, owner_id, input, expires_at) values ($1, $2, $3, '{}', now() + interval '1 day')", [draftId, businessId, ownerId]);
     await db.query("insert into public.meta_connections (business_id, generation, authorization_status) values ($1, 1, 'connected')", [businessId]);
+
+    await check(`${database}: enquiry paging, follow-up persistence and tenant isolation`, async () => {
+      await db.query(`insert into public.leads (business_id, meta_lead_id, full_name, phone, created_time)
+        select $1, 'inbox-' || number, case when number > 220 then null else 'Enquiry ' || lpad(number::text, 3, '0') end,
+          case when number % 2 = 0 then '+910000000000' else '  ' end,
+          case when number > 210 then null else '2026-09-01'::timestamptz + (number % 3) * interval '1 day' + (number % 2) * interval '1 microsecond' end
+        from generate_series(1, 225) number`, [businessId]);
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
+        const page = async (sort = 'newest', after = null, query = '', status = 'all', contact = 'all') =>
+          (await session.query("select public.get_lead_page($1,$2,$3,$4,$5,50,$6,$7,$8) as page",
+            [businessId, query, status, contact, sort, after?.id ?? null, after?.key ?? '', after?.missing ?? false])).rows[0].page;
+        for (const sort of ['newest', 'oldest', 'name']) {
+          const seen = [];
+          let cursor = null;
+          for (let batch = 0; batch < 6; batch++) {
+            const result = await page(sort, cursor);
+            assert.equal(result.total, 225);
+            assert.ok(result.leads.length <= 50);
+            seen.push(...result.leads);
+            cursor = result.nextCursor;
+            if (!cursor) break;
+          }
+          assert.equal(cursor, null);
+          assert.equal(seen.length, 225);
+          assert.equal(new Set(seen.map(lead => lead.id)).size, 225);
+          const ordering = sort === 'name' ? 'lower(full_name) collate "C" asc nulls last'
+            : `created_time ${sort === 'newest' ? 'desc' : 'asc'} nulls last`;
+          const expected = await db.query(`select id from public.leads where business_id=$1 order by ${ordering}, id`, [businessId]);
+          assert.deepEqual(seen.map(lead => lead.id), expected.rows.map(lead => lead.id));
+          assert.equal(sort === 'name' ? seen.at(-1).full_name : seen.at(-1).created_time, null);
+          assert.ok(seen.every(lead => lead.workflow_status === 'new' && lead.follow_up_note === ''));
+        }
+        const found = await page('newest', null, 'Enquiry 219');
+        assert.equal(found.total, 1);
+        const leadId = found.leads[0].id;
+        await session.query("update public.leads set workflow_status='booked', follow_up_note='Synthetic follow-up' where id=$1", [leadId]);
+        await session.query(`insert into public.leads (business_id, meta_lead_id, full_name) values ($1, 'inbox-219', 'Enquiry 219')
+          on conflict (business_id, meta_lead_id) do update set full_name=excluded.full_name`, [businessId]);
+        const booked = await page('newest', null, '', 'booked');
+        assert.equal(booked.total, 1);
+        assert.equal(booked.leads[0].follow_up_note, 'Synthetic follow-up');
+        assert.equal((await page('newest', null, '', 'all', 'ready')).total, 112);
+        assert.equal((await page('newest', null, '', 'all', 'missing')).total, 113);
+        await assert.rejects(session.query("update public.leads set follow_up_note=repeat('x',2001) where id=$1", [leadId]), { code: '23514' });
+        await assert.rejects(session.query("update public.leads set workflow_status='invalid' where id=$1", [leadId]), { code: '23514' });
+        await session.query("select set_config('request.jwt.claim.sub', $1, false)", [randomUUID()]);
+        await assert.rejects(page(), { code: '42501' });
+        assert.equal((await session.query("update public.leads set follow_up_note='foreign' where id=$1 returning id", [leadId])).rowCount, 0);
+        assert.equal((await session.query("select id from public.leads where business_id=$1", [businessId])).rowCount, 0);
+        await session.query("set role anon");
+        await assert.rejects(page(), { code: '42501' });
+      } finally {
+        await session.end();
+      }
+    });
+    if (process.argv.includes("--leads-only")) return;
 
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
       const profileId = randomUUID();
@@ -586,8 +652,12 @@ try {
   const workerMigration = await readFile(join(root, "db/migrations/20260919_campaign_worker.sql"), "utf8");
   const billingMigration = await readFile(join(root, "db/migrations/20260924_managed_billing.sql"), "utf8");
   const billingEventsMigration = await readFile(join(root, "db/migrations/20260924_meta_billing_events.sql"), "utf8");
+  const leadFollowUpMigration = await readFile(join(root, "db/migrations/20260926_lead_follow_up.sql"), "utf8");
+  const legacyLead = `insert into auth.users (id, email) values ('30000000-0000-4000-8000-000000000001', 'legacy@example.invalid');
+    insert into public.businesses (id, owner_id, name) values ('30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Legacy fixture');
+    insert into public.leads (business_id, meta_lead_id, full_name) values ('30000000-0000-4000-8000-000000000002', 'legacy-follow-up', 'Legacy enquiry');`;
   await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}`);
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

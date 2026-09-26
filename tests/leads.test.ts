@@ -1,6 +1,110 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { parseLeadFields } from "@/lib/leads/parse";
 import { buildLeadDigest, relativeAge } from "@/lib/leads/digest";
+import { leadListSchema, leadUpdateSchema } from "@/lib/leads/filters";
+import { getLeadPage } from "@/lib/leads/queries";
+import { GET } from "@/app/api/leads/route";
+import { PATCH } from "@/app/api/leads/[id]/route";
+
+const databaseMocks = vi.hoisted(() => ({
+  getUser: vi.fn(), business: vi.fn(), rpc: vi.fn(), from: vi.fn(), update: vi.fn(),
+  eq: vi.fn(), select: vi.fn(), maybeSingle: vi.fn(),
+}));
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
+  auth: { getUser: databaseMocks.getUser }, rpc: databaseMocks.rpc, from: databaseMocks.from,
+}) }));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: databaseMocks.business }));
+vi.mock("@/lib/observability/logger", () => ({ observeRoute: (_path: string, _method: string, handler: unknown) => handler }));
+
+describe("enquiry list and follow-up routes", () => {
+  const businessId = "10000000-0000-4000-8000-000000000001";
+  const leadId = "20000000-0000-4000-8000-000000000001";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    databaseMocks.getUser.mockResolvedValue({ data: { user: { id: "owner" } } });
+    databaseMocks.business.mockResolvedValue({ id: businessId });
+    databaseMocks.rpc.mockResolvedValue({ data: { leads: [], nextCursor: null, total: 225 }, error: null });
+    databaseMocks.from.mockReturnValue(databaseMocks);
+    databaseMocks.update.mockReturnValue(databaseMocks);
+    databaseMocks.eq.mockReturnValue(databaseMocks);
+    databaseMocks.select.mockReturnValue(databaseMocks);
+    databaseMocks.maybeSingle.mockResolvedValue({ data: { id: leadId, workflow_status: "booked", follow_up_note: "Synthetic" }, error: null });
+  });
+  const patch = (body: unknown, id = leadId) => PATCH(new Request(`http://localhost/api/leads/${id}`, {
+    method: "PATCH", body: JSON.stringify(body),
+  }), { params: Promise.resolve({ id }) });
+
+  it("returns the actual saved-record count with private no-store caching", async () => {
+    const response = await GET(new Request("http://localhost/api/leads?query=customer&status=booked&contact=ready"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ leads: [], total: 225, nextCursor: null });
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("get_lead_page", expect.objectContaining({
+      p_business_id: businessId, p_query: "customer", p_status: "booked", p_contact: "ready", p_limit: 50,
+    }));
+  });
+
+  it("binds opaque cursors to the tenant, filters and stable database position", async () => {
+    const position = { id: leadId, key: "2026-09-01T00:00:00.000001", missing: false };
+    databaseMocks.rpc.mockResolvedValueOnce({ data: { leads: [], total: 225, nextCursor: position }, error: null });
+    const first = await getLeadPage(businessId);
+    await getLeadPage(businessId, { cursor: first.nextCursor });
+    expect(databaseMocks.rpc).toHaveBeenLastCalledWith("get_lead_page", expect.objectContaining({
+      p_after_id: leadId, p_after_key: position.key, p_after_null: false,
+    }));
+    await expect(getLeadPage(businessId, { cursor: first.nextCursor, status: "booked" })).rejects.toThrow("Cursor");
+    await expect(getLeadPage("10000000-0000-4000-8000-000000000002", { cursor: first.nextCursor })).rejects.toThrow("Cursor");
+    expect(databaseMocks.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("requires authentication and refuses client-selected tenants or malformed cursors", async () => {
+    expect((await GET(new Request("http://localhost/api/leads?business_id=foreign"))).status).toBe(400);
+    expect((await GET(new Request("http://localhost/api/leads?cursor=garbage"))).status).toBe(400);
+    databaseMocks.getUser.mockResolvedValue({ data: { user: null } });
+    expect((await GET(new Request("http://localhost/api/leads"))).status).toBe(401);
+    expect((await patch({ workflow_status: "booked" })).status).toBe(401);
+    expect(databaseMocks.rpc).not.toHaveBeenCalled();
+    expect(databaseMocks.update).not.toHaveBeenCalled();
+  });
+
+  it("saves only owner-managed fields scoped to both row and server-derived business", async () => {
+    expect((await patch({ workflow_status: "booked", follow_up_note: "Synthetic" })).status).toBe(200);
+    expect(databaseMocks.update).toHaveBeenCalledWith({ workflow_status: "booked", follow_up_note: "Synthetic" });
+    expect(databaseMocks.eq).toHaveBeenCalledWith("id", leadId);
+    expect(databaseMocks.eq).toHaveBeenCalledWith("business_id", businessId);
+    expect((await patch({ workflow_status: "booked", phone: "forbidden" })).status).toBe(400);
+    expect(databaseMocks.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report success for foreign rows or database failures", async () => {
+    databaseMocks.maybeSingle.mockResolvedValue({ data: null, error: null });
+    expect((await patch({ follow_up_note: "Synthetic" })).status).toBe(404);
+    databaseMocks.maybeSingle.mockResolvedValue({ data: null, error: { message: "private database detail" } });
+    const failed = await patch({ follow_up_note: "Synthetic" });
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain("private database detail");
+    databaseMocks.rpc.mockResolvedValue({ data: null, error: { message: "private" } });
+    expect((await GET(new Request("http://localhost/api/leads"))).status).toBe(503);
+  });
+});
+
+describe("enquiry input boundaries", () => {
+  it("bounds server-side paging and rejects unknown filters", () => {
+    expect(leadListSchema.parse({})).toMatchObject({ limit: 50, sort: "newest", status: "all" });
+    expect(leadListSchema.parse({ limit: "100", query: "  customer  " }).query).toBe("customer");
+    for (const input of [{ limit: 101 }, { limit: 0 }, { business_id: "foreign" }, { status: "active" }]) {
+      expect(leadListSchema.safeParse(input).success).toBe(false);
+    }
+  });
+
+  it("accepts only bounded owner-managed follow-up fields", () => {
+    expect(leadUpdateSchema.parse({ workflow_status: "booked", follow_up_note: "Call Friday" }))
+      .toEqual({ workflow_status: "booked", follow_up_note: "Call Friday" });
+    for (const input of [{}, { phone: "changed" }, { business_id: "foreign" }, { workflow_status: "active" }, { follow_up_note: "x".repeat(2001) }]) {
+      expect(leadUpdateSchema.safeParse(input).success).toBe(false);
+    }
+  });
+});
 
 describe("parseLeadFields", () => {
   it("extracts common fields regardless of exact field names", () => {

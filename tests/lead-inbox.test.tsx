@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadInbox } from "@/components/lead-inbox";
 import type { Lead } from "@/lib/types";
@@ -23,12 +23,25 @@ const lead = (over: Partial<Lead> = {}): Lead =>
   }) as unknown as Lead;
 
 const setFetch = (impl: unknown) => {
-  global.fetch = vi.fn().mockResolvedValue(impl) as unknown as typeof fetch;
+  const response = impl as { ok: boolean; json: () => Promise<{ leads?: Lead[] }> };
+  global.fetch = vi.fn(async (url: string) => {
+    if (!url.startsWith("/api/leads?")) return impl;
+    const data = await response.json();
+    const params = new URL(url, "http://localhost").searchParams;
+    const query = params.get("query")?.toLowerCase() ?? "";
+    const contact = params.get("contact");
+    const leads = (data.leads ?? []).filter(row => {
+      const ready = Boolean(row.phone?.trim() || row.email?.trim());
+      return (!query || [row.full_name, row.email, row.phone, row.city, row.form_name].some(value => value?.toLowerCase().includes(query))) &&
+        (contact === "all" || ready === (contact === "ready"));
+    });
+    return { ok: response.ok, json: async () => ({ leads, total: leads.length, nextCursor: null }) };
+  }) as unknown as typeof fetch;
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
+  setFetch({ ok: true, json: async () => ({ leads: [], imported: 0, sync: { id: "sync-1", state: "complete", hasMore: false } }) });
 });
 
 describe("<LeadInbox> empty state", () => {
@@ -60,25 +73,27 @@ describe("<LeadInbox> Meta readiness", () => {
 });
 
 describe("<LeadInbox> table", () => {
-  it("searches contact and source details and clears an empty result", () => {
+  it("searches contact and source details on the server and clears an empty result", async () => {
+    setFetch({ ok: true, json: async () => ({ leads: [lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })] }) });
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })]} metaReady />);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search enquiries" }), { target: { value: "ravi@" } });
-    expect(screen.getByText("Ravi Shah")).toBeInTheDocument();
+    expect(await screen.findByText("Ravi Shah")).toBeInTheDocument();
     expect(screen.queryByText("Asha Verma")).toBeNull();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search enquiries" }), { target: { value: "no-match-123" } });
-    expect(screen.getByRole("heading", { name: "No matching enquiries" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No matching enquiries" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(await screen.findByText("Asha Verma")).toBeInTheDocument();
     expect(screen.getByText("Ravi Shah")).toBeInTheDocument();
   });
 
-  it("filters missing contact details without changing the overall counts", () => {
+  it("filters missing contact details using the matching saved-record count", async () => {
+    setFetch({ ok: true, json: async () => ({ leads: [lead(), lead({ id: "l2", full_name: "Ravi Shah", phone: null, email: null })] }) });
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead(), lead({ id: "l2", full_name: "Ravi Shah", phone: null, email: null })]} metaReady />);
     fireEvent.change(screen.getByRole("combobox", { name: "Contact availability" }), { target: { value: "missing" } });
     expect(screen.queryByText("Asha Verma")).toBeNull();
-    expect(screen.getByText("Ravi Shah")).toBeInTheDocument();
-    expect(screen.getByText("Total responses").nextSibling).toHaveTextContent("2");
-    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 enquiries");
+    expect(await screen.findByText("Ravi Shah")).toBeInTheDocument();
+    expect(screen.getByText("Matching responses").nextSibling).toHaveTextContent("1");
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 1 enquiries");
   });
 
   it("keeps the full digest collapsed until requested", () => {
@@ -101,8 +116,8 @@ describe("<LeadInbox> table", () => {
       />,
     );
     expect(screen.getByText("Total responses").nextSibling).toHaveTextContent("3");
-    expect(screen.getByText("Ready to contact").nextSibling).toHaveTextContent("2");
-    expect(screen.getByText("Areas represented").nextSibling).toHaveTextContent("2");
+    expect(screen.getByText("Loaded with contact").nextSibling).toHaveTextContent("2");
+    expect(screen.getByText("Loaded areas").nextSibling).toHaveTextContent("2");
   });
 
   it("lists each lead's contact details", () => {
@@ -118,7 +133,7 @@ describe("<LeadInbox> table", () => {
 
   it("makes an email-only enquiry actionable", () => {
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead({ phone: null })]} metaReady />);
-    expect(screen.getByText("Ready to contact").nextSibling).toHaveTextContent("1");
+    expect(screen.getByText("Loaded with contact").nextSibling).toHaveTextContent("1");
     expect(screen.getByRole("link", { name: "asha@example.com" })).toHaveAttribute("href", "mailto:asha@example.com");
     expect(screen.getByRole("columnheader", { name: "Contact" })).toBeInTheDocument();
   });
@@ -174,7 +189,7 @@ describe("<LeadInbox> syncing", () => {
     fireEvent.click(screen.getByRole("button", { name: /sync leads/i }));
 
     expect(await screen.findByText("Synced 2 leads from Meta.")).toBeInTheDocument();
-    expect(screen.getByText("Ravi K")).toBeInTheDocument();
+    expect(await screen.findByText("Ravi K")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" });
   });
 
@@ -224,7 +239,7 @@ describe("<LeadInbox> WhatsApp digest", () => {
   it("shows a shareable digest and a WhatsApp link", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
     expect(screen.getByText("WhatsApp digest")).toBeInTheDocument();
-    expect(screen.getByText("Last 7 days · Up to 10 contacts")).toBeInTheDocument();
+    expect(screen.getByText("Loaded enquiries · Last 7 days · Up to 10 contacts")).toBeInTheDocument();
     fireEvent.click(screen.getByText("WhatsApp digest"));
     const share = screen.getByRole("link", { name: /share on whatsapp/i });
     expect(share).toHaveAttribute("target", "_blank");
@@ -244,5 +259,121 @@ describe("<LeadInbox> WhatsApp digest", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText.mock.calls[0][0]).toContain("Solaride");
     expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
+  });
+});
+
+describe("<LeadInbox> saved enquiry workflow", () => {
+  it("keeps SSR totals, pages beyond the first batch and deduplicates rows", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      leads: [lead(), lead({ id: "later", full_name: "Beyond two hundred" })], total: 225, nextCursor: null,
+    }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} initialTotal={225} initialNextCursor="page-2" metaReady={false} />);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 225 enquiries");
+    fireEvent.click(screen.getByRole("button", { name: "Load more enquiries" }));
+    expect(await screen.findByText("Beyond two hundred")).toBeInTheDocument();
+    expect(screen.getAllByText("Asha Verma")).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("cursor=page-2"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 of 225 enquiries");
+  });
+
+  it("retains failed save edits, then persists status and note across reload", async () => {
+    let stored = lead({ workflow_status: "new", follow_up_note: "Confirmed note" });
+    let failSave = true;
+    const fetcher = vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "PATCH") {
+        if (failSave) return { ok: false, json: async () => ({ error: "Unavailable" }) };
+        stored = { ...stored, ...JSON.parse(String(options.body)) };
+        return { ok: true, json: async () => ({ lead: stored }) };
+      }
+      return { ok: true, json: async () => ({ leads: [stored], total: 1, nextCursor: null }) };
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const view = render(<LeadInbox businessName="Fixture" initialLeads={[stored]} metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.change(screen.getByLabelText("Follow-up status"), { target: { value: "booked" } });
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Friday appointment" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
+    expect(await screen.findByText(/Your edits are still here/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Friday appointment");
+    expect(stored.follow_up_note).toBe("Confirmed note");
+    failSave = false;
+    fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
+    expect(await screen.findByText("Follow-up saved.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Follow up Asha Verma" })).toHaveTextContent("booked"));
+    view.unmount();
+    render(<LeadInbox businessName="Fixture" initialLeads={[stored]} metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Friday appointment");
+    expect(screen.getByLabelText("Follow-up status")).toHaveValue("booked");
+    expect(fetcher.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(2);
+  });
+
+  it("refreshes the filtered list after partial sync and resumes without replacing it with sync rows", async () => {
+    let syncCalls = 0;
+    const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "/api/leads/sync") {
+        syncCalls++;
+        if (syncCalls === 2) expect(JSON.parse(String(options?.body))).toEqual({ syncId: "continuation-1" });
+        return { ok: true, json: async () => ({ leads: [lead({ id: "not-the-list", full_name: "Partial response only" })], imported: 0,
+          sync: { id: "continuation-1", state: syncCalls === 1 ? "partial" : "complete", hasMore: syncCalls === 1 } }) };
+      }
+      return { ok: true, json: async () => ({ leads: [lead({ workflow_status: "booked" })], total: 1, nextCursor: null }) };
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady />);
+    fireEvent.change(screen.getByLabelText("Workflow status"), { target: { value: "booked" } });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Sync leads" }));
+    expect(await screen.findByText(/Sync incomplete/)).toBeInTheDocument();
+    expect(screen.queryByText(/You're up to date/)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
+    expect(screen.queryByText("Partial response only")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Resume sync" }));
+    expect(await screen.findByText("You're up to date — no new leads.")).toBeInTheDocument();
+    expect(fetcher.mock.calls.filter(([url]) => url.startsWith("/api/leads?")).every(([url]) => url.includes("status=booked"))).toBe(true);
+  });
+
+  it("does not infer complete sync from a legacy response", async () => {
+    setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
+    render(<LeadInbox businessName="Fixture" initialLeads={[]} metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: "Sync leads" }));
+    expect(await screen.findByText("Sync finished. Completion could not be verified.")).toBeInTheDocument();
+    expect(screen.queryByText(/You're up to date/)).toBeNull();
+  });
+
+  it("aborts old searches and ignores responses that arrive after replacement", async () => {
+    let resolveOld!: (value: unknown) => void;
+    let oldSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((url: string, options: RequestInit) => {
+      if (url.includes("query=old")) {
+        oldSignal = options.signal as AbortSignal;
+        return new Promise(resolve => { resolveOld = resolve; });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ leads: [lead({ full_name: "Current result" })], total: 1, nextCursor: null }) });
+    }));
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady={false} />);
+    fireEvent.change(screen.getByLabelText("Search enquiries"), { target: { value: "old" } });
+    await waitFor(() => expect(oldSignal).toBeDefined());
+    fireEvent.change(screen.getByLabelText("Search enquiries"), { target: { value: "current" } });
+    expect(oldSignal?.aborted).toBe(true);
+    expect(await screen.findByText("Current result")).toBeInTheDocument();
+    await act(async () => resolveOld({ ok: true, json: async () => ({ leads: [lead({ full_name: "Stale result" })], total: 1, nextCursor: null }) }));
+    expect(screen.queryByText("Stale result")).toBeNull();
+  });
+
+  it("keeps loaded rows after a failed page and retries only on request", async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error("offline"));
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} initialTotal={225} initialNextCursor="next" metaReady />);
+    fireEvent.click(screen.getByRole("button", { name: "Load more enquiries" }));
+    expect(await screen.findByRole("button", { name: "Retry list" })).toBeInTheDocument();
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fetcher.mockResolvedValue({ ok: true, json: async () => ({ leads: [lead()], total: 225, nextCursor: "next" }) });
+    fireEvent.click(screen.getByRole("button", { name: "Retry list" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry list" })).toBeNull());
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
