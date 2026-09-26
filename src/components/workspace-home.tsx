@@ -328,6 +328,7 @@ export function WorkspaceHome({
               >
                 <span className="text-slate-700">
                   {describeAuditEvent(event.action, event.reason)}
+                  {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
                 </span>
                 <time
                   dateTime={event.created_at}
