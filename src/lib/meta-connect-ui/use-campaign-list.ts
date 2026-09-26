@@ -29,7 +29,7 @@ export function useCampaignList(input: {
     return client;
   });
   const [campaignQuery, setCampaignQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, updateStatusFilter] = useState("all");
   const search = campaignQuery.trim();
   const [settledSearch, setSettledSearch] = useState(search);
   const scopeKey = ["campaign-list", ownerId, businessId] as const;
@@ -89,6 +89,11 @@ export function useCampaignList(input: {
   const listLoading = query.isFetching || Boolean(search && search !== settledSearch);
   const reportError = useEffectEvent((error: Error) => onError(error.message));
   useEffect(() => { if (query.error) reportError(query.error); }, [query.error, query.errorUpdatedAt]);
+
+  function setStatusFilter(update: SetStateAction<string>) {
+    setSettledSearch(search);
+    updateStatusFilter(update);
+  }
 
   async function loadCampaignPage(append = false) {
     if (search && search !== settledSearch) return;

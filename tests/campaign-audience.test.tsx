@@ -113,6 +113,17 @@ describe("campaign list query cache", () => {
     expect(view.result.current.nextListCursor).toBe("fresh-cursor");
   });
 
+  it("requests a status change immediately even while search text is debouncing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [second], results: {}, nextCursor: null })));
+    const view = renderHook(useCampaignList, { initialProps: input() });
+    act(() => view.result.current.setCampaignQuery("second"));
+    expect(fetch).not.toHaveBeenCalled();
+    act(() => view.result.current.setStatusFilter("active"));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(fetch).mock.lastCall![0])).toContain("query=second&status=active");
+    await waitFor(() => expect(view.result.current.campaigns).toEqual([second]));
+  });
+
   it("does not retry or refetch on focus/reconnect and permits an explicit retry", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ error: "Read unavailable" }, { status: 503 }))
       .mockResolvedValue(Response.json({ campaigns: [second], results: {}, nextCursor: null })));
