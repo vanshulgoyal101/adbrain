@@ -6,17 +6,20 @@ settings before a release; the historical receipts below are not current status.
 
 ## Current Release Boundary
 
-Production `main` currently serves the enquiry workflow at `f639cc3`; payment
-collection is disabled. The selective operator-managed checkout candidate carries
-the accepted #48 payment source without #49's unfinished spend guard. Publish its
-code only through a protected main PR with required exact-head checks. Before
-enabling the payment callers, verify the AdBrain production target and apply the
-ordered `20260924_managed_billing.sql`, `20260924_meta_billing_events.sql`,
+Before this candidate, production `main` served the enquiry workflow at `f639cc3`;
+payment collection remained disabled. The selective operator-managed checkout
+candidate carries accepted #48 payment source without #49's unfinished spend
+guard. Publish its code only through a protected main PR with required exact-head
+checks. On September 26 at 18:46 UTC, the verified AdBrain production target
+applied `20260924_managed_billing.sql`, `20260924_meta_billing_events.sql`,
 `20260926_production_payment_orders.sql` and
-`20260926_production_payment_policy_v2.sql` migrations with preflight and
-recoverable backup. Do not replay the whole canonical schema or rewrite an
-applied migration checksum. Live credentials, merchant identity, webhook and tax
-status need independent verification; collection flags remain off until then.
+`20260926_production_payment_policy_v2.sql` together, after scoped encrypted
+before-state capture. Independent readback matched all four pinned ledger hashes,
+showed zero orders, preserved 4 businesses and 2 Meta connections, and confirmed
+server-only payment claim access. This scoped metadata snapshot is not a full
+database backup. Do not replay the whole canonical schema or rewrite an applied
+migration checksum. Live credentials, merchant identity, webhook and tax status
+need independent verification; collection flags remain off until then.
 Neither code deployment nor capture activates Meta advertising. Real charges,
 refunds and ad spend need separate financial authorization.
 
