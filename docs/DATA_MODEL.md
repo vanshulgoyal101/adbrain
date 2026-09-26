@@ -229,6 +229,47 @@ granted `razorpay_test_order_*` RPCs expose them. Test order states are `creatin
 or settlement. Runtime also requires explicitly enabled local test configuration;
 installing tables does not enable checkout. See [test API](API_REFERENCE.md#local-test-payments).
 
+### Customer Allowance Candidate
+
+Issue #49 adds [20260926_customer_ad_allowance.sql](../db/migrations/20260926_customer_ad_allowance.sql)
+after existing live-payment and trusted campaign objects. It is not yet copied into
+the canonical fresh schema or applied to a hosted database; DevOps owns integration.
+It reuses verified live payment orders/effects and immutable quote allocations,
+not pooled bank balances, order creation, test captures or automatic Meta funding.
+
+| Private table | Authority and purpose |
+| --- | --- |
+| `customer_ad_costs` | Campaign-bound cumulative media/tax high-water values, actual tax-rate evidence, freshness/finalization and sticky conflict hold |
+| `customer_ad_cost_evidence` | Immutable actor/campaign/evidence UUID/input records; same UUID with different input rejects |
+| `customer_ad_reservations` | One current campaign reservation with rotating UUID, tenant/merchant/Meta account, generation and campaign-ID binding, tax-inclusive ceiling, finite media limit, daily budget, state and in-flight fence |
+| `customer_refund_allocations` | Verified refund split and explicitly attested service earnings; capture does not earn service fees |
+| `customer_refund_allocation_evidence` | Immutable operator/evidence UUID/input history for allocation changes |
+
+All five tables have RLS and deny direct access even to service_role. Service-only
+`customer_ad_balance`, `customer_ad_reserve`, `customer_ad_activation_result`,
+`customer_ad_reconcile_costs` and `customer_ad_refund_allocation` RPCs use fixed
+search paths. Reads verify business ownership; financial evidence mutations verify
+the approved financial operator. Campaign/business restrictive foreign keys retain
+financial history rather than allowing deletion to free credit.
+
+Reservations, cost/allocation changes and the refund insertion guard share the
+existing `production-payments:<merchant>` transaction lock. Campaign active/budget
+writes fail immediately on competing accounting locks, avoiding inverted row-lock
+waits. Concurrent admissions/refunds cannot claim the same allowance. Campaigns
+with reservation or cost history cannot change their Meta campaign ID, even while
+paused; there is no implicit rebind or cap transfer. Cumulative cost increases
+consume reserved headroom rather than being charged repeatedly;
+tax, pending refund/dispute adjustments, stale costs and missing evidence stay
+distinct. Partial refunds hold new spend until their allocation matches verified
+refund totals. Service allocation and service-earned are different concepts.
+
+The initial offer reserves all available ad funds for one campaign. It is not a
+general multi-campaign wallet or accounting package. Attributed costs are currently
+operator-supplied evidence, not automatically collected provider lifetime invoices.
+Paused/final reconciliation requires the exact reservation, a settled activation
+dispatch and costs observed after pause. Refunds remain blocked while delivery or
+costs are unresolved. See [API and recovery limits](API_REFERENCE.md#customer-advertising-allowance).
+
 ### Enquiry Candidate Schema
 
 These changes are absent from baseline dev and the recorded production release:

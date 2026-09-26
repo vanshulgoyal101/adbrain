@@ -231,6 +231,39 @@ describe("campaign object binding", () => {
   });
 });
 
+describe("MetaClient.enforceCampaignSpendCap", () => {
+  const bound = () => vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+    .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }));
+  it("sets and reads back a finite minor-unit cap without increasing a lower limit", async () => {
+    const fetchMock = bound()
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: true, spend_cap: "0" }))
+      .mockResolvedValueOnce(Response.json({ success: true }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", spend_cap: "677966" }));
+    await new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966);
+    expect(String(fetchMock.mock.calls[3][1]?.body)).toContain("spend_cap=677966");
+    expect(fetchMock.mock.calls[4][1]?.method).toBe("GET");
+  });
+  it("preserves an existing stricter cap", async () => {
+    const fetchMock = bound()
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: true, spend_cap: "500000" }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", spend_cap: "500000" }));
+    await new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966);
+    expect(fetchMock.mock.calls.every(([,options])=>options?.method==="GET")).toBe(true);
+  });
+  it("rejects unsupported caps and changed read-back without removing the limit", async () => {
+    const fetchMock = bound().mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: false }));
+    await expect(new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966)).rejects.toThrow("finite campaign spending limit");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+  it("rejects a provider read-back above the reserved media allowance", async () => {
+    bound().mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: true, spend_cap: "0" }))
+      .mockResolvedValueOnce(Response.json({ success: true }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", spend_cap: "999999" }));
+    await expect(new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966)).rejects.toThrow("spending limit changed");
+  });
+});
+
 describe("MetaClient.updateCampaignStatus", () => {
   it("does not bind campaigns containing a different Page", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "set", status: "ACTIVE", daily_budget: "50000", promoted_object: { page_id: "other" } }] })));
