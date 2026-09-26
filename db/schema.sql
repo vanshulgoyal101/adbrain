@@ -851,6 +851,31 @@ grant select, insert, update, delete on public.campaign_operations to service_ro
 
 create unique index if not exists campaign_operations_draft_id_uidx on public.campaign_operations(draft_id);
 
+create or replace function public.initialize_owned_campaign_draft()
+returns trigger language plpgsql security invoker set search_path = pg_catalog, public as $$
+begin
+  if current_user = 'authenticated' then
+    if new.owner_id is distinct from auth.uid() or not public.owns_business(new.business_id) then
+      raise exception 'Draft owner mismatch' using errcode = '42501';
+    end if;
+    perform 1 from public.businesses where id = new.business_id for update;
+    if (select count(*) from public.campaign_drafts draft
+      where draft.business_id = new.business_id and draft.expires_at > now()
+        and not exists (select 1 from public.campaign_operations operation where operation.draft_id = draft.id)) >= 50 then
+      raise exception 'Draft limit reached' using errcode = '23514';
+    end if;
+    new.version := 1;
+    new.created_at := now();
+    new.updated_at := now();
+    new.expires_at := now() + interval '7 days';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.initialize_owned_campaign_draft() from public, anon, authenticated;
+create trigger initialize_owned_campaign_draft before insert on public.campaign_drafts
+  for each row execute function public.initialize_owned_campaign_draft();
+
 create or replace function public.update_campaign_draft_if_version(
   p_draft_id uuid,
   p_business_id uuid,
@@ -860,20 +885,45 @@ create or replace function public.update_campaign_draft_if_version(
   p_now timestamptz default now()
 )
 returns setof public.campaign_drafts
-language sql
-security invoker
-set search_path = public
-as $$
-  update public.campaign_drafts
-  set input = p_input, version = version + 1, updated_at = p_now
-  where id = p_draft_id and business_id = p_business_id and owner_id = p_owner_id
-    and version = p_expected_version and expires_at > p_now
-    and not exists (select 1 from public.campaign_operations where draft_id = p_draft_id)
-  returning *;
+language plpgsql security definer set search_path = pg_catalog, public as $$
+begin
+  if p_owner_id is distinct from auth.uid() or not public.owns_business(p_business_id) then
+    raise exception 'Draft owner mismatch' using errcode = '42501';
+  end if;
+  if p_expected_version < 1 or p_expected_version >= 9007199254740991
+    or p_input is null or jsonb_typeof(p_input) <> 'object' or octet_length(p_input::text) > 65536 then
+    raise exception 'Invalid draft input' using errcode = '23514';
+  end if;
+  perform 1 from public.campaign_drafts where id = p_draft_id
+    and business_id = p_business_id and owner_id = p_owner_id for update;
+  if not found then return; end if;
+  return query update public.campaign_drafts
+    set input = p_input, version = version + 1, updated_at = now()
+    where id = p_draft_id and version = p_expected_version and expires_at > now()
+      and not exists (select 1 from public.campaign_operations where draft_id = p_draft_id)
+    returning *;
+end;
 $$;
 
-revoke execute on function public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamptz) from public;
+revoke execute on function public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamptz) from public, anon, authenticated;
 grant execute on function public.update_campaign_draft_if_version(uuid, uuid, uuid, bigint, jsonb, timestamptz) to authenticated;
+
+create or replace function public.delete_campaign_draft_if_version(p_draft_id uuid, p_expected_version bigint)
+returns setof public.campaign_drafts
+language plpgsql security definer set search_path = pg_catalog, public as $$
+begin
+  perform 1 from public.campaign_drafts where id = p_draft_id and owner_id = auth.uid()
+    and public.owns_business(business_id) for update;
+  if not found then return; end if;
+  return query delete from public.campaign_drafts
+    where id = p_draft_id and version = p_expected_version
+    returning *;
+end;
+$$;
+revoke all on function public.delete_campaign_draft_if_version(uuid, bigint) from public, anon, authenticated;
+grant execute on function public.delete_campaign_draft_if_version(uuid, bigint) to authenticated;
+revoke all on public.campaign_drafts from public, anon, authenticated;
+grant select, insert on public.campaign_drafts to authenticated;
 
 create or replace function public.claim_campaign_operation(
   p_operation_id uuid, p_business_id uuid, p_draft_id uuid, p_draft_version bigint,
@@ -1093,6 +1143,46 @@ create policy "audit_log: insert own"
   on public.audit_log for insert
   with check (business_id is not null and public.owns_business(business_id));
 
+revoke all on public.campaigns, public.campaign_results, public.audit_log from public, anon, authenticated;
+grant select on public.campaigns, public.campaign_results, public.audit_log to authenticated;
+revoke delete, truncate on public.businesses from public, anon, authenticated;
+revoke all on public.audit_log from service_role;
+grant select on public.audit_log to service_role;
+alter table public.audit_log add column authority text not null default 'legacy_unverified'
+  check (authority in ('legacy_unverified', 'server'));
+
+create or replace function public.append_verified_audit_event(
+  p_business_id uuid, p_actor_id uuid, p_action text, p_entity_type text,
+  p_entity_id text default null, p_meta_object_id text default null,
+  p_reason text default null, p_details jsonb default '{}', p_system_actor text default null
+)
+returns uuid language plpgsql security definer set search_path = pg_catalog, public as $$
+declare
+  actor_label text;
+  event_id uuid;
+begin
+  if p_actor_id is not null then
+    perform 1 from public.businesses where id = p_business_id and owner_id = p_actor_id for share;
+    if not found or p_system_actor is not null then
+      raise exception 'Audit owner mismatch' using errcode = '42501';
+    end if;
+    select coalesce(email, 'owner') into actor_label from auth.users where id = p_actor_id;
+  else
+    if p_system_actor is null or p_system_actor not in ('cron', 'worker') then
+      raise exception 'Explicit system identity required' using errcode = '23514';
+    end if;
+    actor_label := p_system_actor;
+  end if;
+  insert into public.audit_log(business_id, actor_id, actor_label, action, entity_type,
+    entity_id, meta_object_id, reason, details, authority, created_at)
+  values (p_business_id, p_actor_id, actor_label, p_action, p_entity_type,
+    p_entity_id, p_meta_object_id, p_reason, p_details, 'server', now()) returning id into event_id;
+  return event_id;
+end;
+$$;
+revoke all on function public.append_verified_audit_event(uuid, uuid, text, text, text, text, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.append_verified_audit_event(uuid, uuid, text, text, text, text, text, jsonb, text) to service_role;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  leads: instant-form leads pulled from Meta into one inbox
 -- ════════════════════════════════════════════════════════════════════════
@@ -1289,6 +1379,35 @@ create policy "spend_limits: all own"
   using (public.owns_business(business_id))
   with check (public.owns_business(business_id));
 
+alter table public.campaigns
+  add constraint campaigns_budget_finite_nonnegative
+    check (daily_budget is null or (daily_budget >= 0 and daily_budget < 'Infinity'::numeric));
+alter table public.campaign_results
+  add constraint campaign_results_metrics_safe
+    check (impressions between 0 and 9007199254740991
+      and clicks between 0 and 9007199254740991
+      and leads between 0 and 9007199254740991
+      and (conversations is null or conversations between 0 and 9007199254740991)),
+  add constraint campaign_results_costs_finite_nonnegative
+    check (spend >= 0 and spend < 'Infinity'::numeric
+      and (cpl is null or (cpl >= 0 and cpl < 'Infinity'::numeric))
+      and (cost_per_conversation is null or (cost_per_conversation >= 0 and cost_per_conversation < 'Infinity'::numeric))),
+  add constraint campaign_results_period_order
+    check ((period_start is null and period_end is null)
+      or (period_start is not null and period_end is not null
+        and isfinite(period_start) and isfinite(period_end) and period_start <= period_end)),
+  add constraint campaign_results_fetched_finite check (isfinite(fetched_at));
+alter table public.spend_limits
+  add constraint spend_limits_positive_cap check (weekly_cap_rupees is null or weekly_cap_rupees > 0);
+alter table public.campaigns add constraint campaigns_business_id_id_key unique (business_id, id);
+alter table public.leads
+  add constraint leads_same_business_campaign foreign key (business_id, campaign_id)
+    references public.campaigns(business_id, id) on delete set null (campaign_id);
+alter table public.campaign_operations
+  add constraint operations_same_business_campaign foreign key (business_id, campaign_id)
+    references public.campaigns(business_id, id) on delete set null (campaign_id),
+  add constraint operations_same_business_draft foreign key (business_id, draft_id)
+    references public.campaign_drafts(business_id, id) on delete restrict;
 
 
 

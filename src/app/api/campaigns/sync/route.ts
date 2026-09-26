@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCampaignPage, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection, getConnectionStatus } from "@/lib/meta/connection-access";
 import { z } from "zod";
+import { saveCampaign } from "@/lib/campaign/trusted-write";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -59,9 +60,7 @@ async function handlePOST(request?: Request) {
         if (error) throw new Error("Campaign storage unavailable.");
         if ((existing?.meta_ad_account_id && existing.meta_ad_account_id !== row.meta_ad_account_id)
           || (existing?.meta_page_id && existing.meta_page_id !== row.meta_page_id)) { skipped += 1; continue; }
-        const saved = existing
-          ? await supabase.from("campaigns").update(row).eq("id", existing.id).eq("business_id", context.businessId)
-          : await supabase.from("campaigns").insert(row);
+        const saved = await saveCampaign(context, row, existing?.id);
         if (saved.error) throw new Error("Campaign save failed.");
       }
       return { skipped, nextCursor: page.nextCursor };

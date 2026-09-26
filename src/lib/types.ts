@@ -467,6 +467,7 @@ export interface Database {
       };
       audit_log: {
         Row: {
+          authority: "legacy_unverified" | "server";
           id: string;
           business_id: string | null;
           actor_id: string | null;
@@ -480,6 +481,7 @@ export interface Database {
           created_at: string;
         };
         Insert: {
+          authority?: "legacy_unverified" | "server";
           id?: string;
           business_id?: string | null;
           actor_id?: string | null;
@@ -552,6 +554,12 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      append_verified_audit_event: {
+        Args: { p_business_id: string; p_actor_id: string | null; p_action: string; p_entity_type: string;
+          p_entity_id?: string | null; p_meta_object_id?: string | null; p_reason?: string | null;
+          p_details?: Json; p_system_actor?: "cron" | "worker" | null };
+        Returns: string;
+      };
       enqueue_campaign_operation: {
         Args: { p_operation_id: string; p_input: Json; p_request_hash: string };
         Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
@@ -571,6 +579,10 @@ export interface Database {
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number };
         Returns: { allowed: boolean; retry_after_ms: number }[];
+      };
+      delete_campaign_draft_if_version: {
+        Args: { p_draft_id: string; p_expected_version: number };
+        Returns: Database["public"]["Tables"]["campaign_drafts"]["Row"][];
       };
       update_campaign_draft_if_version: {
         Args: {
@@ -776,6 +788,26 @@ export interface Database {
       meta_revoke_subject: {
         Args: { p_subject_id: string };
         Returns: number;
+      };
+      razorpay_test_order_claim: {
+        Args: { p_business_id: string; p_user_id: string; p_request_key: string; p_order_id: string; p_account_id: string; p_key_id: string };
+        Returns: Json;
+      };
+      razorpay_test_order_result: {
+        Args: { p_order_id: string; p_provider_order_id: string | null };
+        Returns: Json;
+      };
+      razorpay_test_order_get: {
+        Args: { p_order_id: string; p_user_id: string };
+        Returns: Json;
+      };
+      razorpay_test_order_find: {
+        Args: { p_provider_order_id: string; p_account_id: string; p_key_id: string };
+        Returns: Json;
+      };
+      razorpay_test_order_observe: {
+        Args: { p_order_id: string; p_account_id: string; p_key_id: string; p_event_id: string; p_payload_hash: string; p_payment_id: string; p_outcome: string };
+        Returns: Json;
       };
     };
     Enums: Record<string, never>;

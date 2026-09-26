@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload } from "@/lib/campaign/activation";
+import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -154,10 +155,8 @@ async function handlePATCH(
     return serverError("campaign.status", err, "Could not update the campaign.");
   }
 
-  const { error } = await supabase
-    .from("campaigns")
-    .update({ status: action })
-    .eq("id", id);
+  const { error } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: action }, id)
+    .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
   if (error) {
     return serverError("campaign.status", error, "Could not update the campaign.");
   }
@@ -241,7 +240,8 @@ async function handleDELETE(
     );
   }
 
-  const { error } = await supabase.from("campaigns").delete().eq("id", id);
+  const { error } = await deleteVerifiedCampaign({ businessId: campaign.business_id, userId: user.id }, id)
+    .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
   if (error) {
     return serverError("campaign.delete", error, "Could not delete the campaign.");
   }

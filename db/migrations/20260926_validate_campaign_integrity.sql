@@ -1,0 +1,9 @@
+alter table public.campaigns validate constraint campaigns_budget_finite_nonnegative;
+alter table public.campaign_results validate constraint campaign_results_metrics_safe;
+alter table public.campaign_results validate constraint campaign_results_costs_finite_nonnegative;
+alter table public.campaign_results validate constraint campaign_results_period_order;
+alter table public.campaign_results validate constraint campaign_results_fetched_finite;
+alter table public.spend_limits validate constraint spend_limits_positive_cap;
+alter table public.leads validate constraint leads_same_business_campaign;
+alter table public.campaign_operations validate constraint operations_same_business_campaign;
+alter table public.campaign_operations validate constraint operations_same_business_draft;
