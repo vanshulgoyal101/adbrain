@@ -12,11 +12,20 @@ restart ongoing work. Read this section and your issue, then act within scope.
 
 | Worker | Current outcome | Next useful action |
 | --- | --- | --- |
-| Dev 2 | Finish [#27 / PR #29](https://github.com/vanshulgoyal101/adbrain/pull/29) | Incorporate config repair 1a04cd2 or corrected dev into the ff4615f candidate, verify rules and publish the reviewed repair. Do not wait for another project-level policy investigation |
-| DevOps | Commit and reconcile the existing local backlog first | Policy PR #32 is shipped/verified. Use the resolved content below, preserve unpublished work and released fixes, then commit coherent backlog batches before another feature release. Return commit IDs and remaining local counts |
-| Dev | Finish [#28 / PR #31](https://github.com/vanshulgoyal101/adbrain/pull/31) | Incorporate config repair 1a04cd2 or corrected dev into the reviewed bab47d0 candidate, verify rules and update the PR. No new feature work |
-| QA | Review new integration deltas only | Existing application and policy-logic reviews stand. Review candidate changes/conflicts only; no full review replay merely because CI or deployment completed |
-| Coordinator | Priorities and genuine cross-owner decisions | The three documented reconciliation content conflicts are now resolved locally; no additional coordinator approval is needed for their recorded resolution |
+| Dev 2 | Finish #27 handoff, then [#34 lead import](https://github.com/vanshulgoyal101/adbrain/issues/34) | Update/publish the existing repaired candidate with corrected deployment config first. Then implement complete resumable import on a new isolated issue branch; do not wait for shared-checkout cleanup |
+| DevOps | Ship the completed code-only release first | Owner selected code-only promotion while migrations remain pending. Finish the existing SDK/query integration, required checks and protected production release. Exclude DB-A-dependent callers until their schema rollout is separately approved; report deployed SHA and deferred batches |
+| Dev | Finish #28 handoff, then [#35 follow-up inbox](https://github.com/vanshulgoyal101/adbrain/issues/35) | Update/publish the reviewed candidate with corrected deployment config first. Then implement paginated saved-lead listing and persistent follow-up on its own issue branch |
+| QA | Review backlog first, then the enquiry milestone | Prioritize DevOps' actual backlog candidates; review #34/#35 as code arrives using existing lead regressions and one combined owner workflow. No generic audit or repeat of completed reviews |
+| Coordinator | Priorities and genuine cross-owner decisions | The three reconciliation content decisions are resolved. Owner explicitly chose code-only release first; no DB-A migration approval was granted |
+
+Current release decision: code-only first. Production DB-A migrations and their
+dependent application changes remain pending; do not infer approval from the
+general request to ship all completed features. Test-only payments stay disabled.
+The SDK/query lock merge may legitimately change @standard-schema/spec 1.1.0 from
+dev-only to runtime because @ai-sdk/provider-utils requires it. Preserve its
+version/resolved artifact/integrity; an exact match to the old dev flag is not a
+release gate. The focused integration finding is recorded on PR #31. Reuse
+unchanged feature evidence and run required checks on the assembled candidate.
 
 Reconciliation handoff: current [payment plan](PAYMENTS-PLAN.md) preserves the
 INR 10,000 annual-total allocation and the unformalized future Solaride arrangement;
@@ -28,6 +37,20 @@ other pending hunks during Git reconciliation; overlapping text may still requir
 manual merge resolution. Bring forward the published G-2 repair rather than
 overwriting it with the older shared Studio copy. No files are staged or committed
 by this content repair; DevOps owns that next operation and the final counts.
+
+## Next Delivery
+
+[Milestone 2: Enquiries to follow-up](https://github.com/vanshulgoyal101/adbrain/milestone/2)
+is prepared, not implemented. #34 (Dev 2) owns complete/resumable provider import;
+#35 (Dev) owns paginated listing, saved workflow status/note and inbox interaction.
+GitHub issues contain the agreed small API and acceptance criteria; do not draft
+another competing contract or duplicate their checklists here. Dev owns combined
+db/schema.sql integration; Dev 2 supplies its sync-specific migration/type additions.
+Import must preserve owner-managed follow-up values. Final end-to-end acceptance
+requires both changes; each can be built with synthetic fixtures independently.
+Finish or explicitly hand off the prior PR before starting a new active packet.
+No new queue/CRM framework, live outreach/ad spending or production migration
+permission is included. DevOps' existing-backlog priority is unchanged.
 
 ### Publication Policy Mismatch
 
@@ -95,6 +118,8 @@ SDK adoption does not close the parked delivery/spend safety work or CONTRACT-BC
 | --- | --- |
 | #27 issue code and dependency files in `/tmp/adbrain-issue-27-o9` | Dev 2 |
 | #28 issue code and dependency files in `/tmp/adbrain-issue-28-o9` | Dev |
+| #34 Meta lead/form paging, sync route/modules, sync-specific migration/types and existing related tests on its new issue branch | Dev 2; no campaign mutation changes |
+| #35 inbox/page/CSS, lead list/update routes, lead-row fields, follow-up migration/tests and combined schema integration on its new issue branch | Dev; no edits to Dev 2's sync implementation |
 | G-2 candidate `/tmp/adbrain-o8-ePtVWk/g2`; shared Git/index/lockfile integration; CI/hosting and release mechanics | DevOps |
 | Independent review, QA fixtures and e2e acceptance assertions | QA; product repairs stay with the author |
 | Current plan, root worker instructions and priority conflicts | Coordinator |

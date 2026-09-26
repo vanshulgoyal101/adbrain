@@ -5,6 +5,39 @@ CONTRACT-BC: **DRAFT / not accepted**. QA case proposal: QA-BC-cases-1.
 The O-1 filename is retained as directed by the coordinator. This is a new
 artifact/contract receipt, not a change to historical candidate acceptance.
 
+## O-11 Backlog Reconciliation Review
+
+QA **accepts the source-preservation/reconciliation scope**, conditional on
+required assembled-candidate CI, at `e8962b4a6c821ed0e9debc72b437da45c200b4e5`
+against released `174d3585ed3357dbd10131b2ed68434763589d32`. No new regression
+found. Reviewed batches: `63931ef`, `8b82a5e`, `f57c75d`, `5f047fe`,
+`ea45c71`, `979245f`, and their reconciliation merge. No backlog PR is open
+yet; this receipt is the review handoff to DevOps.
+
+The merge tree equals its validated first parent. All 27 changed application/DB
+files and both dependency manifests match retained independent-QA candidate B;
+reuse its acceptance and existing limitations, not a claim that all parked
+workflows now pass. Released Studio/tests, instruction query and deployment
+configuration are unchanged. Both shipped operator assertions and the new
+payment tests remain. The resolved plans retain Vanshul Goyal as current
+operator, unformalized future Solaride ownership, INR 10,000 annual total,
+20:80 allocation and tax-inclusive Meta costs. The identity-only release boundary
+is retained. Test payments remain local-only and cannot grant advertising credit.
+
+Reused DevOps-reported 264 focused tests/15 files, disposable fresh/upgrade SQL
+and secret/whitespace checks, plus prior matching QA evidence. No suite, build,
+database or provider replay. CI uses Node 24; artifact exclusions do not remove
+source, tests or e2e. Production schema changes still require the documented
+preflight, quiescence/compatible rollout and explicit migration authorization;
+this is not approval for live payments or managed delivery. The current O-11
+hosted policy receipt supersedes this document's older blanket-hold checkpoint.
+
+Next: DevOps supplies the eventual release candidate/PR and required CI. Enquiry
+review has no delivered candidate yet: #34 remains clean at released base;
+#35 has uncommitted filter-helper/test work only. Leave that active work with its
+owner; review completed deltas and the combined import-to-follow-up workflow
+when delivered. Completed G-1/G-2 and #27/#28 reviews were not repeated.
+
 ## O-11 Deployment Policy Draft Review
 
 QA accepts the configuration logic of the uncommitted one-line

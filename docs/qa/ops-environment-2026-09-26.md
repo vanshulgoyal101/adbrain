@@ -6,7 +6,59 @@ production rollout approval or packet closure**. Governing backlog:
 [release rules](../RELEASING.md) and the latest
 [DB-A developer handoff](db-a-dev-a-handoff-2026-09-26.md).
 
+## O-11 SDK and Query Release
+
+**Shipped through protected [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36).**
+PR #29 head `7cc9e62d4ee7047764293bdba108024fc885145f` merged as `35acbf6`;
+PR #31 head `db2179eee879630493fe5b69a066818c4707ea7b` then merged as candidate
+`4c8dd56e1149ae4519e63ccb1b73772a094c25ef`. Production merge:
+`6291dc2d2691bfc8a235b2aa1b103f119b26b83e`. Existing QA approvals were reused.
+The only integration conflicts were adjacent manifest entries for AI SDK and
+TanStack Query. Structured validation preserved all 672 lockfile entries,
+including the SDK's runtime classification of `@standard-schema/spec`; package
+versions, resolved artifacts and integrity were retained. Application code was
+not rewritten for integration. No completed local suite was restarted.
+
+Required CI passed on both source heads
+([#29](https://github.com/vanshulgoyal101/adbrain/actions/runs/36246054735),
+[#31](https://github.com/vanshulgoyal101/adbrain/actions/runs/36246051296)),
+the assembled [dev](https://github.com/vanshulgoyal101/adbrain/actions/runs/36246375768)
+and [release PR](https://github.com/vanshulgoyal101/adbrain/actions/runs/36246436124),
+and [main](https://github.com/vanshulgoyal101/adbrain/actions/runs/36246804645).
+Production `dpl_EnA1LRC9hiegYy55GDp956J3U5PX` is READY at the exact merge,
+with canonical alias `adbrain.vanshul.com`, Node 24.x and region hnd1.
+
+At `2026-09-26T14:00:13.417Z`, authenticated Campaigns returned 200 at the
+actual 485x584 viewport with no horizontal overflow. Four real list GETs
+verified active/paused filters, empty search results and return to all results;
+each returned 200, tenant scope and a request ID. An authenticated invalid GET
+to the generation module returned 400 with a request ID, without generation.
+The assertion pass blocked client POSTs for auto-sync and telemetry. An earlier
+sign-in navigation used the page's normal auto-sync before that guard; this is
+not a claim of zero provider reads or zero local synchronization throughout the
+session. No ad-state action, paid generation, payment or migration was initiated.
+The first filter attempt preceded hydration and sent no list request; retrying
+after the mount effect completed passed. Cross-page pagination was not exercised;
+reuse the existing scoped browser/tests. Live AI-provider behavior remains unverified.
+
+The corrected source heads and release branch produced no Vercel deployments.
+Authenticated metadata covered all 87 deployments before promotion and showed
+preview SSO, 29 production-only project variables, no preview variables and no
+branch overrides. Reuse the bounded historical isolation checks below, not a
+retrospective absence-of-exposure claim. Only main intentionally deployed.
+
+The original 77-path backlog remains preserved by `63931ef`, `8b82a5e`,
+`f57c75d`, `5f047fe`, `ea45c71`, `979245f` and reconciliation `e8962b4`.
+Shared dev sync `39d4200ce5c57b8a0bc0c33eafdbd40fd184a89d` retains that work
+and the production release; its 684-entry dependency union preserves Razorpay
+2.9.8. The final publication/CI receipt is attached to PR #36. DB-A migrations
+and dependent callers, local test checkout and #34/#35 are not in this release.
+Production migration approval remains outstanding; test payments remain disabled.
+
 ## O-11 Preview Policy Hold
+
+Historical repair checkpoint; current candidate prerequisites were satisfied
+and the resulting code-only release is recorded above.
 
 **Policy defect fixed and hosted-verified in [PR #32](https://github.com/vanshulgoyal101/adbrain/pull/32);
 older feature candidates remain held.** After the read-only investigation, the
