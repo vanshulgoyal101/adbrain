@@ -4,11 +4,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -45,6 +46,147 @@ async function check(label, run) {
   }
 }
 
+async function verifyRollback() {
+  const fallback = "ce89976815a58cc17ac580130fdc1798ef62910e";
+  const candidate = "273cbf80422f8c89b851dfc2fcfa85bff878104f";
+  const baseline = "6291dc2d2691bfc8a235b2aa1b103f119b26b83e";
+  const source = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], { cwd: root, encoding: "utf8" });
+  const migrations = [
+    ["20260926_campaign_integrity.sql", "f982ef1782a0166cbd4ebae7f696ce0a748bc1e744132d539fe385e4cf6717cf"],
+    ["20260926_draft_authority.sql", "0d8e5fff0eaa7e1a728fec0087eac513c0cd7cf609dd4522097e720b1d18ebd2"],
+    ["20260926_trusted_campaign_writes.sql", "c0cbe8418fd608dba782ccbe384fdb3205150d682236ccd221ef8f6892038306"],
+    ["20260926_validate_campaign_integrity.sql", "8d6149ba4d4f3fcf4c13d6369c518fe24832d6b8a03425a0cfd1257521b27224"],
+    ["20260926_lead_sync_progress.sql", "e769403c7cc39e7dff7ad11c8a9224a1c0a64535314bd435ace6ed0a54d5c7c5"],
+    ["20260926_lead_follow_up.sql", "92fe5ec785017b262614fee5a49446898a852170c79268ca58bd77fca48271af"],
+  ];
+  const admin = client();
+  await admin.connect();
+  try { await admin.query("create database rollback_compatibility"); }
+  finally { await admin.end(); }
+  const db = client("rollback_compatibility");
+  await db.connect();
+  try {
+    await db.query(bootstrap);
+    const schema = source(baseline, "db/schema.sql");
+    console.log(`Rollback fallback ${fallback}; baseline schema SHA256 ${createHash("sha256").update(schema).digest("hex")}`);
+    await db.query(schema);
+    for (const [name, checksum] of migrations) {
+      const sql = source(candidate, `db/migrations/${name}`);
+      assert.equal(createHash("sha256").update(sql).digest("hex"), checksum, name);
+      assert.equal(await applyMigration(db, name, sql), "applied");
+      assert.equal(await applyMigration(db, name, sql), "already_applied");
+      console.log(`PASS rollback: applied immutable ${name} ${checksum}`);
+    }
+    await check("rollback: post-revocation grants keep old main writes denied", async () => {
+      const { rows } = await db.query(`select
+        has_table_privilege('authenticated','public.campaigns','UPDATE') as campaign_write,
+        has_table_privilege('authenticated','public.campaign_results','INSERT') as result_write,
+        has_table_privilege('authenticated','public.campaign_drafts','UPDATE') as draft_write,
+        has_table_privilege('service_role','public.campaigns','UPDATE') as trusted_write`);
+      assert.deepEqual(rows, [{ campaign_write: false, result_write: false, draft_write: false, trusted_write: true }]);
+    });
+    for (const path of ["src/lib/campaign/trusted-write.ts", "src/lib/audit.ts", "src/app/api/campaign-drafts/[id]/route.ts"]) {
+      assert.equal(source(fallback, path), source(candidate, path), path);
+    }
+    const ownerId = randomUUID();
+    const otherOwnerId = randomUUID();
+    const businessId = randomUUID();
+    const otherBusinessId = randomUUID();
+    const campaignId = randomUUID();
+    const otherCampaignId = randomUUID();
+    const draftId = randomUUID();
+    await db.query("insert into auth.users(id,email) values ($1,'fallback@example.invalid'),($2,'other@example.invalid')", [ownerId, otherOwnerId]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Fallback'),($3,$4,'Other')", [businessId, ownerId, otherBusinessId, otherOwnerId]);
+    await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200)", [otherCampaignId, otherBusinessId]);
+    await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_fixture','page_fixture')", [businessId]);
+    const session = client("rollback_compatibility");
+    await session.connect();
+    try {
+      await check("rollback: scoped service campaign/result writes and integrity constraints", async () => {
+        await session.query("set role service_role");
+        const owner = async userId => session.query("select id from public.businesses where id=$1 and owner_id=$2", [businessId, userId]);
+        assert.equal((await owner(ownerId)).rowCount, 1);
+        assert.equal((await owner(otherOwnerId)).rowCount, 0);
+        await session.query("insert into public.campaigns(id,business_id,objective,daily_budget) values ($1,$2,'leads',200) returning *", [campaignId, businessId]);
+        assert.equal((await session.query("update public.campaigns set status='paused',business_id=$1 where business_id=$1 and id=$2 returning *", [businessId, campaignId])).rowCount, 1);
+        assert.equal((await session.query("update public.campaigns set status='paused',business_id=$1 where business_id=$1 and id=$2 returning *", [businessId, otherCampaignId])).rowCount, 0);
+        const membership = async id => session.query("select id from public.campaigns where business_id=$1 and id=$2", [businessId, id]);
+        assert.equal((await membership(campaignId)).rowCount, 1);
+        assert.equal((await membership(otherCampaignId)).rowCount, 0);
+        assert.equal((await session.query("insert into public.campaign_results(campaign_id,spend,impressions) values ($1,10,100) returning *", [campaignId])).rowCount, 1);
+        await assert.rejects(session.query("insert into public.campaign_results(campaign_id,spend) values ($1,-1)", [campaignId]), { code: "23514" });
+      });
+      await check("rollback: owner and wrong-owner reads, browser and anonymous mutation denials", async () => {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        assert.equal((await session.query("select * from public.campaigns where business_id=$1", [businessId])).rowCount, 1);
+        assert.equal((await session.query("select * from public.campaign_results where campaign_id=$1", [campaignId])).rowCount, 1);
+        await assert.rejects(session.query("update public.campaigns set status='active' where id=$1", [campaignId]), { code: "42501" });
+        await assert.rejects(session.query("insert into public.campaign_results(campaign_id,spend) values ($1,1)", [campaignId]), { code: "42501" });
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
+        assert.equal((await session.query("select * from public.campaigns where business_id=$1", [businessId])).rowCount, 0);
+        assert.equal((await session.query("select * from public.campaign_results where campaign_id=$1", [campaignId])).rowCount, 0);
+        await session.query("set role anon");
+        await assert.rejects(session.query("select * from public.campaigns"), { code: "42501" });
+      });
+      await check("rollback: fallback draft RPC arguments preserve owner and version fences", async () => {
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        await session.query("insert into public.campaign_drafts(id,business_id,owner_id,input) values ($1,$2,$3,'{}')", [draftId, businessId, ownerId]);
+        const update = async version => session.query("select * from public.update_campaign_draft_if_version($1,$2,$3,$4,'{}',now())", [draftId, businessId, ownerId, version]);
+        assert.equal(Number((await update(1)).rows[0].version), 2);
+        assert.equal((await update(1)).rowCount, 0);
+        await assert.rejects(session.query("update public.campaign_drafts set version=99 where id=$1", [draftId]), { code: "42501" });
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
+        assert.equal((await session.query("select * from public.campaign_drafts where id=$1 and owner_id=$2", [draftId, ownerId])).rowCount, 0);
+        await assert.rejects(update(2), { code: "42501" });
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId])).rowCount, 0);
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,1)", [draftId])).rowCount, 0);
+        assert.equal((await session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId])).rowCount, 1);
+      });
+      await check("rollback: fallback audit RPC derives trusted identity and denies spoofing", async () => {
+        const append = actor => session.query("select public.append_verified_audit_event($1,$2,'campaign.refresh','campaign',null,null,null,'{}') as id", [businessId, actor]);
+        await session.query("set role service_role");
+        const eventId = (await append(ownerId)).rows[0].id;
+        const { rows } = await session.query("select actor_id,actor_label,authority from public.audit_log where id=$1", [eventId]);
+        assert.deepEqual(rows, [{ actor_id: ownerId, actor_label: "fallback@example.invalid", authority: "server" }]);
+        await assert.rejects(append(otherOwnerId), { code: "42501" });
+        await assert.rejects(append(null), { code: "23514" });
+        for (const role of ["service_role", "authenticated", "anon"]) {
+          await session.query(`set role ${role}`);
+          await assert.rejects(session.query("insert into public.audit_log(action,entity_type) values ('forged','campaign')"), { code: "42501" });
+          if (role !== "service_role") await assert.rejects(append(ownerId), { code: "42501" });
+        }
+      });
+      await check("rollback: legacy lead query/import preserves follow-up and unfinished sync evidence", async () => {
+        await session.query("set role service_role");
+        const run = (await session.query("select * from public.lead_sync_start($1,$2,null,1,'act_fixture','page_fixture')", [businessId, ownerId])).rows[0];
+        await session.query("set role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
+        await session.query("insert into public.leads(business_id,campaign_id,meta_lead_id,full_name,workflow_status,follow_up_note,field_data) values ($1,$2,'retained','Original','qualified','Keep this note','{\"source\":\"fixture\"}')", [businessId, campaignId]);
+        const before = (await session.query("select * from public.leads where business_id=$1 order by created_time desc nulls last limit 200", [businessId])).rows[0];
+        const legacyImport = (business, metaId) => session.query("insert into public.leads(business_id,meta_lead_id,full_name,field_data) values ($1,$2,'Incoming','{}') on conflict(business_id,meta_lead_id) do nothing returning *", [business, metaId]);
+        assert.equal((await legacyImport(businessId, "retained")).rowCount, 0);
+        assert.deepEqual((await session.query("select * from public.leads where id=$1", [before.id])).rows[0], before);
+        const inserted = (await legacyImport(businessId, "new")).rows[0];
+        assert.equal(inserted.workflow_status, "new");
+        assert.equal(inserted.follow_up_note, "");
+        await assert.rejects(legacyImport(otherBusinessId, "foreign"), { code: "42501" });
+        await assert.rejects(session.query("insert into public.leads(business_id,campaign_id,meta_lead_id) values ($1,$2,'foreign-campaign')", [businessId, otherCampaignId]), { code: "23503" });
+        await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
+        assert.equal((await session.query("select * from public.leads where business_id=$1 order by created_time desc nulls last limit 200", [businessId])).rowCount, 0);
+        await session.query("set role service_role");
+        assert.deepEqual((await session.query("select * from public.lead_sync_runs where id=$1", [run.id])).rows[0], run);
+        assert.equal((await session.query("delete from public.campaigns where business_id=$1 and id=$2 returning id", [businessId, otherCampaignId])).rowCount, 0);
+        assert.equal((await session.query("delete from public.campaigns where business_id=$1 and id=$2 returning id", [businessId, campaignId])).rowCount, 1);
+        const retained = (await session.query("select business_id,campaign_id,workflow_status,follow_up_note from public.leads where id=$1", [before.id])).rows[0];
+        assert.deepEqual(retained, { business_id: businessId, campaign_id: null, workflow_status: "qualified", follow_up_note: "Keep this note" });
+      });
+    } finally { await session.end(); }
+  } finally { await db.end(); }
+}
+
 async function verify(database, source, integrityMigration) {
   const admin = client();
   await admin.connect();
@@ -55,6 +197,8 @@ async function verify(database, source, integrityMigration) {
   try {
     await db.query(bootstrap);
     await db.query(source);
+    await db.query(operatorPaymentMigration);
+    await db.query(operatorPaymentMigration);
     if (integrityMigration) {
       await check(`${database}: invalid legacy evidence is preserved and blocks validation`, async () => {
         await db.query("begin");
@@ -406,6 +550,196 @@ async function verify(database, source, integrityMigration) {
       }
     });
   if (process.argv.includes("--leads-only")) return;
+
+    await check(`${database}: production payment claims and financial effects survive competing clients and restart recovery`, async () => {
+      const payerBusinessId = randomUUID();
+      const evidenceId = randomUUID();
+      const profileId = randomUUID();
+      const requestKey = randomUUID();
+      const webhookId = randomUUID();
+      const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+        serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+        metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+      const policy = { version: "synthetic-policy-v1", approvalReference: randomUUID(), automaticFundingApprovalReference: randomUUID(),
+        approvedAt: new Date(Date.now() - 60000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        serviceScope: "Synthetic finite scope", invoiceTerms: "Synthetic invoice policy", refundTerms: "Synthetic refund policy" };
+      const terms = JSON.stringify(policy);
+      const termsHash = createHash("sha256").update(terms).digest("hex");
+      const funding = { version: 1, businessId: payerBusinessId, environment: "live", connectionGeneration: 1, evidenceId,
+        verifiedAt: policy.approvedAt, expiresAt: policy.expiresAt, revokedAt: null,
+        setup: { method: "recurring_card", accountId: "act_4567891", expectedOwnerBusinessId: "456", ownerBusinessId: "456",
+          currency: "INR", country: "IN", accountActive: true, billingMode: "automatic", paymentMethod: "verified",
+          recurringAuthorisation: "verified", spendControls: "verified", ownerAcceptedMetaInitiatedPayments: true } };
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic payments fixture')", [payerBusinessId,ownerId]);
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id) values ($1,1,'connected','act_4567891')", [payerBusinessId]);
+      await db.query("insert into public.meta_billing_profiles(id,business_id,environment,ad_account_id,owner_business_id,created_by) values ($1,$2,'live','act_4567891','456',$3)", [profileId,payerBusinessId,ownerId]);
+      await db.query("insert into public.meta_funding_evidence(id,profile_id,verified_by,source,source_reference,verified_at,record) values ($1,$2,$3,'operator_review',$4,now(),$5)", [evidenceId,profileId,ownerId,randomUUID(),funding]);
+      const asService = async run => {
+        const session = client(database);
+        await session.connect();
+        try { await session.query("set role service_role"); return await run(session); }
+        finally { await session.end(); }
+      };
+      const claim = (overrides = {}) => asService(async session => {
+        const input = { business: payerBusinessId, owner: ownerId, request: requestKey, key: "rzp_live_fixture", quote, terms, hash: termsHash, funding: evidenceId, ...overrides };
+        return (await session.query("select public.production_payment_order_claim($1,$2,$3,$4,'acc_fixture',$5,$6,$7,$8,$9) as result",
+          [input.business,input.owner,input.request,randomUUID(),input.key,input.quote,input.terms,input.hash,input.funding])).rows[0].result;
+      });
+      await assert.rejects(claim({ owner: otherOwnerId }), { code: "23514" });
+      await assert.rejects(claim({ key: "rzp_test_fixture" }), { code: "23514" });
+      await assert.rejects(claim({ hash: "0".repeat(64) }), { code: "23514" });
+      await assert.rejects(claim({ funding: randomUUID() }), { code: "23514" });
+      await assert.rejects(claim({ quote: { ...quote, totalPaise: 1 } }), { code: "23514" });
+      const competingClaims = await Promise.all(Array.from({ length: 4 }, () => claim()));
+      assert.equal(competingClaims.filter(result => result.claimed).length,1);
+      assert.equal(new Set(competingClaims.map(result => result.order.id)).size,1);
+      const order = competingClaims[0].order;
+      assert.equal(order.environment,"live");
+      assert.equal(order.amount_paise,1000000);
+      assert.deepEqual(order.quote,quote);
+      assert.deepEqual(order.terms,policy);
+      assert.equal(order.terms_hash,termsHash);
+      assert.equal((await claim({ request: randomUUID() })).order.id,order.id);
+      await assert.rejects(claim({ hash: "1".repeat(64) }), { code: "23514" });
+      const result = providerOrderId => asService(async session => (await session.query(
+        "select public.production_payment_order_result($1,'acc_fixture','rzp_live_fixture',$2) as result", [order.id,providerOrderId])).rows[0].result);
+      assert.equal((await result(null)).state,"needs_reconciliation");
+      assert.equal((await claim()).claimed,false);
+      assert.equal((await result("order_production")).state,"created");
+      assert.equal((await result(null)).provider_order_id,"order_production");
+      const fundingValid = async session => (await session.query(
+        "select public.production_payment_funding_valid($1,$2) as valid",[payerBusinessId,evidenceId])).rows[0].valid;
+      assert.equal(await asService(fundingValid),true);
+      const rejectsInvalidFunding = async (statement, parameters) => {
+        await db.query("begin");
+        try {
+          await db.query(statement,parameters);
+          await db.query("set local role service_role");
+          assert.equal(await fundingValid(db),false);
+          const history = (await db.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result;
+          assert.equal(history.id,order.id);
+          assert.equal(history.provider_order_id,"order_production");
+          assert.equal(history.funding_evidence_id,evidenceId);
+          for (const replayKey of [requestKey,randomUUID()]) {
+            await db.query("savepoint replay_check");
+            await assert.rejects(db.query("select public.production_payment_order_claim($1,$2,$3,$4,'acc_fixture','rzp_live_fixture',$5,$6,$7,$8)",
+              [payerBusinessId,ownerId,replayKey,randomUUID(),quote,terms,termsHash,evidenceId]),{ code: "23514" });
+            await db.query("rollback to savepoint replay_check");
+          }
+        } finally { await db.query("rollback"); }
+      };
+      await rejectsInvalidFunding("insert into public.meta_funding_revocations(evidence_id,revoked_by,reason) values ($1,$2,'mandate_revoked')",[evidenceId,ownerId]);
+      await rejectsInvalidFunding("update public.meta_funding_evidence set record=jsonb_set(record,'{expiresAt}',to_jsonb((now()-interval '1 second')::text)) where id=$1",[evidenceId]);
+      await rejectsInvalidFunding("update public.meta_connections set authorization_status='disconnected' where business_id=$1",[payerBusinessId]);
+      await rejectsInvalidFunding("update public.meta_connections set generation=generation+1 where business_id=$1",[payerBusinessId]);
+      await rejectsInvalidFunding("update public.meta_connections set ad_account_id='act_4567892' where business_id=$1",[payerBusinessId]);
+      const replacementEvidence = randomUUID();
+      await rejectsInvalidFunding("insert into public.meta_funding_evidence(id,profile_id,verified_by,source,source_reference,verified_at,record) values ($1,$2,$3,'operator_review',$4,now(),$5)",
+        [replacementEvidence,profileId,ownerId,randomUUID(),{ ...funding, evidenceId: replacementEvidence, verifiedAt: new Date().toISOString() }]);
+      assert.equal(await asService(fundingValid),true);
+      assert.equal((await claim()).order.id,order.id);
+      const operatorBusinessId = randomUUID();
+      const operatorPolicy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+      const operatorTerms = JSON.stringify(operatorPolicy);
+      const operatorHash = createHash("sha256").update(operatorTerms).digest("hex");
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Operator-managed fixture')",[operatorBusinessId,ownerId]);
+      const operatorInput = { business: operatorBusinessId, funding: null, terms: operatorTerms, hash: operatorHash };
+      for (const invalid of [{ owner: otherOwnerId }, { key: "rzp_test_fixture" }, { funding: evidenceId },
+        { hash: "0".repeat(64) }, { quote: { ...quote, totalPaise: 1 } }]) {
+        await assert.rejects(claim({ ...operatorInput, ...invalid }),{ code: "23514" });
+      }
+      const alteredTerms = JSON.stringify({ ...operatorPolicy, refundTerms: "Service earned at capture" });
+      await assert.rejects(claim({ ...operatorInput, terms: alteredTerms, hash: createHash("sha256").update(alteredTerms).digest("hex") }),{ code: "23514" });
+      const operatorClaims = await Promise.all(Array.from({ length: 4 },() => claim(operatorInput)));
+      assert.equal(operatorClaims.filter(value => value.claimed).length,1);
+      const operatorOrder = operatorClaims[0].order;
+      assert.equal(operatorOrder.funding_evidence_id,null);
+      assert.deepEqual(operatorOrder.terms,operatorPolicy);
+      assert.equal((await claim({ ...operatorInput, request: randomUUID() })).order.id,operatorOrder.id);
+      assert.equal((await db.query("select count(*)::int as count from public.meta_connections where business_id=$1",[operatorBusinessId])).rows[0].count,0);
+      assert.equal((await db.query("select count(*)::int as count from public.meta_billing_profiles where business_id=$1",[operatorBusinessId])).rows[0].count,0);
+      await asService(session => session.query("select public.production_payment_order_result($1,'acc_fixture','rzp_live_fixture','order_operator')",[operatorOrder.id]));
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const observed = await asService(async session => (await session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_operator',true,0,false,$2) as result",[operatorOrder.id,"a".repeat(64)])).rows[0].result);
+        assert.equal(observed.captured_paise,1000000);
+        assert.equal(observed.review_required,false);
+      }
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[operatorOrder.id])).rows[0].count,1);
+      await db.query(operatorPaymentMigration);
+      assert.deepEqual((await claim()).order.terms,policy);
+      assert.equal((await claim()).order.funding_evidence_id,evidenceId);
+      await assert.rejects(claim({ ...operatorInput, business: payerBusinessId }),{ code: "23514" });
+      const refundRequest = randomUUID();
+      const refundApproval = randomUUID();
+      const claimRefund = (amount = 500, request = refundRequest) => asService(async session => (await session.query(
+        "select public.production_payment_refund_claim($1,'acc_fixture','rzp_live_fixture',$2,$3,$4,$5,$6,$7,'Synthetic approved refund') as result",
+        [order.id,ownerId,request,randomUUID(),amount,termsHash,refundApproval])).rows[0].result);
+      await assert.rejects(claimRefund(),{ code: "42501" });
+      await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')",[ownerId,randomUUID()]);
+      await assert.rejects(claimRefund(),{ code: "23514" });
+      const earlyRefund = await asService(async session => (await session.query(
+        "select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',false,100,false,$2,'rfnd_early',100,'processed') as result",
+        [order.id,"d".repeat(64)])).rows[0].result);
+      assert.equal(earlyRefund.captured_paise,0);
+      assert.equal(earlyRefund.refunded_paise,100);
+      assert.equal(earlyRefund.refund_hold,true);
+      await asService(session => session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',true,0,false,$2)",[order.id,"e".repeat(64)]));
+      const refundClaims = await Promise.all(Array.from({length: 4},() => claimRefund()));
+      assert.equal(refundClaims.filter(value => value.claimed).length,1);
+      const refundOperation = refundClaims[0].refund;
+      await assert.rejects(claimRefund(501),{ code: "23514" });
+      await assert.rejects(claimRefund(500,randomUUID()),{ code: "23514" });
+      await asService(session => session.query("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture',null)",[refundOperation.id]));
+      assert.equal((await claimRefund()).refund.state,"needs_reconciliation");
+      assert.equal((await claimRefund()).claimed,false);
+      await asService(session => session.query("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture','rfnd_requested')",[refundOperation.id]));
+      await asService(session => session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',true,500,false,$2,'rfnd_requested',500,'processed')",[order.id,"f".repeat(64)]));
+      await asService(session => session.query("select public.production_payment_refund_observed($1,'acc_fixture','rfnd_requested',500,'processed')",[refundOperation.id]));
+      assert.equal((await claimRefund()).refund.state,"processed");
+      await assert.rejects(claimRefund(1000000,randomUUID()),{ code: "23514" });
+      const receive = (event, kind, hash = "a".repeat(64), payment = "pay_production") => asService(async session => (await session.query(
+        "select public.production_payment_event_receive('acc_fixture','rzp_live_fixture',$1,$2,$3,$4,'order_production',$5,$6) as result",
+        [webhookId,event,hash,payment,kind === "refund" ? "rfnd_production" : null,kind])).rows[0].result);
+      const observe = (captured, refunded = 0, refundId = null, refundAmount = null, refundStatus = null) => asService(async session => (await session.query(
+        "select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',$2,$3,false,$4,$5,$6,$7) as result",
+        [order.id,captured,refunded,"b".repeat(64),refundId,refundAmount,refundStatus])).rows[0].result);
+      const pending = await receive("event_refund_first","refund");
+      assert.equal(pending.processed_at,null);
+      const afterRefund = await observe(false,1000,"rfnd_production",1000,"processed");
+      assert.equal(afterRefund.refunded_paise,1600);
+      assert.equal(afterRefund.captured_paise,1000000);
+      assert.equal(afterRefund.refund_hold,true);
+      await Promise.all([receive("event_capture_1","capture"), receive("event_capture_2","capture")]);
+      const race = await Promise.all([observe(true),observe(true,1000,"rfnd_production",1000,"processed"),observe(true)]);
+      assert.ok(race.every(value => value.captured_paise === 1000000 && value.refunded_paise === 1600 && value.refund_hold));
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[order.id])).rows[0].count,1);
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='refund'",[order.id])).rows[0].count,3);
+      assert.equal((await receive("event_capture_1","capture","c".repeat(64))).conflicted,true);
+      await asService(session => session.query("select public.production_payment_event_receive('acc_fixture','rzp_live_fixture',$1,'event_capture_1',$2,'pay_unmatched','order_unmatched',null,'capture')",
+        [webhookId,"d".repeat(64)]));
+      const unmatchedConflict = await db.query("select payment_id,provider_order_id from private.production_payment_event_conflicts where account_id='acc_fixture' and event_id='event_capture_1' and payload_hash=$1",["d".repeat(64)]);
+      assert.deepEqual(unmatchedConflict.rows,[{ payment_id: "pay_unmatched", provider_order_id: "order_unmatched" }]);
+      assert.equal((await observe(true)).state,"review_required");
+      await receive("event_dispute","dispute");
+      assert.equal((await observe(true)).review_required,true);
+      await asService(async session => {
+        const get = async user => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,user])).rows[0].result;
+        assert.equal(await get(otherOwnerId),null);
+        assert.equal((await get(ownerId)).id,order.id);
+        for (const table of ["production_payment_orders","production_payment_events","production_payment_event_conflicts","production_payment_effects","production_payment_refunds","production_payment_operators"]) {
+          await assert.rejects(session.query(`select * from private.${table}`), { code: "42501" });
+          await assert.rejects(session.query(`delete from private.${table}`), { code: "42501" });
+        }
+        await session.query("set role authenticated");
+        await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(fundingValid(session), { code: "42501" });
+        await session.query("set role anon");
+        await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(fundingValid(session), { code: "42501" });
+      });
+      await db.query("update public.businesses set owner_id=$2 where id=$1",[payerBusinessId,otherOwnerId]);
+      assert.equal(await asService(async session => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result),null);
+    });
 
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
       const profileId = randomUUID();
@@ -902,6 +1236,9 @@ try {
   await admin.connect();
   await admin.query("create role anon; create role authenticated; create role service_role bypassrls");
   await admin.end();
+  if (process.argv.includes("--rollback-only")) {
+    await verifyRollback();
+  } else {
   const schema = await readFile(join(root, "db/schema.sql"), "utf8");
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
@@ -919,11 +1256,17 @@ try {
     insert into public.businesses (id, owner_id, name) values ('30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Legacy fixture');
     insert into public.leads (business_id, meta_lead_id, full_name) values ('30000000-0000-4000-8000-000000000002', 'legacy-follow-up', 'Legacy enquiry');`;
   const testPaymentsMigration = await readFile(join(root, "db/migrations/20260926_razorpay_test_orders.sql"), "utf8");
+  const productionPaymentsMigration = await readFile(join(root, "db/migrations/20260926_production_payment_orders.sql"), "utf8");
   const integrityMigration = await readFile(join(root, "db/migrations/20260926_campaign_integrity.sql"), "utf8");
   const draftAuthorityMigration = await readFile(join(root, "db/migrations/20260926_draft_authority.sql"), "utf8");
   const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
+  assert.ok(schema.includes(billingMigration.trim()), "Canonical schema must include the exact managed billing dependency");
+  assert.ok(schema.includes(productionPaymentsMigration.trim()), "Canonical schema must include the exact production payment migration");
+  assert.ok(schema.indexOf(billingMigration.trim()) < schema.indexOf(productionPaymentsMigration.trim()), "Managed billing must precede production payments");
+  assert.ok(schema.endsWith(operatorPaymentMigration), "Canonical schema must end with the exact operator-managed payment migration");
+  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
+  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
+  }
 } catch (error) {
   failures.push("database harness");
   console.error(`FAIL database harness: ${error.message}`);

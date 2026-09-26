@@ -30,6 +30,20 @@ foreign keys**. Deleting a creative does not automatically rewrite campaign arra
 or remote ads. The primary-workspace query selects the oldest owned business;
 there is no database uniqueness constraint limiting an owner to one business.
 
+The selective live checkout schema adds `private.production_payment_orders`,
+`private.production_payment_events`, `private.production_payment_effects` and
+conflict records. Apply `20260924_managed_billing.sql` and
+`20260924_meta_billing_events.sql` before
+`20260926_production_payment_orders.sql`, followed by the additive
+`20260926_production_payment_policy_v2.sql`. These four migrations were applied
+to the verified AdBrain production target on September 26 at 18:46 UTC; this
+does not enable collection.
+New `operator-managed-v1` orders have no funding evidence; legacy orders retain
+their original evidence and reconciliation rules. Owner claims are atomic and
+server-only, and captured funds do not authorize campaign activation. The
+canonical schema appends the same policy SQL; verify the migration ledger for
+other targets rather than inferring their state from source.
+
 ## Table Dictionary
 
 ### Identity and Brand

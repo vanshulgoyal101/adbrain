@@ -23,6 +23,34 @@ of leaving blank assignments.
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
 | `DEMO_USER_EMAIL` | `demo@adbrain.vanshul.com`, email | Demo identity; not a sandbox guarantee |
 
+## Live Checkout (Disabled By Default)
+
+The server-only [live configuration](../src/lib/payments/production-config.ts)
+requires `PAYMENTS_LIVE_ENABLED=true` and `PAYMENTS_LIVE_COLLECTION_ENABLED=true`
+for collection, a production Vercel deployment from `main`, matching
+`PAYMENTS_LIVE_PROJECT_ID`/`VERCEL_PROJECT_ID` and
+`PAYMENTS_LIVE_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_URL`, and valid
+`RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`,
+`RAZORPAY_LIVE_ACCOUNT_ID`, `RAZORPAY_LIVE_WEBHOOK_SECRET` and
+`PAYMENTS_LIVE_WEBHOOK_ID`. Test credentials or test checkout enabled in
+production block live checkout. Do not put provider secrets in the browser or
+the repository. An unset `PAYMENTS_LIVE_POLICY_JSON` uses the approved
+operator-managed terms; an explicitly supplied legacy policy still requires
+its historical Meta funding evidence. Confirm the effective policy and webhook
+registration before enabling collection. The payment schema must be migrated
+first; code publication alone is not collection authorization.
+`PAYMENTS_LIVE_REFUNDS_ENABLED=true` separately permits operator-initiated
+refunds; reconciliation remains available while it is false. Hosting checks
+also require `VERCEL_GIT_COMMIT_REF=main` and reject a nonproduction
+`VERCEL_TARGET_ENV`. Generic `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` aliases,
+if present, must match the live pair exactly.
+
+Local test checkout uses `PAYMENTS_TEST_ENABLED=true` with
+`RAZORPAY_TEST_KEY_ID`, `RAZORPAY_TEST_KEY_SECRET`,
+`RAZORPAY_TEST_ACCOUNT_ID` and `RAZORPAY_TEST_WEBHOOK_SECRET` (or matching
+generic key aliases). It is unavailable in production or any Vercel environment;
+never place those test variables in live production configuration.
+
 ## Text Models
 
 Key pools split commas, trim whitespace, and discard empty entries. Empty pools
