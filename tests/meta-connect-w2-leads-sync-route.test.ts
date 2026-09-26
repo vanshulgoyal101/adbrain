@@ -195,6 +195,39 @@ describe("lead sync connection boundary", () => {
     expect(mocks.formsPage).toHaveBeenCalledTimes(1);
   });
 
+  it("QA resumes after a 503 following a committed page without losing follow-up or recounting duplicates", async () => {
+    mocks.listLeadForms.mockResolvedValue([{ id: "form-1", name: "Available" }]);
+    mocks.leadsPage.mockImplementation(async (_form, options: { after: string | null }) => options.after
+      ? { data: [{ id: "lead-1", field_data: [] }, { id: "lead-2", field_data: [] }], after: null }
+      : { data: [{ id: "lead-1", field_data: [] }], after: "page-two" });
+    const insertRows = mocks.upsert.getMockImplementation()!;
+    let writes = 0;
+    mocks.upsert.mockImplementation(async (...args) => {
+      writes++;
+      return writes === 2 ? { error: { code: "08006" } } : insertRows(...args);
+    });
+    const { POST } = await import("@/app/api/leads/sync/route");
+    const failed = await POST();
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({ imported: 1, sync: { id: syncId, state: "partial", hasMore: true } });
+    expect(savedLeads.size).toBe(1);
+    expect(persisted?.progress.pending[0].after).toBe("page-two");
+    Object.assign(savedLeads.get("lead-1")!, {
+      workflow_status: "qualified", follow_up_note: "Synthetic saved follow-up", campaign_id: "verified-campaign",
+    });
+    const confirmed = structuredClone(savedLeads.get("lead-1"));
+
+    const recovered = await POST(new Request("http://localhost/api/leads/sync", { method: "POST" }));
+    expect(recovered.status).toBe(200);
+    const body = await recovered.json();
+    expect(body).toMatchObject({ imported: 1, sync: { id: syncId, state: "complete", hasMore: false } });
+    expect(body.leads).toHaveLength(2);
+    expect(savedLeads.size).toBe(2);
+    expect(savedLeads.get("lead-1")).toEqual(confirmed);
+    expect(mocks.formsPage).toHaveBeenCalledTimes(1);
+    expect(mocks.leadsPage.mock.calls.map(([, options]) => options.after)).toEqual([null, "page-two", "page-two"]);
+  });
+
   it("bounds provider pages and resumes the remaining forms rather than starving them", async () => {
     mocks.listLeadForms.mockResolvedValue(Array.from({ length: 30 }, (_, index) => ({ id: String(index), name: String(index) })));
     const { POST } = await import("@/app/api/leads/sync/route");

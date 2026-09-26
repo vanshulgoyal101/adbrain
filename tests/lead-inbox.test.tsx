@@ -335,6 +335,49 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     expect(fetcher.mock.calls.filter(([url]) => url.startsWith("/api/leads?")).every(([url]) => url.includes("status=booked"))).toBe(true);
   });
 
+  it("QA discovers committed rows through explicit retry after a 503 without false completion", async () => {
+    const confirmed = lead({ workflow_status: "qualified", follow_up_note: "Synthetic saved follow-up" });
+    const committed = lead({ id: "committed", meta_lead_id: "m2", full_name: "Committed enquiry" });
+    let syncCalls = 0;
+    const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
+      if (url === "/api/leads/sync") {
+        syncCalls++;
+        expect(options?.body).toBeUndefined();
+        return {
+          ok: syncCalls > 1, status: syncCalls === 1 ? 503 : 200,
+          json: async () => ({
+            leads: [lead({ id: "snapshot-only", full_name: "Not the filtered list" })],
+            imported: syncCalls === 1 ? 1 : 0,
+            error: syncCalls === 1 ? "Could not save the next page. Retry to resume." : undefined,
+            sync: { id: "11111111-1111-4111-8111-111111111111", state: syncCalls === 1 ? "partial" : "complete", hasMore: syncCalls === 1 },
+          }),
+        };
+      }
+      expect(url).toContain("contact=ready");
+      const rows = syncCalls ? [confirmed, committed] : [confirmed];
+      return { ok: true, json: async () => ({ leads: rows, total: rows.length, nextCursor: null }) };
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Fixture" initialLeads={[confirmed]} metaReady />);
+    fireEvent.change(screen.getByLabelText("Contact availability"), { target: { value: "ready" } });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("1 of 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Sync leads" }));
+    expect(await screen.findByText("Could not save the next page. Retry to resume.")).toBeInTheDocument();
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.queryByText(/You're up to date/)).toBeNull();
+    expect(syncCalls).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync leads" }));
+    expect(await screen.findByText("Committed enquiry")).toBeInTheDocument();
+    expect(screen.queryByText("Not the filtered list")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
+    expect(screen.getAllByText("Asha Verma")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Synthetic saved follow-up");
+    expect(screen.getByLabelText("Follow-up status")).toHaveValue("qualified");
+    expect(syncCalls).toBe(2);
+  });
+
   it("does not infer complete sync from a legacy response", async () => {
     setFetch({ ok: true, json: async () => ({ leads: [], imported: 0 }) });
     render(<LeadInbox businessName="Fixture" initialLeads={[]} metaReady />);
