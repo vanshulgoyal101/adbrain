@@ -75,7 +75,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/campaigns/[id]` | Path ID -> `{delivery}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation |
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery}` | Live parent Meta mutation + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
-| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused | Provider read, DB write, possible auto-pause |
+| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
@@ -415,11 +415,13 @@ and budgets, and imports only ACTIVE/PAUSED status. Local unsupported/unmatched
 records remain unchanged. No remote-deletion pruning occurs. Concurrent insert
 failure is not a successful import; partial writes before an error can exist.
 
-Refresh returns `{result,summary,insights,autoPaused}`. **This can invoke an LLM
-summary and pause live campaigns through spend enforcement**; it is not a harmless
-read-only smoke test. The current handler does not explicitly fail the response
-on an insight-row insert error, so `result` can be null. Verify persistence rather
-than claiming every successful refresh stored a snapshot.
+Refresh returns `{result,summary,insights,autoPaused,protectionConfirmed}`. **This
+can invoke an LLM summary and pause live campaigns through spend enforcement**; it
+is not a read-only smoke test. `autoPaused` lists only confirmed remote and local
+pauses. `protectionConfirmed:false` means the spend decision or a required pause
+could not be verified; inspect the bound campaign in Meta, since a local error
+does not prove remote delivery stopped. Provider refresh failures can still attempt
+protective pauses. An unsaved result returns 503 before summary and enforcement.
 
 Lead sync returns `{leads,imported,failedForms}`; each failed form has `id,name`.
 `imported` is actual new inserts, duplicates are ignored, partial unreadable forms
@@ -492,7 +494,11 @@ remains active for the contextual signed/bound flow.
 Cron endpoints require `Authorization: Bearer <CRON_SECRET>`; absent configured
 secret disables them with 404. Keepalive checks DB availability and, when enabled,
 bounded event retention. Enforce-spend can mutate Meta and reports incomplete
-enforcement as failure. Do not invoke either against production without authority.
+enforcement as 503 (`ok:false`) even when some campaigns were paused; failure to
+read the limit list returns 502; failure to scan active campaigns returns 503.
+`swept` lists only confirmed remote and local
+pauses, not a guarantee that every campaign stopped. Do not invoke either against
+production without authority.
 
 Internal traffic options: numeric `rounds` clamped to 1/configured maximum
 (default 5), boolean `createDraftCampaigns` (true rejected with 400), numeric

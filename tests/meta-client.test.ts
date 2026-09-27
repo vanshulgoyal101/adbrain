@@ -233,6 +233,23 @@ describe("campaign object binding", () => {
     expect(await new MetaClient(creds).getCampaignInsights("camp_1")).toMatchObject({ leads: 0, cpl: null, conversations: 3, costPerConversation: 50 });
   });
 
+  it("requests an explicit Monday-to-today period for weekly spend protection", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ spend: "5", date_start: "2026-09-21", date_stop: "2026-09-27" }] }));
+    await new MetaClient(creds).getCampaignInsights("camp_1", { weekly: true });
+    expect(String(fetchMock.mock.calls[2][0])).toContain("date_preset=this_week_mon_today");
+  });
+
+  it("rejects a dated weekly report with no spend observation", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ date_start: "2026-09-21", date_stop: "2026-09-27" }] }));
+    await expect(new MetaClient(creds).getCampaignInsights("camp_1", { weekly: true })).rejects.toThrow();
+  });
+
   it.each(["delete", "insights"])("allows bound campaign %s after verification", async (operation) => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
