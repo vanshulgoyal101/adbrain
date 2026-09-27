@@ -78,6 +78,19 @@ export function Studio({
         value?.toLowerCase().includes(search.trim().toLowerCase()),
       ),
   );
+  const variantsByHeadline = new Map<string, Creative[]>();
+  for (const item of items) {
+    const headline = item.headline?.trim().toLowerCase() ?? "";
+    const variants = variantsByHeadline.get(headline) ?? [];
+    variants.push(item);
+    variantsByHeadline.set(headline, variants);
+  }
+  const variantLabels = new Map<string, string>();
+  for (const variants of variantsByHeadline.values()) {
+    if (variants.length < 2) continue;
+    variants.sort((first, second) => first.id < second.id ? -1 : first.id > second.id ? 1 : 0);
+    variants.forEach((item, index) => variantLabels.set(item.id, `Variant ${index + 1} of ${variants.length}`));
+  }
   const selectedCreative =
     visibleItems.find((item) => item.id === selectedId) ??
     visibleItems[0] ??
@@ -150,6 +163,10 @@ export function Studio({
         const response = await fetch(`/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(intent.generationId)}&expectedCount=${intent.count}`, {
           cache: "no-store", signal: AbortSignal.timeout(10_000),
         });
+        if (response.status === 404) {
+          clearIntent();
+          message = "No generation was started. You can generate ads again.";
+        }
         if (response.ok) {
           const result = await response.json() as { status?: string; creatives?: Creative[] };
           acceptResults(result.creatives ?? []);
@@ -157,7 +174,12 @@ export function Studio({
             clearIntent();
             return;
           }
-          if (result.creatives?.length) message = "Some ads are saved. The remaining results are not confirmed; no new generation was started.";
+          if (result.status === "failed") {
+            clearIntent();
+            message = "Generation failed before a result was saved. You can start a new request.";
+          } else if (result.status === "unresolved") {
+            message = "Generation outcome is unresolved. Saved ads are shown; do not retry this request until it is reviewed.";
+          } else if (result.creatives?.length) message = "Some ads are saved. The remaining results are not confirmed; no new generation was started.";
         }
       } catch {
         if (!generationMounted.current) return;
@@ -470,45 +492,48 @@ export function Studio({
             <ul
               className="scrollbar-stable flex gap-3 overflow-x-auto p-1 lg:grid lg:max-h-[75vh] lg:grid-cols-2 lg:overflow-y-scroll"
             >
-              {visibleItems.map((creative) => (
-                <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
-                  <button
-                    type="button"
-                    aria-label={`Inspect ${creative.headline || "untitled creative"}`}
-                    aria-pressed={creative.id === selectedCreative.id}
-                    onClick={() => setSelectedId(creative.id)}
-                    className={cn(
-                      "w-full overflow-hidden rounded-md border text-left",
-                      creative.id === selectedCreative.id
-                        ? "border-blue-700 ring-1 ring-blue-700"
-                        : "border-slate-200 hover:border-slate-400",
-                    )}
-                  >
-                    <div className="flex aspect-square items-center justify-center bg-slate-100">
-                      {creative.image_url ? (
-                        <img
-                          src={creative.image_url}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <ImageIcon className="text-slate-400" />
+              {visibleItems.map((creative) => {
+                const statusLabel = creative.status === "approved" ? "Approved" : "Needs review";
+                const variantLabel = variantLabels.get(creative.id);
+                return (
+                  <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
+                    <button
+                      type="button"
+                      aria-label={`Inspect ${creative.headline || "untitled creative"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
+                      aria-pressed={creative.id === selectedCreative.id}
+                      onClick={() => setSelectedId(creative.id)}
+                      className={cn(
+                        "w-full overflow-hidden rounded-md border text-left",
+                        creative.id === selectedCreative.id
+                          ? "border-blue-700 ring-1 ring-blue-700"
+                          : "border-slate-200 hover:border-slate-400",
                       )}
-                    </div>
-                    <div className="p-3">
-                      <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
-                        {creative.headline || "Untitled creative"}
-                      </p>
-                      <p className="mt-2 text-xs text-slate-600">
-                        {creative.status === "approved"
-                          ? "Approved"
-                          : "Needs review"}
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
+                    >
+                      <div className="flex aspect-square items-center justify-center bg-slate-100">
+                        {creative.image_url ? (
+                          <img
+                            src={creative.image_url}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <ImageIcon className="text-slate-400" />
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
+                          {creative.headline || "Untitled creative"}
+                        </p>
+                        <p className="mt-2 text-xs text-slate-600">
+                          {statusLabel}
+                        </p>
+                        {variantLabel && <p className="mt-1 text-xs font-medium text-blue-700">{variantLabel}</p>}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </section>
           <section

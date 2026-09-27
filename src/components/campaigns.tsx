@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -96,17 +96,22 @@ async function fetchDraftForms(signal?: AbortSignal): Promise<LeadForm[]> {
   return data.forms;
 }
 
-export function Campaigns({
-  business,
-  approved,
-  initialCampaigns,
-  initialNextCursor = null,
-  initialResults,
-  leadForms,
-  leadFormError,
-  metaReady,
-  adAccountId,
-}: {
+type ComposerSetup = {
+  selected: Set<string>;
+  budget: number;
+  destination: "instant_form" | "whatsapp";
+  leadFormId: string;
+  name: string;
+  targeting: TargetingValue;
+  draftGoal: string;
+  includedNames: string;
+  excludedNames: string;
+  abTest: boolean;
+  creationMode: string;
+  showComposer: boolean;
+};
+
+type CampaignsProps = {
   business: Business;
   approved: Creative[];
   initialCampaigns: Campaign[];
@@ -116,23 +121,49 @@ export function Campaigns({
   leadFormError: string | null;
   metaReady: boolean;
   adAccountId: string;
-}) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [budget, setBudget] = useState(200);
-  const [destination, setDestination] = useState<"instant_form" | "whatsapp">("instant_form");
-  const [leadFormId, setLeadFormId] = useState(leadForms[0]?.id ?? "");
+};
+
+export function Campaigns(props: CampaignsProps) {
+  const [setups, saveSetup] = useReducer((current: Map<string, ComposerSetup>, [scope, setup]: [string, ComposerSetup]) => {
+    const next = new Map(current);
+    next.set(scope, setup);
+    return next;
+  }, new Map<string, ComposerSetup>());
+  const scope = `${props.business.owner_id}:${props.business.id}`;
+  return <BusinessCampaigns key={scope} {...props} scope={scope} initialSetup={setups.get(scope)} onSetupChange={saveSetup} />;
+}
+
+function BusinessCampaigns({
+  business,
+  approved,
+  initialCampaigns,
+  initialNextCursor = null,
+  initialResults,
+  leadForms,
+  leadFormError,
+  metaReady,
+  adAccountId,
+  scope,
+  initialSetup,
+  onSetupChange,
+}: CampaignsProps & { scope: string; initialSetup?: ComposerSetup; onSetupChange: (value: [string, ComposerSetup]) => void }) {
+  const [hadInitialSetup] = useState(Boolean(initialSetup));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSetup?.selected));
+  const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
+  const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
+  const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const [availableForms, setAvailableForms] = useState(leadForms);
   const [formsLoading, setFormsLoading] = useState(false);
   const [formsError, setFormsError] = useState(leadFormError);
   const [formsRetry, setFormsRetry] = useState(0);
   const formsFreshnessRef = useRef<{ ownerId: string; businessId: string; retry: number; fetchedAt: number } | null>(null);
   const [connectedForDraft, setConnectedForDraft] = useState(metaReady);
-  const [name, setName] = useState(`${business.name} — leads`);
-  const [targeting, setTargeting] = useState<TargetingValue>(defaultTargeting);
-  const [draftGoal, setDraftGoal] = useState("");
-  const [includedNames, setIncludedNames] = useState("");
-  const [excludedNames, setExcludedNames] = useState("");
-  const [abTest, setAbTest] = useState(false);
+  const [name, setName] = useState(initialSetup?.name ?? `${business.name} — leads`);
+  const [targeting, setTargeting] = useState<TargetingValue>(initialSetup?.targeting ?? defaultTargeting);
+  const [draftGoal, setDraftGoal] = useState(initialSetup?.draftGoal ?? "");
+  const [includedNames, setIncludedNames] = useState(initialSetup?.includedNames ?? "");
+  const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
+  const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -140,7 +171,17 @@ export function Campaigns({
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
     ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
   });
-  const [showComposer, setShowComposer] = useState(initialCampaigns.length === 0);
+  const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? initialCampaigns.length === 0);
+  const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const guidedModeRef = useRef<HTMLInputElement>(null);
+  const focusOnOpenRef = useRef(false);
+  useEffect(() => {
+    if (showComposer && focusOnOpenRef.current) {
+      (creationMode === "guided" ? guidedModeRef : nameInputRef).current?.focus();
+      focusOnOpenRef.current = false;
+    }
+  }, [showComposer, creationMode]);
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectionIntent, setConnectionIntent] = useState<ConnectIntent>({ kind: "setup" });
   const [activationReview, setActivationReview] = useState<Campaign | null>(null);
@@ -173,7 +214,9 @@ export function Campaigns({
   const [savedDrafts, setSavedDrafts] = useState<DraftDTO[]>([]);
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
-  const [creationMode, setCreationMode] = useState("manual");
+  useEffect(() => {
+    onSetupChange([scope, { selected, budget, destination, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -273,7 +316,7 @@ export function Campaigns({
         }
         const draft = await client.draft(saved.draft.draftId, controller.signal);
         if (controller.signal.aborted) return;
-        restoreDraft(draft);
+        if (!hadInitialSetup || saved.request) restoreDraft(draft);
         preparedDraftRef.current = draft;
         const connection = await client.status(business.id, controller.signal);
         if (controller.signal.aborted) return;
@@ -286,7 +329,7 @@ export function Campaigns({
       }
     })();
     return () => { controller.abort(); operationControllerRef.current?.abort(); };
-  }, [business.id, recoveryKey]);
+  }, [business.id, recoveryKey, hadInitialSetup]);
 
   function saveRecovery(recovery: CampaignRecovery) {
     writeCampaignRecovery(window.sessionStorage, recoveryKey, recovery);
@@ -333,7 +376,14 @@ export function Campaigns({
   function toggleComposer() {
     if (preparing || creating) return;
     if (showComposer) { setShowComposer(false); return; }
+    focusOnOpenRef.current = true;
+    setShowComposer(true);
+  }
+
+  function startNewCampaign() {
+    if (preparing || creating) return;
     if (unresolvedRecovery()) { setError("Resolve the current campaign operation before starting another campaign."); return; }
+    if (!window.confirm("Discard this campaign setup and start a new one? Saved drafts remain available.")) return;
     preparedDraftRef.current = null;
     recoveryRef.current = null;
     operationRef.current = null;
@@ -353,6 +403,8 @@ export function Campaigns({
     setLeadFormId("");
     setDestination("instant_form");
     setShowComposer(true);
+    if (creationMode === "guided") focusOnOpenRef.current = true;
+    else nameInputRef.current?.focus();
   }
 
   function finishDraftConnection(connection: ConnectionDTO) {
@@ -841,7 +893,10 @@ export function Campaigns({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} requested active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
-        <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
+          <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>
+        </div>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
@@ -1047,7 +1102,7 @@ export function Campaigns({
           </section>
           <fieldset disabled={preparing || creating} className="my-5 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
-            {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
+            {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={destinationRecoveryLocked ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
@@ -1138,6 +1193,7 @@ export function Campaigns({
                     <Label htmlFor="name">Campaign name</Label>
                     <Input
                       id="name"
+                      ref={nameInputRef}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                     />

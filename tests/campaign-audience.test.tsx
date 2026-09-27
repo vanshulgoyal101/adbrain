@@ -225,6 +225,113 @@ beforeEach(() => {
     : { forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] })));
 });
 
+describe("unsaved campaign setup", () => {
+  it("retains the goal and selected creative after closing and reopening", () => {
+    view();
+    const trigger = screen.getByRole("button", { name: "Close campaign setup" });
+    trigger.focus();
+    fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Jaipur solar enquiries" } });
+    fireEvent.change(screen.getByLabelText("Daily budget (₹)"), { target: { value: "350" } });
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Enquiries for a local solar offer" } });
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Jaipur" } });
+    fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Ajmer" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /A\/B test the audience by age/ }));
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(trigger);
+    expect(screen.getByRole("button", { name: "New campaign" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByLabelText("Campaign name")).toHaveValue("Jaipur solar enquiries");
+    expect(screen.getByLabelText("Campaign name")).toHaveFocus();
+    expect(screen.getByLabelText("Daily budget per ad set (₹)")).toHaveValue(350);
+    expect(screen.getByLabelText("Campaign goal")).toHaveValue("Enquiries for a local solar offer");
+    expect(screen.getByLabelText("Planned areas")).toHaveValue("Jaipur");
+    expect(screen.getByLabelText("Excluded areas")).toHaveValue("Ajmer");
+    expect(screen.getByRole("checkbox", { name: /A\/B test the audience by age/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("cancels discard without losing edits, then starts clean without removing a saved draft", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    view();
+    fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Saved first setup" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByRole("button", { name: /^Saved first setup/ });
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Unsent changes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
+    expect(screen.getByLabelText("Campaign goal")).toHaveValue("Unsent changes");
+    fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
+    expect(screen.getByLabelText("Campaign goal")).toHaveValue("");
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^Saved first setup/ })).toBeInTheDocument();
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it("retains the chosen lead form and destination without another save", () => {
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}}
+      leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }, { id: "form-2", name: "Consultations", status: "ACTIVE" }]}
+      leadFormError={null} metaReady={false} adAccountId="" />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Lead form" }), { target: { value: "form-2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-2");
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "Instant form" }));
+    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-2");
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("restores keyboard focus to the guided setup when reopening", () => {
+    view();
+    fireEvent.click(screen.getByRole("radio", { name: "Plan with AdBrain" }));
+    const trigger = screen.getByRole("button", { name: "Close campaign setup" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("button", { name: "New campaign" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByRole("radio", { name: "Plan with AdBrain" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Plan with AdBrain" })).toHaveFocus();
+  });
+
+  it("does not discard a campaign operation that needs reconciliation", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "needs_reconciliation", checkpoints: [], externalIds: {}, error: null });
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    await screen.findByText("Campaign creation needs reconciliation. Do not retry the create operation.");
+    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
+    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
+    expect(screen.getByText("Resolve the current campaign operation before starting another campaign.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(sessionStorage.length).toBeGreaterThan(0);
+    expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["business", "owner"])("keeps unsaved setups separate when switching %s and back", (boundary) => {
+    const props = { approved: [creative], initialCampaigns: [], initialResults: {}, leadForms: [], leadFormError: null, metaReady: false, adAccountId: "" };
+    const current = render(<Campaigns {...props} business={business} />);
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Jaipur enquiries" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    const otherBusiness = boundary === "owner"
+      ? { ...business, owner_id: "other-owner" }
+      : { ...business, id: "other-business", name: "Another business" };
+    current.rerender(<Campaigns {...props} business={otherBusiness} />);
+    expect(screen.getByLabelText("Campaign goal")).toHaveValue("");
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "false");
+    current.rerender(<Campaigns {...props} business={business} />);
+    expect(screen.getByLabelText("Campaign goal")).toHaveValue("Jaipur enquiries");
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
 describe("campaign Ads Manager links", () => {
   it("unmounts the planner when switching to manual setup or closing the composer", () => {
     view();
@@ -516,7 +623,7 @@ describe("campaign sync feedback", () => {
       fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
       fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
       expect(screen.getByRole("option", { name: "Enquiries" })).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
+      expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-1");
       expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument();
       expect(formCalls()).toHaveLength(1);
       fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
