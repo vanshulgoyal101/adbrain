@@ -683,6 +683,7 @@ function CreativeCard({
               imgLoaded ? "opacity-100" : "opacity-0",
             )}
             loading="lazy"
+            fetchPriority="high"
             onLoad={() => setLoadedUrl(creative.image_url)}
             onError={() => setErroredUrl(creative.image_url)}
           />
