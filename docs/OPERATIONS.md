@@ -20,6 +20,7 @@ Inspect durable evidence before retrying anything that can create objects or spe
 | Symptom | Inspect | Recovery / avoid |
 | --- | --- | --- |
 | Sign-in or redirect failure | Supabase availability, configured site/callback URLs, browser cookie state, safe redirect policy | Retry intended method; use local path destinations, never bypass authentication |
+| Workspace stays loading or shows an error | In a visible session, compare the request and streamed response with Supabase auth and business-read failures; a fallback HTTP 200 alone is not a completed workspace | Use Try again to refetch the failed segment, or Sign in if the session expired. Check auth and business-read availability before treating an empty workspace as a first run; do not reset saved state or bypass the route guard |
 | Brand autofill fails | URL validation, public DNS/fetch reachability, provider availability | Enter fields manually; do not disable SSRF protection or overwrite concurrent edits |
 | Generation fails before starting | Ownership, monthly aggregate RPC, receipt column, references, keys/model, rate limit | Repair verified configuration/schema; do not disable quota because usage is unknown |
 | Browser loses generation result | GET recovery by business/generation UUID and expected count | Recover saved rows first; generation UUID is not a durable deduplication lock |

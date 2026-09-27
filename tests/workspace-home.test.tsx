@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import { Suspense } from "react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceHome } from "@/components/workspace-home";
 import type { Business, Creative } from "@/lib/types";
@@ -57,6 +58,39 @@ const empty = {
 };
 
 describe("Home workspace", () => {
+  it("shows workspace loading while auth is pending and gates the shell on user and business", async () => {
+    let resolveAuth!: (value: { id: string; email: string }) => void;
+    let resolveBusiness!: (value: Business) => void;
+    queries.getUser.mockReturnValue(new Promise(resolve => { resolveAuth = resolve; }));
+    queries.getPrimaryBusiness.mockReturnValue(new Promise(resolve => { resolveBusiness = resolve; }));
+    const { default: AppLayout } = await import("@/app/(app)/layout");
+    const layout = AppLayout({ children: <span>Private workspace</span> });
+
+    expect(layout.type).toBe(Suspense);
+    render(layout.props.fallback);
+    expect(screen.getByRole("status", { name: "Loading workspace" })).toBeInTheDocument();
+    expect(renderToString(layout)).toContain("Loading workspace");
+    const pendingShell = layout.props.children.type(layout.props.children.props);
+    expect(queries.getPrimaryBusiness).not.toHaveBeenCalled();
+
+    resolveAuth({ id: "owner", email: "owner@example.test" });
+    await vi.waitFor(() => expect(queries.getPrimaryBusiness).toHaveBeenCalled());
+    resolveBusiness(business);
+    const shell = await pendingShell;
+    expect(shell.props.email).toBe("owner@example.test");
+    expect(shell.props.businessName).toBe(business.name);
+  });
+
+  it("does not read a business or render the shell when auth fails", async () => {
+    queries.getUser.mockResolvedValue(null);
+    queries.getPrimaryBusiness.mockReset();
+    const { default: AppLayout } = await import("@/app/(app)/layout");
+    const layout = AppLayout({ children: <span>Private workspace</span> });
+
+    await expect(layout.props.children.type(layout.props.children.props)).rejects.toThrow("NEXT_REDIRECT");
+    expect(queries.getPrimaryBusiness).not.toHaveBeenCalled();
+  });
+
   it("streams connection settings independently of slow spend evaluation", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getMetaConnection.mockResolvedValue({ ready: false });
