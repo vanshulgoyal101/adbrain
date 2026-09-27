@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getCustomerBalance: vi.fn(),
   confirmCustomerCampaign: vi.fn(),
   failedTable: "",
+  failedPageAfter: "",
   updateError: null as { message: string } | null,
 }));
 
@@ -44,14 +45,17 @@ function configureAdmin(campaigns: Record<string, unknown>[], limits: Record<str
     let after: string | null = null;
     let orderKey = "id";
     let pageSize = 100;
+    const filters = new Map<string, unknown>();
     const query = {
-      eq: () => query,
+      eq: (key: string, value: unknown) => { filters.set(key, value); return query; },
       gt: (key: string, value: string | number) => { if (key === orderKey) after = String(value); return query; },
       order: (key: string) => { orderKey = key; return query; },
       limit: (value: number) => { pageSize = value; return query; },
       then: (resolve: (value: unknown) => unknown) => resolve({
-        data: rows.filter(row => after === null || String(row[orderKey]) > after).slice(0, pageSize),
-        error: mocks.failedTable === table ? { message: "private database failure" } : null,
+        data: rows.filter(row => [...filters].every(([key, value]) => row[key] === value)
+          && (after === null || String(row[orderKey]) > after)).slice(0, pageSize),
+        error: mocks.failedTable === table || (mocks.failedPageAfter && after === mocks.failedPageAfter)
+          ? { message: "private database failure" } : null,
       }),
     };
     return { select: () => query };
@@ -73,6 +77,7 @@ function configureAdmin(campaigns: Record<string, unknown>[], limits: Record<str
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.failedTable = "";
+  mocks.failedPageAfter = "";
   mocks.updateError = null;
   mocks.requireScheduledBusiness.mockResolvedValue({ businessId: "business-1", userId: "system" });
   mocks.getCustomerBalance.mockResolvedValue({ held: false, reservations: [] });
@@ -221,6 +226,40 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.getCustomerBalance).toHaveBeenCalledOnce();
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
     expect(mocks.getCampaignInsights).not.toHaveBeenCalled();
+  });
+
+  it("finds a held business beyond the first active-campaign page", async () => {
+    configureAdmin([
+      ...Array.from({ length: 100 }, (_, index) => ({
+        ...boundCampaign, id: `campaign-${String(index).padStart(3, "0")}`,
+        meta_campaign_id: `meta-${index}`,
+      })),
+      { ...boundCampaign, id: "campaign-999", business_id: "business-2", meta_campaign_id: "meta-last" },
+    ], []);
+    mocks.requireScheduledBusiness.mockImplementation(async (businessId: string) => ({ businessId, userId: "system" }));
+    mocks.getCustomerBalance.mockImplementation(async ({ businessId }: { businessId: string }) => ({ held: businessId === "business-2", reservations: [] }));
+
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.requireScheduledBusiness).toHaveBeenCalledWith("business-2", expect.any(Request));
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledExactlyOnceWith("meta-last", "PAUSED");
+    expect(await response.json()).toMatchObject({ ok: true, swept: [{ businessId: "business-2", paused: ["campaign-999"] }] });
+  });
+
+  it("reports incomplete when the second active-campaign page fails", async () => {
+    configureAdmin(Array.from({ length: 101 }, (_, index) => ({
+      ...boundCampaign, id: `campaign-${String(index).padStart(3, "0")}`,
+      meta_campaign_id: `meta-${index}`,
+    })));
+    mocks.failedPageAfter = "campaign-099";
+
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ ok: false, error: "Active campaigns could not be loaded.", swept: [] });
+    expect(mocks.getCustomerBalance).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("reports an unknown customer balance as incomplete after attempting the pause", async () => {
