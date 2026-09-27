@@ -276,6 +276,14 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 ### Review, Create, Activate
 
+Closing New campaign retains its unsaved brief, creatives, audience, destination
+and budget in memory for the current business; returning to a business in the
+same mounted view restores its own setup. Use **Discard and start new** to clear
+it after confirmation. Unsaved edits are not durable across reload/navigation:
+use Save draft for server-backed recovery. A pending or uncertain creation
+operation cannot be discarded to bypass its recovery identity; saved drafts
+remain available after clearing the local setup.
+
 Preflight validates ownership, approved creative content, active lead form,
 connection capability, INR currency, resolved targeting, and budget. Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.

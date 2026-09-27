@@ -11,6 +11,7 @@ import { applyMigration } from "./database-migrations.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
+const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -308,6 +309,103 @@ async function verifyCustomerAllowance(db, database) {
   });
 }
 
+async function verifyCreativeGenerationAdmission(db, database) {
+  const owner = randomUUID();
+  const otherOwner = randomUUID();
+  const business = randomUUID();
+  const otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id,email) values ($1,'author@example.invalid'),($2,'other@example.invalid')", [owner,otherOwner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Author'),($3,$4,'Other')", [business,owner,otherBusiness,otherOwner]);
+  async function service(sql, values) {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("set role service_role");
+      return (await session.query(sql,values)).rows[0]?.result;
+    } finally { await session.end(); }
+  }
+  const admit=(id, tenant=business, user=owner, hash='a'.repeat(64), tokens=100, limit=150, imageFloor=10) =>
+    service("select public.creative_generation_admit($1,$2,$3,$4,1,$5,$6,$7) as result",[tenant,user,id,hash,tokens,imageFloor,limit]);
+  const status=(id, tenant=business, user=owner) =>
+    service("select public.creative_generation_status($1,$2,$3) as result",[tenant,user,id]);
+  await check(`${database}: generation admission migration is private and service-only`, async () => {
+    const { rows } = await db.query(`select
+      has_table_privilege('authenticated','private.creative_generation_intents','SELECT') as can_read,
+      has_function_privilege('authenticated','public.creative_generation_admit(uuid,uuid,uuid,text,integer,bigint,bigint,bigint)','EXECUTE') as can_admit`);
+    assert.deepEqual(rows, [{ can_read: false, can_admit: false }]);
+  });
+  await check(`${database}: concurrent identity claims admit one producer and reject rebinds`, async () => {
+    const id=randomUUID();
+    const results=await Promise.all([admit(id),admit(id)]);
+    assert.deepEqual(results.map(result=>result.action).sort(),['recover','start']);
+    assert.equal((await admit(id,business,owner,'b'.repeat(64))).action,'conflict');
+    assert.equal((await admit(id,otherBusiness,otherOwner)).action,'missing');
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unknown');
+    assert.equal((await status(randomUUID())).status,'unknown');
+    assert.equal((await status(id)).status,'processing');
+  });
+  await check(`${database}: concurrent tenants cannot exceed the remaining quota`, async () => {
+    const results=await Promise.all([admit(randomUUID(),otherBusiness,otherOwner),admit(randomUUID(),otherBusiness,otherOwner)]);
+    assert.deepEqual(results.map(result=>result.action).sort(),['quota','start']);
+  });
+  await check(`${database}: an unknown recovery lookup fences a delayed producer`, async () => {
+    const id=randomUUID();
+    const freshBusiness=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Delayed producer')",[freshBusiness,owner]);
+    assert.equal((await status(id,freshBusiness,owner)).status,'unknown');
+    assert.equal((await admit(id,freshBusiness,owner)).action,'missing');
+    assert.equal((await status(id,freshBusiness,owner)).status,'unknown');
+    const racedId=randomUUID();
+    const [lookup,claim]=await Promise.all([status(racedId,freshBusiness,owner),admit(racedId,freshBusiness,owner)]);
+    assert.deepEqual([lookup.status,claim.action].sort(),
+      lookup.status==='unknown' ? ['missing','unknown'] : ['processing','start']);
+  });
+  await check(`${database}: verified usage releases only its accounted share`, async () => {
+    const first=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1",[business])).rows[0].generation_id;
+    await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens) values ($1,$2,'creatives.generate','fixture','fixture',40)",[business,owner]);
+    const progress=await service("select public.creative_generation_progress($1,$2,$3,40,false,false,false) as result",[business,owner,first]);
+    assert.equal(progress.status,'processing');
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'quota');
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),50)).action,'start');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[business,first]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,false) as result",[business,owner,first])).status,'complete');
+    assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),60)).action,'quota');
+    assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),50)).action,'start');
+    assert.equal((await admit(first)).action,'recover');
+  });
+  await check(`${database}: timeout and uncertain provider outcome retain identity and hold`, async () => {
+    const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='processing' limit 1",[otherBusiness])).rows[0].generation_id;
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
+    assert.equal((await admit(id,otherBusiness,otherOwner)).action,'recover');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[otherBusiness,otherOwner,id])).status,'unresolved');
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
+  });
+  await check(`${database}: known pre-provider failure frees unused quota but not identity`, async () => {
+    const freshBusiness=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'No provider call')",[freshBusiness,owner]);
+    const id=randomUUID();
+    assert.equal((await admit(id,freshBusiness,owner)).action,'start');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,true) as result",[freshBusiness,owner,id])).status,'failed');
+    assert.equal((await status(id,freshBusiness,owner)).status,'failed');
+    assert.equal((await admit(id,freshBusiness,owner)).action,'recover');
+    assert.equal((await admit(randomUUID(),freshBusiness,owner,'b'.repeat(64),150)).action,'start');
+  });
+  await check(`${database}: one failed angle cannot release another in-flight angle's quota`, async () => {
+    const freshBusiness=randomUUID();
+    const id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Parallel angles')",[freshBusiness,owner]);
+    const first=await service("select public.creative_generation_admit($1,$2,$3,$4,2,100,10,150) as result",
+      [freshBusiness,owner,id,'d'.repeat(64)]);
+    assert.equal(first.action,'start');
+    await service("select public.creative_generation_progress($1,$2,$3,0,false,false,true) as result",[freshBusiness,owner,id]);
+    const second=await admit(randomUUID(),freshBusiness,owner,'e'.repeat(64),100);
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Still running',$2)",[freshBusiness,id]);
+    const late=await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[freshBusiness,owner,id]);
+    assert.deepEqual({ nextAdmission: second.action, lateProgress: late.status }, { nextAdmission: 'quota', lateProgress: 'partial' });
+  });
+}
+
 async function verify(database, source, integrityMigration, customerOnly = false) {
   const admin = client();
   await admin.connect();
@@ -318,6 +416,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
   try {
     await db.query(bootstrap);
     await db.query(source);
+    if (process.argv.includes("--generation-only")) {
+      await db.query(creativeIntentMigration);
+      await db.query(creativeIntentMigration);
+      await verifyCreativeGenerationAdmission(db, database);
+      return;
+    }
     await db.query(operatorPaymentMigration);
     await db.query(operatorPaymentMigration);
     if (customerOnly) {
@@ -1391,12 +1495,16 @@ try {
   assert.ok(schema.includes(productionPaymentsMigration.trim()), "Canonical schema must include the exact production payment migration");
   assert.ok(schema.indexOf(billingMigration.trim()) < schema.indexOf(productionPaymentsMigration.trim()), "Managed billing must precede production payments");
   assert.ok(schema.includes(operatorPaymentMigration.trim()), "Canonical schema must include the exact operator-managed payment migration");
-  assert.ok(schema.endsWith(customerAllowanceMigration), "Canonical schema must end with the exact customer allowance migration");
-  if (!process.argv.includes("--customer-only")) {
+  assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
+  assert.ok(schema.endsWith(creativeIntentMigration), "Canonical schema must end with the exact creative generation intent migration");
+  if (process.argv.includes("--generation-only")) {
+    await verify("generation_fresh",schema);
+    await verify("generation_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}`);
+  } else if (!process.argv.includes("--customer-only")) {
     await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
-  if (!process.argv.includes("--leads-only")) {
+  if (!process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
   }

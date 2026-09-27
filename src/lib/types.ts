@@ -624,6 +624,20 @@ export interface Database {
         Args: { p_business_id: string; p_since: string };
         Returns: number;
       };
+      creative_generation_admit: {
+        Args: { p_business_id: string; p_user_id: string; p_generation_id: string; p_request_hash: string;
+          p_expected_count: number; p_reserved_tokens: number; p_image_floor_tokens: number; p_monthly_limit: number };
+        Returns: { action: "start" | "recover" | "missing" | "conflict" | "quota"; status?: string; expectedCount?: number };
+      };
+      creative_generation_status: {
+        Args: { p_business_id: string; p_user_id: string; p_generation_id: string };
+        Returns: { status: "unknown" | "processing" | "partial" | "complete" | "failed" | "unresolved"; expectedCount?: number };
+      };
+      creative_generation_progress: {
+        Args: { p_business_id: string; p_user_id: string; p_generation_id: string;
+          p_accounted_tokens?: number; p_complete?: boolean; p_uncertain?: boolean; p_failed?: boolean };
+        Returns: { status: "unknown" | "processing" | "partial" | "complete" | "failed" | "unresolved"; count?: number; expectedCount?: number };
+      };
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number };
         Returns: { allowed: boolean; retry_after_ms: number }[];

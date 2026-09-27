@@ -58,7 +58,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/brand/autofill` | URL -> plain extraction | Website fetch + model call, no brand save |
 | POST | `/api/creatives/assistant` | Interview -> question/brief | Model call |
 | POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
-| GET | `/api/creatives/generate` | Business/group/count -> saved status | DB read, no generation |
+| GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
@@ -218,18 +218,37 @@ Example paid-generation input, submitted only after brief review and authorizati
 
 Returns `{variantGroup, creatives, failures}`. Individual saved variants survive
 other failures. If none save, returns 502 with an error/failure list. Missing
-generation schema or unavailable quota checking blocks before work with 503.
+generation schema or unavailable admission blocks before work with 503.
 No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
 429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
+In the #54 source candidate (not yet production), POST atomically claims the
+generation UUID and normalized request inputs before paid work. Repeating the
+same ID returns 202 with `{variantGroup, status, creatives: [], count: 0,
+expectedCount}` and never starts another producer. A changed brief, count,
+language or format for that ID returns 409; another business or owner gets 404.
+The route reserves monthly quota for text and images, counts recorded tokens,
+and retains an allowance of 10,000 quota units per completed image. This is
+**not** measured image billing or a USD spend limit: image usage may lack a known
+cost. Uncertain provider, usage or result writes retain their reservation until
+an operator can reconcile them. A definitive whole-request pre-provider failure
+can free unused quota after the batch has settled; one failed angle cannot free
+its still-running siblings' hold. The failed UUID remains non-reusable. Omitted `generationId` gets
+a new server UUID and cannot be replayed safely after a lost response.
+
 Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`.
-`generationId` must be UUID; `expectedCount` is integer 1-6, default 1. Result:
-`{status, creatives, count, expectedCount}`; `status` is `complete` when count meets
-expectation, `partial` when some rows exist, otherwise `processing`.
-`processing` is an inference from missing rows, **not proof a worker is running**.
-The POST is not durably deduplicated by generation ID. Do not automatically retry
-it after a timeout; inspect saved results first.
+`generationId` must be UUID; optional `expectedCount` is integer 1-6 and, if
+provided, must match the claimed count (409 otherwise). The source candidate
+returns `{status, creatives, count, expectedCount}` based on the persisted
+intent and saved rows. Status may be `processing`, `partial`, `complete`,
+`failed` or `unresolved` (including stale processing after five minutes).
+Unknown/foreign ID returns 404; unavailable status or row lookup returns 503.
+An owner lookup returning 404 permanently fences that UUID with a zero-quota
+no-spend record; a delayed original POST cannot start generation afterward.
+Recovery lookups are limited to 30 per user per five minutes (429 when exceeded).
+`processing` does not prove a worker is running. Inspect saved results after a
+timeout; `unresolved` requires investigation, not another paid request.
 
 `POST /api/creatives/[id]/regenerate` has no request body. It uses saved generation
 settings and current business context, replaces the creative, and sets `draft`.

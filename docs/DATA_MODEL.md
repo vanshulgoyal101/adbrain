@@ -169,6 +169,24 @@ but old data requires a separate validation decision. Monthly aggregation is
 owner-scoped and sums all relevant rows, avoiding client pagination truncation.
 Persistence is best effort and estimated costs are not invoices.
 
+The #54 source candidate adds [creative-generation intents](../db/migrations/20260927_creative_generation_intents.sql)
+as an additive migration; it is **not** included in the core schema or proof of
+a deployed migration. `private.creative_generation_intents` binds a UUID to one
+business, owner, request hash and expected count, a UTC month, reserved/accounted
+quota units, an image allowance and a persisted state. Direct table access is
+revoked; service-only admission, status and progress RPCs verify current
+ownership. Admission serializes same-ID claims and business/month quotas against
+recorded usage plus outstanding holds. Completion releases unused text allowance
+but retains 10,000 units per completed image; paid image rows carry zero tokens,
+and their estimated USD costs may be unknown. Unresolved work keeps its ID and
+hold across restarts and months. Only a settled whole-request failure with no
+saved results can release unused reservation; one failed angle cannot fail the
+intent while sibling work remains in flight. An unknown owner recovery lookup claims a
+zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
+starting after the client receives a 404. This is a conservative quota fence, **not** a
+payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
+defines the client-visible recovery states.
+
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
 per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
@@ -187,6 +205,7 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
+| `creative_generation_admit/status/progress` | #54 candidate: service-only, owner-checked generation claim, recovery and quota reconciliation |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
 

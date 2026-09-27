@@ -99,6 +99,27 @@ describe("<Studio> generation", () => {
     await waitFor(() => expect(localStorage.getItem("adbrain:studio-generation:b1")).toBeNull());
   });
 
+  it("clears a never-admitted identity without launching a paid retry", async () => {
+    localStorage.setItem("adbrain:studio-generation:b1", JSON.stringify({ generationId: "11111111-1111-4111-8111-111111111111", count: 3 }));
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: "Generation not found." }) });
+    render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /check saved results/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No generation was started");
+    expect(localStorage.getItem("adbrain:studio-generation:b1")).toBeNull();
+    expect(vi.mocked(global.fetch).mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET"]);
+  });
+
+  it("keeps an unresolved identity and does not reissue paid work", async () => {
+    const intent = { generationId: "11111111-1111-4111-8111-111111111111", count: 3 };
+    localStorage.setItem("adbrain:studio-generation:b1", JSON.stringify(intent));
+    global.fetch = vi.fn().mockResolvedValue(okJson({ status: "unresolved", creatives: [creative()] }));
+    render(<Studio business={business} initialCreatives={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /check saved results/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("unresolved");
+    expect(localStorage.getItem("adbrain:studio-generation:b1")).toBe(JSON.stringify(intent));
+    expect(vi.mocked(global.fetch).mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET"]);
+  });
+
   it.each(["POST completion", "POST rejection", "GET recovery"])("preserves a newer pending identity after late %s", async (outcome) => {
     let finishFirst!: (value: unknown) => void;
     let finishSecond!: (value: unknown) => void;
@@ -459,6 +480,39 @@ describe("<Studio> empty state", () => {
 });
 
 describe("<Studio> review board", () => {
+  it("distinguishes duplicate headlines across keyboard selection, filtering and reorder", async () => {
+    const user = userEvent.setup();
+    const variants = [
+      creative({ id: "c2", headline: "Same offer", primary_text: "Second concept copy." }),
+      creative({ id: "c1", headline: "Same offer", primary_text: "First concept copy." }),
+    ];
+    const { rerender } = render(<Studio key="first" business={business} initialCreatives={variants} />);
+    const board = within(screen.getByRole("region", { name: "Creative board" }));
+    const first = board.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 1 of 2" });
+    const second = board.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" });
+    expect(board.getByText("Variant 1 of 2")).toBeVisible();
+    expect(board.getByText("Variant 2 of 2")).toBeVisible();
+    second.focus();
+    await user.keyboard("{Enter}");
+    expect(second).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("region", { name: "Creative inspector" })).getByText("Second concept copy.")).toBeInTheDocument();
+
+    const search = screen.getByRole("searchbox", { name: "Search creatives" });
+    await user.type(search, "First concept copy.");
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    expect(board.queryByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" })).not.toBeInTheDocument();
+    await user.clear(search);
+    expect(second).toHaveAttribute("aria-pressed", "true");
+
+    rerender(<Studio key="reordered" business={business} initialCreatives={[...variants].reverse()} />);
+    const reorderedBoard = within(screen.getByRole("region", { name: "Creative board" }));
+    const reorderedSecond = reorderedBoard.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" });
+    reorderedSecond.focus();
+    await user.keyboard("{Enter}");
+    expect(reorderedSecond).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("region", { name: "Creative inspector" })).getByText("Second concept copy.")).toBeInTheDocument();
+  });
+
   it("opens a requested creative in the inspector", () => {
     render(
       <Studio
@@ -476,7 +530,7 @@ describe("<Studio> review board", () => {
       ).getByRole("heading", { name: "Second concept" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Inspect Second concept" }),
+      screen.getByRole("button", { name: "Inspect Second concept, Needs review" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -497,7 +551,7 @@ describe("<Studio> review board", () => {
       />,
     );
     expect(
-      screen.queryByRole("button", { name: "Inspect Cut your power bill" }),
+      screen.queryByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
     ).not.toBeInTheDocument();
     await user.type(
       screen.getByRole("searchbox", { name: "Search creatives" }),
@@ -506,10 +560,10 @@ describe("<Studio> review board", () => {
     expect(screen.getByText("No matching creatives")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(
-      screen.getByRole("button", { name: "Inspect Cut your power bill" }),
+      screen.getByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Inspect Second concept" }),
+      screen.getByRole("button", { name: "Inspect Second concept, Approved" }),
     ).toBeInTheDocument();
   });
 
@@ -527,7 +581,7 @@ describe("<Studio> review board", () => {
     fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: "Inspect Cut your power bill" }),
+        screen.queryByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
       ).not.toBeInTheDocument(),
     );
     expect(

@@ -44,7 +44,7 @@ status, not an undated feature claim.
 | --- | --- |
 | Business / Brand Brain | Local owner-scoped workspace and saved brand context, not a Meta business portfolio |
 | Creative | Local image/copy record, draft or approved; not necessarily a published Meta ad |
-| Generation UUID | Groups recoverable creative results; not durable paid-request idempotency |
+| Generation UUID | Groups recoverable results; the #54 source candidate adds a durable paid-request claim after its migration is applied, not yet a production claim |
 | Campaign draft | Versioned local launch intent with expiry, no remote creation on save |
 | Preflight / plan hash | Review of exact launch inputs; hash becomes stale when material inputs change |
 | Connection generation | Fence against publishing through an obsolete account/Page/credential selection |
