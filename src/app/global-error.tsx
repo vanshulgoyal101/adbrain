@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Brain } from "lucide-react";
 import { siteConfig } from "@/lib/site";
 
@@ -12,13 +12,15 @@ import { siteConfig } from "@/lib/site";
  */
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     console.error(error);
+    headingRef.current?.focus();
   }, [error]);
 
   return (
@@ -42,14 +44,14 @@ export default function GlobalError({
         }}
       >
         <p style={{ margin: 0, fontWeight: 500, color: "#2563eb", display: "flex", alignItems: "center", gap: 8 }}><Brain size={24} aria-hidden="true" />AdBrain</p>
-        <h1 style={{ margin: 0, fontSize: "1.25rem" }}>Something went wrong</h1>
+        <h1 ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: "1.25rem" }}>Something went wrong</h1>
         <p style={{ margin: 0, maxWidth: "28rem", color: "#475569" }}>
           We hit an unexpected error and couldn&apos;t load the page. Try again —
           if it keeps happening, come back in a few minutes.
         </p>
         <button
           type="button"
-          onClick={reset}
+          onClick={retry}
           style={{
             cursor: "pointer",
             borderRadius: "0.5rem",
@@ -63,6 +65,7 @@ export default function GlobalError({
         >
           Try again
         </button>
+        <a href="/login" style={{ color: "#1d4ed8", fontSize: "0.875rem", fontWeight: 500 }}>Sign in</a>
       </body>
     </html>
   );

@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
 
-if (process.argv.includes("--offline-campaigns")) {
+if (process.argv.includes("--offline-assets-focus")) {
+  await checkOfflineAssetsFocus();
+} else if (process.argv.includes("--offline-campaigns")) {
   await checkOfflineCampaigns();
 } else if (process.argv.includes("--offline-leads")) {
   await checkOfflineLeads();
@@ -348,6 +350,77 @@ async function checkOfflineLeads() {
       await context.close();
     }
     await writeFile(`${output}receipt.json`, JSON.stringify({ transport: "fully synthetic", receipts }, null, 2));
+  } finally {
+    await browser.close();
+  }
+}
+
+async function checkOfflineAssetsFocus() {
+  const { build } = await import("esbuild");
+  const { default: postcss } = await import("postcss");
+  const { default: tailwind } = await import("@tailwindcss/postcss");
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const output = `${root}test-results/brand-assets/`;
+  await mkdir(output, { recursive: true });
+  const css = await postcss([tailwind({ base: root })]).process(await readFile(`${root}src/app/globals.css`, "utf8"), { from: `${root}src/app/globals.css` });
+  const bundle = await build({
+    stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
+      import {BrandAssets} from './src/components/brand-assets';
+      import {AssetsLibrary} from './src/components/assets-library';
+      const asset = window.fixture;
+      createRoot(document.getElementById('root')).render(<main style={{maxWidth:1160,margin:'24px auto',padding:16}}>
+        <h1>Brand Brain</h1><BrandAssets businessId="b1" initialAssets={[asset]} />
+        <h1>Assets</h1><AssetsLibrary creatives={[]} brandAssets={[asset]} />
+      </main>);`, resolveDir: root, loader: "tsx" },
+    absWorkingDir: root, bundle: true, write: false, outdir: output, format: "iife", jsx: "automatic",
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [{ name: "offline-assets", setup(builder) {
+      builder.onResolve({ filter: /^next\/navigation$|^@\/lib\/supabase\/client$/ }, args => ({ path: args.path, namespace: "fixture" }));
+      builder.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({
+        contents: args.path === "next/navigation"
+          ? "export const useRouter=()=>({refresh(){}});"
+          : "export const createClient=()=>({storage:{from:()=>({})},from:()=>({})});",
+        loader: "js", resolveDir: root,
+      }));
+    } }],
+  });
+  const script = bundle.outputFiles.find(file => file.path.endsWith(".js")).text;
+  const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==";
+  const asset = { id: "asset-1", business_id: "b1", type: "logo", notes: "Synthetic logo", url: `data:image/png;base64,${image}` };
+  const browser = await chromium.launch({ channel: "chrome" });
+  try {
+    for (const width of [1440, 390, 320]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", error => errors.push(error.message));
+      await context.route("**/*", route => route.request().url() === "http://assets.test/"
+        ? route.fulfill({ contentType: "text/html", body: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css.css}</style></head><body><div id="root"></div><script>window.fixture=${JSON.stringify(asset)};${script}</script></body></html>` })
+        : route.abort());
+      await page.goto("http://assets.test/");
+      const deleteButton = page.getByRole("button", { name: "Delete asset" });
+      await expect(deleteButton).toBeAttached();
+      await page.getByRole("button", { name: "Upload" }).focus();
+      await page.keyboard.press("Tab");
+      await expect(deleteButton).toBeFocused();
+      await expect(deleteButton).toHaveCSS("opacity", "1", { timeout: 1500 });
+      await expect(deleteButton).toHaveCSS("outline-style", "solid");
+      assert.ok(Number.parseFloat(await deleteButton.evaluate(element => getComputedStyle(element).outlineWidth)) >= 2);
+      await page.screenshot({ path: `${output}delete-focus-${width}.png` });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      const bounds = await deleteButton.boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+      const confirms = [];
+      page.on("dialog", async dialog => { confirms.push(dialog.message()); await dialog.dismiss(); });
+      await page.keyboard.press("Enter");
+      assert.deepEqual(confirms, ["Delete this asset?"]);
+      await page.getByRole("button", { name: "Upload" }).focus();
+      await page.getByRole("img", { name: "Synthetic logo" }).first().hover();
+      await expect(deleteButton).toHaveCSS("opacity", "1");
+      assert.deepEqual(errors, []);
+      console.log(`PASS asset focus at ${width}px`);
+      await context.close();
+    }
   } finally {
     await browser.close();
   }

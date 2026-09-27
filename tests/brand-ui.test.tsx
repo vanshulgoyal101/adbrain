@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandForm } from "@/components/brand-form";
 import { BrandAssets } from "@/components/brand-assets";
@@ -144,6 +144,57 @@ describe("<BrandForm> prefill", () => {
     });
 
     expect(preview).toHaveTextContent("4 of 4 ready");
+  });
+
+  it("does not claim a newly edited brand is still saved", async () => {
+    render(<BrandForm business={business()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(saveBusiness).toHaveBeenCalledOnce();
+
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "New unsaved description" },
+    });
+    expect(screen.getByLabelText("Description")).toHaveValue("New unsaved description");
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Rooftop solar" } });
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
+  it("preserves an in-flight edit until its own save succeeds", async () => {
+    let finishSave!: (result: { ok: boolean }) => void;
+    saveBusiness.mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+    render(<BrandForm business={business()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    await waitFor(() => expect(saveBusiness).toHaveBeenCalledOnce());
+    expect((saveBusiness.mock.calls[0][1] as FormData).get("description")).toBe("Rooftop solar");
+
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Edited while saving" },
+    });
+    expect(screen.getByRole("button", { name: "Save Brand Brain" })).toBeDisabled();
+    await act(async () => finishSave({ ok: true }));
+    expect(screen.getByLabelText("Description")).toHaveValue("Edited while saving");
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Edited while saving");
+  });
+
+  it("keeps failed-save edits available for retry", async () => {
+    saveBusiness.mockResolvedValueOnce({ ok: false, error: "Synthetic save failed" });
+    render(<BrandForm business={business()} />);
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Draft description" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    expect(await screen.findByText("Synthetic save failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Description")).toHaveValue("Draft description");
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Draft description");
   });
 });
 

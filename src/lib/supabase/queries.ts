@@ -18,6 +18,7 @@ import {
   type SpendLimits,
 } from "@/lib/campaign/spend";
 import { createClient } from "@/lib/supabase/server";
+import { isSignedOutAuthError } from "@/lib/supabase/auth-error";
 import { eventContext, observeIdentity } from "@/lib/observability/context";
 import type {
   AdInstruction,
@@ -75,8 +76,12 @@ export const getUser = cache(async function getUser(): Promise<AppUser | null> {
   const supabase = await createClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
-  if (user) return { id: user.id, email: user.email ?? null };
+  if (error && !isSignedOutAuthError(error)) {
+    throw new Error("Workspace sign-in could not be checked.");
+  }
+  if (user && !error) return { id: user.id, email: user.email ?? null };
 
   if (isDevAuthEnabled()) {
     const store = await cookies();
@@ -88,11 +93,12 @@ export const getUser = cache(async function getUser(): Promise<AppUser | null> {
 /** All businesses owned by the current user (RLS-scoped). */
 export const getBusinesses = cache(async function getBusinesses(): Promise<Business[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("businesses")
     .select("*")
     .order("created_at", { ascending: true });
-  return data ?? [];
+  if (error || !data) throw new Error("Businesses could not be loaded.");
+  return data;
 });
 
 /** The user's first business (v1 is single-business per user). */
