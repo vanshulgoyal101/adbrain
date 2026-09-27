@@ -8,6 +8,9 @@
  * The cap is gauged against whichever is larger.
  */
 
+import type { CampaignInsights } from "@/lib/meta/insights";
+import type { Campaign } from "@/lib/types";
+
 export const WEEK_DAYS = 7;
 
 /** Per-business guardrail configuration. */
@@ -150,4 +153,54 @@ export function campaignsToAutoPause(
   if (!limits.autoPause || !cap || cap <= 0) return [];
   if (trackedSpend(campaigns) < cap) return [];
   return campaigns.filter(isActive).map((c) => c.id);
+}
+
+function currentWeekRange(timezoneName: string, now: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezoneName, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) => parts.find(value => value.type === type)?.value;
+  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  const date = new Date(`${today}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  return { start: date.toISOString().slice(0, 10), end: today };
+}
+
+export interface WeeklySpendObservation {
+  insights: CampaignInsights;
+  currency: string | null;
+  timezoneName: string | null;
+}
+
+export async function weeklySpendDecision(
+  campaigns: Campaign[],
+  limits: SpendLimits,
+  read: (campaign: Campaign) => Promise<WeeklySpendObservation>,
+  now = new Date(),
+): Promise<{ toPause: string[]; verified: boolean }> {
+  const active = campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id);
+  if (!active.length || !limits.autoPause || limits.weeklyCapRupees === null) return { toPause: [], verified: true };
+  if (!Number.isFinite(limits.weeklyCapRupees) || limits.weeklyCapRupees <= 0) {
+    return { toPause: active, verified: false };
+  }
+
+  const spends: CampaignSpend[] = [];
+  for (const campaign of campaigns) {
+    if (campaign.status === "draft" && !campaign.meta_campaign_id) continue;
+    if (!campaign.meta_campaign_id) return { toPause: active, verified: false };
+    try {
+      const { insights, currency, timezoneName } = await read(campaign);
+      if (currency !== "INR" || !timezoneName || !Number.isFinite(insights.spend) || insights.spend < 0) {
+        return { toPause: active, verified: false };
+      }
+      const week = currentWeekRange(timezoneName, now);
+      if (insights.periodStart !== week.start || insights.periodEnd !== week.end) {
+        return { toPause: active, verified: false };
+      }
+      spends.push({ id: campaign.id, status: campaign.status, dailyBudget: campaign.daily_budget, spend: insights.spend });
+    } catch {
+      return { toPause: active, verified: false };
+    }
+  }
+  return { toPause: campaignsToAutoPause(spends, limits), verified: true };
 }

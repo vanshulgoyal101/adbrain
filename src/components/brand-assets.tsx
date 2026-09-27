@@ -244,7 +244,7 @@ export function BrandAssets({
                   onClick={() => remove(a)}
                   disabled={uploading || deleting}
                   aria-label="Delete asset"
-                  className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

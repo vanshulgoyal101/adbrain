@@ -18,7 +18,7 @@ const metaClientForBusiness = vi.fn();
 const requireOwnedBusiness = vi.fn();
 const withMetaConnection = vi.fn();
 const getCampaigns = vi.fn();
-const getLatestResults = vi.fn();
+const getCampaignInsights = vi.fn();
 const getSpendLimits = vi.fn();
 const getCustomerBalance = vi.fn();
 const confirmCustomerCampaign = vi.fn();
@@ -44,9 +44,17 @@ vi.mock("@/lib/meta/connection-access", () => ({
 }));
 vi.mock("@/lib/supabase/queries", () => ({
   getCampaigns,
-  getLatestResults,
   getSpendLimits,
 }));
+
+const parts = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+}).formatToParts(new Date());
+const part = (type: string) => parts.find(value => value.type === type)?.value;
+const periodEnd = `${part("year")}-${part("month")}-${part("day")}`;
+const monday = new Date(`${periodEnd}T00:00:00Z`);
+monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+const periodStart = monday.toISOString().slice(0, 10);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -59,10 +67,11 @@ beforeEach(() => {
   auditAbortSignal.mockResolvedValue({ error: null });
   updateEq.mockResolvedValue({ error: null });
   updateCampaignStatus.mockResolvedValue(undefined);
+  getCampaignInsights.mockResolvedValue({ spend: 0, periodStart, periodEnd });
   metaClientForBusiness.mockResolvedValue({ updateCampaignStatus });
   requireOwnedBusiness.mockResolvedValue({ businessId: "b1", userId: "u1" });
   withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus }, {
+    execute({ updateCampaignStatus, getCampaignInsights }, {
       generation: 3,
       selected: {
         metaBusinessId: null,
@@ -165,9 +174,7 @@ describe("enforceAutoPause", () => {
     });
     const list = opts.campaigns ?? [campaign()];
     getCampaigns.mockResolvedValue(list);
-    getLatestResults.mockResolvedValue(
-      Object.fromEntries(list.map((c) => [c.id as string, { spend: opts.spend }])),
-    );
+    getCampaignInsights.mockResolvedValue({ spend: opts.spend, periodStart, periodEnd });
   };
 
   it("does nothing when auto-pause is off", async () => {
@@ -179,13 +186,12 @@ describe("enforceAutoPause", () => {
 
   it("pauses held customer funds even when the optional weekly guard is off", async () => {
     setup({ autoPause: false, cap: null, spend: 100 });
-    getLatestResults.mockRejectedValueOnce(new Error("Reporting unavailable"));
+    getCampaignInsights.mockRejectedValue(new Error("Reporting unavailable"));
     getCustomerBalance.mockResolvedValue({ held: true, reservations: [{ campaignId: "c1", reservationId: "r1", state: "active" }] });
     const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
     await expect(enforceAutoPause("b1")).resolves.toEqual(["c1"]);
     expect(confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "b1", userId: "u1" }, "c1", "r1", "paused");
-    expect(getLatestResults).not.toHaveBeenCalled();
-    getLatestResults.mockReset();
+    expect(getCampaignInsights).not.toHaveBeenCalled();
   });
 
   it("does not treat unavailable customer costs as zero spend", async () => {
@@ -205,9 +211,73 @@ describe("enforceAutoPause", () => {
 
   it("does nothing while spend is under the cap", async () => {
     setup({ autoPause: true, cap: 7000, spend: 100 });
-    const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
-    await expect(enforceAutoPause("b1")).resolves.toEqual([]);
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    const outcome = await enforceAutoPauseWithStatus("b1");
+    expect(getCampaignInsights).toHaveBeenCalledWith("meta-1", { weekly: true });
+    expect(outcome).toEqual({ paused: [], confirmed: true });
     expect(updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not pause a funded active campaign because an unrelated draft has no Meta ID", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 100, campaigns: [
+      campaign(),
+      campaign({ id: "draft", status: "draft", meta_campaign_id: null }),
+    ] });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: true });
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["draft", "paused"])("counts spend from a launched %s campaign", async status => {
+    setup({ autoPause: true, cap: 7000, spend: 0, campaigns: [
+      campaign(),
+      campaign({ id: "other", status, meta_campaign_id: "meta-other" }),
+    ] });
+    getCampaignInsights.mockImplementation(async (id: string) => ({
+      spend: id === "meta-other" ? 6900 : 100, periodStart, periodEnd,
+    }));
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: true });
+    expect(getCampaignInsights).toHaveBeenCalledWith("meta-other", { weekly: true });
+  });
+
+  it("fails closed when an active campaign has no Meta ID", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 100, campaigns: [
+      campaign(),
+      campaign({ id: "other", status: "active", meta_campaign_id: null }),
+    ] });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: false });
+    expect(updateCampaignStatus).toHaveBeenCalledWith("meta-1", "PAUSED");
+  });
+
+  it("does not treat a missing active spend observation as zero", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 100 });
+    getCampaignInsights.mockResolvedValue({ spend: 0, periodStart: null, periodEnd: null });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: false });
+    expect(updateCampaignStatus).toHaveBeenCalledWith("meta-1", "PAUSED");
+  });
+
+  it.each([
+    ["stale", { spend: 100, periodStart: "2020-01-01", periodEnd: "2020-01-07" }],
+    ["partial", { spend: 100, periodStart, periodEnd: null }],
+    ["invalid", { spend: Number.NaN, periodStart, periodEnd }],
+  ])("pauses rather than trusting %s weekly insights", async (_label, insights) => {
+    setup({ autoPause: true, cap: 7000, spend: 100 });
+    getCampaignInsights.mockResolvedValue(insights);
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: false });
+  });
+
+  it("does not trust an account whose currency is not rupees", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 100 });
+    withMetaConnection.mockImplementation(async (_context, _options, execute) => execute(
+      { updateCampaignStatus, getCampaignInsights },
+      { selected: { currency: "USD", timezoneName: "Asia/Kolkata" } },
+    ));
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: false });
   });
 
   it("pauses on Meta and locally once the cap is reached", async () => {
@@ -262,6 +332,9 @@ describe("enforceAutoPause", () => {
 
     const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
     await expect(enforceAutoPause("b1")).resolves.toEqual(["c2"]);
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    updateCampaignStatus.mockRejectedValueOnce(new Error("meta 500"));
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toMatchObject({ confirmed: false });
   });
 
   it("returns empty rather than throwing if the lookup fails", async () => {

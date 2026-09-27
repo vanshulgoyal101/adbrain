@@ -1,4 +1,5 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { generateVariants } from "@/lib/creative/generate";
@@ -10,19 +11,20 @@ import { languagePromptName } from "@/lib/languages";
 import { NoLLMKeysError } from "@/lib/llm";
 import {
   configuredMonthlyTokenLimit,
-  monthlyTokenUsage,
   persistLLMUsage,
 } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
+import { getEnv } from "@/lib/env";
 import { z } from "zod";
 import {
   generationReceipt,
   variantUsageEvents,
   failedVariantUsage,
 } from "@/lib/creative/receipt";
-import type { Creative } from "@/lib/types";
+import type { Creative, Database } from "@/lib/types";
 import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
 
 export const runtime = "nodejs";
@@ -45,10 +47,30 @@ async function handleGET(req: Request) {
   const params = new URL(req.url).searchParams;
   const businessId = params.get("businessId")?.trim() ?? "";
   const generationId = params.get("generationId")?.trim() ?? "";
-  const expectedCount = Number(params.get("expectedCount") ?? 1);
-  if (!businessId || !z.string().uuid().safeParse(generationId).success || !Number.isSafeInteger(expectedCount) || expectedCount < 1 || expectedCount > 6) {
+  const requestedCount = params.has("expectedCount") ? Number(params.get("expectedCount")) : null;
+  if (!businessId || !z.string().uuid().safeParse(generationId).success ||
+    (requestedCount !== null && (!Number.isSafeInteger(requestedCount) || requestedCount < 1 || requestedCount > 6))) {
     return NextResponse.json({ error: "A valid businessId, generationId, and expectedCount are required." }, { status: 400 });
   }
+  const limited = await rateLimitResponse(`generate-status:${user.id}`, {
+    limit: 30,
+    windowMs: 5 * 60_000,
+  });
+  if (limited) return limited;
+  let intent: Database["public"]["Functions"]["creative_generation_status"]["Returns"];
+  try {
+    const lookup = await createAdminClient().rpc("creative_generation_status", {
+      p_business_id: businessId, p_user_id: user.id, p_generation_id: generationId,
+    });
+    if (lookup.error || !lookup.data) return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+    intent = lookup.data;
+  } catch {
+    return NextResponse.json({ error: "Generation status is unavailable." }, { status: 503 });
+  }
+  if (intent.status === "unknown") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+  const expectedCount = Number(intent.expectedCount);
+  if (requestedCount !== null && requestedCount !== expectedCount)
+    return NextResponse.json({ error: "Generation count does not match the saved request." }, { status: 409 });
 
   const { data: creatives, error } = await supabase
     .from("creatives")
@@ -60,7 +82,8 @@ async function handleGET(req: Request) {
 
   const saved = (creatives ?? []) as Creative[];
   return NextResponse.json({
-    status: saved.length >= expectedCount ? "complete" : saved.length ? "partial" : "processing",
+    status: intent.status === "complete" && saved.length < expectedCount ? "unresolved" :
+      intent.status === "processing" && saved.length ? "partial" : intent.status,
     creatives: saved,
     count: saved.length,
     expectedCount,
@@ -133,27 +156,6 @@ async function handlePOST(req: Request) {
   }
 
   const monthlyLimit = configuredMonthlyTokenLimit();
-  if (monthlyLimit > 0) {
-    const used = await monthlyTokenUsage(businessId);
-    if (used === null)
-      return NextResponse.json(
-        {
-          error:
-            "AI usage limits could not be verified. No generation was started.",
-        },
-        { status: 503 },
-      );
-    if (used != null && used >= monthlyLimit) {
-      return NextResponse.json(
-        {
-          error: "This business has reached its monthly AI generation limit.",
-          code: "LLM_MONTHLY_QUOTA_EXCEEDED",
-        },
-        { status: 429 },
-      );
-    }
-  }
-
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")
@@ -167,15 +169,46 @@ async function handlePOST(req: Request) {
       { status: 503 },
     );
   const requestId = currentRequestId();
+  const userId = user.id;
   const variantGroup = body.generationId ?? crypto.randomUUID();
   const inserted: Creative[] = [];
   const failures: { angle: string; error: string }[] = [];
+  let noProviderFailures = 0;
+  let admitted = false;
+  let admin: ReturnType<typeof createAdminClient> | null = null;
+  async function progress(tokens = 0, complete = false, uncertain = false, failed = false) {
+    const { data, error } = await admin!.rpc("creative_generation_progress", {
+      p_business_id: businessId, p_user_id: userId, p_generation_id: variantGroup,
+      p_accounted_tokens: tokens, p_complete: complete, p_uncertain: uncertain, p_failed: failed,
+    });
+    if (error || !data || data.status === "unknown") throw new Error("Generation progress is unavailable");
+  }
   try {
     const [instructions, referenceImages, recentCopy] = await Promise.all([
       getActiveInstructionsText(businessId),
       creativeReferences(supabase, businessId),
       recentCreativeCopy(supabase, businessId),
     ]);
+    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format])).digest("hex");
+    admin = createAdminClient();
+    const { data: admission, error: admissionError } = await admin.rpc("creative_generation_admit", {
+      p_business_id: businessId,
+      p_user_id: user.id,
+      p_generation_id: variantGroup,
+      p_request_hash: requestHash,
+      p_expected_count: count,
+      p_reserved_tokens: count * (50_000 + 2 * getEnv().CREATIVE_MAX_TOKENS),
+      p_image_floor_tokens: count * 10_000,
+      p_monthly_limit: monthlyLimit,
+    });
+    if (admissionError || !admission) return NextResponse.json({ error: "Generation admission is unavailable. No generation was started." }, { status: 503 });
+    if (admission.action !== "start") {
+      if (admission.action === "missing") return NextResponse.json({ error: "Generation not found." }, { status: 404 });
+      if (admission.action === "conflict") return NextResponse.json({ error: "Generation ID was already used for different inputs." }, { status: 409 });
+      if (admission.action === "quota") return NextResponse.json({ error: "This business has reached its monthly AI generation limit.", code: "LLM_MONTHLY_QUOTA_EXCEEDED" }, { status: 429 });
+      return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
+    }
+    admitted = true;
     await generateVariants({
       brand: business,
       brief,
@@ -186,14 +219,14 @@ async function handlePOST(req: Request) {
       referenceImages,
       recentCopy,
       onVariant: async (variant) => {
-        await persistLLMUsage(
-          variantUsageEvents(variant, {
+        const events = variantUsageEvents(variant, {
             businessId,
             userId: user.id,
             route: "creatives.generate",
             requestId,
-          }),
-        );
+          });
+        const recorded = await persistLLMUsage(events);
+        await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
         const photoUrl = await persistCreativeImage(
           supabase,
           businessId,
@@ -231,23 +264,31 @@ async function handlePOST(req: Request) {
             "Could not save the creative. Check the generation schema migration.",
           );
         inserted.push(data);
+        await progress();
       },
       onFailure: async (angle, error) => {
-        await persistLLMUsage(
-          failedVariantUsage(error, {
+        const events = failedVariantUsage(error, {
             businessId,
             userId: user.id,
             route: "creatives.generate",
             requestId,
-          }),
-        );
+          });
+        const recorded = await persistLLMUsage(events);
+        if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;
+        await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded || !(error instanceof NoLLMKeysError));
         failures.push({
           angle: angle.name,
           error: "This creative could not be generated or saved. Check saved results before trying again.",
         });
       },
     });
+    const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
+    await progress(0, (inserted.length === count && !failures.length) || noProvider,
+      !noProvider && (inserted.length < count || failures.length > 0), noProvider);
+    if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
   } catch (err) {
+    const noProvider = err instanceof NoLLMKeysError;
+    if (admitted) await progress(0, noProvider, !noProvider, noProvider).catch(() => {});
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json(
         { error: err.message, code: "NO_LLM_KEYS" },

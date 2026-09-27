@@ -92,6 +92,25 @@ updated dev before publishing a branch based on older source, and check the
 resulting committed rules. Repair of a deployment policy is not itself approval
 for a feature, schema, credential or financial change.
 
+## Current Release Boundary
+
+Before this candidate, production `main` served the enquiry workflow at `f639cc3`;
+payment collection remained disabled. The selective operator-managed checkout
+candidate carries accepted #48 payment source without #49's unfinished spend
+guard. Publish its code only through a protected main PR with required exact-head
+checks. On September 26 at 18:46 UTC, the verified AdBrain production target
+applied `20260924_managed_billing.sql`, `20260924_meta_billing_events.sql`,
+`20260926_production_payment_orders.sql` and
+`20260926_production_payment_policy_v2.sql` together, after scoped encrypted
+before-state capture. Independent readback matched all four pinned ledger hashes,
+showed zero orders, preserved 4 businesses and 2 Meta connections, and confirmed
+server-only payment claim access. This scoped metadata snapshot is not a full
+database backup. Do not replay the whole canonical schema or rewrite an applied
+migration checksum. Live credentials, merchant identity, webhook and tax status
+need independent verification; collection flags remain off until then.
+Neither code deployment nor capture activates Meta advertising. Real charges,
+refunds and ad spend need separate financial authorization.
+
 ## Latest Application Release: 2026-09-18
 
 **Historical receipt.** This heading is retained for existing links; the current
@@ -149,17 +168,17 @@ documentation-only synchronization is recorded in its PR.
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
-| Vercel Git deployment (repaired source) | `**: false`, `main: true`, `dev: false`, pilot branch disabled |
+| Vercel Git deployment (current source) | `**: false`, `main: true`, `dev: false`, pilot branch disabled |
 
 These controls are split between [.github/workflows/ci.yml](../.github/workflows/ci.yml),
 [vercel.json](../vercel.json), and GitHub branch-protection settings. GitHub does
 not enforce that every release originated on `dev`; the promotion procedure does.
 Direct CLI deployments are not blocked by Git branch protection.
 
-**A single `*` does not disable slash-containing Git branches.** Use `**` for
-the default-deny rule with the explicit `main: true` exception, and validate the
-exact branch's committed configuration and observed hosted behavior. Earlier
-receipts that inferred suppression from `*: false` are superseded by the repair above.
+**A single `*` does not disable slash-containing Git branches.** The corrected
+checked-in `**: false` rule defaults to deny, with an explicit `main: true`
+exception. Validate the exact branch's committed configuration and observed
+hosted behavior; historical single-star receipts describe the earlier failure.
 Before pushing a feature or release branch, inspect effective remote deployment
 rules and preview credentials rather than relying on an old receipt or local JSON
 alone. Do not assume a preview URL implies a preview database, harmless cron

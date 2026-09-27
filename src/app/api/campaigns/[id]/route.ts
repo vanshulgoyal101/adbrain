@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { MetaError, friendlyMetaError } from "@/lib/meta/client";
+import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -15,12 +15,47 @@ import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
-import { activationConfirmationPayload } from "@/lib/campaign/activation";
+import { activationConfirmationPayload, intendedCampaignChildren } from "@/lib/campaign/activation";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) => {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return apiError("Unauthorized", 401);
+  const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", id).maybeSingle();
+  if (!campaign) return apiError("Campaign not found", 404);
+  const binding = readStoredCampaignBinding(campaign);
+  const children = intendedCampaignChildren(campaign);
+  if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId
+    || binding.metaConnectionGeneration === null || !children || !Number.isFinite(campaign.daily_budget)) {
+    return apiError("Campaign children or account need reconciliation before activation review.", 409);
+  }
+  try {
+    const context = await requireOwnedBusiness(campaign.business_id);
+    await recheckMetaConnection(context, binding.metaConnectionGeneration);
+    const delivery = await withMetaConnection(context, {
+      purpose: "activate",
+      binding: { adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId },
+      expectedGeneration: binding.metaConnectionGeneration,
+    }, async meta => meta.readCampaignDelivery(campaign.meta_campaign_id!, {
+      dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children,
+    }));
+    return NextResponse.json({ delivery }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
+    if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);
+    if (error instanceof MetaError) return apiError(friendlyMetaError(error), error.status && error.status >= 500 ? 502 : 400);
+    return serverError("campaign.delivery", error, "Campaign delivery review is unavailable.");
+  }
+});
 
 /**
  * Pause or resume a campaign. Updates the status on Meta, then mirrors it
@@ -101,7 +136,12 @@ async function handlePATCH(
   ) {
     return apiError("Meta connection changed; review the campaign again.", 409);
   }
+  const children = action === "active" ? intendedCampaignChildren(campaign) : null;
+  if (action === "active" && !children) {
+    return apiError("Campaign children need reconciliation before activation.", 409);
+  }
 
+  let deliveryAfter: CampaignDeliverySnapshot | null = null;
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
     if (action === "active") {
@@ -128,14 +168,13 @@ async function handlePATCH(
           if (!Number.isFinite(campaign.daily_budget) || (campaign.daily_budget ?? 0) <= 0 || connection.selected?.currency !== "INR") {
             throw new ConnectionAccessError("UNAVAILABLE", "Campaign budget and currency must be verified before activation.");
           }
-          const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection)).digest("hex");
-          if (parsed.data.confirmationDigest !== expectedDigest) {
-            throw new ConnectionAccessError("CONFLICT", "Campaign review changed; review the current budget and Meta assets again.");
-          }
-          await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
-            dailyBudgetRupees: campaign.daily_budget!,
-            status: campaign.status,
+          const delivery = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
+            dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!,
           });
+          const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery)).digest("hex");
+          if (parsed.data.confirmationDigest !== expectedDigest) {
+            throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
+          }
           const reservation = await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
@@ -144,6 +183,9 @@ async function handlePATCH(
           try {
             await meta.enforceCampaignSpendCap(campaign.meta_campaign_id!, reservation.mediaLimitPaise);
             await meta.updateCampaignStatus(campaign.meta_campaign_id!, "ACTIVE");
+            deliveryAfter = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
+              dailyBudgetRupees: campaign.daily_budget!, status: "active", ...children!,
+            });
             await confirmCustomerCampaign(context, id, reservation.reservationId, "active");
           } catch (error) {
             await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
@@ -160,6 +202,7 @@ async function handlePATCH(
     );
   } catch (err) {
     if (err instanceof CustomerBalanceError) return apiError(err.message, 409);
+    if (err instanceof CampaignDeliveryError) return apiError(err.message, 409);
     if (err instanceof ConnectionAccessError) {
       return apiError(
         err.message,
@@ -187,7 +230,7 @@ async function handlePATCH(
     reason: `${action === "active" ? "Resumed" : "Paused"} campaign "${campaign.name ?? id}"`,
   });
 
-  return NextResponse.json({ ok: true, status: action });
+  return NextResponse.json({ ok: true, status: action, delivery: deliveryAfter });
 }
 
 /** Delete a campaign from Meta (best-effort) and remove it from AdBrain. */

@@ -81,12 +81,23 @@ function firstLine(value: string): string {
     .find(Boolean) ?? "";
 }
 
+type BrandSaveState = SaveState & { submittedRevision?: number };
+
 export function BrandForm({ business }: { business: Business | null }) {
-  const [fields, setFields] = useState<FieldsState>(() =>
-    fromBusiness(business),
-  );
-  const [state, formAction, pending] = useActionState<SaveState, FormData>(
-    saveBusiness,
+  const [form, setForm] = useState(() => ({ fields: fromBusiness(business), revision: 0 }));
+  const { fields, revision } = form;
+  function setFields(update: (current: FieldsState) => FieldsState) {
+    setForm(current => {
+      const next = update(current.fields);
+      return next === current.fields ? current : { fields: next, revision: current.revision + 1 };
+    });
+  }
+  const [state, formAction, pending] = useActionState<BrandSaveState, FormData>(
+    async (previous, formData) => {
+      const submittedRevision = revision;
+      const result = await saveBusiness(previous, formData);
+      return result.ok ? { ...result, submittedRevision } : result;
+    },
     { ok: false },
   );
   const [autofilling, setAutofilling] = useState(false);
@@ -481,7 +492,7 @@ export function BrandForm({ business }: { business: Business | null }) {
           {pending ? <Spinner /> : <Save className="h-4 w-4" />}
           Save Brand Brain
         </Button>
-        {state.ok && (
+        {state.ok && state.submittedRevision === revision && !pending && (
           <span className="inline-flex items-center gap-1.5 text-sm text-blue-700">
             <CheckCircle2 className="h-4 w-4" /> Saved
           </span>

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { AuthApiError, AuthSessionMissingError } from "@supabase/supabase-js";
 import { eventContext, newEventContext } from "@/lib/observability/context";
 
 const mocks = vi.hoisted(() => ({ getUser: vi.fn() }));
@@ -24,5 +25,21 @@ describe("verified logging identity", () => {
       await (await createClient()).auth.getUser();
       expect(eventContext.getStore()?.userId).toBeNull();
     });
+  });
+});
+
+describe("workspace authentication recovery", () => {
+  it("treats a missing or expired session as signed out", async () => {
+    const { getUser } = await import("@/lib/supabase/queries");
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: new AuthSessionMissingError() });
+    expect(await getUser()).toBeNull();
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: new AuthApiError("expired", 401, undefined) });
+    expect(await getUser()).toBeNull();
+  });
+
+  it("surfaces an auth service failure without leaking provider details", async () => {
+    mocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: new AuthApiError("private provider detail", 503, undefined) });
+    const { getUser } = await import("@/lib/supabase/queries");
+    await expect(getUser()).rejects.toThrow("Workspace sign-in could not be checked.");
   });
 });

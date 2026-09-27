@@ -36,6 +36,19 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
 
 beforeEach(() => { mocks.failedTable = ""; mocks.failAfter = ""; mocks.pageSize = 1000; vi.clearAllMocks(); });
 
+describe("workspace business query failures", () => {
+  it("keeps an empty workspace valid when the business read succeeds", async () => {
+    const { getPrimaryBusiness } = await import("@/lib/supabase/queries");
+    expect(await getPrimaryBusiness()).toBeNull();
+  });
+
+  it("rejects a failed business read instead of presenting an empty workspace", async () => {
+    mocks.failedTable = "businesses";
+    const { getPrimaryBusiness } = await import("@/lib/supabase/queries");
+    await expect(getPrimaryBusiness()).rejects.toThrow("Businesses could not be loaded.");
+  });
+});
+
 describe("instruction query failures", () => {
   it.each(["getAdInstructions", "getActiveInstructionsText"] as const)("%s rejects unavailable instructions with a safe error", async (queryName) => {
     mocks.failedTable = "ad_instructions";

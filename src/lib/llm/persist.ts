@@ -112,9 +112,9 @@ export function configuredMonthlyTokenLimit(): number {
   return getEnv().LLM_MONTHLY_TOKEN_LIMIT;
 }
 
-/** Best-effort persistence: generation should not fail because telemetry is unavailable. */
-export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
-  if (!events.length) return;
+/** Best-effort persistence; callers admitting paid work can retain a hold on failure. */
+export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean> {
+  if (!events.length) return true;
   for (const event of events) recordProductEvent({
     kind: "workflow", name: "ai.completion", businessId: event.businessId,
     outcome: event.status === "error" ? "failed" : event.status === "fallback" ? "partial" : "success",
@@ -156,7 +156,9 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<void> {
       })),
     ).abortSignal(AbortSignal.timeout(3_000));
     if (error) recordProductEvent({ kind: "system", name: "ai.usage.persist", outcome: "failed", attributes: { errorCode: "USAGE_WRITE_FAILED" } });
+    return !error;
   } catch {
     recordProductEvent({ kind: "system", name: "ai.usage.persist", outcome: "failed", attributes: { errorCode: "USAGE_WRITE_FAILED" } });
+    return false;
   }
 }

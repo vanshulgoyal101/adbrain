@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
 
-if (process.argv.includes("--offline-leads")) {
+if (process.argv.includes("--offline-assets-focus")) {
+  await checkOfflineAssetsFocus();
+} else if (process.argv.includes("--offline-campaigns")) {
+  await checkOfflineCampaigns();
+} else if (process.argv.includes("--offline-leads")) {
   await checkOfflineLeads();
 } else {
 const origin = process.env.WORKSPACE_CHECK_URL ?? "http://localhost:3000";
@@ -142,6 +146,78 @@ try {
 }
 }
 
+async function checkOfflineCampaigns() {
+  const { build } = await import("esbuild");
+  const { default: postcss } = await import("postcss");
+  const { default: tailwind } = await import("@tailwindcss/postcss");
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const output = `${root}test-results/workspace-ux/`;
+  await mkdir(output, { recursive: true });
+  const css = await postcss([tailwind({ base: root })]).process(await readFile(`${root}src/app/globals.css`, "utf8"), { from: `${root}src/app/globals.css` });
+  const bundle = await build({
+    stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
+      import {Campaigns} from './src/components/campaigns';
+      const business={id:'fixture-business',owner_id:'fixture-owner',name:'Fixture Solar',locations:['Jaipur']};
+      const creative={id:'fixture-creative',headline:'Local solar offer',image_url:'',status:'approved'};
+      createRoot(document.getElementById('root')).render(<main style={{maxWidth:1160,margin:'24px auto',padding:16}}>
+        <Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}}
+          leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" /></main>);`, resolveDir: root, loader: "tsx" },
+    absWorkingDir: root, bundle: true, write: false, outdir: output, format: "iife", jsx: "automatic",
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [{ name: "offline-campaign-boundaries", setup(builder) {
+      builder.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: "fixture" }));
+      builder.onResolve({ filter: /(?:components\/(?:campaign-chat|meta-connect\/meta-connect-dialog)|lib\/meta-connect-ui\/client)$/ }, args => ({ path: args.path, namespace: "fixture" }));
+      builder.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ contents: args.path === "next/navigation"
+        ? 'export function useRouter(){return {refresh(){}}}'
+        : args.path === "next/link"
+          ? 'import React from "react"; export default function Link(props){return React.createElement("a",props)}'
+          : args.path.endsWith("/client")
+            ? 'export class MetaConnectClientError extends Error{}; export function createMetaConnectClient(){return {drafts:async()=>[]}}'
+            : 'export function CampaignChat(){return null}; export function MetaConnectDialog(){return null}', resolveDir: root, loader: "js" }));
+    } }],
+  });
+  const script = bundle.outputFiles.find(file => file.path.endsWith(".js")).text;
+  const moduleCss = bundle.outputFiles.find(file => file.path.endsWith(".css"))?.text ?? "";
+  const browser = await chromium.launch({ channel: "chrome" });
+  try {
+    for (const width of [1440, 390, 320]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", error => errors.push(error.message));
+      await page.route("**/*", route => route.request().url() === "http://campaign-fixture.test/"
+        ? route.fulfill({ contentType: "text/html", body: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css.css}\n${moduleCss}</style></head><body><div id="root"></div><script>${script}</script></body></html>` })
+        : route.abort());
+      await page.goto("http://campaign-fixture.test/");
+      const goal = page.getByRole("textbox", { name: "Campaign goal" });
+      await expect(goal).toBeVisible();
+      await goal.fill("Synthetic local solar enquiries");
+      await page.getByRole("button", { name: "Local solar offer" }).click();
+      await page.getByRole("button", { name: "Close campaign setup" }).click();
+      await page.getByRole("button", { name: "New campaign" }).click();
+      await expect(goal).toHaveValue("Synthetic local solar enquiries");
+      await expect(page.getByRole("textbox", { name: "Campaign name" })).toBeFocused();
+      const controls = await page.getByRole("button", { name: /^(Discard and start new|Close campaign setup)$/ }).evaluateAll(buttons => buttons.map(button => {
+        const box = button.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+      }));
+      assert.equal(controls.length, 2);
+      assert.ok(controls.every(box => box.left >= 0 && box.right <= width), `Composer controls overflow at ${width}px`);
+      assert.ok(controls[0].bottom <= controls[1].top || controls[1].bottom <= controls[0].top
+        || controls[0].right <= controls[1].left || controls[1].right <= controls[0].left, `Composer controls overlap at ${width}px`);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Composer overflows at ${width}px`);
+      assert.deepEqual(errors, []);
+      await page.screenshot({ path: `${output}offline-campaign-${width}.png`, fullPage: true });
+      await page.getByRole("radio", { name: "Plan with AdBrain" }).check();
+      await page.getByRole("button", { name: "Close campaign setup" }).click();
+      await page.getByRole("button", { name: "New campaign" }).click();
+      await expect(page.getByRole("radio", { name: "Plan with AdBrain" })).toBeFocused();
+      console.log(`${width}px: retained composer input, focus, controls and overflow PASS`);
+      await context.close();
+    }
+  } finally { await browser.close(); }
+}
+
 async function checkOfflineLeads() {
   const { build } = await import("esbuild");
   const { default: postcss } = await import("postcss");
@@ -274,6 +350,77 @@ async function checkOfflineLeads() {
       await context.close();
     }
     await writeFile(`${output}receipt.json`, JSON.stringify({ transport: "fully synthetic", receipts }, null, 2));
+  } finally {
+    await browser.close();
+  }
+}
+
+async function checkOfflineAssetsFocus() {
+  const { build } = await import("esbuild");
+  const { default: postcss } = await import("postcss");
+  const { default: tailwind } = await import("@tailwindcss/postcss");
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const output = `${root}test-results/brand-assets/`;
+  await mkdir(output, { recursive: true });
+  const css = await postcss([tailwind({ base: root })]).process(await readFile(`${root}src/app/globals.css`, "utf8"), { from: `${root}src/app/globals.css` });
+  const bundle = await build({
+    stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client';
+      import {BrandAssets} from './src/components/brand-assets';
+      import {AssetsLibrary} from './src/components/assets-library';
+      const asset = window.fixture;
+      createRoot(document.getElementById('root')).render(<main style={{maxWidth:1160,margin:'24px auto',padding:16}}>
+        <h1>Brand Brain</h1><BrandAssets businessId="b1" initialAssets={[asset]} />
+        <h1>Assets</h1><AssetsLibrary creatives={[]} brandAssets={[asset]} />
+      </main>);`, resolveDir: root, loader: "tsx" },
+    absWorkingDir: root, bundle: true, write: false, outdir: output, format: "iife", jsx: "automatic",
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [{ name: "offline-assets", setup(builder) {
+      builder.onResolve({ filter: /^next\/navigation$|^@\/lib\/supabase\/client$/ }, args => ({ path: args.path, namespace: "fixture" }));
+      builder.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({
+        contents: args.path === "next/navigation"
+          ? "export const useRouter=()=>({refresh(){}});"
+          : "export const createClient=()=>({storage:{from:()=>({})},from:()=>({})});",
+        loader: "js", resolveDir: root,
+      }));
+    } }],
+  });
+  const script = bundle.outputFiles.find(file => file.path.endsWith(".js")).text;
+  const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==";
+  const asset = { id: "asset-1", business_id: "b1", type: "logo", notes: "Synthetic logo", url: `data:image/png;base64,${image}` };
+  const browser = await chromium.launch({ channel: "chrome" });
+  try {
+    for (const width of [1440, 390, 320]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", error => errors.push(error.message));
+      await context.route("**/*", route => route.request().url() === "http://assets.test/"
+        ? route.fulfill({ contentType: "text/html", body: `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css.css}</style></head><body><div id="root"></div><script>window.fixture=${JSON.stringify(asset)};${script}</script></body></html>` })
+        : route.abort());
+      await page.goto("http://assets.test/");
+      const deleteButton = page.getByRole("button", { name: "Delete asset" });
+      await expect(deleteButton).toBeAttached();
+      await page.getByRole("button", { name: "Upload" }).focus();
+      await page.keyboard.press("Tab");
+      await expect(deleteButton).toBeFocused();
+      await expect(deleteButton).toHaveCSS("opacity", "1", { timeout: 1500 });
+      await expect(deleteButton).toHaveCSS("outline-style", "solid");
+      assert.ok(Number.parseFloat(await deleteButton.evaluate(element => getComputedStyle(element).outlineWidth)) >= 2);
+      await page.screenshot({ path: `${output}delete-focus-${width}.png` });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      const bounds = await deleteButton.boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+      const confirms = [];
+      page.on("dialog", async dialog => { confirms.push(dialog.message()); await dialog.dismiss(); });
+      await page.keyboard.press("Enter");
+      assert.deepEqual(confirms, ["Delete this asset?"]);
+      await page.getByRole("button", { name: "Upload" }).focus();
+      await page.getByRole("img", { name: "Synthetic logo" }).first().hover();
+      await expect(deleteButton).toHaveCSS("opacity", "1");
+      assert.deepEqual(errors, []);
+      console.log(`PASS asset focus at ${width}px`);
+      await context.close();
+    }
   } finally {
     await browser.close();
   }

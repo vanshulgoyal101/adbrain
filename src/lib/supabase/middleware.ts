@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from "@/lib/dev-auth";
+import { isSignedOutAuthError } from "@/lib/supabase/auth-error";
 
 // Every route under src/app/(app). Keep in sync with that folder — the layout
 // also redirects, but guarding at the edge avoids a wasted render and keeps the
@@ -48,6 +49,7 @@ export async function updateSession(request: NextRequest) {
   // first await so the session refresh cookies are attached to the response.
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
@@ -57,7 +59,7 @@ export async function updateSession(request: NextRequest) {
     isDevAuthEnabled() &&
     request.cookies.get(DEV_AUTH_COOKIE)?.value === "1";
 
-  if (!user && !devAuthed && isProtected) {
+  if (!user && !devAuthed && isProtected && (!error || isSignedOutAuthError(error))) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("redirect", path);
