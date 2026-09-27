@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -20,6 +21,7 @@ export interface WorkspaceHomeProps {
   audit: AuditLog[];
   metaReady: boolean;
   spend: SpendEvaluation | null;
+  spendStatus?: ReactNode;
 }
 
 const actionClass =
@@ -32,6 +34,7 @@ export function WorkspaceHome({
   audit,
   metaReady,
   spend,
+  spendStatus,
 }: WorkspaceHomeProps) {
   const queue = buildWorkQueue({ business, creatives, campaigns, metaReady });
   const drafts = creatives.filter(
@@ -70,9 +73,9 @@ export function WorkspaceHome({
         </Link>
       </header>
 
-      {spend && (spend.status === "approaching" || spend.status === "over") && (
+      {spendStatus ?? (spend && (spend.status === "approaching" || spend.status === "over") && (
         <SpendStatusBanner evaluation={spend} />
-      )}
+      ))}
 
       {business && (
         <dl className="grid grid-cols-2 divide-x divide-slate-200 border-b border-slate-200 pb-6 lg:grid-cols-4">
