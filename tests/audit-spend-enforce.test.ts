@@ -218,6 +218,39 @@ describe("enforceAutoPause", () => {
     expect(updateCampaignStatus).not.toHaveBeenCalled();
   });
 
+  it("does not pause a funded active campaign because an unrelated draft has no Meta ID", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 100, campaigns: [
+      campaign(),
+      campaign({ id: "draft", status: "draft", meta_campaign_id: null }),
+    ] });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: true });
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["draft", "paused"])("counts spend from a launched %s campaign", async status => {
+    setup({ autoPause: true, cap: 7000, spend: 0, campaigns: [
+      campaign(),
+      campaign({ id: "other", status, meta_campaign_id: "meta-other" }),
+    ] });
+    getCampaignInsights.mockImplementation(async (id: string) => ({
+      spend: id === "meta-other" ? 6900 : 100, periodStart, periodEnd,
+    }));
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: true });
+    expect(getCampaignInsights).toHaveBeenCalledWith("meta-other", { weekly: true });
+  });
+
+  it("fails closed when an active campaign has no Meta ID", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 100, campaigns: [
+      campaign(),
+      campaign({ id: "other", status: "active", meta_campaign_id: null }),
+    ] });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: false });
+    expect(updateCampaignStatus).toHaveBeenCalledWith("meta-1", "PAUSED");
+  });
+
   it("does not treat a missing active spend observation as zero", async () => {
     setup({ autoPause: true, cap: 7000, spend: 100 });
     getCampaignInsights.mockResolvedValue({ spend: 0, periodStart: null, periodEnd: null });

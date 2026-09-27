@@ -186,6 +186,7 @@ export async function weeklySpendDecision(
 
   const spends: CampaignSpend[] = [];
   for (const campaign of campaigns) {
+    if (campaign.status === "draft" && !campaign.meta_campaign_id) continue;
     if (!campaign.meta_campaign_id) return { toPause: active, verified: false };
     try {
       const { insights, currency, timezoneName } = await read(campaign);

@@ -495,7 +495,8 @@ Cron endpoints require `Authorization: Bearer <CRON_SECRET>`; absent configured
 secret disables them with 404. Keepalive checks DB availability and, when enabled,
 bounded event retention. Enforce-spend can mutate Meta and reports incomplete
 enforcement as 503 (`ok:false`) even when some campaigns were paused; failure to
-read the limit list returns 502. `swept` lists only confirmed remote and local
+read the limit list returns 502; failure to scan active campaigns returns 503.
+`swept` lists only confirmed remote and local
 pauses, not a guarantee that every campaign stopped. Do not invoke either against
 production without authority.
 

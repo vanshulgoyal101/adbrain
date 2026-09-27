@@ -10,6 +10,7 @@ import {
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import {
+  DEFAULT_SPEND_LIMITS,
   weeklySpendDecision,
   type SpendLimits,
 } from "@/lib/campaign/spend";
@@ -23,9 +24,9 @@ export const maxDuration = 60;
  *
  * The per-campaign refresh route only enforces the weekly cap while a user is
  * looking at the app; Meta, however, spends around the clock. This cron sweeps
- * every business that has auto-pause on with a positive weekly cap and pauses
- * active campaigns when current-week spend has reached the cap or cannot be
- * verified. It runs under the service-role client (no user session).
+ * businesses with active campaigns and pauses them for customer holds or when
+ * opted-in weekly spend has reached the cap or cannot be verified. It runs
+ * under the service-role client (no user session).
  *
  * Vercel Cron calls this with `Authorization: Bearer $CRON_SECRET`.
  */
@@ -40,13 +41,11 @@ async function handleGET(request: Request) {
 
   const admin = createAdminClient();
 
-  // Only businesses that opted into auto-pause with a real cap.
   let limitRows;
   try {
     limitRows = await readAllByCursor(after => {
       const query = admin.from("spend_limits")
         .select("business_id, weekly_cap_rupees, alert_pct, auto_pause")
-        .eq("auto_pause", true).gt("weekly_cap_rupees", 0)
         .order("business_id").limit(100);
       return after ? query.gt("business_id", after) : query;
     }, "Spend limits could not be loaded.", row => row.business_id);
@@ -59,14 +58,25 @@ async function handleGET(request: Request) {
 
   const swept: Array<{ businessId: string; paused: string[] }> = [];
   let incomplete = false;
+  let activeCampaigns;
+  try {
+    activeCampaigns = await readAllByCursor(after => {
+      const query = admin.from("campaigns").select("id, business_id")
+        .eq("status", "active").order("id").limit(100);
+      return after ? query.gt("id", after) : query;
+    }, "Active campaigns could not be loaded.", campaign => campaign.id);
+  } catch {
+    return NextResponse.json({ ok: false, error: "Active campaigns could not be loaded.", swept }, { status: 503 });
+  }
+  const limitsByBusiness = new Map(limitRows.map(row => [row.business_id, row]));
 
-  for (const row of limitRows ?? []) {
-    const businessId = row.business_id;
-    const limits: SpendLimits = {
+  for (const businessId of new Set(activeCampaigns.map(campaign => campaign.business_id))) {
+    const row = limitsByBusiness.get(businessId);
+    const limits: SpendLimits = row ? {
       weeklyCapRupees: row.weekly_cap_rupees,
       alertPct: row.alert_pct,
       autoPause: row.auto_pause,
-    };
+    } : { ...DEFAULT_SPEND_LIMITS };
 
     let campaigns;
     try {

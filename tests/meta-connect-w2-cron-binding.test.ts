@@ -37,7 +37,9 @@ vi.mock("@/lib/meta/connection-access", () => ({
   withMetaConnection: mocks.withMetaConnection,
 }));
 
-function configureAdmin(campaigns: Record<string, unknown>[]) {
+function configureAdmin(campaigns: Record<string, unknown>[], limits: Record<string, unknown>[] = [
+  { business_id: "business-1", weekly_cap_rupees: 7000, alert_pct: 80, auto_pause: true },
+]) {
   const page = (table: string, rows: Record<string, unknown>[]) => {
     let after: string | null = null;
     let orderKey = "id";
@@ -56,7 +58,7 @@ function configureAdmin(campaigns: Record<string, unknown>[]) {
   };
   mocks.adminFrom.mockImplementation((table: string) => {
     if (table === "spend_limits") {
-      return page(table, [{ business_id: "business-1", weekly_cap_rupees: 7000, alert_pct: 80, auto_pause: true }]);
+      return page(table, limits);
     }
     if (table === "campaigns") {
       return {
@@ -174,6 +176,51 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(
       { businessId: "business-1", userId: "system" }, "campaign-1", "reservation-1", "paused",
     );
+  });
+
+  it("protects held customer funds even when the optional weekly cap is disabled", async () => {
+    mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "active" }] });
+    const originalAdminFrom = mocks.adminFrom.getMockImplementation()!;
+    mocks.adminFrom.mockImplementation((table: string) => {
+      if (table !== "spend_limits") return originalAdminFrom(table);
+      let optInOnly = false;
+      let after: string | null = null;
+      const query = {
+        select: () => query,
+        eq: (field: string, value: unknown) => { if (field === "auto_pause" && value === true) optInOnly = true; return query; },
+        gt: (field: string, value: string | number) => {
+          if (field === "weekly_cap_rupees") optInOnly = true;
+          if (field === "business_id") after = String(value);
+          return query;
+        },
+        order: () => query,
+        limit: () => query,
+        then: (resolve: (value: unknown) => unknown) => resolve({
+          data: optInOnly || after !== null ? [] : [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }],
+          error: null,
+        }),
+      };
+      return query;
+    });
+
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(mocks.getCustomerBalance).toHaveBeenCalledOnce();
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(
+      { businessId: "business-1", userId: "system" }, "campaign-1", "reservation-1", "paused",
+    );
+  });
+
+  it("protects held customer funds without a saved spend-limits row", async () => {
+    configureAdmin([boundCampaign], []);
+    mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.getCustomerBalance).toHaveBeenCalledOnce();
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.getCampaignInsights).not.toHaveBeenCalled();
   });
 
   it("reports an unknown customer balance as incomplete after attempting the pause", async () => {
