@@ -762,10 +762,12 @@ function BusinessCampaigns({
         result?: CampaignResult;
         summary?: string;
         error?: string;
+        protectionConfirmed?: boolean;
       };
       if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
+        if (data.protectionConfirmed === false) setError("Results refreshed, but spend protection could not be verified. Check campaign delivery in Meta.");
       } else {
         setError(data.error ?? "Couldn't refresh results.");
       }

@@ -57,13 +57,21 @@ async function readAllById<Row extends { id: string }>(
   fetchPage: (after: string | null) => PromiseLike<{ data: Row[] | null; error: unknown }>,
   errorMessage: string,
 ): Promise<Row[]> {
+  return readAllByCursor(fetchPage, errorMessage, row => row.id);
+}
+
+export async function readAllByCursor<Row>(
+  fetchPage: (after: string | null) => PromiseLike<{ data: Row[] | null; error: unknown }>,
+  errorMessage: string,
+  cursor: (row: Row) => string,
+): Promise<Row[]> {
   const rows: Row[] = [];
   let after: string | null = null;
   for (;;) {
     const { data, error } = await fetchPage(after);
     if (error || !data) throw new Error(errorMessage);
     if (!data.length) return rows;
-    const next = data[data.length - 1].id;
+    const next = cursor(data[data.length - 1]);
     if (after !== null && next <= after) throw new Error(errorMessage);
     rows.push(...data);
     after = next;

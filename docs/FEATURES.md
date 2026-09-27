@@ -335,10 +335,15 @@ an alert percentage from 1-100, and an auto-pause flag. Zero is invalid, not
 unlimited. Unsaved changes invalidate the Saved indicator.
 
 Activation compares projected weekly commitment against the cap; unavailable
-spend data blocks activation. Scheduled enforcement can pause bound active
-campaigns when the cap is reached. Stored insights may be stale and the configured
-job runs daily. These are application guardrails, not Meta account spending limits
-or guaranteed protection from overspend. Use provider-side limits as well.
+spend data blocks activation. Refresh and the daily scheduled sweep request bound
+Meta insights for Monday through today in the selected account's timezone.
+They require a complete INR observation for every campaign before comparing the
+weekly total to the rupee cap. Missing, partial, mismatched-period/currency or
+failed observations trigger protective pauses of active campaigns; an unknown
+observation or failed pause remains unconfirmed even when some pauses succeed.
+Existing reporting snapshots are not audited customer cost or tax evidence.
+These are application guardrails, not Meta account spending limits or guaranteed
+protection from overspend between checks or during outages. Use provider-side limits.
 
 ## Public Surface and Operations
 

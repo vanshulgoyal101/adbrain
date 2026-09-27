@@ -437,7 +437,7 @@ export class MetaClient {
       const sep = path.includes("?") ? "&" : "?";
       res = await fetch(
         `${GRAPH}/${path}${sep}access_token=${encodeURIComponent(token)}`,
-        { method, signal },
+        { method, signal, cache: "no-store" },
       );
     }
 
@@ -934,9 +934,9 @@ export class MetaClient {
     return destinationFromAdSets(adSets.data);
   }
 
-  async getCampaignInsights(campaignId: string): Promise<CampaignInsights> {
+  async getCampaignInsights(campaignId: string, options?: { weekly?: boolean }): Promise<CampaignInsights> {
     const destination = await this.verifyCampaignBinding(campaignId);
-    const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions`);
+    const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop${options?.weekly ? "&date_preset=this_week_mon_today" : ""}`);
     return decodeCampaignInsights(data, destination);
   }
 
