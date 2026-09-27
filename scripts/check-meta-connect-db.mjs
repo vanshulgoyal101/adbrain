@@ -12,6 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
+const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -187,6 +188,160 @@ async function verifyRollback() {
       });
     } finally { await session.end(); }
   } finally { await db.end(); }
+}
+
+async function verifyConfigurablePayments(db, database) {
+  const owner = randomUUID();
+  const business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic pricing')", [business, owner]);
+  const legacyPolicy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]?.result; }
+    finally { await session.end(); }
+  };
+  const quote = async (amount, verification = false) => (await db.query("select private.production_payment_quote($1,$2) as quote", [amount,verification])).rows[0].quote;
+  const terms = async (value, verification = null) => (await db.query("select private.production_payment_priced_policy($1,$2) as policy", [value,verification])).rows[0].policy;
+  const claim = (value, policy, requestKey = randomUUID(), businessId = business, userId = owner) => {
+    const text = JSON.stringify(policy);
+    return service("select public.production_payment_order_claim($1,$2,$3,$4,'acc_pricing','rzp_live_pricing',$5,$6,$7,null) as result",
+      [businessId,userId,requestKey,randomUUID(),value,text,createHash("sha256").update(text).digest("hex")]);
+  };
+  const complete = async (order, suffix) => {
+    await service("select public.production_payment_order_result($1,'acc_pricing','rzp_live_pricing',$2) as result", [order.id,`order_${suffix}`]);
+    return service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing',$2,true,0,false,$3) as result", [order.id,`pay_${suffix}`,'c'.repeat(64)]);
+  };
+  const verification = { businessId: business, userId: owner, expiresAt: new Date(Date.now()+3_600_000).toISOString() };
+  const verificationQuote = await quote(1000,true);
+  const verificationPolicy = await terms(verificationQuote,verification);
+  let testOrder;
+  let annualOrder;
+  await check(`${database}: SQL quotes and consent match the actual TypeScript policy`,async () => {
+    const environment = { NODE_ENV:'production',VERCEL_ENV:'production',VERCEL_GIT_COMMIT_REF:'main',
+      PAYMENTS_LIVE_ENABLED:'true',PAYMENTS_LIVE_COLLECTION_ENABLED:'true',RAZORPAY_LIVE_KEY_ID:'rzp_live_fixture',
+      RAZORPAY_LIVE_KEY_SECRET:'synthetic-key-only',RAZORPAY_LIVE_WEBHOOK_SECRET:'synthetic-webhook-only',RAZORPAY_LIVE_ACCOUNT_ID:'acc_fixture',
+      PAYMENTS_LIVE_WEBHOOK_ID:randomUUID(),VERCEL_PROJECT_ID:'prj_fixture',PAYMENTS_LIVE_PROJECT_ID:'prj_fixture',
+      NEXT_PUBLIC_SUPABASE_URL:'https://fixture.supabase.co',PAYMENTS_LIVE_SUPABASE_URL:'https://fixture.supabase.co' };
+    for (const [amount,scope] of [[100,null],[1005,null],[50000,null],[999999,null],[1000,verification]]) {
+      const settings = { ...environment,PAYMENTS_LIVE_AMOUNT_PAISE:String(amount),...(scope ? {
+        PAYMENTS_LIVE_VERIFICATION_ENABLED:'true',PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE:String(amount),
+        PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID:business,PAYMENTS_LIVE_VERIFICATION_USER_ID:owner,PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT:scope.expiresAt } : {}) };
+      const actual = JSON.parse(execFileSync(process.execPath,['--import','tsx','-e',
+        'const {getProductionCollectionPolicy}=require("./src/lib/payments/production-config.ts"); const {hash,...policy}=getProductionCollectionPolicy(JSON.parse(process.argv[1]),Date.now(),JSON.parse(process.argv[2])); process.stdout.write(JSON.stringify(policy));',
+        JSON.stringify(settings),JSON.stringify({businessId:business,userId:owner})],{cwd:root,encoding:'utf8'}));
+      assert.deepEqual(actual,await terms(await quote(amount,Boolean(scope)),scope));
+      assert.equal((await db.query("select private.production_payment_contract_valid($1,$2,$3) as valid",[amount,actual.quote,actual])).rows[0].valid,true);
+    }
+  });
+  await check(`${database}: exact verification quote and single concurrent order`, async () => {
+    const results = await Promise.all([claim(verificationQuote,verificationPolicy),claim(verificationQuote,verificationPolicy)]);
+    assert.equal(results.filter(result => result.claimed).length,1);
+    assert.equal(new Set(results.map(result => result.order.id)).size,1);
+    testOrder = results[0].order;
+    assert.equal(testOrder.amount_paise,1000);
+    assert.equal(testOrder.purpose,'verification');
+    assert.equal(testOrder.quote.serviceAllocationPaise,0);
+    assert.equal(testOrder.quote.metaAllocationPaise,0);
+  });
+  await check(`${database}: verification preserves normal checkout and credits no allowance`, async () => {
+    annualOrder = (await claim(await quote(1000000),legacyPolicy)).order;
+    assert.notEqual(annualOrder.id,testOrder.id);
+    const captured = await complete(testOrder,'verification');
+    assert.equal(captured.state,'captured');
+    assert.equal(captured.captured_paise,1000);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result", [business,owner]);
+    assert.equal(balance.capturedPaise,1000);
+    assert.equal(balance.serviceAllocationPaise,0);
+    assert.equal(balance.advertisingAllocationPaise,0);
+    assert.equal(balance.remainingPaise,0);
+    assert.equal((await claim(verificationQuote,verificationPolicy)).claimed,false);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_orders where business_id=$1 and purpose='verification'",[business])).rows[0].count,1);
+  });
+  await check(`${database}: partial verification refunds are visible without fictional ad allocation`,async () => {
+    const observe = () => service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_verification',true,250,false,$2,'rfnd_partial',250,'processed') as result",[testOrder.id,'e'.repeat(64)]);
+    assert.equal((await observe()).state,'partially_refunded');
+    assert.equal((await observe()).refunded_paise,250);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[business,owner]);
+    assert.equal(balance.refundedPaise,250);
+    assert.equal(balance.held,false);
+    assert.equal(balance.serviceAllocationPaise,0);
+    assert.equal(balance.advertisingAllocationPaise,0);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='refund'",[testOrder.id])).rows[0].count,1);
+  });
+  await check(`${database}: policy scope, expiry and forged amounts fail closed`, async () => {
+    for (const changed of [
+      { ...verification, userId: randomUUID() },
+      { ...verification, businessId: randomUUID() },
+      { ...verification, expiresAt: new Date(Date.now()-60_000).toISOString() },
+      { ...verification, expiresAt: new Date(Date.now()+90_000_000).toISOString() },
+    ]) await assert.rejects(claim(verificationQuote,await terms(verificationQuote,changed)),{code:'23514'});
+    await assert.rejects(claim({ ...verificationQuote, metaAllocationPaise:800000 },verificationPolicy),{code:'23514'});
+    await assert.rejects(claim(verificationQuote,{ ...verificationPolicy, serviceScope:'Annual service for a verification charge' }),{code:'23514'});
+  });
+  await check(`${database}: saved order identity and capture effects cannot be repriced`, async () => {
+    await assert.rejects(db.query("update private.production_payment_orders set amount_paise=2000 where id=$1",[testOrder.id]),{code:'23514'});
+    await assert.rejects(db.query("update private.production_payment_effects set amount_paise=1000000 where order_id=$1 and kind='capture'",[testOrder.id]),{code:'23514'});
+    const captured = await complete(annualOrder,'annual');
+    assert.equal(captured.captured_paise,1000000);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[business,owner]);
+    assert.equal(balance.capturedPaise,1001000);
+    assert.equal(balance.serviceAllocationPaise,200000);
+    assert.equal(balance.advertisingAllocationPaise,800000);
+    assert.equal(balance.remainingPaise,800000);
+    assert.equal(balance.held,false);
+  });
+  await check(`${database}: configurable annual allocations conserve paise and bound earning`, async () => {
+    const other = randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic revised price')",[other,owner]);
+    const value = await quote(1005);
+    const payment = (await claim(value,await terms(value),randomUUID(),other)).order;
+    await complete(payment,'revised');
+    await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,clock_timestamp()+interval '1 hour')",[owner,randomUUID()]);
+    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,201,$4) as result",[other,owner,payment.id,randomUUID()]);
+    await assert.rejects(service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,200000,$4) as result",[other,owner,payment.id,randomUUID()]),{code:'23514'});
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
+    assert.equal(balance.serviceAllocationPaise,201);
+    assert.equal(balance.advertisingAllocationPaise,804);
+    assert.equal(balance.serviceEarnedPaise,201);
+    await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_revised',true,33,false,$2,'rfnd_revised',33,'processed') as result",[payment.id,'e'.repeat(64)]);
+    assert.equal((await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner])).held,true);
+    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,33,201,$4) as result",[other,owner,payment.id,randomUUID()]);
+    const adjusted = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
+    assert.equal(adjusted.held,false);
+    assert.equal(adjusted.remainingPaise,771);
+  });
+  await check(`${database}: expired saved verification can still capture and refund its own amount`, async () => {
+    const other = randomUUID();
+    const order = randomUUID();
+    const value = await quote(1000,true);
+    const policy = await terms(value,{ ...verification,businessId:other,expiresAt:new Date(Date.now()-60_000).toISOString() });
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic expired verification')",[other,owner]);
+    await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,amount_paise,quote,terms,terms_hash) values ($1,$2,$3,$4,'acc_pricing','rzp_live_pricing',1000,$5,$6,$7)",[order,other,owner,randomUUID(),value,policy,'d'.repeat(64)]);
+    await complete({id:order},'expired');
+    const refunded = await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_expired',true,1000,false,$2,'rfnd_expired',1000,'processed') as result",[order,'e'.repeat(64)]);
+    assert.equal(refunded.state,'refunded');
+    assert.equal(refunded.refunded_paise,1000);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
+    assert.equal(balance.advertisingAllocationPaise,0);
+    assert.equal(balance.held,false);
+    const invalid = await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_expired',true,1001,false,$2,'rfnd_excess',1001,'processed') as result",[order,'e'.repeat(64)]);
+    assert.equal(invalid.state,'review_required');
+    assert.equal(invalid.refunded_paise,1000);
+    assert.equal((await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner])).held,true);
+  });
+  await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
+    for (const role of ['anon','authenticated']) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("select * from private.production_payment_orders"),{code:'42501'});
+        await assert.rejects(session.query("select public.production_payment_orders_list($1,$2)",[business,owner]),{code:'42501'});
+      } finally { await session.end(); }
+    }
+  });
 }
 
 async function verifyCustomerAllowance(db, database) {
@@ -415,6 +570,28 @@ async function verify(database, source, integrityMigration, customerOnly = false
   try {
     await db.query(bootstrap);
     await db.query(source);
+    if (process.argv.includes("--pricing-only") || database.startsWith("pricing_")) {
+      const installed = (await db.query("select to_regprocedure('private.production_payment_quote(bigint,boolean)') is not null as installed")).rows[0].installed;
+      if (!installed) {
+        const owner = randomUUID(),business = randomUUID(),order = randomUUID();
+        const policy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+        await db.query("insert into auth.users(id) values ($1)",[owner]);
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic previous price')",[business,owner]);
+        const value = { version:'inr-annual-total-v1',merchantDisplay:'Vanshul Goyal',currency:'INR',totalPaise:1000000,
+          serviceAllocationPaise:200000,metaAllocationPaise:800000,additionalCustomerTaxPaise:0,
+          metaTaxTreatment:'included-in-meta-allocation',gatewayFees:'absorbed-by-adbrain',automaticRenewal:false };
+        await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id,payment_id,captured_paise) values ($1,$2,$3,$4,'acc_upgrade','rzp_live_upgrade',$5,$6,$7,'order_upgrade','pay_upgrade',1000000)",[order,business,owner,randomUUID(),value,policy,'f'.repeat(64)]);
+        const before = (await db.query("select to_jsonb(payment) as saved from private.production_payment_orders payment where id=$1",[order])).rows[0].saved;
+        await check(`${database}: migration ledger applies once and safely skips replay`,async () => {
+          assert.equal(await applyMigration(db,"20260927_configurable_payment_quotes.sql",configurablePaymentMigration),'applied');
+          assert.equal(await applyMigration(db,"20260927_configurable_payment_quotes.sql",configurablePaymentMigration),'already_applied');
+        });
+        const after = (await db.query("select to_jsonb(payment)-'purpose' as saved from private.production_payment_orders payment where id=$1",[order])).rows[0].saved;
+        await check(`${database}: existing accepted order is preserved by migration`,async () => assert.deepEqual(after,before));
+      }
+      await verifyConfigurablePayments(db,database);
+      return;
+    }
     if (process.argv.includes("--generation-only")) {
       await db.query(creativeIntentMigration);
       await db.query(creativeIntentMigration);
@@ -1495,17 +1672,25 @@ try {
   assert.ok(schema.indexOf(billingMigration.trim()) < schema.indexOf(productionPaymentsMigration.trim()), "Managed billing must precede production payments");
   assert.ok(schema.includes(operatorPaymentMigration.trim()), "Canonical schema must include the exact operator-managed payment migration");
   assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
-  assert.ok(schema.trimEnd().endsWith(creativeIntentMigration.trimEnd()), "Canonical schema must end with the exact creative generation intent migration");
-  if (process.argv.includes("--generation-only")) {
+  assert.ok(schema.includes(creativeIntentMigration.trim()), "Canonical schema must include the exact creative generation intent migration");
+  assert.ok(schema.trimEnd().endsWith(configurablePaymentMigration.trimEnd()), "Canonical schema must end with the exact configurable pricing migration");
+  if (process.argv.includes("--pricing-only")) {
+    await verify("pricing_fresh",schema);
+    await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
+  } else if (process.argv.includes("--generation-only")) {
     await verify("generation_fresh",schema);
     await verify("generation_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}`);
   } else if (!process.argv.includes("--customer-only")) {
     await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
-  if (!process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+  if (!process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+    if (!process.argv.includes("--customer-only")) {
+      await verify("pricing_fresh",schema);
+      await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
+    }
   }
   }
 } catch (error) {

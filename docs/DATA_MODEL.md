@@ -35,6 +35,26 @@ approved policy; legacy claims keep non-null evidence and the service-only
 harness checks exact canonical inclusion/order, fresh installation and upgrade
 replay. Its separate six-migration rollback mode does not certify payment rollback.
 
+The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
+depends on the original payment, operator policy and
+[customer allowance](../db/migrations/20260926_customer_ad_allowance.sql) migrations.
+It replaces fixed-total constraints with exact saved-quote checks within 100-1000000
+paise; generated payment state and capture/refund effects use each saved total.
+An identity trigger prevents repricing accepted orders. Existing default-priced
+rows, policies and funding evidence are preserved without backfill.
+
+Generated `purpose` separates annual orders from verification. Annual active-order
+uniqueness remains; a second index permits only one verification order per business,
+including after refund. Claims require matching owner/business, current expiry and
+exact quote-bound consent. Verification capture is recorded but grants no service
+or ad allocation. Verified partial verification refunds need no fictional allocation;
+dispute, pending-refund, missing-capture and provider-mismatch holds remain intact.
+Annual refund allocation and service earnings are bounded by the stored quote.
+Private tables and service-only RPC authority are unchanged. Apply once through
+the checksum ledger, not by replaying the canonical schema. After a nondefault
+order exists, rollback must retain a quote-aware runtime; see
+[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+
 ## Relationships
 
 ```mermaid

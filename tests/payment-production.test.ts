@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getProductionCollectionPolicy, getProductionPaymentConfig, OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
+import { getProductionCollectionPolicy, getProductionPaymentConfig, OPERATOR_MANAGED_POLICY, PRICING_APPROVED_AT, quoteForPaymentPolicy } from "@/lib/payments/production-config";
 import { getRazorpayTestConfig } from "@/lib/payments/razorpay-test";
 import { createProductionPaymentClient } from "@/lib/payments/razorpay-production";
 
@@ -46,6 +46,37 @@ const payment = { id: "pay_fixture", entity: "payment", order_id: "order_fixture
 const refund = { id: "rfnd_fixture", entity: "refund", payment_id: "pay_fixture", receipt, amount: 10_000, currency: "INR", status: "pending" };
 
 describe("production payment boundaries", () => {
+  it("builds one server-configured quote and matching terms while preserving the default", () => {
+    const at = Date.parse(PRICING_APPROVED_AT);
+    const base = { ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true" };
+    const original = getProductionCollectionPolicy(base, at);
+    const configured = getProductionCollectionPolicy({ ...base, PAYMENTS_LIVE_AMOUNT_PAISE: "50000" }, at);
+    expect(quoteForPaymentPolicy(configured)).toMatchObject({ totalPaise: 50_000, serviceAllocationPaise: 10_000, metaAllocationPaise: 40_000 });
+    expect(configured.serviceScope).toContain("INR 500 total");
+    expect(configured.refundTerms).toContain("INR 100 service");
+    expect(configured.hash).not.toBe(original.hash);
+    expect(quoteForPaymentPolicy(original).totalPaise).toBe(1_000_000);
+  });
+
+  it.each(["", "0", "99", "100.5", " 1000", "1e3", "Infinity", "1000001"])("blocks invalid configured amount %s", amount => {
+    expect(() => getProductionCollectionPolicy({ ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true", PAYMENTS_LIVE_AMOUNT_PAISE: amount }, Date.parse(PRICING_APPROVED_AT))).toThrow("approved");
+  });
+
+  it("restricts an expiring configurable verification quote and restores the normal price", () => {
+    const at = Date.parse(PRICING_APPROVED_AT);
+    const subject = { businessId: receipt, userId: policy.approvalReference };
+    const verification = { ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true", PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
+      PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: subject.businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: subject.userId,
+      PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(at + 3_600_000).toISOString(), PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE: "1000" };
+    expect(quoteForPaymentPolicy(getProductionCollectionPolicy(verification, at, subject))).toMatchObject({ totalPaise: 1_000,
+      serviceAllocationPaise: 0, metaAllocationPaise: 0, verificationAllocationPaise: 1_000 });
+    for (const actor of [undefined, { ...subject, userId: receipt }, { ...subject, verificationCompleted: true }]) {
+      expect(quoteForPaymentPolicy(getProductionCollectionPolicy(verification, at, actor)).totalPaise).toBe(1_000_000);
+    }
+    expect(quoteForPaymentPolicy(getProductionCollectionPolicy(verification, at + 3_600_000, subject)).totalPaise).toBe(1_000_000);
+    expect(() => getProductionCollectionPolicy({ ...verification, PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(at + 86_400_001).toISOString() }, at, subject)).toThrow("approved");
+  });
+
   it("selects the recorded operator-managed offer without invented funding approval", () => {
     const migration = readFileSync(new URL("../db/migrations/20260926_production_payment_policy_v2.sql", import.meta.url), "utf8");
     expect(migration).toContain(`$policy$${JSON.stringify(OPERATOR_MANAGED_POLICY)}$policy$`);
@@ -114,6 +145,18 @@ describe("production payment boundaries", () => {
 });
 
 describe("production official SDK adapter", () => {
+  it("creates the exact configured quote and rejects a different saved quote before transport", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    const configured = { ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true", PAYMENTS_LIVE_AMOUNT_PAISE: "1000" };
+    const approved = getProductionCollectionPolicy(configured);
+    respondWith({ ...providerOrder, amount: 1_000, amount_due: 1_000 });
+    await expect(createProductionPaymentClient(configured).createOrder(receipt, approved.hash, quoteForPaymentPolicy(approved))).resolves.toMatchObject({ amount: 1_000 });
+    expect(JSON.parse(sdkRequest.mock.calls[0][0].data!)).toMatchObject({ amount: 1_000 });
+    await expect(createProductionPaymentClient(configured).createOrder(receipt, approved.hash,
+      quoteForPaymentPolicy(getProductionCollectionPolicy(collection)))).rejects.toThrow("approved");
+    expect(sdkRequest).toHaveBeenCalledTimes(1);
+  });
+
   it("creates only the fixed annual order with approved policy and bounded transport", async () => {
     respondWith(providerOrder);
     const policyHash = getProductionCollectionPolicy(collection).hash;

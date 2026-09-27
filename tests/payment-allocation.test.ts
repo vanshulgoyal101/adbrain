@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createAnnualPaymentQuote,
+  createVerificationPaymentQuote,
+  productionPaymentQuoteSchema,
   ANNUAL_PAYMENT_VERSION,
   createPaymentQuote,
   DEFAULT_PAYMENT_ALLOCATION_POLICY,
@@ -35,6 +37,31 @@ describe("payment allocation", () => {
       totalPaise: 1_000_000,
     });
   });
+
+  it("snapshots a configured annual amount without changing an existing quote", () => {
+    const original = createAnnualPaymentQuote();
+    const configured = createAnnualPaymentQuote(1_005);
+    expect(configured).toMatchObject({
+      version: "inr-annual-configurable-v1", totalPaise: 1_005,
+      serviceAllocationPaise: 201, metaAllocationPaise: 804,
+    });
+    expect(original.totalPaise).toBe(1_000_000);
+    expect(Object.isFrozen(configured)).toBe(true);
+  });
+
+  it("keeps verification money separate from service and advertising allocations", () => {
+    const quote = createVerificationPaymentQuote(1_000);
+    expect(productionPaymentQuoteSchema.parse(quote)).toMatchObject({ totalPaise: 1_000,
+      serviceAllocationPaise: 0, metaAllocationPaise: 0, verificationAllocationPaise: 1_000 });
+    expect(productionPaymentQuoteSchema.safeParse({ ...quote, metaAllocationPaise: 800_000 }).success).toBe(false);
+  });
+
+  it.each([undefined, 0, 99, 100.5, -1, NaN, Infinity, 1_000_001])(
+    "rejects unsupported configured annual amounts except the unchanged default: %s", amount => {
+      if (amount === undefined) expect(createAnnualPaymentQuote(amount).totalPaise).toBe(1_000_000);
+      else expect(() => createAnnualPaymentQuote(amount)).toThrow(RangeError);
+    },
+  );
 
   it("adds an explicitly supplied tax amount without changing the split", () => {
     const quote = createPaymentQuote(1_000_000, 123_456);

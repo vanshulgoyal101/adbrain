@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomerBalanceError, getCustomerBalance, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { ConnectionAccessError } from "@/lib/meta/connection-access";
 import { GET, POST } from "@/app/api/payments/customer-balance/route";
+import { customerRefundAllocationSchema } from "@/lib/payments/customer-balance-contracts";
 
 const mocks = vi.hoisted(() => {
   const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
@@ -34,6 +35,14 @@ function returns(data: unknown, error: unknown = null) {
 }
 
 describe("customer advertising accounting boundary", () => {
+  it("accepts configurable service allocations but retains integer and maximum bounds", () => {
+    const evidence = { orderId: campaignId, serviceRefundedPaise: 0, advertisingRefundedPaise: 0,
+      serviceEarnedPaise: 201, evidenceReference: campaignId };
+    expect(customerRefundAllocationSchema.parse(evidence)).toEqual(evidence);
+    for (const serviceEarnedPaise of [-1, 0.5, 200001, Number.NaN]) {
+      expect(customerRefundAllocationSchema.safeParse({ ...evidence, serviceEarnedPaise }).success).toBe(false);
+    }
+  });
   it("uses authenticated tenant and configured merchant authority", async () => {
     returns(balance);
     expect(await getCustomerBalance(actor)).toEqual(balance);
