@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceHome } from "@/components/workspace-home";
+import { DEFAULT_SPEND_LIMITS, evaluateSpend } from "@/lib/campaign/spend";
 import type { Business, Creative } from "@/lib/types";
 
 const queries = vi.hoisted(() => ({
@@ -213,5 +214,53 @@ describe("Home workspace", () => {
     expect(
       screen.getByRole("heading", { name: "1 ad needs review" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders usable dashboard content while spend evaluation is pending", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([creative]);
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([]);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    const overCap = evaluateSpend(
+      [{ id: "campaign", status: "active", dailyBudget: 100, spend: 0 }],
+      { ...DEFAULT_SPEND_LIMITS, weeklyCapRupees: 500 },
+    );
+    let resolveSpend!: (value: { evaluation: typeof overCap }) => void;
+    queries.getSpendEvaluation.mockReturnValue(new Promise(resolve => { resolveSpend = resolve; }));
+
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const page = DashboardPage();
+    await vi.waitFor(() => expect(queries.getSpendEvaluation).toHaveBeenCalledWith(business.id));
+    const ready = await Promise.race([
+      page.then(() => true),
+      new Promise<false>(resolve => setTimeout(() => resolve(false), 75)),
+    ]);
+    expect(ready).toBe(true);
+    render(await page);
+    expect(screen.getByRole("heading", { name: "1 ad needs review" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking spend status");
+    resolveSpend({ evaluation: overCap });
+    const spendBoundary = (await page).props.spendStatus;
+    const notice = spendBoundary.props.children;
+    render(await notice.type(notice.props));
+    expect(screen.getByRole("alert")).toHaveTextContent("weekly ad-spend cap");
+  });
+
+  it("reports an unavailable spend read without claiming a safe status", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([]);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    queries.getSpendEvaluation.mockRejectedValue(new Error("Private database detail"));
+
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const page = await DashboardPage();
+    const notice = page.props.spendStatus.props.children;
+    render(await notice.type(notice.props));
+    expect(screen.getByRole("alert")).toHaveTextContent("Spend status could not be loaded");
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.queryByText("Private database detail")).not.toBeInTheDocument();
   });
 });
