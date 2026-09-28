@@ -233,6 +233,63 @@ describe("production checkout with synthetic responses", () => {
     expect(options).toMatchObject({ amount: 1_000, description: "AdBrain payment verification" });
   });
 
+  it("updates a custom rupee amount through a server quote and requires fresh acceptance before payment", async () => {
+    const initial = { policy: livePolicy, quote: createVerificationPaymentQuote(1000),
+      verificationAmountRange: { minPaise: 100, maxPaise: 1000 }, orders: [] };
+    const updated = { ...initial, policy: { ...livePolicy, hash: "b".repeat(64) }, quote: createVerificationPaymentQuote(525) };
+    fetchMock.mockImplementation(async (path: string) => Response.json(path.includes("verificationAmountPaise=525") ? updated
+      : path.includes("orders?") ? initial : { ...liveOrder, quote: updated.quote, amountPaise: 525,
+        checkout: { ...liveOrder.checkout, amount: 525, description: "AdBrain payment verification" } }));
+    render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText("Ready for payment");
+    fireEvent.load(screen.getByTestId("checkout-script"));
+    fireEvent.click(screen.getByRole("checkbox"));
+    const input = screen.getByRole("spinbutton", { name: "Verification amount (INR)" });
+    expect(input).toHaveValue(10);
+    fireEvent.change(input, { target: { value: "5.25" } });
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay INR 10" })).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
+    await screen.findByText("Amount updated.");
+    expect(fetchMock.mock.calls[1][0]).toContain("verificationAmountPaise=525");
+    expect(fetchMock.mock.calls[1][1].method).toBe("GET");
+    expect(screen.getByRole("button", { name: "Pay INR 5.25" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 5.25" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ verificationAmountPaise: 525, termsHash: updated.policy.hash, acceptTerms: true });
+    expect(options).toMatchObject({ amount: 525 });
+    expect(input).toBeDisabled();
+  });
+
+  it("rejects invalid custom amounts locally and leaves payment disabled after a failed quote update", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ policy: livePolicy, quote: createVerificationPaymentQuote(),
+      verificationAmountRange: { minPaise: 100, maxPaise: 1000 }, orders: [] }));
+    render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText("Ready for payment");
+    const input = screen.getByRole("spinbutton", { name: "Verification amount (INR)" });
+    for (const value of ["0", "10.01", "1.234", "1e3"]) {
+      fireEvent.change(input, { target: { value } });
+      fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Enter an amount from INR 1 to INR 10"));
+      await waitFor(() => expect(input).toBeEnabled());
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockResolvedValueOnce(Response.json({ error: "Quote unavailable" }, { status: 503 }));
+    fireEvent.change(input, { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
+    await screen.findByText("Quote unavailable");
+    expect(screen.getByRole("button", { name: "Pay INR 10" })).toBeDisabled();
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("keeps amount entry unavailable for the normal annual package", async () => {
+    await mountLive();
+    expect(screen.queryByRole("spinbutton", { name: "Verification amount (INR)" })).not.toBeInTheDocument();
+  });
+
   it("restores annual checkout while preserving the verification capture and refund history", async () => {
     const previous = { ...captured, amountPaise: 1_000, quote: createVerificationPaymentQuote(),
       status: "partially_refunded", capturedPaise: 1_000, refundedPaise: 250,

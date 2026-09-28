@@ -77,6 +77,28 @@ describe("production payment boundaries", () => {
     expect(() => getProductionCollectionPolicy({ ...verification, PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(at + 86_400_001).toISOString() }, at, subject)).toThrow("approved");
   });
 
+  it("accepts custom amounts only inside the eligible verification ceiling with fresh consent", () => {
+    const at = Date.parse(PRICING_APPROVED_AT);
+    const subject = { businessId: receipt, userId: policy.approvalReference };
+    const verification = { ...environment, PAYMENTS_LIVE_COLLECTION_ENABLED: "true", PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
+      PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: subject.businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: subject.userId,
+      PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(at + 3_600_000).toISOString(), PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE: "1000" };
+    const selected = { ...subject, verificationAmountPaise: 525 };
+    const quoted = getProductionCollectionPolicy(verification, at, selected);
+    expect(quoteForPaymentPolicy(quoted)).toMatchObject({ totalPaise: 525, serviceAllocationPaise: 0, metaAllocationPaise: 0 });
+    expect(quoted.serviceScope).toContain("INR 5.25");
+    expect(quoted.hash).not.toBe(getProductionCollectionPolicy(verification, at, subject).hash);
+    for (const verificationAmountPaise of [0, 99, 1001, 1000000, 100.5, Number.NaN]) {
+      expect(() => getProductionCollectionPolicy(verification, at, { ...subject, verificationAmountPaise })).toThrow("approved");
+    }
+    for (const actor of [{ ...selected, userId: receipt }, { ...selected, businessId: policy.approvalReference }, { ...selected, verificationCompleted: true }]) {
+      expect(() => getProductionCollectionPolicy(verification, at, actor)).toThrow("approved");
+    }
+    expect(() => getProductionCollectionPolicy(verification, at + 3_600_000, selected)).toThrow("approved");
+    expect(() => getProductionCollectionPolicy({ ...verification, PAYMENTS_LIVE_VERIFICATION_ENABLED: "false" }, at, selected)).toThrow("approved");
+    expect(() => getProductionCollectionPolicy({ ...collection }, now, selected)).toThrow("approved");
+  });
+
   it("selects the recorded operator-managed offer without invented funding approval", () => {
     const migration = readFileSync(new URL("../db/migrations/20260926_production_payment_policy_v2.sql", import.meta.url), "utf8");
     expect(migration).toContain(`$policy$${JSON.stringify(OPERATOR_MANAGED_POLICY)}$policy$`);

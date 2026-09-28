@@ -68,7 +68,8 @@ function currentPolicy(subject?: PaymentSubject) {
 }
 
 async function orderResponse(order: SavedOrder, config: Config, policy = currentPolicy({ businessId: order.business_id, userId: order.user_id,
-  verificationCompleted: order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0 })) {
+  verificationCompleted: order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0,
+  verificationAmountPaise: order.quote.version === "inr-payment-verification-v1" ? order.amount_paise : undefined })) {
   const checkoutAllowed = order.state === "created" && order.provider_order_id && order.account_id === config.accountId && order.key_id === config.keyId
     && policy?.hash === order.terms_hash && ("fundingMode" in order.terms || await stored(createAdminClient().rpc("production_payment_funding_valid", {
       p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id!,
@@ -234,21 +235,35 @@ export async function handleProductionPayments(request: Request, action: Action)
     const limited = await rateLimitResponse(`live-payments:${action}:${user.id}`, { limit: action === "create" || action === "operator" ? 10 : 30, windowMs: 300_000 });
     if (limited) return limited;
     if (action === "read" || action === "create") {
-      const body = action === "read" ? { businessId: new URL(request.url).searchParams.get("businessId") } : await paymentJsonBody(request);
-      const input = parsed(action === "read" ? z.strictObject({ businessId: z.uuid() }) : z.strictObject({
-        businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true),
+      const params = new URL(request.url).searchParams;
+      const requestedAmount = params.get("verificationAmountPaise");
+      const body = action === "read" ? { businessId: params.get("businessId"),
+        ...(requestedAmount !== null ? { verificationAmountPaise: parsed(z.string().regex(/^[1-9][0-9]*$/).transform(Number).pipe(amountSchema.min(100)), requestedAmount) } : {}) } : await paymentJsonBody(request);
+      const input = parsed(action === "read" ? z.strictObject({ businessId: z.uuid(), verificationAmountPaise: amountSchema.min(100).optional() }) : z.strictObject({
+        businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true), verificationAmountPaise: amountSchema.min(100).optional(),
       }), body);
       const context = await requireOwnedBusiness(input.businessId);
       if (context.userId !== user.id) throw new CheckoutRequestError(401, "Session changed.");
       const orders = await stored(database.rpc("production_payment_orders_list", { p_business_id: input.businessId, p_user_id: user.id }), z.array(orderSchema).max(20));
-      const subject = { businessId: input.businessId, userId: user.id,
+      const subject: PaymentSubject = { businessId: input.businessId, userId: user.id,
         verificationCompleted: orders.some(order => order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0) };
+      const basePolicy = currentPolicy(subject);
+      const baseQuote = basePolicy ? quoteForPaymentPolicy(basePolicy) : null;
+      const verificationOrder = orders.find(order => order.quote.version === "inr-payment-verification-v1");
+      if (input.verificationAmountPaise !== undefined && verificationOrder && input.verificationAmountPaise !== verificationOrder.amount_paise) {
+        throw new CheckoutRequestError(409, "The saved verification amount cannot be changed. Recover the existing payment.");
+      }
+      subject.verificationAmountPaise = input.verificationAmountPaise ?? (baseQuote?.version === "inr-payment-verification-v1"
+        && verificationOrder && verificationOrder.amount_paise <= baseQuote.totalPaise ? verificationOrder.amount_paise : undefined);
       if (action === "read") {
-        const policy = currentPolicy(subject);
+        const policy = input.verificationAmountPaise === undefined ? currentPolicy(subject) : getProductionCollectionPolicy(process.env, Date.now(), subject);
         return paymentReply({ quote: policy ? quoteForPaymentPolicy(policy) : createAnnualPaymentQuote(), policy,
+          verificationAmountRange: baseQuote?.version === "inr-payment-verification-v1" && !verificationOrder
+            ? { minPaise: 100, maxPaise: baseQuote.totalPaise } : null,
           orders: await Promise.all(orders.map(order => orderResponse(order, config, policy))) });
       }
-      const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true) }), body);
+      const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true),
+        verificationAmountPaise: amountSchema.min(100).optional() }), body);
       const { hash, ...policy } = getProductionCollectionPolicy(process.env, Date.now(), subject);
       if (hash !== create.termsHash) throw new CheckoutRequestError(409, "Payment terms changed. Review the current terms before payment.");
       const funding = "fundingMode" in policy ? null : await stored(database.rpc("meta_funding_latest_record", { p_business_id: input.businessId, p_environment: "live" }), z.object({ evidenceId: z.uuid() }));

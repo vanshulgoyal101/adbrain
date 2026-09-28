@@ -77,7 +77,7 @@ export const PRICING_APPROVAL_REFERENCE = "https://github.com/vanshulgoyal101/ad
 export const PRICING_APPROVED_AT = "2026-09-27T17:36:03Z";
 const verificationSchema = z.strictObject({ businessId: z.uuid(), userId: z.uuid(), expiresAt: z.iso.datetime() });
 type VerificationScope = z.infer<typeof verificationSchema>;
-export type PaymentSubject = { businessId: string; userId: string; verificationCompleted?: boolean };
+export type PaymentSubject = { businessId: string; userId: string; verificationCompleted?: boolean; verificationAmountPaise?: number };
 const rupees = (paise: number) => `INR ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(paise / 100)}`;
 
 function pricedPolicy(quote: ProductionPaymentQuote, verification?: VerificationScope) {
@@ -152,7 +152,9 @@ export function getProductionCollectionPolicy(environment: Environment = process
       const verificationAmount = configuredAmount(environment, "PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE", 1_000);
       if (expiresAt > now + 86_400_000) throw new Error();
       if (expiresAt > now && subject?.businessId === verification.businessId && subject.userId === verification.userId && !subject.verificationCompleted) {
-        configured = pricedPolicy(createVerificationPaymentQuote(verificationAmount), verification);
+        const amount = subject.verificationAmountPaise === undefined ? verificationAmount
+          : z.number().int().min(100).max(verificationAmount).parse(subject.verificationAmountPaise);
+        configured = pricedPolicy(createVerificationPaymentQuote(amount), verification);
       }
     }
     if (environment.PAYMENTS_LIVE_POLICY_JSON && (totalPaise !== DEFAULT_ANNUAL_PAYMENT_PAISE || verificationEnabled === "true")) throw new Error();
@@ -161,6 +163,7 @@ export function getProductionCollectionPolicy(environment: Environment = process
       throw new Error();
     }
     const policy = productionPaymentPolicySchema.parse(JSON.parse(raw));
+    if (subject?.verificationAmountPaise !== undefined && !("verification" in policy && policy.verification)) throw new Error();
     if (Date.parse(policy.approvedAt) > now || ("expiresAt" in policy && Date.parse(policy.expiresAt) <= now)) throw new Error();
     if ("verification" in policy && policy.verification && (policy.verification.businessId !== subject?.businessId
       || policy.verification.userId !== subject.userId || subject.verificationCompleted || Date.parse(policy.verification.expiresAt) <= now)) throw new Error();

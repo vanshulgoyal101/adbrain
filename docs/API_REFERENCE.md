@@ -45,8 +45,8 @@ does not rewrite a saved unpaid order or authorize a replacement payment.
 
 The configurable-price source adds a saved `quote` to each order response and
 returns the effective current quote at list level. Both `amountPaise` and provider
-checkout `amount` equal that order's saved `quote.totalPaise`; clients cannot submit
-an amount. `operator-managed-priced-v1` binds the quote and, for verification,
+checkout `amount` equal that order's saved `quote.totalPaise`; clients cannot set
+an annual amount. `operator-managed-priced-v1` binds the quote and, for verification,
 the exact owner/business/expiry into the accepted policy hash. Quote versions are
 `inr-annual-total-v1` (unchanged default), `inr-annual-configurable-v1`, and
 `inr-payment-verification-v1`. Verification has zero service/ad allocation and
@@ -55,6 +55,17 @@ amounts even after configuration changes. The bounded list retains the one-time
 verification order before recent annual orders, so completion cannot age out.
 Read [configuration and restoration](CONFIGURATION.md#configurable-live-amounts)
 before rollout; this addition is not evidence that INR 10 is enabled in production.
+
+For an eligible pilot with no saved verification order, GET returns
+`verificationAmountRange: {minPaise:100,maxPaise:<configured ceiling>}`; otherwise
+it is null. GET accepts optional `verificationAmountPaise` to obtain a read-only
+custom quote within that range. POST accepts the same optional integer field
+alongside the returned `termsHash` and explicit acceptance. Neither accepts a
+client-selected annual price. Owner/expiry/ceiling violations fail closed and
+changed consent or attempts to reprice a saved verification order are rejected.
+Without an amount parameter, reads recover the saved eligible verification quote,
+not a replacement at the default price. No additional migration is needed beyond
+the configurable-quote migration.
 
 Accounting consumers use the existing private order/effect IDs, business scope,
 quote, captured/refunded/provider-reported-refund amounts and review/refund holds
