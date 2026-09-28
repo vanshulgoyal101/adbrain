@@ -35,7 +35,11 @@ async function handlePOST(request: Request) {
   const parsed = clientEventSchema.safeParse(await Promise.resolve().then(() => JSON.parse(text)).catch(() => null));
   if (!parsed.success) return new Response(null, { status: 400 });
   const business = await getPrimaryBusiness();
-  recordProductEvent({ kind: "client", name: parsed.data.name, outcome: parsed.data.name === "page.view" ? "success" : "failed",
-    businessId: business?.id, attributes: { route: parsed.data.page } });
+  const event = parsed.data;
+  recordProductEvent({ kind: "client", name: event.name,
+    outcome: event.name === "ui.action" ? "started" : event.name.startsWith("client.") ? "failed" : "success",
+    businessId: business?.id, ...(event.name === "page.engagement" ? { durationMs: event.durationMs } : {}),
+    attributes: { route: event.page, ...(event.viewport ? { viewport: event.viewport } : {}),
+      ...(event.name === "ui.action" ? { action: event.action } : {}) } });
   return new Response(null, { status: 204 });
 }

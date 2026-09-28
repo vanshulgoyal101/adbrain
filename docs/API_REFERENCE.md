@@ -6,6 +6,19 @@ replace them only in an authorized isolated environment. Source: [route handlers
 [campaign schemas](../src/lib/campaign/connect-contracts.ts),
 [connection schemas](../src/lib/meta/connect-contracts.ts).
 
+## Product Analytics Ingestion
+
+`POST /api/events` requires an authenticated same-origin session; identity and
+business context come from the server. The strict payload always includes a known
+workspace `page` and optionally `viewport` (`compact`, `medium`, `wide`). Existing
+names `page.view`, `client.error` and `client.rejection` remain supported.
+`ui.action` additionally requires an allowlisted `action`; `page.engagement`
+requires integer `durationMs` between 1000 and 3600000. Unknown fields, arbitrary
+labels and client identity overrides are rejected. No request/field content is
+captured. DNT/GPC, 2 KiB body limits, rate limiting and 204 responses are preserved.
+Action intent is not authoritative success. See [collection and retention](OBSERVABILITY.md)
+for the fixed action catalog, privacy controls and operator-only analytics queries.
+
 ## Conventions
 
 - Workspace endpoints normally require the Supabase session cookie and enforce

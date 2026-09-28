@@ -168,6 +168,15 @@ columns to restore an obsolete UI.
 | `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp |
 | `public.rate_limit_hits` | Limiter key and hit timestamp, indexed by both |
 | `public.product_events` | Event/request UUIDs, version 1, optional user/business, kind/name/outcome/duration, allowlisted attributes, timestamp |
+| `public.product_event_daily` | Account-free daily usage/performance totals, grouped by UTC day/environment/release/event/route/action/viewport/provider/model; RLS, browser access denied, service-role read only |
+
+The source [rollup migration](../db/migrations/20260928_product_event_rollups.sql)
+depends only on the existing product-event table and replaces its pruning function
+without changing the caller contract. It aggregates and deletes up to 10,000 raw
+events older than 90 days atomically, preserves aggregate totals for 730 UTC days,
+and bounds old-aggregate cleanup. Migration application itself deletes no events.
+Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics,
+privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
 existing lead. Campaign deletion sets lead `campaign_id` null rather than deleting
