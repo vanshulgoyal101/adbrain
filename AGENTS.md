@@ -53,8 +53,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep handoffs short: issue/PR, exact source, result, blocker and next owner.
 	Reference existing evidence once. A blocker must name the missing decision or
 	failing command and the work that can continue; no repeated status-only handoffs.
-- The current publication hold overrides general push permission until resolved.
-	Do not interrupt active work or change release controls to adopt process updates.
+- Any active hold recorded in the current dispatch overrides general publication
+	permission. Do not resurrect resolved holds from historical receipts or change
+	release controls to adopt process updates.
 
 ## Engineering priorities and reuse
 
@@ -74,6 +75,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Replace existing custom code only when the benefit exceeds migration risk and
 	maintenance cost; preserve behavior and tests. Do not disrupt an active release
 	or start a broad rewrite merely to adopt a library.
+
+## Documentation
+
+- Use [docs/README.md](docs/README.md) to find the canonical guide and follow its
+	maintenance rules. Update the owning reference with route, schema, configuration,
+	workflow or operational changes; link shared definitions instead of duplicating them.
+- Ground examples and claims in deciding code, tests and exact release evidence.
+	Distinguish source, branch-only, migration-dependent, test-only, planned and deployed
+	behavior. A new date or a passing local test is not production verification.
+- Write for the reader's task: prerequisites, supported steps, expected result,
+	failure recovery and limitations. Keep examples synthetic and identify side effects.
+- Preserve historical receipts and stable links. Mark superseded plans explicitly;
+	do not rewrite old evidence as current fact. Run relevant documentation checks;
+	prose-only changes do not justify repeated application or provider tests.
 
 ## Branches and deployments
 

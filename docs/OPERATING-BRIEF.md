@@ -41,8 +41,10 @@ only supported industry or proof of external demand.
 Vanshul Goyal's unregistered business is the current operator. Solaride ownership
 and agency-account plans require formalization. The agreed annual allocation,
 fees, tax questions and funding model live in [Payments](PAYMENTS-PLAN.md#1-goal-and-decisions).
-The requirement is one customer payment with automatic Meta funding; changing it
-requires an owner decision. Gateway settlement alone does not prove that route.
+The owner's latest decision is one customer payment with operator-managed Meta
+payment outside the app. Automatic funding is not a checkout gate. AdBrain owns
+customer allocations, attributed costs and spend limits; gateway settlement is
+not proof that any customer's allocation has already been paid to Meta.
 
 ### Economics to Prove
 
@@ -69,8 +71,8 @@ as scenarios, not tax advice or a verified margin forecast.
 | Database authority | Preserve accepted local DB-A evidence; production legacy data, grants and migration rollout still require target-specific acceptance |
 | Delivery and spend | Keep unresolved activation-race, uncertain-save and stale-spend findings visible; require exact-candidate remedies before claiming bounded managed delivery |
 | Creative execution | Instruction-read failure handling and Studio browser recovery shipped; neither proves server-side exactly-once execution or atomic paid quota admission |
-| Enquiries | #34/PR37 and #35/PR38 need combined workflow/schema acceptance; do not infer exact attribution or automated recipient handoff |
-| Payments | Merchant status is verified, but the application remains test-only; capture, settlement, entitlement, funding and activation are separate states |
+| Enquiries | Released at main f639cc3; authenticated follow-up save/reload/filter smoke passed. Do not infer real Meta lead sync or recipient handoff from that smoke |
+| Payments | Repaired live-capable code is in dev PR46, not production-enabled. #48 removes the obsolete automatic-funding gate and completes live setup; #49 owns per-customer spend/activation limits. Operator pays Meta externally |
 | Public contract and operations | Reconcile service terms, privacy/deletion promises, support, alerts and recovery with actual operating capability before paid launch |
 
 Historical QA failures are evidence about their tested baseline, not proof of a
@@ -84,8 +86,10 @@ lease does not prove that a provider did nothing.
 confirmed live mode, complete account access, active settlements and the approved
 AdBrain website. Earlier real-provider test receipts record two test captures and
 one deliberate test-bank failure. No live collection, bank settlement, public
-webhook delivery, refund issuance or automatic Meta funding is established by
-those checks. Test captures remain non-spendable.
+webhook delivery, refund issuance or real Razorpay charge is established by those
+checks. Automatic Meta funding is outside AdBrain's responsibility. Live credentials
+and webhook configuration remain to be installed. Test captures remain non-spendable;
+campaign spending waits for #49's customer guardrails.
 
 ## Worker Coordination
 

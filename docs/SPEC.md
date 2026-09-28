@@ -59,12 +59,14 @@ nor a promise of year-round ad delivery or INR 2,000 profit.
 [Payments](PAYMENTS-PLAN.md) is the canonical record for operator identity,
 allocation rules, provider readiness, tax/refund decisions and rollout gates.
 The current operator is Vanshul Goyal's unregistered business; a future Solaride
-arrangement requires formalization. One customer payment and automatic Meta
-funding remain explicit requirements. Replacing them with manual top-ups or
-customer-direct Meta billing requires an owner decision.
+arrangement requires formalization. The owner now explicitly handles Meta payment
+outside AdBrain, manually or by bank/card arrangement. AdBrain collects once,
+tracks each customer's advertising allowance and enforces spend authorization;
+automatic Meta funding is no longer a checkout prerequisite. Use the approved
+initial offer/refund policy in the payment guide, not historical funding-first plans.
 
 Razorpay merchant activation and website approval do not turn test captures into
-spendable balances. Live orders, reconciliation, refunds and funding authorization
+spendable balances. Live orders, reconciliation, refunds and customer spend authorization
 must be implemented and verified before offering the complete paid workflow.
 
 ## Acceptance Principles

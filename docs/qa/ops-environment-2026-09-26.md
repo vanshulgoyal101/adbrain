@@ -1506,3 +1506,49 @@ selectors, seed-schema/helper checks and any mismatch with these preconditions.
 This does not transfer runtime seeding ownership to QA or change G-1's release
 scope. DevOps implementation and real Auth/REST/Storage/browser validation follow
 the scheduled infrastructure slot; S-1 is not a completed seed/provisioning result.
+
+## September 27 #48 Live Collection Activation
+
+DevOps activated the approved operator-managed checkout on the existing protected
+main source `a8ec89d516d90c1fc8716497ac087cf0a228d7e1`. The verified Vercel
+project is `prj_LNNhyKmbQYXyBUNadG2hZJSLDjOw`; Production deployment
+`dpl_Dc3EGqxH2c7Q9Z7h7gjXiJAhbF5U` is Ready at that exact main commit and
+serves `adbrain.vanshul.com`. The CLI also reported the existing `adsvanz.app`
+alias; inspecting the canonical domain confirmed it points to this new deployment.
+No source PR, schema replay, preview configuration or refund enablement was part
+of this environment-only redeploy of the previously reviewed production build.
+
+`PAYMENTS_LIVE_COLLECTION_ENABLED` and `PAYMENTS_LIVE_ENABLED` were added as
+Production-only Config variables, in that order, with `true` supplied by the CLI.
+Metadata readback verified both names, scopes and visibility; Vercel redacts
+values in its list output, so that readback does not independently display their
+values. The live API key ID/secret and distinct webhook secret remain sensitive
+Production-only variables. No test keys, generic Razorpay aliases, refund flag or
+policy override are configured. The original project, database, merchant and
+webhook identity pins were preserved, not overwritten with local placeholders.
+
+Before enabling, the owner confirmed in secure consoles that the live keys
+belong to the pinned merchant and that the enabled live webhook has the canonical
+`/api/payments/live/webhook` URL, subscribed payment/refund/dispute events and
+the same separate webhook secret. A read-only `orders.all` call with the locally
+supplied live pair authenticated against Razorpay; it created no order. This is
+not an independent account-ID comparison or proof of signed webhook delivery.
+
+After redeployment, anonymous GET `/api/payments/live/orders` returned `401`
+instead of the previous disabled `404`; a synthetic POST with an invalid webhook
+signature returned `400` before processing. The existing authenticated browser
+session loaded Settings Billing as "Ready for payment", with Pay disabled until
+terms acceptance and zero verified payments/available advertising allowance.
+Authenticated payment-status GET returned `200`, policy `operator-managed-v1`,
+funding mode `operator_managed`, quote 1,000,000 paise and zero saved orders.
+Displayed service, invoice and refund terms matched the approved operator-managed
+terms, including no tax-invoice claim and no implied Meta funding. No payment
+order, customer charge, refund, bank operation or ad-spend action was performed.
+Actual signed provider delivery and the first customer capture/settlement remain
+unverified and must be monitored separately; none is claimed by this receipt.
+
+If a technical failure requires suspending collection, restore the prior Ready
+disabled deployment `dpl_51BkGHCX5KrpuEWMFvw8YsCHo4FA` promptly, remove both
+Production enablement flags, and verify the canonical alias and disabled endpoint
+before another deployment. Removing flags alone does not change an already
+deployed environment snapshot.

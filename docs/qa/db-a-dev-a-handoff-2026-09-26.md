@@ -1,5 +1,146 @@
 # DB-A and DEV-A Development Handoff
 
+## Issue 45 Payment Peer Review
+
+Dev completed the assigned read-only trust-boundary review of
+**5f0998f23acf184696b4a03f51ac1599f0729804** in /tmp/adbrain-issue-45.
+[Two source-specific findings and reproduction details](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848049686)
+were sent directly to Dev 2:
+
+- P1: saved unpaid checkout remains available after automatic-funding evidence
+  expires or is revoked. GET does not validate current funding; SQL order replay
+  also returns before the funding gate. Withhold checkout without replacing the
+  immutable order or blocking history/reconciliation.
+- P2: a late failed attempt on an already-paid order becomes a permanent review
+  hold, blocking refunds despite a different valid captured payment. Distinguish
+  stale attempts from conflicting capture evidence without clearing real holds.
+
+Two narrow synthetic route probes reproduced these cases: revoked funding still
+returned checkout without reading funding evidence; the late failed attempt set
+review_required. Both expected-contract assertions failed; 33 existing route
+cases were skipped. Reused the author's fixture/mocks through an in-memory Vitest
+transform, with scrubbed Node 24, environment-file loading disabled and caches
+outside the peer worktree. No peer source/test edit or new validation harness.
+Existing 426 author tests and SQL/browser evidence were reused, not repeated or
+claimed as independent workflow acceptance. The peer worktree stayed clean at
+the reviewed SHA; no provider, database, live-money or release action occurred.
+
+Dev 2 owns repairs and exact-source focused evidence. QA retains independent
+workflow acceptance; DevOps owns separate integration and release gates. This
+review is not acceptance of enabled collection or production deployment. No
+shared application/index changes, branch operations or held services.
+
+## Issue 35 Combined Enquiry Candidate
+
+Dev delivered [PR #38 combined handoff](https://github.com/vanshulgoyal101/adbrain/pull/38#issuecomment-5847149580)
+at **c85ba252cf3dd4d9e039df9409bed484fd6967db**, published on
+feature/issue-35-follow-up-inbox, clean /tmp/adbrain-issue-35-o11. Parents preserve
+#35 6732027 and #34 363859f. This supersedes the earlier separate-candidate and
+missing-schema checkpoints below, not their historical evidence.
+
+Canonical schema now contains the exact #34 sync migration. Three merge conflicts
+were resolved preserving both RPC type sets, API contracts and all database
+safeguards. Existing harness coverage now proves authenticated follow-up save,
+checkpoint re-import preserving the entire lead/source/campaign record, and
+filtered list recovery. Fresh installation uses the canonical SQL; repeated
+ordered upgrades cover both enquiry migrations. Peer sync runtime and existing
+inbox/browser/dependency inputs are unchanged. No new dependency or harness.
+
+Author checks: missing canonical schema regression red then green; 177 affected
+tests across five suites; disposable PostgreSQL fresh/upgrade --leads-only pass
+with tenant, cursor, stale-writer and atomic rollback checks; typecheck, touched
+lint/editor, whitespace, Gitleaks and API docs check pass. Unchanged real-component
+browser evidence at 1440/390/320 is reused. Exact migration SHA256 values and
+reproduction commands are in the linked handoff. No full suite/build replay.
+
+QA owns independent combined acceptance; DevOps owns shared integration, required
+assembled CI and the migration/preflight/backup/rollback approval packet. #37 is
+included by ancestry, not a second schema implementation to copy. The branch's
+committed deployment policy matches main; zero GitHub deployments were observed
+for this head. No production migration, provider action, live payment work or
+shared-branch integration occurred; no service is held. Required hosted checks
+are separate from these local results.
+
+## Issue 40 Documentation Handoff
+
+QA correction: **6917f87ab3976e7121ccc7311c6afdfa700400b6** is published on the
+same documentation branch, correcting the
+[reported refresh contract](https://github.com/vanshulgoyal101/adbrain/issues/40#issuecomment-5847118832)
+in FEATURES and API_REFERENCE only. Snapshot write error/missing row returns 503
+before summary, auto-pause or audit; successful refresh can still pause delivery.
+Two-guide checker/source-order/whitespace/Gitleaks checks pass. No app suite or
+provider call was repeated; deployment configuration is unchanged. QA's prior
+DATA_MODEL/DEMO-RUNBOOK scoped approvals stand; delta-only re-review remains.
+
+Dev / #40: [author handoff](https://github.com/vanshulgoyal101/adbrain/issues/40#issuecomment-5847066792),
+commit **7c968dc17aa21e75fb9f520c0186a6a4f1bd7a4f**, published branch
+docs/issue-40-product-api-data, clean worktree /tmp/adbrain-issue-40-docs.
+Base dev 672eb132ad57bb3ba31f118afaffddaa878b4923. Exactly four guides:
+FEATURES, API_REFERENCE, DATA_MODEL and DEMO-RUNBOOK. No new PR opened.
+
+Rebuilt owner workflow/recovery, targeting/pagination contracts, effective SQL
+authority and migration inventory, optional test-payment storage and an
+artifact-first demo. Source/release/candidate limits and old headings are retained.
+QA's existing maintained checker was reused; no new validation harness or dependency
+was added to this branch. Exact reproduction and checker hash are in the handoff.
+
+Author checks: QA checker 4 documents, zero errors/warnings, no route/migration
+mention gaps; 83 local links/anchors, six JSON examples, 46 API methods, 25 baseline
+tables and 16 migrations; editor, whitespace and Gitleaks pass. Main configuration
+parity and four deployment-policy cases pass; zero GitHub deployments observed for
+this head. No application suite/build, database/provider call, installation,
+credential change, migration or production release. No held services.
+
+Next: QA #43 independent factual review, coordinator #39 guide reconciliation,
+then DevOps integration and required CI. The whole documentation rebuild is not
+accepted by this author receipt. #35 TESTING additions were transferred to QA in
+[issue #43](https://github.com/vanshulgoyal101/adbrain/issues/43#issuecomment-5846951327).
+
+Preserved #34 at 363859fc1195839822f60a92fda6109194a14268 and #35 at
+67320272380429b003b2131bf3b2b22641b0dd67. The concrete #34 migration/type handoff
+is now available, superseding the earlier missing-input checkpoint below. Combined
+schema/workflow acceptance and production migration remain separate; no feature
+integration was performed during #40.
+
+## O-11: Enquiry Inbox Implementation
+
+Dev / #35: [PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38), final
+head **67320272380429b003b2131bf3b2b22641b0dd67**. Worktree
+/tmp/adbrain-issue-35-o11, branch feature/issue-35-follow-up-inbox. Initial feature
+commit be14452 from dev 174d358; merged dev 672eb13 in the isolated worktree to
+resolve the PR's type/database-harness conflicts without dropping either side.
+The PR remains a 17-file inbox change against dev, not a new framework project.
+
+Delivered bounded, tenant-derived saved-lead paging/filtering/counts; stable
+microsecond/null/tie cursors; strict persistent workflow status/note updates;
+save failure recovery; and partial-sync/resume UI that re-reads the filtered list.
+Reuse: existing React, Zod, Supabase/Postgres and browser/database harnesses;
+no issue-specific dependency additions. Existing getLeads callers are preserved.
+
+79 affected tests, touched lint/types/editor checks and Gitleaks passed. The full
+isolated PostgreSQL harness passed after the merge, including fresh/upgrade,
+legacy defaults, 225-row ordering, re-import preservation and tenant denials.
+Real-component/CSS browser checks passed 1440/390/320; source and renderer inputs
+were unchanged by the merge, so that evidence was reused. Reproduction commands
+and limits are in the PR and issue-branch docs/TESTING.md. Screenshots/receipt are
+in the worktree's ignored test-results/lead-inbox. No server/browser/DB is held.
+
+QA: review the actual PR at this SHA, conditional on required hosted CI. Dev 2:
+the concrete follow-up migration is linked on #34; supply the sync migration/type
+commit so Dev can assemble the combined schema. That handoff was not available
+at the latest check. Combined #34 import-to-follow-up acceptance remains pending;
+synthetic sync responses are not real integration evidence. DevOps owns final
+integration/release. Production application of 20260926_lead_follow_up.sql remains
+separately authorized; preserve owner notes on application rollback.
+
+Prior #28 was corrected to **db2179eee879630493fe5b69a066818c4707ea7b** and handed
+off on PR #31/#33. Exact-head build/secrets passed; no deployment was recorded
+for that corrected SHA. The accepted O-11 policy evidence supersedes the older
+blanket hold below. #35 inherits the corrected ** rule; matching/config checks
+passed before pushes, with no deployment recorded for its initial feature SHA.
+
+## Historical Baseline
+
 Date: September 26, 2026. Status: local implementation slices, not packet closure
 or release approval. Source HEAD: `9da5b07b00e54fb552796cbcf01cc5fc7c2f02e7`,
 dirty `dev`. The local origin/dev reference advanced during this work; no fetch,

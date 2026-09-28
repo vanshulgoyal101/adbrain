@@ -1,15 +1,65 @@
 # Customer Payments and Managed Advertising
 
 Current payment decisions and implementation boundaries, reconciled September 26,
-2026. Owner requests live-payment rollout. Razorpay merchant readiness is verified;
-AdBrain's implemented checkout remains local and test-only. This guide does not
-authorize a charge, bank action, credential change, migration or ad activation.
+2026. Owner explicitly requests live collection as soon as possible with
+operator-managed Meta payments. Repaired payment code is integrated on dev
+through PR46; this is not yet enabled production collection. Rollout authority
+lives in [the dispatch](ORCHESTRATION.md).
 
-Implementation is assigned to Dev 2 in [#45](https://github.com/vanshulgoyal101/adbrain/issues/45):
-production checkout, durable orders, verified captures, webhook/reconciliation
-and refund recovery using the existing SDK. It proceeds alongside documentation,
-not after the documentation milestone. Delivery timing depends on the accepted
-candidate and explicit rollout prerequisites, not merchant onboarding already done.
+## Current Funding Boundary
+
+Latest owner decision, September 26: customer payments settle through Razorpay to
+the operator's bank account. The operator pays Meta separately, manually or by
+bank/card arrangement. Automatic Meta funding verification and bank-to-Meta
+automation are no longer checkout or release prerequisites. This explicitly
+supersedes the earlier funding-first requirement and investigation.
+
+AdBrain tracks each customer's verified captured/refunded amounts, service and
+advertising allocations, reservations, attributed advertising costs and remaining
+allowance. A pooled bank/Meta balance is not customer credit. Keep the agreed
+INR 10,000 annual total: INR 2,000 service and INR 8,000 Meta costs including tax;
+gateway fees remain an operator expense, not an extra customer charge.
+
+Use a versioned operator-managed policy in server/config/SQL, not fake funding
+evidence or rewritten old terms. New checkout must work without an automatic
+funding record or completed Meta onboarding. Merchant, tenant, amount, policy
+consent and test/live verification remain required. Old payment history and
+reconciliation stay available; changing funding responsibility is not a refund.
+
+Capture is not ad activation. Managed campaign approval/execution must use the
+correct customer's remaining allocation with atomic reservations and existing
+spend controls. Refunds/disputes/uncertain costs cannot create available money.
+Meta account/campaign ownership and delivery capability still matter at launch,
+but proof of how the operator pays Meta does not. No live bank/Meta operation or
+automatic campaign activation is requested by this change.
+
+Priority: remove the superseded checkout gate and complete live setup now;
+deliver customer accounting/spend controls in parallel. Do not enable managed
+ad spending until those controls are present and checked. Do not describe a
+disabled deployment as completion of the owner's live-collection request.
+
+## Approved Initial Offer
+
+Owner explicitly approved this initial live-checkout policy on September 26, 2026:
+
+- INR 10,000 total for 12 months; one business, one offer/service area, up to two
+  creatives and one capped Meta campaign.
+- INR 2,000 service allocation; INR 8,000 advertising allocation including Meta
+  taxes. Gateway fees are absorbed; no extra checkout charge or automatic renewal.
+- No promise of year-round ad delivery, a lead count, sales or other guaranteed result.
+- Full refund before work starts. Afterward, unused advertising allocation is
+  refundable after reconciling pending costs.
+- The INR 2,000 service allocation is earned only after the agreed creatives and
+  campaign setup are delivered; otherwise it remains refundable.
+- Invoice uses the current operator's actual tax status, with no invented GST
+  claim. Mandatory customer rights remain applicable.
+- The operator handles Meta payments externally. Approval does not initiate a
+  charge, refund, bank operation or campaign activation.
+
+Implement these as versioned terms shown before customer consent. Do not mark
+service allocation earned at capture, or charge a fee on top of the total.
+This is an approved commercial policy, not a determination of the operator's tax
+registration. Preserve the actual approval reference and original order terms.
 
 ## Verified Razorpay Account Status
 
@@ -32,15 +82,16 @@ automatic Meta funding or approval for every proposed future funds model.
 | Subject | Agreed direction | Still required |
 | --- | --- | --- |
 | Operator | Vanshul Goyal's unregistered business; permitted merchant display is Vanshul Goyal | A future Solaride arrangement needs formalization and applicable provider approval |
-| Customer payment | One INR 10,000 annual total | Finite service scope, dates, invoice treatment and accepted terms; no automatic renewal |
+| Customer payment | Approved initial offer above: INR 10,000 total for 12 months | Versioned terms and explicit customer acceptance; no automatic renewal |
 | Allocation | INR 2,000 service; INR 8,000 Meta media including applicable Meta taxes | Versioned approved quote and accounting rules; do not silently add customer tax |
 | Gateway fees | Absorbed by AdBrain | Verify economics after fees, fee taxes, support, refunds and disputes |
-| Delivery funding | Automatic Meta payment, with one customer payment | A provider-supported, account-specific route and separately authorized setup/test |
-| Proposed account model | Separate Solaride-owned customer ad accounts | Legal relationship, capacity, consent, access, ownership disclosure and offboarding |
+| Delivery funding | Operator pays Meta externally, manually or by bank/card arrangement | No automatic-funding proof before checkout; enforce each customer's paid advertising allowance inside AdBrain |
+| Proposed account model | Separate Solaride-owned customer ad accounts for future managed delivery | Legal relationship, capacity, consent, access, ownership disclosure and offboarding; not a live-checkout prerequisite |
 
 The allocation is a restricted service obligation, not a general-purpose wallet,
-arbitrary forwarding service or proof of cash already at Meta. Manual top-ups and
-customer-direct Meta billing are alternative product models, not silent fallbacks.
+arbitrary forwarding service or proof of cash already at Meta. Operator-managed
+Meta payment is now explicitly chosen. Customer-direct Meta billing has not been
+selected; the operator's external bank/card setup is outside application scope.
 Customer invoice tax treatment and principal/agent obligations need qualified
 review; this document is not legal or tax advice.
 
@@ -61,8 +112,9 @@ Do not copy their INR 11,800 illustration into the current INR 10,000 offer.
 Customer capture creates a gateway receivable and a service obligation. Gateway
 settlement moves net cash to the merchant bank after fees and adjustments. An
 internal allocation earmarks liability; it does not transfer funds to Meta.
-Meta charges through its supported billing arrangement, and delivery consumes
-the approved allocation. Refunds/disputes and revenue recognition are separate.
+The operator handles Meta payment outside the app, and attributed delivery costs
+consume the correct customer's allocation. Refunds/disputes and revenue recognition
+are separate. AdBrain must not report an allocation as a completed transfer to Meta.
 
 Keep order, capture, settlement, allocated, reserved, delivered and reconciled
 states distinct. A browser success callback, a paid order or an active settlement
@@ -90,18 +142,23 @@ blindly creating another account.
 | [Allocation](../src/lib/payments/allocation.ts) | Integer-paise arithmetic and versioned quotes | Current pre-tax-base helper is not the approved annual tax-inclusive product contract |
 | [Razorpay adapter](../src/lib/payments/razorpay-test.ts) | Official SDK and validated provider results | Explicit local test gate; production/Vercel and live keys rejected |
 | [Verification](../src/lib/payments/razorpay-verification.ts) | Constant-time checkout/raw-webhook signatures and captured-order matching | Signature verification alone grants no entitlement |
-| [Test workflow](../src/lib/payments/test-checkout.ts) and [UI](../src/components/test-checkout.tsx) | Stored test orders, callback verification and reload recovery | Test environment only; every capture remains non-spendable |
+| [Production workflow](../src/lib/payments/production-checkout.ts) and Billing checkout | Live-capable durable orders, verified captures, signed webhooks, reconciliation and refunds; three known defects fixed and merged on dev | PR46 is dev integration only; production collection flags remain off until issue48 rollout/configuration |
+| [Test workflow](../src/lib/payments/test-checkout.ts) and [UI](../src/components/test-checkout.tsx) | Separate stored test orders, callback verification and reload recovery | Test environment only; every capture remains non-spendable |
 | [Funding assessment](../src/lib/payments/meta-funding.ts) and [store](../src/lib/payments/meta-funding-store.ts) | Account-bound evidence, expiry/revocation and conflict handling | Not a proven automatic funding adapter or cash ledger |
 | [Campaign creation](../src/lib/campaign/create-service.ts) | Reviewed paused creation and durable operation recovery | Not a general payment ledger or atomic activation reservation |
 
-The optional [test-order migration](../db/migrations/20260926_razorpay_test_orders.sql)
+The [production payment migration](../db/migrations/20260926_production_payment_orders.sql)
+is integrated in dev with the managed-billing and Meta-event schema. Its current
+hash and rollout dependencies are in the [payment release packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
+It has not been applied to production. The optional [test-order migration](../db/migrations/20260926_razorpay_test_orders.sql)
 and [billing](../db/migrations/20260924_managed_billing.sql)/[event](../db/migrations/20260924_meta_billing_events.sql)
 migrations exist in source. Their production application is not established by
 the code-only release. Follow [Data Model](DATA_MODEL.md) and
 [Releasing](RELEASING.md) for target-specific prerequisites and approval.
 
-Production orders, event processing, customer liabilities, reservations, refunds
-and settlements remain implementation work. Use safe integer minor units,
+Live order/capture/webhook/reconciliation/refund behavior and the three identified
+payment fixes are implemented in dev. Customer liability/reservation accounting
+and campaign admission remain #49 work. Use safe integer minor units,
 tenant/currency invariants, immutable policy/quote versions, unique business-event
 keys and server-authorized writes. Client notes must not determine tenant,
 merchant, account, amount or authority. Keep raw card data and secrets out of
@@ -158,23 +215,24 @@ or unnecessary personal data. Privileged corrections need a reason and audit tra
 
 ## 8. Delivery Phases and Acceptance Gates
 
-Owner's live-rollout request supersedes the old blanket instruction to defer all
-checkout implementation. Feasibility and production integration can progress in
-parallel; actual collection/delivery still needs the relevant gates below.
+The operator-managed decision removes outbound funding feasibility from the
+critical path. Collection and customer accounting can ship without a bank-to-Meta
+adapter; ad spending still requires the customer-specific controls below.
 
 | Phase | Complete when |
 | --- | --- |
-| Contract and funding feasibility | Operator, annual scope/tax/refund terms and account-specific automatic funding route are established; actual financial setup has its own authority |
-| Production financial core | Durable live orders/events and immutable quotes survive duplicate, concurrent and uncertain outcomes without duplicate entitlement |
-| Gateway integration | Reused SDK/verification supports verified live context, secure configuration, public webhook processing and recovery; test records cannot cross the boundary |
-| Delivery and refunds | Reservations, current funding/spend evidence, bounded consent, pause/reconciliation and refund holds work together |
+| Contract and operator-managed policy | Operator, annual scope/tax/refund terms and external Meta-payment responsibility are explicit; no automatic-funding evidence gate |
+| Operator-managed collection | New-mode orders do not depend on automatic Meta-funding evidence; existing order history remains readable and recoverable |
+| Production financial core | Dev candidate has durable live orders/events and immutable quotes with consent/funding-replay/stale-attempt fixes; customer-level ad balance remains #49 |
+| Gateway deployment | Apply exact payment migration, securely configure live merchant/account/project/webhook binding, enable flags only for the reviewed production main deployment; test records cannot cross the boundary |
+| Delivery and refunds | Verified customer allocations, atomic reservations, attributed costs, bounded consent, pause/reconciliation and refund holds work together |
 | Bounded live verification | Exact authorized transaction, settlement/refund and delivery evidence reconcile on the approved production candidate and schema |
 
 The [earlier M0-M7 design](PAYMENTS-HISTORY-2026-09-26.md#8-delivery-phases-and-acceptance-gates)
 preserves detailed proposed tables, routes and cases. Its old source baseline,
-onboarding gaps and worker sequence are not current dispatch or proof of deployed
-contracts. Reuse suitable existing SDKs and helpers; do not build a generic billing
-platform around unverified provider behavior.
+onboarding gaps, automatic-funding requirement and worker sequence are not current
+dispatch or proof of deployed contracts. Reuse existing SDKs and helpers; do not
+build a generic wallet or funding-adapter platform for this narrowed scope.
 
 ## 9. Implementation Receipt
 

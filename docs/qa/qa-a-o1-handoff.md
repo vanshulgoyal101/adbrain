@@ -5,6 +5,224 @@ CONTRACT-BC: **DRAFT / not accepted**. QA case proposal: QA-BC-cases-1.
 The O-1 filename is retained as directed by the coordinator. This is a new
 artifact/contract receipt, not a change to historical candidate acceptance.
 
+## Payment Repairs Verified
+
+September 26, 2026: **all three reported defects closed; scoped repaired-source
+acceptance**, conditional on exact integrated CI. This supersedes the original
+5f0998f changes-requested verdict below, not financial or production evidence.
+
+- Consent: `7ba82db36a2cc3b2b5f941bd951d2ea2a1aa791f`. The existing red regression
+   now passes, including explicit renewed acceptance submitting the new policy hash.
+- Backend: `49d05e85e30130dcc84509f411bb0b25abd91ecb`, including stale-attempt
+   repair `119bcef55a4bfd1f95f8a5054d0b18e2c3398cfd`. Six selected regressions pass:
+   distinct capture recovery with/without saved capture, same-payment contradiction
+   still held, and invalid/missing/unavailable funding withholding checkout while
+   preserving history/reconciliation. Reviewed funding checks before SQL replay.
+- Corrected payment migration SHA-256, independently matched:
+   `8983ba31e8fc9af8b6a580feb1869a0bc8715c3d5a17ab0103bc9601fd42c47b`.
+   DevOps must update the canonical copy alongside the repaired callers.
+
+Independent checks used clean detached `/tmp/adbrain-qa-consent-7ba` and
+`/tmp/adbrain-qa-backend-49d`, existing Vitest configuration with runner loader,
+scrubbed Node 24, network guard, synthetic HTTP/RPC/provider fixtures, no dotenv
+and external caches. Seven tests passed; no new tests or application edits.
+Reused author 31 UI/39 backend tests, real SQL revocation/expiry/connection/replay
+evidence and earlier 426-test/browser/recovery evidence without replay. These are
+source and synthetic-workflow checks, not actual provider transactions.
+
+[Exact-source verdict](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848198762)
+and [DevOps handoff](https://github.com/vanshulgoyal101/adbrain/issues/42#issuecomment-5848198925).
+Both QA UI cases are already adopted by the consent commit; do not re-add the full
+024f0a9 overlay. Old 5f0998f/a95e622 alone is not the repaired source. Next: DevOps
+integrates exact fixes/canonical SQL and uses existing required CI; QA smokes the
+deployed non-financial workflow after the deployment handoff. Current fast-path
+production authority supersedes old approval/rehearsal holds. No new broad review,
+SQL execution, provider/financial action or deployment was performed by QA here.
+
+## Payment Workflow Review
+
+September 26, 2026: **changes requested** at
+`5f0998f23acf184696b4a03f51ac1599f0729804`; payment workflow acceptance is withheld.
+QA reviewed checkout/API recovery and consumed Dev's separate trust/SQL review.
+The earlier enquiry, documentation and selective-source verdicts remain unchanged.
+
+1. **P1, QA reproduced:** a status refresh replaces collection policy without
+   invalidating the checked acceptance. With no saved order, accept policy A,
+   refresh to policy B, and payment remains eligible to submit B's hash with
+   `acceptTerms: true`. Bind consent to the accepted terms hash across refreshes.
+   [Finding and reproduction](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848036223).
+2. **P1, Dev peer finding:** saved checkout/replay does not revalidate current
+   automatic funding after revocation, expiry or connection-generation changes.
+   Withhold checkout while preserving history/reconciliation when prerequisites fail.
+3. **P2, Dev peer finding:** an earlier failed attempt delivered after another
+   payment captured the order is classified as a sticky conflict, blocking refunds.
+   Distinguish that stale attempt from contradictory capture evidence.
+   [Both peer findings and bounded evidence](https://github.com/vanshulgoyal101/adbrain/issues/45#issuecomment-5848049686).
+
+Independent test-only overlay `024f0a99145ae2c187b8fcd4b2ca13617a0bd45f`, parent
+exactly 5f0998f, is preserved in clean detached `/tmp/adbrain-qa-payments-5f`.
+It adds three cases to existing component/route suites, with no new harness:
+the consent assertion **fails** on the candidate; lost verification followed by
+duplicate callbacks and reload **passes** without reopening checkout or repeating
+verification; queued webhook recovery through owner reconciliation with collection
+suspended **passes**, returning a verified receipt without new orders/refunds or
+spend/activation entitlement. The consent test is intentionally red evidence, not
+a green release overlay to adopt before repair.
+
+Each case ran separately under scrubbed Node 24, synthetic credentials/responses,
+the existing unit network guard and `--no-cache`. Select the three cases with
+`npm test -- tests/payment-funding-panel.test.tsx tests/payment-production-checkout.test.ts -t 'QA ' --maxWorkers=1 --no-cache`
+under the same isolation settings. Touched lint/editor, whitespace and Gitleaks
+pass. Reused 426 author tests, local SQL/concurrency and 1440/390/320 synthetic
+browser evidence. Peer probes were consumed, not rerun. Route tests use mocked
+RPC/provider boundaries; neither those nor component mocks are real-provider proof.
+
+Dev 2 owns the three repairs and exact corrected-source handoff. QA can then run
+the repaired consent case and review only relevant workflow deltas; Dev retains
+static trust/SQL findings. DevOps was notified that integration preparation may
+continue but original-source payment acceptance is blocked. Repaired/integrated
+CI, finite commercial terms, supported automatic funding, secure configuration,
+schema/operator approvals and bounded live verification remain separate gates.
+No author-worktree/application edits, production environment/account inspection,
+SQL, provider/financial operations, push or new PR. AI-assisted same-account review.
+
+## Selective Release Dependency Acceptance
+
+September 26, 2026: **scoped, conditional QA acceptance** of immutable
+`273cbf80422f8c89b851dfc2fcfa85bff878104f` in clean
+`/tmp/adbrain-backlog-preflight-20260926`. No blocking integration findings in
+the assigned assembly/dependency boundary. This is not deployment readiness.
+
+Reviewed main 6291dc2 plus DB-A 8b82a5e (assembled as 9e4d29b), audit 5f047fe
+(ce89976), the accepted enquiry implementation delta 672eb13..c85ba25 (cd069c5)
+and Node 24 CI. Reused the existing selected-file identity evidence and prior
+DB-A/enquiry acceptance, 177 author tests, SQL/browser receipts and the two
+90bec0f recovery regressions; no feature review or application suite replay.
+
+Read-only TypeScript parser/resolver check under Node 24.21.0 passed for all
+21 changed runtime modules and their 80-module transitive source graph. All
+14 external packages reached are declared runtime dependencies. This checks
+static import closure, not a substitute for compilation or the production build.
+Manifest, lockfile and deployment policy are unchanged from main. Billing helpers
+already present on main remain unchanged; absence of the entire payments helper
+directory is not required. Checkout API routes/components, Razorpay SDK integration
+and Razorpay canonical-schema definitions are absent. The retained test-order SQL
+is consumed by the disposable PostgreSQL harness, not the production apply packet.
+
+Traced draft update/delete, verified audit append, lead start/checkpoint and
+filtered-list callers to their included RPCs. Trusted campaign/result helpers
+use the owner-scoped admin path required after write revocation. The six-file
+order in the [DevOps packet](ops-environment-2026-09-26.md) covers integrity,
+draft authority, trusted writes, gated legacy validation and both enquiry
+expansions. Existing main schema supplies prerequisite tables/keys; incompatible
+grant changes still require quiescence or a reviewed transition before reopening
+callers. DevOps' new synthetic fallback report is author evidence, not independent
+acceptance of a deployed rollback or permission to restore unsafe grants.
+
+**Open gate:** GitHub returned zero check runs for this exact head. CI still
+triggers on main/dev pushes and PRs targeting them; the Node version change did
+not remove required jobs. DevOps must obtain exact-candidate required CI through
+the approved workflow, plus rollout/backup/restore/quiescence and target-specific
+migration authorization. This verdict supplies none of those approvals.
+Candidate and peer worktrees/services were not modified; no tests adopted,
+production inspection, SQL execution, provider/financial calls, push or new PR.
+Payment #45 is outside this assignment. AI-assisted same-account review.
+
+## Combined Enquiry Acceptance
+
+September 26, 2026: **scoped QA acceptance** of PR38 at
+`c85ba252cf3dd4d9e039df9409bed484fd6967db`, with no blocking findings in the
+joined import/checkpoint/follow-up/list/schema scope. This supersedes the
+pre-review below, not production migration or release gates.
+
+Independent test-only overlay: `90bec0f07c0400c8b8b6d2f41d963e9e66727266`,
+parent exactly c85ba25, clean detached `/tmp/adbrain-qa-enquiry-c85`. Two new
+regressions in existing suites pass individually, without a new harness:
+
+- Actual route/service with synthetic RPC/provider doubles: page one commits,
+   page two save returns 503 with partial state; empty retry resumes the saved
+   cursor, counts only the new row and preserves the entire confirmed lead,
+   including follow-up, source and campaign fields. Two unique rows after recovery.
+- Actual inbox with synthetic HTTP: 503 retains visible rows without claiming
+   completion. Explicit retry discovers committed rows through the contact-filtered
+   saved list, ignores sync snapshot rows as list authority and retains follow-up.
+   Automatic refresh on error is not required for this safe recovery path.
+
+Node 24, scrubbed environment, placeholder Supabase values, disabled paid
+evaluation/logging and the existing unit network guard were used. From the overlay,
+with those isolation settings, run `npm test -- tests/meta-connect-w2-leads-sync-route.test.ts tests/lead-inbox.test.tsx -t 'QA ' --maxWorkers=1`.
+Touched lint/editor, whitespace and Gitleaks pass. No application code changed.
+
+Reused [author evidence](https://github.com/vanshulgoyal101/adbrain/pull/38#issuecomment-5847149580):
+177 tests, real PostgreSQL fresh/upgrade/rollback/stale-writer/tenant/reimport and
+225-row paging checks, and unchanged 1440/390/320 browser evidence. Reviewed the
+joined SQL assertions and tenant-scoped list/update paths. Canonical schema
+contains both exact enquiry migrations, with hashes matching the author handoff.
+Inbox/list/package and sync/migration inputs match their respective parents.
+Exact c85ba25 hosted build/secrets checks are successful; no full suite replay.
+Synthetic route/component results are not real-provider or production evidence.
+
+DevOps owns exact assembled CI and the separately authorized migration/release
+packet. Selective candidate 273cbf8 is not accepted by this source verdict.
+No production/provider/credential operation, server, database, push or new PR.
+Dev may adopt the local test-only overlay. AI-assisted same-account review, not
+a second-human approval.
+
+### Issue 40 Correction Accepted
+
+Scoped approval at `6917f87ab3976e7121ccc7311c6afdfa700400b6`: corrected
+FEATURES/API_REFERENCE paragraphs match the handler's 503 persistence failure
+before summary, auto-pause and audit work. Delta-only review and two-guide checker
+pass with zero errors/warnings. DATA_MODEL/DEMO-RUNBOOK are unchanged from the
+previous approval. Integrate all four guides together because of cross-guide
+anchor dependencies. The P2 below is closed, conditional on assembled docs checks
+and required CI. #41/#42 and QA-owned author-only status remain unchanged.
+
+## Issue 40 Independent Documentation Review
+
+Historical initial review: the verdicts above supersede its pending actions.
+
+September 26, 2026: reviewed the four-guide candidate
+`7c968dc17aa21e75fb9f520c0186a6a4f1bd7a4f` against its declared dev baseline
+`672eb132ad57bb3ba31f118afaffddaa878b4923`. The previous missing-handoff and
+ten-migration-mention entries are superseded: all 16 migrations are now mapped,
+with candidate #34/#35 migrations and production application kept separate.
+
+**Changes requested, P2:** [API refresh contract](../API_REFERENCE.md#sync-insights-leads-and-settings)
+says an insight insert error does not fail the response and `result` can be null.
+The [handler](../../src/app/api/campaigns/[id]/refresh/route.ts#L97) instead returns
+503 when `resultError || !result`, before summary, auto-pause and audit work.
+The [feature summary](../FEATURES.md#sync-results-and-leads) also describes a null
+stored result rather than this explicit failure. Correct both guides to distinguish
+provider-read success from failed persistence; do not change application behavior.
+
+Data Model and Demo Runbook receive scoped approval conditional on assembled
+documentation checks/required CI. Reviewed effective campaign/audit grants,
+versioned draft authority, same-business/NOT VALID constraints, migration ordering,
+optional payment storage, synthetic examples and demo side effects/recovery.
+No app/provider tests or SQL execution were needed for this prose review; author
+checks are reused. #41/#42 approvals and QA-owned author-only status are unchanged.
+Next: Dev corrects the two refresh paragraphs; QA reviews only that delta.
+[Finding sent to Dev](https://github.com/vanshulgoyal101/adbrain/issues/40#issuecomment-5847118832).
+Four-guide checker: zero errors/warnings and zero route/env/migration mention gaps.
+
+### Enquiry Pre-Review Boundary
+
+Read-only inspection of #34 `363859fc1195839822f60a92fda6109194a14268` and
+#35 `67320272380429b003b2131bf3b2b22641b0dd67` covered sync route/service,
+checkpoint SQL, inbox/list state and neighboring test assertions. Atomic
+insert/checkpoint, duplicate-ignore owner-field preservation and successful
+partial-response filtered-list refresh align. This is not combined acceptance.
+
+[Coverage request to Dev](https://github.com/vanshulgoyal101/adbrain/issues/35#issuecomment-5847131995):
+exercise HTTP 503 after some pages have committed. The inbox returns before
+list refresh/continuation handling on non-2xx responses; current component cases
+separately cover old-row retention on error and HTTP 200 continuation. Verify
+safe discovery of newly saved rows, retained follow-up, resumable retry and no
+false completion using existing tests. This is not reproduced data loss.
+No combined candidate was in the consumed handoff; Dev retains assembly ownership.
+No new harness, application/provider execution or #45 financial acceptance.
+
 ## Issue 43 Documentation QA
 
 September 26, 2026. QA owns the testing/brand guides, design-history annotation
@@ -43,7 +261,7 @@ Q = owned author checks complete, independent review/integration still required.
 C = bounded independent review of the seven hashed coordinator drafts below.
 D2 = scoped approval at `1b0bb378bd5b660c40c3c58fd4402d327dfe6d0d`.
 O = scoped approval at `bd47fcf8bb32ec6c0649dceac7530525e555b71b`.
-P = #40 rewrite handoff pending; baseline mechanical checks are not acceptance.
+D = #40 at `6917f87ab3976e7121ccc7311c6afdfa700400b6`; correction accepted above.
 All approvals remain conditional on assembled documentation checks/required CI.
 
 | Core guide | Owner/source | Acceptance and factual sample |
@@ -55,10 +273,10 @@ All approvals remain conditional on assembled documentation checks/required CI.
 | [Roadmap](../ROADMAP.md) | C / #39 | Reviewed released/dev/candidate separation and unresolved risks |
 | [Operating brief](../OPERATING-BRIEF.md) | C / #39 | Reviewed evidence layers, operator and payment boundaries |
 | [Payments](../PAYMENTS-PLAN.md) | C / #39 | Reviewed test gate/amount/allocation source; merchant evidence attributed, not replayed |
-| [Features](../FEATURES.md) | P / #40 | Awaiting rewrite |
-| [API reference](../API_REFERENCE.md) | P / #40 | Awaiting rewrite; no missing route-path mentions in baseline |
-| [Data model](../DATA_MODEL.md) | P / #40 | Awaiting rewrite; ten migration mentions/prerequisites handed to owner |
-| [Demo runbook](../DEMO-RUNBOOK.md) | P / #40 | Awaiting rewrite |
+| [Features](../FEATURES.md) | D / #40 | Scoped approval; corrected refresh persistence failure wording |
+| [API reference](../API_REFERENCE.md) | D / #40 | Scoped approval; refresh returns 503 before downstream work, not null success |
+| [Data model](../DATA_MODEL.md) | D / #40 | Scoped approval; all 16 migrations mapped and authority/prerequisites reviewed |
+| [Demo runbook](../DEMO-RUNBOOK.md) | D / #40 | Scoped approval; synthetic artifacts, side effects and recovery boundaries reviewed |
 | [Architecture](../ARCHITECTURE.md) | D2 / #41 | Reviewed trust, operation, query-cache and consistency boundaries |
 | [AI pipeline](../AI_PIPELINE.md) | D2 / #41 | Reviewed SDK/retry/accounting and generation GET example against handler |
 | [Meta connection](../META_CONNECT.md) | D2 / #41 | Reviewed consent/capabilities, uncertain activation and #34 migration boundary |
@@ -97,9 +315,9 @@ docs/OPERATING-BRIEF.md 713199648f1d87dcd689c57a402a3294cc63b8f361cc7e2385b0c731
 docs/PAYMENTS-PLAN.md 41be963cc943db885b6ee687fc487a315222e34980661e9b54af140bf38d08d8
 ```
 
-Next: Dev delivers #40; QA reviews its factual delta and migration map. DevOps
-integrates the owned checker/guides with peers and runs the documentation check
-and required CI on that exact assembly. #39 is not fully accepted yet.
+Next: DevOps integrates the dependency-complete corrected #40 packet and runs
+documentation checks/required CI on that assembly. QA-owned guides/checker still
+require another worker's independent review; #39 is not fully accepted yet.
 
 ## O-11 Backlog Reconciliation Review
 
