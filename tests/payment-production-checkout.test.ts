@@ -1,11 +1,13 @@
 import { createHmac } from "node:crypto";
+import type { z } from "zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, POST } from "@/app/api/payments/live/orders/route";
 import { POST as verify } from "@/app/api/payments/live/verify/route";
 import { POST as webhook } from "@/app/api/payments/live/webhook/route";
 import { POST as reconcile } from "@/app/api/payments/live/reconcile/route";
 import { POST as operator } from "@/app/api/payments/live/operator/route";
-import { getProductionCollectionPolicy, OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
+import { getProductionCollectionPolicy, OPERATOR_MANAGED_POLICY, PRICING_APPROVED_AT, productionPaymentPolicySchema, quoteForPaymentPolicy } from "@/lib/payments/production-config";
+import { createAnnualPaymentQuote, type ProductionPaymentQuote } from "@/lib/payments/allocation";
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), getUser: vi.fn(), own: vi.fn(), rateLimit: vi.fn(), createOrder: vi.fn(), fetchOrder: vi.fn(),
   findOrder: vi.fn(), fetchPayment: vi.fn(), fetchOrderPayments: vi.fn(), createRefund: vi.fn(), fetchRefund: vi.fn(), fetchRefunds: vi.fn() }));
@@ -26,6 +28,7 @@ const webhookSecret = "synthetic-live-webhook-secret";
 const policy = { version: "synthetic-terms-v1", approvalReference: orderId, approvedAt: "2026-09-01T00:00:00Z", expiresAt: "2026-10-01T00:00:00Z",
   serviceScope: "Synthetic finite scope, not actual terms", invoiceTerms: "Synthetic invoice policy", refundTerms: "Synthetic refund policy", automaticFundingApprovalReference: businessId };
 const initialOrder = { id: orderId, business_id: businessId, user_id: userId, account_id: "acc_fixture", key_id: "rzp_live_fixture", environment: "live",
+  quote: createAnnualPaymentQuote() as ProductionPaymentQuote,
   amount_paise: 1_000_000, currency: "INR", state: "created", provider_order_id: "order_fixture" as string | null, payment_id: null as string | null,
   captured_paise: 0, refunded_paise: 0, provider_refunded_paise: 0, review_required: false, refund_hold: false, terms: policy, terms_hash: "",
   funding_evidence_id: businessId,
@@ -34,7 +37,7 @@ const payment = { id: "pay_fixture", entity: "payment", order_id: "order_fixture
   captured: true, amount_refunded: 0, refund_status: null };
 const remoteOrder = { id: "order_fixture", entity: "order", receipt: orderId, amount: 1_000_000, amount_paid: 1_000_000, amount_due: 0, status: "paid", currency: "INR" };
 let saved: Omit<typeof initialOrder, "terms" | "funding_evidence_id"> & {
-  terms: typeof policy | typeof OPERATOR_MANAGED_POLICY; funding_evidence_id: string | null;
+  terms: z.infer<typeof productionPaymentPolicySchema>; funding_evidence_id: string | null;
 } = { ...initialOrder };
 let replay = false;
 let storageFailure: string | null = null;
@@ -100,7 +103,7 @@ beforeEach(() => {
     if (name === "production_payment_recovery") data = args.p_order_id === orderId ? { order: saved, refunds: operatorAllowed ? [refundOperation] : [], refundIds: [] } : null;
     if (name === "production_payment_order_review") { saved.review_required = true; saved.state = "review_required"; data = saved; }
     if (name === "production_payment_observe") {
-      saved = { ...saved, captured_paise: args.p_capture_verified ? 1_000_000 : saved.captured_paise,
+      saved = { ...saved, captured_paise: args.p_capture_verified ? saved.amount_paise : saved.captured_paise,
         payment_id: args.p_capture_verified ? "pay_fixture" : saved.payment_id, review_required: saved.review_required || Boolean(args.p_review_required),
         state: args.p_review_required ? "review_required" : args.p_capture_verified ? "captured" : saved.state };
       data = saved;
@@ -124,6 +127,88 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("live checkout service with synthetic provider evidence", () => {
+  it("quotes a bounded custom verification amount without creating an order and locks it after creation", async () => {
+    const at = Date.parse(PRICING_APPROVED_AT);
+    vi.spyOn(Date, "now").mockReturnValue(at);
+    for (const [name, value] of Object.entries({ PAYMENTS_LIVE_POLICY_JSON: "", PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
+      PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: userId,
+      PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(at + 3_600_000).toISOString(), PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE: "1000" })) vi.stubEnv(name, value);
+    const originalRpc = mocks.rpc.getMockImplementation()!;
+    let created = false;
+    mocks.rpc.mockImplementation((name, args) => name === "production_payment_orders_list" && !created
+      ? { abortSignal: async () => ({ data: [], error: null }) } : originalRpc(name, args));
+    const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
+    const response = await GET(new Request(`${url}&verificationAmountPaise=525`));
+    expect(response.status).toBe(200);
+    const quoted = await response.json();
+    expect(quoted).toMatchObject({ quote: { totalPaise: 525, serviceAllocationPaise: 0, metaAllocationPaise: 0 },
+      verificationAmountRange: { minPaise: 100, maxPaise: 1000 }, orders: [] });
+    expect(mocks.rpc.mock.calls.every(([name]) => name === "production_payment_orders_list")).toBe(true);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+    for (const invalid of ["99", "1001", "100.5", "1e3", ""]) {
+      expect((await GET(new Request(`${url}&verificationAmountPaise=${invalid}`))).status).toBeGreaterThanOrEqual(400);
+    }
+    const { hash, ...terms } = quoted.policy;
+    saved = { ...saved, terms, terms_hash: hash, quote: quoted.quote, amount_paise: 525, funding_evidence_id: null };
+    const body = { ...createBody(), verificationAmountPaise: 525 };
+    expect((await POST(request("orders", { ...body, verificationAmountPaise: 1000 }))).status).toBe(409);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+    mocks.createOrder.mockResolvedValue({ ...remoteOrder, amount: 525, amount_paid: 0, amount_due: 525, status: "created" });
+    expect((await POST(request("orders", body))).status).toBe(201);
+    expect(mocks.createOrder).toHaveBeenCalledWith(orderId, hash, saved.quote, expect.objectContaining({ verificationAmountPaise: 525 }));
+    created = true;
+    expect(await (await GET(new Request(url))).json()).toMatchObject({ quote: { totalPaise: 525 }, verificationAmountRange: null,
+      orders: [{ checkout: { amount: 525 } }] });
+    expect((await GET(new Request(`${url}&verificationAmountPaise=1000`))).status).toBe(409);
+    expect((await POST(request("orders", { ...body, verificationAmountPaise: 1000 }))).status).toBe(409);
+    vi.stubEnv("PAYMENTS_LIVE_VERIFICATION_ENABLED", "false");
+    expect(await (await GET(new Request(url))).json()).toMatchObject({ quote: { totalPaise: 1_000_000 }, verificationAmountRange: null,
+      orders: [{ amountPaise: 525, checkout: null }] });
+    expect(mocks.createOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expose a custom amount or permit custom-price annual orders", async () => {
+    const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
+    expect(await (await GET(new Request(url))).json()).toMatchObject({ verificationAmountRange: null });
+    expect((await GET(new Request(`${url}&verificationAmountPaise=1000`))).status).toBeGreaterThanOrEqual(400);
+    expect((await POST(request("orders", { ...createBody(), verificationAmountPaise: 1000 }))).status).toBeGreaterThanOrEqual(400);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("uses the saved configured amount for creation and capture after the current price changes", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "50000");
+    const { hash, ...terms } = getProductionCollectionPolicy();
+    saved = { ...saved, terms, terms_hash: hash, funding_evidence_id: null, quote: quoteForPaymentPolicy(terms), amount_paise: 50_000 };
+    expect((await POST(request("orders", createBody()))).status).toBe(201);
+    expect(mocks.createOrder).toHaveBeenCalledWith(orderId, hash, saved.quote, expect.objectContaining({ businessId, userId }));
+    vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "1000000");
+    mocks.fetchPayment.mockResolvedValue({ ...payment, amount: 50_000 });
+    mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, amount: 50_000, amount_paid: 50_000 });
+    expect(await (await verify(callback())).json()).toMatchObject({ status: "captured", amountPaise: 50_000, capturedPaise: 50_000,
+      quote: { serviceAllocationPaise: 10_000, metaAllocationPaise: 40_000 } });
+  });
+
+  it("restores the normal quote after a verification capture while preserving its receipt", async () => {
+    const at = Date.parse(PRICING_APPROVED_AT);
+    vi.spyOn(Date, "now").mockReturnValue(at);
+    for (const [name, value] of Object.entries({ PAYMENTS_LIVE_POLICY_JSON: "", PAYMENTS_LIVE_VERIFICATION_ENABLED: "true",
+      PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID: businessId, PAYMENTS_LIVE_VERIFICATION_USER_ID: userId,
+      PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT: new Date(at + 3_600_000).toISOString() })) vi.stubEnv(name, value);
+    const { hash, ...terms } = getProductionCollectionPolicy(process.env, at, { businessId, userId });
+    saved = { ...saved, terms, terms_hash: hash, quote: quoteForPaymentPolicy(terms), amount_paise: 1_000, funding_evidence_id: null };
+    expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
+      .toMatchObject({ quote: { totalPaise: 1_000, serviceAllocationPaise: 0, metaAllocationPaise: 0 } });
+    vi.stubEnv("PAYMENTS_LIVE_VERIFICATION_ENABLED", "false");
+    mocks.fetchPayment.mockResolvedValue({ ...payment, amount: 1_000 });
+    mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, amount: 1_000, amount_paid: 1_000 });
+    expect(await (await verify(callback())).json()).toMatchObject({ amountPaise: 1_000, capturedPaise: 1_000, status: "captured", spendablePaise: 0 });
+    vi.stubEnv("PAYMENTS_LIVE_VERIFICATION_ENABLED", "true");
+    expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
+      .toMatchObject({ quote: { totalPaise: 1_000_000 }, orders: [{ amountPaise: 1_000, receipt: { amountPaise: 1_000 } }] });
+  });
+
   it.each(["meta_funding_latest_record", "production_payment_funding_valid"])("creates and replays operator checkout without Meta onboarding or available %s", async unavailable => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse(OPERATOR_MANAGED_POLICY.approvedAt));
     vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");

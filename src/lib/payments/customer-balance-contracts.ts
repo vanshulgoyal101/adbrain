@@ -17,5 +17,5 @@ export const customerCostEvidenceSchema = z.strictObject({
 });
 export const customerRefundAllocationSchema = z.strictObject({
   orderId: z.uuid(), serviceRefundedPaise: customerPaiseSchema.max(200000), advertisingRefundedPaise: customerPaiseSchema.max(800000),
-  serviceEarnedPaise: z.union([z.literal(0), z.literal(200000)]), evidenceReference: z.uuid(),
+  serviceEarnedPaise: customerPaiseSchema.max(200000), evidenceReference: z.uuid(),
 });

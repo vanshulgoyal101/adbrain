@@ -27,7 +27,8 @@ const orderSchema = z.object({
 });
 type Recovery = z.infer<typeof recoverySchema>;
 type Order = z.infer<typeof orderSchema>;
-export type TestCheckoutOptions = NonNullable<Order["checkout"]> & {
+export type TestCheckoutOptions = Omit<NonNullable<Order["checkout"]>, "amount"> & {
+  amount: number;
   handler: (value: unknown) => void;
   modal: { ondismiss: () => void; confirm_close: boolean };
   retry: { enabled: boolean };
