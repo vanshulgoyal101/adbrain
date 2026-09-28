@@ -120,6 +120,15 @@ but an existing order cannot be repriced or replaced while unresolved. Captures
 and refunds use saved amounts, and the one-time verification order remains visible
 ahead of recent annual orders. See [configuration and restoration](CONFIGURATION.md#configurable-live-amounts).
 
+For an eligible pilot without a saved verification order, GET returns
+`verificationAmountRange: {minPaise:100,maxPaise:<configured ceiling>}`; otherwise
+it is null. GET accepts optional `verificationAmountPaise` for a read-only quote
+within that range. POST accepts the same integer alongside the returned
+`termsHash` and explicit acceptance. Neither permits a client-selected annual
+price. Owner, expiry, ceiling and consent changes fail closed; a saved
+verification order cannot be repriced. Without an amount parameter, reads recover
+the saved eligible verification quote rather than replacing it with the default.
+
 ### Customer Advertising Allowance
 
 The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)

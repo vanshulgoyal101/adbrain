@@ -63,7 +63,7 @@ Changing Vercel Production environment values requires a new deployment.
 | --- | --- | --- |
 | `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: `1000000`; integer 100-1000000 | Normal annual total; 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
 | `PAYMENTS_LIVE_VERIFICATION_ENABLED` | Unset/empty/`false`: off; exactly `true`: on | Separate one-time real payment verification, not the annual service |
-| `PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE` | Unset: `1000`; integer 100-1000000 | Verification total, INR 10 by default; zero service/ad allocation |
+| `PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE` | Unset: `1000`; integer 100-1000000 | Default and maximum selectable verification total, INR 10 by default; zero service/ad allocation |
 | `PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID` | Required UUID when enabled | Exact privately verified pilot business |
 | `PAYMENTS_LIVE_VERIFICATION_USER_ID` | Required UUID when enabled | Exact authenticated owner of that business |
 | `PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT` | Required UTC ISO timestamp, at most 24 hours ahead | Expiry stops new verification checkout; saved-order recovery remains available |
@@ -76,6 +76,18 @@ its saved annual allocations. Amounts must be decimal digits without spaces,
 decimals or exponent notation; blank amounts are invalid, while unset amounts
 use their defaults. Invalid enabled verification configuration blocks collection.
 The approved maximum remains INR 10,000; this setting cannot raise that ceiling.
+
+The eligible pilot owner sees **Verification amount (INR)** in Billing before an
+order is saved. Enter rupees with at most two decimal places, choose **Update
+amount**, review the refreshed quote/terms, accept them and then choose **Pay**.
+The input accepts INR 1 through the configured verification maximum; with the
+pilot configuration above it defaults to INR 10 and cannot exceed INR 10.
+Updating the quote creates no provider order or charge and requires no deployment.
+The server rechecks owner, expiry, ceiling and consent on creation. Once an order
+exists its amount cannot change; recovery uses its saved quote. The input is not
+available for the normal annual package, other users, expired or completed tests.
+If the quote update fails, payment stays disabled until the amount is restored or
+a valid updated quote is received and accepted.
 
 The normal default preserves the original quote and policy. Other totals produce
 a versioned quote and matching service/refund terms, requiring fresh hash-bound
