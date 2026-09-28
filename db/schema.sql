@@ -2918,9 +2918,9 @@ alter table private.production_payment_orders add column purpose text generated 
   case when quote->>'version'='inr-payment-verification-v1' then 'verification' else 'annual' end
 ) stored;
 drop index private.production_payment_orders_active_business_idx;
-create unique index production_payment_orders_active_business_idx on private.production_payment_orders(business_id)
+create unique index if not exists production_payment_orders_active_business_idx on private.production_payment_orders(business_id)
   where purpose='annual' and (refunded_paise<amount_paise or review_required);
-create unique index production_payment_verification_once_idx on private.production_payment_orders(business_id) where purpose='verification';
+create unique index if not exists production_payment_verification_once_idx on private.production_payment_orders(business_id) where purpose='verification';
 
 create or replace function private.production_payment_identity_guard()
 returns trigger language plpgsql set search_path = '' as $$
