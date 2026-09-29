@@ -357,6 +357,12 @@ This JSON is valid to **save**, not valid to create a campaign:
 `POST /api/campaigns/plan` uses the primary business. Actual route fields:
 `goal` trimmed 1-2000; optional `answers` string up to 12000 or array up to 30
 `{question,answer}` records (maximum 1000/2000 characters); optional `audienceDraft`.
+Structured answers also accept `questionId` (1-80 characters), a fixed `topic`
+(`location`, `radius`, `budget`, `offer`, `audience`, `exclusions`, `creative`,
+`lead_form`, `compliance`) and `disposition` (`answered` or `deferred`). A deferred
+answer must have empty text. Unknown answer fields are rejected; serialized history
+is capped at 12000 characters. Legacy text answers remain accepted, with wording-
+based repeat checks but without the new topic identity guarantees.
 This route schema differs from the older exported `planRequestSchema`; use the
 handler's contract, not that unused declaration, for integration.
 
@@ -365,6 +371,16 @@ Returns `{ready:false,questions}` when more input/setup is needed. Without
 `audienceDraft`, success is `{ready:true,targeting}` for review, preserving manual
 choices; it does not create a campaign. No approved creatives produces an
 informational question without invoking generation. Model deadline is 45 seconds.
+
+The v5 campaign interview filters covered topics and repeats, returns at most two
+new questions and stops asking after six supplied decisions. One bounded correction
+is allowed for invalid/no-progress model output; each attempt is accounted for.
+When the interview cannot progress, it returns HTTP 200 with
+`{ready:false,questions:[],handoff:{reason,message}}`, where `reason` is
+`no_progress` or `interview_limit`. This response performs no draft save or Meta
+mutation. Both guided and manual-audience callers surface it without losing their
+existing context. Explicit audience-editor radius values are retained. See
+[campaign interview and framework choice](AI_PIPELINE.md#campaign-interview).
 
 ## Review and Durable Creation
 

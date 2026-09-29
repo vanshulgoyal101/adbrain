@@ -982,4 +982,17 @@ describe("campaign audience workflow", () => {
     expect(mocks.saveDraft).not.toHaveBeenCalled();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
+  it("shows interview handoff without losing editor values or silently saving a campaign", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ready: false, questions: [], handoff: {
+      reason: "no_progress", message: "Your answers are saved. Finish the remaining settings in the campaign editor.",
+    } }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Hisar" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    expect(await screen.findByText("Your answers are saved. Finish the remaining settings in the campaign editor.")).toBeVisible();
+    expect(screen.getByLabelText("Planned areas")).toHaveValue("Hisar");
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
 });
