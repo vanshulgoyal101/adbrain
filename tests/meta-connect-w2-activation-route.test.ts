@@ -156,6 +156,30 @@ describe("campaign activation generation fence", () => {
     expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
   });
 
+  it("checks campaign ownership before exposing an incomplete child binding", async () => {
+    mocks.storedAdSetIds = ["set-unexpected"];
+    mocks.requireOwnedBusiness.mockRejectedValue(new MockConnectionAccessError("Business access changed."));
+    const { GET } = await import("@/app/api/campaigns/[id]/route");
+    const response = await GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(mocks.requireOwnedBusiness).toHaveBeenCalledWith("business-1");
+    expect(response.status).toBe(409);
+    expect(await response.text()).not.toContain("Campaign children or account need reconciliation");
+    expect(mocks.readCampaignDelivery).not.toHaveBeenCalled();
+  });
+
+  it.each(["paused", "active"] as const)("checks ownership before %s campaign details or spend", async status => {
+    mocks.storedAdSetIds = ["set-unexpected"];
+    mocks.requireOwnedBusiness.mockRejectedValue(new MockConnectionAccessError("Business access changed."));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const body = status === "active" ? { status, confirmationDigest: confirmationDigest(), connectionGeneration: 4 } : { status };
+    const response = await PATCH(patch(body), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(mocks.requireOwnedBusiness).toHaveBeenCalledWith("business-1");
+    expect(response.status).toBe(409);
+    expect(await response.text()).not.toMatch(/children|account reconciliation|spend limits/i);
+    expect(mocks.getSpendLimits).not.toHaveBeenCalled();
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+  });
+
   it("rejects an incomplete stored child binding before review or activation", async () => {
     mocks.storedAdSetIds = ["set-unexpected"];
     const { GET, PATCH } = await import("@/app/api/campaigns/[id]/route");
