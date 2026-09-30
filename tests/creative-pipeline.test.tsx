@@ -171,6 +171,27 @@ describe("generateVariants", () => {
     expect(generateImage.mock.calls[0][0].prompt).toContain(concept.visual.direction);
   });
 
+  it("carries bounded advisory style through concept and image generation", async () => {
+    const { generateVariants, generateOneVariant } = await import("@/lib/creative/generate");
+    const advisoryPreferences = `PAST DECLARED PREFERENCES: tone: warm ${"x".repeat(2000)}`;
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const [variant] = await generateVariants({ brand, brief: "Use clear copy", count: 1, advisoryPreferences });
+    const context = JSON.parse(complete.mock.calls[0][0][1].content);
+    expect(context.advisoryPreferences).toContain("tone: warm");
+    expect(context.advisoryPreferences.length).toBeLessThanOrEqual(1200);
+    expect(generateImage.mock.calls[0][0].prompt).toContain("tone: warm");
+    expect(variant.imagePrompt).not.toContain("tone: warm");
+    expect(variant.imagePrompt).toContain("omitted from stored prompt");
+    const { generationReceipt } = await import("@/lib/creative/receipt");
+    expect(JSON.stringify(generationReceipt(variant))).not.toContain("tone: warm");
+    vi.clearAllMocks();
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const regenerated = await generateOneVariant(brand, "Use clear copy", (await import("@/lib/templates/ads")).AD_ANGLES[0], undefined, undefined, undefined, undefined, undefined, [], advisoryPreferences);
+    expect(JSON.parse(complete.mock.calls[0][0][1].content).advisoryPreferences).toContain("tone: warm");
+    expect(generateImage.mock.calls[0][0].prompt).toContain("tone: warm");
+    expect(JSON.stringify(generationReceipt(regenerated))).not.toContain("tone: warm");
+  });
+
   it("never spends on images after two invalid concepts", async () => {
     const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
     complete.mockResolvedValue({ ...completion({ ...concept, headline: 12 }), usage });

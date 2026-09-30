@@ -101,7 +101,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
 ## Variant Generation
 
 1. Bound the context: brief 2000 characters, selected brand strings 1000 each,
-   lists at most ten items, active instruction text at most 3000 characters.
+  lists at most ten items, active instruction text at most 3000 characters.
+  When enabled, read up to five relevant declared preferences for this owner
+  and business; pass at most 1200 advisory characters separately to concept
+  and image prompts. Current brief/instructions and Brand facts take priority.
 2. Choose up to six configured marketing angles; default batch count is three.
 3. For each angle, request a structured concept with caching disabled. First
    attempt temperature is 0.8; one repair attempt uses 0.4. Max output and
@@ -120,6 +123,14 @@ The batch is not automatically cancelled merely because a browser stopped waitin
 retains preceding text usage. Provider errors are returned as safe user-facing
 failures, not raw prompt/token traces. No model validation proves the image
 accurately depicts a real product or that an ad claim is legally supportable.
+Preferences are style guidance, not evidence for `sourceQuotes` or commercial
+claims and not permission to spend. Paused, forgotten, fresh-direction and
+unavailable memory supply no advisory text. A read failure omits notes without
+changing admission, replay, usage accounting or the unresolved-intent hold.
+When notes are used for an image, the saved image-prompt receipt records their
+application without the raw note values. An in-flight paid request cannot retract
+context already sent to a provider after a later forget; older creative output
+may still reflect the guidance.
 
 ### Product References
 

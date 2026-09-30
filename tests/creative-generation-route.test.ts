@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AD_ANGLES } from "@/lib/templates/ads";
 import { NoLLMKeysError } from "@/lib/llm";
+import { advisoryPreferenceContext } from "@/lib/preferences/context";
 
 const mocks = vi.hoisted(() => ({
   generateVariants: vi.fn(),
@@ -10,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   instructions: vi.fn(),
   references: vi.fn(),
   recentCopy: vi.fn(),
+  preferenceContext: vi.fn(),
+  preferenceSettings: null as { enabled: boolean; epoch: number } | null,
+  preferenceNotes: [] as { category: "tone"; value: string; updated_at: string; version: number }[],
   schemaError: null as unknown,
   saveError: false,
   used: 0 as number | null,
@@ -43,11 +47,19 @@ vi.mock("@/lib/supabase/server", () => ({
       select: () => ({
         eq: (_key: string, value: string) => ({
           maybeSingle: async () => ({
-            data: { id: table === "businesses" ? value : "business", name: "Example" },
+            data: table === "creatives" ? {
+              id: value, business_id: "business", name: "Example", brief: "Installation",
+              headline: "Previous ad", primary_text: "Previous opening",
+            } : { id: value, name: "Example" },
+          }),
+          eq: () => ({
+            maybeSingle: async () => ({ data: mocks.preferenceSettings, error: null }),
+            order: () => ({ limit: async () => ({ data: mocks.preferenceNotes, error: null }) }),
           }),
         }),
         limit: async () => ({ error: mocks.schemaError }),
       }),
+      update: (row: unknown) => ({ eq: () => ({ select: () => ({ single: async () => ({ data: row, error: null }) }) }) }),
       insert: (row: unknown) => {
         mocks.insert(table, row);
         return {
@@ -71,6 +83,7 @@ vi.mock("@/lib/creative/references", () => ({
   creativeReferences: mocks.references,
   recentCreativeCopy: mocks.recentCopy,
 }));
+vi.mock("@/lib/preferences/store", () => ({ preferenceContext: mocks.preferenceContext }));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://cdn.example/photo.png",
   renderAndPersistDesign: mocks.render,
@@ -132,6 +145,9 @@ beforeEach(() => {
   mocks.instructions.mockResolvedValue("No discounts");
   mocks.references.mockResolvedValue(["https://example.com/product.png"]);
   mocks.recentCopy.mockResolvedValue([{ headline: "Previous ad", primary_text: "Previous opening" }]);
+  mocks.preferenceContext.mockResolvedValue("");
+  mocks.preferenceSettings = null;
+  mocks.preferenceNotes = [];
   mocks.generateVariants.mockImplementation(async (params) => {
     try {
       await params.onVariant(variant);
@@ -233,6 +249,50 @@ describe("creative generation route", () => {
     expect((await POST(request(payload))).status).toBe(200);
     expect((await POST(request(payload))).status).toBe(202);
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads tenant-scoped advisory context only after admission, never on replay", async () => {
+    mocks.preferenceContext.mockResolvedValue("PAST DECLARED PREFERENCES: tone: warm");
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const payload = { businessId: "business", brief: "Write a precise ad", format: "story", generationId: "11111111-1111-4111-8111-111111111111" };
+    expect((await POST(request(payload))).status).toBe(200);
+    expect(mocks.preferenceContext).toHaveBeenCalledWith("business", "creative", "Write a precise ad\nNo discounts");
+    expect(mocks.generateVariants.mock.calls[0][0]).toMatchObject({ advisoryPreferences: "PAST DECLARED PREFERENCES: tone: warm" });
+    expect((await POST(request(payload))).status).toBe(202);
+    expect(mocks.preferenceContext).toHaveBeenCalledTimes(1);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits current-language overrides and fresh-direction memory from paid generation", async () => {
+    mocks.preferenceContext.mockImplementation(async (_businessId, _task, requestText: string) =>
+      advisoryPreferenceContext([{ category: "language", value: "Usually Hinglish", updated_at: "2026-09-30T00:00:00Z" }], "creative", requestText));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request({ businessId: "business", brief: "Use English today", format: "story" }))).status).toBe(200);
+    expect((await POST(request({ businessId: "business", brief: "Take a fresh direction", format: "story" }))).status).toBe(200);
+    expect(mocks.generateVariants.mock.calls.map(([params]) => params.advisoryPreferences)).toEqual(["", ""]);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(2);
+  });
+
+  it("omits paused and forgotten notes from the real tenant-scoped read helper", async () => {
+    const { preferenceContext } = await vi.importActual<typeof import("@/lib/preferences/store")>("@/lib/preferences/store");
+    mocks.preferenceSettings = { enabled: true, epoch: 2 };
+    mocks.preferenceNotes = [{ category: "tone", value: "Warm copy", updated_at: "2026-09-30T00:00:00Z", version: 1 }];
+    expect(await preferenceContext("business", "creative", "Make an ad")).toContain("Warm copy");
+    mocks.preferenceSettings = { enabled: false, epoch: 3 };
+    expect(await preferenceContext("business", "creative", "Make an ad")).toBe("");
+    mocks.preferenceSettings = { enabled: true, epoch: 4 };
+    mocks.preferenceNotes = [];
+    expect(await preferenceContext("business", "creative", "Make an ad")).toBe("");
+  });
+
+  it("omits unavailable memory without blocking regeneration", async () => {
+    mocks.preferenceContext.mockRejectedValueOnce(new Error("Memory unavailable"));
+    mocks.generateOneVariant.mockResolvedValueOnce(variant);
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "creative" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.preferenceContext).toHaveBeenCalledWith("business", "creative", "Installation\nNo discounts");
+    expect(mocks.generateOneVariant.mock.calls[0][9]).toBe("");
   });
 
   it("admits just one producer when two handlers race with the same identity", async () => {

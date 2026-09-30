@@ -354,14 +354,18 @@ clear the notes. The same Settings area shows notes while paused and can export
 the saved notes as JSON. Pausing excludes them from future interviews/planning;
 it does not erase them. Re-enabling does not reread old conversations or campaigns.
 
-Creative interviews and campaign planning receive at most five relevant advisory
-notes (up to 1000 characters of serialized notes) alongside the current request.
+Creative interviews, campaign planning and active ad generation/regeneration receive
+at most five relevant advisory notes (up to 1000 characters of serialized notes)
+alongside the current request. Generation gives these notes to concept and image
+providers only after an accepted request; a replay does not launch another provider
+call or reread notes.
 "Ignore preferences" and "fresh direction" omit them for that request. Notes
 cannot authorize spend, justify a commercial claim, override an explicit current
 brief, or turn an old tagline into required copy. Explicit Brand and legal
-requirements remain separate. Generation/Create consumers are owned separately;
-do not assume this source change applies preferences to saved ad generation until
-those consumers adopt the same contract. The first slice has no inferred notes,
+requirements remain separate. This is source behavior after the migration is
+applied, not a claim of deployment or provider quality. Saved image-prompt receipts
+omit raw preference values, but forgetting cannot retract provider calls or erase
+older creative output influenced by a note. The first slice has no inferred notes,
 background extraction, cross-business profile or historical backfill. A memory
 read outage omits advisory context; failed explicit writes surface an error.
 

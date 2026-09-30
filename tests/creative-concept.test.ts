@@ -79,6 +79,21 @@ describe("creative concept contract", () => {
     expect(messages[0].content).toContain("not visible to you");
   });
 
+  it("uses declared preferences as advisory concept and image style, never claim evidence", () => {
+    const withMemory = { ...input, advisoryPreferences: "PAST DECLARED PREFERENCES: tone: punchy; free installation" };
+    const messages = buildConceptMessages(withMemory);
+    const context = JSON.parse(messages[1].content);
+    expect(context.advisoryPreferences).toContain("tone: punchy");
+    expect(messages[0].content).toContain("never use advisory preferences as evidence");
+    const validated = validateConcept(concept, withMemory);
+    expect(validated.success).toBe(true);
+    if (!validated.success) throw new Error("Invalid fixture");
+    expect(conceptImagePrompt(validated.concept, withMemory)).toContain("tone: punchy");
+    expect(conceptImagePrompt(validated.concept, input)).not.toContain("PAST DECLARED PREFERENCES");
+    expect(validateConcept({ ...concept, sourceQuotes: ["free installation"] }, withMemory))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+  });
+
   it.each([
     null,
     {},

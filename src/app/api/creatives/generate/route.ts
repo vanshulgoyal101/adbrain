@@ -26,6 +26,7 @@ import {
 } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
+import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -209,6 +210,7 @@ async function handlePOST(req: Request) {
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;
+    const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     await generateVariants({
       brand: business,
       brief,
@@ -218,6 +220,7 @@ async function handlePOST(req: Request) {
       format: body.format,
       referenceImages,
       recentCopy,
+      advisoryPreferences,
       onVariant: async (variant) => {
         const events = variantUsageEvents(variant, {
             businessId,
