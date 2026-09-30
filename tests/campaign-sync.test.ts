@@ -84,6 +84,21 @@ describe("verified campaign sync", () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
+  it("reports provider binding-read failures instead of treating them as unmatched campaigns", async () => {
+    mocks.readBoundCampaign.mockRejectedValue(new Error("Meta read timeout"));
+    const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    const response = await POST();
+    const entries = logs.mock.calls.map(([entry]) => JSON.parse(entry as string));
+    logs.mockRestore();
+    expect(response.status).toBe(502);
+    expect(await response.text()).not.toContain("Meta read timeout");
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(entries).toContainEqual(expect.objectContaining({ kind: "request", name: "http.request", outcome: "failed",
+      attributes: expect.objectContaining({ route: "/api/campaigns/sync", method: "POST", status: 502 }) }));
+  });
+
   it.each(["DELETED", "ARCHIVED", "UNKNOWN"])("does not import %s campaigns as paused", async (status) => {
     mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign", status }], nextCursor: null });
     const { POST } = await import("@/app/api/campaigns/sync/route");
