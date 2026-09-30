@@ -119,6 +119,12 @@ is scoped session state, not cross-device durable scheduling. The preceding
 interview can itself use paid text AI. See the
 [generation handler](../src/app/api/creatives/generate/route.ts).
 
+Newly saved creatives use a smaller WebP for Review board and generated Assets
+tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
+Download, ZIP export, and campaign delivery retain the original image. If the
+derivative fails, the original remains available; older creatives and uploaded
+brand assets are not retroactively resized.
+
 Regeneration uses the creative's saved language/format, updates that creative,
 and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
 change existing remote ads. Deleting a local creative is not a request to delete
