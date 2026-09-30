@@ -167,7 +167,7 @@ columns to restore an obsolete UI.
 | `public.leads` | Business, nullable campaign, unique `(business_id,meta_lead_id)`, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time |
 | `public.spend_limits` | One per business; nullable integer weekly cap, alert percentage 1-100 default 80, auto-pause default false, updated time |
 | `public.audit_log` | Business/actor, action, entity type/ID, Meta object ID, reason, detail JSON, timestamp |
-| `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp |
+| `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp; new candidate metadata binds a generation UUID to bounded provider request IDs and provider finality when available |
 | `public.rate_limit_hits` | Limiter key and hit timestamp, indexed by both |
 | `public.product_events` | Event/request UUIDs, version 1, optional user/business, kind/name/outcome/duration, allowlisted attributes, timestamp |
 | `public.product_event_daily` | Account-free daily usage/performance totals, grouped by UTC day/environment/release/event/route/action/viewport/provider/model; RLS, browser access denied, service-role read only |
@@ -200,9 +200,8 @@ but old data requires a separate validation decision. Monthly aggregation is
 owner-scoped and sums all relevant rows, avoiding client pagination truncation.
 Persistence is best effort and estimated costs are not invoices.
 
-The #54 source candidate adds [creative-generation intents](../db/migrations/20260927_creative_generation_intents.sql)
-as an additive migration; it is **not** included in the core schema or proof of
-a deployed migration. `private.creative_generation_intents` binds a UUID to one
+The deployed #54 [creative-generation intents](../db/migrations/20260927_creative_generation_intents.sql)
+bind a UUID to one
 business, owner, request hash and expected count, a UTC month, reserved/accounted
 quota units, an image allowance and a persisted state. Direct table access is
 revoked; service-only admission, status and progress RPCs verify current
@@ -217,6 +216,17 @@ zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
 starting after the client receives a 404. This is a conservative quota fence, **not** a
 payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
 defines the client-visible recovery states.
+
+The new, undeployed [operator reconciliation migration](../db/migrations/20260930_creative_generation_reconcile.sql)
+adds a private one-row-per-intent audit and a service-role-only, owner/intent-scoped
+RPC. It fences older intents without generation-bound receipts, requires an
+operator evidence reference, explicit provider-verified token total, matching
+saved-creative outcome and current accounted/reserved counters, then atomically
+writes any missing usage adjustment and closes the hold. No browser caller can
+invoke it, and a late progress callback cannot change an audited result. The
+SQL cannot independently verify external provider finality: the authorized
+operator must do that before calling. In particular it cannot reconcile the
+September 29 #54 incident, whose per-generation provider evidence is still absent.
 
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
@@ -237,7 +247,8 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
-| `creative_generation_admit/status/progress` | #54 candidate: service-only, owner-checked generation claim, recovery and quota reconciliation |
+| `creative_generation_admit/status/progress` | Deployed #54 service-only, owner-checked generation claim, recovery and quota holds |
+| `creative_generation_reconcile` | Undeployed candidate: service-only operator-attested settlement after external finality and token verification; legacy intents denied |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
 

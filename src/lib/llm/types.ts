@@ -15,6 +15,7 @@ export interface CompletionOptions {
   maxTokens?: number;
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   signal?: AbortSignal;
+  onAttempt?: (attempt: ProviderAttempt) => void;
   /** Stable cache identity for the selected routing policy/model. */
   provider?: string;
   model?: string;
@@ -39,10 +40,21 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+export interface ProviderAttempt {
+  provider: string;
+  model: string;
+  usage?: TokenUsage;
+  providerRequestId?: string;
+  providerFinalStatus: "completed" | "failed" | "unknown";
+  status: "success" | "error";
+}
+
 /** What a provider returns from a single completion call. */
 export interface ProviderCompletion {
   text: string;
   usage?: TokenUsage;
+  providerRequestId?: string;
+  providerFinalStatus?: "completed" | "failed" | "unknown";
 }
 
 export interface CompletionResult {
@@ -50,6 +62,8 @@ export interface CompletionResult {
   provider: string;
   model: string;
   usage?: TokenUsage;
+  providerRequestId?: string;
+  providerFinalStatus?: "completed" | "failed" | "unknown";
   /** True when served from the response cache (zero token cost). */
   cached?: boolean;
   latencyMs?: number;
@@ -79,10 +93,13 @@ export class LLMError extends Error {
   readonly retryable: boolean;
   readonly model?: string;
   readonly usage?: TokenUsage;
+  readonly providerRequestId?: string;
+  readonly providerFinalStatus?: "completed" | "failed" | "unknown";
 
   constructor(
     message: string,
-    opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage },
+    opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage;
+      providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown" },
   ) {
     super(message);
     this.name = "LLMError";
@@ -91,6 +108,8 @@ export class LLMError extends Error {
     this.retryable = opts.retryable;
     this.model = opts.model;
     this.usage = opts.usage;
+    this.providerRequestId = opts.providerRequestId;
+    this.providerFinalStatus = opts.providerFinalStatus;
   }
 }
 

@@ -13,6 +13,7 @@ export interface LLMUsageEvent {
   model: string;
   usage: TokenUsage;
   requestId: string;
+  generationId?: string;
   usageKind?: "text" | "image";
   promptVersion?: string;
   inputChars?: number;
@@ -28,6 +29,8 @@ export interface LLMUsageEvent {
   imageHeight?: number;
   estimatedCostUsd?: number;
   metadata?: { [key: string]: Json };
+  providerRequestId?: string;
+  providerFinalStatus?: "completed" | "failed" | "unknown";
 }
 
 export interface LLMUsageSummary {
@@ -151,7 +154,12 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
         error_code: event.errorCode ?? null,
         image_width: event.imageWidth ?? null,
         image_height: event.imageHeight ?? null,
-        metadata: event.metadata ?? {},
+        metadata: {
+          ...event.metadata,
+          ...(event.generationId ? { generationId: event.generationId } : {}),
+          ...(event.providerRequestId ? { providerRequestId: event.providerRequestId } : {}),
+          providerFinalStatus: event.providerFinalStatus ?? "unknown",
+        },
         request_id: event.requestId,
       })),
     ).abortSignal(AbortSignal.timeout(3_000));

@@ -150,12 +150,19 @@ async function callProviders(
       if ((cooldownUntil.get(coolKey) ?? 0) > now) continue;
 
       try {
-        const { text, usage } = await provider.complete(messages, options, {
+        const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, options, {
           apiKey: keys[idx],
           model,
         });
-        return { text, provider: provider.name, model, usage };
+        options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
+          providerFinalStatus: providerFinalStatus ?? "unknown", status: "success" });
+        return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
       } catch (err) {
+        options.onAttempt?.({ provider: provider.name, model,
+          usage: err instanceof LLMError ? err.usage : undefined,
+          providerRequestId: err instanceof LLMError ? err.providerRequestId : undefined,
+          providerFinalStatus: err instanceof LLMError ? err.providerFinalStatus ?? "unknown" : "unknown",
+          status: "error" });
         if (err instanceof LLMError && err.usage) {
           recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
         }

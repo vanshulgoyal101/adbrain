@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AD_ANGLES } from "@/lib/templates/ads";
 import { NoLLMKeysError } from "@/lib/llm";
+import { CreativeImageError } from "@/lib/creative/generate";
 import { advisoryPreferenceContext } from "@/lib/preferences/context";
 
 const mocks = vi.hoisted(() => ({
@@ -244,6 +245,9 @@ describe("creative generation route", () => {
     expect(mocks.insert.mock.calls[0][1]).toMatchObject({
       variant_group: "11111111-1111-4111-8111-111111111111",
     });
+    expect(mocks.persist.mock.calls[0][0][0]).toMatchObject({
+      generationId: "11111111-1111-4111-8111-111111111111",
+    });
   });
 
   it("does not launch a second paid generation for a repeated identity", async () => {
@@ -383,6 +387,25 @@ describe("creative generation route", () => {
     expect(replay.status).toBe(202);
     await expect(replay.json()).resolves.toMatchObject({ status: "unresolved" });
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("links failed provider attempts to the admitted generation", async () => {
+    mocks.generateVariants.mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void> }) => {
+      await params.onFailure(AD_ANGLES[0], new CreativeImageError(new Error("Provider timeout"), [], [{
+        provider: "openrouter-image", model: "paid-image", status: "error",
+        providerFinalStatus: "unknown", providerRequestId: "upstream-456",
+      }]));
+    });
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", generationId: "11111111-1111-4111-8111-111111111111" }));
+    expect(response.status).toBe(502);
+    expect(mocks.persist).toHaveBeenCalledWith([expect.objectContaining({
+      generationId: "11111111-1111-4111-8111-111111111111",
+      providerRequestId: "upstream-456",
+      providerFinalStatus: "unknown",
+      status: "error",
+    })]);
+    expect(mocks.progress.mock.calls.some(([args]) => args.p_uncertain)).toBe(true);
   });
 
   it("does not mark a failed angle as whole-request failure before its sibling saves", async () => {

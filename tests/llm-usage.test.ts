@@ -59,6 +59,23 @@ describe("persistent quota accounting", () => {
     expect(browserFrom).not.toHaveBeenCalled();
   });
 
+  it("stores provider evidence without replacing the internal generation identity", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    expect(await persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "creatives.generate",
+      provider: "openrouter-image", model: "image-model", usageKind: "image",
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      requestId: "internal-request", generationId: "generation-456", providerRequestId: "provider-image-123",
+      providerFinalStatus: "unknown", status: "error", metadata: { angle: "local" },
+    }])).toBe(true);
+    expect(insert).toHaveBeenCalledWith([expect.objectContaining({
+      request_id: "internal-request", status: "error", total_tokens: 0,
+      metadata: { angle: "local", generationId: "generation-456", providerRequestId: "provider-image-123", providerFinalStatus: "unknown" },
+    })]);
+  });
+
   it("bounds best-effort ledger writes without failing the completed operation", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     adminFrom.mockReturnValue({ insert });

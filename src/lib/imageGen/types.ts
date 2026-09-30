@@ -1,11 +1,21 @@
 export interface ImageRequest {
   signal?: AbortSignal;
+  onAttempt?: (attempt: ImageAttempt) => void;
   prompt: string;
   width?: number;
   height?: number;
   seed?: number;
   /** Public brand/product images used by capable providers as visual references. */
   referenceImages?: string[];
+}
+
+export interface ImageAttempt {
+  provider: string;
+  model: string;
+  status: "success" | "error";
+  providerRequestId?: string;
+  providerFinalStatus: "completed" | "failed" | "unknown";
+  estimatedCostUsd?: number;
 }
 
 export interface GeneratedImage {
@@ -20,6 +30,16 @@ export interface GeneratedImage {
   width?: number;
   height?: number;
   fallbackFrom?: string;
+  providerRequestId?: string;
+  providerFinalStatus?: "completed" | "failed" | "unknown";
+}
+
+export class ImageProviderError extends Error {
+  constructor(message: string, public readonly providerRequestId?: string,
+    public readonly providerFinalStatus: "completed" | "failed" | "unknown" = "unknown") {
+    super(message);
+    this.name = "ImageProviderError";
+  }
 }
 
 export interface ImageProvider {

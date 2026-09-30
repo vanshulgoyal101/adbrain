@@ -12,6 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
+const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -622,6 +623,66 @@ async function verifyCreativeGenerationAdmission(db, database) {
     assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[otherBusiness,otherOwner,id])).status,'unresolved');
     assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
   });
+  await check(`${database}: only service operators can reconcile an evidenced unresolved intent`, async () => {
+    const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='unresolved' limit 1",[otherBusiness])).rows[0].generation_id;
+    const procedure='public.creative_generation_reconcile(uuid,uuid,uuid,text,text,text,bigint,bigint,bigint)';
+    const {rows}=await db.query(`select has_function_privilege('authenticated',$1,'EXECUTE') as can_reconcile,
+      has_table_privilege('authenticated','private.creative_generation_reconciliations','SELECT') as can_read`,[procedure]);
+    assert.deepEqual(rows,[{can_reconcile:false,can_read:false}]);
+    const reconcile=(tenant,user,verified=40,accounted=0,reserved=100,evidence='case-verified-123',outcome='failed') =>
+      service("select public.creative_generation_reconcile($1,$2,$3,$4,$5,$6,$7,$8,$9) as result",
+        [tenant,user,id,'operator-fixture',evidence,outcome,verified,accounted,reserved]);
+    await assert.rejects(reconcile(otherBusiness,owner),{code:'42501'});
+    await assert.rejects(reconcile(otherBusiness,otherOwner,null),{code:'22023'});
+    await assert.rejects(reconcile(otherBusiness,otherOwner,40,0,100,'private?token=secret'),{code:'22023'});
+    await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,metadata) values ($1,$2,'creatives.generate','fixture','fixture',20,$3)",
+      [otherBusiness,otherOwner,JSON.stringify({generationId:id,providerFinalStatus:'completed'})]);
+    await assert.rejects(reconcile(otherBusiness,otherOwner,10),{code:'23514'});
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
+    assert.equal((await reconcile(otherBusiness,otherOwner)).status,'failed');
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'failed');
+    const {rows: after}=await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id]);
+    assert.deepEqual(after.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:40}]);
+    const {rows: audit}=await db.query("select count(*)::int as count from private.creative_generation_reconciliations where generation_id=$1",[id]);
+    assert.equal(audit[0].count,1);
+    const {rows: adjustment}=await db.query("select total_tokens from public.llm_usage_events where business_id=$1 and metadata->>'operatorAdjustment'='true'",[otherBusiness]);
+    assert.deepEqual(adjustment.map(row=>row.total_tokens),[20]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,100,false,false,false) as result",[otherBusiness,otherOwner,id])).status,'failed');
+    assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:40}]);
+    await assert.rejects(reconcile(otherBusiness,otherOwner),{code:'23505'});
+  });
+  await check(`${database}: old intents remain held without generation-bound provider evidence`, async () => {
+    const freshBusiness=randomUUID(),id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Legacy hold')",[freshBusiness,owner]);
+    await db.query("insert into private.creative_generation_intents(generation_id,business_id,user_id,request_hash,expected_count,month_start,reserved_tokens,image_floor_tokens,state,receipt_version) values ($1,$2,$3,$4,1,date_trunc('month',now())::date,100,10,'unresolved',0)",
+      [id,freshBusiness,owner,'e'.repeat(64)]);
+    await assert.rejects(service("select public.creative_generation_reconcile($1,$2,$3,'operator-fixture','case-verified-123','failed',40,0,100) as result",[freshBusiness,owner,id]),{code:'23514'});
+    assert.equal((await status(id,freshBusiness,owner)).status,'unresolved');
+  });
+  await check(`${database}: attested zero-charge failure releases an empty ledger without replay`, async () => {
+    const freshBusiness=randomUUID(),id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'No-charge outcome')",[freshBusiness,owner]);
+    assert.equal((await admit(id,freshBusiness,owner)).action,'start');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[freshBusiness,owner,id])).status,'unresolved');
+    assert.equal((await service("select public.creative_generation_reconcile($1,$2,$3,'operator-fixture','case-no-charge-123','failed',0,0,100) as result",
+      [freshBusiness,owner,id])).status,'failed');
+    assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:0,accounted:0}]);
+    assert.equal((await admit(id,freshBusiness,owner)).action,'recover');
+  });
+  await check(`${database}: reconciled partial remains terminal through late callbacks`, async () => {
+    const freshBusiness=randomUUID(),id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Partial reconciliation')",[freshBusiness,owner]);
+    assert.equal((await service("select public.creative_generation_admit($1,$2,$3,$4,2,100,10,150) as result",
+      [freshBusiness,owner,id,'f'.repeat(64)])).action,'start');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'One saved',$2)",[freshBusiness,id]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[freshBusiness,owner,id])).status,'unresolved');
+    assert.equal((await service("select public.creative_generation_reconcile($1,$2,$3,'operator-fixture','case-partial-123','partial',30,0,100) as result",
+      [freshBusiness,owner,id])).status,'partial');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,40,true,false,false) as result",[freshBusiness,owner,id])).status,'partial');
+    assert.equal((await status(id,freshBusiness,owner)).status,'partial');
+    assert.equal((await admit(id,freshBusiness,owner,'f'.repeat(64))).action,'conflict');
+    assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:30}]);
+  });
   await check(`${database}: known pre-provider failure frees unused quota but not identity`, async () => {
     const freshBusiness=randomUUID();
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'No provider call')",[freshBusiness,owner]);
@@ -695,6 +756,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
     if (process.argv.includes("--generation-only")) {
       await db.query(creativeIntentMigration);
       await db.query(creativeIntentMigration);
+      await db.query(creativeReconcileMigration);
+      await db.query(creativeReconcileMigration);
       await verifyCreativeGenerationAdmission(db, database);
       return;
     }
@@ -1773,6 +1836,7 @@ try {
   assert.ok(schema.includes(operatorPaymentMigration.trim()), "Canonical schema must include the exact operator-managed payment migration");
   assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
   assert.ok(schema.includes(creativeIntentMigration.trim()), "Canonical schema must include the exact creative generation intent migration");
+  assert.ok(schema.includes(creativeReconcileMigration.trim()), "Canonical schema must include the exact creative reconciliation migration");
   assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
   assert.ok(schema.trimEnd().endsWith(productRollupMigration.trimEnd()), "Canonical schema must end with the exact product rollup migration");
   if (process.argv.includes("--analytics-only")) {
