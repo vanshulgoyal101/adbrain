@@ -15,6 +15,28 @@ A failed response does not prove no side effect occurred. A successful response
 can be partial, and a local row is not authoritative proof of remote delivery.
 Inspect durable evidence before retrying anything that can create objects or spend.
 
+## Privacy Request Operations
+
+Before publishing the Settings request controls, DevOps applies the reviewed
+`20260930_privacy_requests.sql` migration to the verified target and records the
+ledger checksum. Identify the real owner-controlled operator account through
+authenticated readback, then register its user UUID in
+`private.privacy_request_operators` using the authorized database administration
+channel. Never infer the operator from an email, grant a public table policy, or
+paste identifiers into a public issue. A new installation has **no** active
+privacy operator by default; without one, the operator queue is 403 and the
+request channel is not operational. Revocation sets `revoked_at` on that private
+row. This registry is separate from payment/refund operators.
+
+After deployment, use a bounded synthetic request from an owner-controlled
+account to confirm that Settings reports Received, the operator queue shows the
+same request, and the operator can mark it In review; confirm the owner sees that
+status after reload. Do not mark Completed until manual verification, export or
+deletion work is actually finished. Review the oldest Received/In review requests
+regularly and contact the owner through a verified secure channel for scope and
+delivery. The API does not send email, automatically export data or delete records.
+Financial/security retention and provider-held Meta data remain separate.
+
 ## Incident Playbooks
 
 | Symptom | Inspect | Recovery / avoid |

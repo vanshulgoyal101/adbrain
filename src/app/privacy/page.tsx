@@ -99,10 +99,12 @@ export default function PrivacyPolicyPage() {
 
         <h2>Data retention</h2>
         <p>
-          We keep your data for as long as your account is active. You can delete
-          creatives, campaigns, and leads at any time from within the app.
-          Deleting your account removes your associated data, subject to any
-          records we must keep for legal or security reasons.
+          We keep account and workspace data while it is needed to provide the
+          service. Request an export or deletion from Settings; these requests
+          are reviewed manually after ownership verification. Payment, invoice,
+          refund and security records may need to be retained for legal or fraud
+          prevention reasons. Removing AdBrain-held copies does not remove data
+          held by Meta or other providers.
         </p>
         <p>
           Preferences are off until you enable them. You can pause their use,
@@ -132,10 +134,14 @@ export default function PrivacyPolicyPage() {
 
         <h2>Your rights</h2>
         <p>
-          You can access, correct, export, or delete your data from within the
-          app, or by contacting us. If you handle other people&rsquo;s personal
-          data (your leads), you are the controller of that data and are
-          responsible for having a lawful basis to collect and contact them.
+          You can review and correct some business details in the app. To request
+          a full-account export or deletion of AdBrain-held data, sign in and use
+          the Privacy and data requests section in <a href="/settings">Settings</a>.
+          We verify account ownership before sharing or removing data; submitting
+          a request does not automatically export or delete anything. If you handle
+          other people&rsquo;s personal data (your leads), you are the controller
+          of that data and are responsible for having a lawful basis to collect
+          and contact them.
         </p>
         <p>
           For formal deletion requests, see our {" "}
@@ -153,8 +159,8 @@ export default function PrivacyPolicyPage() {
 
         <h2>Contact</h2>
         <p>
-          Questions about privacy? Email{" "}
-          <a href="mailto:privacy@adbrain.vanshul.com">privacy@adbrain.vanshul.com</a>.
+          To submit or follow an export or deletion request, use the signed-in
+          <a href="/settings"> Settings privacy section</a>.
         </p>
       </LegalPage>
     </>

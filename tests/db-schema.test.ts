@@ -70,6 +70,24 @@ const OWNED_TABLES = [
 const ALL_TABLES = [...OWNED_TABLES, "profiles", "rate_limit_hits", "meta_connections"] as const;
 
 describe("schema: tables", () => {
+  it("keeps privacy requests owner-scoped and operator access restricted", () => {
+    const migration = readFileSync(join(process.cwd(), "db/migrations/20260930_privacy_requests.sql"), "utf8").toLowerCase();
+    for (const definition of [SQL, migration]) {
+      expect(definition).toContain("create table if not exists public.privacy_requests");
+      expect(definition).toContain("alter table public.privacy_requests enable row level security");
+      expect(definition).toContain("owner_id = auth.uid()");
+      expect(definition).toContain("with check (owner_id = auth.uid() and status = 'received')");
+      expect(definition).toContain("revoke all on public.privacy_requests from public, anon, authenticated");
+      expect(definition).toContain("grant select on public.privacy_requests to authenticated");
+      expect(definition).toContain("grant insert(owner_id, kind) on public.privacy_requests to authenticated");
+      expect(definition).toContain("grant select on public.privacy_requests to service_role");
+      expect(definition).toContain("grant update(status, handled_by, updated_at) on public.privacy_requests to service_role");
+      expect(definition).toContain("create table if not exists private.privacy_request_operators");
+      expect(definition).toContain("revoke all on private.privacy_request_operators from public, anon, authenticated, service_role");
+      expect(definition).toContain("grant execute on function public.privacy_request_operator_allowed(uuid) to service_role");
+    }
+  });
+
   it("includes resumable enquiry import in the canonical fresh schema", () => {
     expect(SQL).toContain("create table if not exists public.lead_sync_runs");
     for (const name of ["lead_sync_start", "lead_sync_checkpoint"]) {

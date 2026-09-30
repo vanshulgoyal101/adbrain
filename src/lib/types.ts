@@ -66,6 +66,12 @@ export type LeadSyncRow = {
 export interface Database {
   public: {
     Tables: {
+      privacy_requests: {
+        Row: { id: string; owner_id: string; kind: "export" | "delete"; status: "received" | "in_review" | "completed" | "declined"; handled_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; owner_id: string; kind: "export" | "delete"; status?: "received" | "in_review" | "completed" | "declined"; handled_by?: string | null; created_at?: string; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["privacy_requests"]["Insert"]>;
+        Relationships: [];
+      };
       preference_settings: {
         Row: { business_id: string; owner_id: string; enabled: boolean; epoch: number; updated_at: string };
         Insert: { business_id: string; owner_id: string; enabled?: boolean; epoch?: number; updated_at?: string };
@@ -909,6 +915,7 @@ export interface Database {
           p_refund_id?: string | null; p_refund_amount_paise?: number | null; p_refund_status?: string | null }; Returns: Json;
       };
       production_payment_operator_allowed: { Args: { p_user_id: string; p_refund?: boolean }; Returns: boolean };
+      privacy_request_operator_allowed: { Args: { p_user_id: string }; Returns: boolean };
       production_payment_refund_claim: {
         Args: { p_order_id: string; p_account_id: string; p_key_id: string; p_actor_id: string; p_request_key: string; p_refund_id: string;
           p_amount_paise: number; p_terms_hash: string; p_approval_reference: string; p_reason: string }; Returns: Json;

@@ -96,6 +96,10 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
 | POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |
+| GET | `/api/privacy-requests` | No body -> `{requests}` (latest 20) | Authenticated owner-only export/deletion status, no cache |
+| POST | `/api/privacy-requests` | Same-origin `{kind:"export"|"delete"}` -> `{request}` (201) | Owner-scoped request; one open request per kind, no export/deletion |
+| GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests) | Verified privacy operator only; server-only queue read |
+| PATCH | `/api/privacy-requests/operator` | Same-origin `{id,expectedStatus,status}` -> `{request}` | Verified privacy operator only; status and handler audit, no export/deletion |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |

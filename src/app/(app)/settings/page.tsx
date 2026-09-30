@@ -9,6 +9,7 @@ import { MetaConnectionPanel } from "@/components/meta-connection";
 import { ManagedBilling } from "@/components/managed-billing";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
+import { PrivacyRequests } from "@/components/privacy-requests";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
@@ -68,6 +69,7 @@ export default async function SettingsPage({
             </Link>
           </CardContent>
         </Card>
+        <div className="mt-6"><PrivacyRequests /></div>
       </div>
     );
   }
@@ -86,6 +88,7 @@ export default async function SettingsPage({
         <SpendSettings businessId={business.id} />
       </Suspense>
       <PreferenceSettings key={business.id} businessId={business.id} />
+      <PrivacyRequests />
     </div>
   );
 }
