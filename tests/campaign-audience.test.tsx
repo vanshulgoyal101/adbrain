@@ -653,6 +653,18 @@ describe("campaign sync feedback", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("opens connected campaigns without a Meta sync until requested", async () => {
+    const sync = vi.fn().mockResolvedValue(Response.json({ campaigns: [], nextCursor: null }));
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync")
+      ? sync() : Promise.resolve(Response.json({ forms: [] }))));
+    view(true);
+    const button = await screen.findByRole("button", { name: "Sync from Meta" });
+    expect(sync).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await screen.findByText("Campaign sync completed.");
+    expect(sync).toHaveBeenCalledTimes(1);
+  });
+
   it("loads forms only when setup opens, retries failures, and cancels on close", async () => {
     const requests: AbortSignal[] = [];
     const forms = vi.fn().mockResolvedValueOnce(Response.json({ error: "Unavailable" }, { status: 503 }))
@@ -666,7 +678,7 @@ describe("campaign sync feedback", () => {
     }));
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "paused" } as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
-    await screen.findByText("Campaign sync completed.");
+    await screen.findByRole("button", { name: "New campaign" });
     expect(forms).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
     await screen.findByText(/Page forms are temporarily unavailable/);
@@ -686,6 +698,7 @@ describe("campaign sync feedback", () => {
       .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 0 }));
     vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
     view(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
     expect(await screen.findByText(/More campaigns are available/)).toHaveTextContent("2 campaign(s) could not be imported");
     fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
     expect(await screen.findByText(/Campaign sync completed/)).toHaveTextContent("3 campaign(s) could not be imported");
@@ -703,6 +716,7 @@ describe("campaign sync feedback", () => {
       .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null }));
     vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
     view(true);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
     await screen.findByText(/More campaigns are available/);
     fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
     expect(await screen.findByText("Sync failed. Please try again.")).toBeInTheDocument();

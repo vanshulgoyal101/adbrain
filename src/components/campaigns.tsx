@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { startTransition, useEffect, useReducer, useRef, useState } from "react";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -464,9 +464,9 @@ function BusinessCampaigns({
     }
   }
 
-  async function syncFromMeta(opts: { silent?: boolean } = {}) {
+  async function syncFromMeta() {
     setSyncing(true);
-    if (!opts.silent) setError(null);
+    setError(null);
     try {
       const cursor = syncCursorRef.current;
       const res = await fetch(`/api/campaigns/sync${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`, { method: "POST" });
@@ -485,25 +485,15 @@ function BusinessCampaigns({
         const skippedNotice = syncSkippedRef.current
           ? ` ${syncSkippedRef.current} campaign(s) could not be imported and were left unchanged.` : "";
         setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
-      } else if (!opts.silent) {
+      } else {
         setError(data.error ?? "Sync failed. Please try again.");
       }
     } catch {
-      if (!opts.silent) setError("Sync failed.");
+      setError("Sync failed.");
     } finally {
       setSyncing(false);
     }
   }
-
-  // Auto-sync from Meta once when the page opens, so campaigns stay fresh.
-  const autoSynced = useRef(false);
-  const autoSyncFromMeta = useEffectEvent(() => void syncFromMeta({ silent: true }));
-  useEffect(() => {
-    if (metaReady && !autoSynced.current) {
-      autoSynced.current = true;
-      autoSyncFromMeta();
-    }
-  }, [metaReady]);
 
   function toggle(id: string) {
     if (!unresolvedRecovery()) setPrepareReview(null);
