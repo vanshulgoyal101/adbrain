@@ -15,6 +15,11 @@ describe("first-party client event ingestion", () => {
     expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({ kind: "client", businessId: "22222222-2222-4222-8222-222222222222", name: "page.view" }));
   });
   it.each([
+    { name: "ui.action", page: "/studio", action: "private customer text" },
+    { name: "ui.action", page: "/studio", action: "creative.generate", value: "private prompt" },
+    { name: "page.engagement", page: "/studio", durationMs: -1 },
+    { name: "page.engagement", page: "/studio", durationMs: 3_600_001 },
+    { name: "page.view", page: "/studio", viewport: "iPhone-private-user-agent" },
     { name: "page.view", page: "/studio", userId: "other" },
     { name: "page.view", page: "/studio?token=secret" },
     { name: "creative.approve", page: "/studio" },
@@ -30,6 +35,14 @@ describe("first-party client event ingestion", () => {
     mocks.user = null;
     expect((await POST(request({})))).toHaveProperty("status", 401);
     expect(mocks.record).not.toHaveBeenCalled();
+  });
+  it("records interaction intent separately from completed server work", async () => {
+    const { POST } = await import("@/app/api/events/route");
+    expect((await POST(request({ name: "ui.action", page: "/studio", action: "creative.generate", viewport: "compact" }))).status).toBe(204);
+    expect(mocks.record).toHaveBeenCalledWith({ kind: "client", name: "ui.action", outcome: "started",
+      businessId: "22222222-2222-4222-8222-222222222222", attributes: { route: "/studio", action: "creative.generate", viewport: "compact" } });
+    expect((await POST(request({ name: "page.engagement", page: "/studio", durationMs: 12500 }))).status).toBe(204);
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ name: "page.engagement", outcome: "success", durationMs: 12500 }));
   });
   it("bounds body bytes and event rates", async () => {
     const { POST } = await import("@/app/api/events/route");

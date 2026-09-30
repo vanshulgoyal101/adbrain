@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import { ManagedBilling } from "@/components/managed-billing";
 import { SpendGuardrails } from "@/components/spend-guardrails";
+import { PreferenceSettings } from "@/components/preference-settings";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
@@ -84,6 +85,7 @@ export default async function SettingsPage({
       <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
         <SpendSettings businessId={business.id} />
       </Suspense>
+      <PreferenceSettings key={business.id} businessId={business.id} />
     </div>
   );
 }

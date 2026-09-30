@@ -1,9 +1,9 @@
-import { observeRoute, currentRequestId } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contracts";
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
-import { formatAnswers, runPlanner, PLANNER_PROMPT_VERSION, type PlannerQuestion } from "@/lib/campaign/planner";
+import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
@@ -12,6 +12,7 @@ import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
+import { preferenceContext } from "@/lib/preferences/store";
 import {
   getActiveInstructionsText,
   getApprovedCreatives,
@@ -50,13 +51,14 @@ async function handlePOST(req: Request) {
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
     destination: z.enum(["instant_form", "whatsapp"]).optional(),
-    answers: z.union([z.string().max(12_000), z.array(z.object({
-      question: z.string().max(1_000), answer: z.string().max(2_000),
-    })).max(30)]).optional(),
+    answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
   }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "A valid goal and answers are required." }, { status: 400 });
   const goal = parsed.data.goal;
   const rawAnswers = parsed.data.answers;
+  if (Array.isArray(rawAnswers) && JSON.stringify(rawAnswers).length > 12_000) {
+    return NextResponse.json({ error: "The interview is too long. Continue in the campaign editor." }, { status: 400 });
+  }
   const answers = Array.isArray(rawAnswers)
     ? formatAnswers(rawAnswers) || undefined
     : typeof rawAnswers === "string"
@@ -113,12 +115,14 @@ async function handlePOST(req: Request) {
       if (used >= limit) return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
     }
     const instructions = await getActiveInstructionsText(business.id);
+    const preferences = await preferenceContext(business.id, "campaign", `${goal}\n${answers ?? ""}`);
     const performance = await getPerformanceContext(business.id);
     const requestId = currentRequestId();
     result = await runPlanner({
       destination,
       brand: business,
       instructions,
+      preferences,
       performance,
       approved: approved.map((c) => ({
         id: c.id,
@@ -127,19 +131,23 @@ async function handlePOST(req: Request) {
       })),
       leadForms: leadForms.map((f) => ({ id: f.id, name: f.name })),
       goal,
+      answerHistory: Array.isArray(rawAnswers) ? rawAnswers : undefined,
+      knownTopics: audienceDraft ? ["budget", "creative", "lead_form",
+        ...(audienceDraft.targeting.location?.mode === "manual" ? ["location", "radius"] as PlannerTopic[] : []),
+        ...(audienceDraft.targeting.age?.mode === "manual" ? ["audience"] as PlannerTopic[] : [])] : undefined,
       answers: audienceDraft
         ? `${answers ?? ""}\nPlan only the audience. The owner has already chosen these campaign settings: ${JSON.stringify(audienceDraft)}. Preserve manual location and age choices. Do not ask for a budget, creative or form. Decide audience settings from the business evidence; ask only for missing service-area facts.`
         : answers,
     }, {
       signal: req.signal,
-      onCompletion: async (completion, valid) => {
+      onCompletion: async (completion, valid, attempt = 1) => {
         if (!completion.usage) return;
         await persistLLMUsage([{
           businessId: business.id, userId: user.id, requestId, route: "campaigns.plan",
           provider: completion.provider, model: completion.model, usage: completion.usage,
           promptVersion: PLANNER_PROMPT_VERSION, inputChars: completion.inputChars,
           outputChars: completion.outputChars, latencyMs: completion.latencyMs,
-          attempt: 1, maxTokens: 1500, temperature: 0.4,
+          attempt, maxTokens: 1500, temperature: 0.2,
           status: valid ? "success" : "error", errorCode: valid ? undefined : "PLANNER_VALIDATION",
           metadata: { audienceOnly: Boolean(audienceDraft) },
         }]);
@@ -147,6 +155,12 @@ async function handlePOST(req: Request) {
     });
   } catch (err) {
     return NextResponse.json({ error: friendlyMetaError(err, "Could not prepare the campaign plan.") }, { status: 502 });
+  }
+
+  if (result.handoff) {
+    recordProductEvent({ kind: "workflow", name: "campaign.interview", outcome: "partial", businessId: business.id,
+      attributes: { errorCode: result.handoff.reason === "interview_limit" ? "INTERVIEW_LIMIT" : "NO_PROGRESS" } });
+    return NextResponse.json({ ready: false, questions: [], handoff: result.handoff });
   }
 
   if (!result.ready || !result.plan) {
@@ -168,6 +182,7 @@ async function handlePOST(req: Request) {
     plan: audienceDraft ? {
       ...result.plan,
       city_scope: audienceDraft.targeting.location?.cityScope ?? "radius",
+      radius_km: audienceDraft.targeting.location?.radiusKm ?? result.plan.radius_km,
       name: audienceDraft.name,
       daily_budget_rupees: audienceDraft.dailyBudgetRupees,
       creative_ids: audienceDraft.creativeIds,

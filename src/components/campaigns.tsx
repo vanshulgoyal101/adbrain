@@ -540,9 +540,9 @@ function BusinessCampaigns({
       body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
       signal,
     });
-    const data = await response.json() as { ready?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[] };
+    const data = await response.json() as { ready?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
     signal.throwIfAborted();
-    if (!response.ok || !data.ready) throw new Error(data.error ?? data.questions?.map((question) => question.question).join(" ") ?? "Could not recommend an audience.");
+    if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "Could not recommend an audience."));
     const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
     if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
     setTargeting(targetingToEditor(recommended));
@@ -957,6 +957,7 @@ function BusinessCampaigns({
               || activationDelivery.ads.some(ad => ad.status !== "ACTIVE")
               || statusChangingId === activationReview.id}
             onClick={() => void setCampaignStatus(activationReview, "active", true)}
+            data-product-event="campaign.activate"
           >
             {statusChangingId === activationReview.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Request activation
@@ -972,7 +973,7 @@ function BusinessCampaigns({
               <RefreshCw className="h-4 w-4" />Check status
             </Button>
             {retryAllowed && prepareReview?.status === "ready" && (
-              <Button size="sm" onClick={() => void createPreparedCampaign()} disabled={creating}>
+              <Button size="sm" data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>
                 <RefreshCw className="h-4 w-4" />Retry original request
               </Button>
             )}
@@ -1011,7 +1012,7 @@ function BusinessCampaigns({
               )}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {prepareReview.review.canCreatePaused && prepareReview.review.planHash && !operation && !recoveryPending && (
-                  <Button size="sm" onClick={() => void createPreparedCampaign()} disabled={creating}>
+                  <Button size="sm" data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>
                     {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
                     Send to Meta (paused)
                   </Button>
@@ -1115,6 +1116,12 @@ function BusinessCampaigns({
             businessId={business.id}
             destination={destination}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
+            onEditManually={(goal) => {
+              if (unresolvedRecovery()) return;
+              setDraftGoal(goal);
+              setCreationMode("manual");
+              setPrepareReview(null);
+            }}
           />}
         </>
       )}
@@ -1318,7 +1325,7 @@ function BusinessCampaigns({
                   <Button variant="outline" onClick={() => void prepareManualCampaign(false)} disabled={preparing || creating}>
                     <Save className="h-4 w-4" aria-hidden="true" /> Save draft
                   </Button>
-                  <Button onClick={() => void prepareManualCampaign()} disabled={preparing || selected.size === 0 || budget <= 0}>
+                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing || selected.size === 0 || budget <= 0}>
                     {preparing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -1372,6 +1379,7 @@ function BusinessCampaigns({
                 size="sm"
                 variant="outline"
                 onClick={() => syncFromMeta()}
+                data-product-event="campaign.sync"
                 disabled={syncing}
               >
                 {syncing ? (
@@ -1456,6 +1464,7 @@ function BusinessCampaigns({
                             <Button
                               size="sm"
                               variant="outline"
+                              data-product-event={c.status === "active" ? "campaign.pause" : "campaign.review"}
                               onClick={() =>
                                 setCampaignStatus(
                                   c,

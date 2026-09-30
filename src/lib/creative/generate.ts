@@ -87,6 +87,8 @@ export async function generateVariants(params: {
   format?: AdFormat;
   referenceImages?: string[];
   recentCopy?: ConceptInput["recentCopy"];
+  advisoryPreferences?: string;
+  sourceFacts?: string[];
   onVariant?: (variant: GeneratedVariant) => Promise<void>;
   onFailure?: (angle: AdAngle, error: unknown) => Promise<void>;
 }): Promise<GeneratedVariant[]> {
@@ -101,6 +103,8 @@ export async function generateVariants(params: {
   const brand = boundedBrand(rawBrand);
   const brief = rawBrief.slice(0, MAX_BRIEF_CHARS);
   const instructions = rawInstructions?.slice(0, 3_000);
+  const advisoryPreferences = params.advisoryPreferences?.slice(0, 1_200);
+  const sourceFacts = params.sourceFacts?.slice(0, 12).map((fact) => fact.slice(0, 2_000)) ?? [];
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
   const signal = AbortSignal.timeout(240_000);
 
@@ -117,7 +121,7 @@ export async function generateVariants(params: {
   const outcomes = await Promise.allSettled(
     angles.map(async (angle) => {
       try {
-        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages };
+        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts };
         const planned = planning.then(async () => {
           input.recentCopy = recentCopy.slice(0, 12);
           const result = await generateConcept(input, signal);
@@ -150,6 +154,7 @@ export class CreativeValidationError extends Error {
   constructor(
     public issues: string[],
     public usage: GeneratedVariant["llmUsage"],
+    public stage: "provider" | "parse" | "concept" = "concept",
   ) {
     super(`Creative concept failed validation: ${issues.join("; ")}`);
     this.name = "CreativeValidationError";
@@ -175,6 +180,7 @@ async function generateConcept(
   const messages = buildConceptMessages(input);
   const usage: GeneratedVariant["llmUsage"] = [];
   let issues: string[] = [];
+  let stage: CreativeValidationError["stage"] = "concept";
   for (let attempt = 0; attempt < 2; attempt++) {
     const env = getEnv();
     const completion = await complete(messages, {
@@ -188,7 +194,7 @@ async function generateConcept(
     }).catch((error: unknown) => {
       if (error instanceof LLMError && error.model && error.usage) {
         usage.push({ provider: error.provider, model: error.model, usage: error.usage });
-        throw new CreativeValidationError([error.message], usage);
+        throw new CreativeValidationError([error.message], usage, "provider");
       }
       throw error;
     });
@@ -207,11 +213,13 @@ async function generateConcept(
     try {
       value = parseJSON<unknown>(completion.text);
     } catch {
+      stage = "parse";
       issues = [
         "Output must be valid JSON matching the requested concept shape.",
       ];
     }
     if (value !== undefined) {
+      stage = "concept";
       const result = validateConcept(value, input);
       if (result.success) return { concept: result.concept, usage };
       issues = result.issues;
@@ -224,7 +232,7 @@ async function generateConcept(
       },
     );
   }
-  throw new CreativeValidationError(issues, usage);
+  throw new CreativeValidationError(issues, usage, stage);
 }
 
 export async function generateOneVariant(
@@ -237,10 +245,13 @@ export async function generateOneVariant(
   referenceImages?: string[],
   signal: AbortSignal = AbortSignal.timeout(240_000),
   recentCopy: ConceptInput["recentCopy"] = [],
+  advisoryPreferences?: string,
+  sourceFacts: string[] = [],
 ): Promise<GeneratedVariant> {
   brand = boundedBrand(brand);
   brief = brief.slice(0, MAX_BRIEF_CHARS);
   instructions = instructions?.slice(0, 3_000);
+  advisoryPreferences = advisoryPreferences?.slice(0, 1_200);
   const input = {
     brand,
     brief,
@@ -250,6 +261,8 @@ export async function generateOneVariant(
     format,
     referenceImages,
     recentCopy,
+    advisoryPreferences,
+    sourceFacts: sourceFacts.slice(0, 12).map((fact) => fact.slice(0, 2_000)),
   };
   return renderVariant(input, signal, await generateConcept(input, signal));
 }
@@ -280,7 +293,9 @@ async function renderVariant(
     primaryText: concept.primary_text,
     cta: concept.cta,
     imageUrl: image.url,
-    imagePrompt: image.prompt,
+    imagePrompt: input.advisoryPreferences
+      ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
+      : image.prompt,
     design: buildAdDesign({
       brand,
       copy: concept,

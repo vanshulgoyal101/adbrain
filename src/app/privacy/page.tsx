@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
       <JsonLd
         data={contentPageGraph({ path: "/privacy", name: TITLE, description: DESCRIPTION })}
       />
-      <LegalPage title={TITLE} updated="18 September 2026">
+      <LegalPage title={TITLE} updated="30 September 2026">
         <p>
           AdBrain (&ldquo;AdBrain&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) helps businesses create ad
           creatives and run lead-generation campaigns on Meta (Facebook and
@@ -41,6 +41,12 @@ export default function PrivacyPolicyPage() {
             upload.
           </li>
           <li>
+            <strong>Remembered preferences.</strong> If you opt in under Settings,
+            we store the short creative or workflow preferences you explicitly
+            save for that business and account, with their category and update date.
+            We do not automatically learn preferences from clicks or old campaigns.
+          </li>
+          <li>
             <strong>Campaign &amp; lead data.</strong> When you connect a Meta ad
             account and run campaigns, we store campaign settings, performance
             metrics, and the leads your ads generate (which may include a
@@ -49,7 +55,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Usage and diagnostic data.</strong> Account and business
-            identifiers, pages visited, operation outcomes, response times,
+            identifiers, pages visited, selected workflow actions, foreground
+            page time, coarse screen-size categories, operation outcomes, response times,
             error categories, and AI usage and estimated costs help us operate
             and improve the product. Product-event logs exclude prompts,
             creative copy, lead contact details, passwords, access tokens,
@@ -62,6 +69,7 @@ export default function PrivacyPolicyPage() {
         <h2>How we use your data</h2>
         <ul>
           <li>To generate ad creatives and campaign plans on your behalf.</li>
+          <li>To consider your saved preferences when relevant to a new brief; the current request can override them.</li>
           <li>To create and manage your Meta campaigns and report on results.</li>
           <li>To collect and display the leads your campaigns generate.</li>
           <li>To operate, secure, and improve the service.</li>
@@ -82,8 +90,10 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>AI providers</strong> — brand details and briefs are sent to
             large-language-model and image-generation providers to produce
-            creatives. We do not sell your data, and we do not use it to train
-            third-party models beyond generating your requested output.
+            creatives. If you enable remembered preferences, selected relevant
+            notes may also be sent as advisory context for that request. We do
+            not sell your data, and we do not use it to train third-party models
+            beyond generating your requested output.
           </li>
         </ul>
 
@@ -94,11 +104,21 @@ export default function PrivacyPolicyPage() {
           Deleting your account removes your associated data, subject to any
           records we must keep for legal or security reasons.
         </p>
+        <p>
+          Preferences are off until you enable them. You can pause their use,
+          edit or forget individual notes, clear all notes, or export the saved
+          notes from Settings. Forgotten notes are removed from future preference
+          retrieval; we do not backfill preferences from past activity when you
+          enable them again. Business or account deletion also removes these
+          records through database cascades.
+        </p>
 
         <h2>Security</h2>
         <p>
           Product-event database records are targeted for deletion after 90 days
           through periodic cleanup; outages or cleanup backlogs may delay removal.
+          Daily usage and performance totals without account or business identifiers
+          may be retained for up to two years to understand product trends.
           Hosting-provider diagnostic logs follow separately configured retention.
           These account-linked diagnostics are available only to authorized
           operators, not to other customers.

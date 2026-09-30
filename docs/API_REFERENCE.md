@@ -9,11 +9,12 @@ environment. Deciding sources: [route handlers](../src/app/api/),
 [campaign schemas](../src/lib/campaign/connect-contracts.ts),
 [connection schemas](../src/lib/meta/connect-contracts.ts).
 
-## Production Payment Candidate
+## Production Payments
 
-Repaired integration `954e44a` adds five route modules beyond this guide's original baseline.
-They are default-disabled (404) and unreleased. QA accepted the three repair
-deltas conditional on exact integrated CI; this is not live collection approval.
+Repaired integration `954e44a` added five route modules beyond this guide's original baseline.
+They are default-disabled (404) unless the scoped live collection policy is enabled.
+QA accepted the three repair deltas; live collection still depends on the
+effective production configuration and owner authorization.
 See the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet)
 and [exact request/response contracts](qa/dev2-devc-contract-o1.md#api-delta-for-integration).
 
@@ -72,7 +73,20 @@ quote, captured/refunded/provider-reported-refund amounts and review/refund hold
 through their service-only interfaces. The INR 2,000 service allocation is not
 earned at capture. Checkout still returns `spendablePaise: 0` and
 `canActivateCampaign: false`; customer accounting/reservations are a separate #49
-integration. This candidate does not establish a Meta balance or perform a transfer.
+integration. This workflow does not establish a Meta balance or perform a transfer.
+
+## Product Analytics Ingestion
+
+`POST /api/events` requires an authenticated same-origin session; identity and
+business context come from the server. The strict payload always includes a known
+workspace `page` and optionally `viewport` (`compact`, `medium`, `wide`). Existing
+names `page.view`, `client.error` and `client.rejection` remain supported.
+`ui.action` additionally requires an allowlisted `action`; `page.engagement`
+requires integer `durationMs` between 1000 and 3600000. Unknown fields, arbitrary
+labels and client identity overrides are rejected. No request/field content is
+captured. DNT/GPC, 2 KiB body limits, rate limiting and 204 responses are preserved.
+Action intent is not authoritative success. See [collection and retention](OBSERVABILITY.md)
+for the fixed action catalog, privacy controls and operator-only analytics queries.
 
 ## Conventions
 
@@ -167,6 +181,8 @@ same identity; do not change a key or clear local recovery data to force progres
 | PATCH | `/api/leads/[id]` | Status/note -> `{lead}` | Owned local follow-up only |
 | POST | `/api/leads/sync` | Optional `{syncId}` -> leads/imported/failedForms/sync | Bounded provider pages + atomic deduplicated inserts/checkpoints |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
+| GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
+| POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
@@ -337,6 +353,27 @@ to replay every migration over an initialized database.
 Application rollback may leave this additive migration installed. Production
 migration execution requires separate approval.
 
+### Configurable Live Payments
+
+The effective quote is returned by the order-list route; each saved order retains
+its own `quote` and accepted policy. `amountPaise` and provider checkout `amount`
+equal the saved `quote.totalPaise`, even after configuration changes. Normal
+annual quotes retain their original allocation; pilot verification quotes carry
+zero service/ad allocation and a `verificationAllocationPaise` equal to the total.
+The eligible owner may refresh a verification quote before creating an order,
+but an existing order cannot be repriced or replaced while unresolved. Captures
+and refunds use saved amounts, and the one-time verification order remains visible
+ahead of recent annual orders. See [configuration and restoration](CONFIGURATION.md#configurable-live-amounts).
+
+For an eligible pilot without a saved verification order, GET returns
+`verificationAmountRange: {minPaise:100,maxPaise:<configured ceiling>}`; otherwise
+it is null. GET accepts optional `verificationAmountPaise` for a read-only quote
+within that range. POST accepts the same integer alongside the returned
+`termsHash` and explicit acceptance. Neither permits a client-selected annual
+price. Owner, expiry, ceiling and consent changes fail closed; a saved
+verification order cannot be repriced. Without an amount parameter, reads recover
+the saved eligible verification quote rather than replacing it with the default.
+
 ### Customer Advertising Allowance
 
 The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
@@ -430,6 +467,7 @@ Example interview input for a synthetic business:
 | `count` | Integer 1-6, default 3 |
 | `generationId` | Optional UUID; use a client-known UUID before the first POST |
 | `language` | Optional string normalized through language helpers |
+| `sourceFacts` | Optional array of up to 12 explicit user-authored facts, each up to 2000 characters (6000 combined); never copy an AI-generated brief or advisory preferences here |
 | `format` | `portrait` (default), `square`, `story`, `landscape` |
 
 Example paid-generation input, submitted only after brief review and authorization:
@@ -438,6 +476,7 @@ Example paid-generation input, submitted only after brief review and authorizati
 {
   "businessId": "11111111-1111-4111-8111-111111111111",
   "brief": "Invite Jaipur homeowners to enquire about our saved rooftop survey offer. Use only verified brand facts and contact details.",
+  "sourceFacts": ["We offer rooftop surveys in Jaipur."],
   "count": 3,
   "generationId": "22222222-2222-4222-8222-222222222222",
   "language": "en",
@@ -452,11 +491,18 @@ No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
 429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
-In the #54 source candidate (not yet production), POST atomically claims the
+POST atomically claims the
 generation UUID and normalized request inputs before paid work. Repeating the
 same ID returns 202 with `{variantGroup, status, creatives: [], count: 0,
 expectedCount}` and never starts another producer. A changed brief, count,
-language or format for that ID returns 409; another business or owner gets 404.
+language, format or nonempty `sourceFacts` for that ID returns 409; another business
+or owner gets 404. Omitting `sourceFacts` keeps the prior hash format for existing
+requests. The validator uses Brand facts, saved instructions and `sourceFacts` as
+quote evidence, not the potentially model-derived `brief`. Studio submits its
+directly authored brief as user evidence; Create submits the original goal and
+free-text answers, excluding model-suggested options and the generated brief.
+The accepted facts are stored in the generation receipt for regeneration. Existing
+creatives without that field regenerate with no separate user-fact evidence.
 The route reserves monthly quota for text and images, counts recorded tokens,
 and retains an allowance of 10,000 quota units per completed image. This is
 **not** measured image billing or a USD spend limit: image usage may lack a known
@@ -568,6 +614,12 @@ This JSON is valid to **save**, not valid to create a campaign:
 `POST /api/campaigns/plan` uses the primary business. Actual route fields:
 `goal` trimmed 1-2000; optional `answers` string up to 12000 or array up to 30
 `{question,answer}` records (maximum 1000/2000 characters); optional `audienceDraft`.
+Structured answers also accept `questionId` (1-80 characters), a fixed `topic`
+(`location`, `radius`, `budget`, `offer`, `audience`, `exclusions`, `creative`,
+`lead_form`, `compliance`) and `disposition` (`answered` or `deferred`). A deferred
+answer must have empty text. Unknown answer fields are rejected; serialized history
+is capped at 12000 characters. Legacy text answers remain accepted, with wording-
+based repeat checks but without the new topic identity guarantees.
 This route schema differs from the older exported `planRequestSchema`; use the
 handler's contract, not that unused declaration, for integration.
 
@@ -576,6 +628,16 @@ Returns `{ready:false,questions}` when more input/setup is needed. Without
 `audienceDraft`, success is `{ready:true,targeting}` for review, preserving manual
 choices; it does not create a campaign. No approved creatives produces an
 informational question without invoking generation. Model deadline is 45 seconds.
+
+The v5 campaign interview filters covered topics and repeats, returns at most two
+new questions and stops asking after six supplied decisions. One bounded correction
+is allowed for invalid/no-progress model output; each attempt is accounted for.
+When the interview cannot progress, it returns HTTP 200 with
+`{ready:false,questions:[],handoff:{reason,message}}`, where `reason` is
+`no_progress` or `interview_limit`. This response performs no draft save or Meta
+mutation. Both guided and manual-audience callers surface it without losing their
+existing context. Explicit audience-editor radius values are retained. See
+[campaign interview and framework choice](AI_PIPELINE.md#campaign-interview).
 
 ## Review and Durable Creation
 
@@ -706,6 +768,24 @@ Spend settings are strict and complete:
 Cap is null or a positive integer <= 2147483647; threshold integer 1-100; autoPause
 boolean. Missing fields, zero, and fractional caps return 422. Only null means
 unlimited. Success `{ok:true}` does not assert that Meta account limits changed.
+
+Preference reads require `GET /api/preferences?businessId=<owned UUID>`. The
+uncached response is `{enabled,epoch,notes}`; each note has `category`, `value`,
+`version` and `updated_at`. Notes stay visible to their owner while paused but
+are not included in creative or campaign-planning prompts. An unconfigured
+business returns `enabled:false`, `epoch:0`, and no notes.
+
+Mutations use `POST /api/preferences` with a JSON object containing `businessId`,
+`operation` (`enable`, `pause`, `save`, `forget`, `clear`), and `expectedEpoch` from
+the latest read. `save` requires a category and 1-160 character value; `forget`
+requires a category. The fixed categories are `copy_length`, `tone`, `language`,
+`visual_style`, `layout_density`, `creative_dislikes`, and `workflow`. One current
+value per category is retained. Successful mutations return the updated state.
+The database rejects sensitive/financial content and unauthorized businesses;
+failed content is 400, lost ownership is 403, a stale epoch is 409, and database
+or reload failures are 503. A failed reload after a committed mutation may require
+a refresh to determine what was saved; no best-effort memory write is reported
+as confirmed.
 
 Geo search trims `q`, truncates to 100 characters, and returns an empty array below
 two characters. Up to eight results have `key,name,type,region,countryCode`.

@@ -55,6 +55,26 @@ the checksum ledger, not by replaying the canonical schema. After a nondefault
 order exists, rollback must retain a quote-aware runtime; see
 [pricing operations](CONFIGURATION.md#configurable-live-amounts).
 
+The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
+depends on the original payment, operator policy and
+[customer allowance](../db/migrations/20260926_customer_ad_allowance.sql) migrations.
+It replaces fixed-total constraints with exact saved-quote checks within 100-1000000
+paise; generated payment state and capture/refund effects use each saved total.
+An identity trigger prevents repricing accepted orders. Existing default-priced
+rows, policies and funding evidence are preserved without backfill.
+
+Generated `purpose` separates annual orders from verification. Annual active-order
+uniqueness remains; a second index permits only one verification order per business,
+including after refund. Claims require matching owner/business, current expiry and
+exact quote-bound consent. Verification capture is recorded but grants no service
+or ad allocation. Verified partial verification refunds need no fictional allocation;
+dispute, pending-refund, missing-capture and provider-mismatch holds remain intact.
+Annual refund allocation and service earnings are bounded by the stored quote.
+Private tables and service-only RPC authority are unchanged. Apply once through
+the checksum ledger, not by replaying the canonical schema. After a nondefault
+order exists, rollback must retain a quote-aware runtime; see
+[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+
 ## Relationships
 
 ```mermaid
@@ -144,6 +164,8 @@ and recovery limitations.
 | `public.businesses` | UUID, owner UUID, name, free-text vertical default `local business`; website/description/voice/audience; primary/secondary colors, font, logo URL; language/location/USP/offer arrays; phone/email/address; timestamps |
 | `public.brand_assets` | Business UUID, `type` = `logo`/`product_photo`/`past_ad`, URL, optional notes, creation time |
 | `public.ad_instructions` | Business UUID, title, Markdown content, active flag, timestamps; active files supply prompt context |
+| `public.preference_settings` | `(business_id,owner_id)` key, opt-in/paused state, monotonic epoch; cascade deletes on business or owner deletion |
+| `public.declared_preferences` | `(business_id,owner_id,category)` key, one 160-character declared note per category, version/update date; cascades with namespace deletion |
 
 Blank optional form strings become null; list fields split on newlines, not
 commas, preserving locations such as `Jaipur, Rajasthan`. Business name is required.
@@ -223,6 +245,15 @@ columns to restore an obsolete UI.
 | `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp |
 | `public.rate_limit_hits` | Limiter key and hit timestamp, indexed by both |
 | `public.product_events` | Event/request UUIDs, version 1, optional user/business, kind/name/outcome/duration, allowlisted attributes, timestamp |
+| `public.product_event_daily` | Account-free daily usage/performance totals, grouped by UTC day/environment/release/event/route/action/viewport/provider/model; RLS, browser access denied, service-role read only |
+
+The source [rollup migration](../db/migrations/20260928_product_event_rollups.sql)
+depends only on the existing product-event table and replaces its pruning function
+without changing the caller contract. It aggregates and deletes up to 10,000 raw
+events older than 90 days atomically, preserves aggregate totals for 730 UTC days,
+and bounds old-aggregate cleanup. Migration application itself deletes no events.
+Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics,
+privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
 existing lead. Campaign deletion sets lead `campaign_id` null rather than deleting
@@ -370,6 +401,7 @@ verification remain separate gates; source types alone do not prove DB parity.
 | RPC family | Purpose |
 | --- | --- |
 | `owns_business` | Current authenticated owner predicate |
+| `change_declared_preferences` | Owner-checked, namespace-locked opt-in/save/forget/clear/pause with monotonic epoch; only authenticated callers can execute and direct table writes are denied |
 | `meta_token_*` | Business-bound encrypted token insertion/read/delete |
 | `meta_attempt_*` | OAuth claim, discovery, revision, selection commit and failure transitions |
 | `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation |
@@ -433,14 +465,14 @@ alone is not a safe deployment plan.
 | [20260926_trusted_campaign_writes.sql](../db/migrations/20260926_trusted_campaign_writes.sql) | Trusted campaign/result callers and verified audit RPC must deploy together with grant changes |
 | [20260926_validate_campaign_integrity.sql](../db/migrations/20260926_validate_campaign_integrity.sql) | Separate validation only after integrity migration, read-only preflight and approved repair; failure must not be bypassed |
 | [20260926_razorpay_test_orders.sql](../db/migrations/20260926_razorpay_test_orders.sql) | Optional private test orders/events and service RPCs; never live-payment activation |
+| [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
 
 This inventory is not a command to replay every file. Start an empty local core
 database with its documented schema path; do not then blindly reapply non-idempotent
 incremental migrations already represented there. For an upgrade, Meta connection
 must precede campaign connection; WhatsApp/reporting must precede integrity checks;
 managed billing precedes billing events; integrity validation is last after review.
-Candidate enquiry migrations are linked separately above, not available files in
-this source tree.
+Enquiry migrations are linked separately above.
 
 The [migration runner](../scripts/database-migrations.mjs) requires explicit target
 configuration, serializes named migrations with an advisory lock, records a

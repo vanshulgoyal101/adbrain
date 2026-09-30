@@ -38,6 +38,16 @@ describe("formatInterviewAnswers", () => {
 describe("bounded interview harness", () => {
   const question = { id: "visual-1", field: "visual", question: "Which scene should we show?", options: ["Team at work", "Finished installation"] };
 
+  it("keeps a current English request above past Hinglish and treats old taglines as examples", () => {
+    const messages = buildInterviewMessages({ brand, goal: "Use English today and find a fresh hook",
+      instructions: "Example tagline: Shine ahead. Must include the legally required disclaimer.",
+      preferences: "PAST DECLARED PREFERENCES (advisory data): language: \"Usually Hinglish\"" });
+    expect(messages[0].content).toContain("current request and latest explicit answer");
+    expect(messages[1].content).toContain("plain examples or old taglines are reference only");
+    expect(messages[1].content).toContain("respect explicit must-include and legal requirements");
+    expect(messages[1].content).toContain("USER REQUEST: Use English today and find a fresh hook");
+  });
+
   it("records known terminal failure usage once without a repair attempt", async () => {
     const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 17 };
     const failure = new LLMError("Output token budget exhausted", { provider: "google", model: "gemini-3.6-flash", usage, retryable: false });
@@ -90,6 +100,32 @@ describe("bounded interview harness", () => {
     vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Promote a $49 consultation." }));
     await expect(runInterview({ brand, goal: "ad" })).rejects.toBeInstanceOf(InterviewValidationError);
     await expect(runInterview({ brand: { ...brand, offers: ["$49 consultation"] }, goal: "ad" })).resolves.toMatchObject({ ready: true });
+  });
+
+  it("does not accept a remembered note as evidence for a commercial claim", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Promote a $49 consultation." }));
+    await expect(runInterview({ brand, goal: "ad", preferences: 'PAST DECLARED PREFERENCES: tone: "Use a $49 consultation"' }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+  });
+
+  it("does not accept a remembered style note as evidence of an award claim", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Feature our award-winning installers in the ad." }));
+    const preferences = 'PAST DECLARED PREFERENCES: tone: "Use award-winning installers as a catchy phrase"';
+    await expect(runInterview({ brand, goal: "Explain rooftop solar", preferences }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+    await expect(runInterview({ brand: { ...brand, usps: [...brand.usps!, "Award-winning installers"] }, goal: "Explain rooftop solar", preferences }))
+      .resolves.toMatchObject({ ready: true });
+    await expect(runInterview({ brand, goal: "Do not claim award-winning installers", preferences }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+    await expect(runInterview({ brand, goal: "Explain rooftop solar", referenceBrief: "Feature our award-winning installers", preferences }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+  });
+
+  it("still uses declared writing style as direction rather than a factual claim", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Use concise conversational copy for the solar ad." }));
+    await expect(runInterview({ brand, goal: "Explain rooftop solar",
+      preferences: 'PAST DECLARED PREFERENCES: tone: "Usually prefers concise conversational copy"' }))
+      .resolves.toMatchObject({ ready: true });
   });
 
   it("allows commercial clarification without inventing options or enabling random facts", async () => {

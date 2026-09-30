@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Loader2, RotateCcw, Send, Sparkles } from "lucide-react";
+import { Loader2, RotateCcw, Send, SlidersHorizontal, Sparkles } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,20 +15,8 @@ import type { Campaign } from "@/lib/types";
 import type { DraftDTO } from "@/lib/campaign/connect-contracts";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { cn } from "@/lib/utils";
+import type { PlannerQuestion, PlannerAnswer as Answer, PlannerLLMResult } from "@/lib/campaign/planner";
 
-type QuestionType = "single" | "multi" | "text";
-interface PlannerQuestion {
-  id: string;
-  question: string;
-  help?: string;
-  type: QuestionType;
-  options?: string[];
-  allowText?: boolean;
-}
-interface Answer {
-  question: string;
-  answer: string;
-}
 type Turn =
   | { role: "user"; text: string }
   | { role: "questions"; questions: PlannerQuestion[] }
@@ -41,6 +29,7 @@ interface ChatSession {
   turns: Turn[];
   collected: Answer[];
   pending?: { goal: string; answers: Answer[] } | null;
+  handoff?: PlannerLLMResult["handoff"];
 }
 
 function reviveSession(raw: unknown): ChatSession | null {
@@ -50,10 +39,11 @@ function reviveSession(raw: unknown): ChatSession | null {
     goal: s.goal,
     started: s.started === true,
     turns: s.turns,
-    collected: Array.isArray(s.collected) ? s.collected : [],
+    collected: Array.isArray(s.collected) && s.collected.every(answer => answer && typeof answer.question === "string" && typeof answer.answer === "string") ? s.collected : [],
     pending: s.pending && typeof s.pending.goal === "string" && Array.isArray(s.pending.answers)
       && s.pending.answers.every((answer) => answer && typeof answer.question === "string" && typeof answer.answer === "string")
       ? s.pending : null,
+    handoff: s.handoff && ["no_progress", "interview_limit"].includes(s.handoff.reason) && typeof s.handoff.message === "string" ? s.handoff : undefined,
   };
 }
 
@@ -62,13 +52,14 @@ type CampaignChatProps = {
   destination?: "instant_form" | "whatsapp";
   onCreated?: (campaign: Campaign) => void;
   onDraftReady?: (draft: DraftDTO) => void;
+  onEditManually?: (goal: string) => void;
 };
 
 export function CampaignChat(props: CampaignChatProps) {
   return <CampaignChatSession key={`${props.businessId}:${props.destination ?? "instant_form"}`} {...props} />;
 }
 
-function CampaignChatSession({ businessId, destination = "instant_form", onCreated, onDraftReady }: CampaignChatProps) {
+function CampaignChatSession({ businessId, destination = "instant_form", onCreated, onDraftReady, onEditManually }: CampaignChatProps) {
   const sessionKey = `adbrain:campaign-chat:${businessId}${destination === "whatsapp" ? ":whatsapp" : ""}`;
   // Keeps the interview alive across tab changes; a finished one is discarded.
   const [session, setSession, clearSession] = useSessionDraft<ChatSession>(
@@ -89,7 +80,7 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
   useEffect(() => () => requestRef.current?.abort(), []);
 
   const activeQuestions =
-    turns.length && turns[turns.length - 1].role === "questions" && !done
+    turns.length && turns[turns.length - 1].role === "questions" && !done && !session.handoff
       ? (turns[turns.length - 1] as { questions: PlannerQuestion[] }).questions
       : null;
   const answerable = (activeQuestions ?? []).filter((q) => q.id !== "note");
@@ -100,7 +91,7 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
     requestRef.current = controller;
     setLoading(true);
     setError(null);
-    setSession((current) => ({ ...current, pending: { goal: goalText, answers } }));
+    setSession((current) => ({ ...current, collected: answers, pending: { goal: goalText, answers }, handoff: undefined }));
     try {
       const res = await fetch("/api/campaigns/plan", {
         method: "POST",
@@ -115,18 +106,22 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
         campaign?: Campaign;
         draft?: DraftDTO;
         error?: string;
+        handoff?: PlannerLLMResult["handoff"];
       };
       if (controller.signal.aborted) return;
       if (!res.ok) {
         setError(data.error ?? "Planning failed.");
         return;
       }
-      if (data.ready !== false && !(data.ready === true && (data.draft || data.campaign))) {
+      if ((data.ready === false && !data.handoff && !data.questions?.length)
+        || (data.ready !== false && !(data.ready === true && (data.draft || data.campaign)))) {
         setError("Planning returned an incomplete response.");
         return;
       }
       setSession((s) => ({ ...s, collected: answers, pending: null }));
-      if (data.ready === false) {
+      if (data.ready === false && data.handoff) {
+        setSession((current) => ({ ...current, collected: answers, pending: null, handoff: data.handoff }));
+      } else if (data.ready === false) {
         setSession((s) => ({
           ...s,
           turns: [...s.turns, { role: "questions", questions: data.questions ?? [] }],
@@ -191,10 +186,11 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
     for (const q of answerable) {
       const cur = draft[q.id];
       const parts = [...(cur?.picked ?? []), (cur?.text ?? "").trim()].filter(Boolean);
-      if (parts.length) answers.push({ question: q.question, answer: parts.join(", ") });
+      answers.push({ questionId: q.id, ...(q.topic ? { topic: q.topic } : {}), question: q.question,
+        answer: parts.join(", "), disposition: parts.length ? "answered" : "deferred" });
     }
     const readable =
-      answers.map((a) => a.answer).join(" • ") || "(let AdBrain decide)";
+      answers.map((a) => a.answer || "Skipped").join(" • ");
     setSession((s) => ({ ...s, turns: [...s.turns, { role: "user", text: readable }] }));
     setDraft({});
     send(goal.trim(), [...collected, ...answers]);
@@ -215,10 +211,6 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
       <CardContent className="flex flex-col gap-4">
         {!started ? (
           <>
-            <p className="text-sm text-slate-500">
-              Tell me your goal in plain words. I&apos;ll ask a few quick questions —
-              just tap the answers — then build a paused campaign for you.
-            </p>
             <Textarea
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
@@ -275,6 +267,7 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
                                   <button
                                     key={opt}
                                     type="button"
+                                    disabled={loading || Boolean(session.pending)}
                                     onClick={() => togglePick(q, opt)}
                                     className={cn(
                                       "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
@@ -291,7 +284,9 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
                           )}
                           {(q.allowText || q.type === "text") && (
                             <Input
+                              aria-label={q.question}
                               value={draft[q.id]?.text ?? ""}
+                              disabled={loading || Boolean(session.pending)}
                               onChange={(e) => setText(q, e.target.value)}
                               placeholder="Type your own…"
                               className="mt-2"
@@ -320,13 +315,26 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
               </div>
             )}
 
-            {activeQuestions && answerable.length > 0 && !loading && (
+            {session.handoff && <div className="space-y-3">
+              <Alert>{session.handoff.message}</Alert>
+              <div className="flex flex-wrap gap-2">
+                {onEditManually && <Button onClick={() => onEditManually([goal, ...collected.filter(answer => answer.answer.trim())
+                  .map(answer => `${answer.question}: ${answer.answer}`)].join("\n").slice(0, 2000))}>
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Continue in editor
+                </Button>}
+                <Button variant="outline" onClick={reset}>
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" /> Start over
+                </Button>
+              </div>
+            </div>}
+
+            {activeQuestions && answerable.length > 0 && !loading && !session.pending && (
               <div className="flex items-center gap-2">
                 <Button onClick={submitAnswers}>
                   <Send className="h-4 w-4" /> Send answers
                 </Button>
                 <span className="text-xs text-slate-400">
-                  Leave blank to let AdBrain decide.
+                  Unanswered questions will be skipped.
                 </span>
               </div>
             )}

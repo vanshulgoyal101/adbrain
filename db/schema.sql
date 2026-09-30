@@ -130,6 +130,94 @@ as $$
   );
 $$;
 
+-- Declared, opt-in preferences are private to the owner and business.
+create table if not exists public.preference_settings (
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  enabled boolean not null default false,
+  epoch bigint not null default 0 check (epoch >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (business_id, owner_id)
+);
+
+create table if not exists public.declared_preferences (
+  business_id uuid not null,
+  owner_id uuid not null,
+  category text not null check (category in ('copy_length', 'tone', 'language', 'visual_style', 'layout_density', 'creative_dislikes', 'workflow')),
+  value text not null check (char_length(value) between 1 and 160),
+  version bigint not null default 1 check (version > 0),
+  updated_at timestamptz not null default now(),
+  primary key (business_id, owner_id, category),
+  foreign key (business_id, owner_id) references public.preference_settings(business_id, owner_id) on delete cascade
+);
+
+alter table public.preference_settings enable row level security;
+alter table public.declared_preferences enable row level security;
+revoke all on public.preference_settings, public.declared_preferences from public, anon, authenticated;
+grant select on public.preference_settings, public.declared_preferences to authenticated;
+drop policy if exists "preference settings: read own" on public.preference_settings;
+create policy "preference settings: read own" on public.preference_settings for select to authenticated
+  using (owner_id = auth.uid() and public.owns_business(business_id));
+drop policy if exists "declared preferences: read own" on public.declared_preferences;
+create policy "declared preferences: read own" on public.declared_preferences for select to authenticated
+  using (owner_id = auth.uid() and public.owns_business(business_id));
+
+create or replace function public.change_declared_preferences(
+  p_business_id uuid, p_operation text, p_expected_epoch bigint,
+  p_category text default null, p_value text default null
+) returns bigint language plpgsql security definer set search_path = public
+as $$
+declare current_settings public.preference_settings;
+begin
+  if auth.uid() is null then raise exception 'Unauthenticated' using errcode = '42501'; end if;
+  perform 1 from public.businesses where id = p_business_id and owner_id = auth.uid() for update;
+  if not found then raise exception 'Business unavailable' using errcode = '42501'; end if;
+  if p_operation is null or p_operation not in ('enable', 'pause', 'save', 'forget', 'clear') then
+    raise exception 'Invalid preference operation' using errcode = '22023';
+  end if;
+  insert into public.preference_settings (business_id, owner_id) values (p_business_id, auth.uid())
+    on conflict do nothing;
+  select * into current_settings from public.preference_settings
+    where business_id = p_business_id and owner_id = auth.uid() for update;
+  if current_settings.epoch is distinct from p_expected_epoch then
+    raise exception 'Preferences changed; reload before saving' using errcode = '40001';
+  end if;
+  if p_operation = 'save' then
+    if not current_settings.enabled then raise exception 'Preferences are paused' using errcode = '22023'; end if;
+    if p_category is null or p_category not in ('copy_length', 'tone', 'language', 'visual_style', 'layout_density', 'creative_dislikes', 'workflow')
+      or p_value is null or char_length(trim(p_value)) not between 1 and 160
+      or p_value ~ '[[:cntrl:]]' or p_value like '%' || chr(8377) || '%'
+      or p_value ~* '(https?://|www\.|[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}|[0-9]{6,}|[$][0-9]|api[_ -]?key|password|secret|token|budget|spend|inr|rupees|per day|daily|weekly|monthly|city|location|target|service area|deadline|offer|discount|guarantee|price|approval|activate|religion|ethnicity|medical|health condition|credit card|phone number|ignore (all|previous|system|developer)|system prompt|you must|override (rules|safety))' then
+      raise exception 'Invalid preference content' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid() and category = p_category)
+      and (select count(*) from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid()) >= 12 then
+      raise exception 'Preference limit reached' using errcode = '22023';
+    end if;
+    insert into public.declared_preferences (business_id, owner_id, category, value)
+      values (p_business_id, auth.uid(), p_category, trim(p_value))
+      on conflict (business_id, owner_id, category) do update
+        set value = excluded.value, version = declared_preferences.version + 1, updated_at = now();
+  elsif p_operation = 'forget' then
+    if p_category is null or p_category not in ('copy_length', 'tone', 'language', 'visual_style', 'layout_density', 'creative_dislikes', 'workflow') then
+      raise exception 'Invalid preference category' using errcode = '22023';
+    end if;
+    delete from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid() and category = p_category;
+  elsif p_operation = 'clear' then
+    delete from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid();
+  elsif p_operation = 'pause' then
+    update public.preference_settings set enabled = false where business_id = p_business_id and owner_id = auth.uid();
+  elsif p_operation = 'enable' then
+    update public.preference_settings set enabled = true where business_id = p_business_id and owner_id = auth.uid();
+  end if;
+  update public.preference_settings set epoch = epoch + 1, updated_at = now()
+    where business_id = p_business_id and owner_id = auth.uid() returning epoch into current_settings.epoch;
+  return current_settings.epoch;
+end
+$$;
+revoke all on function public.change_declared_preferences(uuid, text, bigint, text, text) from public, anon, service_role;
+grant execute on function public.change_declared_preferences(uuid, text, bigint, text, text) to authenticated;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  brand_assets
 -- ════════════════════════════════════════════════════════════════════════
@@ -3192,3 +3280,87 @@ revoke all on function public.production_payment_order_claim(uuid,uuid,uuid,uuid
 grant execute on function public.production_payment_order_claim(uuid,uuid,uuid,uuid,text,text,jsonb,text,text,uuid),
   public.production_payment_orders_list(uuid,uuid),public.production_payment_observe(uuid,text,text,text,boolean,bigint,boolean,text,text,bigint,text),
   public.customer_ad_refund_allocation(uuid,uuid,text,uuid,bigint,bigint,bigint,uuid) to service_role;
+
+create table if not exists public.product_event_daily (
+  day date not null,
+  environment text not null,
+  release text not null,
+  kind text not null,
+  name text not null,
+  outcome text not null,
+  route text not null,
+  action text not null,
+  viewport text not null,
+  provider text not null,
+  model text not null,
+  event_count bigint not null check(event_count > 0),
+  timed_event_count bigint not null check(timed_event_count >= 0),
+  duration_sum_ms bigint not null check(duration_sum_ms >= 0),
+  duration_max_ms integer not null check(duration_max_ms >= 0),
+  input_tokens numeric not null check(input_tokens >= 0),
+  output_tokens numeric not null check(output_tokens >= 0),
+  total_tokens numeric not null check(total_tokens >= 0),
+  estimated_cost_usd numeric not null check(estimated_cost_usd >= 0),
+  item_count numeric not null check(item_count >= 0),
+  failed_item_count numeric not null check(failed_item_count >= 0),
+  primary key(day,environment,release,kind,name,outcome,route,action,viewport,provider,model)
+);
+
+alter table public.product_event_daily enable row level security;
+revoke all on public.product_event_daily from public,anon,authenticated,service_role;
+grant select on public.product_event_daily to service_role;
+
+create or replace function public.prune_product_events()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare removed_count integer;
+begin
+  if not pg_try_advisory_xact_lock(hashtextextended('adbrain:product-event-retention',0)) then return 0; end if;
+  with expired as (
+    select event_id from public.product_events
+    where created_at < now() - interval '90 days'
+    order by created_at,event_id limit 10000 for update skip locked
+  ), removed as (
+    delete from public.product_events event using expired
+    where event.event_id=expired.event_id returning event.*
+  ), rolled_up as (
+    insert into public.product_event_daily as daily
+      (day,environment,release,kind,name,outcome,route,action,viewport,provider,model,
+       event_count,timed_event_count,duration_sum_ms,duration_max_ms,input_tokens,output_tokens,total_tokens,
+       estimated_cost_usd,item_count,failed_item_count)
+    select (created_at at time zone 'UTC')::date,
+      coalesce(attributes->>'environment','unknown'),coalesce(attributes->>'release',''),kind,name,outcome,
+      coalesce(attributes->>'route',''),coalesce(attributes->>'action',''),coalesce(attributes->>'viewport',''),
+      coalesce(attributes->>'provider',''),coalesce(attributes->>'model',''),
+      count(*),count(duration_ms),coalesce(sum(duration_ms),0),coalesce(max(duration_ms),0),
+      sum(case when jsonb_typeof(attributes->'inputTokens')='number' then greatest((attributes->>'inputTokens')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'outputTokens')='number' then greatest((attributes->>'outputTokens')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'totalTokens')='number' then greatest((attributes->>'totalTokens')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'estimatedCostUsd')='number' then greatest((attributes->>'estimatedCostUsd')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'count')='number' then greatest((attributes->>'count')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'failedCount')='number' then greatest((attributes->>'failedCount')::numeric,0) else 0 end)
+    from removed where (created_at at time zone 'UTC')::date >= (now() at time zone 'UTC')::date - 730
+    group by 1,2,3,4,5,6,7,8,9,10,11
+    on conflict(day,environment,release,kind,name,outcome,route,action,viewport,provider,model) do update set
+      event_count=daily.event_count+excluded.event_count,
+      timed_event_count=daily.timed_event_count+excluded.timed_event_count,
+      duration_sum_ms=daily.duration_sum_ms+excluded.duration_sum_ms,
+      duration_max_ms=greatest(daily.duration_max_ms,excluded.duration_max_ms),
+      input_tokens=daily.input_tokens+excluded.input_tokens,
+      output_tokens=daily.output_tokens+excluded.output_tokens,
+      total_tokens=daily.total_tokens+excluded.total_tokens,
+      estimated_cost_usd=daily.estimated_cost_usd+excluded.estimated_cost_usd,
+      item_count=daily.item_count+excluded.item_count,
+      failed_item_count=daily.failed_item_count+excluded.failed_item_count
+    returning 1
+  ) select count(*) into removed_count from removed;
+  delete from public.product_event_daily where ctid in (
+    select ctid from public.product_event_daily
+    where day < (now() at time zone 'UTC')::date - 730
+    order by day limit 10000 for update skip locked
+  );
+  return removed_count;
+end;
+$$;
+
+revoke all on function public.prune_product_events() from public,anon,authenticated;
+grant execute on function public.prune_product_events() to service_role;

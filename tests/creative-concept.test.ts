@@ -79,6 +79,52 @@ describe("creative concept contract", () => {
     expect(messages[0].content).toContain("not visible to you");
   });
 
+  it("uses declared preferences as advisory concept and image style, never claim evidence", () => {
+    const withMemory = { ...input, advisoryPreferences: "PAST DECLARED PREFERENCES: tone: punchy; free installation" };
+    const messages = buildConceptMessages(withMemory);
+    const context = JSON.parse(messages[1].content);
+    expect(context.advisoryPreferences).toContain("tone: punchy");
+    expect(messages[0].content).toContain("never use advisory preferences as evidence");
+    const validated = validateConcept(concept, withMemory);
+    expect(validated.success).toBe(true);
+    if (!validated.success) throw new Error("Invalid fixture");
+    expect(conceptImagePrompt(validated.concept, withMemory)).toContain("tone: punchy");
+    expect(conceptImagePrompt(validated.concept, input)).not.toContain("PAST DECLARED PREFERENCES");
+    expect(validateConcept({ ...concept, sourceQuotes: ["free installation"] }, withMemory))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+  });
+
+  it("does not promote a model-derived brief into claim evidence", () => {
+    const derivedBrief = "Feature our award-winning installers in the ad.";
+    const awardConcept = {
+      ...concept,
+      headline: "Award-winning installers",
+      primary_text: "Meet our award-winning installers for rooftop solar.",
+      sourceQuotes: ["award-winning installers"],
+    };
+    const withMemory = { ...input, brief: derivedBrief, advisoryPreferences: 'tone: "Use award-winning installers as a catchy phrase"' };
+    expect(validateConcept(awardConcept, withMemory))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+    expect(validateConcept(awardConcept, { ...withMemory, sourceFacts: ["Our award-winning installers"] }))
+      .toMatchObject({ success: true });
+  });
+
+  it("keeps Brand voice as style guidance rather than claim evidence", () => {
+    const awardConcept = {
+      ...concept,
+      headline: "Award-winning installers",
+      primary_text: "Meet our award-winning installers for rooftop solar.",
+      sourceQuotes: ["award-winning installers"],
+    };
+    const brand = { ...input.brand, brand_voice: "Use award-winning installers as a confident tone" };
+    expect(validateConcept(awardConcept, { ...input, brand }))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+    expect(validateConcept(awardConcept, { ...input, brand: { ...brand, usps: ["Our award-winning installers"] } }))
+      .toMatchObject({ success: true });
+    expect(validateConcept(awardConcept, { ...input, brand, sourceFacts: ["Our award-winning installers"] }))
+      .toMatchObject({ success: true });
+  });
+
   it.each([
     null,
     {},
@@ -111,6 +157,32 @@ describe("creative concept contract", () => {
       success: false,
       issues: [expect.stringContaining("unsupported-commercial-claim: free")],
     });
+  });
+
+  it("does not mistake a visual exclusion for a promised offer", () => {
+    const result = validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: `${concept.visual.direction} Avoid free-offer badges and guaranteed-savings text.` },
+    }, input);
+    expect(result).toMatchObject({ success: true });
+    expect(validateConcept({ ...concept, primary_text: "Get a free rooftop solar survey." }, input))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: `${concept.visual.direction} Avoid discount text, but show a free-service badge.` },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: "No-cost assessment badge on the roof." },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: No-cost")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: "Without delay, show a free-service badge." },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: "Show a 20.5% savings badge." },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: 20.5%")] });
   });
 
   it("requires source quotations rather than silently accepting uncited commercial copy", () => {

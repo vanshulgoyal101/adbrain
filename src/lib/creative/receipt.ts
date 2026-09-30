@@ -13,8 +13,9 @@ export function savedGenerationSettings(value: unknown) {
         .enum(["portrait", "square", "story", "landscape"])
         .default("portrait"),
       language: z.string().nullable().optional(),
+      sourceFacts: z.array(z.string().max(2000)).max(12).default([]),
     })
-    .catch({ format: "portrait" })
+    .catch({ format: "portrait", sourceFacts: [] })
     .parse(value);
 }
 
@@ -22,6 +23,7 @@ export function generationReceipt(
   variant: GeneratedVariant,
   language?: string,
   referenceImages: string[] = [],
+  sourceFacts: string[] = [],
 ): Json {
   return JSON.parse(
     JSON.stringify({
@@ -31,6 +33,7 @@ export function generationReceipt(
       format: variant.design.format,
       language: language ?? null,
       referenceImages,
+      sourceFacts,
       composition: getEnv().AD_DESIGN_OVERLAY ? "overlay" : "image-only",
       textModels: variant.llmUsage.map(({ provider, model }) => ({
         provider,
@@ -86,6 +89,18 @@ export function failedVariantUsage(
     !(error instanceof CreativeImageError)
   )
     return [];
+  const allowedRules = new Set([
+    "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
+    "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
+  ]);
+  const metadata = error instanceof CreativeValidationError ? {
+    validationStage: error.stage,
+    validationRules: [...new Set(error.issues.map((issue) => {
+      const rule = issue.split(":", 1)[0];
+      return allowedRules.has(rule) ? rule : issue.startsWith("Output must be valid JSON")
+        ? "invalid-json" : issue.includes(":") ? "schema-or-other" : "other";
+    }))],
+  } : undefined;
   return error.usage.map((entry, index) => ({
     ...context,
     ...entry,
@@ -93,5 +108,6 @@ export function failedVariantUsage(
     attempt: index + 1,
     status: "error",
     errorCode: error.name,
+    ...(metadata && index === error.usage.length - 1 ? { metadata } : {}),
   }));
 }
