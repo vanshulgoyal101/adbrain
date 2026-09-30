@@ -86,6 +86,18 @@ export function failedVariantUsage(
     !(error instanceof CreativeImageError)
   )
     return [];
+  const allowedRules = new Set([
+    "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
+    "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
+  ]);
+  const metadata = error instanceof CreativeValidationError ? {
+    validationStage: error.stage,
+    validationRules: [...new Set(error.issues.map((issue) => {
+      const rule = issue.split(":", 1)[0];
+      return allowedRules.has(rule) ? rule : issue.startsWith("Output must be valid JSON")
+        ? "invalid-json" : issue.includes(":") ? "schema-or-other" : "other";
+    }))],
+  } : undefined;
   return error.usage.map((entry, index) => ({
     ...context,
     ...entry,
@@ -93,5 +105,6 @@ export function failedVariantUsage(
     attempt: index + 1,
     status: "error",
     errorCode: error.name,
+    ...(metadata && index === error.usage.length - 1 ? { metadata } : {}),
   }));
 }

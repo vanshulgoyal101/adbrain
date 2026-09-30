@@ -113,6 +113,32 @@ describe("creative concept contract", () => {
     });
   });
 
+  it("does not mistake a visual exclusion for a promised offer", () => {
+    const result = validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: `${concept.visual.direction} Avoid free-offer badges and guaranteed-savings text.` },
+    }, input);
+    expect(result).toMatchObject({ success: true });
+    expect(validateConcept({ ...concept, primary_text: "Get a free rooftop solar survey." }, input))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: `${concept.visual.direction} Avoid discount text, but show a free-service badge.` },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: "No-cost assessment badge on the roof." },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: No-cost")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: "Without delay, show a free-service badge." },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free")] });
+    expect(validateConcept({
+      ...concept,
+      visual: { ...concept.visual, direction: "Show a 20.5% savings badge." },
+    }, input)).toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: 20.5%")] });
+  });
+
   it("requires source quotations rather than silently accepting uncited commercial copy", () => {
     expect(
       validateConcept({ ...concept, sourceQuotes: [] }, input).success,

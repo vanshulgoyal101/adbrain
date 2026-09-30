@@ -66,9 +66,26 @@ describe("generateVariants", () => {
       businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
     });
     expect(events.map((event) => event.usage)).toEqual(priorRepair ? [earlierUsage, usage] : [usage]);
-    expect(events.at(-1)).toMatchObject({ provider: "google", model: "gemini-3.6-flash", status: "error", attempt: priorRepair ? 2 : 1 });
+    expect(events.at(-1)).toMatchObject({ provider: "google", model: "gemini-3.6-flash", status: "error", attempt: priorRepair ? 2 : 1, metadata: { validationStage: "provider", validationRules: ["other"] } });
     expect(complete).toHaveBeenCalledTimes(priorRepair ? 2 : 1);
     expect(generateImage).not.toHaveBeenCalled();
+  });
+
+  it("records only allowlisted concept failure categories alongside paid usage", async () => {
+    const { CreativeValidationError } = await import("@/lib/creative/generate");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const error = new CreativeValidationError([
+      "sourceQuotes: quote not present in supplied facts: private customer text",
+      "unsupported-commercial-claim: free; remove it or cite a supplied positive fact supporting it",
+    ], [{ provider: "test", model: "model", usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 } }]);
+    const events = failedVariantUsage(error, {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events).toMatchObject([{ errorCode: "CreativeValidationError", metadata: {
+      validationStage: "concept",
+      validationRules: ["sourceQuotes", "unsupported-commercial-claim"],
+    } }]);
+    expect(JSON.stringify(events)).not.toContain("private customer text");
   });
 
   it("repairs repeated copy using history and earlier siblings before image generation", async () => {
@@ -155,10 +172,39 @@ describe("generateVariants", () => {
   });
 
   it("never spends on images after two invalid concepts", async () => {
-    complete.mockResolvedValue(completion({ ...concept, headline: 12 }));
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
+    complete.mockResolvedValue({ ...completion({ ...concept, headline: 12 }), usage });
     const { generateVariants } = await import("@/lib/creative/generate");
-    await expect(generateVariants({ brand, brief: "x", count: 1 })).rejects.toThrow("failed validation");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const onFailure = vi.fn();
+    expect(await generateVariants({ brand, brief: "x", count: 1, onFailure })).toEqual([]);
+    const events = failedVariantUsage(onFailure.mock.calls[0][1], {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events).toMatchObject([
+      { usage, attempt: 1 },
+      { usage, attempt: 2, metadata: { validationStage: "concept", validationRules: ["schema-or-other"] } },
+    ]);
+    expect(events[0].metadata).toBeUndefined();
     expect(complete).toHaveBeenCalledTimes(2);
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+
+  it("categorizes invalid JSON without persisting provider output", async () => {
+    complete.mockResolvedValue({ ...completion({}), text: "private malformed response", usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 } });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const onFailure = vi.fn();
+    expect(await generateVariants({ brand, brief: "x", count: 1, onFailure })).toEqual([]);
+    const events = failedVariantUsage(onFailure.mock.calls[0][1], {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events).toMatchObject([
+      { attempt: 1 },
+      { metadata: { validationStage: "parse", validationRules: ["invalid-json"] } },
+    ]);
+    expect(events[0].metadata).toBeUndefined();
+    expect(JSON.stringify(events)).not.toContain("private malformed response");
     expect(generateImage).not.toHaveBeenCalled();
   });
 

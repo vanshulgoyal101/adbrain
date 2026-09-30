@@ -150,6 +150,7 @@ export class CreativeValidationError extends Error {
   constructor(
     public issues: string[],
     public usage: GeneratedVariant["llmUsage"],
+    public stage: "provider" | "parse" | "concept" = "concept",
   ) {
     super(`Creative concept failed validation: ${issues.join("; ")}`);
     this.name = "CreativeValidationError";
@@ -175,6 +176,7 @@ async function generateConcept(
   const messages = buildConceptMessages(input);
   const usage: GeneratedVariant["llmUsage"] = [];
   let issues: string[] = [];
+  let stage: CreativeValidationError["stage"] = "concept";
   for (let attempt = 0; attempt < 2; attempt++) {
     const env = getEnv();
     const completion = await complete(messages, {
@@ -188,7 +190,7 @@ async function generateConcept(
     }).catch((error: unknown) => {
       if (error instanceof LLMError && error.model && error.usage) {
         usage.push({ provider: error.provider, model: error.model, usage: error.usage });
-        throw new CreativeValidationError([error.message], usage);
+        throw new CreativeValidationError([error.message], usage, "provider");
       }
       throw error;
     });
@@ -207,11 +209,13 @@ async function generateConcept(
     try {
       value = parseJSON<unknown>(completion.text);
     } catch {
+      stage = "parse";
       issues = [
         "Output must be valid JSON matching the requested concept shape.",
       ];
     }
     if (value !== undefined) {
+      stage = "concept";
       const result = validateConcept(value, input);
       if (result.success) return { concept: result.concept, usage };
       issues = result.issues;
@@ -224,7 +228,7 @@ async function generateConcept(
       },
     );
   }
-  throw new CreativeValidationError(issues, usage);
+  throw new CreativeValidationError(issues, usage, stage);
 }
 
 export async function generateOneVariant(
