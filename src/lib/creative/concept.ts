@@ -151,13 +151,17 @@ export function validateConcept(
   }
   const commercialTerms =
     /\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d[\d,.]*/gi;
+  const visualClaims = concept.visual.direction
+    .split(/(?:[.!?;](?=\s|$)\s*|\s+\bbut\b\s+)/i)
+    .filter((clause) => !/^(?:avoid|do not|don't|omit|exclude|never (?:show|include|add|render|depict|use))\b/i.test(clause.trim()))
+    .join(" ");
   const output = [
     concept.headline,
     concept.primary_text,
     concept.description,
     concept.supportingText,
     concept.rationale,
-    concept.visual.direction,
+    visualClaims,
   ].join(" ");
   for (const term of output.match(commercialTerms) ?? []) {
     if (

@@ -299,9 +299,14 @@ export function AdAssistant({ business }: { business: Business }) {
           `/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=3`,
           { cache: "no-store" },
         );
+        if (res.status === 429) {
+          setPhase("chat");
+          setError("Too many status checks. Wait a few minutes before checking again. Do not start another generation.");
+          return true;
+        }
         if (res.ok) {
           const data = (await res.json()) as {
-            status?: "processing" | "partial" | "complete";
+            status?: "processing" | "partial" | "complete" | "failed" | "unresolved";
             creatives?: Creative[];
           };
           if (data.creatives?.length) {
@@ -310,6 +315,17 @@ export function AdAssistant({ business }: { business: Business }) {
             if (data.status === "partial") {
               setError("Some ads finished while the request was reconnecting. Review the saved work in Creative Studio; no duplicate generation was started.");
             }
+            return true;
+          }
+          if (data.status === "failed") {
+            setGenerationId(null);
+            setPhase("chat");
+            setError("No ads were saved. This attempt failed. You can try again.");
+            return true;
+          }
+          if (data.status === "unresolved") {
+            setPhase("chat");
+            setError("No ads were saved. This generation is held for review. Check Creative Studio later; do not start another paid attempt yet.");
             return true;
           }
         }

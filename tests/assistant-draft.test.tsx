@@ -53,6 +53,85 @@ describe("<AdAssistant> draft persistence", () => {
     expect(reads.every(([url]) => new URL(url, "http://localhost").searchParams.get("generationId") === generationId)).toBe(true);
   });
 
+  it("releases a terminal failed generation for an explicit new attempt", async () => {
+    vi.useFakeTimers();
+    const identity = "12345678-1234-4234-8234-123456789012";
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, turns: [], answers: [], phase: "chat",
+      generationId: identity, prepared: { brief: "Use saved brand facts" },
+    }));
+    const fetchMock = vi.fn(async () => Response.json({ status: "failed", creatives: [], count: 0, expectedCount: 3 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check saved results" }));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(screen.getByText(/no ads were saved/i)).toBeInTheDocument();
+  });
+
+  it("stops polling an unresolved paid attempt without offering another generation", async () => {
+    vi.useFakeTimers();
+    const identity = "12345678-1234-4234-8234-123456789012";
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, turns: [], answers: [], phase: "chat",
+      generationId: identity, prepared: { brief: "Use saved brand facts" },
+    }));
+    const fetchMock = vi.fn(async () => Response.json({ status: "unresolved", creatives: [], count: 0, expectedCount: 3 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check saved results" }));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/no ads were saved.*held for review/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check saved results" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("shows held-for-review immediately after a failed POST with an unresolved status", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/creatives/assistant") return Response.json({ ready: true, brief: "Use saved brand facts" });
+      if (init?.method === "POST") return new Response(null, { status: 502 });
+      return Response.json({ status: "unresolved", creatives: [], count: 0, expectedCount: 3 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Campaign goal" }), { target: { value: "Invite enquiries" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /start creating/i })));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Generate 3 ads" }));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST" && JSON.stringify(init.body).includes("generationId"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/creatives/generate?"))).toHaveLength(1);
+    expect(screen.getByText(/no ads were saved.*held for review/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check saved results" })).toBeEnabled();
+  });
+
+  it("backs off when saved-result checks are rate limited", async () => {
+    vi.useFakeTimers();
+    const identity = "12345678-1234-4234-8234-123456789012";
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, turns: [], answers: [], phase: "chat",
+      generationId: identity, prepared: { brief: "Use saved brand facts" },
+    }));
+    const fetchMock = vi.fn(async () => new Response(null, { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check saved results" }));
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/wait a few minutes before checking again/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check saved results" })).toBeEnabled();
+  });
+
   it("frames creation as a brand-grounded campaign brief", async () => {
     const user = userEvent.setup();
     render(<AdAssistant business={business} />);
