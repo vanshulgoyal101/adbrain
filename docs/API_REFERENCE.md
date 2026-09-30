@@ -98,7 +98,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |
 | GET | `/api/privacy-requests` | No body -> `{requests}` (latest 20) | Authenticated owner-only export/deletion status, no cache |
 | POST | `/api/privacy-requests` | Same-origin `{kind:"export"|"delete"}` -> `{request}` (201) | Owner-scoped request; one open request per kind, no export/deletion |
-| GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests) | Verified privacy operator only; server-only queue read |
+| GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests); `?check=1` -> `{allowed:true}` without loading the queue | Verified privacy operator only; server-only queue read |
 | PATCH | `/api/privacy-requests/operator` | Same-origin `{id,expectedStatus,status}` -> `{request}` | Verified privacy operator only; status and handler audit, no export/deletion |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |

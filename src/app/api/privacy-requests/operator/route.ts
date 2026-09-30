@@ -20,10 +20,13 @@ async function operator() {
   return { admin, user };
 }
 
-export const GET = observeRoute("/api/privacy-requests/operator", "GET", async () => {
+export const GET = observeRoute("/api/privacy-requests/operator", "GET", async (request: Request) => {
   try {
     const access = await operator();
     if ("status" in access) return NextResponse.json({ error: "Privacy request queue unavailable." }, { status: access.status });
+    if (new URL(request.url).searchParams.get("check") === "1") {
+      return NextResponse.json({ allowed: true }, { headers: noStore });
+    }
     const { data, error } = await access.admin.from("privacy_requests").select(fields)
       .in("status", ["received", "in_review"]).order("created_at", { ascending: true }).limit(100);
     if (error) throw error;

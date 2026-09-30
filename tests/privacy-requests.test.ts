@@ -32,13 +32,25 @@ beforeEach(() => {
 });
 
 describe("privacy request routes", () => {
+  it("does not render the operator page or read the queue without a private operator grant", async () => {
+    const { default: OperatorPage } = await import("@/app/(app)/settings/privacy-requests/page");
+    await expect(OperatorPage()).rejects.toThrow("NEXT_HTTP_ERROR_FALLBACK;404");
+    expect(mocks.list).not.toHaveBeenCalled();
+    mocks.user.mockResolvedValueOnce({ data: { user: null } });
+    await expect(OperatorPage()).rejects.toThrow("NEXT_HTTP_ERROR_FALLBACK;404");
+    expect(mocks.allowed).toHaveBeenCalledTimes(1);
+    mocks.allowed.mockResolvedValue({ data: true, error: null });
+    const page = await OperatorPage();
+    expect(page.props.children.at(-1).type.name).toBe("PrivacyOperatorQueue");
+  });
+
   it("requires a session before storage or an operator check", async () => {
     mocks.user.mockResolvedValue({ data: { user: null } });
     const customer = await import("@/app/api/privacy-requests/route");
     const operator = await import("@/app/api/privacy-requests/operator/route");
     expect((await customer.GET()).status).toBe(401);
     expect((await customer.POST(submission({ kind: "export" }))).status).toBe(401);
-    expect((await operator.GET()).status).toBe(401);
+    expect((await operator.GET(new Request("http://localhost/api/privacy-requests/operator"))).status).toBe(401);
     expect((await operator.PATCH(statusChange({ id: row.id, expectedStatus: "received", status: "in_review" }))).status).toBe(401);
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
@@ -68,7 +80,7 @@ describe("privacy request routes", () => {
 
   it("denies an ordinary customer before queue access or status changes", async () => {
     const { GET, PATCH } = await import("@/app/api/privacy-requests/operator/route");
-    expect((await GET()).status).toBe(403);
+    expect((await GET(new Request("http://localhost/api/privacy-requests/operator?check=1"))).status).toBe(403);
     expect((await PATCH(statusChange({ id: row.id, expectedStatus: "received", status: "completed" }))).status).toBe(403);
     expect(mocks.list).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
@@ -77,7 +89,9 @@ describe("privacy request routes", () => {
   it("lets an approved operator view the queue and advance only a matching status", async () => {
     mocks.allowed.mockResolvedValue({ data: true, error: null });
     const { GET, PATCH } = await import("@/app/api/privacy-requests/operator/route");
-    expect(await (await GET()).json()).toEqual({ requests: [row] });
+    expect(await (await GET(new Request("http://localhost/api/privacy-requests/operator?check=1"))).json()).toEqual({ allowed: true });
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(await (await GET(new Request("http://localhost/api/privacy-requests/operator"))).json()).toEqual({ requests: [row] });
     const response = await PATCH(statusChange({ id: row.id, expectedStatus: "received", status: "in_review" }));
     expect(response.status).toBe(200);
     expect(mocks.allowed).toHaveBeenCalledWith("privacy_request_operator_allowed", { p_user_id: ownerId });

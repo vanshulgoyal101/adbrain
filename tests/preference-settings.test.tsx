@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PreferenceSettings } from "@/components/preference-settings";
-import { PrivacyRequests } from "@/components/privacy-requests";
+import { PrivacyOperatorQueue, PrivacyRequests } from "@/components/privacy-requests";
 
 const businessId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const saved = { enabled: true, epoch: 2, notes: [
@@ -83,7 +83,7 @@ describe("PreferenceSettings", () => {
 describe("PrivacyRequests", () => {
   it("confirms a saved export request and shows its current status", async () => {
     const request = { id: "22222222-2222-4222-8222-222222222222", kind: "export", status: "received", created_at: "2026-09-30T00:00:00Z", updated_at: "2026-09-30T00:00:00Z" };
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => url.endsWith("/operator")
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => url.startsWith("/api/privacy-requests/operator")
       ? Response.json({ error: "Forbidden" }, { status: 403 }) : init?.method
         ? Response.json({ request }, { status: 201 }) : Response.json({ requests: [] }));
     vi.stubGlobal("fetch", fetchMock);
@@ -97,7 +97,7 @@ describe("PrivacyRequests", () => {
   });
 
   it("does not claim a failed deletion request was submitted", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => url.endsWith("/operator")
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => url.startsWith("/api/privacy-requests/operator")
       ? Response.json({ error: "Forbidden" }, { status: 403 }) : init?.method
         ? Response.json({ error: "Could not submit your request." }, { status: 503 }) : Response.json({ requests: [] })));
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -112,16 +112,39 @@ describe("PrivacyRequests", () => {
   it("shows an authorized operator queue and updates a matching request status", async () => {
     const request = { id: "22222222-2222-4222-8222-222222222222", owner_id: "11111111-1111-4111-8111-111111111111",
       kind: "export", status: "received", created_at: "2026-09-30T00:00:00Z", updated_at: "2026-09-30T00:00:00Z" };
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => url.endsWith("/operator")
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => url.startsWith("/api/privacy-requests/operator")
       ? init?.method === "PATCH" ? Response.json({ request: { ...request, status: "in_review" } })
         : Response.json({ requests: [request] }) : Response.json({ requests: [request] }));
     vi.stubGlobal("fetch", fetchMock);
-    render(<PrivacyRequests />);
-    expect(await screen.findByText("Operator request queue")).toBeInTheDocument();
+    render(<PrivacyOperatorQueue />);
+    expect(await screen.findByRole("region", { name: "Open privacy requests" })).toBeInTheDocument();
+    expect(screen.getByText(/11111111-1111/)).toBeInTheDocument();
     await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: /Update export request/ }), "in_review");
-    expect((await screen.findAllByText("In review")).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/In review/)).toBeInTheDocument();
     expect(JSON.parse(fetchMock.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
       id: request.id, expectedStatus: "received", status: "in_review",
+    });
+  });
+
+  it("links authorized operators to their page and removes completed requests from the open queue", async () => {
+    const request = { id: "22222222-2222-4222-8222-222222222222", owner_id: "11111111-1111-4111-8111-111111111111",
+      kind: "delete", status: "in_review", created_at: "2026-09-30T00:00:00Z", updated_at: "2026-09-30T00:00:00Z" };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => url.startsWith("/api/privacy-requests/operator")
+      ? init?.method === "PATCH" ? Response.json({ request: { ...request, status: "completed" } })
+        : url.includes("?check=1") ? Response.json({ allowed: true }) : Response.json({ requests: [request] })
+      : Response.json({ requests: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const settings = render(<PrivacyRequests />);
+    expect(await screen.findByRole("link", { name: "Operator request queue" })).toHaveAttribute("href", "/settings/privacy-requests");
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/privacy-requests/operator", expect.anything());
+    expect(screen.queryByRole("combobox", { name: /Update delete request/ })).not.toBeInTheDocument();
+    settings.unmount();
+    render(<PrivacyOperatorQueue />);
+    await screen.findByRole("combobox", { name: /Update delete request/ });
+    await userEvent.setup().selectOptions(screen.getByRole("combobox", { name: /Update delete request/ }), "completed");
+    expect(await screen.findByText("No open requests.")).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1]!.body as string)).toMatchObject({
+      id: request.id, expectedStatus: "in_review", status: "completed",
     });
   });
 });
