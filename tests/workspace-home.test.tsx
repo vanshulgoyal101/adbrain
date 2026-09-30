@@ -216,6 +216,46 @@ describe("Home workspace", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the dashboard before the recent activity read finishes", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([creative]);
+    queries.getCampaigns.mockResolvedValue([]);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    let resolveAudit!: (value: object[]) => void;
+    queries.getAuditLog.mockReturnValue(new Promise(resolve => { resolveAudit = resolve; }));
+
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const page = DashboardPage();
+    const ready = await Promise.race([page.then(() => true), new Promise<false>(resolve => setTimeout(() => resolve(false), 75))]);
+    expect(ready).toBe(true);
+    const content = await page;
+    expect(content.props.activity.type).toBe(Suspense);
+    render(<WorkspaceHome {...content.props} spendStatus={null} activity={content.props.activity.props.fallback} />);
+    expect(screen.getByRole("heading", { name: "1 ad needs review" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading recent activity");
+    resolveAudit([]);
+    const feed = content.props.activity.props.children;
+    const activity = await feed.type(feed.props);
+    expect(activity.type(activity.props)).toBeNull();
+  });
+
+  it("keeps recent activity failures local to their section", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([]);
+    queries.getMetaConnection.mockResolvedValue({ ready: false });
+    queries.getSpendEvaluation.mockResolvedValue({ evaluation: { status: "healthy" } });
+    queries.getAuditLog.mockRejectedValue(new Error("Private audit detail"));
+
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    const page = await DashboardPage();
+    const feed = page.props.activity.props.children;
+    render(await feed.type(feed.props));
+    expect(screen.getByRole("alert")).toHaveTextContent("Recent activity could not be loaded.");
+    expect(screen.queryByText("Private audit detail")).not.toBeInTheDocument();
+  });
+
   it("renders usable dashboard content while spend evaluation is pending", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getCreativePreviews.mockResolvedValue([creative]);
@@ -239,7 +279,7 @@ describe("Home workspace", () => {
     expect(ready).toBe(true);
     render(await page);
     expect(screen.getByRole("heading", { name: "1 ad needs review" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Checking spend status");
+    expect(screen.getByText("Checking spend status...")).toBeInTheDocument();
     resolveSpend({ evaluation: overCap });
     const spendBoundary = (await page).props.spendStatus;
     const notice = spendBoundary.props.children;

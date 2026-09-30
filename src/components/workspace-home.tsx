@@ -22,6 +22,7 @@ export interface WorkspaceHomeProps {
   metaReady: boolean;
   spend: SpendEvaluation | null;
   spendStatus?: ReactNode;
+  activity?: ReactNode;
 }
 
 const actionClass =
@@ -35,6 +36,7 @@ export function WorkspaceHome({
   metaReady,
   spend,
   spendStatus,
+  activity,
 }: WorkspaceHomeProps) {
   const queue = buildWorkQueue({ business, creatives, campaigns, metaReady });
   const drafts = creatives.filter(
@@ -315,35 +317,27 @@ export function WorkspaceHome({
         </section>
       )}
 
-      {audit.length > 0 && (
-        <section aria-labelledby="activity-title">
-          <h2
-            id="activity-title"
-            className="mb-3 text-lg font-semibold text-slate-900"
-          >
-            Recent activity
-          </h2>
-          <ul className="divide-y divide-slate-200 border-t border-slate-200">
-            {audit.map((event) => (
-              <li
-                key={event.id}
-                className="flex flex-wrap justify-between gap-2 py-3 text-sm"
-              >
-                <span className="text-slate-700">
-                  {describeAuditEvent(event.action, event.reason)}
-                  {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
-                </span>
-                <time
-                  dateTime={event.created_at}
-                  className="text-xs text-slate-500"
-                >
-                  {formatDateShort(event.created_at)}
-                </time>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {activity ?? <RecentActivity audit={audit} />}
     </div>
+  );
+}
+
+export function RecentActivity({ audit }: { audit: AuditLog[] }) {
+  if (!audit.length) return null;
+  return (
+    <section aria-labelledby="activity-title">
+      <h2 id="activity-title" className="mb-3 text-lg font-semibold text-slate-900">Recent activity</h2>
+      <ul className="divide-y divide-slate-200 border-t border-slate-200">
+        {audit.map((event) => (
+          <li key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
+            <span className="text-slate-700">
+              {describeAuditEvent(event.action, event.reason)}
+              {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
+            </span>
+            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDateShort(event.created_at)}</time>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
