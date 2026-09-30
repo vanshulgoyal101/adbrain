@@ -170,6 +170,46 @@ function commercialClaimIssues(result: InterviewResult, input: InterviewInput): 
   )).map((term) => `Unsupported commercial term: ${term}. Omit it; do not convert a creative suggestion into a business fact.`);
 }
 
+function advisoryFactIssues(result: InterviewResult, input: InterviewInput): string[] {
+  if (!input.preferences) return [];
+  const exclusions = new Set(["no", "not", "never", "avoid", "without", "omit", "exclude"]);
+  const hasPositivePhrase = (text: string, phrase: string) => {
+    const words = normalized(text).split(" ");
+    for (let index = 0; index + 2 < words.length; index++) {
+      if (words.slice(index, index + 3).join(" ") === phrase &&
+        !words.slice(Math.max(0, index - 4), index).some((word) => exclusions.has(word))) return true;
+    }
+    return false;
+  };
+  const output = result.ready
+    ? [result.brief, ...(result.recommendations ?? []).flatMap((item) => [item.label, item.prompt])].join("\n")
+    : result.question?.options?.join("\n") ?? "";
+  const outputWords = normalized(output).split(" ");
+  const advisoryValues = input.preferences.split("\n").flatMap((line) => {
+    const quoteStart = line.indexOf('"');
+    if (quoteStart < 0) return [];
+    try {
+      const value: unknown = JSON.parse(line.slice(quoteStart));
+      return typeof value === "string" ? [normalized(value)] : [];
+    } catch { return [normalized(line)]; }
+  });
+  const trustedFacts = [input.goal, ...(input.answers ?? []).map((answer) => answer.answer),
+    input.brand.name, input.brand.description, input.brand.target_audience,
+    ...(input.brand.usps ?? []), ...(input.brand.offers ?? []), ...(input.brand.locations ?? [])]
+    .filter((value): value is string => typeof value === "string");
+  const styleFields = new Set(["copy", "tone", "language", "style", "visual", "palette", "color", "colour", "layout", "image", "headline", "text", "composition"]);
+  const styleDirections = new Set(["use", "write", "keep", "make", "choose", "try", "prefer", "with"]);
+  for (let index = 0; index + 2 < outputWords.length; index++) {
+    const phrase = outputWords.slice(index, index + 3).join(" ");
+    if (!advisoryValues.some((value) => value.includes(phrase)) || trustedFacts.some((fact) => hasPositivePhrase(fact, phrase))) continue;
+    if (outputWords.slice(Math.max(0, index - 4), index).some((word) => exclusions.has(word))) continue;
+    if (outputWords.slice(index, index + 3).some((word) => styleFields.has(word)) &&
+      outputWords.slice(Math.max(0, index - 4), index).some((word) => styleDirections.has(word))) continue;
+    return ["Advisory-only wording cannot establish a business fact. Use verified Brand or current user facts, or ask for confirmation."];
+  }
+  return [];
+}
+
 export class InterviewValidationError extends Error {
   constructor() {
     super("The assistant could not prepare a reliable next step. Please retry; no images were generated.");
@@ -276,7 +316,7 @@ export async function runInterview(
     }
     const parsed = resultSchema.safeParse(value);
     const issues = parsed.success
-      ? [...interviewResultIssues(parsed.data, input.answers ?? []), ...commercialClaimIssues(parsed.data, input)]
+      ? [...interviewResultIssues(parsed.data, input.answers ?? []), ...commercialClaimIssues(parsed.data, input), ...advisoryFactIssues(parsed.data, input)]
       : parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
     await options.onAttempt?.(completion, attempt + 1, parsed.success && !issues.length);
     if (parsed.success && !issues.length) {

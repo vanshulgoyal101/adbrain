@@ -108,6 +108,26 @@ describe("bounded interview harness", () => {
       .rejects.toBeInstanceOf(InterviewValidationError);
   });
 
+  it("does not accept a remembered style note as evidence of an award claim", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Feature our award-winning installers in the ad." }));
+    const preferences = 'PAST DECLARED PREFERENCES: tone: "Use award-winning installers as a catchy phrase"';
+    await expect(runInterview({ brand, goal: "Explain rooftop solar", preferences }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+    await expect(runInterview({ brand: { ...brand, usps: [...brand.usps!, "Award-winning installers"] }, goal: "Explain rooftop solar", preferences }))
+      .resolves.toMatchObject({ ready: true });
+    await expect(runInterview({ brand, goal: "Do not claim award-winning installers", preferences }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+    await expect(runInterview({ brand, goal: "Explain rooftop solar", referenceBrief: "Feature our award-winning installers", preferences }))
+      .rejects.toBeInstanceOf(InterviewValidationError);
+  });
+
+  it("still uses declared writing style as direction rather than a factual claim", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Use concise conversational copy for the solar ad." }));
+    await expect(runInterview({ brand, goal: "Explain rooftop solar",
+      preferences: 'PAST DECLARED PREFERENCES: tone: "Usually prefers concise conversational copy"' }))
+      .resolves.toMatchObject({ ready: true });
+  });
+
   it("allows commercial clarification without inventing options or enabling random facts", async () => {
     vi.mocked(complete).mockResolvedValue(reply({ ready: false, question: { id: "offer", field: "offer", question: "What offer is available?", options: [], allowText: true, allowRandom: true, aiCanDecide: true } }));
     await expect(runInterview({ brand, goal: "Promote an offer" })).resolves.toMatchObject({ question: { options: [], allowRandom: false, aiCanDecide: false } });

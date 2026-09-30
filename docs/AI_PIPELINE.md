@@ -22,6 +22,12 @@ optional reference brief form the context. The interviewer can finish with zero
 questions and may ask at most three new decisions. Field/ID/history checks reject
 repeated decisions and recycled options. Structured output and commercial-claim
 checks prevent some unsupported terms, not all misleading claims in every language.
+When declared preferences are enabled, a bounded advisory note may guide style,
+but wording copied only from that note cannot establish a factual brief. The
+interview checks positive support in current owner answers or factual Brand fields;
+negated requests, Brand voice and model-derived reference briefs are not factual
+support. This check cannot recognize every paraphrase, so generation must also
+keep the generated brief separate from verified claim evidence.
 
 There is one repair opportunity, sharing a 45-second deadline and request
 cancellation. Accepted brief length is at most 2000 characters. Follow-up
