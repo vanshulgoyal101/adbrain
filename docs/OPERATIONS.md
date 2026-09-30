@@ -23,7 +23,7 @@ Inspect durable evidence before retrying anything that can create objects or spe
 | Workspace stays loading or shows an error | In a visible session, compare the request and streamed response with Supabase auth and business-read failures; a fallback HTTP 200 alone is not a completed workspace | Use Try again to refetch the failed segment, or Sign in if the session expired. Check auth and business-read availability before treating an empty workspace as a first run; do not reset saved state or bypass the route guard |
 | Brand autofill fails | URL validation, public DNS/fetch reachability, provider availability | Enter fields manually; do not disable SSRF protection or overwrite concurrent edits |
 | Generation fails before starting | Ownership, monthly aggregate RPC, receipt column, references, keys/model, rate limit | Repair verified configuration/schema; do not disable quota because usage is unknown |
-| Browser loses generation result | GET recovery by business/generation UUID and expected count | Recover saved rows first; generation UUID is not a durable deduplication lock |
+| Browser loses generation result | GET recovery by business/generation UUID and expected count | Recover saved rows first; a generation UUID now fences replay and unknown paid outcomes |
 | Partial generation | Saved count and per-variant failures | Keep successes, review before a deliberate additional paid request |
 | Image/composition failure | Provider/reference compatibility, bounded raster validation, upload/render stage | No silent raw-photo substitution; uploaded sources may need later cleanup |
 | Draft conflict/expiry | Latest version, expiry, operation linkage | Reload/review; expired draft requires new intent, not an expiry extension hack |
@@ -36,6 +36,30 @@ Inspect durable evidence before retrying anything that can create objects or spe
 | Leads partly sync | `failedForms`, newly inserted count, reload result | Retry failed forms after permission fix; repeated IDs are ignored, not counted as new leads |
 | Disconnect fails | Explicit business UUID, owner check, RPC/schema availability | Keep existing UI state until confirmed; disconnect is not an emergency pause |
 | Telemetry missing | Enable flags, applied migration, hosting logs, retention, request cap | Events are best effort; a missing event does not prove no action occurred |
+
+### Creative Generation Reconciliation
+
+The `creative_generation_reconcile` RPC is installed in Production under migration
+checksum `99d1be625171c48dee4cbe7bec71d749169742a2a49b2c113dd1cd36c2f6f681`. Only an
+authorized service operator may call it, after identifying the exact owner,
+business and generation UUID and confirming all provider text/image attempts
+against per-generation provider evidence. A 502, absent ID, missing usage row,
+zero-token error receipt or expired request is not proof of zero spend or finality.
+The caller must verify the provider total and final outcome, check saved creative
+count, and supply a sanitized evidence reference, operator reference and the
+currently observed accounted/reserved counters. No raw provider export, API key,
+prompt, customer data or signed URL belongs in the evidence reference.
+
+The RPC checks tenant, state, receipt version, current counters, recorded usage
+and saved count; it appends missing verified usage before releasing the uncertain
+reservation, audits the transition and blocks duplicate or late mutation. It
+also rejects later generation-linked usage or newly saved creatives; existing
+creative content may still be edited. It does not infer finality from local data
+or offer a customer-facing repair action.
+Pre-instrumentation intents, including the held September 29 #54 request, remain
+blocked. Verify the migration ledger and grants in any other environment; an
+operator must obtain external evidence for each eligible intent before calling
+the RPC. Evidence for the held September 29 request cannot make it eligible.
 
 ### Campaign Reconciliation
 

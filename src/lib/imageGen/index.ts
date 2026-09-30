@@ -1,7 +1,7 @@
 import { getEnv } from "@/lib/env";
 import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
-import type { GeneratedImage, ImageProvider, ImageRequest } from "./types";
+import { ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 
@@ -29,7 +29,11 @@ function getFallbackProvider(): ImageProvider | null {
 async function executeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
   if (provider.name === "pollinations" && req.referenceImages?.length) throw new Error("Pollinations does not support product references. Select a reference-capable image provider.");
   const generated = await provider.generate(req);
-  const raster = await downloadImage(generated.url, req.signal);
+  const raster = await downloadImage(generated.url, req.signal).catch((error: unknown) => {
+    if (!generated.providerRequestId) throw error;
+    throw new ImageProviderError("Image response could not be validated.", generated.providerRequestId,
+      generated.providerFinalStatus ?? "unknown");
+  });
   return { ...generated, url: `data:image/png;base64,${Buffer.from(raster.bytes).toString("base64")}`, width: raster.width, height: raster.height };
 }
 
@@ -41,17 +45,33 @@ export async function generateImage(
   req.signal?.throwIfAborted();
   const provider = getProvider();
   try {
-    return {
+    const generated = {
       ...(await executeImage(provider, req)),
       latencyMs: Date.now() - startedAt,
     };
+    req.onAttempt?.({ provider: provider.name, model: generated.model ?? provider.name,
+      providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
+      estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
+    return generated;
   } catch (error) {
+    req.onAttempt?.({ provider: provider.name, model: provider.name, status: "error",
+      providerRequestId: error instanceof ImageProviderError ? error.providerRequestId : undefined,
+      providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
     req.signal?.throwIfAborted();
     if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) throw error;
     const fallback = getFallbackProvider();
     if (!fallback || fallback.name === provider.name) throw error;
+    const generated = await executeImage(fallback, req).catch((fallbackError: unknown) => {
+      req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error",
+        providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
+        providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });
+      throw fallbackError;
+    });
+    req.onAttempt?.({ provider: fallback.name, model: generated.model ?? fallback.name,
+      providerRequestId: generated.providerRequestId, providerFinalStatus: generated.providerFinalStatus ?? "unknown",
+      estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
     return {
-      ...(await executeImage(fallback, req)),
+      ...generated,
       latencyMs: Date.now() - startedAt,
       fallbackFrom: provider.name,
     };

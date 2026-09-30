@@ -42,13 +42,18 @@ describe("LLM provider fallthrough", () => {
 
   it("falls through to the next provider when one errors", async () => {
     mockFetchByHost({
-      "api.groq.com": () => httpError(500),
-      "openrouter.ai": () => ok("from openrouter"),
+      "api.groq.com": () => new Response("private error", { status: 500, headers: { "x-request-id": "groq-failed-123" } }),
+      "openrouter.ai": () => Response.json({ id: "openrouter-done-456", choices: [{ message: { content: "from openrouter" } }] }),
     });
     const { complete } = await import("@/lib/llm");
-    const res = await complete([{ role: "user", content: "hi" }]);
+    const attempts: unknown[] = [];
+    const res = await complete([{ role: "user", content: "hi" }], { onAttempt: (attempt) => attempts.push(attempt) });
     expect(res.provider).toBe("openrouter");
     expect(res.text).toBe("from openrouter");
+    expect(attempts).toMatchObject([
+      { provider: "groq", providerRequestId: "groq-failed-123", providerFinalStatus: "unknown", status: "error" },
+      { provider: "openrouter", providerRequestId: "openrouter-done-456", providerFinalStatus: "completed", status: "success" },
+    ]);
   });
 
   it("aggregates errors and throws when every provider/key fails", async () => {

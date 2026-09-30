@@ -14,10 +14,11 @@ function mockFetch(response: {
   status?: number;
   json?: unknown;
   text?: string;
+  headers?: HeadersInit;
 }) {
   global.fetch = vi.fn().mockImplementation(async () => new Response(
     response.json === undefined ? response.text ?? "" : JSON.stringify(response.json),
-    { status: response.status ?? (response.ok ? 200 : 500), headers: { "Content-Type": "application/json" } },
+    { status: response.status ?? (response.ok ? 200 : 500), headers: { "Content-Type": "application/json", ...response.headers } },
   )) as unknown as typeof fetch;
 }
 
@@ -128,10 +129,12 @@ describe.each(["groq", "google"] as const)("%s SDK compatibility", (name) => {
   const messages = [{ role: "user" as const, content: "Return a value" }];
   const reply = (text: string, finish = "stop") => name === "google"
     ? {
+      responseId: "google-generation-123",
       candidates: [{ content: { parts: [{ text }] }, finishReason: finish === "length" ? "MAX_TOKENS" : "STOP" }],
       usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 2, thoughtsTokenCount: 7, totalTokenCount: 17 },
     }
     : {
+      id: "openai-request-123",
       choices: [{ message: { content: text }, finish_reason: finish }],
       usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 17 },
     };
@@ -163,6 +166,7 @@ describe.each(["groq", "google"] as const)("%s SDK compatibility", (name) => {
       ]);
     }
     expect(result.usage).toEqual({ promptTokens: 8, completionTokens: 2, totalTokens: 17 });
+    expect(result.providerRequestId).toBe(name === "google" ? "google-generation-123" : "openai-request-123");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -192,9 +196,9 @@ describe.each(["groq", "google"] as const)("%s SDK compatibility", (name) => {
   );
 
   it.each([401, 403, 429, 503])("does not retry HTTP %s or expose the provider body", async (status) => {
-    mockFetch({ ok: false, status, text: `private response ${context.apiKey}` });
+    mockFetch({ ok: false, status, text: `private response ${context.apiKey}`, headers: { "x-request-id": "provider-error-123" } });
     const failure = await provider.complete(messages, {}, context).catch((error: unknown) => error);
-    expect(failure).toMatchObject({ status, retryable: !(name === "google" && status === 401) });
+    expect(failure).toMatchObject({ status, retryable: !(name === "google" && status === 401), providerRequestId: "provider-error-123", providerFinalStatus: "unknown" });
     expect(String(failure)).not.toContain(context.apiKey);
     expect(String(failure)).not.toContain("private response");
     expect(fetch).toHaveBeenCalledTimes(1);
