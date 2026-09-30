@@ -456,6 +456,8 @@ connectionGeneration:<nonnegative-safe-integer>}`. The digest is derived from
 current assets/budget and exact Meta campaign/ad-set/ad delivery snapshot from
 `GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Legacy or
 incomplete stored child identity requires reconciliation; the route does not guess.
+GET and PATCH verify business ownership before reporting binding or child
+reconciliation details.
 
 Activation checks projected weekly cap (422 if exceeded; 503 if unreadable),
 stored binding/generation, live capability, positive budget/INR currency, digest,
@@ -475,6 +477,8 @@ Campaign sync accepts optional query `after` of 1-2000 characters. Returns
 and budgets, and imports only ACTIVE/PAUSED status. Local unsupported/unmatched
 records remain unchanged. No remote-deletion pruning occurs. Concurrent insert
 failure is not a successful import; partial writes before an error can exist.
+Failed Meta binding reads return a generic 502 before local imports; only a
+confirmed unmatched binding counts as skipped.
 
 Refresh returns `{result,summary,insights,autoPaused,protectionConfirmed}`. **This
 can invoke an LLM summary and pause live campaigns through spend enforcement**; it
