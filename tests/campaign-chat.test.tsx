@@ -24,6 +24,45 @@ function mockPlan(...responses: unknown[]) {
 }
 
 describe("<CampaignChat>", () => {
+  it("offers an editor handoff and preserves answered context after reload", async () => {
+    const fetchMock = mockPlan({ ready: false, questions: [
+      { id: "location", topic: "location", question: "Which city?", type: "text" },
+    ] }, { ready: false, questions: [], handoff: { reason: "no_progress", message: "Your answers are saved. Continue in the editor." } });
+    const onEditManually = vi.fn();
+    const first = render(<CampaignChat businessId="biz-1" onEditManually={onEditManually} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Solar enquiries" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Which city?" }), { target: { value: "Hisar, 20 km" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
+    await screen.findByRole("button", { name: "Continue in editor" });
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send answers" })).toBeNull();
+    first.unmount();
+    render(<CampaignChat businessId="biz-1" onEditManually={onEditManually} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue in editor" }));
+    expect(onEditManually).toHaveBeenCalledWith("Solar enquiries\nWhich city?: Hisar, 20 km");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves question identity and explicitly records a skipped question", async () => {
+    const fetchMock = mockPlan({ ready: false, questions: [
+      { id: "location", topic: "location", question: "Which city?", type: "text" },
+      { id: "exclusions", topic: "exclusions", question: "Any areas to exclude?", type: "text" },
+    ] }, { ready: true, draft: { draftId: "saved-draft" } });
+    render(<CampaignChat businessId="biz-1" />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Solar enquiries" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await screen.findByText("Which city?");
+    const inputs = screen.getAllByRole("textbox");
+    fireEvent.change(inputs[0], { target: { value: "Hisar" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
+    await screen.findByRole("button", { name: "Plan another" });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers).toEqual([
+      { questionId: "location", topic: "location", question: "Which city?", answer: "Hisar", disposition: "answered" },
+      { questionId: "exclusions", topic: "exclusions", question: "Any areas to exclude?", answer: "", disposition: "deferred" },
+    ]);
+  });
+
   it("aborts on unmount and does not deliver a late result", async () => {
     let complete!: (response: unknown) => void;
     const fetchMock = vi.fn().mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
@@ -38,7 +77,7 @@ describe("<CampaignChat>", () => {
     expect(onDraftReady).not.toHaveBeenCalled();
   });
 
-  it.each([{}, { ready: true }])("offers recovery for an incomplete planner response %j", async (response) => {
+  it.each([{}, { ready: true }, { ready: false, questions: [] }])("offers recovery for an incomplete planner response %j", async (response) => {
     mockPlan(response);
     const onDraftReady = vi.fn();
     render(<CampaignChat businessId="biz-1" onDraftReady={onDraftReady} />);
@@ -85,7 +124,7 @@ describe("<CampaignChat>", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
     expect(fetchMock.mock.calls[2][1].body).toBe(fetchMock.mock.calls[1][1].body);
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body).answers).toEqual([{ question: "Which city?", answer: "Jaipur" }]);
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).answers).toEqual([{ questionId: "area", question: "Which city?", answer: "Jaipur", disposition: "answered" }]);
   });
 
   it("disables Start until a goal is typed", () => {

@@ -28,6 +28,76 @@ cancellation. Accepted brief length is at most 2000 characters. Follow-up
 recommendations are optional; the user reviews the next brief before generating.
 An interview response does not itself produce paid image variants.
 
+### Campaign Interview
+
+The campaign planner is a separate workflow from the creative interviewer above.
+The September 29 source change uses `campaign-planner-v5` and keeps structured
+`questionId`, `topic`, answer and `answered`/`deferred` disposition across turns.
+Brand context and explicitly selected campaign settings are supplied with history.
+Known single service areas/offers and manual settings do not need confirmation;
+exclusions default empty unless requested, and the planner recommends creatives
+and technical targeting rather than asking the owner for API IDs or ad jargon.
+Goal interpretation remains model-driven, including natural-language city/radius
+requests; a prompt example is not a guarantee of correct interpretation.
+
+Questions have a fixed topic enum. The server filters previously answered/deferred
+topics, repeated IDs and normalized question text, deduplicates topics within the
+response, and returns at most two useful questions per turn. After six supplied
+decisions it permits one final plan attempt but no more questions. Missing or
+repeated output gets at most one correction call under the same 45-second deadline;
+transport/provider failures are not retried by this progress check. Each completed
+attempt retains usage and validity metadata. Existing provider routing has its own
+bounded fallback behavior; two planner attempts are not a guarantee of only two
+physical provider requests.
+
+A deferred budget/compliance decision without an explicit editor value stops for
+manual completion; skipping is not permission to invent spending or compliance.
+No-progress and question-limit responses contain an editor `handoff`, not another
+question loop or fabricated plan. Guided UI persists submitted answers and the
+handoff per business/destination in session storage, and offers the existing
+campaign editor with a goal/answer summary capped at 2000 characters. The full
+submitted transcript remains in that browser session; this is not a durable,
+cross-device checkpoint. Transport failures retain the exact pending request for
+explicit retry. A lost successful draft response still requires checking Saved
+drafts before retry; this change does not add server-side planner idempotency.
+
+Audience-only recommendations preserve an explicitly selected radius as well as
+manual location/age settings. Both callers display the no-progress handoff without
+creating a campaign. Preflight, approved-creative checks, ownership, special-category
+restrictions, paused creation and explicit activation remain authoritative.
+The `campaign.interview` workflow event records fixed no-progress/limit codes,
+not conversation text. These are source claims, not deployed conversation results.
+
+### Orchestration Reuse
+
+Keep the existing pinned AI SDK Core (`ai` 7.0.116, Apache-2.0) and Zod structured
+output behind the provider facade. It already owns model transport, schema output
+and provider compatibility; the interview state/progress rules are AdBrain domain
+logic. No new framework, dependency upgrade or paid provider is needed for this fix.
+
+This follows [Anthropic's simple workflow guidance](https://www.anthropic.com/engineering/building-effective-agents)
+and [AI SDK structured workflows/agent guidance](https://ai-sdk.dev/docs/agents/overview):
+explicit state, bounded steps and a clear handoff instead of an unconstrained loop.
+The [loop-control guide](https://ai-sdk.dev/docs/agents/loop-control) distinguishes
+tool-loop agents from manually controlled structured workflows. Use ToolLoopAgent
+when a real tool-selection loop becomes necessary, preserving current tenant,
+usage, cancellation and provider-selection controls.
+
+[LangGraph](https://docs.langchain.com/oss/javascript/langgraph/overview) is worth
+considering for durable multi-session workflows, not as an automatic question-quality
+fix. Its [interrupts](https://docs.langchain.com/oss/javascript/langgraph/interrupts)
+need a durable checkpointer, tenant-scoped thread identity and replay-safe effects;
+adopting it would require persistence integration and migration, not merely a prompt
+swap. A general coding harness is not a drop-in campaign runtime. Do not grant shell,
+filesystem or unrestricted provider tools to solve a bounded interview problem.
+
+Focused regressions live in the existing planner, campaign-chat and planner-route
+suites, with one manual-audience handoff case. They reproduce lost IDs/deferrals,
+paraphrased topic repetition, known-fact reuse, correction usage, cancellation,
+question limits, reload recovery and radius preservation. Synthetic tests establish
+these contracts, not a live-model quality score. Use real authorized conversation
+feedback to assess unnecessary questions, abandonment and time to a useful draft.
+
 ## Variant Generation
 
 1. Bound the context: brief 2000 characters, selected brand strings 1000 each,
