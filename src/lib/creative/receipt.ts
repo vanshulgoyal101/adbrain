@@ -13,8 +13,9 @@ export function savedGenerationSettings(value: unknown) {
         .enum(["portrait", "square", "story", "landscape"])
         .default("portrait"),
       language: z.string().nullable().optional(),
+      sourceFacts: z.array(z.string().max(2000)).max(12).default([]),
     })
-    .catch({ format: "portrait" })
+    .catch({ format: "portrait", sourceFacts: [] })
     .parse(value);
 }
 
@@ -22,6 +23,7 @@ export function generationReceipt(
   variant: GeneratedVariant,
   language?: string,
   referenceImages: string[] = [],
+  sourceFacts: string[] = [],
 ): Json {
   return JSON.parse(
     JSON.stringify({
@@ -31,6 +33,7 @@ export function generationReceipt(
       format: variant.design.format,
       language: language ?? null,
       referenceImages,
+      sourceFacts,
       composition: getEnv().AD_DESIGN_OVERLAY ? "overlay" : "image-only",
       textModels: variant.llmUsage.map(({ provider, model }) => ({
         provider,

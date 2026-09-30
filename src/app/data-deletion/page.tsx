@@ -28,7 +28,7 @@ export default function DataDeletionPage() {
           description: DESCRIPTION,
         })}
       />
-      <LegalPage title={TITLE} updated="22 August 2026">
+      <LegalPage title={TITLE} updated="30 September 2026">
         <p>
           If you want AdBrain to delete your data, email us at {" "}
           <a href="mailto:privacy@adbrain.vanshul.com">privacy@adbrain.vanshul.com</a>
@@ -47,6 +47,7 @@ export default function DataDeletionPage() {
           <li>Brand profile details and uploaded brand assets stored in AdBrain.</li>
           <li>Campaign drafts, generated creatives, reports, and lead copies stored in AdBrain.</li>
           <li>Stored Meta connection credentials and related sync metadata.</li>
+          <li>Short remembered preferences saved for your account and business.</li>
         </ul>
 
         <h2>What may remain</h2>

@@ -12,6 +12,7 @@ import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
+import { preferenceContext } from "@/lib/preferences/store";
 import {
   getActiveInstructionsText,
   getApprovedCreatives,
@@ -114,12 +115,14 @@ async function handlePOST(req: Request) {
       if (used >= limit) return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
     }
     const instructions = await getActiveInstructionsText(business.id);
+    const preferences = await preferenceContext(business.id, "campaign", `${goal}\n${answers ?? ""}`);
     const performance = await getPerformanceContext(business.id);
     const requestId = currentRequestId();
     result = await runPlanner({
       destination,
       brand: business,
       instructions,
+      preferences,
       performance,
       approved: approved.map((c) => ({
         id: c.id,

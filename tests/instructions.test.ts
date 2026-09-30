@@ -16,13 +16,13 @@ describe("instruction injection", () => {
       AD_ANGLES[0],
       "Always mention 25-year warranty",
     );
-    expect(msgs[1].content).toContain("CUSTOMER INSTRUCTIONS");
+    expect(msgs[1].content).toContain("BRAND DOCUMENTS");
     expect(msgs[1].content).toContain("25-year warranty");
   });
 
   it("omits the instructions block when none provided", () => {
     const msgs = buildCopyMessages(brand, "brief", AD_ANGLES[0]);
-    expect(msgs[1].content).not.toContain("CUSTOMER INSTRUCTIONS");
+    expect(msgs[1].content).not.toContain("BRAND DOCUMENTS");
   });
 
   it("includes instructions in the image prompt", () => {

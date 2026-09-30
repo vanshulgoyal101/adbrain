@@ -171,6 +171,56 @@ describe("generateVariants", () => {
     expect(generateImage.mock.calls[0][0].prompt).toContain(concept.visual.direction);
   });
 
+  it("carries bounded advisory style through concept and image generation", async () => {
+    const { generateVariants, generateOneVariant } = await import("@/lib/creative/generate");
+    const advisoryPreferences = `PAST DECLARED PREFERENCES: tone: warm ${"x".repeat(2000)}`;
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const [variant] = await generateVariants({ brand, brief: "Use clear copy", count: 1, advisoryPreferences });
+    const context = JSON.parse(complete.mock.calls[0][0][1].content);
+    expect(context.advisoryPreferences).toContain("tone: warm");
+    expect(context.advisoryPreferences.length).toBeLessThanOrEqual(1200);
+    expect(generateImage.mock.calls[0][0].prompt).toContain("tone: warm");
+    expect(variant.imagePrompt).not.toContain("tone: warm");
+    expect(variant.imagePrompt).toContain("Image prompt omitted");
+    const { generationReceipt } = await import("@/lib/creative/receipt");
+    expect(JSON.stringify(generationReceipt(variant))).not.toContain("tone: warm");
+    vi.clearAllMocks();
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const regenerated = await generateOneVariant(brand, "Use clear copy", (await import("@/lib/templates/ads")).AD_ANGLES[0], undefined, undefined, undefined, undefined, undefined, [], advisoryPreferences);
+    expect(JSON.parse(complete.mock.calls[0][0][1].content).advisoryPreferences).toContain("tone: warm");
+    expect(generateImage.mock.calls[0][0].prompt).toContain("tone: warm");
+    expect(JSON.stringify(generationReceipt(regenerated))).not.toContain("tone: warm");
+  });
+
+  it("omits the provider image prompt when the concept echoes an advisory style", async () => {
+    const advisoryPhrase = "verdant-ochre palette";
+    const advisoryPreferences = `PAST DECLARED PREFERENCES: visual_style: ${advisoryPhrase}`;
+    complete.mockResolvedValueOnce(completion({
+      ...concept,
+      visual: { ...concept.visual, direction: `A rooftop array on a home with a ${advisoryPhrase}, leaving open space above.` },
+    }));
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const [variant] = await generateVariants({ brand, brief: "Show the rooftop", count: 1, advisoryPreferences });
+    expect(generateImage.mock.calls[0][0].prompt).toContain(advisoryPhrase);
+    expect(variant.concept.visual.direction).toContain(advisoryPhrase);
+    expect(variant.imagePrompt).not.toContain(advisoryPhrase);
+    expect(variant.imagePrompt).toContain("Image prompt omitted");
+  });
+
+  it("requires explicit user facts to ground claims in a model-derived brief", async () => {
+    const claim = { ...concept, headline: "Award-winning installers", primary_text: "Meet our award-winning installers.", sourceQuotes: ["award-winning installers"] };
+    complete.mockResolvedValue(completion(claim));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const onFailure = vi.fn();
+    expect(await generateVariants({ brand, brief: "Feature our award-winning installers", count: 1, onFailure })).toEqual([]);
+    expect(onFailure.mock.calls[0][1].issues).toEqual(expect.arrayContaining([expect.stringContaining("sourceQuotes:")]));
+    expect(generateImage).not.toHaveBeenCalled();
+    const variants = await generateVariants({ brand, brief: "Feature our award-winning installers", count: 1, sourceFacts: ["Our award-winning installers"] });
+    expect(variants).toHaveLength(1);
+    expect(JSON.parse(complete.mock.calls.at(-1)![0][1].content).sourceFacts).toEqual(["Our award-winning installers"]);
+  });
+
   it("never spends on images after two invalid concepts", async () => {
     const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
     complete.mockResolvedValue({ ...completion({ ...concept, headline: 12 }), usage });

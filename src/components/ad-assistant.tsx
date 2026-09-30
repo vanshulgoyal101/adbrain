@@ -250,7 +250,12 @@ export function AdAssistant({ business }: { business: Business }) {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: business.id, brief, count: 3, language, generationId: newGenerationId }),
+        body: JSON.stringify({
+          businessId: business.id, brief, count: 3, language, generationId: newGenerationId,
+          sourceFacts: [goal.trim().slice(0, 500), ...answers
+            .filter((answer) => !(answer.options ?? []).includes(answer.answer) && answer.answer !== AI_ANSWER && answer.answer !== RANDOM_ANSWER)
+            .map((answer) => answer.answer.trim().slice(0, 500))].filter(Boolean).slice(0, 12),
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         creatives?: Creative[];

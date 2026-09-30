@@ -94,6 +94,8 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
+| GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
+| POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
@@ -235,6 +237,7 @@ Example interview input for a synthetic business:
 | `count` | Integer 1-6, default 3 |
 | `generationId` | Optional UUID; use a client-known UUID before the first POST |
 | `language` | Optional string normalized through language helpers |
+| `sourceFacts` | Optional array of up to 12 explicit user-authored facts, each up to 2000 characters (6000 combined); never copy an AI-generated brief or advisory preferences here |
 | `format` | `portrait` (default), `square`, `story`, `landscape` |
 
 Example paid-generation input, submitted only after brief review and authorization:
@@ -243,6 +246,7 @@ Example paid-generation input, submitted only after brief review and authorizati
 {
   "businessId": "11111111-1111-4111-8111-111111111111",
   "brief": "Invite Jaipur homeowners to enquire about our saved rooftop survey offer. Use only verified brand facts and contact details.",
+  "sourceFacts": ["We offer rooftop surveys in Jaipur."],
   "count": 3,
   "generationId": "22222222-2222-4222-8222-222222222222",
   "language": "en",
@@ -257,11 +261,18 @@ No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
 429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
-In the #54 source candidate (not yet production), POST atomically claims the
+POST atomically claims the
 generation UUID and normalized request inputs before paid work. Repeating the
 same ID returns 202 with `{variantGroup, status, creatives: [], count: 0,
 expectedCount}` and never starts another producer. A changed brief, count,
-language or format for that ID returns 409; another business or owner gets 404.
+language, format or nonempty `sourceFacts` for that ID returns 409; another business
+or owner gets 404. Omitting `sourceFacts` keeps the prior hash format for existing
+requests. The validator uses Brand facts, saved instructions and `sourceFacts` as
+quote evidence, not the potentially model-derived `brief`. Studio submits its
+directly authored brief as user evidence; Create submits the original goal and
+free-text answers, excluding model-suggested options and the generated brief.
+The accepted facts are stored in the generation receipt for regeneration. Existing
+creatives without that field regenerate with no separate user-fact evidence.
 The route reserves monthly quota for text and images, counts recorded tokens,
 and retains an allowance of 10,000 quota units per completed image. This is
 **not** measured image billing or a USD spend limit: image usage may lack a known
@@ -489,6 +500,24 @@ Spend settings are strict and complete:
 Cap is null or a positive integer <= 2147483647; threshold integer 1-100; autoPause
 boolean. Missing fields, zero, and fractional caps return 422. Only null means
 unlimited. Success `{ok:true}` does not assert that Meta account limits changed.
+
+Preference reads require `GET /api/preferences?businessId=<owned UUID>`. The
+uncached response is `{enabled,epoch,notes}`; each note has `category`, `value`,
+`version` and `updated_at`. Notes stay visible to their owner while paused but
+are not included in creative or campaign-planning prompts. An unconfigured
+business returns `enabled:false`, `epoch:0`, and no notes.
+
+Mutations use `POST /api/preferences` with a JSON object containing `businessId`,
+`operation` (`enable`, `pause`, `save`, `forget`, `clear`), and `expectedEpoch` from
+the latest read. `save` requires a category and 1-160 character value; `forget`
+requires a category. The fixed categories are `copy_length`, `tone`, `language`,
+`visual_style`, `layout_density`, `creative_dislikes`, and `workflow`. One current
+value per category is retained. Successful mutations return the updated state.
+The database rejects sensitive/financial content and unauthorized businesses;
+failed content is 400, lost ownership is 403, a stale epoch is 409, and database
+or reload failures are 503. A failed reload after a committed mutation may require
+a refresh to determine what was saved; no best-effort memory write is reported
+as confirmed.
 
 Geo search trims `q`, truncates to 100 characters, and returns an empty array below
 two characters. Up to eight results have `key,name,type,region,countryCode`.

@@ -22,6 +22,12 @@ optional reference brief form the context. The interviewer can finish with zero
 questions and may ask at most three new decisions. Field/ID/history checks reject
 repeated decisions and recycled options. Structured output and commercial-claim
 checks prevent some unsupported terms, not all misleading claims in every language.
+When declared preferences are enabled, a bounded advisory note may guide style,
+but wording copied only from that note cannot establish a factual brief. The
+interview checks positive support in current owner answers or factual Brand fields;
+negated requests, Brand voice and model-derived reference briefs are not factual
+support. This check cannot recognize every paraphrase, so generation must also
+keep the generated brief separate from verified claim evidence.
 
 There is one repair opportunity, sharing a 45-second deadline and request
 cancellation. Accepted brief length is at most 2000 characters. Follow-up
@@ -101,7 +107,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
 ## Variant Generation
 
 1. Bound the context: brief 2000 characters, selected brand strings 1000 each,
-   lists at most ten items, active instruction text at most 3000 characters.
+    lists at most ten items, active instruction text at most 3000 characters.
+    When enabled, read up to five relevant declared preferences for this owner
+    and business; pass at most 1200 advisory characters separately to concept
+    and image prompts. Current brief/instructions and Brand facts take priority.
 2. Choose up to six configured marketing angles; default batch count is three.
 3. For each angle, request a structured concept with caching disabled. First
    attempt temperature is 0.8; one repair attempt uses 0.4. Max output and
@@ -120,6 +129,24 @@ The batch is not automatically cancelled merely because a browser stopped waitin
 retains preceding text usage. Provider errors are returned as safe user-facing
 failures, not raw prompt/token traces. No model validation proves the image
 accurately depicts a real product or that an ad claim is legally supportable.
+Preferences are style guidance, not evidence for `sourceQuotes` or commercial
+claims and not permission to spend. The brief is direction, not quote evidence:
+Create passes only the original user goal and free-text answers as explicit
+`sourceFacts`; model-suggested options and the interview brief are excluded.
+Studio passes its directly authored brief as evidence. Validated user facts are
+saved in the generation receipt for regeneration and fenced by the generation ID;
+older receipts without facts use Brand fields and saved instructions only.
+Review or edits to a generated brief alone do not certify its claims; add new
+facts to the goal/answers or write a direct Studio brief instead. Paused, forgotten, fresh-direction and
+unavailable memory supply no advisory text. A read failure omits notes without
+changing admission, replay, usage accounting or the unresolved-intent hold.
+When notes are used for an image, the saved image-prompt receipt contains only
+an omission marker, not a provider prompt or a prompt reconstructed from the
+concept. The validated concept, copy and finished image can still echo advisory
+style; no deterministic filter can distinguish identical user art direction from
+model-echoed memory. An in-flight paid request cannot retract context already
+sent to a provider after a later forget; older creative output may still reflect
+the guidance.
 
 ### Product References
 

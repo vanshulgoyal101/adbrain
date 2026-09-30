@@ -104,6 +104,15 @@ describe("planner response validation", () => {
 });
 
 describe("campaign planner prompt", () => {
+  it("keeps current geography and spend above advisory memory without repeating example taglines", () => {
+    const messages = buildPlannerMessages({ brand: { name: "Solaride", locations: ["Hisar"] }, approved: [], leadForms: [],
+      goal: "Chandigarh, not Hisar; ask before choosing a budget", preferences: "PAST DECLARED PREFERENCES: workflow: \"Usually review drafts\"",
+      instructions: "Example tagline: Shine ahead. Must include a current legal notice." });
+    expect(messages[0].content).toContain("latest explicit answers first, then USER GOAL");
+    expect(messages[1].content).toContain("USER GOAL: Chandigarh, not Hisar");
+    expect(messages[1].content).toContain("plain examples or old taglines are reference only");
+    expect(messages[1].content).toContain("respect explicit must-include and legal requirements");
+  });
   it("preserves WhatsApp and needs no lead form for a guided draft", () => {
     const messages = buildPlannerMessages({ destination: "whatsapp", brand: { name: "Solaride" }, approved: [], leadForms: [], goal: "WhatsApp enquiries" });
     expect(messages[0].content).toContain("selected destination: whatsapp");

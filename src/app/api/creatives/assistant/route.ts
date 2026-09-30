@@ -12,6 +12,7 @@ import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from 
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
+import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -51,8 +52,9 @@ async function handlePOST(req: Request) {
       if (used >= limit) return apiError("This business has reached its monthly AI generation limit.", 429);
     }
     const instructions = await getActiveInstructionsText(businessId);
+    const preferences = await preferenceContext(businessId, "creative", `${goal}\n${answers.map(answer => answer.answer).join("\n")}`);
     const requestId = currentRequestId();
-    const result = await runInterview({ brand: business, instructions, goal, answers, recentGoals, referenceBrief }, {
+    const result = await runInterview({ brand: business, instructions, preferences, goal, answers, recentGoals, referenceBrief }, {
       signal: req.signal,
       onAttempt: async (completion, attempt, valid) => {
         if (!completion.usage) return;
