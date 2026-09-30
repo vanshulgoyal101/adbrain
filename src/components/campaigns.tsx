@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useReducer, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -83,6 +83,15 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 const LEAD_FORMS_FRESH_MS = 60_000;
+const CAMPAIGNS_FRESH_MS = 15 * 60_000;
+
+function readCampaignSyncTime(key: string): number {
+  try { return Number(localStorage.getItem(key)); } catch { return 0; }
+}
+
+function saveCampaignSyncTime(key: string, completedAt: number) {
+  try { localStorage.setItem(key, String(completedAt)); } catch { return; }
+}
 
 type PrepareReviewState =
   | { status: "checking"; draft: DraftDTO; connection: ConnectionDTO }
@@ -226,6 +235,7 @@ function BusinessCampaigns({
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const syncStorageKey = `campaign-sync:${scope}:${adAccountId}`;
   const syncCursorRef = useRef<string | null>(null);
   const syncSkippedRef = useRef(0);
   const selectedLeadForm = availableForms.find((form) => form.id === leadFormId);
@@ -481,7 +491,11 @@ function BusinessCampaigns({
         replaceCampaignPage(data.campaigns, data.pageCursor ?? null);
         syncSkippedRef.current = (cursor ? syncSkippedRef.current : 0) + (data.skipped ?? 0);
         syncCursorRef.current = data.nextCursor ?? null;
-        if (!data.nextCursor) setLastSynced(new Date());
+        if (!data.nextCursor) {
+          const completedAt = new Date();
+          setLastSynced(completedAt);
+          saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
+        }
         const skippedNotice = syncSkippedRef.current
           ? ` ${syncSkippedRef.current} campaign(s) could not be imported and were left unchanged.` : "";
         setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
@@ -494,6 +508,16 @@ function BusinessCampaigns({
       setSyncing(false);
     }
   }
+
+  const syncStaleCampaigns = useEffectEvent(() => { void syncFromMeta(); });
+  useEffect(() => {
+    if (!metaReady) return;
+    const completedAt = readCampaignSyncTime(syncStorageKey);
+    const age = Date.now() - completedAt;
+    if (completedAt > 0 && age >= 0 && age < CAMPAIGNS_FRESH_MS) return;
+    const timer = window.setTimeout(syncStaleCampaigns, 0);
+    return () => window.clearTimeout(timer);
+  }, [metaReady, syncStorageKey]);
 
   function toggle(id: string) {
     if (!unresolvedRecovery()) setPrepareReview(null);
