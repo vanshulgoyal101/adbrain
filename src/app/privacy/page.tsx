@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
       <JsonLd
         data={contentPageGraph({ path: "/privacy", name: TITLE, description: DESCRIPTION })}
       />
-      <LegalPage title={TITLE} updated="28 September 2026">
+      <LegalPage title={TITLE} updated="30 September 2026">
         <p>
           AdBrain (&ldquo;AdBrain&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) helps businesses create ad
           creatives and run lead-generation campaigns on Meta (Facebook and
@@ -39,6 +39,12 @@ export default function PrivacyPolicyPage() {
             Brand Brain — name, description, industry, brand voice, colours,
             offers, service areas, and any custom instructions or assets you
             upload.
+          </li>
+          <li>
+            <strong>Remembered preferences.</strong> If you opt in under Settings,
+            we store the short creative or workflow preferences you explicitly
+            save for that business and account, with their category and update date.
+            We do not automatically learn preferences from clicks or old campaigns.
           </li>
           <li>
             <strong>Campaign &amp; lead data.</strong> When you connect a Meta ad
@@ -63,6 +69,7 @@ export default function PrivacyPolicyPage() {
         <h2>How we use your data</h2>
         <ul>
           <li>To generate ad creatives and campaign plans on your behalf.</li>
+          <li>To consider your saved preferences when relevant to a new brief; the current request can override them.</li>
           <li>To create and manage your Meta campaigns and report on results.</li>
           <li>To collect and display the leads your campaigns generate.</li>
           <li>To operate, secure, and improve the service.</li>
@@ -83,8 +90,10 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>AI providers</strong> — brand details and briefs are sent to
             large-language-model and image-generation providers to produce
-            creatives. We do not sell your data, and we do not use it to train
-            third-party models beyond generating your requested output.
+            creatives. If you enable remembered preferences, selected relevant
+            notes may also be sent as advisory context for that request. We do
+            not sell your data, and we do not use it to train third-party models
+            beyond generating your requested output.
           </li>
         </ul>
 
@@ -94,6 +103,14 @@ export default function PrivacyPolicyPage() {
           creatives, campaigns, and leads at any time from within the app.
           Deleting your account removes your associated data, subject to any
           records we must keep for legal or security reasons.
+        </p>
+        <p>
+          Preferences are off until you enable them. You can pause their use,
+          edit or forget individual notes, clear all notes, or export the saved
+          notes from Settings. Forgotten notes are removed from future preference
+          retrieval; we do not backfill preferences from past activity when you
+          enable them again. Business or account deletion also removes these
+          records through database cascades.
         </p>
 
         <h2>Security</h2>

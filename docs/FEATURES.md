@@ -22,7 +22,7 @@ ID are different identifiers. Never infer one from another.
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report | Live Meta writes require verified binding and capability |
 | `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
-| `/settings` | Meta connection and spend guardrails | Disconnect does not pause running ads |
+| `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
 
@@ -344,6 +344,26 @@ observation or failed pause remains unconfirmed even when some pauses succeed.
 Existing reporting snapshots are not audited customer cost or tax evidence.
 These are application guardrails, not Meta account spending limits or guaranteed
 protection from overspend between checks or during outages. Use provider-side limits.
+
+## Declared Preferences
+
+After the additive [declared-preferences migration](../db/migrations/20260930_declared_preferences.sql)
+is applied, Settings offers an optional per-owner, per-business preference list.
+Enable it to remember one short note per category, then edit, forget, pause or
+clear the notes. The same Settings area shows notes while paused and can export
+the saved notes as JSON. Pausing excludes them from future interviews/planning;
+it does not erase them. Re-enabling does not reread old conversations or campaigns.
+
+Creative interviews and campaign planning receive at most five relevant advisory
+notes (up to 1000 characters of serialized notes) alongside the current request.
+"Ignore preferences" and "fresh direction" omit them for that request. Notes
+cannot authorize spend, justify a commercial claim, override an explicit current
+brief, or turn an old tagline into required copy. Explicit Brand and legal
+requirements remain separate. Generation/Create consumers are owned separately;
+do not assume this source change applies preferences to saved ad generation until
+those consumers adopt the same contract. The first slice has no inferred notes,
+background extraction, cross-business profile or historical backfill. A memory
+read outage omits advisory context; failed explicit writes surface an error.
 
 ## Public Surface and Operations
 

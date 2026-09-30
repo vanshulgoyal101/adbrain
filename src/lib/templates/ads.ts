@@ -184,21 +184,22 @@ export function buildCopyMessages(
         `You are an expert performance-marketing copywriter for a ${industry} ` +
         "running Meta (Facebook/Instagram) lead ads in India. You write tight, " +
         "high-converting, on-brand ad copy. You never invent facts, prices, or " +
-        "guarantees that were not provided. Customer instructions, when present, " +
-        "take priority over defaults. Output ONLY valid JSON.",
+        "guarantees that were not provided by verified current Brand facts or the current brief. " +
+        "Respect explicit Brand requirements, but treat old examples as inspiration, not copy to repeat. " +
+        "The current request overrides older non-regulatory creative defaults. Output ONLY valid JSON.",
     },
     {
       role: "user",
       content: `BRAND BRAIN:
 ${brandSummary(brand)}
-${instructions ? `\nCUSTOMER INSTRUCTIONS (highest priority — follow exactly):\n${instructions.slice(0, 6000)}\n` : ""}
+${instructions ? `\nBRAND DOCUMENTS (follow explicit must-include and legal requirements; plain old examples are not mandatory):\n${instructions.slice(0, 6000)}\n` : ""}
 CAMPAIGN BRIEF: ${brief}
 
 ANGLE: ${angle.name} — ${angle.description}
 
 Write ONE ad in ${langs}. Match the brand voice. Requirements:
 - "headline": <= 40 characters, punchy, benefit-led.
-- "primary_text": 2–4 short lines, scannable, at most one emoji, ends with a soft nudge to enquire. Do not fabricate specific prices, discounts, or guarantees unless present in the brand brain, instructions, or brief.
+- "primary_text": 2–4 short lines, scannable, at most one emoji, ends with a soft nudge to enquire. Do not fabricate specific prices, discounts, or guarantees unless verified in current Brand facts or the current brief.
 - "cta": choose exactly one of: ${META_CTAS.join(", ")}.
 
 Return strict JSON: {"headline": string, "primary_text": string, "cta": string}`,
@@ -232,7 +233,7 @@ export function buildImagePrompt(
     `commercial photography, and a deliberate ${formatImageFraming(format)} framing. ` +
     `Avoid close-up portraits or headshots as the main subject; do not make a generic smiling-person image. ` +
     `Show the actual offering and its customer-visible context. If reference images are provided, preserve the real product, materials, proportions, and recognizable visual identity from them. ` +
-    `${instructions ? `Follow these brand instructions without adding unverified claims: ${instructions.slice(0, 500)}. ` : ""}` +
+    `${instructions ? `Respect explicit required Brand constraints; use examples only as inspiration, without adding unverified claims: ${instructions.slice(0, 500)}. ` : ""}` +
     `No text, no words, no logos, no watermarks, no UI, no collage, no split-screen, no artificial typography.`
   );
 }

@@ -89,6 +89,8 @@ and recovery limitations.
 | `public.businesses` | UUID, owner UUID, name, free-text vertical default `local business`; website/description/voice/audience; primary/secondary colors, font, logo URL; language/location/USP/offer arrays; phone/email/address; timestamps |
 | `public.brand_assets` | Business UUID, `type` = `logo`/`product_photo`/`past_ad`, URL, optional notes, creation time |
 | `public.ad_instructions` | Business UUID, title, Markdown content, active flag, timestamps; active files supply prompt context |
+| `public.preference_settings` | `(business_id,owner_id)` key, opt-in/paused state, monotonic epoch; cascade deletes on business or owner deletion |
+| `public.declared_preferences` | `(business_id,owner_id,category)` key, one 160-character declared note per category, version/update date; cascades with namespace deletion |
 
 Blank optional form strings become null; list fields split on newlines, not
 commas, preserving locations such as `Jaipur, Rajasthan`. Business name is required.
@@ -225,6 +227,7 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | RPC family | Purpose |
 | --- | --- |
 | `owns_business` | Current authenticated owner predicate |
+| `change_declared_preferences` | Owner-checked, namespace-locked opt-in/save/forget/clear/pause with monotonic epoch; only authenticated callers can execute and direct table writes are denied |
 | `meta_token_*` | Business-bound encrypted token insertion/read/delete |
 | `meta_attempt_*` | OAuth claim, discovery, revision, selection commit and failure transitions |
 | `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation |
@@ -274,6 +277,7 @@ alone is not a safe deployment plan.
 | [20260907_campaign_connect.sql](../db/migrations/20260907_campaign_connect.sql) | Requires connection schema; drafts, durable operations, campaign bindings and fences |
 | [20260916_trusted_usage_and_rate_limits.sql](../db/migrations/20260916_trusted_usage_and_rate_limits.sql) | Trusted usage privileges, quota aggregate, atomic shared limiter |
 | [20260918_product_events.sql](../db/migrations/20260918_product_events.sql) | Structured event table/retention; enable database logging only after application |
+| [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
 
 For each upgrade: inventory deployed objects and grants, review existing data,
 test fresh/repeated-upgrade/concurrency paths locally, prepare backup and code

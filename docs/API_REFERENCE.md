@@ -94,6 +94,8 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
+| GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
+| POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
@@ -489,6 +491,24 @@ Spend settings are strict and complete:
 Cap is null or a positive integer <= 2147483647; threshold integer 1-100; autoPause
 boolean. Missing fields, zero, and fractional caps return 422. Only null means
 unlimited. Success `{ok:true}` does not assert that Meta account limits changed.
+
+Preference reads require `GET /api/preferences?businessId=<owned UUID>`. The
+uncached response is `{enabled,epoch,notes}`; each note has `category`, `value`,
+`version` and `updated_at`. Notes stay visible to their owner while paused but
+are not included in creative or campaign-planning prompts. An unconfigured
+business returns `enabled:false`, `epoch:0`, and no notes.
+
+Mutations use `POST /api/preferences` with a JSON object containing `businessId`,
+`operation` (`enable`, `pause`, `save`, `forget`, `clear`), and `expectedEpoch` from
+the latest read. `save` requires a category and 1-160 character value; `forget`
+requires a category. The fixed categories are `copy_length`, `tone`, `language`,
+`visual_style`, `layout_density`, `creative_dislikes`, and `workflow`. One current
+value per category is retained. Successful mutations return the updated state.
+The database rejects sensitive/financial content and unauthorized businesses;
+failed content is 400, lost ownership is 403, a stale epoch is 409, and database
+or reload failures are 503. A failed reload after a committed mutation may require
+a refresh to determine what was saved; no best-effort memory write is reported
+as confirmed.
 
 Geo search trims `q`, truncates to 100 characters, and returns an empty array below
 two characters. Up to eight results have `key,name,type,region,countryCode`.
