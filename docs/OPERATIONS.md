@@ -37,9 +37,10 @@ Inspect durable evidence before retrying anything that can create objects or spe
 | Disconnect fails | Explicit business UUID, owner check, RPC/schema availability | Keep existing UI state until confirmed; disconnect is not an emergency pause |
 | Telemetry missing | Enable flags, applied migration, hosting logs, retention, request cap | Events are best effort; a missing event does not prove no action occurred |
 
-### Creative Generation Reconciliation (Candidate Only)
+### Creative Generation Reconciliation
 
-The proposed `creative_generation_reconcile` RPC is **not deployed**. Only an
+The `creative_generation_reconcile` RPC is installed in Production under migration
+checksum `99d1be625171c48dee4cbe7bec71d749169742a2a49b2c113dd1cd36c2f6f681`. Only an
 authorized service operator may call it, after identifying the exact owner,
 business and generation UUID and confirming all provider text/image attempts
 against per-generation provider evidence. A 502, absent ID, missing usage row,
@@ -56,7 +57,7 @@ also rejects later generation-linked usage or newly saved creatives; existing
 creative content may still be edited. It does not infer finality from local data
 or offer a customer-facing repair action.
 Pre-instrumentation intents, including the held September 29 #54 request, remain
-blocked. DevOps owns migration deployment as part of an approved release; an
+blocked. Verify the migration ledger and grants in any other environment; an
 operator must obtain external evidence for each eligible intent before calling
 the RPC. Evidence for the held September 29 request cannot make it eligible.
 

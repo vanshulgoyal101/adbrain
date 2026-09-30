@@ -217,8 +217,9 @@ starting after the client receives a 404. This is a conservative quota fence, **
 payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
 defines the client-visible recovery states.
 
-The new, undeployed [operator reconciliation migration](../db/migrations/20260930_creative_generation_reconcile.sql)
-adds a private one-row-per-intent audit and a service-role-only, owner/intent-scoped
+The [operator reconciliation migration](../db/migrations/20260930_creative_generation_reconcile.sql)
+is applied in Production at checksum `99d1be625171c48dee4cbe7bec71d749169742a2a49b2c113dd1cd36c2f6f681`.
+It adds a private one-row-per-intent audit and a service-role-only, owner/intent-scoped
 RPC. It fences older intents without generation-bound receipts, requires an
 operator evidence reference, explicit provider-verified token total, matching
 saved-creative outcome and current accounted/reserved counters, then atomically
@@ -250,7 +251,7 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
 | `creative_generation_admit/status/progress` | Deployed #54 service-only, owner-checked generation claim, recovery and quota holds |
-| `creative_generation_reconcile` | Undeployed candidate: service-only operator-attested settlement after external finality and token verification; legacy intents denied |
+| `creative_generation_reconcile` | Production service-only operator-attested settlement after external finality and token verification; legacy intents denied |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
 
