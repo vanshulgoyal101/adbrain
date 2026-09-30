@@ -340,6 +340,18 @@ describe("<Studio> approval", () => {
 });
 
 describe("<Studio> creative preview", () => {
+  it("uses the smaller versioned image only for review-board thumbnails", () => {
+    const original = "https://cdn.example/storage/v1/object/public/creatives/b1/group/originals-v1/ad.jpg";
+    render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
+
+    const boardImage = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    expect(boardImage)
+      .toHaveAttribute("src", "https://cdn.example/storage/v1/object/public/creatives/b1/group/thumbnails-v1/ad.webp");
+    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
+    fireEvent.error(boardImage!);
+    expect(boardImage).toHaveAttribute("src", original);
+  });
+
   it("prioritizes the selected image without eagerly fetching board thumbnails", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
 

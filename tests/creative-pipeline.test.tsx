@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMounted } from "@/lib/use-mounted";
 import { LLMError } from "@/lib/llm/types";
@@ -295,6 +296,46 @@ describe("persistCreativeImage", () => {
       "https://src.example/a.jpg",
     );
     expect(url).toBe("https://cdn.example/stored.jpg");
+  });
+
+  it("stores a smaller public thumbnail beside the original without changing export bytes", async () => {
+    const original = readFileSync("public/solar-example.jpg");
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const client = { storage: { from: () => ({ upload, getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.example/storage/v1/object/public/creatives/${path}` } }) }) } };
+    const { persistCreativeImageBytes } = await import("@/lib/creative/persist");
+    const url = await persistCreativeImageBytes(client as never, "b1", "grp", "value", original, "image/jpeg");
+
+    expect(url).toMatch(/\/creatives\/b1\/grp\/originals-v1\/value-.*\.jpg$/);
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[0][0]).toMatch(/\/thumbnails-v1\/value-.*\.webp$/);
+    expect(upload.mock.calls[0][1].length).toBeLessThan(original.length);
+    expect(upload.mock.calls[1][1]).toEqual(original);
+  });
+
+  it("keeps the original available when a thumbnail upload is rejected", async () => {
+    const upload = vi.fn()
+      .mockResolvedValueOnce({ error: new Error("preview unavailable") })
+      .mockResolvedValueOnce({ error: null });
+    const client = { storage: { from: () => ({ upload, getPublicUrl: (path: string) => ({ data: { publicUrl: `https://cdn.example/storage/v1/object/public/creatives/${path}` } }) }) } };
+    const { persistCreativeImageBytes } = await import("@/lib/creative/persist");
+    const url = await persistCreativeImageBytes(client as never, "b1", "grp", "value", readFileSync("public/solar-example.jpg"), "image/jpeg");
+
+    expect(url).not.toContain("originals-v1");
+    expect(upload).toHaveBeenCalledTimes(2);
+    expect(upload.mock.calls[1][1]).toEqual(readFileSync("public/solar-example.jpg"));
+  });
+
+  it("removes the derivative when saving the original fails", async () => {
+    const upload = vi.fn()
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: new Error("original unavailable") });
+    const remove = vi.fn().mockResolvedValue({ error: null });
+    const client = { storage: { from: () => ({ upload, remove }) } };
+    const { persistCreativeImageBytes } = await import("@/lib/creative/persist");
+
+    await expect(persistCreativeImageBytes(client as never, "b1", "grp", "value", readFileSync("public/solar-example.jpg"), "image/jpeg"))
+      .rejects.toThrow("Could not store the generated image");
+    expect(remove).toHaveBeenCalledWith([upload.mock.calls[0][0]]);
   });
 
   it("composes from the available image without downloading the newly uploaded photo", async () => {
