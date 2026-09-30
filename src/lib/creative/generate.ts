@@ -294,7 +294,7 @@ async function renderVariant(
     cta: concept.cta,
     imageUrl: image.url,
     imagePrompt: input.advisoryPreferences
-      ? `${conceptImagePrompt(concept, { ...input, advisoryPreferences: undefined })}\n[Declared style preferences applied; values omitted from stored prompt.]`
+      ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
       : image.prompt,
     design: buildAdDesign({
       brand,

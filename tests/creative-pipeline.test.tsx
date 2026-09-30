@@ -181,7 +181,7 @@ describe("generateVariants", () => {
     expect(context.advisoryPreferences.length).toBeLessThanOrEqual(1200);
     expect(generateImage.mock.calls[0][0].prompt).toContain("tone: warm");
     expect(variant.imagePrompt).not.toContain("tone: warm");
-    expect(variant.imagePrompt).toContain("omitted from stored prompt");
+    expect(variant.imagePrompt).toContain("Image prompt omitted");
     const { generationReceipt } = await import("@/lib/creative/receipt");
     expect(JSON.stringify(generationReceipt(variant))).not.toContain("tone: warm");
     vi.clearAllMocks();
@@ -190,6 +190,22 @@ describe("generateVariants", () => {
     expect(JSON.parse(complete.mock.calls[0][0][1].content).advisoryPreferences).toContain("tone: warm");
     expect(generateImage.mock.calls[0][0].prompt).toContain("tone: warm");
     expect(JSON.stringify(generationReceipt(regenerated))).not.toContain("tone: warm");
+  });
+
+  it("omits the provider image prompt when the concept echoes an advisory style", async () => {
+    const advisoryPhrase = "verdant-ochre palette";
+    const advisoryPreferences = `PAST DECLARED PREFERENCES: visual_style: ${advisoryPhrase}`;
+    complete.mockResolvedValueOnce(completion({
+      ...concept,
+      visual: { ...concept.visual, direction: `A rooftop array on a home with a ${advisoryPhrase}, leaving open space above.` },
+    }));
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const [variant] = await generateVariants({ brand, brief: "Show the rooftop", count: 1, advisoryPreferences });
+    expect(generateImage.mock.calls[0][0].prompt).toContain(advisoryPhrase);
+    expect(variant.concept.visual.direction).toContain(advisoryPhrase);
+    expect(variant.imagePrompt).not.toContain(advisoryPhrase);
+    expect(variant.imagePrompt).toContain("Image prompt omitted");
   });
 
   it("requires explicit user facts to ground claims in a model-derived brief", async () => {

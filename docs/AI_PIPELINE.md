@@ -134,10 +134,13 @@ Review or edits to a generated brief alone do not certify its claims; add new
 facts to the goal/answers or write a direct Studio brief instead. Paused, forgotten, fresh-direction and
 unavailable memory supply no advisory text. A read failure omits notes without
 changing admission, replay, usage accounting or the unresolved-intent hold.
-When notes are used for an image, the saved image-prompt receipt records their
-application without the raw note values. An in-flight paid request cannot retract
-context already sent to a provider after a later forget; older creative output
-may still reflect the guidance.
+When notes are used for an image, the saved image-prompt receipt contains only
+an omission marker, not a provider prompt or a prompt reconstructed from the
+concept. The validated concept, copy and finished image can still echo advisory
+style; no deterministic filter can distinguish identical user art direction from
+model-echoed memory. An in-flight paid request cannot retract context already
+sent to a provider after a later forget; older creative output may still reflect
+the guidance.
 
 ### Product References
 

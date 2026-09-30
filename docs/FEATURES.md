@@ -368,10 +368,12 @@ are separately supplied as evidence, while suggested options and saved memories
 are excluded. A directly typed Studio brief can supply evidence. Changing explicit
 facts under the same generation ID is rejected; the accepted facts are retained
 for regeneration. This is source behavior after the migration is
-applied, not a claim of deployment or provider quality. Saved image-prompt receipts
-omit raw preference values, but forgetting cannot retract provider calls or erase
-older creative output influenced by a note. The first slice has no inferred notes,
-background extraction, cross-business profile or historical backfill. A memory
+applied, not a claim of deployment or provider quality. When preferences are
+applied, saved image-prompt receipts contain only an omission marker. The saved
+concept and creative may still reflect their style, and forgetting cannot retract
+provider calls or erase older creative output influenced by a note. The first
+slice has no inferred notes, background extraction, cross-business profile or
+historical backfill. A memory
 read outage omits advisory context; failed explicit writes surface an error.
 
 ## Public Surface and Operations
