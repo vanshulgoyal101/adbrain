@@ -237,6 +237,7 @@ Example interview input for a synthetic business:
 | `count` | Integer 1-6, default 3 |
 | `generationId` | Optional UUID; use a client-known UUID before the first POST |
 | `language` | Optional string normalized through language helpers |
+| `sourceFacts` | Optional array of up to 12 explicit user-authored facts, each up to 2000 characters (6000 combined); never copy an AI-generated brief or advisory preferences here |
 | `format` | `portrait` (default), `square`, `story`, `landscape` |
 
 Example paid-generation input, submitted only after brief review and authorization:
@@ -245,6 +246,7 @@ Example paid-generation input, submitted only after brief review and authorizati
 {
   "businessId": "11111111-1111-4111-8111-111111111111",
   "brief": "Invite Jaipur homeowners to enquire about our saved rooftop survey offer. Use only verified brand facts and contact details.",
+  "sourceFacts": ["We offer rooftop surveys in Jaipur."],
   "count": 3,
   "generationId": "22222222-2222-4222-8222-222222222222",
   "language": "en",
@@ -259,11 +261,18 @@ No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
 429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
-In the #54 source candidate (not yet production), POST atomically claims the
+POST atomically claims the
 generation UUID and normalized request inputs before paid work. Repeating the
 same ID returns 202 with `{variantGroup, status, creatives: [], count: 0,
 expectedCount}` and never starts another producer. A changed brief, count,
-language or format for that ID returns 409; another business or owner gets 404.
+language, format or nonempty `sourceFacts` for that ID returns 409; another business
+or owner gets 404. Omitting `sourceFacts` keeps the prior hash format for existing
+requests. The validator uses Brand facts, saved instructions and `sourceFacts` as
+quote evidence, not the potentially model-derived `brief`. Studio submits its
+directly authored brief as user evidence; Create submits the original goal and
+free-text answers, excluding model-suggested options and the generated brief.
+The accepted facts are stored in the generation receipt for regeneration. Existing
+creatives without that field regenerate with no separate user-fact evidence.
 The route reserves monthly quota for text and images, counts recorded tokens,
 and retains an allowance of 10,000 quota units per completed image. This is
 **not** measured image billing or a USD spend limit: image usage may lack a known

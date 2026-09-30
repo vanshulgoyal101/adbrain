@@ -19,6 +19,24 @@ describe("<AdAssistant> draft persistence", () => {
     Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
   });
 
+  it("sends the original goal and typed answers, not model suggestions or the prepared brief, as evidence", async () => {
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Describe our rooftop work", started: true, turns: [], phase: "review",
+      answers: [
+        { question: "Style?", answer: "Award-winning installers", options: ["Award-winning installers"] },
+        { question: "Credential?", answer: "Our team has 12 certified installers", options: ["Not sure"] },
+      ],
+      prepared: { brief: "Feature our award-winning installers." },
+    }));
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({ creatives: [{ id: "creative" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AdAssistant business={business} />);
+    await act(async () => { fireEvent.click(await screen.findByRole("button", { name: "Generate 3 ads" })); });
+    const payload = JSON.parse(fetchMock.mock.calls.find(([url]) => url === "/api/creatives/generate")![1]!.body as string);
+    expect(payload.sourceFacts).toEqual(["Describe our rooftop work", "Our team has 12 certified installers"]);
+    expect(payload.sourceFacts.join(" ")).not.toContain("Award-winning");
+  });
+
   it("checks the same generation after a timeout instead of paying for another request", async () => {
     vi.useFakeTimers();
     Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });

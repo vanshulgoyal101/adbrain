@@ -116,6 +116,8 @@ async function handlePOST(req: Request) {
       count: z.number().int().min(1).max(6).default(3),
       generationId: z.string().uuid().optional(),
       language: z.string().optional(),
+      sourceFacts: z.array(z.string().trim().min(1).max(2000)).max(12)
+        .refine((facts) => facts.join("").length <= 6000).default([]),
       format: z
         .enum(["portrait", "square", "story", "landscape"])
         .default("portrait"),
@@ -138,6 +140,7 @@ async function handlePOST(req: Request) {
     ? Math.min(Math.max(Math.floor(rawCount), 1), 6)
     : 3;
   const language = languagePromptName(body?.language);
+  const sourceFacts = body.sourceFacts;
 
   if (!businessId || !brief) {
     return NextResponse.json(
@@ -190,7 +193,7 @@ async function handlePOST(req: Request) {
       creativeReferences(supabase, businessId),
       recentCreativeCopy(supabase, businessId),
     ]);
-    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format])).digest("hex");
+    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : [])])).digest("hex");
     admin = createAdminClient();
     const { data: admission, error: admissionError } = await admin.rpc("creative_generation_admit", {
       p_business_id: businessId,
@@ -221,6 +224,7 @@ async function handlePOST(req: Request) {
       referenceImages,
       recentCopy,
       advisoryPreferences,
+      sourceFacts,
       onVariant: async (variant) => {
         const events = variantUsageEvents(variant, {
             businessId,
@@ -258,7 +262,7 @@ async function handlePOST(req: Request) {
             cta: variant.cta,
             variant_group: variantGroup,
             status: "draft",
-            generation: generationReceipt(variant, language, referenceImages),
+            generation: generationReceipt(variant, language, referenceImages, sourceFacts),
           })
           .select("*")
           .single();

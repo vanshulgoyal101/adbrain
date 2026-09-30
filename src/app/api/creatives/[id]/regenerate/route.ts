@@ -112,6 +112,7 @@ async function handlePOST(
       undefined,
       [{ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" }, ...recentCopy].slice(0, 12),
       advisoryPreferences,
+      settings.sourceFacts,
     );
     await persistLLMUsage(
       variantUsageEvents(variant, {
@@ -152,6 +153,7 @@ async function handlePOST(
           variant,
           settings.language ?? undefined,
           referenceImages,
+          settings.sourceFacts,
         ),
       })
       .eq("id", id)

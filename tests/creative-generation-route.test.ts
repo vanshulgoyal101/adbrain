@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   preferenceContext: vi.fn(),
   preferenceSettings: null as { enabled: boolean; epoch: number } | null,
   preferenceNotes: [] as { category: "tone"; value: string; updated_at: string; version: number }[],
+  savedGeneration: null as unknown,
   schemaError: null as unknown,
   saveError: false,
   used: 0 as number | null,
@@ -50,6 +51,7 @@ vi.mock("@/lib/supabase/server", () => ({
             data: table === "creatives" ? {
               id: value, business_id: "business", name: "Example", brief: "Installation",
               headline: "Previous ad", primary_text: "Previous opening",
+              generation: mocks.savedGeneration,
             } : { id: value, name: "Example" },
           }),
           eq: () => ({
@@ -148,6 +150,7 @@ beforeEach(() => {
   mocks.preferenceContext.mockResolvedValue("");
   mocks.preferenceSettings = null;
   mocks.preferenceNotes = [];
+  mocks.savedGeneration = null;
   mocks.generateVariants.mockImplementation(async (params) => {
     try {
       await params.onVariant(variant);
@@ -261,6 +264,35 @@ describe("creative generation route", () => {
     expect((await POST(request(payload))).status).toBe(202);
     expect(mocks.preferenceContext).toHaveBeenCalledTimes(1);
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps claim evidence separate from the derived brief and fences changes under the same ID", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const payload = { businessId: "business", brief: "Feature our award-winning installers", generationId: "11111111-1111-4111-8111-111111111111" };
+    expect((await POST(request(payload))).status).toBe(200);
+    expect(mocks.generateVariants.mock.calls[0][0].sourceFacts).toEqual([]);
+    expect((await POST(request({ ...payload, sourceFacts: ["Our award-winning installers"] }))).status).toBe(409);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes explicit claim evidence into generation and preserves it for regeneration", async () => {
+    const sourceFacts = [`${"Our rooftop team works locally. ".repeat(19)}Our award-winning installers`];
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request({ businessId: "business", brief: "Feature our award-winning installers", sourceFacts }))).status).toBe(200);
+    expect(mocks.generateVariants.mock.calls[0][0].sourceFacts).toEqual(sourceFacts);
+    expect(mocks.insert.mock.calls[0][1].generation.sourceFacts).toEqual(sourceFacts);
+    mocks.savedGeneration = { sourceFacts, format: "story" };
+    mocks.generateOneVariant.mockResolvedValueOnce(variant);
+    const { POST: regenerate } = await import("@/app/api/creatives/[id]/regenerate/route");
+    expect((await regenerate(request(), { params: Promise.resolve({ id: "creative" }) })).status).toBe(200);
+    expect(mocks.generateOneVariant.mock.calls[0][10]).toEqual(sourceFacts);
+  });
+
+  it("rejects oversized evidence without admitting a paid request", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request({ businessId: "business", brief: "Rooftop solar", sourceFacts: ["x".repeat(2001)] }))).status).toBe(400);
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+    expect(mocks.admitted.size).toBe(0);
   });
 
   it("omits current-language overrides and fresh-direction memory from paid generation", async () => {

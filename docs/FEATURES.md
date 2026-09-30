@@ -362,7 +362,12 @@ call or reread notes.
 "Ignore preferences" and "fresh direction" omit them for that request. Notes
 cannot authorize spend, justify a commercial claim, override an explicit current
 brief, or turn an old tagline into required copy. Explicit Brand and legal
-requirements remain separate. This is source behavior after the migration is
+requirements remain separate. A model-written Create brief is direction only,
+not proof of commercial claims: its original typed goal and free-text answers
+are separately supplied as evidence, while suggested options and saved memories
+are excluded. A directly typed Studio brief can supply evidence. Changing explicit
+facts under the same generation ID is rejected; the accepted facts are retained
+for regeneration. This is source behavior after the migration is
 applied, not a claim of deployment or provider quality. Saved image-prompt receipts
 omit raw preference values, but forgetting cannot retract provider calls or erase
 older creative output influenced by a note. The first slice has no inferred notes,

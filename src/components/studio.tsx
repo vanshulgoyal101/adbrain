@@ -216,6 +216,7 @@ export function Studio({
         body: JSON.stringify({
           businessId: business.id,
           brief,
+          sourceFacts: [brief.trim()],
           count,
           generationId: intent.generationId,
           language,

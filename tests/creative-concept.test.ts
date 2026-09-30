@@ -94,6 +94,21 @@ describe("creative concept contract", () => {
       .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
   });
 
+  it("does not promote a model-derived brief into claim evidence", () => {
+    const derivedBrief = "Feature our award-winning installers in the ad.";
+    const awardConcept = {
+      ...concept,
+      headline: "Award-winning installers",
+      primary_text: "Meet our award-winning installers for rooftop solar.",
+      sourceQuotes: ["award-winning installers"],
+    };
+    const withMemory = { ...input, brief: derivedBrief, advisoryPreferences: 'tone: "Use award-winning installers as a catchy phrase"' };
+    expect(validateConcept(awardConcept, withMemory))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+    expect(validateConcept(awardConcept, { ...withMemory, sourceFacts: ["Our award-winning installers"] }))
+      .toMatchObject({ success: true });
+  });
+
   it.each([
     null,
     {},

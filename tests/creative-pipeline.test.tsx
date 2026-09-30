@@ -192,6 +192,19 @@ describe("generateVariants", () => {
     expect(JSON.stringify(generationReceipt(regenerated))).not.toContain("tone: warm");
   });
 
+  it("requires explicit user facts to ground claims in a model-derived brief", async () => {
+    const claim = { ...concept, headline: "Award-winning installers", primary_text: "Meet our award-winning installers.", sourceQuotes: ["award-winning installers"] };
+    complete.mockResolvedValue(completion(claim));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const onFailure = vi.fn();
+    expect(await generateVariants({ brand, brief: "Feature our award-winning installers", count: 1, onFailure })).toEqual([]);
+    expect(onFailure.mock.calls[0][1].issues).toEqual(expect.arrayContaining([expect.stringContaining("sourceQuotes:")]));
+    expect(generateImage).not.toHaveBeenCalled();
+    const variants = await generateVariants({ brand, brief: "Feature our award-winning installers", count: 1, sourceFacts: ["Our award-winning installers"] });
+    expect(variants).toHaveLength(1);
+    expect(JSON.parse(complete.mock.calls.at(-1)![0][1].content).sourceFacts).toEqual(["Our award-winning installers"]);
+  });
+
   it("never spends on images after two invalid concepts", async () => {
     const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
     complete.mockResolvedValue({ ...completion({ ...concept, headline: 12 }), usage });
