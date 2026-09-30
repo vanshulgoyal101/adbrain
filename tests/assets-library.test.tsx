@@ -90,6 +90,23 @@ describe("<AssetsLibrary>", () => {
     expect(screen.getByText("Open")).toBeInTheDocument();
   });
 
+  it("shows the smaller versioned creative while preserving the original export URL", () => {
+    const original = "https://cdn.example/storage/v1/object/public/creatives/b1/group/originals-v1/ad.jpg";
+    render(<AssetsLibrary creatives={[creative({ image_url: original })]} brandAssets={[]} />);
+
+    expect(screen.getByRole("img", { name: "Slash your power bill" }))
+      .toHaveAttribute("src", "https://cdn.example/storage/v1/object/public/creatives/b1/group/thumbnails-v1/ad.webp");
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute("href", original);
+    fireEvent.error(screen.getByRole("img", { name: "Slash your power bill" }));
+    expect(screen.getByRole("img", { name: "Slash your power bill" })).toHaveAttribute("src", original);
+  });
+
+  it("does not rewrite legacy creatives or uploaded brand assets", () => {
+    render(<AssetsLibrary creatives={[creative({})]} brandAssets={[asset({})]} />);
+    expect(screen.getByRole("img", { name: "Slash your power bill" })).toHaveAttribute("src", "https://example.com/a.jpg");
+    expect(screen.getByRole("img", { name: "Logo" })).toHaveAttribute("src", "https://example.com/logo.png");
+  });
+
   it("skips creatives without an image", () => {
     render(
       <AssetsLibrary

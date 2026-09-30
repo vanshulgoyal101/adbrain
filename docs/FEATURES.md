@@ -104,6 +104,12 @@ should check saved results using the same generation ID before starting another
 paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
 
+Newly saved creatives use a smaller WebP for Review board and generated Assets
+tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
+Download, ZIP export, and campaign delivery retain the original image. If the
+derivative fails, the original remains available; older creatives and uploaded
+brand assets are not retroactively resized.
+
 Regeneration uses the creative's saved language/format, updates that creative,
 and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
 change existing remote ads. Deleting a local creative is not a request to delete

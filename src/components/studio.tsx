@@ -25,6 +25,7 @@ import { downloadBlob } from "@/lib/download";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
 import { z } from "zod";
 
@@ -515,10 +516,13 @@ export function Studio({
                       <div className="flex aspect-square items-center justify-center bg-slate-100">
                         {creative.image_url ? (
                           <img
-                            src={creative.image_url}
+                            src={creativeThumbnailUrl(creative.image_url)}
                             alt=""
                             loading="lazy"
                             className="h-full w-full object-contain"
+                            onError={(event) => {
+                              if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
+                            }}
                           />
                         ) : (
                           <ImageIcon className="text-slate-400" />
