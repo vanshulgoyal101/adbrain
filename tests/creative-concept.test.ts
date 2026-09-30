@@ -109,6 +109,22 @@ describe("creative concept contract", () => {
       .toMatchObject({ success: true });
   });
 
+  it("keeps Brand voice as style guidance rather than claim evidence", () => {
+    const awardConcept = {
+      ...concept,
+      headline: "Award-winning installers",
+      primary_text: "Meet our award-winning installers for rooftop solar.",
+      sourceQuotes: ["award-winning installers"],
+    };
+    const brand = { ...input.brand, brand_voice: "Use award-winning installers as a confident tone" };
+    expect(validateConcept(awardConcept, { ...input, brand }))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+    expect(validateConcept(awardConcept, { ...input, brand: { ...brand, usps: ["Our award-winning installers"] } }))
+      .toMatchObject({ success: true });
+    expect(validateConcept(awardConcept, { ...input, brand, sourceFacts: ["Our award-winning installers"] }))
+      .toMatchObject({ success: true });
+  });
+
   it.each([
     null,
     {},

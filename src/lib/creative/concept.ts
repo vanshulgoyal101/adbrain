@@ -145,12 +145,15 @@ export function validateConcept(
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),
   }).map((finding) => `${finding.rule}: ${finding.detail}`));
   const sources = [
-    ...Object.values(input.brand)
-      .flat()
-      .filter((value): value is string => typeof value === "string"),
+    input.brand.name,
+    input.brand.description,
+    input.brand.target_audience,
+    ...(input.brand.usps ?? []),
+    ...(input.brand.offers ?? []),
+    ...(input.brand.locations ?? []),
     input.instructions ?? "",
     ...(input.sourceFacts ?? []),
-  ];
+  ].filter((value): value is string => typeof value === "string");
   for (const quote of concept.sourceQuotes) {
     if (!sources.some((source) => source.includes(quote)))
       issues.push(
