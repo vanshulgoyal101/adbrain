@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { productActions, viewportSchema } from "./client-events";
 
 const identifier = z.string().uuid();
 const label = z.string().regex(/^[a-zA-Z0-9_.:/[\]-]{1,160}$/);
@@ -33,6 +34,8 @@ export const productEventSchema = z.object({
     usageKind: z.enum(["text", "image"]).optional(),
     attempt: z.number().int().min(1).max(100).optional(),
     cacheHit: z.boolean().optional(),
+    action: z.enum(productActions).optional(),
+    viewport: viewportSchema.optional(),
   }),
 });
 

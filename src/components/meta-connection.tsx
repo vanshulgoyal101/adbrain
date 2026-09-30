@@ -82,7 +82,7 @@ export function MetaConnectionPanel({
         )}
         <div className="flex flex-wrap gap-2">
           {businessId && oauthConfigured && (
-            <Button disabled={disconnecting} onClick={() => setDialogOpen(true)}>
+            <Button data-product-event="meta.connect" disabled={disconnecting} onClick={() => setDialogOpen(true)}>
               {connection.ready || connection.expired ? <RefreshCw className="h-4 w-4" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
               {connection.ready ? "Manage connection" : connection.expired ? "Reconnect" : "Connect Business"}
             </Button>

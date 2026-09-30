@@ -286,7 +286,7 @@ export function LeadInbox({
           {workflowStatuses.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
         </select></label>
         <label>Follow-up note<textarea rows={4} maxLength={2000} value={draftNote} disabled={saving} onChange={event => { setDraftNote(event.target.value); setSaved(false); }} /></label>
-        <div className={styles.editorActions}><span>{draftNote.length}/2000</span><Button type="submit" size="sm" disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}Save follow-up</Button></div>
+        <div className={styles.editorActions}><span>{draftNote.length}/2000</span><Button type="submit" data-product-event="lead.follow_up" size="sm" disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}Save follow-up</Button></div>
         {saveError && <Alert variant="error">{saveError}</Alert>}
         {saved && <Alert variant="success">Follow-up saved.</Alert>}
       </form>}

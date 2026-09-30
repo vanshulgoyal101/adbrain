@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
       <JsonLd
         data={contentPageGraph({ path: "/privacy", name: TITLE, description: DESCRIPTION })}
       />
-      <LegalPage title={TITLE} updated="18 September 2026">
+      <LegalPage title={TITLE} updated="28 September 2026">
         <p>
           AdBrain (&ldquo;AdBrain&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) helps businesses create ad
           creatives and run lead-generation campaigns on Meta (Facebook and
@@ -49,7 +49,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Usage and diagnostic data.</strong> Account and business
-            identifiers, pages visited, operation outcomes, response times,
+            identifiers, pages visited, selected workflow actions, foreground
+            page time, coarse screen-size categories, operation outcomes, response times,
             error categories, and AI usage and estimated costs help us operate
             and improve the product. Product-event logs exclude prompts,
             creative copy, lead contact details, passwords, access tokens,
@@ -99,6 +100,8 @@ export default function PrivacyPolicyPage() {
         <p>
           Product-event database records are targeted for deletion after 90 days
           through periodic cleanup; outages or cleanup backlogs may delay removal.
+          Daily usage and performance totals without account or business identifiers
+          may be retained for up to two years to understand product trends.
           Hosting-provider diagnostic logs follow separately configured retention.
           These account-linked diagnostics are available only to authorized
           operators, not to other customers.

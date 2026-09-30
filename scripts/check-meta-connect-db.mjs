@@ -13,6 +13,7 @@ const operatorPaymentMigration = await readFile(join(root, "db/migrations/202609
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
+const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -188,6 +189,91 @@ async function verifyRollback() {
       });
     } finally { await session.end(); }
   } finally { await db.end(); }
+}
+
+async function verifyProductAnalytics(db, database) {
+  const service = async (sql) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql)).rows; }
+    finally { await session.end(); }
+  };
+  const insert = (age, count, name = 'analytics.fixture', environment = 'production') => db.query(`
+    insert into public.product_events(event_id,request_id,version,created_at,kind,name,outcome,duration_ms,attributes)
+    select gen_random_uuid(),gen_random_uuid(),1,
+      (date_trunc('day',now() at time zone 'UTC') - $1::integer * interval '1 day' + interval '1 hour') at time zone 'UTC',
+      'workflow',$3,'success',case when sequence%3=0 then null else sequence*100 end,
+      jsonb_build_object('environment',$4::text,'route','/api/creatives/generate','provider','synthetic','model','fixture',
+        'inputTokens',20,'outputTokens',10,'totalTokens',30,'estimatedCostUsd',0.25,'count',2,'failedCount',1)
+    from generate_series(1,$2::integer) sequence`,[age,count,name,environment]);
+  await check(`${database}: retention preserves aggregate metrics once and keeps recent raw events`,async () => {
+    await db.query("delete from public.product_events");
+    await insert(91,3);
+    await insert(1,1);
+    await insert(91,1,'analytics.fixture','preview');
+    assert.equal((await service("select public.prune_product_events() as count"))[0].count,4);
+    const rows = await service("select * from public.product_event_daily where name='analytics.fixture' order by environment");
+    const production = rows.find(row => row.environment==='production');
+    assert.equal(rows.length,2);
+    assert.equal(Number(production.event_count),3);
+    assert.equal(Number(production.timed_event_count),2);
+    assert.equal(Number(production.duration_sum_ms),300);
+    assert.equal(production.duration_max_ms,200);
+    assert.equal(Number(production.input_tokens),60);
+    assert.equal(Number(production.output_tokens),30);
+    assert.equal(Number(production.total_tokens),90);
+    assert.equal(Number(production.estimated_cost_usd),0.75);
+    assert.equal(Number(production.item_count),6);
+    assert.equal(Number(production.failed_item_count),3);
+    assert.equal((await db.query("select count(*)::int as count from public.product_events")).rows[0].count,1);
+    assert.equal((await service("select public.prune_product_events() as count"))[0].count,0);
+    assert.deepEqual(await service("select * from public.product_event_daily where name='analytics.fixture' order by environment"),rows);
+    await insert(91,1);
+    await service("select public.prune_product_events()");
+    assert.equal(Number((await service("select event_count from public.product_event_daily where name='analytics.fixture' and environment='production'"))[0].event_count),4);
+    const columns = (await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='product_event_daily'")).rows.map(row=>row.column_name);
+    assert.ok(!columns.some(name=>['user_id','business_id','request_id','event_id','attributes'].includes(name)));
+  });
+  await check(`${database}: rollup failure rolls back raw deletion`,async () => {
+    await insert(91,1,'analytics.rollback');
+    await db.query("begin");
+    try {
+      await db.query("alter table public.product_event_daily add constraint analytics_failure_probe check(name<>'analytics.rollback') not valid");
+      await db.query("savepoint retention_probe");
+      await assert.rejects(db.query("select public.prune_product_events()"),{code:'23514'});
+      await db.query("rollback to savepoint retention_probe");
+      assert.equal((await db.query("select count(*)::int as count from public.product_events where name='analytics.rollback'")).rows[0].count,1);
+    } finally { await db.query("rollback"); }
+    await service("select public.prune_product_events()");
+  });
+  await check(`${database}: bounded concurrent cleanup does not double count`,async () => {
+    await insert(92,10005,'analytics.volume');
+    const results = await Promise.all([service("select public.prune_product_events() as count"),service("select public.prune_product_events() as count")]);
+    assert.ok(results.every(rows=>rows[0].count<=10000));
+    await service("select public.prune_product_events()");
+    assert.equal(Number((await service("select sum(event_count) as count from public.product_event_daily where name='analytics.volume'"))[0].count),10005);
+    assert.equal((await db.query("select count(*)::int as count from public.product_events where name='analytics.volume'")).rows[0].count,0);
+  });
+  await check(`${database}: two-year expiry drops obsolete raw and aggregate data`,async () => {
+    await insert(800,1,'analytics.expired');
+    await db.query("update public.product_event_daily set day=(now() at time zone 'UTC')::date-800 where name='analytics.volume'");
+    await service("select public.prune_product_events()");
+    assert.equal((await service("select count(*)::int as count from public.product_event_daily where name in ('analytics.expired','analytics.volume')"))[0].count,0);
+  });
+  await check(`${database}: browsers cannot access rollups and services cannot forge them`,async () => {
+    for (const role of ['anon','authenticated','service_role']) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("delete from public.product_event_daily"),{code:'42501'});
+        if (role!=='service_role') {
+          await assert.rejects(session.query("select * from public.product_event_daily"),{code:'42501'});
+          await assert.rejects(session.query("select public.prune_product_events()"),{code:'42501'});
+        }
+      } finally { await session.end(); }
+    }
+  });
 }
 
 async function verifyConfigurablePayments(db, database) {
@@ -571,6 +657,19 @@ async function verify(database, source, integrityMigration, customerOnly = false
   try {
     await db.query(bootstrap);
     await db.query(source);
+    if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
+      const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
+      if (!installed) {
+        await db.query("insert into public.product_events(event_id,request_id,version,kind,name,outcome) values(gen_random_uuid(),gen_random_uuid(),1,'system','analytics.before_migration','success')");
+        await check(`${database}: upgrade preserves existing raw events and ledger replay`,async () => {
+          assert.equal(await applyMigration(db,"20260928_product_event_rollups.sql",productRollupMigration),'applied');
+          assert.equal(await applyMigration(db,"20260928_product_event_rollups.sql",productRollupMigration),'already_applied');
+          assert.equal((await db.query("select count(*)::int as count from public.product_events where name='analytics.before_migration'")).rows[0].count,1);
+        });
+      }
+      await verifyProductAnalytics(db,database);
+      return;
+    }
     if (process.argv.includes("--pricing-only") || database.startsWith("pricing_")) {
       const installed = (await db.query("select to_regprocedure('private.production_payment_quote(bigint,boolean)') is not null as installed")).rows[0].installed;
       if (!installed) {
@@ -1674,8 +1773,12 @@ try {
   assert.ok(schema.includes(operatorPaymentMigration.trim()), "Canonical schema must include the exact operator-managed payment migration");
   assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
   assert.ok(schema.includes(creativeIntentMigration.trim()), "Canonical schema must include the exact creative generation intent migration");
-  assert.ok(schema.trimEnd().endsWith(configurablePaymentMigration.trimEnd()), "Canonical schema must end with the exact configurable pricing migration");
-  if (process.argv.includes("--pricing-only")) {
+  assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
+  assert.ok(schema.trimEnd().endsWith(productRollupMigration.trimEnd()), "Canonical schema must end with the exact product rollup migration");
+  if (process.argv.includes("--analytics-only")) {
+    await verify("analytics_fresh",schema);
+    await verify("analytics_upgrade",`${baseline}\n${metaMigration}\n${productEventsMigration}`);
+  } else if (process.argv.includes("--pricing-only")) {
     await verify("pricing_fresh",schema);
     await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
   } else if (process.argv.includes("--generation-only")) {
@@ -1685,12 +1788,14 @@ try {
     await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
-  if (!process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+  if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
     if (!process.argv.includes("--customer-only")) {
       await verify("pricing_fresh",schema);
       await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
+      await verify("analytics_fresh",schema);
+      await verify("analytics_upgrade",`${baseline}\n${metaMigration}\n${productEventsMigration}`);
     }
   }
   }

@@ -193,7 +193,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
             value={amountDraft} disabled={working || checkoutOpen || amountLocked || Boolean(order)}
             onChange={event => { setAmountDraft(event.target.value); setAcceptedTermsHash(null); setNotice(null); }} />
         </div>
-        <Button type="button" variant="outline" disabled={!amountChanged || working || checkoutOpen || amountLocked || Boolean(order)} onClick={() => void perform(async signal => {
+        <Button type="button" data-product-event="payment.quote" variant="outline" disabled={!amountChanged || working || checkoutOpen || amountLocked || Boolean(order)} onClick={() => void perform(async signal => {
           if (!enteredAmount.success || enteredAmount.data > amountRange.maxPaise) {
             throw new Error(`Enter an amount from INR ${amountRange.minPaise / 100} to INR ${amountRange.maxPaise / 100}, with at most two decimal places.`);
           }
@@ -227,7 +227,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
       {canPay && <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={accepted}
         onChange={event => setAcceptedTermsHash(event.target.checked ? policy?.hash ?? null : null)} disabled={working || checkoutOpen || amountChanged} />I accept the service, invoice and refund terms.</label>}
       <div className="flex flex-wrap gap-2">
-        {canPay && <Button onClick={() => void pay()} disabled={!accepted || !scriptReady || scriptFailed || working || checkoutOpen || amountChanged} className="h-auto min-h-11 whitespace-normal">
+        {canPay && <Button data-product-event="payment.checkout" onClick={() => void pay()} disabled={!accepted || !scriptReady || scriptFailed || working || checkoutOpen || amountChanged} className="h-auto min-h-11 whitespace-normal">
           <CreditCard size={16} aria-hidden="true" />{order ? "Continue saved checkout" : `Pay INR ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format((displayedQuote?.totalPaise ?? 0) / 100)}`}</Button>}
         <Button variant="outline" onClick={() => void checkStatus()} disabled={working || checkoutOpen} className="h-auto min-h-11 whitespace-normal">
           <RefreshCw size={16} aria-hidden="true" />Check payment status</Button>
