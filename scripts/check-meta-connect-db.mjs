@@ -647,9 +647,21 @@ async function verifyCreativeGenerationAdmission(db, database) {
     assert.equal(audit[0].count,1);
     const {rows: adjustment}=await db.query("select total_tokens from public.llm_usage_events where business_id=$1 and metadata->>'operatorAdjustment'='true'",[otherBusiness]);
     assert.deepEqual(adjustment.map(row=>row.total_tokens),[20]);
+    await assert.rejects(service("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,metadata) values ($1,$2,'creatives.generate','late-provider','fixture',15,$3)",
+      [otherBusiness,otherOwner,JSON.stringify({generationId:id,providerFinalStatus:'completed'})]),{code:'23514'});
+    await assert.rejects(service("update public.llm_usage_events set metadata='{}'::jsonb where business_id=$1 and metadata->>'generationId'=$2",
+      [otherBusiness,id]),{code:'23514'});
+    await assert.rejects(service("delete from public.llm_usage_events where business_id=$1 and metadata->>'generationId'=$2",
+      [otherBusiness,id]),{code:'23514'});
     assert.equal((await service("select public.creative_generation_progress($1,$2,$3,100,false,false,false) as result",[otherBusiness,otherOwner,id])).status,'failed');
     assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:40}]);
     await assert.rejects(reconcile(otherBusiness,otherOwner),{code:'23505'});
+  });
+  await check(`${database}: reconciled failure cannot gain a late saved creative`, async () => {
+    const {rows}=await db.query("select generation_id from private.creative_generation_reconciliations where business_id=$1 and outcome='failed' limit 1",[otherBusiness]);
+    assert.equal(rows.length,1);
+    await assert.rejects(service("insert into public.creatives(business_id,brief,variant_group) values ($1,'Late saved',$2)",
+      [otherBusiness,rows[0].generation_id]),{code:'23514'});
   });
   await check(`${database}: old intents remain held without generation-bound provider evidence`, async () => {
     const freshBusiness=randomUUID(),id=randomUUID();
@@ -682,6 +694,9 @@ async function verifyCreativeGenerationAdmission(db, database) {
     assert.equal((await status(id,freshBusiness,owner)).status,'partial');
     assert.equal((await admit(id,freshBusiness,owner,'f'.repeat(64))).action,'conflict');
     assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:30}]);
+    assert.equal(await service("update public.creatives set headline='Edited' where business_id=$1 and variant_group=$2 returning 1 as result",[freshBusiness,id]),1);
+    await assert.rejects(service("update public.creatives set variant_group=$3 where business_id=$1 and variant_group=$2",
+      [freshBusiness,id,randomUUID()]),{code:'23514'});
   });
   await check(`${database}: known pre-provider failure frees unused quota but not identity`, async () => {
     const freshBusiness=randomUUID();

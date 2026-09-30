@@ -3322,6 +3322,58 @@ create trigger creative_generation_reconciliation_guard before update
   on private.creative_generation_intents for each row
   execute function private.creative_generation_reconciliation_guard();
 
+create or replace function private.creative_generation_settled_write_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare target_id uuid;
+begin
+  if tg_op in ('UPDATE','DELETE') then
+    if tg_table_name='llm_usage_events' then
+      if old.route='creatives.generate' and (old.metadata->>'generationId') ~*
+        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+        target_id:=(old.metadata->>'generationId')::uuid;
+      end if;
+    else
+      target_id:=old.variant_group;
+    end if;
+    if target_id is not null then
+      perform 1 from private.creative_generation_intents
+        where generation_id=target_id for share;
+      if exists(select 1 from private.creative_generation_reconciliations
+        where generation_id=target_id) then
+        raise exception 'Reconciled generation cannot change receipts' using errcode='23514';
+      end if;
+    end if;
+    if tg_op='DELETE' then return old; end if;
+    target_id:=null;
+  end if;
+  if tg_table_name='llm_usage_events' then
+    if new.route='creatives.generate' and (new.metadata->>'generationId') ~*
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      target_id:=(new.metadata->>'generationId')::uuid;
+    end if;
+  else
+    target_id:=new.variant_group;
+  end if;
+  if target_id is not null then
+    perform 1 from private.creative_generation_intents
+      where generation_id=target_id for share;
+    if exists(select 1 from private.creative_generation_reconciliations
+      where generation_id=target_id) then
+      raise exception 'Reconciled generation cannot accept late receipts' using errcode='23514';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists creative_generation_settled_usage_guard on public.llm_usage_events;
+create trigger creative_generation_settled_usage_guard before insert or update or delete
+  on public.llm_usage_events for each row
+  execute function private.creative_generation_settled_write_guard();
+drop trigger if exists creative_generation_settled_creative_guard on public.creatives;
+create trigger creative_generation_settled_creative_guard before insert or update of business_id, variant_group
+  on public.creatives for each row
+  execute function private.creative_generation_settled_write_guard();
+
 create or replace function public.creative_generation_status(p_business_id uuid,p_user_id uuid,p_generation_id uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare

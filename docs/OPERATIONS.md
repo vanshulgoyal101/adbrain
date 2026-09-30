@@ -52,7 +52,9 @@ prompt, customer data or signed URL belongs in the evidence reference.
 The RPC checks tenant, state, receipt version, current counters, recorded usage
 and saved count; it appends missing verified usage before releasing the uncertain
 reservation, audits the transition and blocks duplicate or late mutation. It
-does not infer finality from local data or offer a customer-facing repair action.
+also rejects later generation-linked usage or newly saved creatives; existing
+creative content may still be edited. It does not infer finality from local data
+or offer a customer-facing repair action.
 Pre-instrumentation intents, including the held September 29 #54 request, remain
 blocked. DevOps owns migration deployment as part of an approved release; an
 operator must obtain external evidence for each eligible intent before calling

@@ -223,7 +223,9 @@ RPC. It fences older intents without generation-bound receipts, requires an
 operator evidence reference, explicit provider-verified token total, matching
 saved-creative outcome and current accounted/reserved counters, then atomically
 writes any missing usage adjustment and closes the hold. No browser caller can
-invoke it, and a late progress callback cannot change an audited result. The
+invoke it; row-locking triggers reject late generation-bound usage writes and
+new/reassigned creatives, while ordinary saved creative edits remain available.
+A late progress callback cannot change an audited result. The
 SQL cannot independently verify external provider finality: the authorized
 operator must do that before calling. In particular it cannot reconcile the
 September 29 #54 incident, whose per-generation provider evidence is still absent.
