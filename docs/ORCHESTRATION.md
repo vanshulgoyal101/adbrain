@@ -27,6 +27,9 @@ DevOps, on the owner's own business only. Before each run, post `Create run N/10
 with the result in #74. At 10, stop and ask the coordinator; the owner approves
 more in batches of 10. No Meta ad spend: campaigns stay PAUSED. Dev and Dev 2
 share the signed-in browser tab; agree turns directly, one user at a time.
+The tab is signed in to the owner's demo account (business Cedar Ridge
+Chiropractic, Meta connected, 7 approved ads). Use that business for the core
+loop. If the session expires, the coordinator signs back in; never ask the owner.
 
 | Worker | Deliver next | Ownership and first check |
 | --- | --- | --- |
