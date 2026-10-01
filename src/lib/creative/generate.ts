@@ -127,17 +127,26 @@ export async function generateVariants(params: {
 
   const recentCopy = [...(params.recentCopy ?? []).slice(0, 12)];
   let planning = Promise.resolve();
+  let startNext = Promise.resolve();
   const outcomes = await Promise.allSettled(
     angles.map(async (angle) => {
       try {
         const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts };
-        const planned = planning.then(async () => {
+        const waitForTurn = startNext;
+        let notifyNext!: () => void;
+        startNext = new Promise<void>((resolve) => { notifyNext = resolve; });
+        const earlierConcepts = planning.then(() => {
           input.recentCopy = recentCopy.slice(0, 12);
-          const result = await generateConcept(input, signal);
+        });
+        const planned = waitForTurn.then(() => {
+          input.recentCopy = recentCopy.slice(0, 12);
+          return generateConcept(input, signal, earlierConcepts, notifyNext);
+        }).then((result) => {
           recentCopy.unshift(result.concept);
           return result;
         });
         planning = planned.then(() => undefined, () => undefined);
+        void planning.then(notifyNext);
         const variant = await renderVariant(input, signal, await planned);
         await params.onVariant?.(variant);
         return variant;
@@ -186,6 +195,8 @@ export class CreativeImageError extends Error {
 async function generateConcept(
   input: ConceptInput,
   signal: AbortSignal,
+  earlierConcepts: Promise<void> = Promise.resolve(),
+  onRepair?: () => void,
 ): Promise<{ concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] }> {
   const messages = buildConceptMessages(input);
   const usage: GeneratedVariant["llmUsage"] = [];
@@ -221,6 +232,10 @@ async function generateConcept(
       }
       throw error;
     });
+    if (attempt === 0) {
+      await earlierConcepts;
+      messages[1] = buildConceptMessages(input)[1];
+    }
     if (!sawProviderAttempt && completion.usage) {
       usage.push({
         provider: completion.provider,
@@ -255,6 +270,7 @@ async function generateConcept(
       role: "user",
       content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,
     });
+    if (attempt === 0) onRepair?.();
   }
   throw new CreativeValidationError(issues, usage, stage);
 }
