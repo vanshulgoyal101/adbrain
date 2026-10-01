@@ -147,14 +147,14 @@ async function handlePOST(req: Request) {
           provider: completion.provider, model: completion.model, usage: completion.usage,
           promptVersion: PLANNER_PROMPT_VERSION, inputChars: completion.inputChars,
           outputChars: completion.outputChars, latencyMs: completion.latencyMs,
-          attempt, maxTokens: 1500, temperature: 0.2,
+          attempt, maxTokens: 3000, temperature: 0.2,
           status: valid ? "success" : "error", errorCode: valid ? undefined : "PLANNER_VALIDATION",
           metadata: { audienceOnly: Boolean(audienceDraft) },
         }]);
       },
     });
-  } catch (err) {
-    return NextResponse.json({ error: friendlyMetaError(err, "Could not prepare the campaign plan.") }, { status: 502 });
+  } catch {
+    return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
   }
 
   if (result.handoff) {
