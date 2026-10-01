@@ -5,15 +5,18 @@ live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types.t
 are hand-authored, not generated proof of schema parity. Check SQL constraints,
 route schemas, and deployed migration state separately.
 
-The source-only [privacy request migration](../db/migrations/20260930_privacy_requests.sql)
+The [privacy request migration](../db/migrations/20260930_privacy_requests.sql)
 adds `public.privacy_requests` for account-owner export/deletion requests and
 `private.privacy_request_operators` for explicitly authorized reviewers. RLS
 limits customer reads and inserts to the signed-in owner, permits no customer
 status changes, and prevents duplicate open requests of the same kind. Only the
 server-side service role can read the full queue or update status/handler, after
 the privacy operator check. The request itself does not export or delete data.
-Apply the migration and register a verified operator before enabling the Settings
-request controls; see [Privacy request operations](OPERATIONS.md#privacy-request-operations).
+In Production it is applied at SHA-256
+`02a409069475caff00872c9de31296771d0669bf852f5e5034f7f876a47d972c`, with one
+owner-confirmed operator registered and zero requests at readback. This does not
+verify the application request workflow; see
+[Privacy request operations](OPERATIONS.md#privacy-request-operations).
 
 The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
 depends on the original payment, operator policy and

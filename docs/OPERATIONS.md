@@ -28,6 +28,12 @@ privacy operator by default; without one, the operator queue is 403 and the
 request channel is not operational. Revocation sets `revoked_at` on that private
 row. This registry is separate from payment/refund operators.
 
+For this Production release, the migration ledger matches SHA-256
+`02a409069475caff00872c9de31296771d0669bf852f5e5034f7f876a47d972c`. The
+owner-confirmed account was resolved through the sole restored Settings row and
+its auth/business owner binding. Readback found one active operator, request and
+operator RLS enabled, service-only operator RPC execute, and zero requests.
+
 After deployment, use a bounded synthetic request from an owner-controlled
 account to confirm that Settings reports Received, the operator queue shows the
 same request, and the operator can mark it In review; confirm the owner sees that
