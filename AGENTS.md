@@ -11,7 +11,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Worker coordination
 
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
-	shared resources: read Current Dispatch and your issue, not historical receipts.
+	shared resources: read Current Dispatch, then your GitHub label queue
+	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
+	is done, hand it off by label and start the next one without waiting.
 	Proceed with useful work; do not return only an acknowledgement.
 - One writer per source/resource, one executor for production. DevOps owns the
 	active release. Talk directly to another owner when needed; do not route routine

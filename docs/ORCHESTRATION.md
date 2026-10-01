@@ -9,60 +9,74 @@ own review and CI evidence. Historical dispatches do not grant or block work.
 
 ## Current Dispatch
 
-**September 28 owner reset: build, ship, test in production.** Follow the
-[Startup Fast Path](RELEASING.md#startup-fast-path). It supersedes earlier mandatory
-QA/coordinator rounds, staging expectations and repeated status handoffs. Keep
-required CI, financial/tenant protections and one production executor. Historical
-receipts below are evidence, not permission gates. No broad #66 refactor.
+### Priority
 
-### Active Assignments
+Core features come first, always: Brand, Create 3 ads, review, launch a Meta
+campaign and manage it (sync/pause/results), working reliably in production.
+Other work (polish, speed, docs, compliance, support, analytics) waits until that
+loop is healthy or the owner asks for it. Build, ship and test in production via
+the [Startup Fast Path](RELEASING.md#startup-fast-path).
 
-**October 1 owner direction: core product only.** We are a startup. The only goal
-right now is that one owner can go Brand, then Create 3 ads, then review, then launch
-a Meta campaign, then manage it (sync/pause), reliably in production. Stop all other
-work: no privacy, support, polish, performance or broad P1 test campaigns.
-QA findings already handed off (regenerate guard, Brand save) ship as-is. Each
-core failure found live is fixed next. The #54 Sep 29 hold stays untouched.
+### How work flows
 
-**Paid Create budget (owner, Oct 1): 10 Create runs total**: Dev up to 7 to find
-and fix failures, DevOps 3 to confirm after release. Owner's demo business only.
-Before each run, post `Create run N/10` with the result in #74. At 10, stop and
-ask the coordinator; the owner approves more in batches of 10. No Meta ad spend:
-campaigns stay PAUSED.
+Routine steps never wait for the coordinator.
 
-Browser: the integrated browser is signed in to the owner's demo account (business
-Cedar Ridge Chiropractic, Meta connected, 7 approved ads). Tabs share the session,
-so each worker opens its own tab at https://adbrain.vanshul.com and does not touch
-another worker's tab. If the session expires, the coordinator signs back in.
+1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
+   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:qa`,
+   `owner:devops` (who acts next), `ready-to-ship` (committed, waiting for DevOps)
+   and `blocked` (needs something outside the team; the issue says what).
+2. **Start or resume** by reading this section, then your queue:
+   `gh issue list -R vanshulgoyal101/adbrain -l core -l owner:<you>`. Work the
+   oldest. Empty queue: take an unowned `core` issue in your area and add your
+   label. Nothing left: post one line in #74 that you are idle and stop. Do not
+   invent work.
+3. **Finish an issue** by committing in your worktree and pushing your branch
+   (feature branches do not deploy). Comment the SHA and what you checked, set
+   `ready-to-ship` and `owner:devops`, remove your label, and start your next issue.
+4. **DevOps ships** every `ready-to-ship` issue: migrations first, required CI,
+   protected merge, production smoke, then close the issue with the PR link.
+   Changes to money, tenant boundaries or irreversible data get `owner:qa` first;
+   QA confirms and hands back to DevOps. Everything else ships on CI.
+5. **A core failure found live** gets its own `core` `bug` issue with the exact
+   step, error and owner label. Add `owner:qa` when a red test helps. One issue
+   per problem; do not bury new failures in long comment threads.
+6. **The coordinator** sets priority, resolves conflicts, approves budgets, signs
+   the browser in, keeps labels honest and closes or parks stale issues.
 
-| Worker | Deliver next | Ownership and first check |
-| --- | --- | --- |
-| Dev | **Create works every time** ([#88](https://github.com/vanshulgoyal101/adbrain/issues/88)) | PR86 is live at main `8113d1d`. Only one browser tab can be visible, so background tabs stay on Loading workspace. Use Dev 2's page-local frame flush in your own tab, or call the same Create API from that signed-in tab with the request the UI sends. Either counts as one approved run. Run Create for 3 ads on Cedar Ridge and post the saved count and rejected rule categories. Fix the top failure, hand the commit to DevOps, and run again. Stop at 3/3 twice in a row or 7 runs, whichever comes first |
-| Dev 2 | **Campaign launch and management work** ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) | In your own tab on Cedar Ridge, use the existing approved ads: Prepare campaign, then review, then launch PAUSED on Meta, then sync, then pause/resume. Post each step's result in #74. Fix every failure and hand commits to DevOps. Never activate delivery or spend on ads |
-| QA | Meta budget rejection ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) | Both queued fixes are confirmed. Dev 2 found that Prepare campaign fails with HTTP 502 "Meta rejected the budget settings" at the default INR 200/day. With Dev 2, pin the cause (budget units, currency minimum, bid strategy) and write the red test that reproduces the exact payload. Then cover any other core failure posted in #74 |
-| DevOps | Release queued fixes now, then confirm the loop | QA confirmed `72c10be` and `927b6ff`. Release both now, applying `20261001_creative_regeneration_claims.sql` first. Ship Dev and Dev 2 core fixes as they land. When Dev reports 3/3, use your 3 runs to confirm Create in production, then walk the full loop once |
-| Coordinator | Keep everyone on the core loop | Plan and assign; no product code |
+### Standing rules
 
-Dev adopted QA's recovery overlay for the shipped #54 repair. Preserve the original
-/tmp/adbrain-qa-create-recovery-20260929 copy and reuse that evidence; QA uses
-isolated test copies for new probes. Do not rebuild the shipped admission system.
+- **Worktrees.** `/tmp` can be wiped on restart. Commit each coherent step and
+  push your branch. Never edit the owner's checkout (`adbrain/`).
+- **Browser.** Signed in to the owner's demo account: Cedar Ridge Chiropractic,
+  Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
+  Background tabs do not render; use a page-local frame flush or call the same API
+  the UI calls. If the session expires, post in #74 and the coordinator signs in.
+- **Paid budget.** Create runs: 10 approved on Oct 1 (Dev up to 7, DevOps 3).
+  Log `Create run N/10` with the saved count in [#88](https://github.com/vanshulgoyal101/adbrain/issues/88).
+  At the limit, stop and post; the coordinator asks the owner for the next 10.
+  No Meta ad spend: campaigns stay PAUSED.
+- **Access.** Production DB: Supabase Management API with `SUPABASE_TOKEN` from
+  `/Users/vanshulgoyal/Development/copilot/arcade/.env` (parse into memory, never
+  print), project `kmzuxrvfrwwpwmoovwcp`, `BEGIN READ ONLY` for checks. Vercel:
+  `npx --yes vercel@60.1.3`. Docs: `node scripts/check-docs.mjs` after `npm ci`.
+- **Never** force-push, bypass branch protection, print secrets, activate ad
+  delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-One writer per source: Dev owns `src/components/ad-assistant.tsx`, generation
-routes, and creative concept/validation/generation modules. Dev 2 owns new memory
-modules/routes/migrations/settings UI, `src/lib/templates/ads.ts`, the creative
-interview and campaign planner context. If memory needs a generation/concept or
-Create-screen change, Dev 2 supplies the small consumer change directly to Dev;
-Dev applies it after the incident fix is stable. No simultaneous edits or user
-relay. Dev 2 can complete storage, controls and interview/planner integration
-without waiting on that boundary; do not hold the incident release for memory.
+### Current focus (October 1)
 
-Keep frozen #75/#73 candidates unchanged. Feature authors work in isolated
-checkouts based on current compatible source; Dev 2 must incorporate #75 before
-editing its planner so repeated-question fixes are preserved. DevOps owns shared
-integration and resolves candidate conflicts, not blanket merges of unfinished dev.
-Post the commit/result/real blocker in the assigned issue; no new receipt project.
+| Worker | Queue |
+| --- | --- |
+| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) Create saves 3 of 3: run on Cedar Ridge, fix the top rejection, repeat |
+| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) Meta budget rejection, then the rest of the campaign flow in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
+| QA | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) red test for the budget payload, then any new `core` bug with `owner:qa` |
+| DevOps | Any `ready-to-ship` issue first. PR89 (regenerate guard, Brand save) is live at main `264bc7a`. Use your 3 runs to confirm Create once Dev reports 3/3, then walk the full loop in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
 
-### Release State
+## Historical Dispatch Receipts
+
+Everything below is retained history and evidence. The Current Dispatch above
+supersedes its assignments, pending-state wording and process instructions.
+
+### Sep 30 release notes
 
 [#75](https://github.com/vanshulgoyal101/adbrain/issues/75#issuecomment-5904233276)
 is deployed via PR77, with final required CI and Vercel Ready evidence. The
@@ -119,9 +133,9 @@ Accepted migration `20260927_configurable_payment_quotes.sql` SHA256:
 `f4b66888428add6cf4ee645f99168243c6ba5a9baf0c2680e462d2ac619edef4`.
 Do not use superseded d10de1 bytes or rewrite applied history.
 
-### Ownership
+### Sep 30 ownership notes
 
-The Active Assignments table above controls current work. Existing payment
+Superseded by the Current Dispatch at the top of this file. Existing payment
 acceptance remains valid; no routine second QA sign-off or unchanged-suite replay.
 These assignments authorize scoped development, not new live charges, provider
 spend, ad activation or unsupported clearing of the unresolved production intent.
@@ -150,7 +164,7 @@ memory save/reload/forget and recovery of the old failed Create request remain
 incomplete. INR10 application capture is verified; signed webhook and settlement
 remain separate unverified evidence. No open source-QA blocker remains for #76.
 
-## Historical Dispatch Receipts
+### Earlier receipts
 
 Everything below is retained historical coordination/evidence. The current
 dispatch above supersedes its assignments, pending-state wording and process
