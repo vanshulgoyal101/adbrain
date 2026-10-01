@@ -21,5 +21,5 @@ async function AuthenticatedWorkspace({ children }: { children: React.ReactNode 
   const user = await getUser();
   if (!user) redirect("/login");
   const business = await getPrimaryBusiness();
-  return <WorkspaceShell email={user.email} businessName={business?.name ?? null}><ProductTelemetry />{children}</WorkspaceShell>;
+  return <WorkspaceShell email={user.email} ownerId={user.id} businessId={business?.id ?? null} businessName={business?.name ?? null}><ProductTelemetry />{children}</WorkspaceShell>;
 }

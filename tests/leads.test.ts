@@ -8,7 +8,7 @@ import { PATCH } from "@/app/api/leads/[id]/route";
 
 const databaseMocks = vi.hoisted(() => ({
   getUser: vi.fn(), business: vi.fn(), rpc: vi.fn(), from: vi.fn(), update: vi.fn(),
-  eq: vi.fn(), select: vi.fn(), maybeSingle: vi.fn(),
+  eq: vi.fn(), select: vi.fn(), gt: vi.fn(), maybeSingle: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
   auth: { getUser: databaseMocks.getUser }, rpc: databaseMocks.rpc, from: databaseMocks.from,
@@ -28,6 +28,7 @@ describe("enquiry list and follow-up routes", () => {
     databaseMocks.update.mockReturnValue(databaseMocks);
     databaseMocks.eq.mockReturnValue(databaseMocks);
     databaseMocks.select.mockReturnValue(databaseMocks);
+    databaseMocks.gt.mockResolvedValue({ count: 3, error: null });
     databaseMocks.maybeSingle.mockResolvedValue({ data: { id: leadId, workflow_status: "booked", follow_up_note: "Synthetic" }, error: null });
   });
   const patch = (body: unknown, id = leadId) => PATCH(new Request(`http://localhost/api/leads/${id}`, {
@@ -42,6 +43,28 @@ describe("enquiry list and follow-up routes", () => {
     expect(databaseMocks.rpc).toHaveBeenCalledWith("get_lead_page", expect.objectContaining({
       p_business_id: businessId, p_query: "customer", p_status: "booked", p_contact: "ready", p_limit: 50,
     }));
+  });
+
+  it("counts newly imported enquiries since viewing only for the authenticated owner's business", async () => {
+    const { GET: GETUnseen } = await import("@/app/api/leads/unseen/route");
+    const url = "http://localhost/api/leads/unseen?since=2026-10-01T00%3A00%3A00.000Z";
+    const response = await GETUnseen(new Request(url));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ count: 3 });
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(databaseMocks.select).toHaveBeenCalledWith("id", { count: "exact", head: true });
+    expect(databaseMocks.eq).toHaveBeenCalledWith("business_id", businessId);
+    expect(databaseMocks.gt).toHaveBeenCalledWith("created_at", "2026-10-01T00:00:00.000Z");
+    expect((await GETUnseen(new Request(`${url}&business_id=foreign`))).status).toBe(400);
+    expect((await GETUnseen(new Request("http://localhost/api/leads/unseen?since=not-a-date"))).status).toBe(400);
+    databaseMocks.gt.mockResolvedValueOnce({ count: null, error: { message: "private database detail" } });
+    const failed = await GETUnseen(new Request(url));
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain("private database detail");
+    databaseMocks.business.mockResolvedValueOnce(null);
+    expect((await GETUnseen(new Request(url))).status).toBe(404);
+    databaseMocks.getUser.mockResolvedValue({ data: { user: null } });
+    expect((await GETUnseen(new Request(url))).status).toBe(401);
   });
 
   it("binds opaque cursors to the tenant, filters and stable database position", async () => {

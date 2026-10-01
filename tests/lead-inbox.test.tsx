@@ -42,6 +42,7 @@ const setFetch = (impl: unknown) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   setFetch({ ok: true, json: async () => ({ leads: [], imported: 0, sync: { id: "sync-1", state: "complete", hasMore: false } }) });
 });
 
@@ -174,6 +175,51 @@ describe("<LeadInbox> table", () => {
 });
 
 describe("<LeadInbox> syncing", () => {
+  it("renders saved enquiries while syncing a stale connected Page in the background", async () => {
+    const key = "lead-sync:owner:b1";
+    const previous = String(Date.now() - 16 * 60_000);
+    localStorage.setItem(key, previous);
+    let complete!: (response: Response) => void;
+    const fetcher = vi.fn((url: string) => url === "/api/leads/sync"
+      ? new Promise<Response>(resolve => { complete = resolve; })
+      : Promise.resolve(Response.json({ leads: [lead()], total: 1, nextCursor: null })));
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady syncScope="owner:b1" />);
+    expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" }));
+    expect(localStorage.getItem(key)).toBe(previous);
+    await act(async () => complete(Response.json({ leads: [lead()], imported: 0, sync: { id: "run-1", state: "complete", hasMore: false } })));
+    expect(await screen.findByText("You're up to date — no new leads.")).toBeInTheDocument();
+    expect(Number(localStorage.getItem(key))).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it("skips recent syncs but checks a newly bound Meta Page", async () => {
+    localStorage.setItem("lead-sync:owner:b1:act:page-a", String(Date.now() - 60_000));
+    const fetcher = vi.fn(async () => Response.json({ leads: [], imported: 0, sync: { id: "run-2", state: "complete", hasMore: false } }));
+    vi.stubGlobal("fetch", fetcher);
+    const recent = render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1:act:page-a" />);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    expect(fetcher).not.toHaveBeenCalled();
+    recent.unmount();
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1:act:page-b" />);
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/leads/sync", { method: "POST" }));
+  });
+
+  it.each([
+    [502, { error: "Could not read all forms", leads: [], imported: 0, sync: { id: "run-3", state: "partial", hasMore: true } }],
+    [200, { leads: [], imported: 1, sync: { id: "run-4", state: "partial", hasMore: true } }],
+  ])("does not mark a failed or partial background sync as fresh (HTTP %s)", async (statusCode, body) => {
+    const key = "lead-sync:owner:b1";
+    localStorage.setItem(key, String(Date.now() - 16 * 60_000));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/leads/sync"
+      ? Response.json(body, { status: statusCode })
+      : Response.json({ leads: [], total: 0, nextCursor: null })));
+    render(<LeadInbox businessName="Solaride" initialLeads={[]} metaReady syncScope="owner:b1" />);
+    expect(await screen.findByText(/Sync incomplete/)).toBeInTheDocument();
+    expect(Number(localStorage.getItem(key))).toBeLessThan(Date.now() - 15 * 60_000);
+    expect(screen.getByRole("button", { name: "Resume sync" })).toBeInTheDocument();
+  });
+
   it("warns about a partial sync instead of claiming all leads are up to date", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/leads/sync"
       ? { ok: false, status: 502, json: async () => ({ leads: [lead()], imported: 1, failedForms: [{ id: "f2", name: "Restricted form" }],

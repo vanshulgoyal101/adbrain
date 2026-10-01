@@ -1089,6 +1089,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await session.query("select set_config('request.jwt.claim.sub',$1,false)", [ownerId]);
         const confirmed = (await session.query("update public.leads set workflow_status='qualified', follow_up_note='Synthetic saved note' where business_id=$1 and meta_lead_id='sync-lead' returning *", [businessId])).rows[0];
         assert.equal(confirmed.workflow_status, 'qualified');
+        const viewedAt = (await session.query("select clock_timestamp()::text as viewed_at")).rows[0].viewed_at;
         await session.query("set role service_role");
         await assert.rejects(save(0, [{ meta_lead_id: 'stale-lead' }]), { code: '40001' });
         const duplicate = await save(1, [{ meta_lead_id: 'sync-lead', full_name: 'Overwrite', form_id: 'changed-form',
@@ -1133,6 +1134,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
         assert.equal(late.run.state, 'complete');
         assert.equal((await session.query("select workflow_status,follow_up_note from public.leads where business_id=$1 and meta_lead_id='sync-lead'", [businessId])).rows[0].follow_up_note, 'Synthetic saved note');
         await session.query("set role authenticated");
+        const unseen = (await session.query("select count(*)::int as count from public.leads where business_id=$1 and created_at > $2 and meta_lead_id in ('sync-lead','late-lead')", [businessId, viewedAt])).rows[0].count;
+        assert.equal(unseen, 1);
         await session.query("select set_config('request.jwt.claim.sub',$1,false)", [otherOwnerId]);
         await assert.rejects(session.query("select public.get_lead_page($1) as page", [businessId]), { code: '42501' });
         assert.equal((await session.query("select id from public.leads where business_id=$1", [businessId])).rowCount, 0);
