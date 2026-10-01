@@ -21,12 +21,29 @@ const mocks = vi.hoisted(() => ({
   used: 0 as number | null,
   admitted: new Map<string, { business: string; hash: string }>(),
   states: new Map<string, string>(),
+  regenerateClaims: new Map<string, { attempt: string; state: "processing" | "unresolved" }>(),
+  regenerateClaimError: false,
   persist: vi.fn(),
   progress: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
-    rpc: async (name: string, args: { p_generation_id: string; p_business_id: string; p_request_hash?: string; p_complete?: boolean; p_uncertain?: boolean }) => {
+    rpc: async (name: string, args: { p_generation_id: string; p_business_id: string; p_request_hash?: string; p_complete?: boolean; p_uncertain?: boolean; p_creative_id?: string; p_attempt_id?: string; p_unresolved?: boolean }) => {
+      if (name === "creative_regeneration_claim") {
+        if (mocks.regenerateClaimError) return { data: null, error: { message: "Unavailable" } };
+        const current = mocks.regenerateClaims.get(args.p_creative_id!);
+        if (current) return { data: { action: "busy", status: current.state }, error: null };
+        mocks.regenerateClaims.set(args.p_creative_id!, { attempt: args.p_attempt_id!, state: "processing" });
+        return { data: { action: "start" }, error: null };
+      }
+      if (name === "creative_regeneration_finish") {
+        const current = mocks.regenerateClaims.get(args.p_creative_id!);
+        if (!current || current.attempt !== args.p_attempt_id || current.state !== "processing")
+          return { data: { status: "missing" }, error: null };
+        if (args.p_unresolved) current.state = "unresolved";
+        else mocks.regenerateClaims.delete(args.p_creative_id!);
+        return { data: { status: args.p_unresolved ? "unresolved" : "released" }, error: null };
+      }
       if (name === "creative_generation_progress") {
         mocks.progress(args);
         const status = args.p_uncertain ? "unresolved" : args.p_complete ? "complete" : "processing";
@@ -138,6 +155,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.admitted.clear();
   mocks.states.clear();
+  mocks.regenerateClaims.clear();
+  mocks.regenerateClaimError = false;
   mocks.saveError = false;
   mocks.persist.mockResolvedValue(true);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -211,6 +230,59 @@ describe("creative generation route", () => {
     expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
     expect(mocks.generateOneVariant.mock.calls[0][8]).toContainEqual({ headline: "Previous ad", primary_text: "Previous opening" });
     expect(await response.text()).not.toMatch(/private-test-secret|private prompt/);
+  });
+
+  it("does not start two paid regenerations for overlapping requests for one creative", async () => {
+    let finish!: (result: typeof variant) => void;
+    const pending = new Promise<typeof variant>(resolve => { finish = resolve; });
+    mocks.generateOneVariant.mockReturnValue(pending);
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const context = { params: Promise.resolve({ id: "creative" }) };
+    const first = POST(request(), context);
+    const second = POST(request(), context);
+    await vi.waitFor(() => expect(mocks.generateOneVariant).toHaveBeenCalled());
+    expect((await second).status).toBe(409);
+    expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
+    finish(variant);
+    expect((await first).status).toBe(200);
+    expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
+  });
+
+  it("releases the admission after a confirmed save or a pre-provider failure", async () => {
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const context = { params: Promise.resolve({ id: "creative" }) };
+    mocks.instructions.mockRejectedValueOnce(new Error("Saved instructions unavailable"));
+    expect((await POST(request(), context)).status).toBe(502);
+    expect(mocks.regenerateClaims.size).toBe(0);
+    mocks.generateOneVariant.mockResolvedValue(variant);
+    expect((await POST(request(), context)).status).toBe(200);
+    expect(mocks.regenerateClaims.size).toBe(0);
+    expect((await POST(request(), context)).status).toBe(200);
+    expect(mocks.generateOneVariant).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds an uncertain paid attempt and blocks later paid retries", async () => {
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const context = { params: Promise.resolve({ id: "creative" }) };
+    mocks.generateOneVariant.mockRejectedValueOnce(new Error("Provider result unknown"));
+    expect((await POST(request(), context)).status).toBe(502);
+    expect(mocks.regenerateClaims.get("creative")?.state).toBe("unresolved");
+    expect((await POST(request(), context)).status).toBe(409);
+    expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the claim or a paid usage receipt cannot be recorded", async () => {
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const context = { params: Promise.resolve({ id: "creative" }) };
+    mocks.regenerateClaimError = true;
+    expect((await POST(request(), context)).status).toBe(503);
+    expect(mocks.generateOneVariant).not.toHaveBeenCalled();
+    mocks.regenerateClaimError = false;
+    mocks.generateOneVariant.mockResolvedValue(variant);
+    mocks.persist.mockResolvedValueOnce(false);
+    expect((await POST(request(), context)).status).toBe(502);
+    expect(mocks.regenerateClaims.get("creative")?.state).toBe("unresolved");
+    expect(mocks.render).not.toHaveBeenCalled();
   });
 
   it("does not expose upstream error bodies from total failures", async () => {

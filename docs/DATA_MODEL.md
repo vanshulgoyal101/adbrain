@@ -326,6 +326,15 @@ SQL cannot independently verify external provider finality: the authorized
 operator must do that before calling. In particular it cannot reconcile the
 September 29 #54 incident, whose per-generation provider evidence is still absent.
 
+The [regeneration claims migration](../db/migrations/20261001_creative_regeneration_claims.sql)
+adds one private claim per creative, bound to the current business, owner and
+request UUID. Service-only RPCs atomically admit one paid regeneration at a time
+across server instances and release the claim after a confirmed save or known
+pre-provider failure. An uncertain paid outcome stays `unresolved`; it cannot
+auto-expire or be cleared by an authenticated client. This is not a provider
+idempotency key or a substitute for external outcome evidence. Apply the migration
+before serving the updated regeneration route.
+
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
 per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
@@ -440,6 +449,7 @@ verification remain separate gates; source types alone do not prove DB parity.
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
 | `creative_generation_admit/status/progress` | Deployed #54 service-only, owner-checked generation claim, recovery and quota holds |
 | `creative_generation_reconcile` | Production service-only operator-attested settlement after external finality and token verification; legacy intents denied |
+| `creative_regeneration_claim/finish` | Migration-dependent service-only, owner-checked per-creative paid-operation claim and guarded release/hold |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
 | `meta_funding_latest_record` | Service-only business/environment-scoped funding evidence lookup |
@@ -493,6 +503,7 @@ alone is not a safe deployment plan.
 | [20260926_validate_campaign_integrity.sql](../db/migrations/20260926_validate_campaign_integrity.sql) | Separate validation only after integrity migration, read-only preflight and approved repair; failure must not be bypassed |
 | [20260926_razorpay_test_orders.sql](../db/migrations/20260926_razorpay_test_orders.sql) | Optional private test orders/events and service RPCs; never live-payment activation |
 | [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
+| [20261001_creative_regeneration_claims.sql](../db/migrations/20261001_creative_regeneration_claims.sql) | Service-only paid regeneration fence; apply before serving the updated route and verify private grants |
 
 This inventory is not a command to replay every file. Start an empty local core
 database with its documented schema path; do not then blindly reapply non-idempotent

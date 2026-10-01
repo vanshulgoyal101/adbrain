@@ -532,7 +532,13 @@ timeout; `unresolved` requires investigation, not another paid request.
 
 `POST /api/creatives/[id]/regenerate` has no request body. It uses saved generation
 settings and current business context, replaces the creative, and sets `draft`.
-It has no separate durable regeneration-operation recovery endpoint.
+After the [regeneration claims migration](../db/migrations/20261001_creative_regeneration_claims.sql)
+is applied, the server claims the owned creative before paid work. A concurrent
+attempt or unresolved previous attempt returns 409 without another provider call;
+unavailable admission returns 503 before paid work. A confirmed save or pre-provider
+failure releases the claim. An uncertain paid failure retains it for operator review.
+The claim's attempt UUID is the request ID in usage receipts. It does not expire
+automatically, and there is no customer-facing regeneration recovery endpoint.
 
 ### Export
 
