@@ -175,12 +175,17 @@ describe("<LeadInbox> table", () => {
 
 describe("<LeadInbox> syncing", () => {
   it("warns about a partial sync instead of claiming all leads are up to date", async () => {
-    setFetch({ ok: true, json: async () => ({ leads: [lead()], imported: 0, failedForms: [{ id: "f2", name: "Restricted form" }] }) });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/leads/sync"
+      ? { ok: false, status: 502, json: async () => ({ leads: [lead()], imported: 1, failedForms: [{ id: "f2", name: "Restricted form" }],
+        sync: { id: "sync-1", state: "partial", hasMore: true } }) }
+      : { ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
     render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
     fireEvent.click(screen.getByRole("button", { name: /sync leads/i }));
     expect(await screen.findByText(/Sync incomplete\. Could not read: Restricted form/)).toBeInTheDocument();
     expect(screen.queryByText(/You're up to date/)).toBeNull();
     expect(screen.getByText("Asha Verma")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume sync" })).toBeInTheDocument();
+    expect(screen.queryByText(/Enquiries could not be loaded/)).toBeNull();
   });
 
   it("retains the inbox when the server cannot reload saved leads", async () => {
@@ -429,6 +434,32 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resume sync" }));
     expect(await screen.findByText("You're up to date — no new leads.")).toBeInTheDocument();
     expect(fetcher.mock.calls.filter(([url]) => url.startsWith("/api/leads?")).every(([url]) => url.includes("status=booked"))).toBe(true);
+  });
+
+  it("ignores a stale inbox read completed after a sync refresh", async () => {
+    let resolveOld!: (value: unknown) => void;
+    let oldSignal: AbortSignal | undefined;
+    let reads = 0;
+    const late = lead({ id: "late", meta_lead_id: "meta-late", full_name: "Late arrival", workflow_status: "contacted" });
+    vi.stubGlobal("fetch", vi.fn((url: string, options: RequestInit) => {
+      if (url === "/api/leads/sync") return Promise.resolve({ ok: true, json: async () => ({ leads: [late], imported: 1,
+        sync: { id: "completed", state: "complete", hasMore: false } }) });
+      if (++reads === 1) {
+        oldSignal = options.signal as AbortSignal;
+        return new Promise(resolve => { resolveOld = resolve; });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ leads: [late], total: 1, nextCursor: null }) });
+    }));
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead()]} metaReady />);
+    fireEvent.change(screen.getByLabelText("Search enquiries"), { target: { value: "Late" } });
+    await waitFor(() => expect(oldSignal).toBeDefined());
+    fireEvent.click(screen.getByRole("button", { name: "Sync leads" }));
+    expect(await screen.findByText("Late arrival")).toBeInTheDocument();
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () => resolveOld({ ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
+    expect(screen.getByText("Late arrival")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Follow up Late arrival" })).toHaveTextContent("contacted");
+    expect(screen.queryByText("Asha Verma")).toBeNull();
   });
 
   it("does not infer complete sync from a legacy response", async () => {

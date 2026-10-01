@@ -164,14 +164,15 @@ export function LeadInbox({
         sync?: { id: string; state: "complete" | "partial"; hasMore: boolean };
         error?: string;
       };
-      if (!res.ok || !Array.isArray(data.leads)) {
+      if ((!res.ok && !(res.status === 502 && data.sync?.hasMore)) || !Array.isArray(data.leads)) {
         setError(data.error ?? "Couldn't sync leads. Your existing enquiries are still available.");
         return;
       }
       page.refresh();
       setSyncId(data.sync?.hasMore ? data.sync.id : null);
       if (data.failedForms?.length || data.sync?.state === "partial" || data.sync?.hasMore) {
-        const failures = data.failedForms?.length ? ` Could not read: ${data.failedForms.map(form => form.name).join(", ")}.` : " More enquiries remain to be checked.";
+        const failures = data.failedForms?.length ? ` Could not read: ${data.failedForms.map(form => form.name).join(", ")}.` :
+          !res.ok ? " Could not check all forms. Retry to check remaining enquiries." : " More enquiries remain to be checked.";
         setWarning(`Sync incomplete.${failures} ${data.imported ?? 0} new leads imported.`);
         return;
       }

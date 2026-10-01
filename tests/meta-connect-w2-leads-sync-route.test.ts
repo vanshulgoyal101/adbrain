@@ -19,6 +19,7 @@ const business = { id: "business-1", name: "Business" };
 const syncId = "11111111-1111-4111-8111-111111111111";
 type Progress = { formsDone: boolean; formsAfter: string | null; formsSeen: string[]; formIds: string[]; pending: { id: string; name: string; after: string | null; seen: string[]; failed: boolean }[]; discover: boolean };
 let persisted: { id: string; version: number; state: string; progress: Progress } | undefined;
+let runNumber = 0;
 const savedLeads = new Map<string, Record<string, unknown>>();
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc }) }));
@@ -48,6 +49,7 @@ vi.mock("@/lib/audit", () => ({ logEvent: vi.fn() }));
 beforeEach(() => {
   vi.resetAllMocks();
   persisted = undefined;
+  runNumber = 0;
   savedLeads.clear();
   mocks.upsert.mockImplementation(async (rows: Record<string, unknown>[]) => {
     let count = 0;
@@ -63,7 +65,10 @@ beforeEach(() => {
     abortSignal: async () => {
       if (name === "lead_sync_start") {
         if (args.p_sync_id && args.p_sync_id !== persisted?.id) return { error: { code: "P0002" } };
-        persisted ??= { id: syncId, version: 0, state: "partial", progress: { formsDone: false, formsAfter: null, formsSeen: [], formIds: [], pending: [], discover: true } };
+        if (!persisted || (!args.p_sync_id && persisted.state === "complete")) {
+          const id = runNumber++ === 0 ? syncId : `${String(runNumber).padStart(8, "0")}-1111-4111-8111-111111111111`;
+          persisted = { id, version: 0, state: "partial", progress: { formsDone: false, formsAfter: null, formsSeen: [], formIds: [], pending: [], discover: true } };
+        }
         return { data: [structuredClone(persisted)], error: null };
       }
       if (!persisted || persisted.version !== args.p_version) return { error: { code: "40001" } };
@@ -115,14 +120,32 @@ describe("lead sync connection boundary", () => {
     expect(mocks.upsert).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ count: "exact", ignoreDuplicates: true }));
   });
 
+  it("finds a late lead on a fresh sync without replacing a prior follow-up or recounting duplicates", async () => {
+    mocks.listLeadForms.mockResolvedValue([{ id: "form-1", name: "Enquiries" }]);
+    mocks.listLeadsForForm.mockResolvedValue([{ id: "lead-1", created_time: "2026-09-30T12:00:00Z", field_data: [] }]);
+    const { POST } = await import("@/app/api/leads/sync/route");
+    const first = await (await POST()).json();
+    expect(first).toMatchObject({ imported: 1, sync: { state: "complete" } });
+    Object.assign(savedLeads.get("lead-1")!, { workflow_status: "contacted", follow_up_note: "Call tomorrow" });
+    mocks.listLeadsForForm.mockResolvedValue([
+      { id: "lead-1", created_time: "2026-09-30T12:00:00Z", field_data: [] },
+      { id: "lead-late", created_time: "2026-09-29T12:00:00Z", field_data: [] },
+    ]);
+    const second = await (await POST()).json();
+    expect(second).toMatchObject({ imported: 1, sync: { state: "complete" } });
+    expect(second.sync.id).not.toBe(first.sync.id);
+    expect(savedLeads.size).toBe(2);
+    expect(savedLeads.get("lead-1")).toMatchObject({ workflow_status: "contacted", follow_up_note: "Call tomorrow" });
+    expect(await (await POST()).json()).toMatchObject({ imported: 0, sync: { state: "complete" } });
+  });
+
   it("reports unreadable forms while retaining successful imports", async () => {
     mocks.listLeadForms.mockResolvedValue([{ id: "form-1", name: "Available" }, { id: "form-2", name: "Restricted" }]);
     mocks.listLeadsForForm.mockResolvedValueOnce([{ id: "lead-1", field_data: [] }]).mockRejectedValueOnce(new Error("denied"));
-    mocks.upsert.mockResolvedValue({ error: null, count: 1 });
     const { POST } = await import("@/app/api/leads/sync/route");
     const response = await POST();
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ imported: 1, failedForms: [{ id: "form-2", name: "Restricted" }] });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ imported: 1, leads: [expect.objectContaining({ meta_lead_id: "lead-1" })], failedForms: [{ id: "form-2", name: "Restricted" }] });
   });
 
   it("fails rather than claiming up-to-date when every form is unreadable", async () => {
@@ -244,11 +267,15 @@ describe("lead sync connection boundary", () => {
       .mockRejectedValueOnce(new Error("Malformed later page"));
     mocks.listLeadsForForm.mockResolvedValue([{ id: "lead-1", field_data: [] }]);
     const { POST } = await import("@/app/api/leads/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ imported: 1, sync: { state: "partial", hasMore: true } });
+    const failed = await POST();
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toMatchObject({ imported: 1, sync: { state: "partial", hasMore: true } });
     expect(persisted?.progress.formsAfter).toBe("forms2");
     mocks.formsPage.mockResolvedValue({ data: [{ id: "form-2", name: "Second" }], after: null });
     mocks.listLeadsForForm.mockResolvedValue([{ id: "lead-2", field_data: [] }]);
-    expect(await (await POST()).json()).toMatchObject({ imported: 1, sync: { state: "complete", hasMore: false } });
+    const resumed = await POST();
+    expect(resumed.status).toBe(200);
+    expect(await resumed.json()).toMatchObject({ imported: 1, sync: { state: "complete", hasMore: false } });
     expect(mocks.formsPage).toHaveBeenLastCalledWith({ after: "forms2" });
   });
 });
