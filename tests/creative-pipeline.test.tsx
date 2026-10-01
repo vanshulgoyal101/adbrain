@@ -51,6 +51,54 @@ beforeEach(() => {
 const brand = { name: "Solaride", vertical: "solar energy" } as never;
 
 describe("generateVariants", () => {
+  it("keeps failed provider fallthrough evidence in a successful creative receipt", async () => {
+    complete.mockImplementationOnce(async (_messages, options) => {
+      options.onAttempt({ provider: "groq", model: "model-a", providerRequestId: "groq-failed-123", providerFinalStatus: "unknown", status: "error" });
+      options.onAttempt({ provider: "openrouter", model: "model-b", providerRequestId: "openrouter-done-456", providerFinalStatus: "completed", status: "success", usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 } });
+      return { ...completion(concept), provider: "openrouter", model: "model-b", usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 } };
+    });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { variantUsageEvents } = await import("@/lib/creative/receipt");
+    const [variant] = await generateVariants({ brand, brief: "x", count: 1 });
+    const events = variantUsageEvents(variant, { businessId: "business", userId: "user", route: "creatives.generate", requestId: "request" });
+    expect(events.slice(0, 2)).toMatchObject([
+      { provider: "groq", status: "error", usage: { totalTokens: 0 }, providerRequestId: "groq-failed-123", providerFinalStatus: "unknown" },
+      { provider: "openrouter", status: "success", usage: { totalTokens: 10 }, providerRequestId: "openrouter-done-456", providerFinalStatus: "completed" },
+    ]);
+    expect(events.filter((event) => event.usageKind !== "image").reduce((total, event) => total + event.usage.totalTokens, 0)).toBe(10);
+  });
+
+  it("keeps failed and completed image attempts separately when a fallback succeeds", async () => {
+    generateImage.mockImplementationOnce(async ({ onAttempt }) => {
+      onAttempt({ provider: "openrouter-image", model: "image-a", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown" });
+      onAttempt({ provider: "backup-image", model: "image-b", status: "success", providerRequestId: "image-done-456", providerFinalStatus: "completed", estimatedCostUsd: 0.13 });
+      return { url: "https://img.example/a.jpg", prompt: "a photo", provider: "backup-image", model: "image-b", fallbackFrom: "openrouter-image", estimatedCostUsd: 0.13,
+        width: 120, height: 160, latencyMs: 250 };
+    });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { variantUsageEvents } = await import("@/lib/creative/receipt");
+    const [variant] = await generateVariants({ brand, brief: "x", count: 1 });
+    const events = variantUsageEvents(variant, { businessId: "business", userId: "user", route: "creatives.generate", requestId: "request" });
+    expect(events.filter((event) => event.usageKind === "image")).toMatchObject([
+      { provider: "openrouter-image", providerRequestId: "image-failed-123", providerFinalStatus: "unknown", status: "error" },
+      { provider: "backup-image", providerRequestId: "image-done-456", providerFinalStatus: "completed", status: "fallback", estimatedCostUsd: 0.13,
+        imageWidth: 120, imageHeight: 160, latencyMs: 250, metadata: { fallbackFrom: "openrouter-image" } },
+    ]);
+  });
+
+  it("keeps image failure evidence even when no creative is saved", async () => {
+    generateImage.mockImplementationOnce(async ({ onAttempt }) => {
+      onAttempt({ provider: "openrouter-image", model: "image-a", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown" });
+      throw new Error("Image unavailable");
+    });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const onFailure = vi.fn();
+    await generateVariants({ brand, brief: "x", count: 1, onFailure });
+    const events = failedVariantUsage(onFailure.mock.calls[0][1], { businessId: "business", userId: "user", route: "creatives.generate", requestId: "request" });
+    expect(events).toMatchObject([{ usageKind: "image", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown" }]);
+  });
+
   it.each([false, true])("retains truncated usage once in failure receipts (prior repair: %s)", async (priorRepair) => {
     const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 17 };
     const earlierUsage = { promptTokens: 3, completionTokens: 2, totalTokens: 5 };

@@ -140,8 +140,12 @@ persistence has its own calls and hosting limits still apply. Closing the browse
 does not automatically cancel the batch or undo provider charges.
 
 `CreativeValidationError` retains usage from invalid concepts; image failure also
-retains preceding text usage. Provider errors are returned as safe user-facing
-failures, not raw prompt/token traces. No model validation proves the image
+retains preceding text usage. The #54 prevention candidate records each text and
+image provider attempt on success, fallback and failure, including a bounded
+provider request ID where returned and completed/unknown finality. The generation
+UUID stays separate from the HTTP request ID. Missing IDs or zero-token error
+receipts do not prove a provider charged nothing or completed no work. Provider
+errors are returned as safe user-facing failures, not raw prompt/token traces. No model validation proves the image
 accurately depicts a real product or that an ad claim is legally supportable.
 Preferences are style guidance, not evidence for `sourceQuotes` or commercial
 claims and not permission to spend. The brief is direction, not quote evidence:
@@ -324,8 +328,11 @@ request rather than reading a stored artifact.
 [Usage persistence](../src/lib/llm/persist.ts) writes through the server admin
 client to `llm_usage_events`. Rows include provider/model, route/request, text or
 image kind, tokens, estimated USD, prompt version, attempt, latency, cache flag,
-status/error category, and dimensions. Do not store raw prompts, secrets, or image
-bytes there. Creative rows contain separate user-facing provenance receipts.
+status/error category, and dimensions. The prevention candidate also writes
+generationId, bounded providerRequestId (when available) and providerFinalStatus
+in row metadata; the latter remains unknown on transport/HTTP failures. Do not
+store raw prompts, secrets, provider response bodies or image bytes there.
+Creative rows contain separate user-facing provenance receipts.
 
 Keep three accounting layers separate:
 
@@ -350,8 +357,9 @@ gates fail closed. A zero configured limit disables that check.
 
 Limits remain important:
 
-- The check is not an atomic reservation; concurrent requests can exceed the
-  ceiling, and one request can consume more tokens than remaining headroom.
+- Creative generation has atomic per-business/month reservation and durable
+  unresolved holds. Other LLM callers do not all share that admission boundary;
+  even a reserved request can use more tokens than its estimate.
 - Persistence is best effort, so crashes, provider omissions, and write failure
   can undercount. Do not rerun paid generation merely to fill a missing ledger row.
 - Model cost tables and fallback estimates are estimates, not account invoices.

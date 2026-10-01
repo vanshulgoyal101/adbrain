@@ -4,6 +4,7 @@ import { CONCEPT_VERSION } from "./concept";
 import type { Json } from "@/lib/types";
 import { getEnv } from "@/lib/env";
 import type { LLMUsageEvent } from "@/lib/llm/persist";
+import type { ImageAttempt } from "@/lib/imageGen/types";
 import { z } from "zod";
 
 export function savedGenerationSettings(value: unknown) {
@@ -43,13 +44,14 @@ export function generationReceipt(
         ...variant.imageUsage,
         estimatedCostUsd: variant.imageUsage.estimatedCostUsd ?? null,
       },
+      imageAttempts: variant.imageAttempts ?? [],
     }),
   ) as Json;
 }
 
 export function variantUsageEvents(
   variant: GeneratedVariant,
-  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
 ): LLMUsageEvent[] {
   return [
     ...variant.llmUsage.map((entry, index) => ({
@@ -57,32 +59,59 @@ export function variantUsageEvents(
       ...entry,
       promptVersion: CONCEPT_VERSION,
       attempt: index + 1,
+      status: entry.status ?? "success",
       metadata: { angle: variant.angleId },
     })),
-    {
+    ...(variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
+      entry, context, index + 1, variant.angleId,
+      index === variant.imageAttempts!.length - 1 && entry.status === "success" ? variant.imageUsage : undefined,
+    )) : [{
       ...context,
       provider: variant.imageUsage.provider,
       model: variant.imageUsage.model,
-      usageKind: "image",
+      usageKind: "image" as const,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       estimatedCostUsd: variant.imageUsage.estimatedCostUsd,
       latencyMs: variant.imageUsage.latencyMs,
       imageWidth: variant.imageUsage.width,
       imageHeight: variant.imageUsage.height,
-      status: variant.imageUsage.fallbackFrom ? "fallback" : "success",
+      status: variant.imageUsage.fallbackFrom ? "fallback" as const : "success" as const,
+      providerRequestId: variant.imageUsage.providerRequestId,
+      providerFinalStatus: variant.imageUsage.providerFinalStatus,
       promptVersion: CONCEPT_VERSION,
       metadata: {
         angle: variant.angleId,
         costKnown: variant.imageUsage.estimatedCostUsd !== undefined,
         fallbackFrom: variant.imageUsage.fallbackFrom ?? null,
       },
-    },
+    }]),
   ];
+}
+
+function imageAttemptUsage(
+  entry: ImageAttempt,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
+  attempt: number,
+  angle?: string,
+  completedImage?: GeneratedVariant["imageUsage"],
+): LLMUsageEvent {
+  return {
+    ...context, ...entry, attempt,
+    usageKind: "image",
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    promptVersion: CONCEPT_VERSION,
+    status: completedImage?.fallbackFrom ? "fallback" : entry.status,
+    imageWidth: completedImage?.width,
+    imageHeight: completedImage?.height,
+    latencyMs: completedImage?.latencyMs,
+    metadata: { ...(angle ? { angle } : {}), costKnown: entry.estimatedCostUsd !== undefined,
+      ...(completedImage?.fallbackFrom ? { fallbackFrom: completedImage.fallbackFrom } : {}) },
+  };
 }
 
 export function failedVariantUsage(
   error: unknown,
-  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
 ): LLMUsageEvent[] {
   if (
     !(error instanceof CreativeValidationError) &&
@@ -101,13 +130,16 @@ export function failedVariantUsage(
         ? "invalid-json" : issue.includes(":") ? "schema-or-other" : "other";
     }))],
   } : undefined;
-  return error.usage.map((entry, index) => ({
+  const textEvents = error.usage.map((entry, index) => ({
     ...context,
     ...entry,
     promptVersion: CONCEPT_VERSION,
     attempt: index + 1,
-    status: "error",
+    status: entry.status ?? "error",
     errorCode: error.name,
     ...(metadata && index === error.usage.length - 1 ? { metadata } : {}),
   }));
+  return error instanceof CreativeImageError
+    ? [...textEvents, ...error.imageAttempts.map((entry, index) => imageAttemptUsage(entry, context, index + 1))]
+    : textEvents;
 }

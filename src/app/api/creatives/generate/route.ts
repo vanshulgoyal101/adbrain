@@ -231,6 +231,7 @@ async function handlePOST(req: Request) {
             userId: user.id,
             route: "creatives.generate",
             requestId,
+            generationId: variantGroup,
           });
         const recorded = await persistLLMUsage(events);
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
@@ -279,6 +280,7 @@ async function handlePOST(req: Request) {
             userId: user.id,
             route: "creatives.generate",
             requestId,
+            generationId: variantGroup,
           });
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;

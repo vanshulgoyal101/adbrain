@@ -1,5 +1,5 @@
 import { getEnv } from "@/lib/env";
-import type { GeneratedImage, ImageProvider, ImageRequest } from "../types";
+import { ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "../types";
 import { MAX_IMAGE_BYTES, readBoundedResponse } from "../raster";
 
 type Capability = {
@@ -16,6 +16,10 @@ const capabilityCache = new Map<
   string,
   { expires: number; endpoints: Endpoint[] }
 >();
+
+function boundedRequestId(value: unknown): string | undefined {
+  return typeof value === "string" && /^[\w.:-]{1,256}$/.test(value) ? value : undefined;
+}
 
 async function imageOptions(
   model: string,
@@ -120,27 +124,32 @@ export function createOpenRouterProvider(): ImageProvider {
           ? AbortSignal.any([req.signal, AbortSignal.timeout(180_000)])
           : AbortSignal.timeout(180_000),
       });
-      const payload = JSON.parse(
-        Buffer.from(
-          await readBoundedResponse(response, MAX_IMAGE_BYTES * 1.4),
-        ).toString("utf8"),
-      ) as {
+      const headerRequestId = boundedRequestId(response.headers.get("x-request-id"))
+        ?? boundedRequestId(response.headers.get("x-openrouter-request-id"));
+      let payload: {
+        id?: string;
         data?: { b64_json?: string; media_type?: string }[];
         usage?: { cost?: number };
         error?: { message?: string };
       };
+      try {
+        payload = JSON.parse(Buffer.from(await readBoundedResponse(response, MAX_IMAGE_BYTES * 1.4)).toString("utf8"));
+      } catch {
+        throw new ImageProviderError(`OpenRouter image HTTP ${response.status}: invalid response`, headerRequestId);
+      }
+      const providerRequestId = boundedRequestId(payload.id) ?? headerRequestId;
       if (!response.ok) {
-        throw new Error(
-          `OpenRouter image HTTP ${response.status}: ${payload.error?.message ?? "request failed"}`,
-        );
+        throw new ImageProviderError(`OpenRouter image HTTP ${response.status}: request failed`, providerRequestId);
       }
       const image = payload.data?.[0];
-      if (!image?.b64_json) throw new Error("OpenRouter returned no image.");
+      if (!image?.b64_json) throw new ImageProviderError("OpenRouter returned no image.", providerRequestId);
       return {
         url: `data:${image.media_type ?? "image/png"};base64,${image.b64_json}`,
         provider: "openrouter-image",
         model: env.OPENROUTER_IMAGE_MODEL,
         estimatedCostUsd: payload.usage?.cost,
+        providerRequestId,
+        providerFinalStatus: "completed",
         prompt: req.prompt,
         seed: typeof options.seed === "number" ? options.seed : undefined,
       };
