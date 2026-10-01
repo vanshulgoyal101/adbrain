@@ -1,14 +1,17 @@
-import { ArrowUpRight, CreditCard, Landmark, WalletCards } from "lucide-react";
+import { WalletCards } from "lucide-react";
 import type { MetaConnection } from "@/lib/meta/credentials";
 import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
-import { META_FUNDING_METHODS } from "@/lib/payments/meta-funding";
 import { TestCheckout } from "@/components/test-checkout";
+import { ProductionCheckout } from "@/components/production-checkout";
+import { CustomerBalance } from "@/components/customer-balance";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
-const methodIcons = { upi_auto_reload: WalletCards, recurring_card: CreditCard, monthly_invoicing: Landmark };
-
-export function ManagedBilling({ connection, testBusinessId }: { connection: BillingConnection | null; testBusinessId?: string }) {
+export function ManagedBilling({ connection, testBusinessId, liveBusinessId }: { connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string }) {
+  if (liveBusinessId) return <>
+    <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
+    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} />
+  </>;
   const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"
     : connection.expired ? "Reconnect required"
@@ -30,47 +33,21 @@ export function ManagedBilling({ connection, testBusinessId }: { connection: Bil
         <div><dt className="text-slate-500">Market</dt><dd className="mt-1 font-medium text-slate-900">India / INR</dd></div>
         <div><dt className="text-slate-500">Meta connection</dt><dd className="mt-1 font-medium text-slate-900">{connectionStatus}</dd></div>
         <div><dt className="text-slate-500">Selected ad account</dt><dd className="mt-1 break-all font-mono text-slate-900">{connection ? connection.adAccountId ?? "Not selected" : "Unavailable"}</dd></div>
-        <div><dt className="text-slate-500">Future account ownership</dt><dd className="mt-1 font-medium text-slate-900">Solaride arrangement not yet formalized</dd></div>
-        <div><dt className="text-slate-500">Funding verification</dt><dd className="mt-1 font-medium text-slate-900">Not verified</dd></div>
-        <div><dt className="text-slate-500">New account capacity</dt><dd className="mt-1 font-medium text-slate-900">Not checked</dd></div>
+        <div><dt className="text-slate-500">Meta payment responsibility</dt><dd className="mt-1 font-medium text-slate-900">Operator-managed</dd></div>
       </dl>
 
       <div className="border-y border-slate-200 py-4">
-        <h3 className="text-sm font-medium text-slate-700">Planned pre-tax allocation</h3>
+        <h3 className="text-sm font-medium text-slate-700">Annual total: INR 10,000</h3>
         <dl className="mt-3 grid grid-cols-2 gap-4">
-          <div><dt className="text-sm text-slate-500">Service fee</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{feePercent}%</dd></div>
+          <div><dt className="text-sm text-slate-500">Service allocation</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{feePercent}%</dd></div>
           <div><dt className="text-sm text-slate-500">Advertising</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{100 - feePercent}%</dd></div>
         </dl>
-        <p className="mt-3 text-xs leading-5 text-slate-500">Tax policy pending approval. Gateway charges borne by AdBrain. No customer funds collected.</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">One business, one offer and one service area for 12 months, including up to two creatives and one capped Meta campaign. Meta allocation includes applicable Meta tax. Gateway fees absorbed by AdBrain. No extra checkout charge, automatic renewal or guaranteed results.</p>
       </div>
 
-      <div>
-        <h3 className="text-sm font-medium text-slate-700">Funding options</h3>
-        <div className="mt-2 divide-y divide-slate-200">
-          {META_FUNDING_METHODS.map(method => {
-            const Icon = methodIcons[method.id];
-            return (
-              <details key={method.id} className="group py-3">
-                <summary className="cursor-pointer rounded-sm text-sm font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600">
-                  <Icon aria-hidden="true" className="mx-2 inline h-4 w-4 text-slate-500" />{method.name}
-                </summary>
-                <dl className="mt-3 space-y-3 pl-6 text-sm">
-                  <div><dt className="text-slate-500">Availability</dt><dd className="mt-1 text-slate-700">{method.availability}</dd></div>
-                  <div><dt className="text-slate-500">Payment timing</dt><dd className="mt-1 text-slate-700">{method.paymentTiming}</dd></div>
-                  <div><dt className="text-slate-500">Required authorisation</dt><dd className="mt-1 text-slate-700">{method.setup}</dd></div>
-                </dl>
-                {method.accountSpendLimit === "unavailable" && <p className="mt-3 pl-6 text-xs leading-5 text-amber-800">Prepaid accounts have no Meta account spending limit. Reloads can leave unused funds; campaign budgets and reconciliation are required.</p>}
-                <a href={method.documentationUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-1 rounded-sm pl-6 text-sm font-medium text-blue-700 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600">
-                  Meta requirements for {method.name}<ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0" />
-                </a>
-              </details>
-            );
-          })}
-        </div>
-      </div>
-
-      <p className="text-sm leading-6 text-slate-600">No funding method selected. Meta-initiated charges do not transfer exactly 80% of each customer payment. Payment timing acceptance, account ownership, recurring authorisation and spend controls remain unverified.</p>
-      <p className="text-xs leading-5 text-slate-500">Live checkout, outbound transfers and automatic account creation are not enabled. Existing Meta connections and campaign settings are unchanged.</p>
+      <p className="text-sm leading-6 text-slate-600">The operator pays Meta separately. Advertising allocation is not a confirmed Meta balance. Payment confirmation does not authorize ad activation.</p>
+      <p className="text-sm leading-6 text-slate-600">Full refund before work starts. Afterward, unused advertising allocation is refundable after pending-cost reconciliation. Service allocation is earned only after the agreed creatives and campaign setup are delivered; otherwise it remains refundable.</p>
+      <p className="text-xs leading-5 text-slate-500">Live collection is not enabled here. No bank-to-Meta transfer or automatic account creation is performed by AdBrain.</p>
       {testBusinessId && <TestCheckout key={testBusinessId} businessId={testBusinessId} />}
     </section>
   );

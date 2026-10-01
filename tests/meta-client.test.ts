@@ -113,19 +113,55 @@ describe("MetaClient Page-token lookup", () => {
 
 describe("MetaClient.verifyCampaignActivation", () => {
   const campaign = { id: "camp_1", account_id: "123", status: "PAUSED" };
-  const adSet = { id: "set_1", status: "ACTIVE", daily_budget: "25000", promoted_object: { page_id: "999" } };
-  const mockDelivery = (campaignResponse: unknown, adSetResponse: unknown) => vi.spyOn(globalThis, "fetch")
+  const adSet = { id: "set_1", status: "ACTIVE", daily_budget: "25000", promoted_object: { page_id: "999" }, targeting: { geo_locations: { countries: ["IN"] } } };
+  const ad = { id: "ad_1", status: "ACTIVE", adset_id: "set_1", creative: { id: "creative_1" } };
+  const expected = { dailyBudgetRupees: 250, status: "paused", adSetIds: ["set_1"], adIds: ["ad_1"] };
+  const mockDelivery = (campaignResponse: unknown, adSetResponse: unknown, adResponse: unknown = { data: [ad] }) => vi.spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(new Response(JSON.stringify(campaignResponse)))
-    .mockResolvedValueOnce(new Response(JSON.stringify(adSetResponse)));
+    .mockResolvedValueOnce(new Response(JSON.stringify(adSetResponse)))
+    .mockResolvedValueOnce(new Response(JSON.stringify(adResponse)));
 
   it("verifies the total ad-set budget and bound Page using only timed GET requests", async () => {
-    const fetchMock = mockDelivery(campaign, { data: [adSet, { ...adSet, id: "set_2" }] });
-    await new MetaClient(creds).verifyCampaignActivation("camp_1", { dailyBudgetRupees: 500, status: "paused" });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const fetchMock = mockDelivery(campaign, { data: [adSet, { ...adSet, id: "set_2" }] }, { data: [ad, { ...ad, id: "ad_2", adset_id: "set_2" }] });
+    await new MetaClient(creds).verifyCampaignActivation("camp_1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set_1", "set_2"], adIds: ["ad_1", "ad_2"] });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     for (const [, init] of fetchMock.mock.calls) {
       expect(init?.method).toBe("GET");
       expect(init?.signal).toBeInstanceOf(AbortSignal);
     }
+  });
+
+  it.each([
+    ["all paused", [{ ...adSet, status: "PAUSED" }]],
+    ["mixed", [adSet, { ...adSet, id: "set_2", status: "PAUSED" }]],
+  ])("does not verify %s child delivery as ready", async (_label, adSets) => {
+    mockDelivery(campaign, { data: adSets }, { data: adSets.map((adSet, index) => ({ ...ad, id: `ad_${index + 1}`, adset_id: adSet.id })) });
+    await expect(new MetaClient(creds).verifyCampaignActivation("camp_1", {
+      dailyBudgetRupees: adSets.length * 250, status: "paused", adSetIds: adSets.map(adSet => adSet.id), adIds: adSets.map((_adSet, index) => `ad_${index + 1}`),
+    })).rejects.toBeInstanceOf(MetaError);
+  });
+
+  it("reviews paused children without treating them as active", async () => {
+    mockDelivery(campaign, { data: [{ ...adSet, status: "PAUSED" }] }, { data: [{ ...ad, status: "PAUSED" }] });
+    const snapshot = await new MetaClient(creds).readCampaignDelivery("camp_1", expected);
+    expect(snapshot.adSets).toMatchObject([{ id: "set_1", status: "PAUSED", pageId: "999" }]);
+    expect(snapshot.ads).toMatchObject([{ id: "ad_1", status: "PAUSED", adSetId: "set_1" }]);
+  });
+
+  it("rejects a paused intended ad even if its ad set is active", async () => {
+    mockDelivery(campaign, { data: [adSet] }, { data: [{ ...ad, status: "PAUSED" }] });
+    await expect(new MetaClient(creds).verifyCampaignActivation("camp_1", expected)).rejects.toThrow("paused");
+  });
+
+  it.each([
+    ["added unrelated ad", { data: [ad, { ...ad, id: "ad_other" }] }],
+    ["missing intended ad", { data: [] }],
+    ["ad bound to another set", { data: [{ ...ad, adset_id: "set_other" }] }],
+    ["incomplete ad page", { data: [ad], paging: { next: "https://graph.facebook.com/next" } }],
+    ["ad missing creative", { data: [{ ...ad, creative: null }] }],
+  ])("blocks %s before activation", async (_label, ads) => {
+    mockDelivery(campaign, { data: [adSet] }, ads);
+    await expect(new MetaClient(creds).verifyCampaignActivation("camp_1", expected)).rejects.toBeInstanceOf(MetaError);
   });
 
   it.each([
@@ -135,9 +171,10 @@ describe("MetaClient.verifyCampaignActivation", () => {
     ["incomplete ad sets", campaign, { data: [adSet], paging: { next: "https://graph.facebook.com/next" } }],
     ["lifetime budget", campaign, { data: [{ ...adSet, lifetime_budget: "100000" }] }],
     ["invalid budget", campaign, { data: [{ ...adSet, daily_budget: "unknown" }] }],
+    ["missing targeting", campaign, { data: [{ ...adSet, targeting: null }] }],
   ])("blocks %s", async (_label, campaignResponse, adSetResponse) => {
     mockDelivery(campaignResponse, adSetResponse);
-    await expect(new MetaClient(creds).verifyCampaignActivation("camp_1", { dailyBudgetRupees: 250, status: "paused" }))
+    await expect(new MetaClient(creds).verifyCampaignActivation("camp_1", expected))
       .rejects.toBeInstanceOf(MetaError);
   });
 });
@@ -196,6 +233,23 @@ describe("campaign object binding", () => {
     expect(await new MetaClient(creds).getCampaignInsights("camp_1")).toMatchObject({ leads: 0, cpl: null, conversations: 3, costPerConversation: 50 });
   });
 
+  it("requests an explicit Monday-to-today period for weekly spend protection", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ spend: "5", date_start: "2026-09-21", date_stop: "2026-09-27" }] }));
+    await new MetaClient(creds).getCampaignInsights("camp_1", { weekly: true });
+    expect(String(fetchMock.mock.calls[2][0])).toContain("date_preset=this_week_mon_today");
+  });
+
+  it("rejects a dated weekly report with no spend observation", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ date_start: "2026-09-21", date_stop: "2026-09-27" }] }));
+    await expect(new MetaClient(creds).getCampaignInsights("camp_1", { weekly: true })).rejects.toThrow();
+  });
+
   it.each(["delete", "insights"])("allows bound campaign %s after verification", async (operation) => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
@@ -228,6 +282,39 @@ describe("campaign object binding", () => {
       .mockResolvedValueOnce(Response.json(adSets));
     await expect(new MetaClient(creds).deleteObject("camp_1")).rejects.toThrow("Page binding");
     expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+});
+
+describe("MetaClient.enforceCampaignSpendCap", () => {
+  const bound = () => vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+    .mockResolvedValueOnce(Response.json({ data: [{ promoted_object: { page_id: "999" } }] }));
+  it("sets and reads back a finite minor-unit cap without increasing a lower limit", async () => {
+    const fetchMock = bound()
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: true, spend_cap: "0" }))
+      .mockResolvedValueOnce(Response.json({ success: true }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", spend_cap: "677966" }));
+    await new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966);
+    expect(String(fetchMock.mock.calls[3][1]?.body)).toContain("spend_cap=677966");
+    expect(fetchMock.mock.calls[4][1]?.method).toBe("GET");
+  });
+  it("preserves an existing stricter cap", async () => {
+    const fetchMock = bound()
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: true, spend_cap: "500000" }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", spend_cap: "500000" }));
+    await new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966);
+    expect(fetchMock.mock.calls.every(([,options])=>options?.method==="GET")).toBe(true);
+  });
+  it("rejects unsupported caps and changed read-back without removing the limit", async () => {
+    const fetchMock = bound().mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: false }));
+    await expect(new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966)).rejects.toThrow("finite campaign spending limit");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+  it("rejects a provider read-back above the reserved media allowance", async () => {
+    bound().mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", can_use_spend_cap: true, spend_cap: "0" }))
+      .mockResolvedValueOnce(Response.json({ success: true }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", spend_cap: "999999" }));
+    await expect(new MetaClient(creds).enforceCampaignSpendCap("camp_1",677966)).rejects.toThrow("spending limit changed");
   });
 });
 

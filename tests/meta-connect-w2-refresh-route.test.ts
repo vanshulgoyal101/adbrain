@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   withMetaConnection: vi.fn(),
   metaClientForBusiness: vi.fn(),
   summarizeInsights: vi.fn(),
-  enforceAutoPause: vi.fn(),
+  enforceAutoPauseWithStatus: vi.fn(),
   logEvent: vi.fn(),
   saveResult: vi.fn(),
 }));
@@ -53,7 +53,7 @@ vi.mock("@/lib/meta/connection-access", () => ({
 }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClientForBusiness }));
 vi.mock("@/lib/creative/summary", () => ({ summarizeInsights: mocks.summarizeInsights }));
-vi.mock("@/lib/campaign/spend-enforce", () => ({ enforceAutoPause: mocks.enforceAutoPause }));
+vi.mock("@/lib/campaign/spend-enforce", () => ({ enforceAutoPauseWithStatus: mocks.enforceAutoPauseWithStatus }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
 
 function request(): Request {
@@ -68,7 +68,7 @@ beforeEach(() => {
     execute({ getCampaignInsights: vi.fn().mockResolvedValue({ impressions: 1, clicks: 2, leads: 1, spend: 3, cpl: 3 }) }),
   );
   mocks.summarizeInsights.mockResolvedValue("Summary");
-  mocks.enforceAutoPause.mockResolvedValue([]);
+  mocks.enforceAutoPauseWithStatus.mockResolvedValue({ paused: [], confirmed: true });
   mocks.saveResult.mockResolvedValue({ data: { id: "result-1" }, error: null });
 });
 
@@ -78,7 +78,7 @@ describe("campaign refresh binding boundary", () => {
     mocks.summarizeInsights.mockReturnValue(new Promise<string>(resolve => { resolveSummary = resolve; }));
     const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
     const response = POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
-    await vi.waitFor(() => expect(mocks.enforceAutoPause).toHaveBeenCalledWith("business-1"));
+    await vi.waitFor(() => expect(mocks.enforceAutoPauseWithStatus).toHaveBeenCalledWith("business-1"));
     expect(mocks.logEvent).toHaveBeenCalled();
     resolveSummary("Summary");
     expect((await response).status).toBe(200);
@@ -90,7 +90,7 @@ describe("campaign refresh binding boundary", () => {
     const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
     expect(response.status).toBe(503);
     expect(mocks.summarizeInsights).not.toHaveBeenCalled();
-    expect(mocks.enforceAutoPause).not.toHaveBeenCalled();
+    expect(mocks.enforceAutoPauseWithStatus).not.toHaveBeenCalled();
     expect(await response.text()).not.toContain("Private database error");
   });
 
@@ -109,6 +109,25 @@ describe("campaign refresh binding boundary", () => {
       expect.any(Function),
     );
     expect(mocks.metaClientForBusiness).not.toHaveBeenCalled();
+  });
+
+  it("keeps refreshed results distinct from unconfirmed spend protection", async () => {
+    mocks.enforceAutoPauseWithStatus.mockResolvedValue({ paused: ["campaign-1"], confirmed: false });
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ autoPaused: ["campaign-1"], protectionConfirmed: false });
+  });
+
+  it("still attempts protective enforcement when the provider read fails", async () => {
+    mocks.withMetaConnection.mockRejectedValueOnce(new Error("Meta reporting unavailable"));
+    mocks.enforceAutoPauseWithStatus.mockResolvedValue({ paused: ["campaign-1"], confirmed: false });
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ autoPaused: ["campaign-1"], protectionConfirmed: false });
+    expect(mocks.enforceAutoPauseWithStatus).toHaveBeenCalledWith("business-1");
+    expect(mocks.saveResult).not.toHaveBeenCalled();
   });
 
   it("blocks an old row without binding before any provider access", async () => {

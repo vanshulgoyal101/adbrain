@@ -1,5 +1,22 @@
 export const PAYMENT_ALLOCATION_VERSION = "inr-20-80-v1";
 
+export const ANNUAL_PAYMENT_VERSION = "inr-annual-total-v1";
+
+export function createAnnualPaymentQuote() {
+  return Object.freeze({
+    version: ANNUAL_PAYMENT_VERSION,
+    merchantDisplay: "Vanshul Goyal",
+    currency: "INR",
+    totalPaise: 1_000_000,
+    serviceAllocationPaise: 200_000,
+    metaAllocationPaise: 800_000,
+    additionalCustomerTaxPaise: 0,
+    metaTaxTreatment: "included-in-meta-allocation",
+    gatewayFees: "absorbed-by-adbrain",
+    automaticRenewal: false,
+  } as const);
+}
+
 export interface PaymentAllocationPolicy {
   readonly version: string;
   readonly platformFeeBps: number;

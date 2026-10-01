@@ -8,6 +8,48 @@ production configuration**; the published `6291dc2` release excludes local test
 checkout and DB-A-dependent changes. Deployment evidence belongs in the
 [release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
 
+## Production Payment Candidate
+
+Repaired integration `954e44a` adds the following server-only configuration beyond
+the baseline below. It is disabled and unreleased; QA accepted the repair deltas
+conditional on integrated CI. Live setup and financial prerequisites remain separate;
+see the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
+Deciding code: [production gate](../src/lib/payments/production-config.ts).
+
+| Configuration | Requirement |
+| --- | --- |
+| `PAYMENTS_LIVE_ENABLED` | Defaults false; recovery/webhooks need explicit true plus all target/identity checks |
+| `PAYMENTS_LIVE_COLLECTION_ENABLED`, `PAYMENTS_LIVE_POLICY_JSON` | Separate false-default collection flag; in #48, blank JSON selects the recorded `operator-managed-v1` offer. Explicit JSON must validate as approved operator terms or the legacy policy shape |
+| `PAYMENTS_LIVE_REFUNDS_ENABLED` | Separate false-default refund flag; approved operator and per-operation authority still required |
+| `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_LIVE_ACCOUNT_ID` | Explicit live identities; never reuse test credentials |
+| `RAZORPAY_LIVE_WEBHOOK_SECRET`, `PAYMENTS_LIVE_WEBHOOK_ID` | Distinct secret and immutable configuration UUID; neither replaces signature/merchant checks |
+| `PAYMENTS_LIVE_PROJECT_ID`, `PAYMENTS_LIVE_SUPABASE_URL` | Exact matches to `VERCEL_PROJECT_ID` and `NEXT_PUBLIC_SUPABASE_URL` |
+| `NODE_ENV`, `VERCEL_ENV`, `VERCEL_GIT_COMMIT_REF`, `VERCEL_TARGET_ENV` | Production Node/Vercel/main; reject any explicit non-production target |
+
+Test-payment flags/aliases must not coexist with live configuration. Populated
+generic key aliases must exactly match the explicit live keys. Policy fields and
+operator prerequisites are listed in the [author contract](qa/dev2-devc-contract-o1.md#schema-and-configuration-delta).
+Do not enable these values as setup verification. CSP changes need an approved
+rebuild. Suspend collection independently from recovery after live operations.
+
+### Operator-Managed Offer
+
+Issue #48 pins the [actual September 26 approval](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848530300)
+in `OPERATOR_MANAGED_POLICY`: INR 10,000 total for 12 months, one business/offer/service
+area, up to two creatives and one capped Meta campaign. It retains the 2,000/8,000
+allocation, absorbed fees, no automatic renewal and the approved conditional refund
+policy. Blank `PAYMENTS_LIVE_POLICY_JSON` selects this exact version only when live
+collection is explicitly enabled; it does not enable collection by itself.
+
+The operator pays Meta separately. No automatic-funding approval UUID, funding
+evidence row or customer Meta connection is needed for this new mode. Do not invent
+those records. Existing legacy JSON/orders remain distinct and recoverable.
+Apply [the additive policy migration](../db/migrations/20260926_production_payment_policy_v2.sql)
+after the original payment schema; do not change an applied migration checksum.
+Future commercial changes require a new reviewed policy version and customer consent,
+not edits to stored terms. Invoice wording claims no GST registration; verify actual
+operator tax status in live invoice setup. Real charges/refunds remain separately scoped.
+
 ## Choose a Configuration Boundary
 
 | Task | Required configuration | Side effects and target |
@@ -59,33 +101,57 @@ documentation or release approval. See [release policy](RELEASING.md).
 | `DEV_LOGIN_EMAIL`, `DEV_LOGIN_PASSWORD` | Empty | Development login credentials |
 | `DEMO_USER_EMAIL` | `demo@adbrain.vanshul.com`, email | Demo identity; not a sandbox guarantee |
 
+## Live Checkout (Disabled By Default)
+
+The server-only [live configuration](../src/lib/payments/production-config.ts)
+requires `PAYMENTS_LIVE_ENABLED=true` and `PAYMENTS_LIVE_COLLECTION_ENABLED=true`
+for collection, a production Vercel deployment from `main`, matching
+`PAYMENTS_LIVE_PROJECT_ID`/`VERCEL_PROJECT_ID` and
+`PAYMENTS_LIVE_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_URL`, and valid
+`RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`,
+`RAZORPAY_LIVE_ACCOUNT_ID`, `RAZORPAY_LIVE_WEBHOOK_SECRET` and
+`PAYMENTS_LIVE_WEBHOOK_ID`. Test credentials or test checkout enabled in
+production block live checkout. Do not put provider secrets in the browser or
+the repository. An unset `PAYMENTS_LIVE_POLICY_JSON` uses the approved
+operator-managed terms; an explicitly supplied legacy policy still requires
+its historical Meta funding evidence. Confirm the effective policy and webhook
+registration before enabling collection. The payment schema must be migrated
+first; code publication alone is not collection authorization.
+`PAYMENTS_LIVE_REFUNDS_ENABLED=true` separately permits operator-initiated
+refunds; reconciliation remains available while it is false. Hosting checks
+also require `VERCEL_GIT_COMMIT_REF=main` and reject a nonproduction
+`VERCEL_TARGET_ENV`. Generic `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` aliases,
+if present, must match the live pair exactly.
+
+Local test checkout uses `PAYMENTS_TEST_ENABLED=true` with
+`RAZORPAY_TEST_KEY_ID`, `RAZORPAY_TEST_KEY_SECRET`,
+`RAZORPAY_TEST_ACCOUNT_ID` and `RAZORPAY_TEST_WEBHOOK_SECRET` (or matching
+generic key aliases). It is unavailable in production or any Vercel environment;
+never place those test variables in live production configuration.
+
 ## Local Test Payments
 
-These settings are validated separately by the
-[Razorpay test adapter](../src/lib/payments/razorpay-test.ts), not `getEnv()`.
-This source has no live-payment mode. Merchant-account activation is a separate
-provider fact, recorded in [the payment plan](PAYMENTS-PLAN.md), not permission
-to turn a test flag into production checkout. The gate denies production Node mode, every Vercel
-environment and non-loopback Supabase URLs. Verify the actual local database;
-a tunnel's loopback address is not proof of isolation.
+The [Razorpay test adapter](../src/lib/payments/razorpay-test.ts) validates these
+settings separately from `getEnv()`. The gate denies production Node mode, every
+Vercel environment and non-loopback Supabase URLs. Verify the actual local
+database; a tunnel's loopback address does not prove isolation. Merchant account
+activation is a separate provider fact, not permission to enable live collection.
 
 | Variable | Default / validation | Purpose |
 | --- | --- | --- |
 | `PAYMENTS_TEST_ENABLED` | Disabled unless exactly `true` | Local test APIs, Settings checkout and scoped CSP allowances |
-| `RAZORPAY_KEY_ID` | Required `rzp_test_` identifier when enabled; legacy alias `RAZORPAY_TEST_KEY_ID` | Public test key; never use a live key |
-| `RAZORPAY_KEY_SECRET` | Required nonempty server secret; legacy alias `RAZORPAY_TEST_KEY_SECRET` | SDK authentication and callback HMAC |
+| `RAZORPAY_TEST_KEY_ID` | Required `rzp_test_` identifier when enabled; generic alias `RAZORPAY_KEY_ID` | Public test key; never use a live key |
+| `RAZORPAY_TEST_KEY_SECRET` | Required nonempty server secret; generic alias `RAZORPAY_KEY_SECRET` | SDK authentication and callback HMAC |
 | `RAZORPAY_TEST_ACCOUNT_ID` | Required `acc_` identifier | Expected test merchant identity |
 | `RAZORPAY_TEST_WEBHOOK_SECRET` | At least 16 characters; different from key secret | Raw webhook HMAC; server-only |
 
 The private test-order migration and real local Supabase login are also required.
-Use one complete key pair. If both standard and legacy pairs are populated they
-must match exactly; partial or conflicting pairs fail closed. The public key is
-returned by the order endpoint, so no `NEXT_PUBLIC_` Razorpay variable is needed.
-Never prefix a secret with `NEXT_PUBLIC_`. Environment files are ignored by Git;
-the existing production environment file must not be overwritten or used for QA.
-Restart `npm run dev` after changing configuration so the page and CSP agree.
-Open Settings > Managed billing; Checkout is absent when the gate fails. No
-credentials are needed for mocked component tests. See
+Use one complete key pair; populated alias pairs must match exactly, and partial
+or conflicting pairs fail closed. The public key comes from the order endpoint;
+never prefix a secret with `NEXT_PUBLIC_`. Do not overwrite or use the production
+environment file for QA. Restart `npm run dev` after configuration changes so the
+page and CSP agree. Checkout is absent in Settings > Managed billing when the
+gate fails. Mocked component tests need no provider credentials. See
 [setup and limitations](PAYMENTS-PLAN.md#9-implementation-receipt) before using
 provider test mode or exposing a webhook endpoint.
 

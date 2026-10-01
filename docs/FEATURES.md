@@ -18,6 +18,7 @@ records production `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
 | Additional dev source | Trusted campaign writes, integrity migrations and test checkout exist; they were excluded from that release |
 | [Import candidate #34 / PR #37](https://github.com/vanshulgoyal101/adbrain/pull/37) | Resumable multi-page enquiry import requires its migration and independent acceptance |
 | [Inbox candidate #35 / PR #38](https://github.com/vanshulgoyal101/adbrain/pull/38) | Server-paginated enquiries and persistent follow-up require their migration; combined import/inbox acceptance is separate |
+| [Operator-managed checkout candidate](qa/ops-environment-2026-09-26.md#operator-managed-checkout-candidate) #48 | Built on the accepted dev payment fixes with approved INR 10,000 terms; new checkout no longer depends on automatic Meta funding. Source is not production-deployed; live credentials, SQL, webhook and exact CI/QA remain separate. Capture never activates ads; #49 owns customer advertising guards |
 | External providers | Mocked consent, a green build, merchant account approval or saved metrics do not prove live delivery, payment settlement or provider eligibility |
 
 Do not demonstrate an unreleased database-dependent caller against production.
@@ -74,6 +75,9 @@ Save business name, industry, website, description, voice, audience, languages,
 service areas, selling points, offers, brand colors/font/logo, and contact fields.
 The industry is free text, not a solar-only enum. The reusable fact record drives
 copy, image prompts, and campaign audience suggestions.
+"Saved" acknowledges only the submitted form revision after a successful save.
+Later edits, including edits made while a save is pending, require another save;
+failed saves leave the draft available for retry. There is no autosave.
 
 Website autofill fetches a public website and proposes extracted facts. It does
 not prove those claims are true or authorize scraping private pages. The UI
@@ -221,6 +225,14 @@ certification. [API targeting](API_REFERENCE.md#targeting) owns exact input boun
 
 ### Review, Create, Activate
 
+Closing New campaign retains its unsaved brief, creatives, audience, destination
+and budget in memory for the current business; returning to a business in the
+same mounted view restores its own setup. Use **Discard and start new** to clear
+it after confirmation. Unsaved edits are not durable across reload/navigation:
+use Save draft for server-backed recovery. A pending or uncertain creation
+operation cannot be discarded to bypass its recovery identity; saved drafts
+remain available after clearing the local setup.
+
 Preflight validates ownership, approved creative content, active lead form,
 connection capability, INR currency, resolved targeting, and budget. Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
@@ -292,11 +304,16 @@ an alert percentage from 1-100, and an auto-pause flag. Zero is invalid, not
 unlimited. Unsaved changes invalidate the Saved indicator.
 
 Activation compares projected weekly commitment against the cap; unavailable
-spend data blocks activation. Scheduled enforcement can pause bound active
-campaigns when the cap is reached. Stored insights may be stale and the configured
-job runs daily. These are application guardrails, not a concurrent reservation
-ledger or Meta account spending limit. Do not promise zero overspend or blindly
-retry ambiguous activation. Use provider-side limits and
+spend data blocks activation. Refresh and the daily scheduled sweep request bound
+Meta insights for Monday through today in the selected account's timezone.
+They require a complete INR observation for every campaign before comparing the
+weekly total to the rupee cap. Missing, partial, mismatched-period/currency or
+failed observations trigger protective pauses of active campaigns; an unknown
+observation or failed pause remains unconfirmed even when some pauses succeed.
+Existing reporting snapshots are not audited customer cost or tax evidence.
+These are application guardrails, not Meta account spending limits or guaranteed
+protection from overspend between checks or during outages. Do not blindly retry
+ambiguous activation. Use provider-side limits and
 [operational reconciliation](OPERATIONS.md) as well.
 
 ## Public Surface and Operations

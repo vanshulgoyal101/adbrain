@@ -2,6 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import AppError from "@/app/error";
 import GlobalError from "@/app/global-error";
 import { normalizeSiteUrl } from "@/lib/site";
 
@@ -48,17 +49,35 @@ describe("normalizeSiteUrl", () => {
 describe("<GlobalError>", () => {
   it("renders a branded recovery screen and retries on click", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    const reset = vi.fn();
+    const retry = vi.fn();
     const user = userEvent.setup();
 
-    render(<GlobalError error={new Error("boom")} reset={reset} />);
+    render(<GlobalError error={new Error("boom")} retry={retry} />);
 
     expect(
       screen.getByRole("heading", { name: /something went wrong/i }),
-    ).toBeInTheDocument();
+    ).toHaveFocus();
+    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
     await user.click(screen.getByRole("button", { name: /try again/i }));
 
-    expect(reset).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
+  });
+});
+
+describe("<AppError>", () => {
+  it("focuses the recovery heading and offers refetch or sign in", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const retry = vi.fn();
+    const user = userEvent.setup();
+
+    render(<AppError error={new Error("boom")} retry={retry} />);
+
+    expect(screen.getByRole("heading", { name: /something went wrong/i })).toHaveFocus();
+    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
+    await user.click(screen.getByRole("button", { name: /try again/i }));
+
+    expect(retry).toHaveBeenCalledTimes(1);
     consoleError.mockRestore();
   });
 });

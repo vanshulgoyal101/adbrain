@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { friendlyMetaError } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
-import { enforceAutoPause } from "@/lib/campaign/spend-enforce";
+import { enforceAutoPauseWithStatus } from "@/lib/campaign/spend-enforce";
 import {
   ConnectionAccessError,
   requireOwnedBusiness,
@@ -74,10 +74,11 @@ async function handlePOST(
       (meta) => meta.getCampaignInsights(campaign.meta_campaign_id!),
     );
   } catch (err) {
+    const enforcement = await enforceAutoPauseWithStatus(campaign.business_id);
     if (err instanceof ConnectionAccessError) {
-      return NextResponse.json({ error: err.message }, { status: err.code === "CONFLICT" ? 409 : 400 });
+      return NextResponse.json({ error: err.message, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: err.code === "CONFLICT" ? 409 : 400 });
     }
-    return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results.") }, { status: 502 });
+    return NextResponse.json({ error: friendlyMetaError(err, "Could not refresh campaign results."), autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: 502 });
   }
 
   const { data: result, error: resultError } = await saveCampaignResult(
@@ -95,12 +96,12 @@ async function handlePOST(
     }).catch(() => ({ data: null, error: new Error("Result storage unavailable.") }));
 
   if (resultError || !result) {
-    return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh." }, { status: 503 });
+    return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh.", protectionConfirmed: false }, { status: 503 });
   }
 
-  const [summary, autoPaused] = await Promise.all([
+  const [summary, enforcement] = await Promise.all([
     summarizeInsights(campaign.objective, insights),
-    enforceAutoPause(campaign.business_id),
+    enforceAutoPauseWithStatus(campaign.business_id),
     logEvent({
       businessId: campaign.business_id,
       action: "campaign.refresh",
@@ -111,5 +112,5 @@ async function handlePOST(
     }),
   ]);
 
-  return NextResponse.json({ result, summary, insights, autoPaused });
+  return NextResponse.json({ result, summary, insights, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed });
 }

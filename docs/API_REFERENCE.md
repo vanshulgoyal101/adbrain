@@ -9,6 +9,47 @@ environment. Deciding sources: [route handlers](../src/app/api/),
 [campaign schemas](../src/lib/campaign/connect-contracts.ts),
 [connection schemas](../src/lib/meta/connect-contracts.ts).
 
+## Production Payment Candidate
+
+Repaired integration `954e44a` adds five route modules beyond this guide's original baseline.
+They are default-disabled (404) and unreleased. QA accepted the three repair
+deltas conditional on exact integrated CI; this is not live collection approval.
+See the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet)
+and [exact request/response contracts](qa/dev2-devc-contract-o1.md#api-delta-for-integration).
+
+| Method | Route | Contract |
+| --- | --- | --- |
+| GET, POST | `/api/payments/live/orders` | Owned persisted orders/quote/policy; immutable intent and accepted terms before provider creation |
+| POST | `/api/payments/live/verify` | Stored-order signature plus authoritative capture verification |
+| POST | `/api/payments/live/reconcile` | Recover existing owned order/payment/refund state without recreating uncertain writes |
+| POST | `/api/payments/live/webhook` | Signed bounded raw body; durable event storage before acknowledgment |
+| GET, POST | `/api/payments/live/operator` | Approved operator queue, reconciliation and separately authorized refunds |
+
+Authenticated writes require the exact production origin. Amounts here are integer
+INR paise, not the rupee amounts of campaign budgets. Disabled routes never grant
+collection authority; captured allocations grant no campaign spend/activation.
+Issue #48 adds `operator-managed-v1` with `fundingMode: "operator_managed"` and
+the [recorded owner approval](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848530300).
+New operator-managed creation, display and replay do not query automatic funding
+or require Meta onboarding. Stored `funding_evidence_id` is null for this mode;
+legacy policies retain their original non-null evidence and funding validation.
+The additive [policy migration](../db/migrations/20260926_production_payment_policy_v2.sql)
+must follow the original payment migration before this candidate serves traffic.
+
+Create remains `{businessId,idempotencyKey,termsHash,acceptTerms:true}`: fetch the
+current quote/policy, show the approved service/invoice/refund terms and obtain
+hash-bound acceptance. Server amount, tenant/merchant identity and capture/refund
+checks are unchanged. Test captures never create customer advertising credit.
+Old orders remain readable/reconcilable with their original terms; changing policy
+does not rewrite a saved unpaid order or authorize a replacement payment.
+
+Accounting consumers use the existing private order/effect IDs, business scope,
+quote, captured/refunded/provider-reported-refund amounts and review/refund holds
+through their service-only interfaces. The INR 2,000 service allocation is not
+earned at capture. Checkout still returns `spendablePaise: 0` and
+`canActivateCampaign: false`; customer accounting/reservations are a separate #49
+integration. This candidate does not establish a Meta balance or perform a transfer.
+
 ## Conventions
 
 - Workspace endpoints normally require the Supabase session cookie and enforce
@@ -77,7 +118,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/brand/autofill` | URL -> plain extraction | Website fetch + model call, no brand save |
 | POST | `/api/creatives/assistant` | Interview -> question/brief | Model call |
 | POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
-| GET | `/api/creatives/generate` | Business/group/count -> saved status | DB read, no generation |
+| GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
@@ -91,9 +132,10 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |
-| PATCH | `/api/campaigns/[id]` | Pause/activation input -> plain status | Live Meta mutation + local mirror |
+| GET | `/api/campaigns/[id]` | Path ID -> `{delivery}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation |
+| PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery}` | Live parent Meta mutation + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
-| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused | Provider read, DB write, possible auto-pause |
+| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
@@ -114,6 +156,15 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |
 | POST | `/api/meta/connect` | Business/account/Page | Retired selection, 410 after validation |
 | POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections |
+| GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
+| POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
+| POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |
+| GET/POST | `/api/payments/live/reconcile` | Owner-scoped recovery | Reconcile uncertain provider state |
+| GET/POST | `/api/payments/live/operator` | Operator-authorized refund/review | Financial action; separate authorization required |
+| GET/POST | `/api/payments/customer-balance` | Owner balance/review or operator accounting evidence | No provider charge, refund or ad activation |
+| GET/POST | `/api/payments/test/orders` | Test order read/create | Nonproduction only; isolated test gateway |
+| POST | `/api/payments/test/verify` | Test payment proof | Nonproduction only |
+| POST | `/api/payments/test/webhook` | Test signed event | Nonproduction only |
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
@@ -173,6 +224,57 @@ not start another payment. Only server-confirmed capture enables a new test.
 Without a delivered webhook or retained callback, status may remain pending;
 this UI adds no background provider reconciliation endpoint.
 
+### Customer Advertising Allowance
+
+Issue #49 candidate only; installing source does not enable delivery. Apply the
+[customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
+after the production-payment and trusted-campaign migrations. DevOps owns the
+canonical schema copy and target rollout; existing test payments never give credit.
+
+| Method | Path | Authority and result |
+| --- | --- | --- |
+| GET | `/api/payments/customer-balance?businessId=<uuid>` | Current business owner; `{balance}` with captured/refunded, service/ad allocations, media/tax costs, reservations, remaining paise and hold reason; no-store |
+| GET | `/api/payments/customer-balance?businessId=<uuid>&campaignId=<uuid>` | Same owner; checks stored campaign binding, budget and fresh costs without creating a reservation |
+| POST | `/api/payments/customer-balance` | Same-origin authenticated financial operator, verified again in SQL; explicit cost or refund-allocation evidence, never a provider charge/refund |
+
+GET returns 400 for invalid identifiers, 401/403/404 for failed access, 429 for
+rate limits, 503 for campaign access failure and 409 for unavailable/held accounting.
+Reads allow 60 requests per minute per user. POST allows 20 per five minutes;
+invalid structured input is 400, wrong origin 403, missing session 401 and rejected
+financial evidence/authority 409. Errors do not disclose underlying financial rows.
+
+POST strict actions are `{action:"costs",businessId,evidence}` and
+`{action:"refund-allocation",businessId,allocation}`. Exact fields are in
+[the shared contracts](../src/lib/payments/customer-balance-contracts.ts).
+Use integer paise and immutable evidence UUIDs. Cost evidence must identify the
+campaign, Meta account/generation, cumulative media and tax, actual tax-rate basis
+points and observation time. Do not submit a reporting-period total as lifetime
+cost or invent a zero/tax rate. Replaying identical evidence is idempotent;
+conflicting identity, decreasing fresh totals, stale or ambiguous data holds funds.
+Refund allocations must match verified provider refunds. Service remains unearned
+at capture; earning requires operator-attested delivery of agreed creatives/setup.
+
+Review precedes a separate execution-time atomic reservation. The initial
+one-campaign offer reserves all remaining advertising allocation and needs seven
+days of reviewed daily budget including the recorded tax rate. Weekly limits
+cannot override this boundary. Before ACTIVE, the Meta client sets and reads back
+a finite media cap within that reservation, retaining a lower existing cap.
+Meta documents a US$100 approximate-local-equivalent minimum and capability
+restrictions: unsupported/rejected limits block activation, never raise customer
+funding. Compatibility with the approved INR8000 tax-inclusive offer is not yet
+provider-verified. See the [official campaign reference](https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/).
+
+Pause remains available when accounting fails. It does not release money. A pause
+during in-flight activation cannot finalize the reservation; after the request
+settles, pause again and submit final cumulative costs observed after that confirmed
+pause. Final reconciliation closes the exact reservation UUID and releases only
+unused funds. Unknown outcomes retain credit reservations. Process death or failed
+outcome persistence leaves a hold requiring audited operator recovery; no automatic
+expiry/release or generic force-clear API is implemented. Conflicting cost evidence
+also remains held rather than silently reset. External Meta changes, late provider
+effects and actual tax liabilities still require operator reconciliation; these
+local checks are not provider-delivery certification.
+
 ### Lead Sync
 
 An empty POST starts an import or resumes the current binding's unfinished run.
@@ -210,6 +312,27 @@ application and incremental upgrade are alternative setup paths, not a command
 to replay every migration over an initialized database.
 Application rollback may leave this additive migration installed. Production
 migration execution requires separate approval.
+
+### Customer Advertising Allowance
+
+The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
+does not enable collection or authorize Meta spending. Test payments give no
+credit. Owners can review their balance with `GET /api/payments/customer-balance`
+using `businessId` and optional `campaignId`. Financial operators can submit
+strict `costs` or `refund-allocation` actions with
+`POST /api/payments/customer-balance`; authority is rechecked in SQL. See the
+[shared contracts](../src/lib/payments/customer-balance-contracts.ts).
+
+Cost evidence uses integer paise, immutable UUIDs and cumulative lifetime
+media/tax figures; stale or conflicting figures hold funds. Capturing payment
+does not earn service fees or activate ads. Review precedes an atomic reservation
+for one campaign. Before ACTIVE, the Meta cap must be written and read back
+within the reserved media allowance; unsupported or rejected caps block
+activation. Provider capability for the INR 8,000 tax-inclusive offer remains
+unverified. Pausing does not release a reservation: final reconciliation needs
+the exact reservation UUID, a settled activation outcome and fresh cumulative
+costs after confirmed pause. Uncertain outcomes retain a hold for audited
+recovery, never automatic expiry.
 
 ### Authentication Handlers
 
@@ -300,18 +423,37 @@ Example paid-generation input, submitted only after brief review and authorizati
 
 Returns `{variantGroup, creatives, failures}`. Individual saved variants survive
 other failures. If none save, returns 502 with an error/failure list. Missing
-generation schema or unavailable quota checking blocks before work with 503.
+generation schema or unavailable admission blocks before work with 503.
 No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
 429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
+In the #54 source candidate (not yet production), POST atomically claims the
+generation UUID and normalized request inputs before paid work. Repeating the
+same ID returns 202 with `{variantGroup, status, creatives: [], count: 0,
+expectedCount}` and never starts another producer. A changed brief, count,
+language or format for that ID returns 409; another business or owner gets 404.
+The route reserves monthly quota for text and images, counts recorded tokens,
+and retains an allowance of 10,000 quota units per completed image. This is
+**not** measured image billing or a USD spend limit: image usage may lack a known
+cost. Uncertain provider, usage or result writes retain their reservation until
+an operator can reconcile them. A definitive whole-request pre-provider failure
+can free unused quota after the batch has settled; one failed angle cannot free
+its still-running siblings' hold. The failed UUID remains non-reusable. Omitted `generationId` gets
+a new server UUID and cannot be replayed safely after a lost response.
+
 Recovery uses `GET /api/creatives/generate?businessId=...&generationId=...&expectedCount=3`.
-`generationId` must be UUID; `expectedCount` is integer 1-6, default 1. Result:
-`{status, creatives, count, expectedCount}`; `status` is `complete` when count meets
-expectation, `partial` when some rows exist, otherwise `processing`.
-`processing` is an inference from missing rows, **not proof a worker is running**.
-The POST is not durably deduplicated by generation ID. Do not automatically retry
-it after a timeout; inspect saved results first.
+`generationId` must be UUID; optional `expectedCount` is integer 1-6 and, if
+provided, must match the claimed count (409 otherwise). The source candidate
+returns `{status, creatives, count, expectedCount}` based on the persisted
+intent and saved rows. Status may be `processing`, `partial`, `complete`,
+`failed` or `unresolved` (including stale processing after five minutes).
+Unknown/foreign ID returns 404; unavailable status or row lookup returns 503.
+An owner lookup returning 404 permanently fences that UUID with a zero-quota
+no-spend record; a delayed original POST cannot start generation afterward.
+Recovery lookups are limited to 30 per user per five minutes (429 when exceeded).
+`processing` does not prove a worker is running. Inspect saved results after a
+timeout; `unresolved` requires investigation, not another paid request.
 
 `POST /api/creatives/[id]/regenerate` has no request body. It uses saved generation
 settings and current business context, replaces the creative, and sets `draft`.
@@ -462,12 +604,18 @@ Pause: strict `{ "status": "paused" }`.
 Activation: strict `{status:"active", confirmationDigest:<64 lowercase hex>,
 connectionGeneration:<nonnegative-safe-integer>}`. The digest is derived from
 [the activation payload](../src/lib/campaign/activation.ts) after the owner reviews
-current assets/budget. It is not interchangeable with `planHash`.
+current assets/budget and exact Meta campaign/ad-set/ad delivery snapshot from
+`GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Legacy or
+incomplete stored child identity requires reconciliation; the route does not guess.
 
 Activation checks projected weekly cap (422 if exceeded; 503 if unreadable),
 stored binding/generation, live capability, positive budget/INR currency, digest,
-and remote campaign state. Success is `{ok:true,status}`. Missing legacy binding
-returns 409; reconcile rather than guessing it. Pause/delete also verify binding.
+and exact remote child membership, settings and requested ACTIVE states before
+the #49 customer reservation and again after requesting parent ACTIVE. Paused or
+unexpected children and stale review return 409 before reservation. Success is
+`{ok:true,status,delivery}`; `status:"active"` is a requested parent state,
+not proof of effective delivery or Meta eligibility. An uncertain post-request
+result holds the reservation for reconciliation. Pause/delete also verify binding.
 Deletion preserves the local row when remote deletion cannot be confirmed.
 Remote success followed by local failure is possible; inspect before retrying.
 
@@ -480,14 +628,17 @@ and budgets, and imports only ACTIVE/PAUSED status. Local unsupported/unmatched
 records remain unchanged. No remote-deletion pruning occurs. Concurrent insert
 failure is not a successful import; partial writes before an error can exist.
 
-Refresh returns `{result,summary,insights,autoPaused}`. **This can invoke an LLM
-summary and pause live campaigns through spend enforcement**; it is not a harmless
-read-only smoke test. At this source baseline, a snapshot write error or missing
-saved row returns 503 (`Could not save refreshed results. Retry the refresh.`)
-before summary generation, auto-pause and audit logging. Success requires a saved
-result, not a nullable snapshot. Resolve storage availability before retrying;
-the next successful refresh can still trigger those later side effects. See the
-[deciding handler](../src/app/api/campaigns/%5Bid%5D/refresh/route.ts).
+Refresh returns `{result,summary,insights,autoPaused,protectionConfirmed}`. **This
+can invoke an LLM summary and pause live campaigns through spend enforcement**; it
+is not a read-only smoke test. `autoPaused` lists only confirmed remote and local
+pauses. `protectionConfirmed:false` means the spend decision or a required pause
+could not be verified; inspect the bound campaign in Meta, since a local error
+does not prove remote delivery stopped. Provider refresh failures can still attempt
+protective pauses. An unsaved result returns 503 before summary and enforcement.
+A snapshot write error or missing saved row returns 503 (`Could not save refreshed
+results. Retry the refresh.`); resolve storage availability before retrying. A
+successful retry can still trigger summary and protective pause side effects. See
+the [deciding handler](../src/app/api/campaigns/%5Bid%5D/refresh/route.ts).
 
 Lead sync returns `{leads,imported,failedForms,sync}`; each failed form has `id,name`.
 `imported` is actual new inserts, duplicates are ignored, partial unreadable forms
@@ -624,7 +775,11 @@ remains active for the contextual signed/bound flow.
 Cron endpoints require `Authorization: Bearer <CRON_SECRET>`; absent configured
 secret disables them with 404. Keepalive checks DB availability and, when enabled,
 bounded event retention. Enforce-spend can mutate Meta and reports incomplete
-enforcement as failure. Do not invoke either against production without authority.
+enforcement as 503 (`ok:false`) even when some campaigns were paused; failure to
+read the limit list returns 502; failure to scan active campaigns returns 503.
+`swept` lists only confirmed remote and local
+pauses, not a guarantee that every campaign stopped. Do not invoke either against
+production without authority.
 
 Internal traffic options: numeric `rounds` clamped to 1/configured maximum
 (default 5), boolean `createDraftCampaigns` (true rejected with 400), numeric

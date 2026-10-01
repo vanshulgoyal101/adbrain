@@ -9,6 +9,9 @@ import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
+const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
+const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -186,7 +189,223 @@ async function verifyRollback() {
   } finally { await db.end(); }
 }
 
-async function verify(database, source, integrityMigration) {
+async function verifyCustomerAllowance(db, database) {
+  const owner = randomUUID();
+  const business = randomUUID();
+  const order = randomUUID();
+  const campaignIds = [randomUUID(), randomUUID()];
+  const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+    serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+    metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic allowance')", [business, owner]);
+  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [business]);
+  await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id) values ($1,$2,$3,$4,'acc_fixture','rzp_live_fixture',$5,$6,$7,'order_allowance')", [order,business,owner,randomUUID(),quote,{version:'operator-managed-v1',fundingMode:'operator_managed'},'a'.repeat(64)]);
+  for (const campaignId of campaignIds) await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',200,$3,'act_123','123',1)", [campaignId,business,`meta_${campaignId}`]);
+  await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')", [owner,randomUUID()]);
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]?.result; }
+    finally { await session.end(); }
+  };
+  const balance = (user = owner, account = 'acc_fixture') => service("select public.customer_ad_balance($1,$2,$3) as result",[business,user,account]);
+  const reserve = (campaignId, account = 'act_123') => service("select public.customer_ad_reserve($1,$2,'acc_fixture',$3,$4,1,20000,$5) as result",[business,owner,campaignId,account,'b'.repeat(64)]);
+  const observedAt = new Date().toISOString();
+  const costs = (campaignId, media = 0, tax = 0, reference = randomUUID(), asOf = observedAt, final = false, reservationId = null) => service(
+    "select public.customer_ad_reconcile_costs($1,$2,'acc_fixture',$3,'act_123',1,$4,$5,1800,$6,$7,$8,$9)", [business,owner,campaignId,media,tax,asOf,reference,final,reservationId]);
+  await check(`${database}: no credit before verified capture and tenant/merchant isolation`, async () => {
+    assert.equal((await balance()).remainingPaise,0);
+    await assert.rejects(balance(randomUUID()), {code:'42501'});
+    assert.equal((await balance(owner,'acc_other')).remainingPaise,0);
+    await assert.rejects(reserve(campaignIds[0]), {code:'23514'});
+    for (let repeat=0; repeat<2; repeat++) await service("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_allowance',true,0,false,$2)",[order,'c'.repeat(64)]);
+    assert.equal((await balance()).capturedPaise,1000000);
+    assert.equal((await balance()).serviceEarnedPaise,0);
+    assert.equal((await balance()).remainingPaise,800000);
+  });
+  await check(`${database}: current costs and account binding required before concurrent reservations`, async () => {
+    await assert.rejects(reserve(campaignIds[0]), {code:'23514'});
+    for (const campaignId of campaignIds) await costs(campaignId);
+    await assert.rejects(reserve(campaignIds[0],'act_999'), {code:'23514'});
+    const results = await Promise.allSettled(campaignIds.map(campaignId=>reserve(campaignId)));
+    assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+    assert.equal((await balance()).reservedPaise,800000);
+    assert.equal((await balance()).remainingPaise,0);
+  });
+  const reservation = (await db.query("select * from private.customer_ad_reservations where business_id=$1",[business])).rows[0];
+  await check(`${database}: active campaign cannot change provider identity without a new cap`, async () => {
+    await db.query("update public.campaigns set status='active' where id=$1",[reservation.campaign_id]);
+    try {
+      await assert.rejects(db.query("update public.campaigns set meta_campaign_id='meta_rebound' where id=$1",[reservation.campaign_id]), {code:'23514'});
+    } finally {
+      await db.query("update public.campaigns set status='paused',meta_campaign_id=$2 where id=$1",[reservation.campaign_id,`meta_${reservation.campaign_id}`]);
+    }
+  });
+  await check(`${database}: paused reservation keeps its provider campaign identity`, async () => {
+    assert.equal(reservation.meta_campaign_id,`meta_${reservation.campaign_id}`);
+    await assert.rejects(db.query("update public.campaigns set meta_campaign_id='meta_rebound' where id=$1",[reservation.campaign_id]), {code:'23514'});
+  });
+  await check(`${database}: uncertain activation and refunds cannot free or double-use funds`, async () => {
+    assert.equal(Number(reservation.media_limit_paise),677966);
+    await assert.rejects(reserve(reservation.campaign_id), {code:'23514'});
+    await assert.rejects(service("select public.production_payment_refund_claim($1,'acc_fixture','rzp_live_fixture',$2,$3,$4,10000,$5,$6,'Synthetic refund')",[order,owner,randomUUID(),randomUUID(),'a'.repeat(64),randomUUID()]), {code:'23514'});
+    await assert.rejects(costs(reservation.campaign_id,0,0,randomUUID(),observedAt,true,reservation.id), {code:'23514'});
+    await assert.rejects(db.query("update public.campaigns set status='active',daily_budget=10000 where id=$1",[reservation.campaign_id]), {code:'23514'});
+    await db.query("update public.campaigns set status='paused' where id=$1",[reservation.campaign_id]);
+    await service("select public.customer_ad_activation_result($1,$2,'acc_fixture',$3,$4,'paused')",[business,owner,reservation.campaign_id,reservation.id]);
+    await assert.rejects(costs(reservation.campaign_id,0,0,randomUUID(),'now',true,reservation.id), {code:'23514'});
+    assert.equal((await db.query("select activation_in_flight from private.customer_ad_reservations where id=$1",[reservation.id])).rows[0].activation_in_flight,true);
+    await service("select public.customer_ad_activation_result($1,$2,'acc_fixture',$3,$4,'uncertain')",[business,owner,reservation.campaign_id,reservation.id]);
+  });
+  await check(`${database}: cumulative media/tax snapshots deduplicate without dropping late liability`, async () => {
+    const reference=randomUUID();
+    await costs(reservation.campaign_id,10000,1800,reference);
+    await costs(reservation.campaign_id,10000,1800,reference);
+    await costs(reservation.campaign_id,10000,1800);
+    const current=await balance();
+    assert.equal(current.mediaCostPaise,10000);
+    assert.equal(current.taxCostPaise,1800);
+    assert.equal(current.reservedPaise,788200);
+    assert.equal(current.remainingPaise,0);
+    await assert.rejects(costs(reservation.campaign_id,10001,1800,reference), {code:'23514'});
+  });
+  await check(`${database}: reconciled pause permits explicit refund allocation, not automatic service earnings`, async () => {
+    await service("select public.customer_ad_activation_result($1,$2,'acc_fixture',$3,$4,'paused')",[business,owner,reservation.campaign_id,reservation.id]);
+    await assert.rejects(costs(reservation.campaign_id,10000,1800,randomUUID(),observedAt,true,reservation.id), {code:'23514'});
+    for (const campaignId of campaignIds) await costs(campaignId,campaignId===reservation.campaign_id?10000:0,campaignId===reservation.campaign_id?1800:0,randomUUID(),'now',true,campaignId===reservation.campaign_id?reservation.id:null);
+    assert.equal((await balance()).reservedPaise,0);
+    assert.equal((await balance()).remainingPaise,788200);
+    const operation=await service("select public.production_payment_refund_claim($1,'acc_fixture','rzp_live_fixture',$2,$3,$4,10000,$5,$6,'Synthetic reconciled refund') as result",[order,owner,randomUUID(),randomUUID(),'a'.repeat(64),randomUUID()]);
+    await service("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture','rfnd_allowance')",[operation.refund.id]);
+    await service("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_allowance',true,10000,false,$2,'rfnd_allowance',10000,'processed')",[order,'d'.repeat(64)]);
+    await service("select public.production_payment_refund_observed($1,'acc_fixture','rfnd_allowance',10000,'processed')",[operation.refund.id]);
+    assert.equal((await balance()).held,true);
+    const allocation=()=>service("select public.customer_ad_refund_allocation($1,$2,'acc_fixture',$3,0,10000,0,$4)",[business,owner,order,reference]);
+    const reference=randomUUID();
+    await allocation();
+    await allocation();
+    assert.equal((await balance()).held,false);
+    assert.equal((await balance()).remainingPaise,778200);
+    assert.equal((await balance()).serviceEarnedPaise,0);
+  });
+  await check(`${database}: refund initiation and new reservation have one atomic winner`, async () => {
+    const results=await Promise.allSettled([
+      reserve(reservation.campaign_id),
+      service("select public.production_payment_refund_claim($1,'acc_fixture','rzp_live_fixture',$2,$3,$4,10000,$5,$6,'Synthetic concurrent refund')",[order,owner,randomUUID(),randomUUID(),'a'.repeat(64),randomUUID()]),
+    ]);
+    assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+  });
+  await check(`${database}: a decreasing fresh snapshot holds rather than restoring credit`, async () => {
+    await costs(reservation.campaign_id,9000,1700,randomUUID(),new Date().toISOString());
+    assert.equal((await balance()).held,true);
+    assert.equal((await balance()).mediaCostPaise,10000);
+  });
+  await check(`${database}: browser and direct service mutations remain denied`, async () => {
+    await assert.rejects(service("update private.customer_ad_reservations set ceiling_paise=1"), {code:'42501'});
+    await db.query("set role authenticated");
+    try { await assert.rejects(db.query("select public.customer_ad_balance($1,$2,'acc_fixture')",[business,owner]),{code:'42501'}); }
+    finally { await db.query("reset role"); }
+  });
+}
+
+async function verifyCreativeGenerationAdmission(db, database) {
+  const owner = randomUUID();
+  const otherOwner = randomUUID();
+  const business = randomUUID();
+  const otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id,email) values ($1,'author@example.invalid'),($2,'other@example.invalid')", [owner,otherOwner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Author'),($3,$4,'Other')", [business,owner,otherBusiness,otherOwner]);
+  async function service(sql, values) {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("set role service_role");
+      return (await session.query(sql,values)).rows[0]?.result;
+    } finally { await session.end(); }
+  }
+  const admit=(id, tenant=business, user=owner, hash='a'.repeat(64), tokens=100, limit=150, imageFloor=10) =>
+    service("select public.creative_generation_admit($1,$2,$3,$4,1,$5,$6,$7) as result",[tenant,user,id,hash,tokens,imageFloor,limit]);
+  const status=(id, tenant=business, user=owner) =>
+    service("select public.creative_generation_status($1,$2,$3) as result",[tenant,user,id]);
+  await check(`${database}: generation admission migration is private and service-only`, async () => {
+    const { rows } = await db.query(`select
+      has_table_privilege('authenticated','private.creative_generation_intents','SELECT') as can_read,
+      has_function_privilege('authenticated','public.creative_generation_admit(uuid,uuid,uuid,text,integer,bigint,bigint,bigint)','EXECUTE') as can_admit`);
+    assert.deepEqual(rows, [{ can_read: false, can_admit: false }]);
+  });
+  await check(`${database}: concurrent identity claims admit one producer and reject rebinds`, async () => {
+    const id=randomUUID();
+    const results=await Promise.all([admit(id),admit(id)]);
+    assert.deepEqual(results.map(result=>result.action).sort(),['recover','start']);
+    assert.equal((await admit(id,business,owner,'b'.repeat(64))).action,'conflict');
+    assert.equal((await admit(id,otherBusiness,otherOwner)).action,'missing');
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unknown');
+    assert.equal((await status(randomUUID())).status,'unknown');
+    assert.equal((await status(id)).status,'processing');
+  });
+  await check(`${database}: concurrent tenants cannot exceed the remaining quota`, async () => {
+    const results=await Promise.all([admit(randomUUID(),otherBusiness,otherOwner),admit(randomUUID(),otherBusiness,otherOwner)]);
+    assert.deepEqual(results.map(result=>result.action).sort(),['quota','start']);
+  });
+  await check(`${database}: an unknown recovery lookup fences a delayed producer`, async () => {
+    const id=randomUUID();
+    const freshBusiness=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Delayed producer')",[freshBusiness,owner]);
+    assert.equal((await status(id,freshBusiness,owner)).status,'unknown');
+    assert.equal((await admit(id,freshBusiness,owner)).action,'missing');
+    assert.equal((await status(id,freshBusiness,owner)).status,'unknown');
+    const racedId=randomUUID();
+    const [lookup,claim]=await Promise.all([status(racedId,freshBusiness,owner),admit(racedId,freshBusiness,owner)]);
+    assert.deepEqual([lookup.status,claim.action].sort(),
+      lookup.status==='unknown' ? ['missing','unknown'] : ['processing','start']);
+  });
+  await check(`${database}: verified usage releases only its accounted share`, async () => {
+    const first=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1",[business])).rows[0].generation_id;
+    await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens) values ($1,$2,'creatives.generate','fixture','fixture',40)",[business,owner]);
+    const progress=await service("select public.creative_generation_progress($1,$2,$3,40,false,false,false) as result",[business,owner,first]);
+    assert.equal(progress.status,'processing');
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),51)).action,'quota');
+    assert.equal((await admit(randomUUID(),business,owner,'b'.repeat(64),50)).action,'start');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Fixture',$2)",[business,first]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,false) as result",[business,owner,first])).status,'complete');
+    assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),60)).action,'quota');
+    assert.equal((await admit(randomUUID(),business,owner,'c'.repeat(64),50)).action,'start');
+    assert.equal((await admit(first)).action,'recover');
+  });
+  await check(`${database}: timeout and uncertain provider outcome retain identity and hold`, async () => {
+    const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='processing' limit 1",[otherBusiness])).rows[0].generation_id;
+    await db.query("update private.creative_generation_intents set updated_at=clock_timestamp()-interval '6 minutes' where generation_id=$1",[id]);
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
+    assert.equal((await admit(id,otherBusiness,otherOwner)).action,'recover');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[otherBusiness,otherOwner,id])).status,'unresolved');
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
+  });
+  await check(`${database}: known pre-provider failure frees unused quota but not identity`, async () => {
+    const freshBusiness=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'No provider call')",[freshBusiness,owner]);
+    const id=randomUUID();
+    assert.equal((await admit(id,freshBusiness,owner)).action,'start');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,true) as result",[freshBusiness,owner,id])).status,'failed');
+    assert.equal((await status(id,freshBusiness,owner)).status,'failed');
+    assert.equal((await admit(id,freshBusiness,owner)).action,'recover');
+    assert.equal((await admit(randomUUID(),freshBusiness,owner,'b'.repeat(64),150)).action,'start');
+  });
+  await check(`${database}: one failed angle cannot release another in-flight angle's quota`, async () => {
+    const freshBusiness=randomUUID();
+    const id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Parallel angles')",[freshBusiness,owner]);
+    const first=await service("select public.creative_generation_admit($1,$2,$3,$4,2,100,10,150) as result",
+      [freshBusiness,owner,id,'d'.repeat(64)]);
+    assert.equal(first.action,'start');
+    await service("select public.creative_generation_progress($1,$2,$3,0,false,false,true) as result",[freshBusiness,owner,id]);
+    const second=await admit(randomUUID(),freshBusiness,owner,'e'.repeat(64),100);
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'Still running',$2)",[freshBusiness,id]);
+    const late=await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[freshBusiness,owner,id]);
+    assert.deepEqual({ nextAdmission: second.action, lateProgress: late.status }, { nextAdmission: 'quota', lateProgress: 'partial' });
+  });
+}
+async function verify(database, source, integrityMigration, customerOnly = false) {
   const admin = client();
   await admin.connect();
   await admin.query(`create database ${database}`);
@@ -196,6 +415,20 @@ async function verify(database, source, integrityMigration) {
   try {
     await db.query(bootstrap);
     await db.query(source);
+    if (process.argv.includes("--generation-only")) {
+      await db.query(creativeIntentMigration);
+      await db.query(creativeIntentMigration);
+      await verifyCreativeGenerationAdmission(db, database);
+      return;
+    }
+    await db.query(operatorPaymentMigration);
+    await db.query(operatorPaymentMigration);
+    if (customerOnly) {
+      await db.query(customerAllowanceMigration);
+      await db.query(customerAllowanceMigration);
+      await verifyCustomerAllowance(db,database);
+      return;
+    }
     if (integrityMigration) {
       await check(`${database}: invalid legacy evidence is preserved and blocks validation`, async () => {
         await db.query("begin");
@@ -547,6 +780,196 @@ async function verify(database, source, integrityMigration) {
       }
     });
   if (process.argv.includes("--leads-only")) return;
+
+    await check(`${database}: production payment claims and financial effects survive competing clients and restart recovery`, async () => {
+      const payerBusinessId = randomUUID();
+      const evidenceId = randomUUID();
+      const profileId = randomUUID();
+      const requestKey = randomUUID();
+      const webhookId = randomUUID();
+      const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+        serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+        metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+      const policy = { version: "synthetic-policy-v1", approvalReference: randomUUID(), automaticFundingApprovalReference: randomUUID(),
+        approvedAt: new Date(Date.now() - 60000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        serviceScope: "Synthetic finite scope", invoiceTerms: "Synthetic invoice policy", refundTerms: "Synthetic refund policy" };
+      const terms = JSON.stringify(policy);
+      const termsHash = createHash("sha256").update(terms).digest("hex");
+      const funding = { version: 1, businessId: payerBusinessId, environment: "live", connectionGeneration: 1, evidenceId,
+        verifiedAt: policy.approvedAt, expiresAt: policy.expiresAt, revokedAt: null,
+        setup: { method: "recurring_card", accountId: "act_4567891", expectedOwnerBusinessId: "456", ownerBusinessId: "456",
+          currency: "INR", country: "IN", accountActive: true, billingMode: "automatic", paymentMethod: "verified",
+          recurringAuthorisation: "verified", spendControls: "verified", ownerAcceptedMetaInitiatedPayments: true } };
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic payments fixture')", [payerBusinessId,ownerId]);
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id) values ($1,1,'connected','act_4567891')", [payerBusinessId]);
+      await db.query("insert into public.meta_billing_profiles(id,business_id,environment,ad_account_id,owner_business_id,created_by) values ($1,$2,'live','act_4567891','456',$3)", [profileId,payerBusinessId,ownerId]);
+      await db.query("insert into public.meta_funding_evidence(id,profile_id,verified_by,source,source_reference,verified_at,record) values ($1,$2,$3,'operator_review',$4,now(),$5)", [evidenceId,profileId,ownerId,randomUUID(),funding]);
+      const asService = async run => {
+        const session = client(database);
+        await session.connect();
+        try { await session.query("set role service_role"); return await run(session); }
+        finally { await session.end(); }
+      };
+      const claim = (overrides = {}) => asService(async session => {
+        const input = { business: payerBusinessId, owner: ownerId, request: requestKey, key: "rzp_live_fixture", quote, terms, hash: termsHash, funding: evidenceId, ...overrides };
+        return (await session.query("select public.production_payment_order_claim($1,$2,$3,$4,'acc_fixture',$5,$6,$7,$8,$9) as result",
+          [input.business,input.owner,input.request,randomUUID(),input.key,input.quote,input.terms,input.hash,input.funding])).rows[0].result;
+      });
+      await assert.rejects(claim({ owner: otherOwnerId }), { code: "23514" });
+      await assert.rejects(claim({ key: "rzp_test_fixture" }), { code: "23514" });
+      await assert.rejects(claim({ hash: "0".repeat(64) }), { code: "23514" });
+      await assert.rejects(claim({ funding: randomUUID() }), { code: "23514" });
+      await assert.rejects(claim({ quote: { ...quote, totalPaise: 1 } }), { code: "23514" });
+      const competingClaims = await Promise.all(Array.from({ length: 4 }, () => claim()));
+      assert.equal(competingClaims.filter(result => result.claimed).length,1);
+      assert.equal(new Set(competingClaims.map(result => result.order.id)).size,1);
+      const order = competingClaims[0].order;
+      assert.equal(order.environment,"live");
+      assert.equal(order.amount_paise,1000000);
+      assert.deepEqual(order.quote,quote);
+      assert.deepEqual(order.terms,policy);
+      assert.equal(order.terms_hash,termsHash);
+      assert.equal((await claim({ request: randomUUID() })).order.id,order.id);
+      await assert.rejects(claim({ hash: "1".repeat(64) }), { code: "23514" });
+      const result = providerOrderId => asService(async session => (await session.query(
+        "select public.production_payment_order_result($1,'acc_fixture','rzp_live_fixture',$2) as result", [order.id,providerOrderId])).rows[0].result);
+      assert.equal((await result(null)).state,"needs_reconciliation");
+      assert.equal((await claim()).claimed,false);
+      assert.equal((await result("order_production")).state,"created");
+      assert.equal((await result(null)).provider_order_id,"order_production");
+      const fundingValid = async session => (await session.query(
+        "select public.production_payment_funding_valid($1,$2) as valid",[payerBusinessId,evidenceId])).rows[0].valid;
+      assert.equal(await asService(fundingValid),true);
+      const rejectsInvalidFunding = async (statement, parameters) => {
+        await db.query("begin");
+        try {
+          await db.query(statement,parameters);
+          await db.query("set local role service_role");
+          assert.equal(await fundingValid(db),false);
+          const history = (await db.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result;
+          assert.equal(history.id,order.id);
+          assert.equal(history.provider_order_id,"order_production");
+          assert.equal(history.funding_evidence_id,evidenceId);
+          for (const replayKey of [requestKey,randomUUID()]) {
+            await db.query("savepoint replay_check");
+            await assert.rejects(db.query("select public.production_payment_order_claim($1,$2,$3,$4,'acc_fixture','rzp_live_fixture',$5,$6,$7,$8)",
+              [payerBusinessId,ownerId,replayKey,randomUUID(),quote,terms,termsHash,evidenceId]),{ code: "23514" });
+            await db.query("rollback to savepoint replay_check");
+          }
+        } finally { await db.query("rollback"); }
+      };
+      await rejectsInvalidFunding("insert into public.meta_funding_revocations(evidence_id,revoked_by,reason) values ($1,$2,'mandate_revoked')",[evidenceId,ownerId]);
+      await rejectsInvalidFunding("update public.meta_funding_evidence set record=jsonb_set(record,'{expiresAt}',to_jsonb((now()-interval '1 second')::text)) where id=$1",[evidenceId]);
+      await rejectsInvalidFunding("update public.meta_connections set authorization_status='disconnected' where business_id=$1",[payerBusinessId]);
+      await rejectsInvalidFunding("update public.meta_connections set generation=generation+1 where business_id=$1",[payerBusinessId]);
+      await rejectsInvalidFunding("update public.meta_connections set ad_account_id='act_4567892' where business_id=$1",[payerBusinessId]);
+      const replacementEvidence = randomUUID();
+      await rejectsInvalidFunding("insert into public.meta_funding_evidence(id,profile_id,verified_by,source,source_reference,verified_at,record) values ($1,$2,$3,'operator_review',$4,now(),$5)",
+        [replacementEvidence,profileId,ownerId,randomUUID(),{ ...funding, evidenceId: replacementEvidence, verifiedAt: new Date().toISOString() }]);
+      assert.equal(await asService(fundingValid),true);
+      assert.equal((await claim()).order.id,order.id);
+      const operatorBusinessId = randomUUID();
+      const operatorPolicy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+      const operatorTerms = JSON.stringify(operatorPolicy);
+      const operatorHash = createHash("sha256").update(operatorTerms).digest("hex");
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Operator-managed fixture')",[operatorBusinessId,ownerId]);
+      const operatorInput = { business: operatorBusinessId, funding: null, terms: operatorTerms, hash: operatorHash };
+      for (const invalid of [{ owner: otherOwnerId }, { key: "rzp_test_fixture" }, { funding: evidenceId },
+        { hash: "0".repeat(64) }, { quote: { ...quote, totalPaise: 1 } }]) {
+        await assert.rejects(claim({ ...operatorInput, ...invalid }),{ code: "23514" });
+      }
+      const alteredTerms = JSON.stringify({ ...operatorPolicy, refundTerms: "Service earned at capture" });
+      await assert.rejects(claim({ ...operatorInput, terms: alteredTerms, hash: createHash("sha256").update(alteredTerms).digest("hex") }),{ code: "23514" });
+      const operatorClaims = await Promise.all(Array.from({ length: 4 },() => claim(operatorInput)));
+      assert.equal(operatorClaims.filter(value => value.claimed).length,1);
+      const operatorOrder = operatorClaims[0].order;
+      assert.equal(operatorOrder.funding_evidence_id,null);
+      assert.deepEqual(operatorOrder.terms,operatorPolicy);
+      assert.equal((await claim({ ...operatorInput, request: randomUUID() })).order.id,operatorOrder.id);
+      assert.equal((await db.query("select count(*)::int as count from public.meta_connections where business_id=$1",[operatorBusinessId])).rows[0].count,0);
+      assert.equal((await db.query("select count(*)::int as count from public.meta_billing_profiles where business_id=$1",[operatorBusinessId])).rows[0].count,0);
+      await asService(session => session.query("select public.production_payment_order_result($1,'acc_fixture','rzp_live_fixture','order_operator')",[operatorOrder.id]));
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const observed = await asService(async session => (await session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_operator',true,0,false,$2) as result",[operatorOrder.id,"a".repeat(64)])).rows[0].result);
+        assert.equal(observed.captured_paise,1000000);
+        assert.equal(observed.review_required,false);
+      }
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[operatorOrder.id])).rows[0].count,1);
+      await db.query(operatorPaymentMigration);
+      assert.deepEqual((await claim()).order.terms,policy);
+      assert.equal((await claim()).order.funding_evidence_id,evidenceId);
+      await assert.rejects(claim({ ...operatorInput, business: payerBusinessId }),{ code: "23514" });
+      const refundRequest = randomUUID();
+      const refundApproval = randomUUID();
+      const claimRefund = (amount = 500, request = refundRequest) => asService(async session => (await session.query(
+        "select public.production_payment_refund_claim($1,'acc_fixture','rzp_live_fixture',$2,$3,$4,$5,$6,$7,'Synthetic approved refund') as result",
+        [order.id,ownerId,request,randomUUID(),amount,termsHash,refundApproval])).rows[0].result);
+      await assert.rejects(claimRefund(),{ code: "42501" });
+      await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')",[ownerId,randomUUID()]);
+      await assert.rejects(claimRefund(),{ code: "23514" });
+      const earlyRefund = await asService(async session => (await session.query(
+        "select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',false,100,false,$2,'rfnd_early',100,'processed') as result",
+        [order.id,"d".repeat(64)])).rows[0].result);
+      assert.equal(earlyRefund.captured_paise,0);
+      assert.equal(earlyRefund.refunded_paise,100);
+      assert.equal(earlyRefund.refund_hold,true);
+      await asService(session => session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',true,0,false,$2)",[order.id,"e".repeat(64)]));
+      const refundClaims = await Promise.all(Array.from({length: 4},() => claimRefund()));
+      assert.equal(refundClaims.filter(value => value.claimed).length,1);
+      const refundOperation = refundClaims[0].refund;
+      await assert.rejects(claimRefund(501),{ code: "23514" });
+      await assert.rejects(claimRefund(500,randomUUID()),{ code: "23514" });
+      await asService(session => session.query("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture',null)",[refundOperation.id]));
+      assert.equal((await claimRefund()).refund.state,"needs_reconciliation");
+      assert.equal((await claimRefund()).claimed,false);
+      await asService(session => session.query("select public.production_payment_refund_result($1,'acc_fixture','rzp_live_fixture','rfnd_requested')",[refundOperation.id]));
+      await asService(session => session.query("select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',true,500,false,$2,'rfnd_requested',500,'processed')",[order.id,"f".repeat(64)]));
+      await asService(session => session.query("select public.production_payment_refund_observed($1,'acc_fixture','rfnd_requested',500,'processed')",[refundOperation.id]));
+      assert.equal((await claimRefund()).refund.state,"processed");
+      await assert.rejects(claimRefund(1000000,randomUUID()),{ code: "23514" });
+      const receive = (event, kind, hash = "a".repeat(64), payment = "pay_production") => asService(async session => (await session.query(
+        "select public.production_payment_event_receive('acc_fixture','rzp_live_fixture',$1,$2,$3,$4,'order_production',$5,$6) as result",
+        [webhookId,event,hash,payment,kind === "refund" ? "rfnd_production" : null,kind])).rows[0].result);
+      const observe = (captured, refunded = 0, refundId = null, refundAmount = null, refundStatus = null) => asService(async session => (await session.query(
+        "select public.production_payment_observe($1,'acc_fixture','rzp_live_fixture','pay_production',$2,$3,false,$4,$5,$6,$7) as result",
+        [order.id,captured,refunded,"b".repeat(64),refundId,refundAmount,refundStatus])).rows[0].result);
+      const pending = await receive("event_refund_first","refund");
+      assert.equal(pending.processed_at,null);
+      const afterRefund = await observe(false,1000,"rfnd_production",1000,"processed");
+      assert.equal(afterRefund.refunded_paise,1600);
+      assert.equal(afterRefund.captured_paise,1000000);
+      assert.equal(afterRefund.refund_hold,true);
+      await Promise.all([receive("event_capture_1","capture"), receive("event_capture_2","capture")]);
+      const race = await Promise.all([observe(true),observe(true,1000,"rfnd_production",1000,"processed"),observe(true)]);
+      assert.ok(race.every(value => value.captured_paise === 1000000 && value.refunded_paise === 1600 && value.refund_hold));
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[order.id])).rows[0].count,1);
+      assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='refund'",[order.id])).rows[0].count,3);
+      assert.equal((await receive("event_capture_1","capture","c".repeat(64))).conflicted,true);
+      await asService(session => session.query("select public.production_payment_event_receive('acc_fixture','rzp_live_fixture',$1,'event_capture_1',$2,'pay_unmatched','order_unmatched',null,'capture')",
+        [webhookId,"d".repeat(64)]));
+      const unmatchedConflict = await db.query("select payment_id,provider_order_id from private.production_payment_event_conflicts where account_id='acc_fixture' and event_id='event_capture_1' and payload_hash=$1",["d".repeat(64)]);
+      assert.deepEqual(unmatchedConflict.rows,[{ payment_id: "pay_unmatched", provider_order_id: "order_unmatched" }]);
+      assert.equal((await observe(true)).state,"review_required");
+      await receive("event_dispute","dispute");
+      assert.equal((await observe(true)).review_required,true);
+      await asService(async session => {
+        const get = async user => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,user])).rows[0].result;
+        assert.equal(await get(otherOwnerId),null);
+        assert.equal((await get(ownerId)).id,order.id);
+        for (const table of ["production_payment_orders","production_payment_events","production_payment_event_conflicts","production_payment_effects","production_payment_refunds","production_payment_operators"]) {
+          await assert.rejects(session.query(`select * from private.${table}`), { code: "42501" });
+          await assert.rejects(session.query(`delete from private.${table}`), { code: "42501" });
+        }
+        await session.query("set role authenticated");
+        await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(fundingValid(session), { code: "42501" });
+        await session.query("set role anon");
+        await assert.rejects(get(ownerId), { code: "42501" });
+        await assert.rejects(fundingValid(session), { code: "42501" });
+      });
+      await db.query("update public.businesses set owner_id=$2 where id=$1",[payerBusinessId,otherOwnerId]);
+      assert.equal(await asService(async session => (await session.query("select public.production_payment_order_get($1,$2) as result",[order.id,ownerId])).rows[0].result),null);
+    });
 
     await check(`${database}: managed billing isolates tenants and preserves evidence history`, async () => {
       const profileId = randomUUID();
@@ -1063,11 +1486,27 @@ try {
     insert into public.businesses (id, owner_id, name) values ('30000000-0000-4000-8000-000000000002', '30000000-0000-4000-8000-000000000001', 'Legacy fixture');
     insert into public.leads (business_id, meta_lead_id, full_name) values ('30000000-0000-4000-8000-000000000002', 'legacy-follow-up', 'Legacy enquiry');`;
   const testPaymentsMigration = await readFile(join(root, "db/migrations/20260926_razorpay_test_orders.sql"), "utf8");
+  const productionPaymentsMigration = await readFile(join(root, "db/migrations/20260926_production_payment_orders.sql"), "utf8");
   const integrityMigration = await readFile(join(root, "db/migrations/20260926_campaign_integrity.sql"), "utf8");
   const draftAuthorityMigration = await readFile(join(root, "db/migrations/20260926_draft_authority.sql"), "utf8");
   const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
-  await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
-  await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
+  assert.ok(schema.includes(billingMigration.trim()), "Canonical schema must include the exact managed billing dependency");
+  assert.ok(schema.includes(productionPaymentsMigration.trim()), "Canonical schema must include the exact production payment migration");
+  assert.ok(schema.indexOf(billingMigration.trim()) < schema.indexOf(productionPaymentsMigration.trim()), "Managed billing must precede production payments");
+  assert.ok(schema.includes(operatorPaymentMigration.trim()), "Canonical schema must include the exact operator-managed payment migration");
+  assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
+  assert.ok(schema.trimEnd().endsWith(creativeIntentMigration.trimEnd()), "Canonical schema must end with the exact creative generation intent migration");
+  if (process.argv.includes("--generation-only")) {
+    await verify("generation_fresh",schema);
+    await verify("generation_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}`);
+  } else if (!process.argv.includes("--customer-only")) {
+    await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
+    await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
+  }
+  if (!process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+    await verify("customer_fresh",schema,undefined,true);
+    await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+  }
   }
 } catch (error) {
   failures.push("database harness");

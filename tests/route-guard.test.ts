@@ -2,6 +2,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { AuthApiError } from "@supabase/supabase-js";
 
 /**
  * Route guard (src/lib/supabase/middleware.ts, wired up by src/proxy.ts).
@@ -71,6 +72,20 @@ describe("route guard: protected routes", () => {
     const res = await updateSession(request("/dashboard"));
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("passes an auth service failure to the protected layout for recovery", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: new AuthApiError("unavailable", 503, undefined) });
+    const { updateSession } = await import("@/lib/supabase/middleware");
+    const res = await updateSession(request("/dashboard"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("still redirects an expired session to sign in", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: new AuthApiError("expired", 401, undefined) });
+    const { updateSession } = await import("@/lib/supabase/middleware");
+    expect((await updateSession(request("/dashboard"))).headers.get("location")).toContain("/login");
   });
 
   it("guards EVERY route under src/app/(app) — no page may be forgotten", async () => {

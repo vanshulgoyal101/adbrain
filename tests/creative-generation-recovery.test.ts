@@ -4,7 +4,11 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   select: vi.fn(),
   eq: vi.fn(),
+  intent: vi.fn(),
+  rateLimit: vi.fn(),
 }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.intent }) }));
+vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: mocks.rateLimit }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -27,7 +31,9 @@ vi.mock("@/lib/supabase/server", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.rateLimit.mockResolvedValue(null);
   mocks.getUser.mockResolvedValue({ data: { user: { id: "owner" } } });
+  mocks.intent.mockResolvedValue({ data: { status: "processing", expectedCount: 3 }, error: null });
   mocks.select.mockResolvedValue({
     data: [{ id: "creative-1", business_id: "business", variant_group: "11111111-1111-4111-8111-111111111111" }],
     error: null,
@@ -60,10 +66,43 @@ describe("creative generation recovery", () => {
     { data: [{ id: "creative-1" }], expectedCount: 1, status: "complete" },
   ])("returns $status for the saved result count", async ({ data, expectedCount, status }) => {
     mocks.select.mockResolvedValue({ data, error: null });
+    mocks.intent.mockResolvedValue({ data: { status, expectedCount }, error: null });
     const { GET } = await import("@/app/api/creatives/generate/route");
     const response = await GET(new Request(`http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111&expectedCount=${expectedCount}`));
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ status, count: data.length });
+  });
+
+  it("reports unknown identities without implying paid work started", async () => {
+    mocks.intent.mockResolvedValue({ data: { status: "unknown" }, error: null });
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
+    expect(response.status).toBe(404);
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("limits recovery requests before claiming an unknown ID", async () => {
+    mocks.rateLimit.mockResolvedValue(new Response("Too many requests", { status: 429 }));
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111"));
+    expect(response.status).toBe(429);
+    expect(mocks.intent).not.toHaveBeenCalled();
+  });
+
+  it.each(["failed", "unresolved"])("reports a persisted %s outcome without calling it processing", async (status) => {
+    mocks.intent.mockResolvedValue({ data: { status, expectedCount: 3 }, error: null });
+    mocks.select.mockResolvedValue({ data: [], error: null });
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111&expectedCount=3"));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ status, count: 0 });
+  });
+
+  it("rejects a changed expected count without reading saved creatives", async () => {
+    const { GET } = await import("@/app/api/creatives/generate/route");
+    const response = await GET(new Request("http://localhost/api/creatives/generate?businessId=business&generationId=11111111-1111-4111-8111-111111111111&expectedCount=2"));
+    expect(response.status).toBe(409);
+    expect(mocks.select).not.toHaveBeenCalled();
   });
 
   it("does not expose database errors", async () => {

@@ -1,16 +1,39 @@
 # Data Model and Migrations
 
 Use this reference to identify persisted state, tenant authority and migration
-dependencies before changing a caller. Source baseline is dev
-`672eb132ad57bb3ba31f118afaffddaa878b4923`, not the production schema. See the
+dependencies before changing a caller. It describes the combined dev/main source,
+not every target's applied migrations. See the
 [availability map](FEATURES.md#source-and-availability) and
 [release evidence](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
 
-[db/schema.sql](../db/schema.sql) defines the core fresh schema; incremental and
-optional changes live in [db/migrations](../db/migrations/). Not every optional
-payment migration is included in the core schema. [TypeScript rows](../src/lib/types.ts)
+[db/schema.sql](../db/schema.sql) defines the fresh schema; incremental and
+optional changes live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types.ts)
 are hand-authored, not proof of parity. SQL constraints, effective grants, runtime
 validation and the target's applied migrations must agree.
+
+## Production Payment Schema
+
+The integrated schema preserves the enquiry schema and appends exact
+[managed billing](../db/migrations/20260924_managed_billing.sql)
+then [production payment SQL](../db/migrations/20260926_production_payment_orders.sql)
+and the additive [operator-managed policy](../db/migrations/20260926_production_payment_policy_v2.sql)
+to the canonical fresh schema. Local-only test-order SQL remains separate.
+The payment migrations were applied to the verified production target on
+September 26 at 18:46 UTC, without enabling collection. Verify the migration
+ledger for other targets. Historical #48 acceptance is in the
+[rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
+
+Private `production_payment_orders`, `production_payment_events`,
+`production_payment_event_conflicts`, `production_payment_effects`,
+`production_payment_refunds` and `production_payment_operators` retain financial
+identities and evidence. Direct browser/service-role table writes are revoked;
+restricted RPCs own transitions. Operator authority starts empty. Payment claims
+depend on existing Auth/business ownership and the trusted limiter. New
+`operator-managed-v1` claims store null funding evidence and require the exact
+approved policy; legacy claims keep non-null evidence and the service-only
+`production_payment_funding_valid` replay check. The maintained SQL
+harness checks exact canonical inclusion/order, fresh installation and upgrade
+replay. Its separate six-migration rollback mode does not certify payment rollback.
 
 ## Relationships
 
@@ -57,9 +80,39 @@ different owner. RLS and table/function grants both apply: an older policy named
 `all own` is not evidence of effective write access after a revoke.
 
 These changes require the September 26 trusted-write and draft-authority
-migrations plus compatible callers. They were excluded from the recorded SDK/query
-production release. Sources: [trusted writes](../db/migrations/20260926_trusted_campaign_writes.sql)
+migrations plus compatible callers. The earlier recorded SDK/query production
+release did not include them; verify the target's migration ledger before relying
+on their grants. Sources: [trusted writes](../db/migrations/20260926_trusted_campaign_writes.sql)
 and [draft authority](../db/migrations/20260926_draft_authority.sql).
+
+The selective live checkout schema adds `private.production_payment_orders`,
+`private.production_payment_events`, `private.production_payment_effects` and
+conflict records. Apply `20260924_managed_billing.sql` and
+`20260924_meta_billing_events.sql` before
+`20260926_production_payment_orders.sql`, followed by the additive
+`20260926_production_payment_policy_v2.sql`. These four migrations were applied
+to the verified AdBrain production target on September 26 at 18:46 UTC; this
+does not enable collection.
+New `operator-managed-v1` orders have no funding evidence; legacy orders retain
+their original evidence and reconciliation rules. Owner claims are atomic and
+server-only, and captured funds do not authorize campaign activation. The
+canonical schema appends the same policy SQL; verify the migration ledger for
+other targets rather than inferring their state from source.
+
+The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
+follows the payment policy and trusted campaign objects in the canonical fresh
+schema. It adds five private RLS-protected tables for cumulative campaign
+media/tax costs and evidence, campaign reservations, verified refund allocations
+and their evidence. Direct table access is denied even to the service role;
+service-only RPCs verify owner/operator authority and share the payment
+transaction lock with refunds. Existing payment orders supply captured/refunded
+allocations; test orders do not. Reservations pin the Meta campaign ID and
+connection generation, and financially attributed campaigns cannot rebind that
+provider ID while paused. Uncertain activation and cost evidence hold funds;
+final reconciliation releases only unused allowance. Source inclusion alone
+does not prove a target migration was applied. See the
+[allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission
+and recovery limitations.
 
 ## Table Dictionary
 
@@ -178,6 +231,24 @@ but old data requires a separate validation decision. Monthly aggregation is
 owner-scoped and sums all relevant rows, avoiding client pagination truncation.
 Persistence is best effort and estimated costs are not invoices.
 
+The #54 source candidate adds [creative-generation intents](../db/migrations/20260927_creative_generation_intents.sql)
+as an additive migration; it is **not** included in the core schema or proof of
+a deployed migration. `private.creative_generation_intents` binds a UUID to one
+business, owner, request hash and expected count, a UTC month, reserved/accounted
+quota units, an image allowance and a persisted state. Direct table access is
+revoked; service-only admission, status and progress RPCs verify current
+ownership. Admission serializes same-ID claims and business/month quotas against
+recorded usage plus outstanding holds. Completion releases unused text allowance
+but retains 10,000 units per completed image; paid image rows carry zero tokens,
+and their estimated USD costs may be unknown. Unresolved work keeps its ID and
+hold across restarts and months. Only a settled whole-request failure with no
+saved results can release unused reservation; one failed angle cannot fail the
+intent while sibling work remains in flight. An unknown owner recovery lookup claims a
+zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
+starting after the client receives a 404. This is a conservative quota fence, **not** a
+payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
+defines the client-visible recovery states.
+
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
 per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
@@ -205,9 +276,51 @@ granted `razorpay_test_order_*` RPCs expose them. Test order states are `creatin
 or settlement. Runtime also requires explicitly enabled local test configuration;
 installing tables does not enable checkout. See [test API](API_REFERENCE.md#local-test-payments).
 
-### Enquiry Candidate Schema
+### Customer Allowance Candidate
 
-These changes are absent from baseline dev and the recorded production release:
+Issue #49 adds [20260926_customer_ad_allowance.sql](../db/migrations/20260926_customer_ad_allowance.sql)
+after existing live-payment and trusted campaign objects. It is not yet copied into
+the canonical fresh schema or applied to a hosted database; DevOps owns integration.
+It reuses verified live payment orders/effects and immutable quote allocations,
+not pooled bank balances, order creation, test captures or automatic Meta funding.
+
+| Private table | Authority and purpose |
+| --- | --- |
+| `customer_ad_costs` | Campaign-bound cumulative media/tax high-water values, actual tax-rate evidence, freshness/finalization and sticky conflict hold |
+| `customer_ad_cost_evidence` | Immutable actor/campaign/evidence UUID/input records; same UUID with different input rejects |
+| `customer_ad_reservations` | One current campaign reservation with rotating UUID, tenant/merchant/Meta account, generation and campaign-ID binding, tax-inclusive ceiling, finite media limit, daily budget, state and in-flight fence |
+| `customer_refund_allocations` | Verified refund split and explicitly attested service earnings; capture does not earn service fees |
+| `customer_refund_allocation_evidence` | Immutable operator/evidence UUID/input history for allocation changes |
+
+All five tables have RLS and deny direct access even to service_role. Service-only
+`customer_ad_balance`, `customer_ad_reserve`, `customer_ad_activation_result`,
+`customer_ad_reconcile_costs` and `customer_ad_refund_allocation` RPCs use fixed
+search paths. Reads verify business ownership; financial evidence mutations verify
+the approved financial operator. Campaign/business restrictive foreign keys retain
+financial history rather than allowing deletion to free credit.
+
+Reservations, cost/allocation changes and the refund insertion guard share the
+existing `production-payments:<merchant>` transaction lock. Campaign active/budget
+writes fail immediately on competing accounting locks, avoiding inverted row-lock
+waits. Concurrent admissions/refunds cannot claim the same allowance. Campaigns
+with reservation or cost history cannot change their Meta campaign ID, even while
+paused; there is no implicit rebind or cap transfer. Cumulative cost increases
+consume reserved headroom rather than being charged repeatedly;
+tax, pending refund/dispute adjustments, stale costs and missing evidence stay
+distinct. Partial refunds hold new spend until their allocation matches verified
+refund totals. Service allocation and service-earned are different concepts.
+
+The initial offer reserves all available ad funds for one campaign. It is not a
+general multi-campaign wallet or accounting package. Attributed costs are currently
+operator-supplied evidence, not automatically collected provider lifetime invoices.
+Paused/final reconciliation requires the exact reservation, a settled activation
+dispatch and costs observed after pause. Refunds remain blocked while delivery or
+costs are unresolved. See [API and recovery limits](API_REFERENCE.md#customer-advertising-allowance).
+
+### Enquiry Schema
+
+These changes are included in the combined source schema; verify each target's
+migration ledger before using the corresponding callers:
 
 - [#34 migration at 363859f](https://github.com/vanshulgoyal101/adbrain/blob/363859fc1195839822f60a92fda6109194a14268/db/migrations/20260926_lead_sync_progress.sql)
   adds `public.lead_sync_runs` and service-only sync RPCs. Durable checkpoints
@@ -227,11 +340,10 @@ server wraps the cursor with business/filter/sort scope. Microsecond timestamp
 keys, C-collated name ordering, nulls last and UUID tie-breakers give deterministic
 continuation, not a frozen snapshot under concurrent edits. Follow-up PATCH is
 restricted to status/note and does not change attribution or send outreach.
-See [candidate API](API_REFERENCE.md#enquiry-candidates).
+See the [enquiry API](API_REFERENCE.md#enquiry-candidates).
 
-Apply neither candidate automatically. Combined schema assembly, joined import/
-follow-up acceptance and any production migration remain separate gates. Do not
-copy candidate TypeScript types into an unmigrated database and assume parity.
+Do not apply migrations automatically. Release authorization and target migration
+verification remain separate gates; source types alone do not prove DB parity.
 
 ## RPC Ownership Boundaries
 
@@ -248,6 +360,7 @@ copy candidate TypeScript types into an unmigrated database and assume parity.
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
+| `creative_generation_admit/status/progress` | #54 candidate: service-only, owner-checked generation claim, recovery and quota reconciliation |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
 | `meta_funding_latest_record` | Service-only business/environment-scoped funding evidence lookup |

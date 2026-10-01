@@ -2,11 +2,14 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManagedBilling } from "@/components/managed-billing";
-import { META_FUNDING_METHODS } from "@/lib/payments/meta-funding";
+import { OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
 import { TestCheckout, type TestCheckoutOptions } from "@/components/test-checkout";
+import { ProductionCheckout } from "@/components/production-checkout";
 
 vi.mock("next/script", () => ({ default: ({ onReady, onError }: { onReady: () => void; onError: () => void }) =>
   <img alt="" data-testid="checkout-script" onLoad={onReady} onError={onError} /> }));
+vi.mock("@/components/customer-balance", () => ({ CustomerBalance: ({ businessId }: { businessId: string }) =>
+  <div data-testid="customer-balance" data-business-id={businessId} /> }));
 
 const connected = { adAccountId: "act_123", ready: true, expired: false, pending: false };
 
@@ -175,7 +178,145 @@ describe("test checkout", () => {
   });
 });
 
+describe("production checkout with synthetic responses", () => {
+  const livePolicy = { ...OPERATOR_MANAGED_POLICY, hash: "a".repeat(64) };
+  const liveOrder = { ...createdOrder, environment: "live", capturedPaise: 0, refundedPaise: 0, refundReconciliationPending: false, receipt: null,
+    checkout: { ...createdOrder.checkout, key: "rzp_live_fixture", name: "Vanshul Goyal", description: "AdBrain annual service" } };
+  const captured = { ...liveOrder, status: "captured", capturedPaise: 1_000_000, checkout: null,
+    receipt: { reference: orderId, paymentId: "pay_fixture", merchant: "Vanshul Goyal", amountPaise: 1_000_000, currency: "INR", isTaxInvoice: false } };
+  async function mountLive(orders: unknown[] = []) {
+    fetchMock.mockImplementation(async (path: string) => Response.json(path.includes("orders?") ? { policy: livePolicy, orders }
+      : path.endsWith("verify") ? captured : liveOrder));
+    const view = render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText(orders.length ? "Awaiting payment" : "Ready for payment");
+    fireEvent.load(screen.getByTestId("checkout-script"));
+    fireEvent.click(screen.getByRole("checkbox"));
+    return view;
+  }
+  it("requires accepted terms and uses only the live server order", async () => {
+    await mountLive();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(OPERATOR_MANAGED_POLICY.serviceScope)).toBeInTheDocument();
+    expect(screen.getByText(OPERATOR_MANAGED_POLICY.refundTerms)).toBeInTheDocument();
+    expect(screen.getByText(/The operator pays Meta separately\. Advertising allocation/)).toBeInTheDocument();
+    expect(options).toMatchObject({ key: "rzp_live_fixture", amount: 1_000_000, order_id: "order_fixture", retry: { enabled: false } });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ businessId, termsHash: livePolicy.hash, acceptTerms: true });
+    act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) }));
+    await screen.findByText("Payment confirmed");
+    expect(screen.queryByRole("button", { name: /Pay INR/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Payment receipt")).toBeInTheDocument();
+    expect(screen.getByText("This receipt is not a tax invoice. Payment confirmation does not authorize ad activation.")).toBeInTheDocument();
+  });
+  it("does not reopen checkout after dismissal and reload", async () => {
+    const view = await mountLive();
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    act(() => options.modal.ondismiss());
+    expect(screen.getByText("Checkout closed. Payment status is unconfirmed.")).toBeInTheDocument();
+    view.unmount();
+    await mountLive([liveOrder]);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Continue saved checkout" })).toBeInTheDocument();
+  });
+  it("checks current server terms before explicitly resuming an existing order", async () => {
+    await mountLive([liveOrder]);
+    fetchMock.mockImplementation(async () => Response.json({ policy: null, orders: [{ ...liveOrder, checkout: null }] }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue saved checkout" }));
+    await screen.findByText("Payment terms changed. Review the current terms before continuing.");
+    expect(opened).not.toHaveBeenCalled();
+  });
+  it("QA recovers a lost verification response on reload without reopening checkout or replaying callbacks", async () => {
+    const view = await mountLive();
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    fetchMock.mockRejectedValueOnce(new Error("Synthetic verification response lost"));
+    const proof = { razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) };
+    act(() => {
+      options.handler(proof);
+      options.handler(proof);
+      options.modal.ondismiss();
+    });
+    await screen.findByText("Synthetic verification response lost");
+    expect(screen.queryByText("Payment confirmed")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([path]) => path.endsWith("verify"))).toHaveLength(1);
+    view.unmount();
+    fetchMock.mockImplementation(async () => Response.json({ policy: null, orders: [captured] }));
+    render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText("Payment confirmed");
+    expect(screen.getByText("Payment receipt")).toBeInTheDocument();
+    expect(screen.getByText(/does not authorize ad activation/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pay INR|Continue saved/ })).not.toBeInTheDocument();
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([path, requestOptions]) => path.endsWith("orders") && requestOptions.method === "POST")).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([path]) => path.endsWith("verify"))).toHaveLength(1);
+  });
+
+  it("QA requires renewed acceptance when a status refresh changes collection terms", async () => {
+    await mountLive();
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    fetchMock.mockImplementation(async () => Response.json({
+      policy: { ...livePolicy, hash: "b".repeat(64), invoiceTerms: "Updated synthetic invoice terms" }, orders: [],
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Check payment status" }));
+    await screen.findByText("Updated synthetic invoice terms");
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+    expect(fetchMock.mock.calls.every(([, requestOptions]) => requestOptions.method === "GET")).toBe(true);
+    expect(opened).not.toHaveBeenCalled();
+
+    fetchMock.mockImplementation(async () => Response.json(liveOrder));
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    const [, createRequest] = fetchMock.mock.calls.find(([path, requestOptions]) => path.endsWith("orders") && requestOptions.method === "POST")!;
+    expect(JSON.parse(createRequest.body)).toMatchObject({ termsHash: "b".repeat(64), acceptTerms: true });
+  });
+
+  it("rejects test-mode confirmations in the live view", async () => {
+    fetchMock.mockImplementation(async () => Response.json({ policy: livePolicy, orders: [{ ...captured, environment: "test" }] }));
+    render(<ProductionCheckout businessId={businessId} />);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.queryByText("Payment confirmed")).not.toBeInTheDocument();
+    expect(opened).not.toHaveBeenCalled();
+  });
+  it("blocks a new provider operation when browser recovery storage cannot be written", async () => {
+    await mountLive();
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
+    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    await screen.findByText("Storage unavailable");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(opened).not.toHaveBeenCalled();
+  });
+  it.each(["refund_pending", "partially_refunded", "refunded", "review_required"])("recovers %s without another payment", async status => {
+    fetchMock.mockImplementation(async () => Response.json({ policy: null, orders: [{ ...captured, status }] }));
+    render(<ProductionCheckout businessId={businessId} />);
+    await screen.findByText(`Payment reference: ${orderId}`);
+    expect(screen.queryByRole("button", { name: /Pay INR|Continue saved/ })).not.toBeInTheDocument();
+    expect(opened).not.toHaveBeenCalled();
+  });
+});
+
 describe("managed billing settings", () => {
+  it("shows the live business's checkout and allowance, updating both when the business changes", async () => {
+    const otherBusinessId = "33333333-3333-4333-8333-333333333333";
+    fetchMock.mockResolvedValue(Response.json({ policy: null, orders: [] }));
+    const view = render(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={otherBusinessId} />);
+    expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", otherBusinessId);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.includes(`businessId=${otherBusinessId}`))).toBe(true));
+    expect(screen.queryByRole("region", { name: "Razorpay test checkout" })).not.toBeInTheDocument();
+
+    view.rerender(<ManagedBilling connection={connected} testBusinessId={businessId} liveBusinessId={businessId} />);
+    expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", businessId);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => path.includes(`businessId=${businessId}`))).toBe(true));
+
+    view.rerender(<ManagedBilling connection={connected} />);
+    expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
+  });
+
   it("renders checkout only when supplied a server-authorized test business", () => {
     render(<ManagedBilling connection={connected} testBusinessId={businessId} />);
     expect(screen.getByRole("region", { name: "Razorpay test checkout" })).toBeInTheDocument();
@@ -188,12 +329,11 @@ describe("managed billing settings", () => {
     expect(screen.getByText("80%")).toBeInTheDocument();
     expect(screen.getByText("Current operator")).toBeInTheDocument();
     expect(screen.getByText("Vanshul Goyal")).toBeInTheDocument();
-    expect(screen.getByText("Future account ownership")).toBeInTheDocument();
-    expect(screen.getByText("Solaride arrangement not yet formalized")).toBeInTheDocument();
+    expect(screen.getByText("Operator-managed")).toBeInTheDocument();
     expect(screen.queryByText("Solaride Energy")).not.toBeInTheDocument();
     expect(screen.getByText("act_123")).toBeInTheDocument();
-    expect(screen.getByText("Not verified")).toBeInTheDocument();
-    expect(screen.getByText(/No funding method selected/)).toBeInTheDocument();
+    expect(screen.queryByText("Funding verification")).not.toBeInTheDocument();
+    expect(screen.getByText(/The operator pays Meta separately/)).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
@@ -204,10 +344,10 @@ describe("managed billing settings", () => {
     [{ ...connected, ready: false, pending: true, adAccountId: null }, "Account selection required"],
     [{ ...connected, ready: false, adAccountId: null }, "Not connected"],
     [connected, "Connected"],
-  ])("keeps funding unverified for connection state %j", (connection, label) => {
+  ])("keeps operator-managed payment independent of connection state %j", (connection, label) => {
     render(<ManagedBilling connection={connection} />);
     expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("Operator-managed")).toBeInTheDocument();
     if (!connection) {
       expect(screen.getByText("Unavailable")).toBeInTheDocument();
       expect(screen.queryByText("Not selected")).not.toBeInTheDocument();
@@ -216,17 +356,10 @@ describe("managed billing settings", () => {
     }
   });
 
-  it("uses official requirements links without exposing a payment execution action", () => {
-    const { container } = render(<ManagedBilling connection={connected} />);
-    const options = container.querySelectorAll("details");
-    expect(options).toHaveLength(3);
-    for (const option of options) option.open = true;
-    for (const method of META_FUNDING_METHODS) {
-      const link = screen.getByRole("link", { name: `Meta requirements for ${method.name}` });
-      expect(link).toHaveAttribute("href", method.documentationUrl);
-      expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    }
-    expect(screen.getByText(/Prepaid accounts have no Meta account spending limit/)).toBeInTheDocument();
-    expect(screen.getByText(/do not transfer exactly 80%/)).toBeInTheDocument();
+  it("shows the approved refund boundary without a funding-setup or payment action", () => {
+    render(<ManagedBilling connection={connected} />);
+    expect(screen.getByText(/Service allocation is earned only after/)).toBeInTheDocument();
+    expect(screen.queryByText("Funding options")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activationConfirmationPayload } from "@/lib/campaign/activation";
+import { CampaignDeliveryError } from "@/lib/meta/client";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
@@ -11,9 +12,16 @@ const mocks = vi.hoisted(() => ({
   getCampaignSpend: vi.fn(),
   updateCampaignStatus: vi.fn(),
   verifyCampaignActivation: vi.fn(),
+  readCampaignDelivery: vi.fn(),
+  saveCampaign: vi.fn(),
+  enforceCampaignSpendCap: vi.fn(),
   recheckMetaConnection: vi.fn(),
   deleteCampaign: vi.fn(),
+  reserveCustomerCampaign: vi.fn(),
+  confirmCustomerCampaign: vi.fn(),
+  getCustomerBalance: vi.fn(),
   dailyBudget: 500,
+  storedAdSetIds: ["set-1"],
 }));
 
 class MockConnectionAccessError extends Error {
@@ -21,7 +29,7 @@ class MockConnectionAccessError extends Error {
 }
 
 vi.mock("@/lib/campaign/trusted-write", () => ({
-  saveCampaign: async () => ({ error: null }),
+  saveCampaign: (...args: unknown[]) => mocks.saveCampaign(...args),
   deleteVerifiedCampaign: (...args: unknown[]) => mocks.deleteCampaign(...args),
 }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -37,6 +45,9 @@ vi.mock("@/lib/supabase/server", () => ({
                   id: "campaign-1",
                   business_id: "business-1",
                   meta_campaign_id: "meta-campaign-1",
+                  meta_adset_id: "set-1",
+                  meta_ad_ids: ["ad-1"],
+                  raw: { source: "campaign_operation", metaResult: { campaignId: "meta-campaign-1", adSetIds: mocks.storedAdSetIds, adIds: ["ad-1"] } },
                   daily_budget: mocks.dailyBudget,
                   status: "paused",
                   name: "Campaign",
@@ -68,6 +79,12 @@ vi.mock("@/lib/supabase/queries", () => ({
   getCampaignSpend: mocks.getCampaignSpend,
 }));
 vi.mock("@/lib/audit", () => ({ logEvent: vi.fn() }));
+vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/payments/customer-balance")>(),
+  reserveCustomerCampaign: mocks.reserveCustomerCampaign,
+  confirmCustomerCampaign: mocks.confirmCustomerCampaign,
+  getCustomerBalance: mocks.getCustomerBalance,
+}));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {
@@ -77,10 +94,26 @@ function patch(body: unknown): Request {
   });
 }
 
+const reviewedDelivery = {
+  campaign: { id: "meta-campaign-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED" },
+  adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_123", destinationType: "ON_AD", targeting: null }],
+  ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.dailyBudget = 500;
-  mocks.verifyCampaignActivation.mockResolvedValue(undefined);
+  mocks.storedAdSetIds = ["set-1"];
+  mocks.updateCampaignStatus.mockResolvedValue(undefined);
+  mocks.reserveCustomerCampaign.mockResolvedValue({ reservationId: "reservation-1", mediaLimitPaise: 677966 });
+  mocks.enforceCampaignSpendCap.mockResolvedValue(undefined);
+  mocks.confirmCustomerCampaign.mockResolvedValue(undefined);
+  mocks.getCustomerBalance.mockResolvedValue({ reservations: [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "active" }] });
+  mocks.verifyCampaignActivation.mockImplementation(async (_id: string, expected: { status: string }) => ({
+    ...reviewedDelivery, campaign: { ...reviewedDelivery.campaign, status: expected.status.toUpperCase() },
+  }));
+  mocks.saveCampaign.mockResolvedValue({ error: null });
+  mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
   mocks.deleteCampaign.mockResolvedValue({ error: null });
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
@@ -88,7 +121,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, verifyCampaignActivation: mocks.verifyCampaignActivation }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -100,7 +133,63 @@ describe("campaign activation generation fence", () => {
   const confirmationDigest = () => createHash("sha256").update(activationConfirmationPayload(
     { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
     { generation: 4, selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" } },
+    reviewedDelivery,
   )).digest("hex");
+
+  it("returns a tenant-scoped, read-only child review without reserving funds", async () => {
+    const { GET } = await import("@/app/api/campaigns/[id]/route");
+    const response = await GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect((await response.json()).delivery).toEqual(reviewedDelivery);
+    expect(mocks.readCampaignDelivery).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"] });
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not read delivery for a campaign whose owner check fails", async () => {
+    mocks.requireOwnedBusiness.mockRejectedValueOnce(new MockConnectionAccessError("Business access changed."));
+    const { GET } = await import("@/app/api/campaigns/[id]/route");
+    const response = await GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.readCampaignDelivery).not.toHaveBeenCalled();
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+  });
+
+  it("rejects an incomplete stored child binding before review or activation", async () => {
+    mocks.storedAdSetIds = ["set-unexpected"];
+    const { GET, PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const context = { params: Promise.resolve({ id: "campaign-1" }) };
+    const review = await GET(new Request("http://localhost/api/campaigns/campaign-1"), context);
+    const activation = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), context);
+    expect(review.status).toBe(409);
+    expect(activation.status).toBe(409);
+    expect(mocks.readCampaignDelivery).not.toHaveBeenCalled();
+    expect(mocks.verifyCampaignActivation).not.toHaveBeenCalled();
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+  });
+
+  it("rejects a child setting change after review without reserving or activating", async () => {
+    mocks.verifyCampaignActivation.mockResolvedValueOnce({
+      ...reviewedDelivery, adSets: [{ ...reviewedDelivery.adSets[0], targeting: { geo_locations: { countries: ["IN"] } } }],
+    });
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("holds a partial provider outcome for reconciliation instead of mirroring active", async () => {
+    mocks.verifyCampaignActivation.mockResolvedValueOnce(reviewedDelivery)
+      .mockRejectedValueOnce(new CampaignDeliveryError("An intended ad is paused after the parent request."));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+    expect(mocks.saveCampaign).not.toHaveBeenCalled();
+  });
 
   it("rejects an arbitrary well-formed digest without activating", async () => {
     const { PATCH } = await import("@/app/api/campaigns/[id]/route");
@@ -115,7 +204,48 @@ describe("campaign activation generation fence", () => {
     expect(response.status).toBe(200);
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
     expect(mocks.recheckMetaConnection).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, 4);
-    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused" });
+    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"] });
+    expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
+    expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active");
+  });
+
+  it("blocks direct activation when customer allowance is insufficient or held", async () => {
+    const { CustomerBalanceError } = await import("@/lib/payments/customer-balance");
+    mocks.reserveCustomerCampaign.mockRejectedValueOnce(new CustomerBalanceError());
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("retains an uncertain reservation after a lost provider activation result", async () => {
+    mocks.updateCampaignStatus.mockRejectedValueOnce(new Error("Unconfirmed provider result"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(500);
+    expect(mocks.reserveCustomerCampaign).toHaveBeenCalledOnce();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+  });
+
+  it("never activates if Meta cannot honor the customer-funded cap", async () => {
+    mocks.enforceCampaignSpendCap.mockRejectedValueOnce(new Error("Minimum cap exceeds customer allowance"));
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(500);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+  });
+
+  it("allows pause with unavailable accounting and fences its confirmation to the original reservation", async () => {
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.getCustomerBalance.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "paused");
+    mocks.getCustomerBalance.mockRejectedValueOnce(new Error("Accounting unavailable"));
+    expect((await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) })).status).toBe(200);
   });
 
   it.each(["getSpendLimits", "getCampaignSpend"] as const)("blocks activation when %s fails", async (query) => {

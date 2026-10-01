@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LeadInbox } from "@/components/lead-inbox";
 import type { Lead } from "@/lib/types";
@@ -73,6 +74,17 @@ describe("<LeadInbox> Meta readiness", () => {
 });
 
 describe("<LeadInbox> table", () => {
+  it("keeps Clear search in the keyboard order and clears the query", async () => {
+    render(<LeadInbox businessName="Form Studio" initialLeads={[]} metaReady={false} />);
+    const search = screen.getByRole("searchbox", { name: "Search enquiries" });
+    await userEvent.type(search, "Asha");
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Clear search" })).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    expect(search).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+  });
+
   it("searches contact and source details on the server and clears an empty result", async () => {
     setFetch({ ok: true, json: async () => ({ leads: [lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })] }) });
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead(), lead({ id: "l2", full_name: "Ravi Shah", email: "ravi@example.com", city: "Pune" })]} metaReady />);
@@ -263,6 +275,90 @@ describe("<LeadInbox> WhatsApp digest", () => {
 });
 
 describe("<LeadInbox> saved enquiry workflow", () => {
+  it("keeps two unsaved drafts separate and returns focus after closing", () => {
+    const second = lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Shah", follow_up_note: "Other" });
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead(), second]} metaReady={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up status")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Call Asha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Other");
+    expect(screen.getByLabelText("Follow-up status")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Call Ravi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
+    expect(screen.getByRole("button", { name: "Follow up Ravi Shah" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Call Asha");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Call Ravi");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failed-save draft with its enquiry across switching and closing", async () => {
+    const first = lead({ workflow_status: "new", follow_up_note: "Original" });
+    const second = lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Shah", follow_up_note: "Other" });
+    const fetcher = vi.fn(async (_url: string, options?: RequestInit) => options?.method === "PATCH"
+      ? { ok: false, json: async () => ({ error: "Unavailable" }) }
+      : { ok: true, json: async () => ({ leads: [first, second], total: 2, nextCursor: null }) });
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Fixture" initialLeads={[first, second]} metaReady={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.change(screen.getByLabelText("Follow-up status"), { target: { value: "booked" } });
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Friday appointment" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
+    expect(await screen.findByText(/Your edits are still here/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Other");
+    fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up status")).toHaveValue("booked");
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Friday appointment");
+    expect(fetcher.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(1);
+  });
+
+  it("forgets a cached draft after reverting to the saved values", () => {
+    const first = lead({ follow_up_note: "Original" });
+    const second = lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Shah" });
+    render(<LeadInbox businessName="Fixture" initialLeads={[first, second]} metaReady={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Temporary" } });
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Temporary");
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Original" } });
+    fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Original");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("holds the current editor while a save is in flight, then clears the saved draft", async () => {
+    const first = lead({ workflow_status: "new", follow_up_note: "Original" });
+    const second = lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Shah" });
+    let resolveSave!: (value: unknown) => void;
+    const fetcher = vi.fn((_url: string, options?: RequestInit) => options?.method === "PATCH"
+      ? new Promise(resolve => { resolveSave = resolve; })
+      : Promise.resolve({ ok: true, json: async () => ({ leads: [first, second], total: 2, nextCursor: null }) }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<LeadInbox businessName="Fixture" initialLeads={[first, second]} metaReady={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Saved after delay" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
+    expect(screen.getByRole("button", { name: "Follow up Ravi Shah" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close follow-up" })).toBeDisabled();
+    expect(screen.getByLabelText("Follow-up note")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    expect(screen.getByRole("heading", { name: "Follow up: Asha Verma" })).toBeInTheDocument();
+    await act(async () => resolveSave({ ok: true, json: async () => ({ lead: { ...first, follow_up_note: "Saved after delay" } }) }));
+    expect(await screen.findByText("Follow-up saved.")).toBeInTheDocument();
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByLabelText("Follow-up note")).toHaveValue("Saved after delay");
+    expect(fetcher.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(1);
+  });
+
   it("keeps SSR totals, pages beyond the first batch and deduplicates rows", async () => {
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
       leads: [lead(), lead({ id: "later", full_name: "Beyond two hundred" })], total: 225, nextCursor: null,

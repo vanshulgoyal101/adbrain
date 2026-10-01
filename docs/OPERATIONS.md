@@ -61,6 +61,7 @@ The launcher-mode effects are documented in [Configuration](CONFIGURATION.md#loc
 | Symptom | Inspect | Recovery / avoid |
 | --- | --- | --- |
 | Sign-in or redirect failure | Supabase availability, configured site/callback URLs, browser cookie state, safe redirect policy | Retry intended method; use local path destinations, never bypass authentication |
+| Workspace stays loading or shows an error | In a visible session, compare the request and streamed response with Supabase auth and business-read failures; a fallback HTTP 200 alone is not a completed workspace | Use Try again to refetch the failed segment, or Sign in if the session expired. Check auth and business-read availability before treating an empty workspace as a first run; do not reset saved state or bypass the route guard |
 | Brand autofill fails | URL validation, public DNS/fetch reachability, provider availability | Enter fields manually; do not disable SSRF protection or overwrite concurrent edits |
 | Generation fails before starting | Ownership, monthly aggregate RPC, receipt column, references, keys/model, rate limit | Repair verified configuration/schema; do not disable quota because usage is unknown |
 | Browser loses generation result | GET recovery by business/generation UUID and expected count | Recover saved rows first; generation UUID is not a durable deduplication lock |
@@ -71,8 +72,9 @@ The launcher-mode effects are documented in [Configuration](CONFIGURATION.md#loc
 | `needs_reconciliation` | Checkpoint IDs, local campaign, correct bound Meta account/Page | Authorized operator reconciles actual objects; preserve evidence, no blind recreate/delete |
 | Activation blocked | Current capability, generation/digest, binding, form/budget/spend evidence | Recheck and re-review; never relabel a different campaign to fit the connection |
 | Sync incomplete | Cursor, skipped count, account/Page binding, status, save error | Continue pages or retry failed page; do not prune local rows based on one page |
-| Refresh returns 503 after provider read | Result persistence and matching schema/grants | The handler rejects a missing/failed save before summary/enforcement; repair the target mismatch, then deliberately retry the read/save workflow |
-| Leads partly sync | `failedForms`, newly inserted count, form/page coverage | Existing sync does not prove every provider page was imported; #34 is a separate candidate. Do not advertise completeness from a successful first page |
+| Refresh result cannot be saved | `campaign_results` persistence and request logs | 503 before summary/enforcement; inspect the saved row before retrying, and verify delivery in Meta |
+| Spend protection unconfirmed | Refresh `protectionConfirmed:false` or cron `ok:false`, stored binding, provider insight period/currency, remote/local pause state | Confirm the campaign status in the original Meta account; repair reporting/connection/storage before retry. Do not read an empty `autoPaused`/`swept` as a safe spend total |
+| Leads partly sync | `failedForms`, newly inserted count, `sync.hasMore`, form/page coverage | Keep the sync ID and saved rows; retry failed forms after permission fix. Repeated IDs are ignored, not counted as new leads; a partial page is not proof of complete import |
 | Disconnect fails | Explicit business UUID, owner check, RPC/schema availability | Keep existing UI state until confirmed; disconnect is not an emergency pause |
 | Telemetry missing | Enable flags, applied migration, hosting logs, retention, request cap | Events are best effort; a missing event does not prove no action occurred |
 
@@ -219,14 +221,16 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | Job | Behavior |
 | --- | --- |
 | `/api/cron/keepalive` | Database activity and bounded product-event retention cleanup when configured; retention failure is visible |
-| `/api/cron/enforce-spend` | Reads opted-in businesses, existing campaigns and latest stored spend; attempts to pause active bound campaigns at cap |
+| `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend |
 
 Keep cron monitoring outside the job itself: observe completion time, status,
 partial outcomes and the age of the last useful spend evidence. The checked-in
 daily schedule cannot satisfy a five-minute spend-stop objective. Do not promise
 that capability based on an unprovisioned scheduler or a hosting-plan upgrade.
 
-Enforcement does **not** fetch fresh insights first. It can return 503 with partial
+Weekly protection requires a complete Monday-to-today INR spend observation;
+missing metrics are not zero spend. Unlaunched drafts do not contribute, but
+launched or paused campaigns can. The scheduled sweep can return 503 with partial
 progress; inspect `swept` and remaining failures rather than declaring every
 campaign paused. Missing bindings, credentials, read errors, or local save failures
 prevent complete enforcement. Both refresh-time and daily enforcement can lag;

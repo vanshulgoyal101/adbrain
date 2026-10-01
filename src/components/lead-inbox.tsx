@@ -39,17 +39,22 @@ export function LeadInbox({
   const [selected, setSelected] = useState<Lead | null>(null);
   const [draftStatus, setDraftStatus] = useState<WorkflowStatus>("new");
   const [draftNote, setDraftNote] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, { status: WorkflowStatus; note: string }>>({});
+  const [confirmed, setConfirmed] = useState<Record<string, { status: WorkflowStatus; note: string }>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [syncId, setSyncId] = useState<string | null>(null);
   const editorField = useRef<HTMLSelectElement>(null);
+  const editorTrigger = useRef<HTMLButtonElement>(null);
+  const searchField = useRef<HTMLInputElement>(null);
   useEffect(() => { editorField.current?.focus(); }, [selected?.id]);
   const page = useLeadList({ leads: initialLeads, total: initialTotal, nextCursor: initialNextCursor }, {
     query, status, contact: contactFilter, sort,
   });
   const leads = page.leads;
   const mounted = useMounted();
+  const dirty = selected && (draftStatus !== (selected.workflow_status ?? "new") || draftNote !== (selected.follow_up_note ?? ""));
 
   const hasFilters = Boolean(query || contactFilter !== "all" || status !== "all");
   function clearFilters() {
@@ -58,12 +63,41 @@ export function LeadInbox({
     setStatus("all");
   }
 
-  function editLead(lead: Lead) {
-    setSelected(lead);
-    setDraftStatus(lead.workflow_status ?? "new");
-    setDraftNote(lead.follow_up_note ?? "");
+  const draftKey = (lead: Lead) => `${lead.business_id}:${lead.id}`;
+  function rememberDraft() {
+    if (!selected) return;
+    const key = draftKey(selected);
+    if (draftStatus !== (selected.workflow_status ?? "new") || draftNote !== (selected.follow_up_note ?? "")) {
+      setDrafts(current => ({ ...current, [key]: { status: draftStatus, note: draftNote } }));
+    } else if (drafts[key]) {
+      setDrafts(current => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  }
+
+  function editLead(lead: Lead, trigger: HTMLButtonElement) {
+    if (selected?.id === lead.id) { editorField.current?.focus(); return; }
+    rememberDraft();
+    editorTrigger.current = trigger;
+    const key = draftKey(lead);
+    const existing = drafts[key];
+    const savedRow = confirmed[key];
+    const current = savedRow ? { ...lead, workflow_status: savedRow.status, follow_up_note: savedRow.note } : lead;
+    setSelected(current);
+    setDraftStatus(existing?.status ?? current.workflow_status ?? "new");
+    setDraftNote(existing?.note ?? current.follow_up_note ?? "");
     setSaveError(null);
     setSaved(false);
+  }
+
+  function closeEditor() {
+    rememberDraft();
+    setSelected(null);
+    if (editorTrigger.current?.isConnected) editorTrigger.current.focus();
+    else searchField.current?.focus();
   }
 
   async function saveFollowUp(event: React.FormEvent) {
@@ -78,8 +112,17 @@ export function LeadInbox({
         body: JSON.stringify({ workflow_status: draftStatus, follow_up_note: draftNote }),
       });
       const data = await response.json() as { lead?: Lead };
-      if (!response.ok || data.lead?.id !== selected.id) throw new Error("Save failed");
+      if (!response.ok || data.lead?.id !== selected.id || data.lead.business_id !== selected.business_id) throw new Error("Save failed");
+      const savedRow = { status: data.lead.workflow_status ?? "new", note: data.lead.follow_up_note ?? "" };
       setSelected(data.lead);
+      setDraftStatus(savedRow.status);
+      setDraftNote(savedRow.note);
+      setConfirmed(current => ({ ...current, [draftKey(selected)]: savedRow }));
+      setDrafts(current => {
+        const next = { ...current };
+        delete next[draftKey(selected)];
+        return next;
+      });
       setSaved(true);
       page.refresh();
     } catch {
@@ -220,7 +263,7 @@ export function LeadInbox({
         <div className={styles.toolbar}>
           <div className={styles.search}>
             <Search size={17} aria-hidden="true" />
-            <input type="search" aria-label="Search enquiries" placeholder="Search name, contact, city, or form" value={query} onChange={event => setQuery(event.target.value)} />
+            <input ref={searchField} type="search" aria-label="Search enquiries" placeholder="Search name, contact, city, or form" value={query} onChange={event => setQuery(event.target.value)} />
             {query && <button type="button" title="Clear search" aria-label="Clear search" onClick={() => setQuery("")}><X size={16} aria-hidden="true" /></button>}
           </div>
           <select aria-label="Contact availability" value={contactFilter} onChange={event => setContactFilter(event.target.value)}>
@@ -238,7 +281,7 @@ export function LeadInbox({
       </div>
 
       {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>
-        <div className={styles.editorHeading}><h3>Follow up: {selected.full_name ?? "Unnamed enquiry"}</h3><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={() => setSelected(null)}><X size={18} /></button></div>
+        <div className={styles.editorHeading}><div><h3>Follow up: {selected.full_name ?? "Unnamed enquiry"}</h3>{dirty && <p role="status" className="text-xs text-amber-800">Unsaved changes</p>}</div><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
         <label>Follow-up status<select ref={editorField} value={draftStatus} disabled={saving} onChange={event => { setDraftStatus(event.target.value as WorkflowStatus); setSaved(false); }}>
           {workflowStatuses.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
         </select></label>
@@ -302,7 +345,7 @@ export function LeadInbox({
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
                     {whenLabel(l.created_time) || "—"}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${l.full_name ?? "enquiry"}`} aria-label={`Follow up ${l.full_name ?? "enquiry"}`} disabled={saving} onClick={() => editLead(l)}><Pencil size={14} aria-hidden="true" />{l.workflow_status ?? "new"}</button></td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${l.full_name ?? "enquiry"}`} aria-label={`Follow up ${l.full_name ?? "enquiry"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
                 </tr>
               ))}
             </tbody>
