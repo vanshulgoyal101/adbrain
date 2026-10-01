@@ -33,17 +33,20 @@ Routine steps never wait for the coordinator.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
    `origin/main`, keep the change small, push, and open a PR to `main` titled
    with the issue number. Comment on the issue in five lines or fewer: what
-   changed, proof, risk, PR link, next step. Set `ready-to-ship` and
-   `owner:devops`, remove your label, and start your next issue. If `main` moves,
-   rebase your own PR; DevOps does not cherry-pick from old bases.
-4. **DevOps ships** every `ready-to-ship` PR: migrations first, required CI,
-   merge, production smoke, then close the issue with the PR link. Batch PRs that
-   are ready together. Changes to money, tenant boundaries or irreversible data
-   get `owner:qa` first; QA confirms and hands back. Everything else ships on CI.
-5. **A core failure found live** gets its own `core` `bug` issue with the exact
+   changed, proof, risk, PR link, next step.
+4. **Low-risk PRs ship themselves.** No migration, money, tenant/auth or config
+   change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
+   (about 3 minutes) and Vercel deploys. If `main` moved, run
+   `gh pr update-branch <n>`. After deploy, smoke the changed flow in production,
+   close the issue with the PR link and start your next issue.
+5. **DevOps ships the rest**: anything with a migration, money, tenant/auth or
+   config change. Label it `ready-to-ship` and `owner:devops`. DevOps applies
+   migrations first, merges, smokes and closes. Money and tenant changes get
+   `owner:qa` first. DevOps also owns rollback when a production smoke fails.
+6. **A core failure found live** gets its own `core` `bug` issue with the exact
    step, error and owner label. Add `owner:qa` when a red test helps. One issue
    per problem; do not bury new failures in long comment threads.
-6. **The coordinator** sets priority, resolves conflicts, approves budgets, signs
+7. **The coordinator** sets priority, resolves conflicts, approves budgets, signs
    the browser in, keeps labels honest and closes or parks stale issues.
 
 ### Standing rules
@@ -75,7 +78,7 @@ Routine steps never wait for the coordinator.
 | --- | --- |
 | Dev | [#90](https://github.com/vanshulgoyal101/adbrain/issues/90) Create page crash (CSP blocks Zod eval), then [#88](https://github.com/vanshulgoyal101/adbrain/issues/88). Run 1/10 saved 1 of 3 (repeated-opening, unsupported-claim, one provider failure) |
 | Dev 2 | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) campaign mechanics: one PAUSED test campaign in the Solaride account with a Solaride lead form, then sync, pause/resume, archive. `29db6cf` is ready-to-ship |
-| QA | Red tests for #90 and for whichever #88 rejection Dev is fixing, then [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) headless `npm run smoke:core` |
+| QA | Red tests for #90 and for whichever #88 rejection Dev is fixing, then [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) headless core smoke script |
 | DevOps | Ship `29db6cf` ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) and Dev's `9980189`, retry Prepare once. Then any `ready-to-ship`; between releases [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) worktree and read-only SQL helpers |
 
 ## Historical Dispatch Receipts
