@@ -19,6 +19,26 @@ describe("<AdAssistant> draft persistence", () => {
     Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
   });
 
+  it("renders saved generated results without triggering eval under the production CSP", async () => {
+    const originalFunction = Function;
+    const blockedEval = vi.fn();
+    vi.stubGlobal("Function", function blockedZodEval(...args: string[]) {
+      if ((args.length === 1 && args[0] === "") || args.at(-1)?.includes("payload.value = newResult;")) {
+        blockedEval();
+        throw new EvalError("unsafe-eval blocked by CSP");
+      }
+      return new originalFunction(...args);
+    });
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, answers: [], phase: "done",
+      turns: [{ role: "result", creatives: [{ id: "creative-1", headline: "Find a new approach", primary_text: "Explore your options.", status: "draft", generation: { concept: { description: "Book a consultation." } } }] }],
+    }));
+    render(<AdAssistant business={business} />);
+    expect(await screen.findByText("Find a new approach")).toBeInTheDocument();
+    expect(screen.getByText("Book a consultation.")).toBeInTheDocument();
+    expect(blockedEval).not.toHaveBeenCalled();
+  });
+
   it("sends the original goal and typed answers, not model suggestions or the prepared brief, as evidence", async () => {
     sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
       goal: "Describe our rooftop work", started: true, turns: [], phase: "review",

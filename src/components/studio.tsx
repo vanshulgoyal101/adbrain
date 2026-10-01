@@ -29,6 +29,8 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
 import { z } from "zod";
 
+z.config({ jitless: true });
+
 const studioGenerationSchema = z.object({ generationId: z.string().uuid(), count: z.number().int().min(1).max(6) });
 type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 
