@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { MarketingHome } from "@/components/marketing-home";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import PrivacyPolicyPage from "@/app/privacy/page";
+import DataDeletionPage from "@/app/data-deletion/page";
 
 describe("public product example", () => {
   it("labels the example without claiming a live generation or customer result", () => {
@@ -50,5 +52,19 @@ describe("public product example", () => {
     expect(container.querySelector("#example")).toBeInTheDocument();
     expect(container.querySelector("a button")).toBeNull();
     for (const link of LEGAL_LINKS) expect(screen.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
+  });
+});
+
+describe("privacy requests", () => {
+  it("directs users to signed-in Settings without promising immediate deletion or an unverified mailbox", () => {
+    render(<PrivacyPolicyPage />);
+    expect(screen.getAllByRole("link", { name: "Settings" })[0]).toHaveAttribute("href", "/settings");
+    expect(screen.getByText(/submitting a request does not automatically export or delete/)).toBeInTheDocument();
+    expect(screen.getByText(/Payment, invoice, refund and security records may need to be retained/)).toBeInTheDocument();
+    expect(screen.queryByText(/privacy@adbrain/)).not.toBeInTheDocument();
+    render(<DataDeletionPage />);
+    expect(screen.getAllByRole("link", { name: "Settings" }).at(-1)).toHaveAttribute("href", "/settings");
+    expect(screen.getByText(/there is no one-click full-account export or deletion/)).toBeInTheDocument();
+    expect(screen.getByText(/does not delete provider-side campaigns or lead data/)).toBeInTheDocument();
   });
 });

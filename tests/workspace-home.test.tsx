@@ -102,6 +102,7 @@ describe("Home workspace", () => {
     const [, connectionBoundary, spendBoundary] = page.props.children;
     expect(connectionBoundary.type).toBe(Suspense);
     expect(spendBoundary.type).toBe(Suspense);
+    expect(page.props.children.at(-1).type.name).toBe("PrivacyRequests");
     const spendSection = spendBoundary.props.children;
     const spend = spendSection.type(spendSection.props);
     const connectionSection = connectionBoundary.props.children;
@@ -110,6 +111,13 @@ describe("Home workspace", () => {
     resolveSpend({ limits: {}, evaluation: {} });
     render(await spend);
     expect(screen.getByText("Guardrails loaded")).toBeInTheDocument();
+  });
+
+  it("keeps privacy requests available before a business is set up", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(null);
+    const { default: SettingsPage } = await import("@/app/(app)/settings/page");
+    const page = await SettingsPage({ searchParams: Promise.resolve({}) });
+    expect(page.props.children.at(-1).props.children.type.name).toBe("PrivacyRequests");
   });
 
   it("keeps spend failures local instead of replacing settings or showing editable defaults", async () => {

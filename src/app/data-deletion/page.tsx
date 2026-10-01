@@ -30,40 +30,47 @@ export default function DataDeletionPage() {
       />
       <LegalPage title={TITLE} updated="30 September 2026">
         <p>
-          If you want AdBrain to delete your data, email us at {" "}
-          <a href="mailto:privacy@adbrain.vanshul.com">privacy@adbrain.vanshul.com</a>
-          {" "}from the account email linked to your AdBrain workspace.
+          To request an export or deletion of data AdBrain holds, sign in and use
+          the Privacy and data requests section in <a href="/settings">Settings</a>.
+          You can submit a request even if you have not set up a business yet.
+          The page confirms receipt and shows the current status. Do not include
+          passwords, payment details or lead contact information in a request.
         </p>
 
-        <h2>What to include in your request</h2>
-        <ul>
-          <li>Your AdBrain account email address.</li>
-          <li>Your business/workspace name (if you have one).</li>
-          <li>Whether you want full account deletion or only specific data removed.</li>
-        </ul>
+        <h2>Verification and status</h2>
+        <p>
+          Our operator reviews each request and verifies ownership of the account
+          and workspace before sharing or removing data. We may ask you to confirm
+          the scope. Exports are shared only through an agreed secure method after
+          verification; there is no one-click full-account export or deletion.
+        </p>
 
-        <h2>What we delete</h2>
-        <ul>
-          <li>Brand profile details and uploaded brand assets stored in AdBrain.</li>
-          <li>Campaign drafts, generated creatives, reports, and lead copies stored in AdBrain.</li>
-          <li>Stored Meta connection credentials and related sync metadata.</li>
-          <li>Short remembered preferences saved for your account and business.</li>
-        </ul>
+        <h2>Data covered by a request</h2>
+        <p>
+          We review AdBrain-held account and brand details, uploaded assets,
+          campaign drafts and reports, generated creatives, lead copies and stored
+          Meta connection details as applicable. We confirm what can be supplied
+          or removed for your verified account before acting.
+        </p>
 
         <h2>What may remain</h2>
         <ul>
           <li>
-            Records we are required to retain for legal, fraud-prevention, or security obligations.
+            Payment, invoice, refund, transaction and security records needed for
+            legal, financial, fraud-prevention or security obligations.
           </li>
           <li>
-            Data that exists in third-party systems (such as Meta) that you must delete from those
-            systems directly.
+            Data held by Meta or other providers. Removing AdBrain-held copies
+            does not delete provider-side campaigns or lead data.
           </li>
         </ul>
 
         <h2>Timeline</h2>
         <p>
-          We verify request ownership and complete deletion within 30 days of a valid request.
+          We aim to review received requests within 7 calendar days and provide
+          a response or status update within 30 calendar days after verifying
+          ownership. If more time is needed, we will explain why and give you
+          the next update date; not all records can necessarily be deleted.
         </p>
       </LegalPage>
     </>
