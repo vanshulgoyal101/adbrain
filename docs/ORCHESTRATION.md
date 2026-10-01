@@ -22,21 +22,23 @@ work: no privacy, support, polish, performance or broad P1 test campaigns.
 QA findings already handed off (regenerate guard, Brand save) ship as-is. Each
 core failure found live is fixed next. The #54 Sep 29 hold stays untouched.
 
-**Paid Create budget (owner, Oct 1): 10 Create runs total**, shared by Dev and
-DevOps, on the owner's own business only. Before each run, post `Create run N/10`
-with the result in #74. At 10, stop and ask the coordinator; the owner approves
-more in batches of 10. No Meta ad spend: campaigns stay PAUSED. Dev and Dev 2
-share the signed-in browser tab; agree turns directly, one user at a time.
-The tab is signed in to the owner's demo account (business Cedar Ridge
-Chiropractic, Meta connected, 7 approved ads). Use that business for the core
-loop. If the session expires, the coordinator signs back in; never ask the owner.
+**Paid Create budget (owner, Oct 1): 10 Create runs total**: Dev up to 7 to find
+and fix failures, DevOps 3 to confirm after release. Owner's demo business only.
+Before each run, post `Create run N/10` with the result in #74. At 10, stop and
+ask the coordinator; the owner approves more in batches of 10. No Meta ad spend:
+campaigns stay PAUSED.
+
+Browser: the integrated browser is signed in to the owner's demo account (business
+Cedar Ridge Chiropractic, Meta connected, 7 approved ads). Tabs share the session,
+so each worker opens its own tab at https://adbrain.vanshul.com and does not touch
+another worker's tab. If the session expires, the coordinator signs back in.
 
 | Worker | Deliver next | Ownership and first check |
 | --- | --- | --- |
-| Dev | **Create works every time** | Own ad generation end to end. Find and fix why production Create saved 0/3 and 2/3. Use the recorded rule categories, run the real pipeline against the owner's business, fix each failure and repeat until 3/3 saves reliably. Paid runs only within the owner-approved cap |
-| Dev 2 | **Campaign launch and management work** | Own Meta campaigns end to end using the signed-in shared browser tab. Work on the owner's business: saved ads, then create a campaign, then review, then launch PAUSED on Meta, then sync, then pause/resume. Fix every failure until the flow is clean. Do not activate delivery or spend money on ads |
-| QA | Turn core failures into tests | When Dev, Dev 2 or DevOps hit a core-loop failure, write the red test the same hour and give it to the owner of the fix. No other test campaigns |
-| DevOps | Ship what's done, then live core smoke | Release the finished commits now: Create `510c92e`+`97e0b44`, regenerate guard `72c10be` (migration first), Brand save `927b6ff`, enquiries `0749725`+`ebbb3a2`. Then release Dev/Dev 2 core fixes as they land and re-run the core loop in production |
+| Dev | **Create works every time** | PR86 (rule categories, repair context) is live at main `8113d1d`. In your own tab, run Create for 3 ads on Cedar Ridge and post the saved count and any rejected rule categories. Fix the top failure, hand the commit to DevOps, and run again. Stop at 3/3 twice in a row or 7 runs, whichever comes first |
+| Dev 2 | **Campaign launch and management work** | In your own tab on Cedar Ridge, use the existing approved ads: Prepare campaign, then review, then launch PAUSED on Meta, then sync, then pause/resume. Post each step's result in #74. Fix every failure and hand commits to DevOps. Never activate delivery or spend on ads |
+| QA | Confirm the two queued fixes, then core failures | Run your red tests against regenerate guard `72c10be` and Brand save `927b6ff` and tell DevOps. Then turn each core failure Dev, Dev 2 or DevOps posts into a red test the same hour |
+| DevOps | Release queued fixes, then confirm the loop | PR86 is live. Release `72c10be` (apply `20261001_creative_regeneration_claims.sql` first) and `927b6ff` once QA confirms. Ship Dev/Dev 2 core fixes as they land. When Dev reports 3/3, use your 3 runs to confirm Create in production, then walk the full loop once |
 | Coordinator | Keep everyone on the core loop | Plan and assign; no product code |
 
 Dev adopted QA's recovery overlay for the shipped #54 repair. Preserve the original
