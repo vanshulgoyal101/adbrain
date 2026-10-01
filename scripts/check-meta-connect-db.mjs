@@ -1844,6 +1844,7 @@ try {
   const integrityMigration = await readFile(join(root, "db/migrations/20260926_campaign_integrity.sql"), "utf8");
   const draftAuthorityMigration = await readFile(join(root, "db/migrations/20260926_draft_authority.sql"), "utf8");
   const trustedCampaignMigration = await readFile(join(root, "db/migrations/20260926_trusted_campaign_writes.sql"), "utf8");
+  const privacyMigration = await readFile(join(root, "db/migrations/20260930_privacy_requests.sql"), "utf8");
   assert.ok(schema.includes(billingMigration.trim()), "Canonical schema must include the exact managed billing dependency");
   assert.ok(schema.includes(productionPaymentsMigration.trim()), "Canonical schema must include the exact production payment migration");
   assert.ok(schema.indexOf(billingMigration.trim()) < schema.indexOf(productionPaymentsMigration.trim()), "Managed billing must precede production payments");
@@ -1852,7 +1853,7 @@ try {
   assert.ok(schema.includes(creativeIntentMigration.trim()), "Canonical schema must include the exact creative generation intent migration");
   assert.ok(schema.includes(creativeReconcileMigration.trim()), "Canonical schema must include the exact creative reconciliation migration");
   assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
-  assert.ok(schema.trimEnd().endsWith(productRollupMigration.trimEnd()), "Canonical schema must end with the exact product rollup migration");
+  assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);
     await verify("analytics_upgrade",`${baseline}\n${metaMigration}\n${productEventsMigration}`);
