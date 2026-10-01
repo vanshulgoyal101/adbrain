@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LLMError, NoLLMKeysError } from "@/lib/llm/types";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
@@ -212,6 +213,48 @@ describe("guided planner route", () => {
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "Could not prepare the campaign plan." });
     expect(mocks.friendlyMetaError).not.toHaveBeenCalled();
+  });
+
+  it("records a safe failure stage without exposing the error to the client", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const { POST } = await import("@/app/api/campaigns/plan/route");
+      mocks.getPerformanceContext.mockRejectedValueOnce(new Error("private performance detail"));
+      expect(await (await POST(post())).json()).toEqual({ error: "Could not prepare the campaign plan." });
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_PERFORMANCE_OTHER"'));
+      expect(info.mock.calls.some(([entry]) => String(entry).includes("private performance detail"))).toBe(false);
+      expect(mocks.runPlanner).not.toHaveBeenCalled();
+
+      info.mockClear();
+      mocks.runPlanner.mockRejectedValueOnce(new Error("private provider detail"));
+      expect(await (await POST(post())).json()).toEqual({ error: "Could not prepare the campaign plan." });
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_MODEL_OTHER"'));
+      expect(info.mock.calls.some(([entry]) => String(entry).includes("private provider detail"))).toBe(false);
+
+      info.mockClear();
+      mocks.runPlanner.mockRejectedValueOnce(new LLMError("private provider detail", { provider: "test", status: 429, retryable: true }));
+      const providerResponse = await POST(post());
+      expect(providerResponse.status).toBe(502);
+      expect(await providerResponse.json()).toEqual({ error: "Could not prepare the campaign plan." });
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_MODEL_RATE_LIMIT"'));
+      expect(info.mock.calls.some(([entry]) => String(entry).includes("private provider detail"))).toBe(false);
+
+      info.mockClear();
+      mocks.runPlanner.mockRejectedValueOnce(new NoLLMKeysError());
+      expect((await POST(post())).status).toBe(502);
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_MODEL_NO_KEYS"'));
+
+      info.mockClear();
+      mocks.persist.mockRejectedValueOnce(new Error("private usage detail"));
+      mocks.runPlanner.mockImplementationOnce(async (_input, options) => {
+        await options.onCompletion({ provider: "test", model: "test", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } }, true);
+      });
+      expect((await POST(post())).status).toBe(502);
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_USAGE_OTHER"'));
+      expect(info.mock.calls.some(([entry]) => String(entry).includes("private usage detail"))).toBe(false);
+    } finally {
+      info.mockRestore();
+    }
   });
 
   it("recommends targeting without saving a duplicate draft or reading Meta, retaining manual choices", async () => {
