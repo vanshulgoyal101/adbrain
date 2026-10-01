@@ -20,7 +20,7 @@ beforeEach(() => { pathname.mockReturnValue("/dashboard"); linkState.pending = f
 
 describe("<Nav>", () => {
   it("shows saved enquiries before the first visit", async () => {
-    const fetcher = vi.fn(async () => Response.json({ count: 4 }));
+    const fetcher = vi.fn<(url: string) => Promise<Response>>(async () => Response.json({ count: 4 }));
     vi.stubGlobal("fetch", fetcher);
     render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Workspace</p></WorkspaceShell>);
     expect(await within(screen.getByRole("navigation", { name: "Workspace navigation" })).findByText("4")).toBeInTheDocument();
