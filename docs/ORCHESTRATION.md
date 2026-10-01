@@ -1,6 +1,6 @@
 # AdBrain Worker Orchestration
 
-Updated September 30, 2026. Maintainer: coordinator.
+Updated October 1, 2026. Maintainer: coordinator.
 Goal: ship useful customer workflows quickly, with checks proportional to risk.
 This file is the current dispatch. GitHub issues own scope and acceptance; PRs
 own review and CI evidence. Historical dispatches do not grant or block work.
@@ -15,61 +15,20 @@ receipts below are evidence, not permission gates. No broad #66 refactor.
 
 ### Active Assignments
 
-September 30 owner direction: assign the idle workers useful implementation and
-release work. The coordinator remains CEO/planning, not another source writer.
-The earlier planning-only status of #76 described the September 29 task; Dev 2
-is now assigned the bounded first implementation slice below. Do not treat the
-whole memory roadmap as one mandatory release or enable automatic inference yet.
-
-**#76 memory is deployed; finish operational follow-ups, not another release.**
-[QA accepted the corrected candidate](https://github.com/vanshulgoyal101/adbrain/issues/76#issuecomment-5905479397)
-and [PR80 released](https://github.com/vanshulgoyal101/adbrain/pull/80#issuecomment-5912048441)
-at `04e2d001f4f1153fd8bd8c5ea33ad51612bf0dd0`, with required PR/main CI green,
-Vercel Ready and migration/RLS/grants verified by DevOps. Do not recompose,
-retest the accepted source or re-release memory because older receipts say pending.
-
-Remaining customer check: authenticated Settings enable/save/reload/forget on a
-harmless owner-controlled preference, preserving unrelated settings and restoring
-the test state. DevOps owns this bounded non-financial smoke, or uses owner manual
-readback. No generation or paid call is needed. The newly shared Settings tab was
-readable by the browser tool but reported `chrome-error://chromewebdata/`;
-public reachability was home200/settings307. This does not prove authenticated
-Settings works, nor that the old CDP timeout still applies. Diagnose the current
-navigation/session failure, not the superseded bridge failure.
-
-DevOps also owns main-to-dev reconciliation deferred at release because of the
-dirty shared checkout and 15 conflicts. Do it in an isolated integration worktree,
-preserve unique dev work and all peer changes, validate actual conflict resolutions
-and publish through the existing branch policy. No reset/stash or copying whole
-files over unrelated work. This is not a reason to hold the already-live feature
-or repeat its production deployment. After these checks, use #67's existing
-accepted thumbnail candidate if it is still unreleased; no new feature scope.
-
-The receipt guarantee is deliberately narrow: when memory was applied, saved
-`imagePrompt` uses a fixed omission marker. Generated concept/copy/image can
-still reflect style; do not claim every stored output is preference-free. No
-unapproved paid generation is needed for review or a Settings memory smoke.
-
-**Separate blocked incident: #54.** The code repair, interview changes and analytics
-shipped via PR77/78/79; last checked main is
-`5e430bc4c9c1fb05a06d3432016b9a1038da2ee1`. The old request still has 0/3 ads,
-9,844 accounted tokens and 186,000 reserved; it is not reconciled. The
-[provider-access check](https://github.com/vanshulgoyal101/adbrain/issues/54#issuecomment-5905187738)
-is complete: the available key returned 403 and daily aggregate access would not
-establish every outcome. Needed evidence is administrator-level per-generation
-activity for the production account/key at 2026-09-29 18:00-18:02 UTC. No keys or
-unredacted exports in chat/issues. Do not repeat unchanged access/count probes.
-Keep the hold and identity; there is no shipped operator reconciliation RPC.
-Resume evidence-based recovery when access/evidence changes. This external wait
-does not block #76 because that release must preserve the held request unchanged.
+**October 1 owner direction: core product only.** We are a startup. The only goal
+right now is that one owner can go Brand, then Create 3 ads, then review, then launch
+a Meta campaign, then manage it (sync/pause), reliably in production. Stop all other
+work: no privacy, support, polish, performance or broad P1 test campaigns.
+QA findings already handed off (regenerate guard, Brand save) ship as-is. Each
+core failure found live is fixed next. The #54 Sep 29 hold stays untouched.
 
 | Worker | Deliver next | Ownership and first check |
 | --- | --- | --- |
-| Dev | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) duplicate paid regenerate, then [#67](https://github.com/vanshulgoyal101/adbrain/issues/67) Brand page | `510c92e` and `97e0b44` are handed off. QA red: two overlapping `POST /api/creatives/[id]/regenerate` calls both run the paid generator. Make concurrent regenerates of one creative run once (server-enforced, survives reload and another tab); the second gets the in-flight result or a clear 409. Use QA's red test. This comes before finishing the Brand page slice. Commit each and hand to DevOps |
-| Dev 2 | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) Brand save can say Saved without saving | `0749725` and `ebbb3a2` are handed off. QA red: when the Brand update affects no row, `saveBusiness` returns ok and the UI shows Saved. Require a returned row (or explicit count) before reporting success; show a real error otherwise. Check sibling save actions for the same pattern. Use QA's red test in /tmp/adbrain-qa-74-p1-brand, commit, hand to DevOps |
-| QA | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) P1 journeys, then confirm fixes | Continue with dashboard/reporting and Settings saves. When Dev and Dev 2 hand off fixes, run your red tests against those exact commits and tell DevOps |
-| DevOps | Release queue | PR85 is live and #50 closed. Now patch-check and release together: Dev `510c92e`+`97e0b44` (Create) and Dev 2 `0749725`+`ebbb3a2` (enquiries). Then the regenerate and Brand save fixes when QA confirms them. A paid Create smoke waits for the owner's yes |
-| Coordinator | Keep priority and ownership clear | Review product decisions and unblock actual dependencies. No product-code implementation in this assignment pass |
+| Dev | **Create works every time** | Own ad generation end to end. Find and fix why production Create saved 0/3 and 2/3. Use the recorded rule categories, run the real pipeline against the owner's business, fix each failure and repeat until 3/3 saves reliably. Paid runs only within the owner-approved cap |
+| Dev 2 | **Campaign launch and management work** | Own Meta campaigns end to end using the signed-in shared browser tab. Work on the owner's business: saved ads, then create a campaign, then review, then launch PAUSED on Meta, then sync, then pause/resume. Fix every failure until the flow is clean. Do not activate delivery or spend money on ads |
+| QA | Turn core failures into tests | When Dev, Dev 2 or DevOps hit a core-loop failure, write the red test the same hour and give it to the owner of the fix. No other test campaigns |
+| DevOps | Ship what's done, then live core smoke | Release the finished commits now: Create `510c92e`+`97e0b44`, regenerate guard `72c10be` (migration first), Brand save `927b6ff`, enquiries `0749725`+`ebbb3a2`. Then release Dev/Dev 2 core fixes as they land and re-run the core loop in production |
+| Coordinator | Keep everyone on the core loop | Plan and assign; no product code |
 
 Dev adopted QA's recovery overlay for the shipped #54 repair. Preserve the original
 /tmp/adbrain-qa-create-recovery-20260929 copy and reuse that evidence; QA uses
