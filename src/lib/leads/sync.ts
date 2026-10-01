@@ -50,7 +50,6 @@ export async function syncMetaLeads(
   if (!parsed.success) throw persistenceError();
   let run = parsed.data;
   let imported = 0;
-  let successfulPages = 0;
   let requests = 0;
   let discoveryFailed = false;
   const failedThisRequest = new Set<string>();
@@ -123,7 +122,6 @@ export async function syncMetaLeads(
           };
         });
         await save(next, rows);
-        successfulPages++;
       }
     }
   } catch (error) {
@@ -131,10 +129,10 @@ export async function syncMetaLeads(
     return { sync: summary(run), imported, failedForms: run.progress.pending.filter(form => form.failed).map(({ id, name }) => ({ id, name })), error: failure.message, status: failure.status };
   }
   const failedForms = run.progress.pending.filter(form => form.failed).map(({ id, name }) => ({ id, name }));
-  const allFailed = successfulPages === 0 && (failedThisRequest.size > 0 || discoveryFailed);
+  const readFailed = failedThisRequest.size > 0 || discoveryFailed;
   return {
     sync: summary(run), imported, failedForms,
-    error: allFailed ? "Could not read Meta enquiries. Saved progress is available to retry." : undefined,
-    status: allFailed ? 502 : 200,
+    error: readFailed ? "Could not read all Meta enquiries. Saved progress is available to retry." : undefined,
+    status: readFailed ? 502 : 200,
   };
 }

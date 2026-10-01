@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Brain, Building2, ChevronRight, Menu, Plus, X } from "lucide-react";
@@ -15,14 +15,59 @@ const sections: Record<string, string> = {
   assets: "Brand assets", settings: "Settings",
 };
 
-export function WorkspaceShell({ children, email, businessName }: {
+function readViewedAt(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function saveViewedAt(key: string, time: string) {
+  try { localStorage.setItem(key, time); } catch { return; }
+}
+
+export function WorkspaceShell({ children, email, ownerId, businessId, businessName }: {
   children: ReactNode;
   email: string | null;
+  ownerId: string;
+  businessId: string | null;
   businessName: string | null;
 }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
   const section = sections[pathname.split("/")[1]] ?? "Workspace";
+  const [unseen, setUnseen] = useState<{ key: string; since: string; count: number } | null>(null);
+  const viewedKey = businessId ? `lead-viewed:${ownerId}:${businessId}` : null;
+  const inInbox = pathname === "/leads" || pathname.startsWith("/leads/");
+  const unseenCount = !inInbox && unseen?.key === viewedKey && readViewedAt(viewedKey) === unseen.since ? unseen.count : 0;
+
+  useEffect(() => {
+    if (!viewedKey) return;
+    const markViewed = () => saveViewedAt(viewedKey, new Date().toISOString());
+    if (inInbox) {
+      markViewed();
+      window.addEventListener("pagehide", markViewed);
+      return () => { markViewed(); window.removeEventListener("pagehide", markViewed); };
+    }
+    let since = readViewedAt(viewedKey);
+    if (!since || Number.isNaN(Date.parse(since))) {
+      since = new Date(0).toISOString();
+      saveViewedAt(viewedKey, since);
+    }
+    const controller = new AbortController();
+    const loadCount = async () => {
+      try {
+        const response = await fetch(`/api/leads/unseen?since=${encodeURIComponent(since)}`, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) return;
+        const data = await response.json() as { count?: number };
+        if (!controller.signal.aborted && typeof data.count === "number" && Number.isSafeInteger(data.count) && data.count >= 0) {
+          setUnseen({ key: viewedKey, since, count: data.count });
+        }
+      } catch { return; }
+    };
+    void loadCount();
+    const timer = window.setInterval(() => { void loadCount(); }, 60_000);
+    const onFocus = () => { void loadCount(); };
+    window.addEventListener("focus", onFocus);
+    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", onFocus); };
+  }, [inInbox, viewedKey]);
 
   const identity = <Link href="/brand" className={styles.business}>
     <span className={styles.businessIcon}><Building2 size={17} aria-hidden="true" /></span>
@@ -37,7 +82,7 @@ export function WorkspaceShell({ children, email, businessName }: {
     <aside className={styles.sidebar} aria-label="Main sidebar">
       <Link href="/dashboard" className={styles.logo}><Brain size={23} aria-hidden="true" />AdBrain</Link>
       {identity}
-      <Nav />
+      <Nav unseenCount={unseenCount} />
       {account}
     </aside>
     <div className={styles.body}>
@@ -54,7 +99,7 @@ export function WorkspaceShell({ children, email, businessName }: {
     }}>
       <div className={styles.drawerBody}>
         <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={23} aria-hidden="true" />AdBrain</Link><button type="button" title="Close navigation" aria-label="Close navigation" onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
-        {identity}<Nav />{account}
+        {identity}<Nav unseenCount={unseenCount} />{account}
       </div>
     </dialog>
   </div>;

@@ -49,8 +49,8 @@ function NavLabel({ label, icon: Icon }: { label: string; icon: LucideIcon }) {
   </>;
 }
 
-function NavItem({ href, label, icon, active }: {
-  href: string; label: string; icon: LucideIcon; active: boolean;
+function NavItem({ href, label, icon, active, unseenCount = 0 }: {
+  href: string; label: string; icon: LucideIcon; active: boolean; unseenCount?: number;
 }) {
   const [intent, setIntent] = useState(false);
   function warmRoute() {
@@ -60,14 +60,17 @@ function NavItem({ href, label, icon, active }: {
     <Link href={href} prefetch={intent && !active ? true : null} aria-current={active ? "page" : undefined} className={navClass(active)}
       onMouseEnter={warmRoute} onFocus={warmRoute} onTouchStart={warmRoute}>
       <NavLabel label={label} icon={icon} />
+      {unseenCount > 0 && <span aria-label={`${unseenCount} new enquiries`} className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded bg-emerald-100 px-1 text-xs font-semibold tabular-nums text-emerald-900">{unseenCount > 99 ? "99+" : unseenCount}</span>}
     </Link>
   );
 }
 
 export function Nav({
   orientation = "vertical",
+  unseenCount = 0,
 }: {
   orientation?: "vertical" | "horizontal";
+  unseenCount?: number;
 }) {
   const pathname = usePathname();
   return (
@@ -88,7 +91,7 @@ export function Nav({
       {primaryItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
-          <NavItem key={href} href={href} label={label} icon={Icon} active={active} />
+          <NavItem key={href} href={href} label={label} icon={Icon} active={active} unseenCount={href === "/leads" ? unseenCount : 0} />
         );
       })}
       {orientation === "vertical" && (

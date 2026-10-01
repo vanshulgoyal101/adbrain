@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Copy, Inbox, Loader2, MessageCircle, RefreshCw, Search, X, Save, Pencil, ChevronDown } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -14,18 +14,30 @@ import { useLeadList } from "@/lib/leads/use-lead-list";
 import { workflowStatuses, type WorkflowStatus } from "@/lib/leads/filters";
 import styles from "./lead-inbox.module.css";
 
+const LEADS_FRESH_MS = 15 * 60_000;
+
+function readLeadSyncTime(key: string): number {
+  try { return Number(localStorage.getItem(key)); } catch { return 0; }
+}
+
+function saveLeadSyncTime(key: string, completedAt: number) {
+  try { localStorage.setItem(key, String(completedAt)); } catch { return; }
+}
+
 export function LeadInbox({
   businessName,
   initialLeads,
   initialTotal = initialLeads.length,
   initialNextCursor = null,
   metaReady,
+  syncScope,
 }: {
   businessName: string;
   initialLeads: Lead[];
   initialTotal?: number;
   initialNextCursor?: string | null;
   metaReady: boolean;
+  syncScope?: string;
 }) {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +57,7 @@ export function LeadInbox({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [syncId, setSyncId] = useState<string | null>(null);
+  const syncStorageKey = syncScope ? `lead-sync:${syncScope}` : null;
   const editorField = useRef<HTMLSelectElement>(null);
   const editorTrigger = useRef<HTMLButtonElement>(null);
   const searchField = useRef<HTMLInputElement>(null);
@@ -149,6 +162,7 @@ export function LeadInbox({
   );
 
   async function sync() {
+    if (syncing) return;
     setSyncing(true);
     setError(null);
     setNotice(null);
@@ -164,16 +178,20 @@ export function LeadInbox({
         sync?: { id: string; state: "complete" | "partial"; hasMore: boolean };
         error?: string;
       };
-      if (!res.ok || !Array.isArray(data.leads)) {
+      if ((!res.ok && !(res.status === 502 && data.sync?.hasMore)) || !Array.isArray(data.leads)) {
         setError(data.error ?? "Couldn't sync leads. Your existing enquiries are still available.");
         return;
       }
       page.refresh();
       setSyncId(data.sync?.hasMore ? data.sync.id : null);
       if (data.failedForms?.length || data.sync?.state === "partial" || data.sync?.hasMore) {
-        const failures = data.failedForms?.length ? ` Could not read: ${data.failedForms.map(form => form.name).join(", ")}.` : " More enquiries remain to be checked.";
+        const failures = data.failedForms?.length ? ` Could not read: ${data.failedForms.map(form => form.name).join(", ")}.` :
+          !res.ok ? " Could not check all forms. Retry to check remaining enquiries." : " More enquiries remain to be checked.";
         setWarning(`Sync incomplete.${failures} ${data.imported ?? 0} new leads imported.`);
         return;
+      }
+      if (syncStorageKey && data.sync?.state === "complete") {
+        saveLeadSyncTime(syncStorageKey, Date.now());
       }
       setNotice(
         data.imported
@@ -186,6 +204,16 @@ export function LeadInbox({
       setSyncing(false);
     }
   }
+
+  const syncStaleLeads = useEffectEvent(() => { void sync(); });
+  useEffect(() => {
+    if (!metaReady || !syncStorageKey) return;
+    const completedAt = readLeadSyncTime(syncStorageKey);
+    const age = Date.now() - completedAt;
+    if (completedAt > 0 && age >= 0 && age < LEADS_FRESH_MS) return;
+    const timer = window.setTimeout(syncStaleLeads, 0);
+    return () => window.clearTimeout(timer);
+  }, [metaReady, syncStorageKey]);
 
   async function copyDigest() {
     try {
