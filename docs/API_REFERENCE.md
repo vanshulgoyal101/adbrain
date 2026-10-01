@@ -92,7 +92,8 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
-| POST | `/api/leads/sync` | No body -> leads/imported/failedForms | Provider read + deduplicated inserts |
+| POST | `/api/leads/sync` | Empty body or `{syncId}` -> `{leads,imported,failedForms,sync}`; failed Meta reads return 502 with saved rows and a resumable `sync.id` | Provider read + per-business deduplicated inserts; incomplete runs are not up to date |
+| GET | `/api/leads/unseen` | `since` (ISO viewed time) -> `{count}` | Authenticated owner business only; exact count of locally imported leads after `since`, private no-store; no provider sync |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
 | POST | `/api/preferences` | Versioned mutation -> `{enabled,epoch,notes}` | Owner-scoped opt-in/save/forget/pause/clear |

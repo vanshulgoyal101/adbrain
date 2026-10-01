@@ -1,6 +1,6 @@
 import type { GeneratedVariant } from "./generate";
 import { CreativeValidationError, CreativeImageError } from "./generate";
-import { CONCEPT_VERSION } from "./concept";
+import { CONCEPT_VERSION, conceptValidationRules } from "./concept";
 import type { Json } from "@/lib/types";
 import { getEnv } from "@/lib/env";
 import type { LLMUsageEvent } from "@/lib/llm/persist";
@@ -54,13 +54,15 @@ export function variantUsageEvents(
   context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
 ): LLMUsageEvent[] {
   return [
-    ...variant.llmUsage.map((entry, index) => ({
+    ...variant.llmUsage.map(({ validation, ...entry }, index) => ({
       ...context,
       ...entry,
       promptVersion: CONCEPT_VERSION,
       attempt: index + 1,
       status: entry.status ?? "success",
-      metadata: { angle: variant.angleId },
+      metadata: { angle: variant.angleId, ...(validation ? {
+        validationStage: validation.stage, validationRules: validation.rules,
+      } : {}) },
     })),
     ...(variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
       entry, context, index + 1, variant.angleId,
@@ -118,26 +120,19 @@ export function failedVariantUsage(
     !(error instanceof CreativeImageError)
   )
     return [];
-  const allowedRules = new Set([
-    "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
-    "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-  ]);
   const metadata = error instanceof CreativeValidationError ? {
     validationStage: error.stage,
-    validationRules: [...new Set(error.issues.map((issue) => {
-      const rule = issue.split(":", 1)[0];
-      return allowedRules.has(rule) ? rule : issue.startsWith("Output must be valid JSON")
-        ? "invalid-json" : issue.includes(":") ? "schema-or-other" : "other";
-    }))],
+    validationRules: conceptValidationRules(error.issues),
   } : undefined;
-  const textEvents = error.usage.map((entry, index) => ({
+  const textEvents = error.usage.map(({ validation, ...entry }, index) => ({
     ...context,
     ...entry,
     promptVersion: CONCEPT_VERSION,
     attempt: index + 1,
     status: entry.status ?? "error",
     errorCode: error.name,
-    ...(metadata && index === error.usage.length - 1 ? { metadata } : {}),
+    ...(validation ? { metadata: { validationStage: validation.stage, validationRules: validation.rules } }
+      : metadata && index === error.usage.length - 1 ? { metadata } : {}),
   }));
   return error instanceof CreativeImageError
     ? [...textEvents, ...error.imageAttempts.map((entry, index) => imageAttemptUsage(entry, context, index + 1))]

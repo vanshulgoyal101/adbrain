@@ -55,6 +55,7 @@ export default async function LeadsPage() {
           initialTotal={page.total}
           initialNextCursor={page.nextCursor}
           metaReady={metaConnection.ready}
+          syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
         />
       </div>
     </div>

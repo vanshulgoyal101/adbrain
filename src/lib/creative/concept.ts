@@ -106,6 +106,18 @@ matter, but never override factual constraints. Use the requested language for a
   ];
 }
 
+export function conceptValidationRules(issues: string[]): string[] {
+  const allowedRules = new Set([
+    "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
+    "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
+  ]);
+  return [...new Set(issues.map((issue) => {
+    const rule = issue.split(":", 1)[0];
+    return allowedRules.has(rule) ? rule : issue.startsWith("Output must be valid JSON")
+      ? "invalid-json" : issue.includes(":") ? "schema-or-other" : "other";
+  }))];
+}
+
 export function validateConcept(
   value: unknown,
   input: ConceptInput,
