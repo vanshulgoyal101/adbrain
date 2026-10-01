@@ -1,7 +1,9 @@
 # AdBrain Worker Orchestration
 
 Updated October 1, 2026. Maintainer: coordinator.
-Goal: ship useful customer workflows quickly, with checks proportional to risk.
+Goal: our core features work first: Brand, Create, review, launch and manage a
+Meta campaign. Other work waits until that loop is healthy in production.
+Ship quickly, with checks proportional to risk.
 This file is the current dispatch. GitHub issues own scope and acceptance; PRs
 own review and CI evidence. Historical dispatches do not grant or block work.
 

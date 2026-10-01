@@ -66,6 +66,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Engineering priorities and reuse
 
+- **Core features come first, always.** AdBrain's core is: Brand, Create ads,
+	review, launch a Meta campaign, manage it (sync/pause/results). Before anything
+	else, that loop must work reliably in production. Spend time on other work
+	(polish, performance, docs, compliance, support, analytics) only while the core
+	loop is healthy, or when the owner asks for it. When in doubt, ask: does this
+	help a customer make and run ads today?
+- Track work in GitHub: one issue per real problem with the `core` or `later`
+	label, linked commits/PRs, and close the issue when the fix is live. Close or
+	park stale issues rather than leaving them open with old status.
 - Prioritize complete, high-value customer workflows over isolated polish or rare
 	edge-case features. Retain essential financial, privacy and security protections.
 - Before building a substantial capability, check existing project dependencies,
