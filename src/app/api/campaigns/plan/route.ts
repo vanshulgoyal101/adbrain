@@ -5,6 +5,7 @@ import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contrac
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
 import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
+import { LLMError, NoLLMKeysError } from "@/lib/llm/types";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
@@ -107,6 +108,7 @@ async function handlePOST(req: Request) {
   }
 
   let result;
+  let failureStage: "QUOTA" | "INSTRUCTIONS" | "PREFERENCES" | "PERFORMANCE" | "MODEL" | "USAGE" = "QUOTA";
   try {
     const limit = configuredMonthlyTokenLimit();
     if (limit > 0) {
@@ -114,10 +116,14 @@ async function handlePOST(req: Request) {
       if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified. No plan was started." }, { status: 503 });
       if (used >= limit) return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
     }
+    failureStage = "INSTRUCTIONS";
     const instructions = await getActiveInstructionsText(business.id);
+    failureStage = "PREFERENCES";
     const preferences = await preferenceContext(business.id, "campaign", `${goal}\n${answers ?? ""}`);
+    failureStage = "PERFORMANCE";
     const performance = await getPerformanceContext(business.id);
     const requestId = currentRequestId();
+    failureStage = "MODEL";
     result = await runPlanner({
       destination,
       brand: business,
@@ -142,6 +148,7 @@ async function handlePOST(req: Request) {
       signal: req.signal,
       onCompletion: async (completion, valid, attempt = 1) => {
         if (!completion.usage) return;
+        failureStage = "USAGE";
         await persistLLMUsage([{
           businessId: business.id, userId: user.id, requestId, route: "campaigns.plan",
           provider: completion.provider, model: completion.model, usage: completion.usage,
@@ -151,9 +158,18 @@ async function handlePOST(req: Request) {
           status: valid ? "success" : "error", errorCode: valid ? undefined : "PLANNER_VALIDATION",
           metadata: { audienceOnly: Boolean(audienceDraft) },
         }]);
+        failureStage = "MODEL";
       },
     });
-  } catch {
+  } catch (error) {
+    const failureClass = failureStage !== "MODEL" ? "OTHER"
+      : error instanceof NoLLMKeysError ? "NO_KEYS"
+      : error instanceof LLMError ? error.status === 429 ? "RATE_LIMIT"
+        : error.status && error.status >= 500 ? "PROVIDER_SERVER"
+          : error.status ? "PROVIDER_CLIENT" : "TRANSPORT"
+        : "OTHER";
+    recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "failed", businessId: business.id,
+      attributes: { errorCode: `PLAN_${failureStage}_${failureClass}` } });
     return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
   }
 
