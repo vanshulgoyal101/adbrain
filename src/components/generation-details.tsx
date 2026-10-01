@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+z.config({ jitless: true });
+
 const receiptSchema = z.object({
   format: z.string(),
   composition: z.string(),
