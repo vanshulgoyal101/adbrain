@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AD_ANGLES } from "@/lib/templates/ads";
 import { NoLLMKeysError } from "@/lib/llm";
+import { CreativeImageError } from "@/lib/creative/generate";
+import { advisoryPreferenceContext } from "@/lib/preferences/context";
 
 const mocks = vi.hoisted(() => ({
   generateVariants: vi.fn(),
@@ -10,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   instructions: vi.fn(),
   references: vi.fn(),
   recentCopy: vi.fn(),
+  preferenceContext: vi.fn(),
+  preferenceSettings: null as { enabled: boolean; epoch: number } | null,
+  preferenceNotes: [] as { category: "tone"; value: string; updated_at: string; version: number }[],
+  savedGeneration: null as unknown,
   schemaError: null as unknown,
   saveError: false,
   used: 0 as number | null,
@@ -43,11 +49,20 @@ vi.mock("@/lib/supabase/server", () => ({
       select: () => ({
         eq: (_key: string, value: string) => ({
           maybeSingle: async () => ({
-            data: { id: table === "businesses" ? value : "business", name: "Example" },
+            data: table === "creatives" ? {
+              id: value, business_id: "business", name: "Example", brief: "Installation",
+              headline: "Previous ad", primary_text: "Previous opening",
+              generation: mocks.savedGeneration,
+            } : { id: value, name: "Example" },
+          }),
+          eq: () => ({
+            maybeSingle: async () => ({ data: mocks.preferenceSettings, error: null }),
+            order: () => ({ limit: async () => ({ data: mocks.preferenceNotes, error: null }) }),
           }),
         }),
         limit: async () => ({ error: mocks.schemaError }),
       }),
+      update: (row: unknown) => ({ eq: () => ({ select: () => ({ single: async () => ({ data: row, error: null }) }) }) }),
       insert: (row: unknown) => {
         mocks.insert(table, row);
         return {
@@ -71,6 +86,7 @@ vi.mock("@/lib/creative/references", () => ({
   creativeReferences: mocks.references,
   recentCreativeCopy: mocks.recentCopy,
 }));
+vi.mock("@/lib/preferences/store", () => ({ preferenceContext: mocks.preferenceContext }));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async () => "https://cdn.example/photo.png",
   renderAndPersistDesign: mocks.render,
@@ -132,6 +148,10 @@ beforeEach(() => {
   mocks.instructions.mockResolvedValue("No discounts");
   mocks.references.mockResolvedValue(["https://example.com/product.png"]);
   mocks.recentCopy.mockResolvedValue([{ headline: "Previous ad", primary_text: "Previous opening" }]);
+  mocks.preferenceContext.mockResolvedValue("");
+  mocks.preferenceSettings = null;
+  mocks.preferenceNotes = [];
+  mocks.savedGeneration = null;
   mocks.generateVariants.mockImplementation(async (params) => {
     try {
       await params.onVariant(variant);
@@ -225,6 +245,9 @@ describe("creative generation route", () => {
     expect(mocks.insert.mock.calls[0][1]).toMatchObject({
       variant_group: "11111111-1111-4111-8111-111111111111",
     });
+    expect(mocks.persist.mock.calls[0][0][0]).toMatchObject({
+      generationId: "11111111-1111-4111-8111-111111111111",
+    });
   });
 
   it("does not launch a second paid generation for a repeated identity", async () => {
@@ -233,6 +256,79 @@ describe("creative generation route", () => {
     expect((await POST(request(payload))).status).toBe(200);
     expect((await POST(request(payload))).status).toBe(202);
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads tenant-scoped advisory context only after admission, never on replay", async () => {
+    mocks.preferenceContext.mockResolvedValue("PAST DECLARED PREFERENCES: tone: warm");
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const payload = { businessId: "business", brief: "Write a precise ad", format: "story", generationId: "11111111-1111-4111-8111-111111111111" };
+    expect((await POST(request(payload))).status).toBe(200);
+    expect(mocks.preferenceContext).toHaveBeenCalledWith("business", "creative", "Write a precise ad\nNo discounts");
+    expect(mocks.generateVariants.mock.calls[0][0]).toMatchObject({ advisoryPreferences: "PAST DECLARED PREFERENCES: tone: warm" });
+    expect((await POST(request(payload))).status).toBe(202);
+    expect(mocks.preferenceContext).toHaveBeenCalledTimes(1);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps claim evidence separate from the derived brief and fences changes under the same ID", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const payload = { businessId: "business", brief: "Feature our award-winning installers", generationId: "11111111-1111-4111-8111-111111111111" };
+    expect((await POST(request(payload))).status).toBe(200);
+    expect(mocks.generateVariants.mock.calls[0][0].sourceFacts).toEqual([]);
+    expect((await POST(request({ ...payload, sourceFacts: ["Our award-winning installers"] }))).status).toBe(409);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes explicit claim evidence into generation and preserves it for regeneration", async () => {
+    const sourceFacts = [`${"Our rooftop team works locally. ".repeat(19)}Our award-winning installers`];
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request({ businessId: "business", brief: "Feature our award-winning installers", sourceFacts }))).status).toBe(200);
+    expect(mocks.generateVariants.mock.calls[0][0].sourceFacts).toEqual(sourceFacts);
+    expect(mocks.insert.mock.calls[0][1].generation.sourceFacts).toEqual(sourceFacts);
+    mocks.savedGeneration = { sourceFacts, format: "story" };
+    mocks.generateOneVariant.mockResolvedValueOnce(variant);
+    const { POST: regenerate } = await import("@/app/api/creatives/[id]/regenerate/route");
+    expect((await regenerate(request(), { params: Promise.resolve({ id: "creative" }) })).status).toBe(200);
+    expect(mocks.generateOneVariant.mock.calls[0][10]).toEqual(sourceFacts);
+  });
+
+  it("rejects oversized evidence without admitting a paid request", async () => {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request({ businessId: "business", brief: "Rooftop solar", sourceFacts: ["x".repeat(2001)] }))).status).toBe(400);
+    expect(mocks.generateVariants).not.toHaveBeenCalled();
+    expect(mocks.admitted.size).toBe(0);
+  });
+
+  it("omits current-language overrides and fresh-direction memory from paid generation", async () => {
+    mocks.preferenceContext.mockImplementation(async (_businessId, _task, requestText: string) =>
+      advisoryPreferenceContext([{ category: "language", value: "Usually Hinglish", updated_at: "2026-09-30T00:00:00Z" }], "creative", requestText));
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request({ businessId: "business", brief: "Use English today", format: "story" }))).status).toBe(200);
+    expect((await POST(request({ businessId: "business", brief: "Take a fresh direction", format: "story" }))).status).toBe(200);
+    expect(mocks.generateVariants.mock.calls.map(([params]) => params.advisoryPreferences)).toEqual(["", ""]);
+    expect(mocks.generateVariants).toHaveBeenCalledTimes(2);
+  });
+
+  it("omits paused and forgotten notes from the real tenant-scoped read helper", async () => {
+    const { preferenceContext } = await vi.importActual<typeof import("@/lib/preferences/store")>("@/lib/preferences/store");
+    mocks.preferenceSettings = { enabled: true, epoch: 2 };
+    mocks.preferenceNotes = [{ category: "tone", value: "Warm copy", updated_at: "2026-09-30T00:00:00Z", version: 1 }];
+    expect(await preferenceContext("business", "creative", "Make an ad")).toContain("Warm copy");
+    mocks.preferenceSettings = { enabled: false, epoch: 3 };
+    expect(await preferenceContext("business", "creative", "Make an ad")).toBe("");
+    mocks.preferenceSettings = { enabled: true, epoch: 4 };
+    mocks.preferenceNotes = [];
+    expect(await preferenceContext("business", "creative", "Make an ad")).toBe("");
+  });
+
+  it("omits unavailable memory without blocking regeneration", async () => {
+    mocks.preferenceContext.mockRejectedValueOnce(new Error("Memory unavailable"));
+    mocks.generateOneVariant.mockResolvedValueOnce(variant);
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const response = await POST(request(), { params: Promise.resolve({ id: "creative" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.preferenceContext).toHaveBeenCalledWith("business", "creative", "Installation\nNo discounts");
+    expect(mocks.generateOneVariant.mock.calls[0][9]).toBe("");
   });
 
   it("admits just one producer when two handlers race with the same identity", async () => {
@@ -291,6 +387,25 @@ describe("creative generation route", () => {
     expect(replay.status).toBe(202);
     await expect(replay.json()).resolves.toMatchObject({ status: "unresolved" });
     expect(mocks.generateVariants).toHaveBeenCalledTimes(1);
+  });
+
+  it("links failed provider attempts to the admitted generation", async () => {
+    mocks.generateVariants.mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void> }) => {
+      await params.onFailure(AD_ANGLES[0], new CreativeImageError(new Error("Provider timeout"), [], [{
+        provider: "openrouter-image", model: "paid-image", status: "error",
+        providerFinalStatus: "unknown", providerRequestId: "upstream-456",
+      }]));
+    });
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const response = await POST(request({ businessId: "business", brief: "Installation", format: "story", generationId: "11111111-1111-4111-8111-111111111111" }));
+    expect(response.status).toBe(502);
+    expect(mocks.persist).toHaveBeenCalledWith([expect.objectContaining({
+      generationId: "11111111-1111-4111-8111-111111111111",
+      providerRequestId: "upstream-456",
+      providerFinalStatus: "unknown",
+      status: "error",
+    })]);
+    expect(mocks.progress.mock.calls.some(([args]) => args.p_uncertain)).toBe(true);
   });
 
   it("does not mark a failed angle as whole-request failure before its sibling saves", async () => {

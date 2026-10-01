@@ -26,6 +26,7 @@ import {
 } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
+import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -115,6 +116,8 @@ async function handlePOST(req: Request) {
       count: z.number().int().min(1).max(6).default(3),
       generationId: z.string().uuid().optional(),
       language: z.string().optional(),
+      sourceFacts: z.array(z.string().trim().min(1).max(2000)).max(12)
+        .refine((facts) => facts.join("").length <= 6000).default([]),
       format: z
         .enum(["portrait", "square", "story", "landscape"])
         .default("portrait"),
@@ -137,6 +140,7 @@ async function handlePOST(req: Request) {
     ? Math.min(Math.max(Math.floor(rawCount), 1), 6)
     : 3;
   const language = languagePromptName(body?.language);
+  const sourceFacts = body.sourceFacts;
 
   if (!businessId || !brief) {
     return NextResponse.json(
@@ -189,7 +193,7 @@ async function handlePOST(req: Request) {
       creativeReferences(supabase, businessId),
       recentCreativeCopy(supabase, businessId),
     ]);
-    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format])).digest("hex");
+    const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : [])])).digest("hex");
     admin = createAdminClient();
     const { data: admission, error: admissionError } = await admin.rpc("creative_generation_admit", {
       p_business_id: businessId,
@@ -209,6 +213,7 @@ async function handlePOST(req: Request) {
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;
+    const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     await generateVariants({
       brand: business,
       brief,
@@ -218,12 +223,15 @@ async function handlePOST(req: Request) {
       format: body.format,
       referenceImages,
       recentCopy,
+      advisoryPreferences,
+      sourceFacts,
       onVariant: async (variant) => {
         const events = variantUsageEvents(variant, {
             businessId,
             userId: user.id,
             route: "creatives.generate",
             requestId,
+            generationId: variantGroup,
           });
         const recorded = await persistLLMUsage(events);
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
@@ -255,7 +263,7 @@ async function handlePOST(req: Request) {
             cta: variant.cta,
             variant_group: variantGroup,
             status: "draft",
-            generation: generationReceipt(variant, language, referenceImages),
+            generation: generationReceipt(variant, language, referenceImages, sourceFacts),
           })
           .select("*")
           .single();
@@ -272,6 +280,7 @@ async function handlePOST(req: Request) {
             userId: user.id,
             route: "creatives.generate",
             requestId,
+            generationId: variantGroup,
           });
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;

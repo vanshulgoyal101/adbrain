@@ -63,7 +63,8 @@ vi.mock("@/lib/supabase/queries", () => ({
   getActiveInstructionsText: mocks.getActiveInstructionsText,
   getPerformanceContext: mocks.getPerformanceContext,
 }));
-vi.mock("@/lib/campaign/planner", () => ({
+vi.mock("@/lib/campaign/planner", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/campaign/planner")>(),
   formatAnswers: (answers: unknown[]) => JSON.stringify(answers),
   runPlanner: mocks.runPlanner,
   PLANNER_PROMPT_VERSION: "campaign-planner-v2",
@@ -140,6 +141,35 @@ beforeEach(() => {
 });
 
 describe("guided planner route", () => {
+  it("passes stable answered and deferred topics to the planner without dropping metadata", async () => {
+    const answers = [
+      { questionId: "location", topic: "location", question: "Where?", answer: "Hisar, 20 km", disposition: "answered" },
+      { questionId: "exclusions", topic: "exclusions", question: "Exclude?", answer: "", disposition: "deferred" },
+    ];
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    expect((await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Solar leads", answers }) }))).status).toBe(200);
+    expect(mocks.runPlanner).toHaveBeenCalledWith(expect.objectContaining({ answerHistory: answers }), expect.any(Object));
+  });
+  it("returns a non-mutating editor handoff instead of another question cycle", async () => {
+    const handoff = { reason: "no_progress", message: "Your answers are saved. Continue in the editor." };
+    mocks.runPlanner.mockResolvedValueOnce({ ready: false, questions: [], handoff });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    expect(await (await POST(post())).json()).toEqual({ ready: false, questions: [], handoff });
+    expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
+  });
+  it("persists each correction attempt separately without adding prompt content", async () => {
+    mocks.runPlanner.mockImplementationOnce(async (_input, options) => {
+      const completion = { provider: "test", model: "test", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } };
+      await options.onCompletion(completion, false, 1);
+      await options.onCompletion(completion, true, 2);
+      return { ready: false, questions: [{ id: "budget", topic: "budget", type: "text", question: "Daily budget?" }] };
+    });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    expect((await POST(post())).status).toBe(200);
+    expect(mocks.persist.mock.calls.map(([events]) => ({ attempt: events[0].attempt, status: events[0].status })))
+      .toEqual([{ attempt: 1, status: "error" }, { attempt: 2, status: "success" }]);
+  });
+
   it.each(["city_only", "radius"])("preserves owner city scope %s in an AI recommendation", async (cityScope) => {
     const audienceDraft = {
       businessId: business.id, name: "Leads", goal: "Leads", mode: "manual", creativeIds: [creativeId],
@@ -152,7 +182,7 @@ describe("guided planner route", () => {
     expect(response.status).toBe(200);
     expect(body.targeting.location.cityScope).toBe(cityScope);
     if (cityScope === "city_only") expect(body.targeting.location).not.toHaveProperty("radiusKm");
-    else expect(body.targeting.location.radiusKm).toBe(25);
+    else expect(body.targeting.location.radiusKm).toBe(35);
   });
 
   it.each([{ used: null, status: 503 }, { used: 1000, status: 429 }])("blocks planning when usage is $used", async ({ used, status }) => {

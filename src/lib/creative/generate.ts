@@ -13,6 +13,7 @@ import {
   type ConceptInput,
 } from "@/lib/creative/concept";
 import { generateImage } from "@/lib/imageGen";
+import type { ImageAttempt } from "@/lib/imageGen/types";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
 import type { TokenUsage } from "@/lib/llm";
@@ -43,6 +44,9 @@ export interface GeneratedVariant {
     outputChars?: number;
     latencyMs?: number;
     cacheHit?: boolean;
+    providerRequestId?: string;
+    providerFinalStatus?: "completed" | "failed" | "unknown";
+    status?: "success" | "error";
   }[];
   imageUsage: {
     provider: string;
@@ -52,7 +56,10 @@ export interface GeneratedVariant {
     width: number;
     height: number;
     fallbackFrom?: string;
+    providerRequestId?: string;
+    providerFinalStatus?: "completed" | "failed" | "unknown";
   };
+  imageAttempts?: ImageAttempt[];
 }
 
 const MAX_BRIEF_CHARS = 2_000;
@@ -87,6 +94,8 @@ export async function generateVariants(params: {
   format?: AdFormat;
   referenceImages?: string[];
   recentCopy?: ConceptInput["recentCopy"];
+  advisoryPreferences?: string;
+  sourceFacts?: string[];
   onVariant?: (variant: GeneratedVariant) => Promise<void>;
   onFailure?: (angle: AdAngle, error: unknown) => Promise<void>;
 }): Promise<GeneratedVariant[]> {
@@ -101,6 +110,8 @@ export async function generateVariants(params: {
   const brand = boundedBrand(rawBrand);
   const brief = rawBrief.slice(0, MAX_BRIEF_CHARS);
   const instructions = rawInstructions?.slice(0, 3_000);
+  const advisoryPreferences = params.advisoryPreferences?.slice(0, 1_200);
+  const sourceFacts = params.sourceFacts?.slice(0, 12).map((fact) => fact.slice(0, 2_000)) ?? [];
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
   const signal = AbortSignal.timeout(240_000);
 
@@ -117,7 +128,7 @@ export async function generateVariants(params: {
   const outcomes = await Promise.allSettled(
     angles.map(async (angle) => {
       try {
-        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages };
+        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts };
         const planned = planning.then(async () => {
           input.recentCopy = recentCopy.slice(0, 12);
           const result = await generateConcept(input, signal);
@@ -150,6 +161,7 @@ export class CreativeValidationError extends Error {
   constructor(
     public issues: string[],
     public usage: GeneratedVariant["llmUsage"],
+    public stage: "provider" | "parse" | "concept" = "concept",
   ) {
     super(`Creative concept failed validation: ${issues.join("; ")}`);
     this.name = "CreativeValidationError";
@@ -160,6 +172,7 @@ export class CreativeImageError extends Error {
   constructor(
     cause: unknown,
     public usage: GeneratedVariant["llmUsage"],
+    public imageAttempts: ImageAttempt[] = [],
   ) {
     super(cause instanceof Error ? cause.message : "Image generation failed.", {
       cause,
@@ -175,8 +188,10 @@ async function generateConcept(
   const messages = buildConceptMessages(input);
   const usage: GeneratedVariant["llmUsage"] = [];
   let issues: string[] = [];
+  let stage: CreativeValidationError["stage"] = "concept";
   for (let attempt = 0; attempt < 2; attempt++) {
     const env = getEnv();
+    let sawProviderAttempt = false;
     const completion = await complete(messages, {
       json: true,
       responseSchema: creativeConceptSchema,
@@ -185,14 +200,20 @@ async function generateConcept(
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
       cache: false,
       signal,
+      onAttempt: (entry) => {
+        sawProviderAttempt = true;
+        usage.push({ ...entry, usage: entry.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 } });
+      },
     }).catch((error: unknown) => {
-      if (error instanceof LLMError && error.model && error.usage) {
-        usage.push({ provider: error.provider, model: error.model, usage: error.usage });
-        throw new CreativeValidationError([error.message], usage);
+      if (!sawProviderAttempt && error instanceof LLMError && error.model) {
+        usage.push({ provider: error.provider, model: error.model,
+          usage: error.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          providerRequestId: error.providerRequestId, providerFinalStatus: error.providerFinalStatus ?? "unknown", status: "error" });
       }
+      if (usage.length) throw new CreativeValidationError(["Provider attempt could not be confirmed"], usage, "provider");
       throw error;
     });
-    if (completion.usage) {
+    if (!sawProviderAttempt && completion.usage) {
       usage.push({
         provider: completion.provider,
         model: completion.model,
@@ -201,17 +222,22 @@ async function generateConcept(
         outputChars: completion.outputChars,
         latencyMs: completion.latencyMs,
         cacheHit: completion.cached,
+        providerRequestId: completion.providerRequestId,
+        providerFinalStatus: completion.providerFinalStatus ?? "unknown",
+        status: "success",
       });
     }
     let value: unknown;
     try {
       value = parseJSON<unknown>(completion.text);
     } catch {
+      stage = "parse";
       issues = [
         "Output must be valid JSON matching the requested concept shape.",
       ];
     }
     if (value !== undefined) {
+      stage = "concept";
       const result = validateConcept(value, input);
       if (result.success) return { concept: result.concept, usage };
       issues = result.issues;
@@ -224,7 +250,7 @@ async function generateConcept(
       },
     );
   }
-  throw new CreativeValidationError(issues, usage);
+  throw new CreativeValidationError(issues, usage, stage);
 }
 
 export async function generateOneVariant(
@@ -237,10 +263,13 @@ export async function generateOneVariant(
   referenceImages?: string[],
   signal: AbortSignal = AbortSignal.timeout(240_000),
   recentCopy: ConceptInput["recentCopy"] = [],
+  advisoryPreferences?: string,
+  sourceFacts: string[] = [],
 ): Promise<GeneratedVariant> {
   brand = boundedBrand(brand);
   brief = brief.slice(0, MAX_BRIEF_CHARS);
   instructions = instructions?.slice(0, 3_000);
+  advisoryPreferences = advisoryPreferences?.slice(0, 1_200);
   const input = {
     brand,
     brief,
@@ -250,6 +279,8 @@ export async function generateOneVariant(
     format,
     referenceImages,
     recentCopy,
+    advisoryPreferences,
+    sourceFacts: sourceFacts.slice(0, 12).map((fact) => fact.slice(0, 2_000)),
   };
   return renderVariant(input, signal, await generateConcept(input, signal));
 }
@@ -262,14 +293,16 @@ async function renderVariant(
   const { brand, angle, format, referenceImages } = input;
   const dims = formatDimensions(format ?? "portrait");
   const { concept, usage } = planned;
+  const imageAttempts: ImageAttempt[] = [];
   const image = await generateImage({
     prompt: conceptImagePrompt(concept, input),
     width: dims.width,
     height: dims.height,
     referenceImages: referenceImages?.slice(0, 3),
     signal,
+    onAttempt: (entry) => imageAttempts.push(entry),
   }).catch((error) => {
-    throw new CreativeImageError(error, usage);
+    throw new CreativeImageError(error, usage, imageAttempts);
   });
 
   return {
@@ -280,7 +313,9 @@ async function renderVariant(
     primaryText: concept.primary_text,
     cta: concept.cta,
     imageUrl: image.url,
-    imagePrompt: image.prompt,
+    imagePrompt: input.advisoryPreferences
+      ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
+      : image.prompt,
     design: buildAdDesign({
       brand,
       copy: concept,
@@ -298,6 +333,9 @@ async function renderVariant(
       width: image.width ?? dims.width,
       height: image.height ?? dims.height,
       fallbackFrom: image.fallbackFrom,
+      providerRequestId: image.providerRequestId,
+      providerFinalStatus: image.providerFinalStatus,
     },
+    imageAttempts,
   };
 }

@@ -5,6 +5,7 @@ import { Download, ExternalLink, ImageIcon, Link2 } from "lucide-react";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { cn } from "@/lib/utils";
 
 const ASSET_TYPE_LABEL: Record<string, string> = {
@@ -33,17 +34,20 @@ function slugify(s: string, fallback: string): string {
 
 function AssetTile({
   url,
+  thumbnailUrl,
   title,
   badges,
   filename,
 }: {
   url: string;
+  thumbnailUrl?: string;
   title: string;
   badges?: { label: string; className?: string }[];
   filename: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [broken, setBroken] = useState(false);
+  const [originalFallback, setOriginalFallback] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,11 +56,14 @@ function AssetTile({
       <div className="relative aspect-square bg-slate-100">
         {!broken ? (
           <img
-            src={url}
+            src={originalFallback ? url : thumbnailUrl ?? url}
             alt={title}
             loading="lazy"
             className="h-full w-full object-contain"
-            onError={() => setBroken(true)}
+            onError={() => {
+              if (thumbnailUrl && !originalFallback) setOriginalFallback(true);
+              else setBroken(true);
+            }}
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
@@ -172,8 +179,9 @@ export function AssetsLibrary({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {generated.map((c) => (
               <AssetTile
-                key={c.id}
+                key={`${c.id}:${c.image_url}`}
                 url={c.image_url as string}
+                thumbnailUrl={creativeThumbnailUrl(c.image_url as string)}
                 title={c.headline ?? "Ad creative"}
                 filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
                 badges={[

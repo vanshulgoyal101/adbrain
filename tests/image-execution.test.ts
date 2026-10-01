@@ -44,6 +44,7 @@ function mockProvider(result?: Response | Error) {
     return (
       result ??
       Response.json({
+        id: "image-done-123",
         data: [{ b64_json: png.toString("base64"), media_type: "image/png" }],
         usage: { cost: 0.13 },
       })
@@ -57,18 +58,23 @@ describe("image execution", () => {
   it("sends supported options and references and records actual dimensions", async () => {
     const fetchMock = mockProvider();
     const { generateImage } = await import("@/lib/imageGen");
+    const attempts: unknown[] = [];
     const image = await generateImage({
       prompt: "A storefront",
       width: 1080,
       height: 1350,
       seed: 3,
       referenceImages: ["https://cdn.example/product.jpg"],
+      onAttempt: (attempt) => attempts.push(attempt),
     });
+    expect(attempts).toMatchObject([{ provider: "openrouter-image", providerRequestId: "image-done-123", providerFinalStatus: "completed", status: "success" }]);
     expect(image).toMatchObject({
       provider: "openrouter-image",
       width: 120,
       height: 160,
       estimatedCostUsd: 0.13,
+      providerRequestId: "image-done-123",
+      providerFinalStatus: "completed",
     });
     expect(image.seed).toBeUndefined();
     const request = JSON.parse(
@@ -91,10 +97,24 @@ describe("image execution", () => {
 
   it("does not substitute a free model on errors", async () => {
     mockProvider(
-      Response.json({ error: { message: "Unavailable" } }, { status: 503 }),
+      Response.json({ error: { message: "Unavailable" } }, { status: 503, headers: { "x-request-id": "image-error-456" } }),
     );
     const { generateImage } = await import("@/lib/imageGen");
-    await expect(generateImage({ prompt: "test" })).rejects.toThrow("503");
+    const attempts: unknown[] = [];
+    await expect(generateImage({ prompt: "test", onAttempt: (attempt) => attempts.push(attempt) })).rejects.toMatchObject({
+      message: expect.stringContaining("503"), providerRequestId: "image-error-456", providerFinalStatus: "unknown",
+    });
+    expect(attempts).toMatchObject([{ provider: "openrouter-image", providerRequestId: "image-error-456", providerFinalStatus: "unknown", status: "error" }]);
+  });
+
+  it.each(["x-request-id", "x-openrouter-request-id"])("retains the %s on a non-JSON provider error", async (header) => {
+    mockProvider(new Response("upstream unavailable", { status: 503, headers: { [header]: "image-error-789" } }));
+    const { generateImage } = await import("@/lib/imageGen");
+    const attempts: unknown[] = [];
+    await expect(generateImage({ prompt: "test", onAttempt: (attempt) => attempts.push(attempt) })).rejects.toMatchObject({
+      providerRequestId: "image-error-789", providerFinalStatus: "unknown",
+    });
+    expect(attempts).toMatchObject([{ provider: "openrouter-image", providerRequestId: "image-error-789", status: "error" }]);
   });
 
   it("rejects a missing paid key before any call", async () => {

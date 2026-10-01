@@ -41,7 +41,7 @@ ID are different identifiers. Never infer one from another.
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report | Live Meta writes require verified binding and capability |
 | `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
-| `/settings` | Meta connection and spend guardrails | Disconnect does not pause running ads |
+| `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
 
@@ -118,6 +118,12 @@ results; resubmitting it is not an exactly-once billing guarantee. Browser recov
 is scoped session state, not cross-device durable scheduling. The preceding
 interview can itself use paid text AI. See the
 [generation handler](../src/app/api/creatives/generate/route.ts).
+
+Newly saved creatives use a smaller WebP for Review board and generated Assets
+tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
+Download, ZIP export, and campaign delivery retain the original image. If the
+derivative fails, the original remains available; older creatives and uploaded
+brand assets are not retroactively resized.
 
 Regeneration uses the creative's saved language/format, updates that creative,
 and resets approval to `draft`. Approval toggles `draft`/`approved`; it does not
@@ -315,6 +321,37 @@ These are application guardrails, not Meta account spending limits or guaranteed
 protection from overspend between checks or during outages. Do not blindly retry
 ambiguous activation. Use provider-side limits and
 [operational reconciliation](OPERATIONS.md) as well.
+
+## Declared Preferences
+
+After the additive [declared-preferences migration](../db/migrations/20260930_declared_preferences.sql)
+is applied, Settings offers an optional per-owner, per-business preference list.
+Enable it to remember one short note per category, then edit, forget, pause or
+clear the notes. The same Settings area shows notes while paused and can export
+the saved notes as JSON. Pausing excludes them from future interviews/planning;
+it does not erase them. Re-enabling does not reread old conversations or campaigns.
+
+Creative interviews, campaign planning and active ad generation/regeneration receive
+at most five relevant advisory notes (up to 1000 characters of serialized notes)
+alongside the current request. Generation gives these notes to concept and image
+providers only after an accepted request; a replay does not launch another provider
+call or reread notes.
+"Ignore preferences" and "fresh direction" omit them for that request. Notes
+cannot authorize spend, justify a commercial claim, override an explicit current
+brief, or turn an old tagline into required copy. Explicit Brand and legal
+requirements remain separate. A model-written Create brief is direction only,
+not proof of commercial claims: its original typed goal and free-text answers
+are separately supplied as evidence, while suggested options and saved memories
+are excluded. A directly typed Studio brief can supply evidence. Changing explicit
+facts under the same generation ID is rejected; the accepted facts are retained
+for regeneration. This is source behavior after the migration is
+applied, not a claim of deployment or provider quality. When preferences are
+applied, saved image-prompt receipts contain only an omission marker. The saved
+concept and creative may still reflect their style, and forgetting cannot retract
+provider calls or erase older creative output influenced by a note. The first
+slice has no inferred notes, background extraction, cross-business profile or
+historical backfill. A memory
+read outage omits advisory context; failed explicit writes surface an error.
 
 ## Public Surface and Operations
 

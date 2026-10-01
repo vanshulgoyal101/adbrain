@@ -66,6 +66,18 @@ export type LeadSyncRow = {
 export interface Database {
   public: {
     Tables: {
+      preference_settings: {
+        Row: { business_id: string; owner_id: string; enabled: boolean; epoch: number; updated_at: string };
+        Insert: { business_id: string; owner_id: string; enabled?: boolean; epoch?: number; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["preference_settings"]["Insert"]>;
+        Relationships: [];
+      };
+      declared_preferences: {
+        Row: { business_id: string; owner_id: string; category: string; value: string; version: number; updated_at: string };
+        Insert: { business_id: string; owner_id: string; category: string; value: string; version?: number; updated_at?: string };
+        Update: Partial<Database["public"]["Tables"]["declared_preferences"]["Insert"]>;
+        Relationships: [];
+      };
       product_events: {
         Row: ProductEventRow;
         Insert: ProductEventRow;
@@ -587,6 +599,11 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      change_declared_preferences: {
+        Args: { p_business_id: string; p_operation: "enable" | "pause" | "save" | "forget" | "clear";
+          p_expected_epoch: number; p_category?: string | null; p_value?: string | null };
+        Returns: number;
+      };
       get_lead_page: {
         Args: {
           p_business_id: string; p_query: string; p_status: string; p_contact: string;

@@ -12,6 +12,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
+const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
+const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
+const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
 const cluster = join(directory, "data");
@@ -187,6 +190,245 @@ async function verifyRollback() {
       });
     } finally { await session.end(); }
   } finally { await db.end(); }
+}
+
+async function verifyProductAnalytics(db, database) {
+  const service = async (sql) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql)).rows; }
+    finally { await session.end(); }
+  };
+  const insert = (age, count, name = 'analytics.fixture', environment = 'production') => db.query(`
+    insert into public.product_events(event_id,request_id,version,created_at,kind,name,outcome,duration_ms,attributes)
+    select gen_random_uuid(),gen_random_uuid(),1,
+      (date_trunc('day',now() at time zone 'UTC') - $1::integer * interval '1 day' + interval '1 hour') at time zone 'UTC',
+      'workflow',$3,'success',case when sequence%3=0 then null else sequence*100 end,
+      jsonb_build_object('environment',$4::text,'route','/api/creatives/generate','provider','synthetic','model','fixture',
+        'inputTokens',20,'outputTokens',10,'totalTokens',30,'estimatedCostUsd',0.25,'count',2,'failedCount',1)
+    from generate_series(1,$2::integer) sequence`,[age,count,name,environment]);
+  await check(`${database}: retention preserves aggregate metrics once and keeps recent raw events`,async () => {
+    await db.query("delete from public.product_events");
+    await insert(91,3);
+    await insert(1,1);
+    await insert(91,1,'analytics.fixture','preview');
+    assert.equal((await service("select public.prune_product_events() as count"))[0].count,4);
+    const rows = await service("select * from public.product_event_daily where name='analytics.fixture' order by environment");
+    const production = rows.find(row => row.environment==='production');
+    assert.equal(rows.length,2);
+    assert.equal(Number(production.event_count),3);
+    assert.equal(Number(production.timed_event_count),2);
+    assert.equal(Number(production.duration_sum_ms),300);
+    assert.equal(production.duration_max_ms,200);
+    assert.equal(Number(production.input_tokens),60);
+    assert.equal(Number(production.output_tokens),30);
+    assert.equal(Number(production.total_tokens),90);
+    assert.equal(Number(production.estimated_cost_usd),0.75);
+    assert.equal(Number(production.item_count),6);
+    assert.equal(Number(production.failed_item_count),3);
+    assert.equal((await db.query("select count(*)::int as count from public.product_events")).rows[0].count,1);
+    assert.equal((await service("select public.prune_product_events() as count"))[0].count,0);
+    assert.deepEqual(await service("select * from public.product_event_daily where name='analytics.fixture' order by environment"),rows);
+    await insert(91,1);
+    await service("select public.prune_product_events()");
+    assert.equal(Number((await service("select event_count from public.product_event_daily where name='analytics.fixture' and environment='production'"))[0].event_count),4);
+    const columns = (await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='product_event_daily'")).rows.map(row=>row.column_name);
+    assert.ok(!columns.some(name=>['user_id','business_id','request_id','event_id','attributes'].includes(name)));
+  });
+  await check(`${database}: rollup failure rolls back raw deletion`,async () => {
+    await insert(91,1,'analytics.rollback');
+    await db.query("begin");
+    try {
+      await db.query("alter table public.product_event_daily add constraint analytics_failure_probe check(name<>'analytics.rollback') not valid");
+      await db.query("savepoint retention_probe");
+      await assert.rejects(db.query("select public.prune_product_events()"),{code:'23514'});
+      await db.query("rollback to savepoint retention_probe");
+      assert.equal((await db.query("select count(*)::int as count from public.product_events where name='analytics.rollback'")).rows[0].count,1);
+    } finally { await db.query("rollback"); }
+    await service("select public.prune_product_events()");
+  });
+  await check(`${database}: bounded concurrent cleanup does not double count`,async () => {
+    await insert(92,10005,'analytics.volume');
+    const results = await Promise.all([service("select public.prune_product_events() as count"),service("select public.prune_product_events() as count")]);
+    assert.ok(results.every(rows=>rows[0].count<=10000));
+    await service("select public.prune_product_events()");
+    assert.equal(Number((await service("select sum(event_count) as count from public.product_event_daily where name='analytics.volume'"))[0].count),10005);
+    assert.equal((await db.query("select count(*)::int as count from public.product_events where name='analytics.volume'")).rows[0].count,0);
+  });
+  await check(`${database}: two-year expiry drops obsolete raw and aggregate data`,async () => {
+    await insert(800,1,'analytics.expired');
+    await db.query("update public.product_event_daily set day=(now() at time zone 'UTC')::date-800 where name='analytics.volume'");
+    await service("select public.prune_product_events()");
+    assert.equal((await service("select count(*)::int as count from public.product_event_daily where name in ('analytics.expired','analytics.volume')"))[0].count,0);
+  });
+  await check(`${database}: browsers cannot access rollups and services cannot forge them`,async () => {
+    for (const role of ['anon','authenticated','service_role']) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("delete from public.product_event_daily"),{code:'42501'});
+        if (role!=='service_role') {
+          await assert.rejects(session.query("select * from public.product_event_daily"),{code:'42501'});
+          await assert.rejects(session.query("select public.prune_product_events()"),{code:'42501'});
+        }
+      } finally { await session.end(); }
+    }
+  });
+}
+
+async function verifyConfigurablePayments(db, database) {
+  const owner = randomUUID();
+  const business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic pricing')", [business, owner]);
+  const legacyPolicy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]?.result; }
+    finally { await session.end(); }
+  };
+  const quote = async (amount, verification = false) => (await db.query("select private.production_payment_quote($1,$2) as quote", [amount,verification])).rows[0].quote;
+  const terms = async (value, verification = null) => (await db.query("select private.production_payment_priced_policy($1,$2) as policy", [value,verification])).rows[0].policy;
+  const claim = (value, policy, requestKey = randomUUID(), businessId = business, userId = owner) => {
+    const text = JSON.stringify(policy);
+    return service("select public.production_payment_order_claim($1,$2,$3,$4,'acc_pricing','rzp_live_pricing',$5,$6,$7,null) as result",
+      [businessId,userId,requestKey,randomUUID(),value,text,createHash("sha256").update(text).digest("hex")]);
+  };
+  const complete = async (order, suffix) => {
+    await service("select public.production_payment_order_result($1,'acc_pricing','rzp_live_pricing',$2) as result", [order.id,`order_${suffix}`]);
+    return service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing',$2,true,0,false,$3) as result", [order.id,`pay_${suffix}`,'c'.repeat(64)]);
+  };
+  const verification = { businessId: business, userId: owner, expiresAt: new Date(Date.now()+3_600_000).toISOString() };
+  const verificationQuote = await quote(1000,true);
+  const verificationPolicy = await terms(verificationQuote,verification);
+  let testOrder;
+  let annualOrder;
+  await check(`${database}: SQL quotes and consent match the actual TypeScript policy`,async () => {
+    const environment = { NODE_ENV:'production',VERCEL_ENV:'production',VERCEL_GIT_COMMIT_REF:'main',
+      PAYMENTS_LIVE_ENABLED:'true',PAYMENTS_LIVE_COLLECTION_ENABLED:'true',RAZORPAY_LIVE_KEY_ID:'rzp_live_fixture',
+      RAZORPAY_LIVE_KEY_SECRET:'synthetic-key-only',RAZORPAY_LIVE_WEBHOOK_SECRET:'synthetic-webhook-only',RAZORPAY_LIVE_ACCOUNT_ID:'acc_fixture',
+      PAYMENTS_LIVE_WEBHOOK_ID:randomUUID(),VERCEL_PROJECT_ID:'prj_fixture',PAYMENTS_LIVE_PROJECT_ID:'prj_fixture',
+      NEXT_PUBLIC_SUPABASE_URL:'https://fixture.supabase.co',PAYMENTS_LIVE_SUPABASE_URL:'https://fixture.supabase.co' };
+    for (const [amount,scope] of [[100,null],[1005,null],[50000,null],[999999,null],[1000,verification]]) {
+      const settings = { ...environment,PAYMENTS_LIVE_AMOUNT_PAISE:String(amount),...(scope ? {
+        PAYMENTS_LIVE_VERIFICATION_ENABLED:'true',PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE:String(amount),
+        PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID:business,PAYMENTS_LIVE_VERIFICATION_USER_ID:owner,PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT:scope.expiresAt } : {}) };
+      const actual = JSON.parse(execFileSync(process.execPath,['--import','tsx','-e',
+        'const {getProductionCollectionPolicy}=require("./src/lib/payments/production-config.ts"); const {hash,...policy}=getProductionCollectionPolicy(JSON.parse(process.argv[1]),Date.now(),JSON.parse(process.argv[2])); process.stdout.write(JSON.stringify(policy));',
+        JSON.stringify(settings),JSON.stringify({businessId:business,userId:owner})],{cwd:root,encoding:'utf8'}));
+      assert.deepEqual(actual,await terms(await quote(amount,Boolean(scope)),scope));
+      assert.equal((await db.query("select private.production_payment_contract_valid($1,$2,$3) as valid",[amount,actual.quote,actual])).rows[0].valid,true);
+    }
+  });
+  await check(`${database}: exact verification quote and single concurrent order`, async () => {
+    const results = await Promise.all([claim(verificationQuote,verificationPolicy),claim(verificationQuote,verificationPolicy)]);
+    assert.equal(results.filter(result => result.claimed).length,1);
+    assert.equal(new Set(results.map(result => result.order.id)).size,1);
+    testOrder = results[0].order;
+    assert.equal(testOrder.amount_paise,1000);
+    assert.equal(testOrder.purpose,'verification');
+    assert.equal(testOrder.quote.serviceAllocationPaise,0);
+    assert.equal(testOrder.quote.metaAllocationPaise,0);
+  });
+  await check(`${database}: verification preserves normal checkout and credits no allowance`, async () => {
+    annualOrder = (await claim(await quote(1000000),legacyPolicy)).order;
+    assert.notEqual(annualOrder.id,testOrder.id);
+    const captured = await complete(testOrder,'verification');
+    assert.equal(captured.state,'captured');
+    assert.equal(captured.captured_paise,1000);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result", [business,owner]);
+    assert.equal(balance.capturedPaise,1000);
+    assert.equal(balance.serviceAllocationPaise,0);
+    assert.equal(balance.advertisingAllocationPaise,0);
+    assert.equal(balance.remainingPaise,0);
+    assert.equal((await claim(verificationQuote,verificationPolicy)).claimed,false);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_orders where business_id=$1 and purpose='verification'",[business])).rows[0].count,1);
+  });
+  await check(`${database}: partial verification refunds are visible without fictional ad allocation`,async () => {
+    const observe = () => service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_verification',true,250,false,$2,'rfnd_partial',250,'processed') as result",[testOrder.id,'e'.repeat(64)]);
+    assert.equal((await observe()).state,'partially_refunded');
+    assert.equal((await observe()).refunded_paise,250);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[business,owner]);
+    assert.equal(balance.refundedPaise,250);
+    assert.equal(balance.held,false);
+    assert.equal(balance.serviceAllocationPaise,0);
+    assert.equal(balance.advertisingAllocationPaise,0);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='refund'",[testOrder.id])).rows[0].count,1);
+  });
+  await check(`${database}: policy scope, expiry and forged amounts fail closed`, async () => {
+    for (const changed of [
+      { ...verification, userId: randomUUID() },
+      { ...verification, businessId: randomUUID() },
+      { ...verification, expiresAt: new Date(Date.now()-60_000).toISOString() },
+      { ...verification, expiresAt: new Date(Date.now()+90_000_000).toISOString() },
+    ]) await assert.rejects(claim(verificationQuote,await terms(verificationQuote,changed)),{code:'23514'});
+    await assert.rejects(claim({ ...verificationQuote, metaAllocationPaise:800000 },verificationPolicy),{code:'23514'});
+    await assert.rejects(claim(verificationQuote,{ ...verificationPolicy, serviceScope:'Annual service for a verification charge' }),{code:'23514'});
+  });
+  await check(`${database}: saved order identity and capture effects cannot be repriced`, async () => {
+    await assert.rejects(db.query("update private.production_payment_orders set amount_paise=2000 where id=$1",[testOrder.id]),{code:'23514'});
+    await assert.rejects(db.query("update private.production_payment_effects set amount_paise=1000000 where order_id=$1 and kind='capture'",[testOrder.id]),{code:'23514'});
+    const captured = await complete(annualOrder,'annual');
+    assert.equal(captured.captured_paise,1000000);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[business,owner]);
+    assert.equal(balance.capturedPaise,1001000);
+    assert.equal(balance.serviceAllocationPaise,200000);
+    assert.equal(balance.advertisingAllocationPaise,800000);
+    assert.equal(balance.remainingPaise,800000);
+    assert.equal(balance.held,false);
+  });
+  await check(`${database}: configurable annual allocations conserve paise and bound earning`, async () => {
+    const other = randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic revised price')",[other,owner]);
+    const value = await quote(1005);
+    const payment = (await claim(value,await terms(value),randomUUID(),other)).order;
+    await complete(payment,'revised');
+    await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,clock_timestamp()+interval '1 hour')",[owner,randomUUID()]);
+    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,201,$4) as result",[other,owner,payment.id,randomUUID()]);
+    await assert.rejects(service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,200000,$4) as result",[other,owner,payment.id,randomUUID()]),{code:'23514'});
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
+    assert.equal(balance.serviceAllocationPaise,201);
+    assert.equal(balance.advertisingAllocationPaise,804);
+    assert.equal(balance.serviceEarnedPaise,201);
+    await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_revised',true,33,false,$2,'rfnd_revised',33,'processed') as result",[payment.id,'e'.repeat(64)]);
+    assert.equal((await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner])).held,true);
+    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,33,201,$4) as result",[other,owner,payment.id,randomUUID()]);
+    const adjusted = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
+    assert.equal(adjusted.held,false);
+    assert.equal(adjusted.remainingPaise,771);
+  });
+  await check(`${database}: expired saved verification can still capture and refund its own amount`, async () => {
+    const other = randomUUID();
+    const order = randomUUID();
+    const value = await quote(1000,true);
+    const policy = await terms(value,{ ...verification,businessId:other,expiresAt:new Date(Date.now()-60_000).toISOString() });
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic expired verification')",[other,owner]);
+    await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,amount_paise,quote,terms,terms_hash) values ($1,$2,$3,$4,'acc_pricing','rzp_live_pricing',1000,$5,$6,$7)",[order,other,owner,randomUUID(),value,policy,'d'.repeat(64)]);
+    await complete({id:order},'expired');
+    const refunded = await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_expired',true,1000,false,$2,'rfnd_expired',1000,'processed') as result",[order,'e'.repeat(64)]);
+    assert.equal(refunded.state,'refunded');
+    assert.equal(refunded.refunded_paise,1000);
+    const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
+    assert.equal(balance.advertisingAllocationPaise,0);
+    assert.equal(balance.held,false);
+    const invalid = await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_expired',true,1001,false,$2,'rfnd_excess',1001,'processed') as result",[order,'e'.repeat(64)]);
+    assert.equal(invalid.state,'review_required');
+    assert.equal(invalid.refunded_paise,1000);
+    assert.equal((await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner])).held,true);
+  });
+  await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
+    for (const role of ['anon','authenticated']) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("select * from private.production_payment_orders"),{code:'42501'});
+        await assert.rejects(session.query("select public.production_payment_orders_list($1,$2)",[business,owner]),{code:'42501'});
+      } finally { await session.end(); }
+    }
+  });
 }
 
 async function verifyCustomerAllowance(db, database) {
@@ -381,6 +623,81 @@ async function verifyCreativeGenerationAdmission(db, database) {
     assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[otherBusiness,otherOwner,id])).status,'unresolved');
     assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
   });
+  await check(`${database}: only service operators can reconcile an evidenced unresolved intent`, async () => {
+    const id=(await db.query("select generation_id from private.creative_generation_intents where business_id=$1 and state='unresolved' limit 1",[otherBusiness])).rows[0].generation_id;
+    const procedure='public.creative_generation_reconcile(uuid,uuid,uuid,text,text,text,bigint,bigint,bigint)';
+    const {rows}=await db.query(`select has_function_privilege('authenticated',$1,'EXECUTE') as can_reconcile,
+      has_table_privilege('authenticated','private.creative_generation_reconciliations','SELECT') as can_read`,[procedure]);
+    assert.deepEqual(rows,[{can_reconcile:false,can_read:false}]);
+    const reconcile=(tenant,user,verified=40,accounted=0,reserved=100,evidence='case-verified-123',outcome='failed') =>
+      service("select public.creative_generation_reconcile($1,$2,$3,$4,$5,$6,$7,$8,$9) as result",
+        [tenant,user,id,'operator-fixture',evidence,outcome,verified,accounted,reserved]);
+    await assert.rejects(reconcile(otherBusiness,owner),{code:'42501'});
+    await assert.rejects(reconcile(otherBusiness,otherOwner,null),{code:'22023'});
+    await assert.rejects(reconcile(otherBusiness,otherOwner,40,0,100,'private?token=secret'),{code:'22023'});
+    await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,metadata) values ($1,$2,'creatives.generate','fixture','fixture',20,$3)",
+      [otherBusiness,otherOwner,JSON.stringify({generationId:id,providerFinalStatus:'completed'})]);
+    await assert.rejects(reconcile(otherBusiness,otherOwner,10),{code:'23514'});
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'unresolved');
+    assert.equal((await reconcile(otherBusiness,otherOwner)).status,'failed');
+    assert.equal((await status(id,otherBusiness,otherOwner)).status,'failed');
+    const {rows: after}=await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id]);
+    assert.deepEqual(after.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:40}]);
+    const {rows: audit}=await db.query("select count(*)::int as count from private.creative_generation_reconciliations where generation_id=$1",[id]);
+    assert.equal(audit[0].count,1);
+    const {rows: adjustment}=await db.query("select total_tokens from public.llm_usage_events where business_id=$1 and metadata->>'operatorAdjustment'='true'",[otherBusiness]);
+    assert.deepEqual(adjustment.map(row=>row.total_tokens),[20]);
+    await assert.rejects(service("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens,metadata) values ($1,$2,'creatives.generate','late-provider','fixture',15,$3)",
+      [otherBusiness,otherOwner,JSON.stringify({generationId:id,providerFinalStatus:'completed'})]),{code:'23514'});
+    await assert.rejects(service("update public.llm_usage_events set metadata='{}'::jsonb where business_id=$1 and metadata->>'generationId'=$2",
+      [otherBusiness,id]),{code:'23514'});
+    await assert.rejects(service("delete from public.llm_usage_events where business_id=$1 and metadata->>'generationId'=$2",
+      [otherBusiness,id]),{code:'23514'});
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,100,false,false,false) as result",[otherBusiness,otherOwner,id])).status,'failed');
+    assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:40}]);
+    await assert.rejects(reconcile(otherBusiness,otherOwner),{code:'23505'});
+  });
+  await check(`${database}: reconciled failure cannot gain a late saved creative`, async () => {
+    const {rows}=await db.query("select generation_id from private.creative_generation_reconciliations where business_id=$1 and outcome='failed' limit 1",[otherBusiness]);
+    assert.equal(rows.length,1);
+    await assert.rejects(service("insert into public.creatives(business_id,brief,variant_group) values ($1,'Late saved',$2)",
+      [otherBusiness,rows[0].generation_id]),{code:'23514'});
+  });
+  await check(`${database}: old intents remain held without generation-bound provider evidence`, async () => {
+    const freshBusiness=randomUUID(),id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Legacy hold')",[freshBusiness,owner]);
+    await db.query("insert into private.creative_generation_intents(generation_id,business_id,user_id,request_hash,expected_count,month_start,reserved_tokens,image_floor_tokens,state,receipt_version) values ($1,$2,$3,$4,1,date_trunc('month',now())::date,100,10,'unresolved',0)",
+      [id,freshBusiness,owner,'e'.repeat(64)]);
+    await assert.rejects(service("select public.creative_generation_reconcile($1,$2,$3,'operator-fixture','case-verified-123','failed',40,0,100) as result",[freshBusiness,owner,id]),{code:'23514'});
+    assert.equal((await status(id,freshBusiness,owner)).status,'unresolved');
+  });
+  await check(`${database}: attested zero-charge failure releases an empty ledger without replay`, async () => {
+    const freshBusiness=randomUUID(),id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'No-charge outcome')",[freshBusiness,owner]);
+    assert.equal((await admit(id,freshBusiness,owner)).action,'start');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[freshBusiness,owner,id])).status,'unresolved');
+    assert.equal((await service("select public.creative_generation_reconcile($1,$2,$3,'operator-fixture','case-no-charge-123','failed',0,0,100) as result",
+      [freshBusiness,owner,id])).status,'failed');
+    assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:0,accounted:0}]);
+    assert.equal((await admit(id,freshBusiness,owner)).action,'recover');
+  });
+  await check(`${database}: reconciled partial remains terminal through late callbacks`, async () => {
+    const freshBusiness=randomUUID(),id=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Partial reconciliation')",[freshBusiness,owner]);
+    assert.equal((await service("select public.creative_generation_admit($1,$2,$3,$4,2,100,10,150) as result",
+      [freshBusiness,owner,id,'f'.repeat(64)])).action,'start');
+    await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'One saved',$2)",[freshBusiness,id]);
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,false,true,false) as result",[freshBusiness,owner,id])).status,'unresolved');
+    assert.equal((await service("select public.creative_generation_reconcile($1,$2,$3,'operator-fixture','case-partial-123','partial',30,0,100) as result",
+      [freshBusiness,owner,id])).status,'partial');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,40,true,false,false) as result",[freshBusiness,owner,id])).status,'partial');
+    assert.equal((await status(id,freshBusiness,owner)).status,'partial');
+    assert.equal((await admit(id,freshBusiness,owner,'f'.repeat(64))).action,'conflict');
+    assert.deepEqual((await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id])).rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)})),[{reserved:40,accounted:30}]);
+    assert.equal(await service("update public.creatives set headline='Edited' where business_id=$1 and variant_group=$2 returning 1 as result",[freshBusiness,id]),1);
+    await assert.rejects(service("update public.creatives set variant_group=$3 where business_id=$1 and variant_group=$2",
+      [freshBusiness,id,randomUUID()]),{code:'23514'});
+  });
   await check(`${database}: known pre-provider failure frees unused quota but not identity`, async () => {
     const freshBusiness=randomUUID();
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'No provider call')",[freshBusiness,owner]);
@@ -415,9 +732,46 @@ async function verify(database, source, integrityMigration, customerOnly = false
   try {
     await db.query(bootstrap);
     await db.query(source);
+    if (process.argv.includes("--analytics-only") || database.startsWith("analytics_")) {
+      const installed = (await db.query("select to_regclass('public.product_event_daily') is not null as installed")).rows[0].installed;
+      if (!installed) {
+        await db.query("insert into public.product_events(event_id,request_id,version,kind,name,outcome) values(gen_random_uuid(),gen_random_uuid(),1,'system','analytics.before_migration','success')");
+        await check(`${database}: upgrade preserves existing raw events and ledger replay`,async () => {
+          assert.equal(await applyMigration(db,"20260928_product_event_rollups.sql",productRollupMigration),'applied');
+          assert.equal(await applyMigration(db,"20260928_product_event_rollups.sql",productRollupMigration),'already_applied');
+          assert.equal((await db.query("select count(*)::int as count from public.product_events where name='analytics.before_migration'")).rows[0].count,1);
+        });
+      }
+      await verifyProductAnalytics(db,database);
+      return;
+    }
+    if (process.argv.includes("--pricing-only") || database.startsWith("pricing_")) {
+      const installed = (await db.query("select to_regprocedure('private.production_payment_quote(bigint,boolean)') is not null as installed")).rows[0].installed;
+      if (!installed) {
+        const owner = randomUUID(),business = randomUUID(),order = randomUUID();
+        const policy = JSON.parse(operatorPaymentMigration.split("$policy$")[1]);
+        await db.query("insert into auth.users(id) values ($1)",[owner]);
+        await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic previous price')",[business,owner]);
+        const value = { version:'inr-annual-total-v1',merchantDisplay:'Vanshul Goyal',currency:'INR',totalPaise:1000000,
+          serviceAllocationPaise:200000,metaAllocationPaise:800000,additionalCustomerTaxPaise:0,
+          metaTaxTreatment:'included-in-meta-allocation',gatewayFees:'absorbed-by-adbrain',automaticRenewal:false };
+        await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id,payment_id,captured_paise) values ($1,$2,$3,$4,'acc_upgrade','rzp_live_upgrade',$5,$6,$7,'order_upgrade','pay_upgrade',1000000)",[order,business,owner,randomUUID(),value,policy,'f'.repeat(64)]);
+        const before = (await db.query("select to_jsonb(payment) as saved from private.production_payment_orders payment where id=$1",[order])).rows[0].saved;
+        await check(`${database}: migration ledger applies once and safely skips replay`,async () => {
+          assert.equal(await applyMigration(db,"20260927_configurable_payment_quotes.sql",configurablePaymentMigration),'applied');
+          assert.equal(await applyMigration(db,"20260927_configurable_payment_quotes.sql",configurablePaymentMigration),'already_applied');
+        });
+        const after = (await db.query("select to_jsonb(payment)-'purpose' as saved from private.production_payment_orders payment where id=$1",[order])).rows[0].saved;
+        await check(`${database}: existing accepted order is preserved by migration`,async () => assert.deepEqual(after,before));
+      }
+      await verifyConfigurablePayments(db,database);
+      return;
+    }
     if (process.argv.includes("--generation-only")) {
       await db.query(creativeIntentMigration);
       await db.query(creativeIntentMigration);
+      await db.query(creativeReconcileMigration);
+      await db.query(creativeReconcileMigration);
       await verifyCreativeGenerationAdmission(db, database);
       return;
     }
@@ -1495,17 +1849,32 @@ try {
   assert.ok(schema.indexOf(billingMigration.trim()) < schema.indexOf(productionPaymentsMigration.trim()), "Managed billing must precede production payments");
   assert.ok(schema.includes(operatorPaymentMigration.trim()), "Canonical schema must include the exact operator-managed payment migration");
   assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
-  assert.ok(schema.trimEnd().endsWith(creativeIntentMigration.trimEnd()), "Canonical schema must end with the exact creative generation intent migration");
-  if (process.argv.includes("--generation-only")) {
+  assert.ok(schema.includes(creativeIntentMigration.trim()), "Canonical schema must include the exact creative generation intent migration");
+  assert.ok(schema.includes(creativeReconcileMigration.trim()), "Canonical schema must include the exact creative reconciliation migration");
+  assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
+  assert.ok(schema.trimEnd().endsWith(productRollupMigration.trimEnd()), "Canonical schema must end with the exact product rollup migration");
+  if (process.argv.includes("--analytics-only")) {
+    await verify("analytics_fresh",schema);
+    await verify("analytics_upgrade",`${baseline}\n${metaMigration}\n${productEventsMigration}`);
+  } else if (process.argv.includes("--pricing-only")) {
+    await verify("pricing_fresh",schema);
+    await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
+  } else if (process.argv.includes("--generation-only")) {
     await verify("generation_fresh",schema);
     await verify("generation_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}`);
   } else if (!process.argv.includes("--customer-only")) {
     await verify("fresh_install", `${schema}\n${trustedUsageMigration}\n${productEventsMigration}\n${whatsappMigration}\n${billingEventsMigration}\n${testPaymentsMigration}`);
     await verify("ordered_upgrade", `${baseline}\n${metaMigration}\n${campaignMigration}\n${trustedUsageMigration}\n${trustedUsageMigration}\n${productEventsMigration}\n${productEventsMigration}\n${whatsappMigration}\n${whatsappMigration}\n${reportingMigration}\n${reportingMigration}\n${workerMigration}\n${workerMigration}\n${billingMigration}\n${billingMigration}\n${billingEventsMigration}\n${billingEventsMigration}\n${testPaymentsMigration}\n${testPaymentsMigration}\n${productionPaymentsMigration}\n${productionPaymentsMigration}\n${draftAuthorityMigration}\n${trustedCampaignMigration}\n${legacyLead}\n${leadFollowUpMigration}\n${leadFollowUpMigration}\n${leadSyncMigration}\n${leadSyncMigration}`, integrityMigration);
   }
-  if (!process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
+  if (!process.argv.includes("--analytics-only") && !process.argv.includes("--pricing-only") && !process.argv.includes("--leads-only") && !process.argv.includes("--generation-only")) {
     await verify("customer_fresh",schema,undefined,true);
     await verify("customer_upgrade",`${baseline}\n${metaMigration}\n${campaignMigration}\n${billingMigration}\n${productionPaymentsMigration}\n${trustedCampaignMigration}`,undefined,true);
+    if (!process.argv.includes("--customer-only")) {
+      await verify("pricing_fresh",schema);
+      await verify("pricing_upgrade",schema.slice(0,schema.lastIndexOf(configurablePaymentMigration.trim())));
+      await verify("analytics_fresh",schema);
+      await verify("analytics_upgrade",`${baseline}\n${metaMigration}\n${productEventsMigration}`);
+    }
   }
   }
 } catch (error) {

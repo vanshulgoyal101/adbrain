@@ -130,6 +130,94 @@ as $$
   );
 $$;
 
+-- Declared, opt-in preferences are private to the owner and business.
+create table if not exists public.preference_settings (
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  enabled boolean not null default false,
+  epoch bigint not null default 0 check (epoch >= 0),
+  updated_at timestamptz not null default now(),
+  primary key (business_id, owner_id)
+);
+
+create table if not exists public.declared_preferences (
+  business_id uuid not null,
+  owner_id uuid not null,
+  category text not null check (category in ('copy_length', 'tone', 'language', 'visual_style', 'layout_density', 'creative_dislikes', 'workflow')),
+  value text not null check (char_length(value) between 1 and 160),
+  version bigint not null default 1 check (version > 0),
+  updated_at timestamptz not null default now(),
+  primary key (business_id, owner_id, category),
+  foreign key (business_id, owner_id) references public.preference_settings(business_id, owner_id) on delete cascade
+);
+
+alter table public.preference_settings enable row level security;
+alter table public.declared_preferences enable row level security;
+revoke all on public.preference_settings, public.declared_preferences from public, anon, authenticated;
+grant select on public.preference_settings, public.declared_preferences to authenticated;
+drop policy if exists "preference settings: read own" on public.preference_settings;
+create policy "preference settings: read own" on public.preference_settings for select to authenticated
+  using (owner_id = auth.uid() and public.owns_business(business_id));
+drop policy if exists "declared preferences: read own" on public.declared_preferences;
+create policy "declared preferences: read own" on public.declared_preferences for select to authenticated
+  using (owner_id = auth.uid() and public.owns_business(business_id));
+
+create or replace function public.change_declared_preferences(
+  p_business_id uuid, p_operation text, p_expected_epoch bigint,
+  p_category text default null, p_value text default null
+) returns bigint language plpgsql security definer set search_path = public
+as $$
+declare current_settings public.preference_settings;
+begin
+  if auth.uid() is null then raise exception 'Unauthenticated' using errcode = '42501'; end if;
+  perform 1 from public.businesses where id = p_business_id and owner_id = auth.uid() for update;
+  if not found then raise exception 'Business unavailable' using errcode = '42501'; end if;
+  if p_operation is null or p_operation not in ('enable', 'pause', 'save', 'forget', 'clear') then
+    raise exception 'Invalid preference operation' using errcode = '22023';
+  end if;
+  insert into public.preference_settings (business_id, owner_id) values (p_business_id, auth.uid())
+    on conflict do nothing;
+  select * into current_settings from public.preference_settings
+    where business_id = p_business_id and owner_id = auth.uid() for update;
+  if current_settings.epoch is distinct from p_expected_epoch then
+    raise exception 'Preferences changed; reload before saving' using errcode = '40001';
+  end if;
+  if p_operation = 'save' then
+    if not current_settings.enabled then raise exception 'Preferences are paused' using errcode = '22023'; end if;
+    if p_category is null or p_category not in ('copy_length', 'tone', 'language', 'visual_style', 'layout_density', 'creative_dislikes', 'workflow')
+      or p_value is null or char_length(trim(p_value)) not between 1 and 160
+      or p_value ~ '[[:cntrl:]]' or p_value like '%' || chr(8377) || '%'
+      or p_value ~* '(https?://|www\.|[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}|[0-9]{6,}|[$][0-9]|api[_ -]?key|password|secret|token|budget|spend|inr|rupees|per day|daily|weekly|monthly|city|location|target|service area|deadline|offer|discount|guarantee|price|approval|activate|religion|ethnicity|medical|health condition|credit card|phone number|ignore (all|previous|system|developer)|system prompt|you must|override (rules|safety))' then
+      raise exception 'Invalid preference content' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid() and category = p_category)
+      and (select count(*) from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid()) >= 12 then
+      raise exception 'Preference limit reached' using errcode = '22023';
+    end if;
+    insert into public.declared_preferences (business_id, owner_id, category, value)
+      values (p_business_id, auth.uid(), p_category, trim(p_value))
+      on conflict (business_id, owner_id, category) do update
+        set value = excluded.value, version = declared_preferences.version + 1, updated_at = now();
+  elsif p_operation = 'forget' then
+    if p_category is null or p_category not in ('copy_length', 'tone', 'language', 'visual_style', 'layout_density', 'creative_dislikes', 'workflow') then
+      raise exception 'Invalid preference category' using errcode = '22023';
+    end if;
+    delete from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid() and category = p_category;
+  elsif p_operation = 'clear' then
+    delete from public.declared_preferences where business_id = p_business_id and owner_id = auth.uid();
+  elsif p_operation = 'pause' then
+    update public.preference_settings set enabled = false where business_id = p_business_id and owner_id = auth.uid();
+  elsif p_operation = 'enable' then
+    update public.preference_settings set enabled = true where business_id = p_business_id and owner_id = auth.uid();
+  end if;
+  update public.preference_settings set epoch = epoch + 1, updated_at = now()
+    where business_id = p_business_id and owner_id = auth.uid() returning epoch into current_settings.epoch;
+  return current_settings.epoch;
+end
+$$;
+revoke all on function public.change_declared_preferences(uuid, text, bigint, text, text) from public, anon, service_role;
+grant execute on function public.change_declared_preferences(uuid, text, bigint, text, text) to authenticated;
+
 -- ════════════════════════════════════════════════════════════════════════
 --  brand_assets
 -- ════════════════════════════════════════════════════════════════════════
@@ -2815,3 +2903,697 @@ grant execute on function public.creative_generation_admit(uuid,uuid,uuid,text,i
 grant execute on function public.creative_generation_status(uuid,uuid,uuid) to service_role;
 grant execute on function public.creative_generation_progress(uuid,uuid,uuid,bigint,boolean,boolean,boolean) to service_role;
 commit;
+
+create or replace function private.production_payment_quote(p_amount bigint,p_verification boolean default false)
+returns jsonb language sql immutable set search_path = '' as $$
+  select case when p_amount between 100 and 1000000 and p_verification is not null then
+    jsonb_build_object('version',case when p_verification then 'inr-payment-verification-v1'
+      when p_amount=1000000 then 'inr-annual-total-v1' else 'inr-annual-configurable-v1' end,
+      'merchantDisplay','Vanshul Goyal','currency','INR','totalPaise',p_amount,
+      'serviceAllocationPaise',case when p_verification then 0 else p_amount/5 end,
+      'metaAllocationPaise',case when p_verification then 0 else p_amount-p_amount/5 end,
+      'additionalCustomerTaxPaise',0,'metaTaxTreatment','included-in-meta-allocation',
+      'gatewayFees','absorbed-by-adbrain','automaticRenewal',false)
+      || case when p_verification then jsonb_build_object('verificationAllocationPaise',p_amount) else '{}'::jsonb end
+    else null end;
+$$;
+
+create or replace function private.production_payment_rupees(p_amount bigint)
+returns text language sql immutable set search_path = '' as $$
+  select 'INR '||rtrim(rtrim(to_char(p_amount::numeric/100,'FM999,999,990.00'),'0'),'.');
+$$;
+
+create or replace function private.production_payment_priced_policy(p_quote jsonb,p_verification jsonb default null)
+returns jsonb language plpgsql immutable set search_path = '' as $$
+declare service_scope text; refund_terms text;
+begin
+  if p_verification is not null then
+    service_scope := 'One real '||private.production_payment_rupees((p_quote->>'totalPaise')::bigint)
+      ||' payment to verify checkout for the selected internal pilot. This is not the annual service and grants no service or advertising allocation, renewal or ad activation. AdBrain absorbs gateway fees; no additional checkout charge applies.';
+    refund_terms := 'This verification payment remains recorded separately from service and advertising funds. Refund requests are handled by the operator under applicable law; no automatic refund is initiated. Mandatory customer rights remain applicable.';
+  else
+    service_scope := private.production_payment_rupees((p_quote->>'totalPaise')::bigint)
+      ||' total for 12 months for one business, one offer and one service area, including up to two creatives and one capped Meta campaign. '
+      ||private.production_payment_rupees((p_quote->>'serviceAllocationPaise')::bigint)||' is allocated to service and '
+      ||private.production_payment_rupees((p_quote->>'metaAllocationPaise')::bigint)
+      ||' to advertising including applicable Meta taxes. AdBrain absorbs gateway fees. No extra checkout charge, automatic renewal, year-round ad delivery or guaranteed results. The operator pays Meta separately; payment to AdBrain is not confirmation of a transfer to Meta or permission to activate ads.';
+    refund_terms := 'Full refund before work starts. After work starts, unused advertising allocation is refundable after pending costs are reconciled. The '
+      ||private.production_payment_rupees((p_quote->>'serviceAllocationPaise')::bigint)
+      ||' service allocation is earned only after the agreed creatives and campaign setup are delivered; otherwise it remains refundable. Mandatory customer rights remain applicable.';
+  end if;
+  return jsonb_build_object('version','operator-managed-priced-v1','fundingMode','operator_managed',
+    'approvalReference','https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5858162341',
+    'approvedAt','2026-09-27T17:36:03Z','serviceScope',service_scope,
+    'invoiceTerms','The invoice will reflect Vanshul Goyal''s actual tax status and applicable law. This payment receipt is not a tax invoice and makes no GST-registration claim. No additional checkout charge applies. Mandatory customer rights remain applicable.',
+    'refundTerms',refund_terms,'quote',p_quote)
+    || case when p_verification is not null then jsonb_build_object('verification',p_verification) else '{}'::jsonb end;
+end;
+$$;
+
+create or replace function private.production_payment_contract_valid(p_amount bigint,p_quote jsonb,p_terms jsonb)
+returns boolean language plpgsql immutable set search_path = '' as $$
+declare verification boolean;
+begin
+  verification := coalesce(p_quote->>'version'='inr-payment-verification-v1',false);
+  if p_quote is distinct from private.production_payment_quote(p_amount,verification)
+    or p_amount is null or jsonb_typeof(p_quote)<>'object' then return false; end if;
+  if p_terms->>'version'='operator-managed-priced-v1' then
+    if verification then
+      if not ((jsonb_typeof(p_terms->'verification')='object'
+        and (p_terms->'verification')-array['businessId','userId','expiresAt']='{}'::jsonb
+        and (p_terms#>>'{verification,businessId}')::uuid is not null
+        and (p_terms#>>'{verification,userId}')::uuid is not null
+        and isfinite((p_terms#>>'{verification,expiresAt}')::timestamptz)) is true) then return false; end if;
+    elsif p_terms ? 'verification' then return false;
+    end if;
+    return p_terms=private.production_payment_priced_policy(p_quote,case when verification then p_terms->'verification' else null end);
+  end if;
+  return not verification and p_quote=private.production_payment_quote(1000000,false);
+exception when others then return false;
+end;
+$$;
+
+revoke all on function private.production_payment_quote(bigint,boolean),private.production_payment_rupees(bigint),
+  private.production_payment_priced_policy(jsonb,jsonb),private.production_payment_contract_valid(bigint,jsonb,jsonb)
+  from public,anon,authenticated,service_role;
+
+alter table private.production_payment_orders drop constraint production_payment_orders_amount_paise_check;
+alter table private.production_payment_orders drop constraint production_payment_orders_quote_check;
+alter table private.production_payment_orders drop constraint production_payment_orders_captured_paise_check;
+alter table private.production_payment_orders drop constraint production_payment_orders_refunded_paise_check;
+alter table private.production_payment_orders drop constraint production_payment_orders_provider_refunded_paise_check;
+alter table private.production_payment_orders drop constraint production_payment_funding_mode_check;
+alter table private.production_payment_orders add constraint production_payment_amount_check check(amount_paise between 100 and 1000000);
+alter table private.production_payment_orders add constraint production_payment_quote_check check(private.production_payment_contract_valid(amount_paise,quote,terms) is true);
+alter table private.production_payment_orders add constraint production_payment_captured_check check(captured_paise in (0,amount_paise));
+alter table private.production_payment_orders add constraint production_payment_refunded_check check(refunded_paise between 0 and amount_paise);
+alter table private.production_payment_orders add constraint production_payment_provider_refunded_check check(provider_refunded_paise between 0 and amount_paise);
+alter table private.production_payment_orders add constraint production_payment_funding_mode_check check((
+  (terms->>'version' in ('operator-managed-v1','operator-managed-priced-v1') and terms->>'fundingMode'='operator_managed' and funding_evidence_id is null)
+  or (terms->>'version' not in ('operator-managed-v1','operator-managed-priced-v1') and not(terms ? 'fundingMode') and funding_evidence_id is not null)
+) is true);
+alter table private.production_payment_orders drop column state;
+alter table private.production_payment_orders add column state text generated always as (case
+  when review_required then 'review_required'
+  when refunded_paise=amount_paise then 'refunded'
+  when refunded_paise>0 then 'partially_refunded'
+  when refund_hold then 'refund_pending'
+  when captured_paise=amount_paise then 'captured'
+  when creation_uncertain then 'needs_reconciliation'
+  when provider_order_id is not null then 'created'
+  else 'creating' end) stored;
+alter table private.production_payment_orders add column purpose text generated always as (
+  case when quote->>'version'='inr-payment-verification-v1' then 'verification' else 'annual' end
+) stored;
+drop index private.production_payment_orders_active_business_idx;
+create unique index if not exists production_payment_orders_active_business_idx on private.production_payment_orders(business_id)
+  where purpose='annual' and (refunded_paise<amount_paise or review_required);
+create unique index if not exists production_payment_verification_once_idx on private.production_payment_orders(business_id) where purpose='verification';
+
+create or replace function private.production_payment_identity_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if (new.id,new.business_id,new.user_id,new.request_key,new.environment,new.account_id,new.key_id,new.amount_paise,new.currency,new.quote,new.terms,new.terms_hash,new.funding_evidence_id,new.accepted_at)
+    is distinct from (old.id,old.business_id,old.user_id,old.request_key,old.environment,old.account_id,old.key_id,old.amount_paise,old.currency,old.quote,old.terms,old.terms_hash,old.funding_evidence_id,old.accepted_at) then
+    raise exception 'Payment identity and accepted quote are immutable' using errcode='23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger production_payment_identity_guard before update on private.production_payment_orders
+  for each row execute function private.production_payment_identity_guard();
+revoke all on function private.production_payment_identity_guard() from public,anon,authenticated,service_role;
+
+alter table private.production_payment_effects drop constraint production_payment_effects_check;
+alter table private.production_payment_effects add constraint production_payment_effect_identity_check check(
+  (kind='capture' and provider_id=payment_id) or (kind='refund' and provider_id ~ '^rfnd_[A-Za-z0-9]{1,100}$'));
+create or replace function private.production_payment_effect_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare payment private.production_payment_orders;
+begin
+  select * into payment from private.production_payment_orders where id=new.order_id;
+  if not found or new.account_id is distinct from payment.account_id or new.amount_paise>payment.amount_paise
+    or (new.kind='capture' and new.amount_paise<>payment.amount_paise) then
+    raise exception 'Payment effect must match the saved order amount' using errcode='23514';
+  end if;
+  return new;
+end;
+$$;
+create trigger production_payment_effect_guard before insert or update on private.production_payment_effects
+  for each row execute function private.production_payment_effect_guard();
+revoke all on function private.production_payment_effect_guard() from public,anon,authenticated,service_role;
+
+create or replace function public.production_payment_order_claim(
+  p_business_id uuid,p_user_id uuid,p_request_key uuid,p_order_id uuid,
+  p_account_id text,p_key_id text,p_quote jsonb,p_terms text,p_terms_hash text,p_funding_evidence_id uuid
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare saved private.production_payment_orders; policy jsonb; verification boolean; amount bigint;
+begin
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||p_account_id,0));
+  perform 1 from public.businesses where id=p_business_id and owner_id=p_user_id for update;
+  if not found then raise exception 'Payment owner not found' using errcode='23514'; end if;
+  if p_terms is null or octet_length(p_terms)>32768 or p_terms_hash is distinct from encode(sha256(convert_to(p_terms,'UTF8')),'hex') then
+    raise exception 'Payment terms digest mismatch' using errcode='23514';
+  end if;
+  policy := p_terms::jsonb;
+  amount := (p_quote->>'totalPaise')::bigint;
+  verification := coalesce(p_quote->>'version'='inr-payment-verification-v1',false);
+  if not private.production_payment_contract_valid(amount,p_quote,policy) then
+    raise exception 'Invalid payment quote contract' using errcode='23514';
+  end if;
+  if policy->>'version'='operator-managed-priced-v1' then
+    if p_funding_evidence_id is not null or (policy->>'approvedAt')::timestamptz>clock_timestamp()
+      or (verification and not ((policy#>>'{verification,businessId}')::uuid=p_business_id
+        and (policy#>>'{verification,userId}')::uuid=p_user_id
+        and (policy#>>'{verification,expiresAt}')::timestamptz>clock_timestamp()
+        and (policy#>>'{verification,expiresAt}')::timestamptz<=clock_timestamp()+interval '24 hours') is true) then
+      raise exception 'Verification scope or pricing approval is unavailable' using errcode='23514';
+    end if;
+  elsif policy->>'version'='operator-managed-v1' then
+    if p_funding_evidence_id is not null or policy is distinct from $policy${"version":"operator-managed-v1","fundingMode":"operator_managed","approvalReference":"https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848530300","approvedAt":"2026-09-26T17:58:20Z","serviceScope":"INR 10,000 total for 12 months for one business, one offer and one service area, including up to two creatives and one capped Meta campaign. INR 2,000 is allocated to service and INR 8,000 to advertising including applicable Meta taxes. AdBrain absorbs gateway fees. No extra checkout charge, automatic renewal, year-round ad delivery or guaranteed results. The operator pays Meta separately; payment to AdBrain is not confirmation of a transfer to Meta or permission to activate ads.","invoiceTerms":"The invoice will reflect Vanshul Goyal's actual tax status and applicable law. This payment receipt is not a tax invoice and makes no GST-registration claim. No additional checkout charge applies. Mandatory customer rights remain applicable.","refundTerms":"Full refund before work starts. After work starts, unused advertising allocation is refundable after pending costs are reconciled. The INR 2,000 service allocation is earned only after the agreed creatives and campaign setup are delivered; otherwise it remains refundable. Mandatory customer rights remain applicable."}$policy$::jsonb
+      or (policy->>'approvedAt')::timestamptz>clock_timestamp() then
+      raise exception 'Operator-managed policy is not approved' using errcode='23514';
+    end if;
+  else
+    if not ((jsonb_typeof(policy)='object'
+      and policy-array['version','approvalReference','approvedAt','expiresAt','serviceScope','invoiceTerms','refundTerms','automaticFundingApprovalReference']='{}'::jsonb
+      and (policy->>'version') ~ '^[a-z0-9][a-z0-9-]{0,63}$'
+      and (policy->>'approvalReference')::uuid is not null and (policy->>'automaticFundingApprovalReference')::uuid is not null
+      and length(trim(policy->>'serviceScope')) between 1 and 8000
+      and length(trim(policy->>'invoiceTerms')) between 1 and 8000 and length(trim(policy->>'refundTerms')) between 1 and 8000
+      and isfinite((policy->>'approvedAt')::timestamptz) and (policy->>'approvedAt')::timestamptz<=clock_timestamp()
+      and isfinite((policy->>'expiresAt')::timestamptz) and (policy->>'expiresAt')::timestamptz>clock_timestamp()) is true)
+      or not public.production_payment_funding_valid(p_business_id,p_funding_evidence_id) then
+      raise exception 'Legacy policy or automatic funding evidence unavailable' using errcode='23514';
+    end if;
+  end if;
+  select * into saved from private.production_payment_orders where business_id=p_business_id
+    and (request_key=p_request_key or (purpose=case when verification then 'verification' else 'annual' end
+      and (verification or refunded_paise<amount_paise or review_required)))
+    order by (request_key=p_request_key) desc limit 1;
+  if found then
+    if saved.user_id is distinct from p_user_id or saved.account_id is distinct from p_account_id or saved.key_id is distinct from p_key_id
+      or saved.terms_hash is distinct from p_terms_hash or saved.terms is distinct from policy or saved.quote is distinct from p_quote
+      or saved.funding_evidence_id is distinct from p_funding_evidence_id then
+      raise exception 'Payment request scope changed' using errcode='23514';
+    end if;
+    return jsonb_build_object('claimed',false,'order',to_jsonb(saved));
+  end if;
+  insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,amount_paise,quote,terms,terms_hash,funding_evidence_id)
+    values(p_order_id,p_business_id,p_user_id,p_request_key,p_account_id,p_key_id,amount,p_quote,policy,p_terms_hash,p_funding_evidence_id)
+    returning * into saved;
+  return jsonb_build_object('claimed',true,'order',to_jsonb(saved));
+end;
+$$;
+
+create or replace function public.production_payment_orders_list(p_business_id uuid,p_user_id uuid)
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(to_jsonb(payment)),'[]'::jsonb) from (
+    select orders.* from private.production_payment_orders orders
+    join public.businesses business on business.id=orders.business_id and business.owner_id=p_user_id
+    where orders.business_id=p_business_id and orders.user_id=p_user_id
+    order by (orders.purpose='verification') desc,orders.accepted_at desc limit 20
+  ) payment;
+$$;
+
+create or replace function public.production_payment_observe(
+  p_order_id uuid,p_account_id text,p_key_id text,p_payment_id text,p_capture_verified boolean,
+  p_provider_refunded_paise bigint,p_review_required boolean,p_snapshot_hash text,
+  p_refund_id text default null,p_refund_amount_paise bigint default null,p_refund_status text default null
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare saved private.production_payment_orders; existing private.production_payment_effects; refund_total bigint;
+begin
+  if not ((p_payment_id ~ '^pay_[A-Za-z0-9]{1,100}$' and p_capture_verified is not null and p_review_required is not null
+    and p_provider_refunded_paise between 0 and 1000000 and p_snapshot_hash ~ '^[a-f0-9]{64}$'
+    and ((p_refund_id is null and p_refund_amount_paise is null and p_refund_status is null)
+      or (p_refund_id ~ '^rfnd_[A-Za-z0-9]{1,100}$' and p_refund_amount_paise between 1 and 1000000 and p_refund_status in ('pending','processed','failed')))) is true) then
+    raise exception 'Invalid payment observation' using errcode='23514';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||p_account_id,0));
+  select * into saved from private.production_payment_orders where id=p_order_id and account_id=p_account_id and key_id=p_key_id for update;
+  if not found or saved.provider_order_id is null then raise exception 'Payment order not ready' using errcode='23514'; end if;
+  if p_provider_refunded_paise>saved.amount_paise or p_refund_amount_paise>saved.amount_paise then
+    update private.production_payment_orders set review_required=true,updated_at=clock_timestamp() where id=p_order_id returning * into saved;
+    return to_jsonb(saved);
+  end if;
+  update private.production_payment_orders set
+    review_required=review_required or p_review_required
+      or (payment_id is not null and payment_id<>p_payment_id and (p_capture_verified or p_refund_id is not null or p_provider_refunded_paise>0))
+      or exists(select 1 from private.production_payment_effects where order_id=p_order_id and payment_id<>p_payment_id)
+      or exists(select 1 from private.production_payment_events where account_id=p_account_id
+        and (payment_id=p_payment_id or provider_order_id=saved.provider_order_id) and (conflicted or kind='dispute'))
+      or exists(select 1 from private.production_payment_event_conflicts where account_id=p_account_id
+        and (payment_id=p_payment_id or provider_order_id=saved.provider_order_id)),
+    refund_hold=refund_hold or p_refund_id is not null or p_provider_refunded_paise>0
+      or exists(select 1 from private.production_payment_events where account_id=p_account_id
+        and (payment_id=p_payment_id or provider_order_id=saved.provider_order_id) and kind='refund'),
+    provider_refunded_paise=greatest(provider_refunded_paise,p_provider_refunded_paise),updated_at=clock_timestamp()
+    where id=p_order_id returning * into saved;
+  if p_capture_verified then
+    select * into existing from private.production_payment_effects where account_id=p_account_id and kind='capture' and provider_id=p_payment_id;
+    if (found and (existing.order_id<>p_order_id or existing.amount_paise<>saved.amount_paise))
+      or (saved.payment_id is not null and saved.payment_id<>p_payment_id) then
+      update private.production_payment_orders set review_required=true where id in (p_order_id,existing.order_id);
+    else
+      insert into private.production_payment_effects(account_id,kind,provider_id,payment_id,order_id,amount_paise,snapshot_hash)
+        values(p_account_id,'capture',p_payment_id,p_payment_id,p_order_id,saved.amount_paise,p_snapshot_hash) on conflict do nothing;
+      update private.production_payment_orders set captured_paise=amount_paise,payment_id=p_payment_id where id=p_order_id;
+    end if;
+  end if;
+  if p_refund_id is not null and (saved.payment_id is null or saved.payment_id=p_payment_id) then
+    select * into existing from private.production_payment_effects where account_id=p_account_id and kind='refund' and provider_id=p_refund_id;
+    if found and (existing.order_id<>p_order_id or existing.payment_id<>p_payment_id or existing.amount_paise<>p_refund_amount_paise or p_refund_status='failed') then
+      update private.production_payment_orders set review_required=true where id in (p_order_id,existing.order_id);
+    elsif p_refund_status='processed' then
+      select coalesce(sum(amount_paise),0) into refund_total from private.production_payment_effects where order_id=p_order_id and kind='refund' and provider_id<>p_refund_id;
+      if refund_total+p_refund_amount_paise>saved.amount_paise then
+        update private.production_payment_orders set review_required=true where id=p_order_id;
+      else
+        insert into private.production_payment_effects(account_id,kind,provider_id,payment_id,order_id,amount_paise,snapshot_hash)
+          values(p_account_id,'refund',p_refund_id,p_payment_id,p_order_id,p_refund_amount_paise,p_snapshot_hash) on conflict do nothing;
+        update private.production_payment_orders set refunded_paise=refund_total+p_refund_amount_paise where id=p_order_id;
+      end if;
+    end if;
+  end if;
+  select * into saved from private.production_payment_orders where id=p_order_id;
+  return to_jsonb(saved);
+end;
+$$;
+
+create or replace function public.customer_ad_balance(p_business_id uuid,p_user_id uuid,p_account_id text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  captured bigint; refunded bigint; service_allocation bigint; advertising bigint; ad_refunded bigint;
+  media bigint; tax bigint; reserved bigint; held boolean; cost_held boolean;
+begin
+  if not exists(select 1 from public.businesses where id=p_business_id and owner_id=p_user_id) then
+    raise exception 'Customer owner not found' using errcode='42501';
+  end if;
+  select coalesce(sum(payment.captured_paise),0),coalesce(sum(payment.refunded_paise),0),
+    coalesce(sum(case when payment.captured_paise=payment.amount_paise then (payment.quote->>'serviceAllocationPaise')::bigint else 0 end),0),
+    coalesce(sum(case when payment.captured_paise=payment.amount_paise then (payment.quote->>'metaAllocationPaise')::bigint else 0 end),0),
+    coalesce(sum(case when payment.refunded_paise=payment.amount_paise then (payment.quote->>'metaAllocationPaise')::bigint else coalesce(allocation.advertising_refunded_paise,0) end),0),
+    coalesce(bool_or(payment.review_required or payment.provider_refunded_paise<>payment.refunded_paise
+      or (payment.purpose<>'verification' and payment.refunded_paise>0 and payment.refunded_paise<payment.amount_paise
+        and coalesce(allocation.service_refunded_paise+allocation.advertising_refunded_paise,-1)<>payment.refunded_paise)
+      or (payment.refund_hold and payment.refunded_paise=0)
+      or exists(select 1 from private.production_payment_refunds refund where refund.order_id=payment.id and refund.state in ('creating','submitted','needs_reconciliation'))
+      or exists(select 1 from private.production_payment_events event where event.account_id=p_account_id
+        and (event.payment_id=payment.payment_id or event.provider_order_id=payment.provider_order_id)
+        and event.processed_at is null and event.kind in ('refund','dispute'))
+      or (payment.captured_paise>0 and not exists(select 1 from private.production_payment_effects effect
+        where effect.account_id=p_account_id and effect.order_id=payment.id and effect.kind='capture'
+          and effect.payment_id=payment.payment_id and effect.amount_paise=payment.captured_paise))),false)
+    into captured,refunded,service_allocation,advertising,ad_refunded,held
+    from private.production_payment_orders payment
+    left join private.customer_refund_allocations allocation on allocation.order_id=payment.id
+    where payment.business_id=p_business_id and payment.user_id=p_user_id and payment.account_id=p_account_id and payment.environment='live';
+  select coalesce(sum(cost.media_paise),0),coalesce(sum(cost.tax_paise),0),
+    coalesce(bool_or(cost.held or (not cost.finalized and cost.observed_at<clock_timestamp()-interval '15 minutes')),false)
+    into media,tax,cost_held from private.customer_ad_costs cost where cost.business_id=p_business_id and cost.account_id=p_account_id;
+  select coalesce(sum(greatest(reservation.ceiling_paise-coalesce(cost.media_paise,0)-coalesce(cost.tax_paise,0),0)),0)
+    into reserved from private.customer_ad_reservations reservation
+    left join private.customer_ad_costs cost on cost.campaign_id=reservation.campaign_id
+    where reservation.business_id=p_business_id and reservation.account_id=p_account_id and reservation.state<>'closed';
+  held := held or cost_held or media+tax+reserved>advertising-ad_refunded
+    or exists(select 1 from private.customer_ad_reservations reservation
+      left join private.customer_ad_costs cost on cost.campaign_id=reservation.campaign_id
+      where reservation.business_id=p_business_id and reservation.account_id=p_account_id and reservation.state<>'closed'
+        and (cost.campaign_id is null or ceil(reservation.daily_budget_paise::numeric*7*(10000+cost.tax_rate_bps)/10000)
+          >reservation.ceiling_paise-cost.media_paise-cost.tax_paise))
+    or exists(select 1 from public.campaigns campaign where campaign.business_id=p_business_id and campaign.status='active'
+      and not exists(select 1 from private.customer_ad_reservations reservation where reservation.campaign_id=campaign.id
+        and reservation.account_id=p_account_id and reservation.state<>'closed'));
+  return jsonb_build_object('businessId',p_business_id,'currency','INR','capturedPaise',captured,'refundedPaise',refunded,
+    'serviceAllocationPaise',service_allocation,'advertisingAllocationPaise',advertising,'advertisingRefundedPaise',ad_refunded,
+    'serviceEarnedPaise',coalesce((select sum(allocation.service_earned_paise) from private.customer_refund_allocations allocation
+      join private.production_payment_orders payment on payment.id=allocation.order_id where payment.business_id=p_business_id and payment.account_id=p_account_id),0),
+    'mediaCostPaise',media,'taxCostPaise',tax,'reservedPaise',reserved,
+    'remainingPaise',case when held then 0 else greatest(advertising-ad_refunded-media-tax-reserved,0) end,
+    'held',held,'reason',case when held then 'Payment, refund or cost reconciliation is required.' else null end,
+    'reservations',coalesce((select jsonb_agg(jsonb_build_object('campaignId',campaign_id,'reservationId',id,'state',state))
+      from private.customer_ad_reservations where business_id=p_business_id and account_id=p_account_id),'[]'::jsonb));
+end;
+$$;
+
+alter table private.customer_refund_allocations drop constraint customer_refund_allocations_service_earned_paise_check;
+alter table private.customer_refund_allocations add constraint customer_refund_service_earned_check check(service_earned_paise between 0 and 200000);
+
+create or replace function public.customer_ad_refund_allocation(p_business_id uuid,p_actor_id uuid,p_account_id text,p_order_id uuid,
+  p_service_refunded_paise bigint,p_advertising_refunded_paise bigint,p_service_earned_paise bigint,p_evidence_reference uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare payment private.production_payment_orders; previous private.customer_refund_allocations;
+  evidence jsonb; saved_evidence private.customer_refund_allocation_evidence;
+begin
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||p_account_id,0));
+  if not public.production_payment_operator_allowed(p_actor_id,true) then raise exception 'Financial operator required' using errcode='42501'; end if;
+  select * into payment from private.production_payment_orders where id=p_order_id and business_id=p_business_id and account_id=p_account_id and environment='live';
+  if not found or not ((payment.captured_paise=payment.amount_paise and p_service_refunded_paise between 0 and (payment.quote->>'serviceAllocationPaise')::bigint
+    and p_advertising_refunded_paise between 0 and (payment.quote->>'metaAllocationPaise')::bigint
+    and p_service_refunded_paise+p_advertising_refunded_paise=case when payment.purpose='verification' then 0 else payment.refunded_paise end
+    and p_service_earned_paise in (0,(payment.quote->>'serviceAllocationPaise')::bigint)
+    and p_service_earned_paise+p_service_refunded_paise<=(payment.quote->>'serviceAllocationPaise')::bigint and p_evidence_reference is not null) is true) then
+    raise exception 'Refund allocation must match verified payment and delivery evidence' using errcode='23514';
+  end if;
+  evidence:=jsonb_build_object('serviceRefunded',p_service_refunded_paise,'advertisingRefunded',p_advertising_refunded_paise,'serviceEarned',p_service_earned_paise);
+  select * into saved_evidence from private.customer_refund_allocation_evidence where reference=p_evidence_reference;
+  if found then
+    if saved_evidence.order_id<>p_order_id or saved_evidence.actor_id<>p_actor_id or saved_evidence.input<>evidence then
+      raise exception 'Refund allocation evidence conflict' using errcode='23514';
+    end if;
+    return;
+  end if;
+  select * into previous from private.customer_refund_allocations where order_id=p_order_id;
+  if found and (p_service_refunded_paise<previous.service_refunded_paise or p_advertising_refunded_paise<previous.advertising_refunded_paise
+    or p_service_earned_paise<previous.service_earned_paise) then raise exception 'Financial allocations cannot be silently reduced' using errcode='23514'; end if;
+  insert into private.customer_refund_allocation_evidence(reference,order_id,actor_id,input) values(p_evidence_reference,p_order_id,p_actor_id,evidence);
+  insert into private.customer_refund_allocations(order_id,service_refunded_paise,advertising_refunded_paise,service_earned_paise,evidence_reference,actor_id)
+    values(p_order_id,p_service_refunded_paise,p_advertising_refunded_paise,p_service_earned_paise,p_evidence_reference,p_actor_id)
+    on conflict(order_id) do update set service_refunded_paise=excluded.service_refunded_paise,advertising_refunded_paise=excluded.advertising_refunded_paise,
+      service_earned_paise=excluded.service_earned_paise,evidence_reference=excluded.evidence_reference,actor_id=excluded.actor_id;
+end;
+$$;
+
+revoke all on function public.production_payment_order_claim(uuid,uuid,uuid,uuid,text,text,jsonb,text,text,uuid),
+  public.production_payment_orders_list(uuid,uuid),public.production_payment_observe(uuid,text,text,text,boolean,bigint,boolean,text,text,bigint,text),
+  public.customer_ad_refund_allocation(uuid,uuid,text,uuid,bigint,bigint,bigint,uuid) from public,anon,authenticated;
+grant execute on function public.production_payment_order_claim(uuid,uuid,uuid,uuid,text,text,jsonb,text,text,uuid),
+  public.production_payment_orders_list(uuid,uuid),public.production_payment_observe(uuid,text,text,text,boolean,bigint,boolean,text,text,bigint,text),
+  public.customer_ad_refund_allocation(uuid,uuid,text,uuid,bigint,bigint,bigint,uuid) to service_role;
+
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '30s';
+
+alter table private.creative_generation_intents
+  add column if not exists receipt_version integer not null default 0;
+alter table private.creative_generation_intents
+  alter column receipt_version set default 1;
+
+create table if not exists private.creative_generation_reconciliations (
+  generation_id uuid primary key references private.creative_generation_intents(generation_id) on delete restrict,
+  business_id uuid not null,
+  user_id uuid not null,
+  operator_ref text not null,
+  evidence_ref text not null,
+  outcome text not null,
+  previous_accounted_tokens bigint not null,
+  previous_reserved_tokens bigint not null,
+  verified_tokens bigint not null,
+  adjustment_tokens bigint not null,
+  saved_count integer not null,
+  reconciled_at timestamptz not null default clock_timestamp()
+);
+alter table private.creative_generation_reconciliations enable row level security;
+revoke all on private.creative_generation_reconciliations from public, anon, authenticated, service_role;
+
+create or replace function private.creative_generation_reconciliation_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if exists(select 1 from private.creative_generation_reconciliations
+    where generation_id=old.generation_id) then
+    raise exception 'Reconciled generation is immutable' using errcode='23514';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists creative_generation_reconciliation_guard on private.creative_generation_intents;
+create trigger creative_generation_reconciliation_guard before update
+  on private.creative_generation_intents for each row
+  execute function private.creative_generation_reconciliation_guard();
+
+create or replace function private.creative_generation_settled_write_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare target_id uuid;
+begin
+  if tg_op in ('UPDATE','DELETE') then
+    if tg_table_name='llm_usage_events' then
+      if old.route='creatives.generate' and (old.metadata->>'generationId') ~*
+        '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+        target_id:=(old.metadata->>'generationId')::uuid;
+      end if;
+    else
+      target_id:=old.variant_group;
+    end if;
+    if target_id is not null then
+      perform 1 from private.creative_generation_intents
+        where generation_id=target_id for share;
+      if exists(select 1 from private.creative_generation_reconciliations
+        where generation_id=target_id) then
+        raise exception 'Reconciled generation cannot change receipts' using errcode='23514';
+      end if;
+    end if;
+    if tg_op='DELETE' then return old; end if;
+    target_id:=null;
+  end if;
+  if tg_table_name='llm_usage_events' then
+    if new.route='creatives.generate' and (new.metadata->>'generationId') ~*
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      target_id:=(new.metadata->>'generationId')::uuid;
+    end if;
+  else
+    target_id:=new.variant_group;
+  end if;
+  if target_id is not null then
+    perform 1 from private.creative_generation_intents
+      where generation_id=target_id for share;
+    if exists(select 1 from private.creative_generation_reconciliations
+      where generation_id=target_id) then
+      raise exception 'Reconciled generation cannot accept late receipts' using errcode='23514';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists creative_generation_settled_usage_guard on public.llm_usage_events;
+create trigger creative_generation_settled_usage_guard before insert or update or delete
+  on public.llm_usage_events for each row
+  execute function private.creative_generation_settled_write_guard();
+drop trigger if exists creative_generation_settled_creative_guard on public.creatives;
+create trigger creative_generation_settled_creative_guard before insert or update of business_id, variant_group
+  on public.creatives for each row
+  execute function private.creative_generation_settled_write_guard();
+
+create or replace function public.creative_generation_status(p_business_id uuid,p_user_id uuid,p_generation_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  intent private.creative_generation_intents;
+  period_start date := date_trunc('month', timezone('UTC', clock_timestamp()))::date;
+begin
+  if not exists(select 1 from public.businesses where id=p_business_id and owner_id=p_user_id) then
+    return jsonb_build_object('status','unknown');
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('creative-id:'||p_generation_id,0));
+  select * into intent from private.creative_generation_intents where generation_id=p_generation_id;
+  if not found then
+    insert into private.creative_generation_intents(generation_id,business_id,user_id,request_hash,expected_count,month_start,reserved_tokens,image_floor_tokens,state)
+      values(p_generation_id,p_business_id,p_user_id,repeat('0',64),1,period_start,0,0,'abandoned');
+    return jsonb_build_object('status','unknown');
+  end if;
+  if intent.business_id<>p_business_id or intent.user_id<>p_user_id or intent.state='abandoned' then
+    return jsonb_build_object('status','unknown');
+  end if;
+  return jsonb_build_object('status',case when intent.state in ('processing','partial')
+    and intent.updated_at < clock_timestamp()-interval '5 minutes'
+    and not exists(select 1 from private.creative_generation_reconciliations where generation_id=p_generation_id)
+    then 'unresolved' else intent.state end,'expectedCount',intent.expected_count);
+end;
+$$;
+
+create or replace function public.creative_generation_progress(
+  p_business_id uuid,p_user_id uuid,p_generation_id uuid,p_accounted_tokens bigint default 0,
+  p_complete boolean default false,p_uncertain boolean default false,p_failed boolean default false)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare intent private.creative_generation_intents; saved_count integer;
+begin
+  if p_accounted_tokens is null or p_accounted_tokens not between 0 and 9007199254740991 then
+    raise exception 'Invalid recorded usage' using errcode='22023';
+  end if;
+  select * into intent from private.creative_generation_intents
+    where generation_id=p_generation_id and business_id=p_business_id and user_id=p_user_id for update;
+  if not found or not exists(select 1 from public.businesses where id=p_business_id and owner_id=p_user_id) then
+    return jsonb_build_object('status','unknown');
+  end if;
+  if intent.state='abandoned' then return jsonb_build_object('status','unknown'); end if;
+  if intent.state in ('complete','failed')
+    or exists(select 1 from private.creative_generation_reconciliations where generation_id=p_generation_id) then
+    return jsonb_build_object('status',intent.state);
+  end if;
+  select count(*) into saved_count from public.creatives where business_id=p_business_id and variant_group=p_generation_id;
+  update private.creative_generation_intents set
+    accounted_tokens=accounted_tokens+p_accounted_tokens,
+    reserved_tokens=case when intent.state<>'unresolved' and not p_uncertain and p_complete and saved_count>=intent.expected_count
+      then accounted_tokens+p_accounted_tokens+intent.image_floor_tokens
+      when intent.state<>'unresolved' and not p_uncertain and p_complete and p_failed and saved_count=0
+      then accounted_tokens+p_accounted_tokens
+      else greatest(reserved_tokens,accounted_tokens+p_accounted_tokens) end,
+    state=case when intent.state='unresolved' or p_uncertain then 'unresolved'
+      when p_complete and p_failed and saved_count=0 then 'failed'
+      when p_complete and saved_count>=intent.expected_count then 'complete'
+      when saved_count>0 then 'partial' else 'processing' end,
+    updated_at=clock_timestamp()
+    where generation_id=p_generation_id returning * into intent;
+  return jsonb_build_object('status',intent.state,'count',saved_count,'expectedCount',intent.expected_count);
+end;
+$$;
+
+create or replace function public.creative_generation_reconcile(
+  p_business_id uuid, p_user_id uuid, p_generation_id uuid,
+  p_operator_ref text, p_evidence_ref text, p_outcome text,
+  p_verified_tokens bigint, p_expected_accounted bigint, p_expected_reserved bigint)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  intent private.creative_generation_intents;
+  saved_count integer;
+  recorded_tokens bigint;
+  adjustment_tokens bigint;
+  final_reserved bigint;
+begin
+  if p_business_id is null or p_user_id is null or p_generation_id is null
+    or p_operator_ref is null or p_operator_ref !~ '^[A-Za-z0-9._:-]{3,100}$'
+    or p_evidence_ref is null or p_evidence_ref !~ '^[A-Za-z0-9._:-]{8,200}$'
+    or p_outcome is null or p_outcome not in ('failed','partial','complete')
+    or p_verified_tokens is null or p_verified_tokens not between 0 and 9007199254740991
+    or p_expected_accounted is null or p_expected_accounted not between 0 and 9007199254740991
+    or p_expected_reserved is null or p_expected_reserved not between 0 and 9007199254740991 then
+    raise exception 'Invalid reconciliation evidence' using errcode='22023';
+  end if;
+  select * into intent from private.creative_generation_intents
+    where generation_id=p_generation_id for update;
+  if not found or intent.business_id<>p_business_id or intent.user_id<>p_user_id
+    or not exists(select 1 from public.businesses where id=p_business_id and owner_id=p_user_id) then
+    raise exception 'Generation is not owned by this tenant' using errcode='42501';
+  end if;
+  if exists(select 1 from private.creative_generation_reconciliations where generation_id=p_generation_id) then
+    raise exception 'Generation already reconciled' using errcode='23505';
+  end if;
+  if intent.state<>'unresolved' or intent.receipt_version<>1
+    or intent.accounted_tokens<>p_expected_accounted or intent.reserved_tokens<>p_expected_reserved then
+    raise exception 'Generation is not eligible for reconciliation' using errcode='23514';
+  end if;
+  select count(*) into saved_count from public.creatives
+    where business_id=p_business_id and variant_group=p_generation_id;
+  if (p_outcome='failed' and saved_count<>0)
+    or (p_outcome='partial' and (saved_count<1 or saved_count>=intent.expected_count))
+    or (p_outcome='complete' and saved_count<>intent.expected_count) then
+    raise exception 'Reconciliation outcome contradicts saved creatives' using errcode='23514';
+  end if;
+  select coalesce(sum(total_tokens),0) into recorded_tokens from public.llm_usage_events
+    where business_id=p_business_id and user_id=p_user_id and route='creatives.generate'
+      and metadata->>'generationId'=p_generation_id::text;
+  if p_verified_tokens<greatest(recorded_tokens,intent.accounted_tokens)
+    or p_verified_tokens+intent.image_floor_tokens>9007199254740991 then
+    raise exception 'Verified usage cannot reduce recorded exposure' using errcode='23514';
+  end if;
+  adjustment_tokens:=p_verified_tokens-recorded_tokens;
+  if adjustment_tokens>0 then
+    insert into public.llm_usage_events(business_id,user_id,route,provider,model,
+      total_tokens,request_id,status,metadata)
+    values(p_business_id,p_user_id,'creatives.generate','operator-attested','reconciliation',
+      adjustment_tokens,p_generation_id::text,'error',
+      jsonb_build_object('generationId',p_generation_id,'evidenceRef',p_evidence_ref,
+        'operatorAdjustment',true,'providerFinalStatus','unknown'));
+  end if;
+  final_reserved:=p_verified_tokens+case when saved_count>0 then intent.image_floor_tokens else 0 end;
+  update private.creative_generation_intents set
+    accounted_tokens=p_verified_tokens,reserved_tokens=final_reserved,
+    state=p_outcome,updated_at=clock_timestamp()
+    where generation_id=p_generation_id;
+  insert into private.creative_generation_reconciliations(generation_id,business_id,user_id,
+    operator_ref,evidence_ref,outcome,previous_accounted_tokens,previous_reserved_tokens,
+    verified_tokens,adjustment_tokens,saved_count)
+  values(p_generation_id,p_business_id,p_user_id,p_operator_ref,p_evidence_ref,p_outcome,
+    intent.accounted_tokens,intent.reserved_tokens,p_verified_tokens,adjustment_tokens,saved_count);
+  return jsonb_build_object('status',p_outcome,'count',saved_count,'verifiedTokens',p_verified_tokens);
+end;
+$$;
+
+revoke all on function public.creative_generation_reconcile(uuid,uuid,uuid,text,text,text,bigint,bigint,bigint)
+  from public, anon, authenticated;
+grant execute on function public.creative_generation_reconcile(uuid,uuid,uuid,text,text,text,bigint,bigint,bigint)
+  to service_role;
+commit;
+
+create table if not exists public.product_event_daily (
+  day date not null,
+  environment text not null,
+  release text not null,
+  kind text not null,
+  name text not null,
+  outcome text not null,
+  route text not null,
+  action text not null,
+  viewport text not null,
+  provider text not null,
+  model text not null,
+  event_count bigint not null check(event_count > 0),
+  timed_event_count bigint not null check(timed_event_count >= 0),
+  duration_sum_ms bigint not null check(duration_sum_ms >= 0),
+  duration_max_ms integer not null check(duration_max_ms >= 0),
+  input_tokens numeric not null check(input_tokens >= 0),
+  output_tokens numeric not null check(output_tokens >= 0),
+  total_tokens numeric not null check(total_tokens >= 0),
+  estimated_cost_usd numeric not null check(estimated_cost_usd >= 0),
+  item_count numeric not null check(item_count >= 0),
+  failed_item_count numeric not null check(failed_item_count >= 0),
+  primary key(day,environment,release,kind,name,outcome,route,action,viewport,provider,model)
+);
+
+alter table public.product_event_daily enable row level security;
+revoke all on public.product_event_daily from public,anon,authenticated,service_role;
+grant select on public.product_event_daily to service_role;
+
+create or replace function public.prune_product_events()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare removed_count integer;
+begin
+  if not pg_try_advisory_xact_lock(hashtextextended('adbrain:product-event-retention',0)) then return 0; end if;
+  with expired as (
+    select event_id from public.product_events
+    where created_at < now() - interval '90 days'
+    order by created_at,event_id limit 10000 for update skip locked
+  ), removed as (
+    delete from public.product_events event using expired
+    where event.event_id=expired.event_id returning event.*
+  ), rolled_up as (
+    insert into public.product_event_daily as daily
+      (day,environment,release,kind,name,outcome,route,action,viewport,provider,model,
+       event_count,timed_event_count,duration_sum_ms,duration_max_ms,input_tokens,output_tokens,total_tokens,
+       estimated_cost_usd,item_count,failed_item_count)
+    select (created_at at time zone 'UTC')::date,
+      coalesce(attributes->>'environment','unknown'),coalesce(attributes->>'release',''),kind,name,outcome,
+      coalesce(attributes->>'route',''),coalesce(attributes->>'action',''),coalesce(attributes->>'viewport',''),
+      coalesce(attributes->>'provider',''),coalesce(attributes->>'model',''),
+      count(*),count(duration_ms),coalesce(sum(duration_ms),0),coalesce(max(duration_ms),0),
+      sum(case when jsonb_typeof(attributes->'inputTokens')='number' then greatest((attributes->>'inputTokens')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'outputTokens')='number' then greatest((attributes->>'outputTokens')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'totalTokens')='number' then greatest((attributes->>'totalTokens')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'estimatedCostUsd')='number' then greatest((attributes->>'estimatedCostUsd')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'count')='number' then greatest((attributes->>'count')::numeric,0) else 0 end),
+      sum(case when jsonb_typeof(attributes->'failedCount')='number' then greatest((attributes->>'failedCount')::numeric,0) else 0 end)
+    from removed where (created_at at time zone 'UTC')::date >= (now() at time zone 'UTC')::date - 730
+    group by 1,2,3,4,5,6,7,8,9,10,11
+    on conflict(day,environment,release,kind,name,outcome,route,action,viewport,provider,model) do update set
+      event_count=daily.event_count+excluded.event_count,
+      timed_event_count=daily.timed_event_count+excluded.timed_event_count,
+      duration_sum_ms=daily.duration_sum_ms+excluded.duration_sum_ms,
+      duration_max_ms=greatest(daily.duration_max_ms,excluded.duration_max_ms),
+      input_tokens=daily.input_tokens+excluded.input_tokens,
+      output_tokens=daily.output_tokens+excluded.output_tokens,
+      total_tokens=daily.total_tokens+excluded.total_tokens,
+      estimated_cost_usd=daily.estimated_cost_usd+excluded.estimated_cost_usd,
+      item_count=daily.item_count+excluded.item_count,
+      failed_item_count=daily.failed_item_count+excluded.failed_item_count
+    returning 1
+  ) select count(*) into removed_count from removed;
+  delete from public.product_event_daily where ctid in (
+    select ctid from public.product_event_daily
+    where day < (now() at time zone 'UTC')::date - 730
+    order by day limit 10000 for update skip locked
+  );
+  return removed_count;
+end;
+$$;
+
+revoke all on function public.prune_product_events() from public,anon,authenticated;
+grant execute on function public.prune_product_events() to service_role;

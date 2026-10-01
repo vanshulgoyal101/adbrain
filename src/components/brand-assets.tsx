@@ -205,7 +205,7 @@ export function BrandAssets({
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
                 className="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
               />
-              <Button type="submit" disabled={uploading || deleting}>
+              <Button type="submit" data-product-event="asset.upload" disabled={uploading || deleting}>
                 {uploading ? <Spinner /> : <Upload className="h-4 w-4" />}
                 Upload
               </Button>
@@ -242,6 +242,7 @@ export function BrandAssets({
                 <button
                   type="button"
                   onClick={() => remove(a)}
+                  data-product-event="asset.delete"
                   disabled={uploading || deleting}
                   aria-label="Delete asset"
                   className="absolute right-1.5 top-1.5 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"

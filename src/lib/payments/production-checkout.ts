@@ -4,9 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
-import { createAnnualPaymentQuote } from "./allocation";
+import { createAnnualPaymentQuote, productionPaymentQuoteSchema } from "./allocation";
 import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } from "./checkout-request";
-import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError } from "./production-config";
+import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
+  quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
 import { createProductionPaymentClient } from "./razorpay-production";
 import { capturedPaymentMatchesOrder, verifyRazorpayCheckoutSignature, verifyRazorpayWebhookSignature } from "./razorpay-verification";
 
@@ -17,14 +18,18 @@ const amountSchema = z.number().int().min(0).max(1_000_000);
 const orderSchema = z.object({
   id: z.uuid(), business_id: z.uuid(), user_id: z.uuid(), environment: z.literal("live"),
   account_id: identifier("acc"), key_id: z.string().regex(/^rzp_live_[A-Za-z0-9]{1,100}$/),
-  amount_paise: z.literal(1_000_000), currency: z.literal("INR"),
+  amount_paise: amountSchema.min(100), currency: z.literal("INR"), quote: productionPaymentQuoteSchema,
   state: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded"]),
   provider_order_id: identifier("order").nullable(), payment_id: identifier("pay").nullable(),
   captured_paise: amountSchema, refunded_paise: amountSchema, provider_refunded_paise: amountSchema,
   review_required: z.boolean(), refund_hold: z.boolean(), terms: productionPaymentPolicySchema, terms_hash: hashSchema,
   funding_evidence_id: z.uuid().nullable(),
   accepted_at: z.string(),
-}).refine(order => "fundingMode" in order.terms ? order.funding_evidence_id === null : order.funding_evidence_id !== null);
+}).refine(order => ("fundingMode" in order.terms ? order.funding_evidence_id === null : order.funding_evidence_id !== null)
+  && order.amount_paise === order.quote.totalPaise
+  && JSON.stringify(order.quote) === JSON.stringify(productionPaymentQuoteSchema.parse(quoteForPaymentPolicy(order.terms)))
+  && [0, order.amount_paise].includes(order.captured_paise) && order.refunded_paise <= order.amount_paise
+  && order.provider_refunded_paise <= order.amount_paise);
 const refundOperationSchema = z.object({
   id: z.uuid(), order_id: z.uuid(), amount_paise: amountSchema,
   state: z.enum(["creating", "submitted", "needs_reconciliation", "processed", "failed"]), provider_refund_id: identifier("rfnd").nullable(),
@@ -54,22 +59,23 @@ async function stored<Schema extends z.ZodType>(query: {
   return result.data;
 }
 
-function currentPolicy() {
-  try { return getProductionCollectionPolicy(); }
+function currentPolicy(subject?: PaymentSubject) {
+  try { return getProductionCollectionPolicy(process.env, Date.now(), subject); }
   catch (error) {
     if (error instanceof ProductionPaymentError) return null;
     throw error;
   }
 }
 
-async function orderResponse(order: SavedOrder, config: Config) {
-  const policy = currentPolicy();
+async function orderResponse(order: SavedOrder, config: Config, policy = currentPolicy({ businessId: order.business_id, userId: order.user_id,
+  verificationCompleted: order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0,
+  verificationAmountPaise: order.quote.version === "inr-payment-verification-v1" ? order.amount_paise : undefined })) {
   const checkoutAllowed = order.state === "created" && order.provider_order_id && order.account_id === config.accountId && order.key_id === config.keyId
     && policy?.hash === order.terms_hash && ("fundingMode" in order.terms || await stored(createAdminClient().rpc("production_payment_funding_valid", {
       p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id!,
     }), z.boolean()).catch(() => false));
   return {
-    orderId: order.id, environment: "live", status: order.state, amountPaise: order.amount_paise, currency: order.currency,
+    orderId: order.id, environment: "live", status: order.state, amountPaise: order.amount_paise, currency: order.currency, quote: order.quote,
     capturedPaise: order.captured_paise, refundedPaise: order.refunded_paise, reviewRequired: order.review_required,
     providerReportedRefundedPaise: order.provider_refunded_paise, refundReconciliationPending: order.provider_refunded_paise > order.refunded_paise,
     refundHold: order.refund_hold, acceptedAt: order.accepted_at, terms: order.terms, termsHash: order.terms_hash,
@@ -77,7 +83,7 @@ async function orderResponse(order: SavedOrder, config: Config) {
     receipt: order.captured_paise > 0 ? { reference: order.id, paymentId: order.payment_id, merchant: "Vanshul Goyal", amountPaise: order.captured_paise, currency: "INR", isTaxInvoice: false } : null,
     checkout: checkoutAllowed ? {
         key: config.keyId, order_id: order.provider_order_id, amount: order.amount_paise, currency: order.currency,
-        name: "Vanshul Goyal", description: "AdBrain annual service", retry: { enabled: false },
+        name: "Vanshul Goyal", description: order.quote.version === "inr-payment-verification-v1" ? "AdBrain payment verification" : "AdBrain annual service", retry: { enabled: false },
       } : null,
   };
 }
@@ -229,28 +235,46 @@ export async function handleProductionPayments(request: Request, action: Action)
     const limited = await rateLimitResponse(`live-payments:${action}:${user.id}`, { limit: action === "create" || action === "operator" ? 10 : 30, windowMs: 300_000 });
     if (limited) return limited;
     if (action === "read" || action === "create") {
-      const body = action === "read" ? { businessId: new URL(request.url).searchParams.get("businessId") } : await paymentJsonBody(request);
-      const input = parsed(action === "read" ? z.strictObject({ businessId: z.uuid() }) : z.strictObject({
-        businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true),
+      const params = new URL(request.url).searchParams;
+      const requestedAmount = params.get("verificationAmountPaise");
+      const body = action === "read" ? { businessId: params.get("businessId"),
+        ...(requestedAmount !== null ? { verificationAmountPaise: parsed(z.string().regex(/^[1-9][0-9]*$/).transform(Number).pipe(amountSchema.min(100)), requestedAmount) } : {}) } : await paymentJsonBody(request);
+      const input = parsed(action === "read" ? z.strictObject({ businessId: z.uuid(), verificationAmountPaise: amountSchema.min(100).optional() }) : z.strictObject({
+        businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true), verificationAmountPaise: amountSchema.min(100).optional(),
       }), body);
       const context = await requireOwnedBusiness(input.businessId);
       if (context.userId !== user.id) throw new CheckoutRequestError(401, "Session changed.");
-      if (action === "read") {
-        const orders = await stored(database.rpc("production_payment_orders_list", { p_business_id: input.businessId, p_user_id: user.id }), z.array(orderSchema).max(20));
-        return paymentReply({ quote: createAnnualPaymentQuote(), policy: currentPolicy(), orders: await Promise.all(orders.map(order => orderResponse(order, config))) });
+      const orders = await stored(database.rpc("production_payment_orders_list", { p_business_id: input.businessId, p_user_id: user.id }), z.array(orderSchema).max(20));
+      const subject: PaymentSubject = { businessId: input.businessId, userId: user.id,
+        verificationCompleted: orders.some(order => order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0) };
+      const basePolicy = currentPolicy(subject);
+      const baseQuote = basePolicy ? quoteForPaymentPolicy(basePolicy) : null;
+      const verificationOrder = orders.find(order => order.quote.version === "inr-payment-verification-v1");
+      if (input.verificationAmountPaise !== undefined && verificationOrder && input.verificationAmountPaise !== verificationOrder.amount_paise) {
+        throw new CheckoutRequestError(409, "The saved verification amount cannot be changed. Recover the existing payment.");
       }
-      const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true) }), body);
-      const { hash, ...policy } = getProductionCollectionPolicy();
+      subject.verificationAmountPaise = input.verificationAmountPaise ?? (baseQuote?.version === "inr-payment-verification-v1"
+        && verificationOrder && verificationOrder.amount_paise <= baseQuote.totalPaise ? verificationOrder.amount_paise : undefined);
+      if (action === "read") {
+        const policy = input.verificationAmountPaise === undefined ? currentPolicy(subject) : getProductionCollectionPolicy(process.env, Date.now(), subject);
+        return paymentReply({ quote: policy ? quoteForPaymentPolicy(policy) : createAnnualPaymentQuote(), policy,
+          verificationAmountRange: baseQuote?.version === "inr-payment-verification-v1" && !verificationOrder
+            ? { minPaise: 100, maxPaise: baseQuote.totalPaise } : null,
+          orders: await Promise.all(orders.map(order => orderResponse(order, config, policy))) });
+      }
+      const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true),
+        verificationAmountPaise: amountSchema.min(100).optional() }), body);
+      const { hash, ...policy } = getProductionCollectionPolicy(process.env, Date.now(), subject);
       if (hash !== create.termsHash) throw new CheckoutRequestError(409, "Payment terms changed. Review the current terms before payment.");
       const funding = "fundingMode" in policy ? null : await stored(database.rpc("meta_funding_latest_record", { p_business_id: input.businessId, p_environment: "live" }), z.object({ evidenceId: z.uuid() }));
       const claimed = await stored(database.rpc("production_payment_order_claim", { ...scope, p_business_id: input.businessId, p_user_id: user.id,
-        p_request_key: create.idempotencyKey, p_order_id: randomUUID(), p_quote: createAnnualPaymentQuote(), p_terms: JSON.stringify(policy), p_terms_hash: hash, p_funding_evidence_id: funding?.evidenceId ?? null,
+        p_request_key: create.idempotencyKey, p_order_id: randomUUID(), p_quote: quoteForPaymentPolicy(policy), p_terms: JSON.stringify(policy), p_terms_hash: hash, p_funding_evidence_id: funding?.evidenceId ?? null,
       }), z.object({ claimed: z.boolean(), order: orderSchema }));
-      if (!claimed.claimed) return paymentReply(await orderResponse(claimed.order, config));
+      if (!claimed.claimed) return paymentReply(await orderResponse(claimed.order, config, { ...policy, hash }));
       try {
-        const remote = await createProductionPaymentClient(process.env, signal).createOrder(claimed.order.id, hash);
+        const remote = await createProductionPaymentClient(process.env, signal).createOrder(claimed.order.id, hash, claimed.order.quote, subject);
         const saved = await stored(database.rpc("production_payment_order_result", { ...scope, p_order_id: claimed.order.id, p_provider_order_id: remote.id }), orderSchema);
-        return paymentReply(await orderResponse(saved, config), 201);
+        return paymentReply(await orderResponse(saved, config, { ...policy, hash }), 201);
       } catch {
         await stored(database.rpc("production_payment_order_result", { ...scope, p_order_id: claimed.order.id, p_provider_order_id: null }), orderSchema).catch(() => undefined);
         return paymentReply({ orderId: claimed.order.id, status: "needs_reconciliation", error: "Creation is unconfirmed. Recover this reference; do not create another payment.", spendablePaise: 0, canActivateCampaign: false }, 503);

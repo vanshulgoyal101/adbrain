@@ -488,7 +488,7 @@ export function BrandForm({ business }: { business: Business | null }) {
       </div>
 
       <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
-        <Button type="submit" disabled={pending || autofilling}>
+        <Button type="submit" data-product-event="brand.save" disabled={pending || autofilling}>
           {pending ? <Spinner /> : <Save className="h-4 w-4" />}
           Save Brand Brain
         </Button>

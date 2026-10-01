@@ -32,14 +32,14 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
   if (!user) return apiError("Unauthorized", 401);
   const { data: campaign } = await supabase.from("campaigns").select("*").eq("id", id).maybeSingle();
   if (!campaign) return apiError("Campaign not found", 404);
-  const binding = readStoredCampaignBinding(campaign);
-  const children = intendedCampaignChildren(campaign);
-  if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId
-    || binding.metaConnectionGeneration === null || !children || !Number.isFinite(campaign.daily_budget)) {
-    return apiError("Campaign children or account need reconciliation before activation review.", 409);
-  }
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
+    const binding = readStoredCampaignBinding(campaign);
+    const children = intendedCampaignChildren(campaign);
+    if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId
+      || binding.metaConnectionGeneration === null || !children || !Number.isFinite(campaign.daily_budget)) {
+      return apiError("Campaign children or account need reconciliation before activation review.", 409);
+    }
     await recheckMetaConnection(context, binding.metaConnectionGeneration);
     const delivery = await withMetaConnection(context, {
       purpose: "activate",
@@ -92,6 +92,16 @@ async function handlePATCH(
     .maybeSingle();
   if (!campaign) return apiError("Campaign not found", 404);
 
+  let context: Awaited<ReturnType<typeof requireOwnedBusiness>>;
+  try {
+    context = await requireOwnedBusiness(campaign.business_id);
+  } catch (err) {
+    if (err instanceof ConnectionAccessError) {
+      return apiError(err.message, err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400);
+    }
+    return serverError("campaign.status", err, "Could not update the campaign.");
+  }
+
   // Spend guardrail: block turning a campaign on if it would push the weekly
   // commitment past the business's cap.
   if (action === "active") {
@@ -143,7 +153,6 @@ async function handlePATCH(
 
   let deliveryAfter: CampaignDeliverySnapshot | null = null;
   try {
-    const context = await requireOwnedBusiness(campaign.business_id);
     if (action === "active") {
       await recheckMetaConnection(context, storedBinding.metaConnectionGeneration);
     }

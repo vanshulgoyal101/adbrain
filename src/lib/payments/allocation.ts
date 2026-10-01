@@ -1,21 +1,60 @@
+import { z } from "zod";
+
 export const PAYMENT_ALLOCATION_VERSION = "inr-20-80-v1";
 
 export const ANNUAL_PAYMENT_VERSION = "inr-annual-total-v1";
 
-export function createAnnualPaymentQuote() {
+export const DEFAULT_ANNUAL_PAYMENT_PAISE = 1_000_000;
+
+export function createAnnualPaymentQuote(totalPaise: number = DEFAULT_ANNUAL_PAYMENT_PAISE) {
+  requirePaise(totalPaise, "totalPaise", 100);
+  if (totalPaise > DEFAULT_ANNUAL_PAYMENT_PAISE) {
+    throw new RangeError("Annual payment must not exceed 1000000 paise.");
+  }
+  const serviceAllocationPaise = Number(BigInt(totalPaise) / BigInt(5));
   return Object.freeze({
-    version: ANNUAL_PAYMENT_VERSION,
+    version: totalPaise === DEFAULT_ANNUAL_PAYMENT_PAISE ? ANNUAL_PAYMENT_VERSION : "inr-annual-configurable-v1",
     merchantDisplay: "Vanshul Goyal",
     currency: "INR",
-    totalPaise: 1_000_000,
-    serviceAllocationPaise: 200_000,
-    metaAllocationPaise: 800_000,
+    totalPaise,
+    serviceAllocationPaise,
+    metaAllocationPaise: totalPaise - serviceAllocationPaise,
     additionalCustomerTaxPaise: 0,
     metaTaxTreatment: "included-in-meta-allocation",
     gatewayFees: "absorbed-by-adbrain",
     automaticRenewal: false,
   } as const);
 }
+
+export function createVerificationPaymentQuote(totalPaise = 1_000) {
+  return Object.freeze({
+    ...createAnnualPaymentQuote(totalPaise),
+    version: "inr-payment-verification-v1",
+    serviceAllocationPaise: 0,
+    metaAllocationPaise: 0,
+    verificationAllocationPaise: totalPaise,
+  } as const);
+}
+
+const quotePaise = z.number().int().min(0).max(DEFAULT_ANNUAL_PAYMENT_PAISE);
+export const productionPaymentQuoteSchema = z.strictObject({
+  version: z.enum([ANNUAL_PAYMENT_VERSION, "inr-annual-configurable-v1", "inr-payment-verification-v1"]),
+  merchantDisplay: z.literal("Vanshul Goyal"), currency: z.literal("INR"),
+  totalPaise: quotePaise.min(100), serviceAllocationPaise: quotePaise, metaAllocationPaise: quotePaise,
+  verificationAllocationPaise: quotePaise.optional(),
+  additionalCustomerTaxPaise: z.literal(0), metaTaxTreatment: z.literal("included-in-meta-allocation"),
+  gatewayFees: z.literal("absorbed-by-adbrain"), automaticRenewal: z.literal(false),
+}).refine(quote => {
+  if (quote.version === "inr-payment-verification-v1") {
+    return quote.serviceAllocationPaise === 0 && quote.metaAllocationPaise === 0
+      && quote.verificationAllocationPaise === quote.totalPaise;
+  }
+  return quote.verificationAllocationPaise === undefined
+    && quote.serviceAllocationPaise === Math.floor(quote.totalPaise / 5)
+    && quote.metaAllocationPaise === quote.totalPaise - quote.serviceAllocationPaise
+    && (quote.version === ANNUAL_PAYMENT_VERSION) === (quote.totalPaise === DEFAULT_ANNUAL_PAYMENT_PAISE);
+});
+export type ProductionPaymentQuote = z.infer<typeof productionPaymentQuoteSchema>;
 
 export interface PaymentAllocationPolicy {
   readonly version: string;

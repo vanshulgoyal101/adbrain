@@ -35,6 +35,46 @@ approved policy; legacy claims keep non-null evidence and the service-only
 harness checks exact canonical inclusion/order, fresh installation and upgrade
 replay. Its separate six-migration rollback mode does not certify payment rollback.
 
+The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
+depends on the original payment, operator policy and
+[customer allowance](../db/migrations/20260926_customer_ad_allowance.sql) migrations.
+It replaces fixed-total constraints with exact saved-quote checks within 100-1000000
+paise; generated payment state and capture/refund effects use each saved total.
+An identity trigger prevents repricing accepted orders. Existing default-priced
+rows, policies and funding evidence are preserved without backfill.
+
+Generated `purpose` separates annual orders from verification. Annual active-order
+uniqueness remains; a second index permits only one verification order per business,
+including after refund. Claims require matching owner/business, current expiry and
+exact quote-bound consent. Verification capture is recorded but grants no service
+or ad allocation. Verified partial verification refunds need no fictional allocation;
+dispute, pending-refund, missing-capture and provider-mismatch holds remain intact.
+Annual refund allocation and service earnings are bounded by the stored quote.
+Private tables and service-only RPC authority are unchanged. Apply once through
+the checksum ledger, not by replaying the canonical schema. After a nondefault
+order exists, rollback must retain a quote-aware runtime; see
+[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+
+The source-only [configurable quote migration](../db/migrations/20260927_configurable_payment_quotes.sql)
+depends on the original payment, operator policy and
+[customer allowance](../db/migrations/20260926_customer_ad_allowance.sql) migrations.
+It replaces fixed-total constraints with exact saved-quote checks within 100-1000000
+paise; generated payment state and capture/refund effects use each saved total.
+An identity trigger prevents repricing accepted orders. Existing default-priced
+rows, policies and funding evidence are preserved without backfill.
+
+Generated `purpose` separates annual orders from verification. Annual active-order
+uniqueness remains; a second index permits only one verification order per business,
+including after refund. Claims require matching owner/business, current expiry and
+exact quote-bound consent. Verification capture is recorded but grants no service
+or ad allocation. Verified partial verification refunds need no fictional allocation;
+dispute, pending-refund, missing-capture and provider-mismatch holds remain intact.
+Annual refund allocation and service earnings are bounded by the stored quote.
+Private tables and service-only RPC authority are unchanged. Apply once through
+the checksum ledger, not by replaying the canonical schema. After a nondefault
+order exists, rollback must retain a quote-aware runtime; see
+[pricing operations](CONFIGURATION.md#configurable-live-amounts).
+
 ## Relationships
 
 ```mermaid
@@ -124,6 +164,8 @@ and recovery limitations.
 | `public.businesses` | UUID, owner UUID, name, free-text vertical default `local business`; website/description/voice/audience; primary/secondary colors, font, logo URL; language/location/USP/offer arrays; phone/email/address; timestamps |
 | `public.brand_assets` | Business UUID, `type` = `logo`/`product_photo`/`past_ad`, URL, optional notes, creation time |
 | `public.ad_instructions` | Business UUID, title, Markdown content, active flag, timestamps; active files supply prompt context |
+| `public.preference_settings` | `(business_id,owner_id)` key, opt-in/paused state, monotonic epoch; cascade deletes on business or owner deletion |
+| `public.declared_preferences` | `(business_id,owner_id,category)` key, one 160-character declared note per category, version/update date; cascades with namespace deletion |
 
 Blank optional form strings become null; list fields split on newlines, not
 commas, preserving locations such as `Jaipur, Rajasthan`. Business name is required.
@@ -200,9 +242,18 @@ columns to restore an obsolete UI.
 | `public.leads` | Business, nullable campaign, unique `(business_id,meta_lead_id)`, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time |
 | `public.spend_limits` | One per business; nullable integer weekly cap, alert percentage 1-100 default 80, auto-pause default false, updated time |
 | `public.audit_log` | Business/actor, action, entity type/ID, Meta object ID, reason, detail JSON, timestamp |
-| `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp |
+| `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp; new candidate metadata binds a generation UUID to bounded provider request IDs and provider finality when available |
 | `public.rate_limit_hits` | Limiter key and hit timestamp, indexed by both |
 | `public.product_events` | Event/request UUIDs, version 1, optional user/business, kind/name/outcome/duration, allowlisted attributes, timestamp |
+| `public.product_event_daily` | Account-free daily usage/performance totals, grouped by UTC day/environment/release/event/route/action/viewport/provider/model; RLS, browser access denied, service-role read only |
+
+The source [rollup migration](../db/migrations/20260928_product_event_rollups.sql)
+depends only on the existing product-event table and replaces its pruning function
+without changing the caller contract. It aggregates and deletes up to 10,000 raw
+events older than 90 days atomically, preserves aggregate totals for 730 UTC days,
+and bounds old-aggregate cleanup. Migration application itself deletes no events.
+Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics,
+privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
 existing lead. Campaign deletion sets lead `campaign_id` null rather than deleting
@@ -231,9 +282,8 @@ but old data requires a separate validation decision. Monthly aggregation is
 owner-scoped and sums all relevant rows, avoiding client pagination truncation.
 Persistence is best effort and estimated costs are not invoices.
 
-The #54 source candidate adds [creative-generation intents](../db/migrations/20260927_creative_generation_intents.sql)
-as an additive migration; it is **not** included in the core schema or proof of
-a deployed migration. `private.creative_generation_intents` binds a UUID to one
+The deployed #54 [creative-generation intents](../db/migrations/20260927_creative_generation_intents.sql)
+bind a UUID to one
 business, owner, request hash and expected count, a UTC month, reserved/accounted
 quota units, an image allowance and a persisted state. Direct table access is
 revoked; service-only admission, status and progress RPCs verify current
@@ -248,6 +298,20 @@ zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
 starting after the client receives a 404. This is a conservative quota fence, **not** a
 payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
 defines the client-visible recovery states.
+
+The [operator reconciliation migration](../db/migrations/20260930_creative_generation_reconcile.sql)
+is applied in Production at checksum `99d1be625171c48dee4cbe7bec71d749169742a2a49b2c113dd1cd36c2f6f681`.
+It adds a private one-row-per-intent audit and a service-role-only, owner/intent-scoped
+RPC. It fences older intents without generation-bound receipts, requires an
+operator evidence reference, explicit provider-verified token total, matching
+saved-creative outcome and current accounted/reserved counters, then atomically
+writes any missing usage adjustment and closes the hold. No browser caller can
+invoke it; row-locking triggers reject late generation-bound usage writes and
+new/reassigned creatives, while ordinary saved creative edits remain available.
+A late progress callback cannot change an audited result. The
+SQL cannot independently verify external provider finality: the authorized
+operator must do that before calling. In particular it cannot reconcile the
+September 29 #54 incident, whose per-generation provider evidence is still absent.
 
 Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
@@ -350,6 +414,7 @@ verification remain separate gates; source types alone do not prove DB parity.
 | RPC family | Purpose |
 | --- | --- |
 | `owns_business` | Current authenticated owner predicate |
+| `change_declared_preferences` | Owner-checked, namespace-locked opt-in/save/forget/clear/pause with monotonic epoch; only authenticated callers can execute and direct table writes are denied |
 | `meta_token_*` | Business-bound encrypted token insertion/read/delete |
 | `meta_attempt_*` | OAuth claim, discovery, revision, selection commit and failure transitions |
 | `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation |
@@ -360,7 +425,8 @@ verification remain separate gates; source types alone do not prove DB parity.
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
 | `finish_campaign_operation`, `fail_campaign_operation`, `expire_campaign_operation` | Terminal/reconciliation transitions |
 | `monthly_token_usage` | Security-invoker, owner-RLS monthly sum |
-| `creative_generation_admit/status/progress` | #54 candidate: service-only, owner-checked generation claim, recovery and quota reconciliation |
+| `creative_generation_admit/status/progress` | Deployed #54 service-only, owner-checked generation claim, recovery and quota holds |
+| `creative_generation_reconcile` | Production service-only operator-attested settlement after external finality and token verification; legacy intents denied |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
 | `meta_funding_latest_record` | Service-only business/environment-scoped funding evidence lookup |
@@ -413,14 +479,14 @@ alone is not a safe deployment plan.
 | [20260926_trusted_campaign_writes.sql](../db/migrations/20260926_trusted_campaign_writes.sql) | Trusted campaign/result callers and verified audit RPC must deploy together with grant changes |
 | [20260926_validate_campaign_integrity.sql](../db/migrations/20260926_validate_campaign_integrity.sql) | Separate validation only after integrity migration, read-only preflight and approved repair; failure must not be bypassed |
 | [20260926_razorpay_test_orders.sql](../db/migrations/20260926_razorpay_test_orders.sql) | Optional private test orders/events and service RPCs; never live-payment activation |
+| [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
 
 This inventory is not a command to replay every file. Start an empty local core
 database with its documented schema path; do not then blindly reapply non-idempotent
 incremental migrations already represented there. For an upgrade, Meta connection
 must precede campaign connection; WhatsApp/reporting must precede integrity checks;
 managed billing precedes billing events; integrity validation is last after review.
-Candidate enquiry migrations are linked separately above, not available files in
-this source tree.
+Enquiry migrations are linked separately above.
 
 The [migration runner](../scripts/database-migrations.mjs) requires explicit target
 configuration, serializes named migrations with an advisory lock, records a

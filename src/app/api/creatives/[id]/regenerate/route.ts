@@ -24,6 +24,7 @@ import {
   failedVariantUsage,
 } from "@/lib/creative/receipt";
 import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
+import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -99,6 +100,7 @@ async function handlePOST(
       recentCreativeCopy(supabase, business.id),
     ]);
     const settings = savedGenerationSettings(creative.generation);
+    const advisoryPreferences = await preferenceContext(business.id, "creative", [creative.brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     const variant = await generateOneVariant(
       business,
       creative.brief,
@@ -109,6 +111,8 @@ async function handlePOST(
       referenceImages,
       undefined,
       [{ headline: creative.headline ?? "", primary_text: creative.primary_text ?? "" }, ...recentCopy].slice(0, 12),
+      advisoryPreferences,
+      settings.sourceFacts,
     );
     await persistLLMUsage(
       variantUsageEvents(variant, {
@@ -149,6 +153,7 @@ async function handlePOST(
           variant,
           settings.language ?? undefined,
           referenceImages,
+          settings.sourceFacts,
         ),
       })
       .eq("id", id)

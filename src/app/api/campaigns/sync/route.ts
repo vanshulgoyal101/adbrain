@@ -37,8 +37,7 @@ async function handlePOST(request?: Request) {
       for (let offset = 0; offset < page.campaigns.length; offset += 5) {
         const batch = await Promise.all(page.campaigns.slice(offset, offset + 5).map(async (campaign) => {
           if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") return { campaign, binding: null };
-          try { return { campaign, binding: await meta.readBoundCampaign(campaign) }; }
-          catch { return { campaign, binding: null }; }
+          return { campaign, binding: await meta.readBoundCampaign(campaign) };
         }));
         for (const { campaign, binding } of batch) {
           if (!binding) { skipped += 1; continue; }

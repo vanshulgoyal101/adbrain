@@ -59,6 +59,15 @@ beforeEach(() => {
 });
 
 describe("<Studio> generation", () => {
+  it("marks the directly entered brief as user-authored evidence", async () => {
+    render(<Studio business={business} initialCreatives={[]} />);
+    const brief = `${"Describe the rooftop installation. ".repeat(18)}Our award-winning installers.`;
+    fireEvent.change(screen.getByLabelText(/what are we advertising/i), { target: { value: brief } });
+    fireEvent.click(screen.getByRole("button", { name: /generate ads/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+    const payload = JSON.parse(vi.mocked(global.fetch).mock.calls[0][1]!.body as string);
+    expect(payload.sourceFacts).toEqual([brief]);
+  });
   it("does not submit paid work when recovery identity cannot be persisted", async () => {
     const original = Storage.prototype.setItem;
     const storage = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
@@ -331,6 +340,18 @@ describe("<Studio> approval", () => {
 });
 
 describe("<Studio> creative preview", () => {
+  it("uses the smaller versioned image only for review-board thumbnails", () => {
+    const original = "https://cdn.example/storage/v1/object/public/creatives/b1/group/originals-v1/ad.jpg";
+    render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
+
+    const boardImage = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    expect(boardImage)
+      .toHaveAttribute("src", "https://cdn.example/storage/v1/object/public/creatives/b1/group/thumbnails-v1/ad.webp");
+    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
+    fireEvent.error(boardImage!);
+    expect(boardImage).toHaveAttribute("src", original);
+  });
+
   it("prioritizes the selected image without eagerly fetching board thumbnails", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
 

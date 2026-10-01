@@ -1,7 +1,7 @@
 import Razorpay from "razorpay";
 import { z } from "zod";
-import { createAnnualPaymentQuote } from "./allocation";
-import { getProductionCollectionPolicy, getProductionPaymentConfig, ProductionPaymentError } from "./production-config";
+import { DEFAULT_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema, type ProductionPaymentQuote } from "./allocation";
+import { getProductionCollectionPolicy, getProductionPaymentConfig, ProductionPaymentError, quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
 import { razorpayTestOrderSchema as orderSchema, razorpayTestPaymentSchema as paymentSchema } from "./razorpay-test";
 
 const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{1,100}$`));
@@ -35,10 +35,12 @@ export function createProductionPaymentClient(environment: Readonly<Record<strin
     catch { throw new ProductionPaymentError("PROVIDER_UNAVAILABLE"); }
   }
   return {
-    async createOrder(receipt: string, policyHash: string) {
+    async createOrder(receipt: string, policyHash: string, savedQuote?: ProductionPaymentQuote, subject?: PaymentSubject) {
       z.uuid().parse(receipt);
-      if (getProductionCollectionPolicy(environment).hash !== policyHash) throw new ProductionPaymentError("COLLECTION_BLOCKED");
-      const quote = createAnnualPaymentQuote();
+      const policy = getProductionCollectionPolicy(environment, Date.now(), subject);
+      if (policy.hash !== policyHash) throw new ProductionPaymentError("COLLECTION_BLOCKED");
+      const quote = productionPaymentQuoteSchema.parse(quoteForPaymentPolicy(policy));
+      if (savedQuote && JSON.stringify(productionPaymentQuoteSchema.parse(savedQuote)) !== JSON.stringify(quote)) throw new ProductionPaymentError("COLLECTION_BLOCKED");
       const order = validated(orderSchema, await request(sdk => sdk.orders.create({
         amount: quote.totalPaise, currency: quote.currency, receipt, partial_payment: false,
         notes: { quote_version: quote.version, policy_hash: policyHash },
@@ -75,7 +77,7 @@ export function createProductionPaymentClient(environment: Readonly<Record<strin
     async createRefund(paymentId: string, receipt: string, amountPaise: number) {
       identifier("pay").parse(paymentId);
       z.uuid().parse(receipt);
-      z.number().int().min(100).max(createAnnualPaymentQuote().totalPaise).parse(amountPaise);
+      z.number().int().min(100).max(DEFAULT_ANNUAL_PAYMENT_PAISE).parse(amountPaise);
       if (environment.PAYMENTS_LIVE_REFUNDS_ENABLED !== "true") throw new ProductionPaymentError("DISABLED");
       const refund = validated(refundSchema, await request(sdk => sdk.payments.refund(paymentId, {
         amount: amountPaise, receipt, speed: "normal",

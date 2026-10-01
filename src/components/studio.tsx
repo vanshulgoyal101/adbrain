@@ -25,6 +25,7 @@ import { downloadBlob } from "@/lib/download";
 import { useSessionDraft } from "@/lib/use-session-draft";
 import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
 import { z } from "zod";
 
@@ -216,6 +217,7 @@ export function Studio({
         body: JSON.stringify({
           businessId: business.id,
           brief,
+          sourceFacts: [brief.trim()],
           count,
           generationId: intent.generationId,
           language,
@@ -386,7 +388,7 @@ export function Studio({
                   <option value="landscape">Landscape 1.91:1</option>
                 </select>
               </div>
-              <Button type="submit" disabled={generating}>
+              <Button type="submit" data-product-event="creative.generate" disabled={generating}>
                 {generating ? <Spinner /> : pendingGeneration ? <RefreshCw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
                 {generating ? "Working..." : pendingGeneration ? "Check saved results" : "Generate ads"}
               </Button>
@@ -406,6 +408,7 @@ export function Studio({
           variant="outline"
           size="sm"
           onClick={exportApproved}
+          data-product-event="creative.download"
           disabled={approvedCount === 0 || exporting}
         >
           {exporting ? <Spinner /> : <Download className="h-4 w-4" />}
@@ -502,6 +505,7 @@ export function Studio({
                       aria-label={`Inspect ${creative.headline || "untitled creative"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
                       aria-pressed={creative.id === selectedCreative.id}
                       onClick={() => setSelectedId(creative.id)}
+                      data-product-event="creative.inspect"
                       className={cn(
                         "w-full overflow-hidden rounded-md border text-left",
                         creative.id === selectedCreative.id
@@ -512,10 +516,13 @@ export function Studio({
                       <div className="flex aspect-square items-center justify-center bg-slate-100">
                         {creative.image_url ? (
                           <img
-                            src={creative.image_url}
+                            src={creativeThumbnailUrl(creative.image_url)}
                             alt=""
                             loading="lazy"
                             className="h-full w-full object-contain"
+                            onError={(event) => {
+                              if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
+                            }}
                           />
                         ) : (
                           <ImageIcon className="text-slate-400" />
@@ -750,6 +757,7 @@ function CreativeCard({
             size="sm"
             variant="outline"
             onClick={onPreview}
+            data-product-event="creative.inspect"
             aria-label={`Preview ${creative.headline ?? "creative"}`}
             title="Enlarge creative"
             className="h-11 w-11 shrink-0 p-0"
@@ -760,6 +768,7 @@ function CreativeCard({
             size="sm"
             variant={approved ? "outline" : "primary"}
             onClick={toggleApprove}
+            data-product-event={approved ? "creative.unapprove" : "creative.approve"}
             disabled={pending || regenerating}
             className="h-11 flex-1"
           >
@@ -777,6 +786,7 @@ function CreativeCard({
             size="sm"
             variant="ghost"
             onClick={regenerate}
+            data-product-event="creative.regenerate"
             disabled={pending || regenerating}
             aria-label="Regenerate creative"
             title="Regenerate creative"

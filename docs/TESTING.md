@@ -93,6 +93,13 @@ npm run build
 ```
 
 Gitleaks is a separate required job. Do not disable checks to make a release green.
+The focused configurable-payment SQL slice is `npm run test:meta-db -- --pricing-only`.
+It uses disposable PostgreSQL for fresh/upgrade preservation, exact TypeScript/SQL
+quote and policy parity, owner/expiry scope, concurrent one-order claims, zero
+verification allowance, immutable pricing, captures, partial/full refunds and
+migration-ledger replay. The default SQL harness includes this slice. It does not
+contact Razorpay or establish real capture, webhook delivery or production rollout.
+
 Coverage thresholds in [vitest.config.mts](../vitest.config.mts) are statements 56%,
 branches 52%, functions 59%, lines 56%. They are minimum regression gates, not a
 claim that all customer journeys are covered. Page/layout files are excluded

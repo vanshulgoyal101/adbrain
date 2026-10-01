@@ -129,6 +129,63 @@ Local test checkout uses `PAYMENTS_TEST_ENABLED=true` with
 generic key aliases). It is unavailable in production or any Vercel environment;
 never place those test variables in live production configuration.
 
+### Configurable Live Amounts
+
+Source implementation, not a production-enable receipt. Apply the new
+[pricing migration](../db/migrations/20260927_configurable_payment_quotes.sql)
+after the payment policy and customer allowance migrations before deploying
+these callers. All settings below are server-only; never use `NEXT_PUBLIC_`.
+Changing Vercel Production environment values requires a new deployment.
+
+| Variable | Default / validation | Purpose |
+| --- | --- | --- |
+| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: `1000000`; integer 100-1000000 | Normal annual total; 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
+| `PAYMENTS_LIVE_VERIFICATION_ENABLED` | Unset/empty/`false`: off; exactly `true`: on | Separate one-time real payment verification, not the annual service |
+| `PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE` | Unset: `1000`; integer 100-1000000 | Default and maximum selectable verification total, INR 10 by default; zero service/ad allocation |
+| `PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID` | Required UUID when enabled | Exact privately verified pilot business |
+| `PAYMENTS_LIVE_VERIFICATION_USER_ID` | Required UUID when enabled | Exact authenticated owner of that business |
+| `PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT` | Required UTC ISO timestamp, at most 24 hours ahead | Expiry stops new verification checkout; saved-order recovery remains available |
+
+For the INR 10 pilot, leave `PAYMENTS_LIVE_AMOUNT_PAISE=1000000`, set the
+verification amount to `1000`, and enable verification only with the verified
+owner/business IDs and a short expiry. Other owners receive the normal offer.
+Do not lower the annual amount merely to test payment: an annual payment grants
+its saved annual allocations. Amounts must be decimal digits without spaces,
+decimals or exponent notation; blank amounts are invalid, while unset amounts
+use their defaults. Invalid enabled verification configuration blocks collection.
+The approved maximum remains INR 10,000; this setting cannot raise that ceiling.
+
+The eligible pilot owner sees **Verification amount (INR)** in Billing before an
+order is saved. Enter rupees with at most two decimal places, choose **Update
+amount**, review the refreshed quote/terms, accept them and then choose **Pay**.
+The input accepts INR 1 through the configured verification maximum; with the
+pilot configuration above it defaults to INR 10 and cannot exceed INR 10.
+Updating the quote creates no provider order or charge and requires no deployment.
+The server rechecks owner, expiry, ceiling and consent on creation. Once an order
+exists its amount cannot change; recovery uses its saved quote. The input is not
+available for the normal annual package, other users, expired or completed tests.
+If the quote update fails, payment stays disabled until the amount is restored or
+a valid updated quote is received and accepted.
+
+The normal default preserves the original quote and policy. Other totals produce
+a versioned quote and matching service/refund terms, requiring fresh hash-bound
+consent. Nondefault pricing or enabled verification cannot be combined with an
+explicit `PAYMENTS_LIVE_POLICY_JSON` override. Stored amounts, quotes, consent and
+identities are immutable. A changed configuration never reprices an old order or
+permits creating a replacement for an unresolved order.
+
+Verification creates at most one recoverable order per business, including after
+a refund. A verified capture or expiry restores the normal quote on the next
+order-list read; a stale open page must reload. Disable
+`PAYMENTS_LIVE_VERIFICATION_ENABLED` and deploy after the test. Previous verification
+captures/refunds remain visible; no automatic refund, renewal or Meta activation
+occurs. Check the authenticated displayed quote and server/provider order amount
+before the owner submits payment. Only the owner completes the real charge.
+
+Keep a quote-aware runtime after any nondefault order exists: the old fixed-price
+runtime cannot read those orders. Suspend collection and use a compatible
+forward fix rather than deleting orders or undoing the migration.
+
 ## Local Test Payments
 
 The [Razorpay test adapter](../src/lib/payments/razorpay-test.ts) validates these
