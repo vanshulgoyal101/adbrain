@@ -242,13 +242,10 @@ async function generateConcept(
       if (result.success) return { concept: result.concept, usage };
       issues = result.issues;
     }
-    messages.push(
-      { role: "assistant", content: completion.text.slice(0, 12_000) },
-      {
-        role: "user",
-        content: `Repair this concept. Return the complete JSON object. Fix these validation failures without inventing facts:\n${issues.join("\n")}`,
-      },
-    );
+    messages.push({
+      role: "user",
+      content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,
+    });
   }
   throw new CreativeValidationError(issues, usage, stage);
 }

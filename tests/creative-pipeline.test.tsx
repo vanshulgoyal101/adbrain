@@ -212,6 +212,24 @@ describe("generateVariants", () => {
     expect(generateImage).toHaveBeenCalledTimes(1);
   });
 
+  it("repairs a failed concept without resending its rejected draft", async () => {
+    const rejected = { ...concept, cta: "", primary_text: "Invented model-only details" };
+    complete.mockResolvedValueOnce(completion(rejected)).mockImplementationOnce(async (messages) => {
+      if (messages.some((message: { role: string }) => message.role === "assistant")) throw new Error("Repair context overflow");
+      return completion(concept);
+    });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const onFailure = vi.fn();
+    const variants = await generateVariants({ brand, brief: "x", count: 1, onFailure });
+    expect(variants).toHaveLength(1);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(complete.mock.calls[1][0]).toHaveLength(3);
+    expect(complete.mock.calls[1][0].at(-1).content).toContain("cta");
+    expect(JSON.stringify(complete.mock.calls[1][0])).not.toContain("Invented model-only details");
+    expect(generateImage).toHaveBeenCalledTimes(1);
+  });
+
   it("uses one concept call per successful variant and executes its visual direction", async () => {
     const { generateVariants } = await import("@/lib/creative/generate");
     await generateVariants({ brand, brief: "x", count: 3 });
