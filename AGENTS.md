@@ -15,8 +15,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
 	is done, hand it off by label and start the next one without waiting.
 	Proceed with useful work; do not return only an acknowledgement.
-- One writer per source/resource, one executor for production. DevOps owns the
-	active release. Talk directly to another owner when needed; do not route routine
+- One writer per source/resource. Low-risk PRs (no migration, money, tenant/auth
+	or config change) auto-merge on green CI and the author smoke-tests production.
+	DevOps owns migrations, money/tenant releases, config and rollback. Talk directly
+	to another owner when needed; do not route routine
 	decisions through the coordinator or ask the user to relay worker messages.
 - QA reviews high-risk changes and investigates concrete failures, not every
 	ordinary release. Authors own focused checks; the release owner owns deployment
@@ -28,7 +30,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
 - Keep the owner's checkout (`adbrain/`) clean: it is what the owner sees in
 	Source Control. Workers edit, test, merge and release only in isolated worktrees
-	under `/tmp`. The coordinator edits only docs there and commits and pushes them
+	under `~/Development/copilot/adbrain-wt/`. The coordinator edits only docs there and commits and pushes them
 	to `dev` immediately. Never leave a merge, staged files or local edits behind.
 
 ## Execution speed
@@ -44,7 +46,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	not default prerequisites. Follow [the fast release policy](docs/RELEASING.md#startup-fast-path).
 - Assigned work includes routine implementation, scoped dependencies, tests,
 	isolated worktree setup, commits and permitted publication. Do not ask permission
-	again for each step. Keep production single-executor; preserve branch protection.
+	again for each step. Production changes go through protected PRs and green CI;
+	preserve branch protection.
 - Production testing is authorized for bounded, reversible, non-financial checks
 	on owner-controlled or synthetic data. No blanket permission to charge/refund,
 	spend on providers, activate ads, expose secrets or damage customer data.
