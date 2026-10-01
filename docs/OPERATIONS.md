@@ -90,6 +90,26 @@ blocked. Verify the migration ledger and grants in any other environment; an
 operator must obtain external evidence for each eligible intent before calling
 the RPC. Evidence for the held September 29 request cannot make it eligible.
 
+### Creative Regeneration Claims
+
+Before deploying the regeneration claim caller, apply the reviewed
+`20261001_creative_regeneration_claims.sql` migration to the verified target and
+independently confirm its ledger checksum, private table RLS, and service-role-only
+execute grants on both claim and finish RPCs. Do not replay the canonical schema.
+An overlapping request receives 409; a `processing` or `unresolved` claim does
+not expire or authorize another paid attempt. The finish RPC releases only a
+`processing` claim with a known outcome; it cannot clear an `unresolved` claim.
+
+For an uncertain regeneration, retain the creative, business, owner and original
+attempt ID (the request ID). Compare the saved creative and usage receipts with
+administrator-level provider evidence for every text and image attempt before
+proposing recovery. A 502, missing receipt or zero-token error is not proof of
+zero spend. Keep the claim and block retries until the outcome is established;
+there is no customer-facing or automatic claim-clearing action. Any repair of an
+`unresolved` row needs separately reviewed operator authority, a scoped verified
+before-state and an exact-identity transaction. Never delete claims merely to
+unblock a retry or use this procedure to clear the older #54 generation hold.
+
 ### Campaign Reconciliation
 
 The operation ledger is durable. Inline execution retains a 60-second lease;
