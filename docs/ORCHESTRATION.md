@@ -66,10 +66,10 @@ Routine steps never wait for the coordinator.
 
 | Worker | Queue |
 | --- | --- |
-| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) Create saves 3 of 3: run on Cedar Ridge, fix the top rejection, repeat |
-| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) Meta budget rejection, then the rest of the campaign flow in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
-| QA | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) red test for the budget payload, then any new `core` bug with `owner:qa` |
-| DevOps | Any `ready-to-ship` issue first. PR89 (regenerate guard, Brand save) is live at main `264bc7a`. Use your 3 runs to confirm Create once Dev reports 3/3, then walk the full loop in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
+| Dev | [#90](https://github.com/vanshulgoyal101/adbrain/issues/90) Create page crash (CSP blocks Zod eval), then [#88](https://github.com/vanshulgoyal101/adbrain/issues/88). Run 1/10 saved 1 of 3 (repeated-opening, unsupported-claim, one provider failure) |
+| Dev 2 | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) campaign mechanics: one PAUSED test campaign in the Solaride account with a Solaride lead form, then sync, pause/resume, archive. `29db6cf` is ready-to-ship |
+| QA | Red tests for #90 and for whichever #88 rejection Dev is fixing |
+| DevOps | Ship `29db6cf` ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) and retry Prepare once. Then any `ready-to-ship`; confirm Create when Dev reports 3/3 |
 
 ## Historical Dispatch Receipts
 
