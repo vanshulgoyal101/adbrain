@@ -68,15 +68,14 @@ export async function saveBusiness(
 
     const { data: saved, error } = await query;
     if (error) return { ok: false, error: error.message };
+    if (!saved) return { ok: false, error: "Brand not found or no longer accessible." };
 
-    if (saved) {
-      await logEvent({
-        businessId: saved.id,
-        action: id ? "business.update" : "business.create",
-        entityType: "business",
-        entityId: saved.id,
-      });
-    }
+    await logEvent({
+      businessId: saved.id,
+      action: id ? "business.update" : "business.create",
+      entityType: "business",
+      entityId: saved.id,
+    });
 
     revalidatePath("/brand");
     revalidatePath("/dashboard");
