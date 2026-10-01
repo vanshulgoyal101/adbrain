@@ -24,6 +24,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Hand off the commit, result and any real blocker in the existing issue/PR.
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
+- Keep the owner's checkout (`adbrain/`) clean: it is what the owner sees in
+	Source Control. Workers edit, test, merge and release only in isolated worktrees
+	under `/tmp`. The coordinator edits only docs there and commits and pushes them
+	to `dev` immediately. Never leave a merge, staged files or local edits behind.
 
 ## Execution speed
 
