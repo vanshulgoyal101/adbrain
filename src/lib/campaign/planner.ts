@@ -242,7 +242,7 @@ export async function runPlanner(
     signal.throwIfAborted();
     const completion = await complete(messages, {
       json: true, responseSchema: plannerResultSchema, cache: false, signal,
-      promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 1500,
+      promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000,
     }).catch(async (error: unknown) => {
       if (error instanceof LLMError && error.model && error.usage) {
         await options.onCompletion?.({ text: "", provider: error.provider, model: error.model, usage: error.usage }, false, attempt);

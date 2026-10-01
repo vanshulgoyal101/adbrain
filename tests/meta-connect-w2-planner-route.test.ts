@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   withMetaConnection: vi.fn(),
   createLeadCampaign: vi.fn(),
   tokenLimit: vi.fn(), usage: vi.fn(), persist: vi.fn(),
+  friendlyMetaError: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -77,7 +78,7 @@ vi.mock("@/lib/meta/connection-access", () => ({
   withMetaConnection: mocks.withMetaConnection,
 }));
 vi.mock("@/lib/meta/client", () => ({
-  friendlyMetaError: (_error: unknown, fallback: string) => fallback,
+  friendlyMetaError: mocks.friendlyMetaError,
 }));
 
 const business = {
@@ -102,6 +103,7 @@ function post(): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.friendlyMetaError.mockImplementation((_error: unknown, fallback: string) => fallback);
   mocks.tokenLimit.mockReturnValue(1000);
   mocks.usage.mockResolvedValue(0);
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
@@ -168,6 +170,7 @@ describe("guided planner route", () => {
     expect((await POST(post())).status).toBe(200);
     expect(mocks.persist.mock.calls.map(([events]) => ({ attempt: events[0].attempt, status: events[0].status })))
       .toEqual([{ attempt: 1, status: "error" }, { attempt: 2, status: "success" }]);
+    expect(mocks.persist.mock.calls[0][0][0].maxTokens).toBe(3000);
   });
 
   it.each(["city_only", "radius"])("preserves owner city scope %s in an AI recommendation", async (cityScope) => {
@@ -200,6 +203,15 @@ describe("guided planner route", () => {
     const { POST } = await import("@/app/api/campaigns/plan/route");
     expect((await POST(post())).status).toBe(502);
     expect(mocks.persist).toHaveBeenCalledWith([expect.objectContaining({ businessId: business.id, route: "campaigns.plan", status: "error", errorCode: "PLANNER_VALIDATION", metadata: { audienceOnly: false } })]);
+  });
+
+  it("does not report planner provider failures as Meta budget rejections", async () => {
+    mocks.runPlanner.mockRejectedValueOnce(new Error("provider budget exhausted"));
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(post());
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "Could not prepare the campaign plan." });
+    expect(mocks.friendlyMetaError).not.toHaveBeenCalled();
   });
 
   it("recommends targeting without saving a duplicate draft or reading Meta, retaining manual choices", async () => {
