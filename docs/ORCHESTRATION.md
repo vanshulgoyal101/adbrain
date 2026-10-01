@@ -30,13 +30,16 @@ Routine steps never wait for the coordinator.
    oldest. Empty queue: take an unowned `core` issue in your area and add your
    label. Nothing left: post one line in #74 that you are idle and stop. Do not
    invent work.
-3. **Finish an issue** by committing in your worktree and pushing your branch
-   (feature branches do not deploy). Comment the SHA and what you checked, set
-   `ready-to-ship` and `owner:devops`, remove your label, and start your next issue.
-4. **DevOps ships** every `ready-to-ship` issue: migrations first, required CI,
-   protected merge, production smoke, then close the issue with the PR link.
-   Changes to money, tenant boundaries or irreversible data get `owner:qa` first;
-   QA confirms and hands back to DevOps. Everything else ships on CI.
+3. **Finish an issue** with a PR, not a loose commit. Branch from current
+   `origin/main`, keep the change small, push, and open a PR to `main` titled
+   with the issue number. Comment on the issue in five lines or fewer: what
+   changed, proof, risk, PR link, next step. Set `ready-to-ship` and
+   `owner:devops`, remove your label, and start your next issue. If `main` moves,
+   rebase your own PR; DevOps does not cherry-pick from old bases.
+4. **DevOps ships** every `ready-to-ship` PR: migrations first, required CI,
+   merge, production smoke, then close the issue with the PR link. Batch PRs that
+   are ready together. Changes to money, tenant boundaries or irreversible data
+   get `owner:qa` first; QA confirms and hands back. Everything else ships on CI.
 5. **A core failure found live** gets its own `core` `bug` issue with the exact
    step, error and owner label. Add `owner:qa` when a red test helps. One issue
    per problem; do not bury new failures in long comment threads.
@@ -45,8 +48,12 @@ Routine steps never wait for the coordinator.
 
 ### Standing rules
 
-- **Worktrees.** `/tmp` can be wiped on restart. Commit each coherent step and
-  push your branch. Never edit the owner's checkout (`adbrain/`).
+- **Worktrees.** Use `/Users/vanshulgoyal/Development/copilot/adbrain-wt/<issue>`,
+  not `/tmp`, which is wiped on restart. Install dependencies once per worktree
+  so typecheck and tests run for real. Push your branch at each coherent step.
+  Never edit the owner's checkout (`adbrain/`).
+- **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
+  Do not rerun full suites or re-review unchanged code.
 - **Browser.** Signed in to the owner's demo account: Cedar Ridge Chiropractic,
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
@@ -68,8 +75,8 @@ Routine steps never wait for the coordinator.
 | --- | --- |
 | Dev | [#90](https://github.com/vanshulgoyal101/adbrain/issues/90) Create page crash (CSP blocks Zod eval), then [#88](https://github.com/vanshulgoyal101/adbrain/issues/88). Run 1/10 saved 1 of 3 (repeated-opening, unsupported-claim, one provider failure) |
 | Dev 2 | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) campaign mechanics: one PAUSED test campaign in the Solaride account with a Solaride lead form, then sync, pause/resume, archive. `29db6cf` is ready-to-ship |
-| QA | Red tests for #90 and for whichever #88 rejection Dev is fixing |
-| DevOps | Ship `29db6cf` ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) and retry Prepare once. Then any `ready-to-ship`; confirm Create when Dev reports 3/3 |
+| QA | Red tests for #90 and for whichever #88 rejection Dev is fixing, then [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) headless `npm run smoke:core` |
+| DevOps | Ship `29db6cf` ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) and Dev's `9980189`, retry Prepare once. Then any `ready-to-ship`; between releases [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) worktree and read-only SQL helpers |
 
 ## Historical Dispatch Receipts
 
