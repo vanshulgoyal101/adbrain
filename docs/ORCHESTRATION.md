@@ -22,6 +22,12 @@ work: no privacy, support, polish, performance or broad P1 test campaigns.
 QA findings already handed off (regenerate guard, Brand save) ship as-is. Each
 core failure found live is fixed next. The #54 Sep 29 hold stays untouched.
 
+**Paid Create budget (owner, Oct 1): 10 Create runs total**, shared by Dev and
+DevOps, on the owner's own business only. Before each run, post `Create run N/10`
+with the result in #74. At 10, stop and ask the coordinator; the owner approves
+more in batches of 10. No Meta ad spend: campaigns stay PAUSED. Dev and Dev 2
+share the signed-in browser tab; agree turns directly, one user at a time.
+
 | Worker | Deliver next | Ownership and first check |
 | --- | --- | --- |
 | Dev | **Create works every time** | Own ad generation end to end. Find and fix why production Create saved 0/3 and 2/3. Use the recorded rule categories, run the real pipeline against the owner's business, fix each failure and repeat until 3/3 saves reliably. Paid runs only within the owner-approved cap |
