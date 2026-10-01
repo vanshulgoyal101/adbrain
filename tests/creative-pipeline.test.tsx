@@ -200,6 +200,31 @@ describe("generateVariants", () => {
     expect(generateImage).toHaveBeenCalledTimes(2);
   });
 
+  it("starts the next concept during a slow repair and validates against the repaired sibling", async () => {
+    let releaseRepair!: (value: ReturnType<typeof completion>) => void;
+    const repair = new Promise<ReturnType<typeof completion>>((resolve) => { releaseRepair = resolve; });
+    const fresh = { ...concept, headline: "A useful rooftop", primary_text: "Start with a conversation about your roof." };
+    complete.mockResolvedValueOnce(completion(concept))
+      .mockImplementationOnce(() => repair)
+      .mockResolvedValueOnce(completion(concept))
+      .mockResolvedValueOnce(completion({ ...concept, headline: "Explore rooftop solar", primary_text: "Find out what fits your home." }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const pending = generateVariants({ brand, brief: "x", count: 2, recentCopy: [concept] });
+    try {
+      await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(3), { timeout: 800 });
+      expect(JSON.parse(complete.mock.calls[2][0][1].content).recentCopy).toEqual([
+        { headline: concept.headline, primary_text: concept.primary_text },
+      ]);
+      expect(generateImage).not.toHaveBeenCalled();
+    } finally {
+      releaseRepair(completion(fresh));
+    }
+    const variants = await pending;
+    expect(variants).toHaveLength(2);
+    expect(complete.mock.calls[3][0].at(-1).content).toContain("repeated-headline");
+    expect(generateImage).toHaveBeenCalledTimes(2);
+  });
+
   it("preserves each completed variant when a sibling fails", async () => {
     generateImage.mockRejectedValueOnce(new Error("Image unavailable"));
     const onVariant = vi.fn().mockResolvedValue(undefined);
