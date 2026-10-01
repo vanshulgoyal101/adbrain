@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setCreativeStatus, deleteCreative } from "@/app/(app)/studio/actions";
+import { saveBusiness } from "@/app/(app)/brand/actions";
 import { saveInstruction, deleteInstruction } from "@/app/(app)/brand/instruction-actions";
 
 const mocks = vi.hoisted(() => ({ result: vi.fn(), eq: vi.fn(), update: vi.fn(), remove: vi.fn(), log: vi.fn(), refresh: vi.fn(), getUser: vi.fn() }));
@@ -25,6 +26,12 @@ describe("saved-work mutation receipts", () => {
   const actions = [
     { name: "approve", run: () => setCreativeStatus("creative", "approved") },
     { name: "delete creative", run: () => deleteCreative("creative") },
+    { name: "save brand", run: () => {
+      const form = new FormData();
+      form.set("id", "business");
+      form.set("name", "Solaride");
+      return saveBusiness({ ok: false }, form);
+    } },
     { name: "save instruction", run: () => saveInstruction({ id: "instruction", businessId: "business", title: "Rules", content: "Be factual", isActive: true }) },
     { name: "delete instruction", run: () => deleteInstruction("instruction", "business") },
   ];

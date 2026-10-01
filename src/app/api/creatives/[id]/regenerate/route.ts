@@ -9,6 +9,7 @@ import {
 } from "@/lib/creative/persist";
 import { NoLLMKeysError } from "@/lib/llm";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
 import { getAngleByName, AD_ANGLES } from "@/lib/templates/ads";
@@ -93,6 +94,29 @@ async function handlePOST(
       { status: 503 },
     );
 
+  const attemptId = currentRequestId();
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+  }
+  const { data: claim, error: claimError } = await admin.rpc("creative_regeneration_claim", {
+    p_creative_id: id, p_business_id: business.id, p_user_id: user.id, p_attempt_id: attemptId,
+  });
+  if (claimError || !claim)
+    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+  if (claim.action === "missing") return NextResponse.json({ error: "Creative not found" }, { status: 404 });
+  if (claim.action === "busy")
+    return NextResponse.json({ error: claim.status === "unresolved"
+      ? "Previous paid regeneration needs review before retrying."
+      : "Regeneration is already in progress. Refresh this creative before trying again." }, { status: 409 });
+  if (claim.action !== "start")
+    return NextResponse.json({ error: "Regeneration admission is unavailable. No generation was started." }, { status: 503 });
+
+  let paidAttemptStarted = false;
+  let unresolved = false;
+  let response: NextResponse;
   try {
     const [instructions, referenceImages, recentCopy] = await Promise.all([
       getActiveInstructionsText(business.id),
@@ -101,6 +125,7 @@ async function handlePOST(
     ]);
     const settings = savedGenerationSettings(creative.generation);
     const advisoryPreferences = await preferenceContext(business.id, "creative", [creative.brief, instructions].filter(Boolean).join("\n")).catch(() => "");
+    paidAttemptStarted = true;
     const variant = await generateOneVariant(
       business,
       creative.brief,
@@ -114,7 +139,7 @@ async function handlePOST(
       advisoryPreferences,
       settings.sourceFacts,
     );
-    await persistLLMUsage(
+    const recorded = await persistLLMUsage(
       variantUsageEvents(variant, {
         businessId: business.id,
         userId: user.id,
@@ -122,6 +147,7 @@ async function handlePOST(
         requestId: currentRequestId(),
       }),
     );
+    if (!recorded) throw new Error("Regeneration usage could not be recorded");
 
     const photoUrl = await persistCreativeImage(
       supabase,
@@ -159,40 +185,50 @@ async function handlePOST(
       .eq("id", id)
       .select("*")
       .single();
-    if (error) {
-      return serverError(
+    if (error || !updated) {
+      unresolved = true;
+      response = serverError(
         "creative.regenerate",
-        error,
+        error ?? new Error("Creative update returned no row"),
         "Could not update creative.",
       );
+    } else {
+      await logEvent({
+        businessId: business.id,
+        action: "creative.regenerate",
+        entityType: "creative",
+        entityId: id,
+        reason: creative.brief,
+        details: { angle: variant.angleName },
+      });
+      response = NextResponse.json({ creative: updated });
     }
-
-    await logEvent({
-      businessId: business.id,
-      action: "creative.regenerate",
-      entityType: "creative",
-      entityId: id,
-      reason: creative.brief,
-      details: { angle: variant.angleName },
-    });
-
-    return NextResponse.json({ creative: updated });
   } catch (err) {
-    await persistLLMUsage(
-      failedVariantUsage(err, {
+    unresolved = paidAttemptStarted && !(err instanceof NoLLMKeysError);
+    try {
+      await persistLLMUsage(failedVariantUsage(err, {
         businessId: business.id,
         userId: user.id,
         route: "creatives.regenerate",
-        requestId: currentRequestId(),
-      }),
-    );
+        requestId: attemptId,
+      }));
+    } catch {
+      unresolved = paidAttemptStarted;
+    }
     if (err instanceof NoLLMKeysError)
-      return NextResponse.json({ error: err.message }, { status: 400 });
-    return NextResponse.json(
+      response = NextResponse.json({ error: err.message }, { status: 400 });
+    else response = NextResponse.json(
       {
         error: "Regeneration could not be completed. Refresh the creative before trying again.",
       },
       { status: 502 },
     );
   }
+  const { data: settled, error: settleError } = await admin.rpc("creative_regeneration_finish", {
+    p_creative_id: id, p_business_id: business.id, p_user_id: user.id,
+    p_attempt_id: attemptId, p_unresolved: unresolved,
+  });
+  if (settleError || settled?.status !== (unresolved ? "unresolved" : "released"))
+    return NextResponse.json({ error: "Regeneration state could not be confirmed. Check the creative before trying again." }, { status: 503 });
+  return response;
 }

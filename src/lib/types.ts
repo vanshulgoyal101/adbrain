@@ -661,6 +661,14 @@ export interface Database {
           p_accounted_tokens?: number; p_complete?: boolean; p_uncertain?: boolean; p_failed?: boolean };
         Returns: { status: "unknown" | "processing" | "partial" | "complete" | "failed" | "unresolved"; count?: number; expectedCount?: number };
       };
+      creative_regeneration_claim: {
+        Args: { p_creative_id: string; p_business_id: string; p_user_id: string; p_attempt_id: string };
+        Returns: { action: "start" | "busy" | "missing"; status?: "processing" | "unresolved" };
+      };
+      creative_regeneration_finish: {
+        Args: { p_creative_id: string; p_business_id: string; p_user_id: string; p_attempt_id: string; p_unresolved: boolean };
+        Returns: { status: "released" | "unresolved" | "missing" };
+      };
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number };
         Returns: { allowed: boolean; retry_after_ms: number }[];
