@@ -6,7 +6,69 @@ setup and SQL mechanics are in [Deployment](DEPLOY.md); incident response is in
 or project in the workspace. Recheck remote controls for a release; dated receipts
 are evidence, not a continuing grant of operational authority.
 
+## Startup Fast Path
+
+**Controlling owner direction, September 28, 2026.** This section supersedes
+older procedural approval, staging and blanket QA waits below. Dated release
+receipts remain historical evidence. Ship complete useful changes, not paperwork.
+
+This is the permanent default for all future features, improvements and bug fixes,
+from initial scope/design through implementation and release. It is not limited
+to payments, PR72 or the current pre-customer milestone. Prefer simple maintainable
+implementations, complete customer workflows, existing tools and rapid production
+feedback. Do not reintroduce approval chains, speculative architecture or exhaustive
+validation merely because the next feature starts. Extra checks must address a
+specific material risk; the financial, security and data protections below remain.
+
+1. The author implements the customer outcome and runs the smallest meaningful
+   checks. Use one existing issue/PR and exact commits; no separate approval packet.
+2. The release owner uses required CI as the full gate, integrates only completed
+   dependencies and deploys through protected main. No extra coordinator approval
+   or mandatory separate QA session for ordinary UI, performance or reversible
+   application changes. Do not replay unchanged green tests locally.
+3. Smoke-test the actual workflow in production immediately after deployment.
+   Bounded non-financial checks with synthetic or owner-controlled data are
+   authorized. Record the result briefly in the same PR; fix or roll back concrete
+   regressions. Staging, automated browser availability and exhaustive pre-release
+   visual checks are not universal prerequisites. Owner manual smoke is valid;
+   distinguish it from automated or provider verification.
+
+Money movement, authorization/tenant boundaries and irreversible data changes
+still require focused checks before exposure. QA can review these alongside CI.
+Once accepted, only a material behavioral/integration change reopens review;
+the release owner can verify a mechanical correction and its focused check without
+another QA round. Non-blocking suggestions go to the backlog. Preserve required
+CI, branch protection, secrets, tenant isolation and financial invariants.
+
+DevOps is the current sole production executor, authorized to complete scoped
+releases without another permission round. Necessary compatible, data-preserving
+migrations and scoped nonsecret rollout configuration are included in an approved
+feature release: authenticate the exact target, check the current schema/ledger,
+apply only the intended migration and retain an appropriate recovery/forward-fix
+path. Take a recoverable snapshot for risky data/schema changes; do not invent a
+new backup-platform or staging project as a release prerequisite. Applied migration
+history remains immutable. Destructive changes, credential rotation, new paid
+infrastructure and unapproved provider spending require explicit authorization.
+
+A broken browser tool is not the same as missing production access. Use an already
+authorized CLI/API/dashboard path where available; never extract browser credentials
+or bypass authentication. Ask once for the precise secure login/input only when
+access genuinely requires the owner. Continue independent work while blocked.
+
+For the current custom-amount release, [PR72](https://github.com/vanshulgoyal101/adbrain/pull/72)
+already has source acceptance and green release CI. Finish that release, not another
+review cycle. Apply the accepted schema with authenticated target access before
+serving dependent callers, configure the private pilot and test the visible field
+in production. Manual owner inspection may replace unavailable browser automation.
+Confirm the displayed, server and Razorpay amount before the owner alone submits
+the approved INR 10 payment. No agent-initiated charge/refund or Meta activation
+is authorized. Keep a quote-aware runtime after any nondefault order exists.
+
 ## Current Release Boundary
+
+Historical September 26 context follows; use Startup Fast Path and Current Dispatch
+for present authority and [PR72](https://github.com/vanshulgoyal101/adbrain/pull/72)
+for current release state. Do not resurrect old collection or review holds.
 
 Latest September 26 release: [PR #47](https://github.com/vanshulgoyal101/adbrain/pull/47)
 deployed trusted campaign/audit safeguards and the combined enquiry workflow as
@@ -42,8 +104,9 @@ Do not replay a completed release because an older paragraph calls it pending.
 | --- | --- |
 | Local implementation/docs commits | Assigned scope and isolated ownership; preserve unpublished work |
 | Feature/dev publication | Correct candidate deployment policy, verified target/environment scope and applicable checks; not migration approval |
-| Production code promotion | Reviewed dependency-complete subset, protected main PR, green exact-head required checks and compatible rollback |
-| Schema/data/credential change | Separate explicit target-specific authorization, preflight, backup and compatibility plan |
+| Production code promotion | Dependency-complete subset, protected main PR, green required checks and compatible recovery; additional review only for material high-risk behavior |
+| Compatible migration and rollout config | Included in approved feature scope under Startup Fast Path; authenticated target, schema/ledger and appropriate recovery checks |
+| Destructive data or credential change | Explicit target-specific authorization and recovery plan |
 | Paid providers, ad activation, live payments or paid infrastructure | Separate financial/provider authorization; not implied by deployment or merchant activation |
 
 For an already-authorized operation, do not ask for approval again merely because
@@ -153,8 +216,9 @@ documentation-only synchronization is recorded in its PR.
 - Never bypass protection, force-push, or use `vercel --prod` to skip review.
 - Preserve local work. Do not reset, stash, or discard unrelated changes to make
   a release branch clean. Use an isolated worktree when appropriate.
-- Git publication, production deployment, migrations, credential changes, and
-  live provider mutations are separate actions requiring appropriate approval.
+- Publication, deployment, migration and live-provider results are distinct facts.
+   Startup Fast Path grants scoped release authority, not permission for destructive
+   operations, credential changes or unapproved financial/provider actions.
 
 ## Enforced Controls and Limits
 

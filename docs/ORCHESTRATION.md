@@ -1,112 +1,182 @@
 # AdBrain Worker Orchestration
 
-Updated September 27, 2026. Maintainer: coordinator.
+Updated September 30, 2026. Maintainer: coordinator.
 Goal: ship useful customer workflows quickly, with checks proportional to risk.
 This file is the current dispatch. GitHub issues own scope and acceptance; PRs
 own review and CI evidence. Historical dispatches do not grant or block work.
 
 ## Current Dispatch
 
-Owner direction, September 27: build and ship high-value work; stop repeated
-coordination loops. This section and each assigned issue control current work.
-The material below Historical Dispatch Receipts preserves evidence, not active
-assignments or approval holds. No broad repository refactor is authorized.
+**September 28 owner reset: build, ship, test in production.** Follow the
+[Startup Fast Path](RELEASING.md#startup-fast-path). It supersedes earlier mandatory
+QA/coordinator rounds, staging expectations and repeated status handoffs. Keep
+required CI, financial/tenant protections and one production executor. Historical
+receipts below are evidence, not permission gates. No broad #66 refactor.
 
-Urgent owner request: temporarily enable an INR 10 real payment for the selected
-internal Solaride pilot; the owner will complete checkout. This supersedes the
-earlier no-payment-verification objective hold only for this bounded test, not
-permission for an agent to enter payment credentials or submit a charge/refund.
-The current SQL/order/quote/UI contract fixes the annual amount at INR 10,000;
-do not change only a label, alter an applied migration or remove amount checks.
-The coordinator owns the coherent configurable-price/verification implementation,
-superseding the initial Dev 2 assignment in the later
-[#48 ownership update](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5858162341).
-QA owns focused financial regression review and DevOps owns guarded production
-rollout. This takes priority over optional performance follow-ups.
+### Active Assignments
 
-Scope: INR 10 total (1000 paise), the privately identified pilot owner/business
-only, one recoverable verification order, a short explicit expiry and no extra
-gateway fee charged to the payer. Label it as a real payment verification, not
-the annual package. No annual service entitlement or advertising allowance may
-be granted, and no Meta activation is included. Keep the normal INR 10,000 offer
-unchanged for other users and after the test. Existing orders/quotes, capture,
-webhook, refund and reconciliation identities must remain immutable/readable.
-The temporary mode must stop new verification payments after success or expiry;
-late callbacks and existing-order reconciliation must still work. Restore the
-normal checkout without rewriting the test receipt or hiding outstanding money.
-Runtime, database and displayed amounts must agree before telling the owner to pay.
+September 30 owner direction: assign the idle workers useful implementation and
+release work. The coordinator remains CEO/planning, not another source writer.
+The earlier planning-only status of #76 described the September 29 task; Dev 2
+is now assigned the bounded first implementation slice below. Do not treat the
+whole memory roadmap as one mandatory release or enable automatic inference yet.
 
-Pricing candidate: local commit `5f95732a65693b7fd24572bfcb8c3b3d1b7100ca`,
-based on reconciled dev `faffec523168a0f5fe4baabd01c61d197fa36b09`, in the clean
-isolated /tmp/adbrain-configurable-payments checkout. No branch push or PR created.
-Normal price uses `PAYMENTS_LIVE_AMOUNT_PAISE` (default 1000000); verification uses
-separate enabled/amount/owner/business/expiry settings, default 1000, zero entitlement.
-The new migration `20260927_configurable_payment_quotes.sql` has SHA256
-`d10de1c180087a05ce1da2ac1c933d6215abdcb1ccf2a52bdd3f7dfadb805701`.
-Focused TS/UI checks, the complete maintained disposable PostgreSQL harness
-(including fresh/upgrade pricing, exact TS/SQL policy parity and refunds), types,
-touched lint, docs and staged secret scan passed. Independent QA, exact-candidate
-CI and production migration/configuration/deployment remain outstanding. No
-production INR 10 quote, real capture, signed webhook or settlement is claimed.
-After a nondefault order exists, retain a quote-aware runtime; old fixed-price
-code is not a compatible rollback. Do not duplicate the implementation.
+**#76 memory is deployed; finish operational follow-ups, not another release.**
+[QA accepted the corrected candidate](https://github.com/vanshulgoyal101/adbrain/issues/76#issuecomment-5905479397)
+and [PR80 released](https://github.com/vanshulgoyal101/adbrain/pull/80#issuecomment-5912048441)
+at `04e2d001f4f1153fd8bd8c5ea33ad51612bf0dd0`, with required PR/main CI green,
+Vercel Ready and migration/RLS/grants verified by DevOps. Do not recompose,
+retest the accepted source or re-release memory because older receipts say pending.
 
-| Owner | Deliver next | Execution rule |
+Remaining customer check: authenticated Settings enable/save/reload/forget on a
+harmless owner-controlled preference, preserving unrelated settings and restoring
+the test state. DevOps owns this bounded non-financial smoke, or uses owner manual
+readback. No generation or paid call is needed. The newly shared Settings tab was
+readable by the browser tool but reported `chrome-error://chromewebdata/`;
+public reachability was home200/settings307. This does not prove authenticated
+Settings works, nor that the old CDP timeout still applies. Diagnose the current
+navigation/session failure, not the superseded bridge failure.
+
+DevOps also owns main-to-dev reconciliation deferred at release because of the
+dirty shared checkout and 15 conflicts. Do it in an isolated integration worktree,
+preserve unique dev work and all peer changes, validate actual conflict resolutions
+and publish through the existing branch policy. No reset/stash or copying whole
+files over unrelated work. This is not a reason to hold the already-live feature
+or repeat its production deployment. After these checks, use #67's existing
+accepted thumbnail candidate if it is still unreleased; no new feature scope.
+
+The receipt guarantee is deliberately narrow: when memory was applied, saved
+`imagePrompt` uses a fixed omission marker. Generated concept/copy/image can
+still reflect style; do not claim every stored output is preference-free. No
+unapproved paid generation is needed for review or a Settings memory smoke.
+
+**Separate blocked incident: #54.** The code repair, interview changes and analytics
+shipped via PR77/78/79; last checked main is
+`5e430bc4c9c1fb05a06d3432016b9a1038da2ee1`. The old request still has 0/3 ads,
+9,844 accounted tokens and 186,000 reserved; it is not reconciled. The
+[provider-access check](https://github.com/vanshulgoyal101/adbrain/issues/54#issuecomment-5905187738)
+is complete: the available key returned 403 and daily aggregate access would not
+establish every outcome. Needed evidence is administrator-level per-generation
+activity for the production account/key at 2026-09-29 18:00-18:02 UTC. No keys or
+unredacted exports in chat/issues. Do not repeat unchanged access/count probes.
+Keep the hold and identity; there is no shipped operator reconciliation RPC.
+Resume evidence-based recovery when access/evidence changes. This external wait
+does not block #76 because that release must preserve the held request unchanged.
+
+| Worker | Deliver next | Ownership and first check |
 | --- | --- | --- |
-| Dev | #67 thumbnail review support | New media candidate 7941567 is committed. Keep it frozen for QA and resolve concrete original/derivative/fallback findings; do not repeat accepted priority-hint checks or claim old assets were backfilled |
-| Dev 2 | Pricing review support only | Coordinator candidate 5f95732 owns this slice; do not write a competing implementation. Report concrete findings against that exact source |
-| QA | Review pricing candidate 5f95732 | Review amount/tenant/eligibility, one-order replay, correct capture/refund accounting, zero ad/service allowance and recovery after expiry/restoration. Reuse author evidence and run only changed-risk checks; do not initiate the owner's real payment |
-| DevOps | Deploy the accepted INR 10 verification mode | Dev synchronization is complete at faffec523168a0f5fe4baabd01c61d197fa36b09; do not repeat the 14-conflict work. Own required CI, any exact compatible migration, restricted Production configuration, deployment and displayed/server quote check before inviting the owner to pay. No automatic charge or refund; normal price restoration is part of the rollout |
-| Coordinator | Support the frozen pricing candidate and clear real blockers | Implementation handed off at 5f95732. Keep production and independent acceptance separate from author checks; no idle polling or repeated status-only handoffs |
+| Dev | [#74 Create success rate](https://github.com/vanshulgoyal101/adbrain/issues/74) | #67 commits `7eba3ec` and `37c3c1d` are handed off. Create is the core paid workflow. Using read-only production data (validation categories and usage since PR78), find the most common reasons Create saves fewer than the requested ads. Fix the top cause in prompts, validation or model fallback without relaxing fact checks, with regression tests. Report counts, not prompts or customer text. No paid calls |
+| Dev 2 | [#74 enquiries journey](https://github.com/vanshulgoyal101/adbrain/issues/74) | #56 `5256499` is handed off. Leads are what customers pay for. Cover Meta lead import/sync to the enquiry inbox to follow-up: duplicates, missed or late leads, sync failure reported as success, stale reads, cross-tenant access. Write red tests with synthetic data, fix real defects, commit and hand to DevOps. Report what is mock-only versus live-verified |
+| QA | Two focused pre-release gates | 1) PR82 `a4e35df`: retest your late-usage repro and the new row-lock and tenant guards (hard gate for #54 prevention). 2) #56 `78be7e8` plus Dev 2's operator page: RLS, cross-owner, anon and operator-grant boundaries. Report verdicts directly to DevOps |
+| DevOps | Release queue | #76 Settings smoke passed; close #76. Now: release the accepted, unreleased #50 focus fix `bfcb767` (patch-check first) with Dev's amended #67 sync commit. Prepare the #56 migration and release branch in parallel with QA. Ship PR82 and #56 as soon as each QA gate is clean. For #56, register the owner's verified account as privacy operator (confirm the account with the owner once). Low priority: enable the Razorpay live webhook if you have dashboard access |
+| Coordinator | Keep priority and ownership clear | Review product decisions and unblock actual dependencies. No product-code implementation in this assignment pass |
 
-Active issue: [#67 performance](https://github.com/vanshulgoyal101/adbrain/issues/67).
-PR70/PR71 have released navigation 8aa107a and image priority 45aa994, per the
-[release handoff](https://github.com/vanshulgoyal101/adbrain/issues/67#issuecomment-5857424252).
-Required PR/main CI and deployment status passed; authenticated Dashboard/Studio
-interaction remains unverified because the browser bridge failed. Do not equate
-the public homepage response with that acceptance or repeat those source reviews.
-Dev synchronization completed at faffec523168a0f5fe4baabd01c61d197fa36b09,
-preserving unique work; do not repeat it.
+Dev adopted QA's recovery overlay for the shipped #54 repair. Preserve the original
+/tmp/adbrain-qa-create-recovery-20260929 copy and reuse that evidence; QA uses
+isolated test copies for new probes. Do not rebuild the shipped admission system.
 
-New local-only candidate: `794156742bcd846635fd5b5175e59691533cf510` at
-/tmp/adbrain-issue-67-media, child of the accepted priority-hint source. It creates
-a smaller 960px WebP for eligible new creative uploads, retains originals for
-inspection/export/provider use, and falls back for legacy/missing derivatives.
-Author evidence: 72 focused tests and synthetic image byte reductions of 67-82%;
-matched delivery fixtures improved but are not authenticated production timings.
-One extra stored object per eligible creative is not net cost savings. Older
-creatives and Brand assets are not backfilled. Scoped QA acceptance has been
-reported; prioritize the payment rollout before optional media follow-ups.
+One writer per source: Dev owns `src/components/ad-assistant.tsx`, generation
+routes, and creative concept/validation/generation modules. Dev 2 owns new memory
+modules/routes/migrations/settings UI, `src/lib/templates/ads.ts`, the creative
+interview and campaign planner context. If memory needs a generation/concept or
+Create-screen change, Dev 2 supplies the small consumer change directly to Dev;
+Dev applies it after the incident fix is stable. No simultaneous edits or user
+relay. Dev 2 can complete storage, controls and interview/planner integration
+without waiting on that boundary; do not hold the incident release for memory.
 
-Already approved under [#48](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5856545914):
-one Solaride Brand save, display name Solaride, offer "Free rooftop solar site
-survey and subsidy application guidance, subject to eligibility", service area
-Chandigarh and Panchkula. Preserve all other fields and the same business. Read
-back after submission; do not blindly retry an uncertain save. No payment/order,
-creative generation, campaign/asset/connection changes; external cost and Meta
-spend both capped at INR 0. Keep the owner login private.
+Keep frozen #75/#73 candidates unchanged. Feature authors work in isolated
+checkouts based on current compatible source; Dev 2 must incorporate #75 before
+editing its planner so repeated-question fixes are preserved. DevOps owns shared
+integration and resolves candidate conflicts, not blanket merges of unfinished dev.
+Post the commit/result/real blocker in the assigned issue; no new receipt project.
 
-Routine issue-local code, tests, dependencies and commits are already authorized.
-One focused author check, one scoped QA verdict, required exact-candidate CI and
-the appropriate deployed check form the delivery loop. Reuse matching evidence;
-do not skip required gates or repeat unchanged ones. A stopped chat needs manual
-resume; a posted assignment cannot wake it. Idle capacity is fine when no useful
-independent work remains, but awaiting one review does not block unrelated work
-inside an existing assignment.
+### Release State
 
-DevOps remains the sole production/shared-integration executor. Follow
-[RELEASING](RELEASING.md), preserve dirty peer work and immutable release inputs,
-and verify the actual target. Stop for a concrete correctness/security failure,
-missing credential or an out-of-scope destructive/financial action, not a routine
-permission question. No new paid service, real charge/refund, paid generation,
-ad activation, customer-data operation beyond the approved save, protection
-bypass or blanket cleanup is included. Issue #66 stays deferred.
+[#75](https://github.com/vanshulgoyal101/adbrain/issues/75#issuecomment-5904233276)
+is deployed via PR77, with final required CI and Vercel Ready evidence. The
+verification flag was configured off for that deployment. Actual live interview
+quality remains distinct from author tests; do not create another release of it.
 
-Current production: PR71 at `d98e2274429b950e612a9451f51a5bc493318fc3`;
-payment collection is technically enabled. Real capture, signed webhook delivery,
-bank settlement and provider delivery remain separate unverified outcomes. Do not
-use that missing financial evidence to hold unrelated software releases, or call
-local/source performance evidence a verified improvement in the deployed app.
+[#73](https://github.com/vanshulgoyal101/adbrain/issues/73) is deployed via PR79
+at `5e430bc`; its exact rollup migration and grants were read back by DevOps.
+Authenticated action/engagement persistence has not yet been demonstrated. A safe
+manual inspect-existing-creative and foreground-page check can supply that evidence;
+no new generation or retention prune is needed. The original candidates stay frozen.
+
+[PR72](https://github.com/vanshulgoyal101/adbrain/pull/72) released to
+`ad73b750aa4332b5902f0c1654a37db50036fd8f`. The owner completed the INR10 payment;
+coordinator read-only verification confirmed one capture/effect, no review hold and
+zero service/ad allowance. Preserve its receipt. DevOps configured verification
+off for PR77; do not repeat that cleanup absent a new mismatch. No repeat payment
+or QA cycle is needed.
+
+The earlier Supabase login blocker is resolved. At the owner's request, the
+coordinator found an existing `SUPABASE_TOKEN` in the sibling Arcade environment
+file (local source below). Read it with a dotenv parser into process memory; do
+not print, copy into AdBrain, commit, rotate or send it through chat. No fresh
+login is needed. The existing Arcade database scripts demonstrate the API pattern;
+do not run those scripts or use their different project target for AdBrain.
+
+```text
+Local credential source: /Users/vanshulgoyal/Development/copilot/arcade/.env
+Variable: SUPABASE_TOKEN
+AdBrain target: kmzuxrvfrwwpwmoovwcp
+API: https://api.supabase.com/v1/projects/kmzuxrvfrwwpwmoovwcp
+```
+
+Verified access: project GET200 matched AdBrain/ACTIVE_HEALTHY and read-only
+POST `/database/query` succeeded. The initial pricing-preflight absence is historical:
+DevOps subsequently applied the pricing migration under PR72. Platform backup
+metadata reported zero backups/PITR disabled; PR72 has a scoped encrypted before-state,
+not a full backup. Reuse the authenticated API with exact target/ledger/hash guards.
+Do not replay whole schema. Analytics baseline read found 76 product events in
+24 hours; existing database logging works, but this is not #73 deployment evidence.
+
+`npx --yes vercel@60.1.3` works. The broken browser bridge is not itself a
+deployment gate: use owner manual production smoke rather than repeated CDP
+diagnosis. Do not reopen the superseded CLI login blocker or request credentials
+already available locally. Apply the required migration before dependent callers.
+
+Payment scope remains: privately verified Solaride owner/business, default and
+maximum INR 10, one expiring recoverable verification order, zero service/ad
+allocation, normal INR 10,000 annual price unchanged. The owner alone submits
+payment after checking displayed/server/Razorpay amount. No automatic refund or
+Meta activation. Preserve saved quotes and late recovery; keep quote-aware code
+after a nondefault order exists. Disable new verification after the test.
+Accepted migration `20260927_configurable_payment_quotes.sql` SHA256:
+`f4b66888428add6cf4ee645f99168243c6ba5a9baf0c2680e462d2ac619edef4`.
+Do not use superseded d10de1 bytes or rewrite applied history.
+
+### Ownership
+
+The Active Assignments table above controls current work. Existing payment
+acceptance remains valid; no routine second QA sign-off or unchanged-suite replay.
+These assignments authorize scoped development, not new live charges, provider
+spend, ad activation or unsupported clearing of the unresolved production intent.
+
+Next ready release is [#67](https://github.com/vanshulgoyal101/adbrain/issues/67)
+thumbnail source `794156742bcd846635fd5b5175e59691533cf510`, with scoped QA
+acceptance reported. Preserve originals and legacy fallback; no old-asset backfill.
+It need not wait for payment-provider evidence. DevOps may ship this independent
+accepted slice while payment access is blocked, without a new approval loop or
+mixing it into PR72. Do not start speculative polish to fill worker capacity.
+
+The existing [one Solaride Brand save approval](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5856545914)
+also remains valid: name Solaride, offer "Free rooftop solar site survey and subsidy
+application guidance, subject to eligibility", area Chandigarh and Panchkula;
+preserve other values, read back and do not retry uncertain writes blindly.
+
+Use one issue/PR for commit, result and blocker; no separate routine receipt.
+Verify only changed inputs and required gates, then test ordinary behavior in
+production with reversible synthetic/owner-controlled data. No secret exposure,
+destructive customer operations or unapproved charges/refunds/provider spend.
+Preserve peer work and services. A posted assignment cannot wake a stopped chat.
+
+Last release reported and verified by DevOps: `04e2d001f4f1153fd8bd8c5ea33ad51612bf0dd0` (PR80).
+Interview, Create recovery, analytics and declared memory are deployed. Authenticated
+memory save/reload/forget and recovery of the old failed Create request remain
+incomplete. INR10 application capture is verified; signed webhook and settlement
+remain separate unverified evidence. No open source-QA blocker remains for #76.
 
 ## Historical Dispatch Receipts
 

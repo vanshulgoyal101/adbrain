@@ -11,51 +11,54 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Worker coordination
 
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
-	shared resources: read its Current Dispatch and your assigned issue, not every
-	historical checkpoint. Include role, scope and conflicts in the first work update;
-	do not end a turn with only an acknowledgement when work can proceed.
-- Follow its single-writer register and applicable contract gates. Discuss needed
-	interfaces directly with their owner; involve the coordinator for conflicts or
-	material scope/policy changes, not routine helper names or local setup.
-- QA owns independent acceptance, DevOps owns release execution, and the coordinator
-	owns priorities and the central board. Workers maintain their own evidence receipts.
+	shared resources: read Current Dispatch and your issue, not historical receipts.
+	Proceed with useful work; do not return only an acknowledgement.
+- One writer per source/resource, one executor for production. DevOps owns the
+	active release. Talk directly to another owner when needed; do not route routine
+	decisions through the coordinator or ask the user to relay worker messages.
+- QA reviews high-risk changes and investigates concrete failures, not every
+	ordinary release. Authors own focused checks; the release owner owns deployment
+	and production smoke. No automatic coordinator or second-QA approval gate.
 - Do not interrupt another worker's terminal, server, database, VM or tests, switch
 	the shared branch, alter shared credentials or remove another worker's artifacts.
-- Hand off an exact commit or reproducible source manifest. Keep implementation,
-	local acceptance, hosted checks, provider evidence and production verification separate.
-- The board is advisory coordination, not automatic dispatch, locking or permission
-	for production actions. The release and approval rules below remain in force.
+- Hand off the commit, result and any real blocker in the existing issue/PR.
+	No separate receipt or manifest project for ordinary committed work. Report local,
+	CI and production evidence honestly. A board update cannot wake a stopped chat.
 
 ## Execution speed
 
-- The assigned issue is authority for related implementation, helpers, tests and
-	issue-local dependencies. Do not request permission again for each routine step.
-- Choose work that completes a core customer workflow, clears a real blocker or
-	reduces a demonstrated recurring cost. Idle capacity is better than invented work.
-- Deliver the assigned customer outcome; defer optional polish, speculative
-	abstractions and unrelated edge cases. Financial, tenant and security protections
-	are required, not optional polish.
-- Own routine decisions inside your isolated issue worktree: reuse or create its
-	allocation, add necessary helpers/tests, install scoped dependencies, and commit.
-	Under the board's publication authority, push only your feature branch and open
-	its PR after deployment-policy checks. Do not wait for DevOps to perform these
-	steps; shared integration, main and production remain single-executor operations.
-- Find the deciding code and a focused check, then implement. Prefer existing
-	tests, commands and maintained libraries; do not build a new validation harness
-	or research report for each routine change.
-- Run focused author checks as code changes. Reuse matching exact-candidate
-	evidence; let required CI provide the canonical full gates. Do not repeat a full
-	suite/build, dependency install, audit or source hash scan without a changed input,
-	actual failure or required environment check. Never skip required CI or tests.
-- QA can review the diff while checks run and make approval conditional on green
-	required checks. Non-blocking suggestions go to the backlog. Unchanged green CI
-	does not require another review session just to copy its results.
-- Keep handoffs short: issue/PR, exact source, result, blocker and next owner.
-	Reference existing evidence once. A blocker must name the missing decision or
-	failing command and the work that can continue; no repeated status-only handoffs.
-- Any active hold recorded in the current dispatch overrides general publication
-	permission. Do not resurrect resolved holds from historical receipts or change
-	release controls to adopt process updates.
+- This is the standing default for every new feature, improvement and bug fix,
+	not a payment-specific exception or temporary release mode. Apply it from scope
+	and architecture through implementation, testing and deployment. Choose the
+	simplest maintainable path to a complete customer outcome; add process only for
+	a concrete risk, not because a new feature or worker handoff has started.
+- September 28 owner direction: build and ship like a small startup. Default loop:
+	implement a complete useful slice, run focused checks and required CI, deploy,
+	then smoke-test in production. Staging and exhaustive local/browser replay are
+	not default prerequisites. Follow [the fast release policy](docs/RELEASING.md#startup-fast-path).
+- Assigned work includes routine implementation, scoped dependencies, tests,
+	isolated worktree setup, commits and permitted publication. Do not ask permission
+	again for each step. Keep production single-executor; preserve branch protection.
+- Production testing is authorized for bounded, reversible, non-financial checks
+	on owner-controlled or synthetic data. No blanket permission to charge/refund,
+	spend on providers, activate ads, expose secrets or damage customer data.
+- QA may run alongside implementation/CI; ordinary changes do not wait for a
+	separate QA session. Money, tenant/auth boundaries and irreversible data changes
+	need focused pre-release evidence. Reuse accepted evidence; a mechanical correction
+	with no behavioral change does not reset acceptance when the release owner verifies
+	the delta and its relevant check passes.
+- Let required CI perform full gates. Do not duplicate full suites/builds, audits,
+	installs or source scans without changed inputs or an actual failure. Never disable
+	required checks, hide failures or bypass financial/security protections for speed.
+- Fix ordinary UX failures in production or roll back promptly. A broken automation
+	bridge is not itself a release gate: use working CLI/API access and owner manual
+	smoke checks where appropriate. Missing authenticated target access remains real.
+- Report an actual blocker once with the exact missing action. Continue independent
+	work; do not turn waiting into repeated board edits, issue comments or user relays.
+	No new research report, test harness or process document for a routine change.
+- Deliver whole customer workflows and demonstrated fixes, not speculative polish.
+	Workers can finish independent assigned work while one release is blocked; do not
+	invent work just to occupy them. Historical holds do not override current authority.
 
 ## Engineering priorities and reuse
 
