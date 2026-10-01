@@ -6,6 +6,7 @@ import {
 } from "@/lib/creative/design";
 import {
   buildConceptMessages,
+  conceptValidationRules,
   creativeConceptSchema,
   conceptImagePrompt,
   validateConcept,
@@ -47,6 +48,7 @@ export interface GeneratedVariant {
     providerRequestId?: string;
     providerFinalStatus?: "completed" | "failed" | "unknown";
     status?: "success" | "error";
+    validation?: { stage: "provider" | "parse" | "concept"; rules: string[] };
   }[];
   imageUsage: {
     provider: string;
@@ -190,6 +192,7 @@ async function generateConcept(
   let issues: string[] = [];
   let stage: CreativeValidationError["stage"] = "concept";
   for (let attempt = 0; attempt < 2; attempt++) {
+    const usageBeforeAttempt = usage.length;
     const env = getEnv();
     let sawProviderAttempt = false;
     const completion = await complete(messages, {
@@ -210,7 +213,12 @@ async function generateConcept(
           usage: error.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           providerRequestId: error.providerRequestId, providerFinalStatus: error.providerFinalStatus ?? "unknown", status: "error" });
       }
-      if (usage.length) throw new CreativeValidationError(["Provider attempt could not be confirmed"], usage, "provider");
+      if (usage.length) {
+        if (sawProviderAttempt || (error instanceof LLMError && error.model)) {
+          usage[usage.length - 1].validation = { stage: "provider", rules: ["other"] };
+        }
+        throw new CreativeValidationError(["Provider attempt could not be confirmed"], usage, "provider");
+      }
       throw error;
     });
     if (!sawProviderAttempt && completion.usage) {
@@ -242,6 +250,7 @@ async function generateConcept(
       if (result.success) return { concept: result.concept, usage };
       issues = result.issues;
     }
+    if (usage.length > usageBeforeAttempt) usage[usage.length - 1].validation = { stage, rules: conceptValidationRules(issues) };
     messages.push({
       role: "user",
       content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,

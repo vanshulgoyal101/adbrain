@@ -137,6 +137,56 @@ describe("generateVariants", () => {
     expect(JSON.stringify(events)).not.toContain("private customer text");
   });
 
+  it("records the rejected concept rule even when repair saves the variant", async () => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
+    complete.mockResolvedValueOnce({ ...completion({ ...concept, sourceQuotes: ["private customer text"] }), usage })
+      .mockResolvedValueOnce({ ...completion(concept), usage });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { variantUsageEvents } = await import("@/lib/creative/receipt");
+    const [variant] = await generateVariants({ brand, brief: "x", count: 1 });
+    const events = variantUsageEvents(variant, {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events[0]).toMatchObject({ status: "success", metadata: {
+      validationStage: "concept", validationRules: ["sourceQuotes"],
+    } });
+    expect(events[1].metadata).toEqual({ angle: variant.angleId });
+    expect(JSON.stringify(events)).not.toContain("private customer text");
+  });
+
+  it("keeps both rejected concept categories on their own failed-variant attempts", async () => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
+    complete.mockResolvedValueOnce({ ...completion({ ...concept, cta: "" }), usage })
+      .mockResolvedValueOnce({ ...completion({ ...concept, sourceQuotes: ["private customer text"] }), usage });
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const onFailure = vi.fn();
+    expect(await generateVariants({ brand, brief: "x", count: 1, onFailure })).toEqual([]);
+    const events = failedVariantUsage(onFailure.mock.calls[0][1], {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events.map((event) => event.metadata)).toEqual([
+      { validationStage: "concept", validationRules: ["schema-or-other"] },
+      { validationStage: "concept", validationRules: ["sourceQuotes"] },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("private customer text");
+  });
+
+  it("does not attribute a missing second usage record to the first rejection", async () => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 10 };
+    complete.mockResolvedValueOnce({ ...completion({ ...concept, cta: "" }), usage })
+      .mockResolvedValueOnce(completion({ ...concept, sourceQuotes: ["private customer text"] }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const { failedVariantUsage } = await import("@/lib/creative/receipt");
+    const onFailure = vi.fn();
+    await generateVariants({ brand, brief: "x", count: 1, onFailure });
+    const events = failedVariantUsage(onFailure.mock.calls[0][1], {
+      businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].metadata).toEqual({ validationStage: "concept", validationRules: ["schema-or-other"] });
+  });
+
   it("repairs repeated copy using history and earlier siblings before image generation", async () => {
     const fresh = { ...concept, headline: "A useful rooftop", primary_text: "Start with a conversation about your roof." };
     complete.mockResolvedValueOnce(completion(concept))
@@ -299,10 +349,9 @@ describe("generateVariants", () => {
       businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
     });
     expect(events).toMatchObject([
-      { usage, attempt: 1 },
+      { usage, attempt: 1, metadata: { validationStage: "concept", validationRules: ["schema-or-other"] } },
       { usage, attempt: 2, metadata: { validationStage: "concept", validationRules: ["schema-or-other"] } },
     ]);
-    expect(events[0].metadata).toBeUndefined();
     expect(complete).toHaveBeenCalledTimes(2);
     expect(generateImage).not.toHaveBeenCalled();
   });
@@ -317,10 +366,9 @@ describe("generateVariants", () => {
       businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
     });
     expect(events).toMatchObject([
-      { attempt: 1 },
+      { attempt: 1, metadata: { validationStage: "parse", validationRules: ["invalid-json"] } },
       { metadata: { validationStage: "parse", validationRules: ["invalid-json"] } },
     ]);
-    expect(events[0].metadata).toBeUndefined();
     expect(JSON.stringify(events)).not.toContain("private malformed response");
     expect(generateImage).not.toHaveBeenCalled();
   });
