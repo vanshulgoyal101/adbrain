@@ -5,7 +5,7 @@ import { draftDtoSchema, draftInputSchema } from "@/lib/campaign/connect-contrac
 import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, prepareDraftCreate } from "@/lib/campaign/draft-store";
 import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
-import { LLMError, NoLLMKeysError } from "@/lib/llm/types";
+import { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "@/lib/llm/types";
 import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
@@ -164,6 +164,9 @@ async function handlePOST(req: Request) {
   } catch (error) {
     const failureClass = failureStage !== "MODEL" ? "OTHER"
       : error instanceof NoLLMKeysError ? "NO_KEYS"
+      : error instanceof AllLLMProvidersFailedError ? `EXHAUSTED_${error.reason}`
+      : error instanceof DOMException && error.name === "TimeoutError" ? "TIMEOUT"
+      : error instanceof DOMException && error.name === "AbortError" ? "ABORTED"
       : error instanceof LLMError ? error.status === 429 ? "RATE_LIMIT"
         : error.status && error.status >= 500 ? "PROVIDER_SERVER"
           : error.status ? "PROVIDER_CLIENT" : "TRANSPORT"

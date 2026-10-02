@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LLMError, NoLLMKeysError } from "@/lib/llm/types";
+import { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "@/lib/llm/types";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
@@ -243,6 +243,17 @@ describe("guided planner route", () => {
       mocks.runPlanner.mockRejectedValueOnce(new NoLLMKeysError());
       expect((await POST(post())).status).toBe(502);
       expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_MODEL_NO_KEYS"'));
+
+      info.mockClear();
+      mocks.runPlanner.mockRejectedValueOnce(new AllLLMProvidersFailedError("PROVIDER_SERVER", 2));
+      expect((await POST(post())).status).toBe(502);
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_MODEL_EXHAUSTED_PROVIDER_SERVER"'));
+
+      info.mockClear();
+      mocks.runPlanner.mockRejectedValueOnce(new DOMException("private timeout detail", "TimeoutError"));
+      expect((await POST(post())).status).toBe(502);
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('"errorCode":"PLAN_MODEL_TIMEOUT"'));
+      expect(info.mock.calls.some(([entry]) => String(entry).includes("private timeout detail"))).toBe(false);
 
       info.mockClear();
       mocks.persist.mockRejectedValueOnce(new Error("private usage detail"));
