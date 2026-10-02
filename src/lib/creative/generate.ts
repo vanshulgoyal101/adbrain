@@ -115,7 +115,7 @@ export async function generateVariants(params: {
   const advisoryPreferences = params.advisoryPreferences?.slice(0, 1_200);
   const sourceFacts = params.sourceFacts?.slice(0, 12).map((fact) => fact.slice(0, 2_000)) ?? [];
   const count = Math.min(Math.max(params.count ?? 3, 1), AD_ANGLES.length);
-  const signal = AbortSignal.timeout(240_000);
+  const signal = AbortSignal.timeout(270_000);
 
   const angles: AdAngle[] = (
     params.angleIds?.length
