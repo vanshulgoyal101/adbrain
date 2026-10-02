@@ -25,6 +25,9 @@ import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/intervie
 import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
+
+z.config({ jitless: true });
 
 type Question = InterviewQuestion;
 type Answer = InterviewAnswer;
