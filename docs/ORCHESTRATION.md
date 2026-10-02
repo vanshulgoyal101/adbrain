@@ -22,7 +22,7 @@ the [Startup Fast Path](RELEASING.md#startup-fast-path).
 Routine steps never wait for the coordinator.
 
 1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
-   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:qa`,
+   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`,
    `owner:devops` (who acts next), `ready-to-ship` (committed, waiting for DevOps)
    and `blocked` (needs something outside the team; the issue says what).
 2. **Start or resume** by reading this section, then your queue:
@@ -61,7 +61,9 @@ Routine steps never wait for the coordinator.
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, post in #74 and the coordinator signs in.
-- **Paid budget.** Create runs: 10 approved on Oct 1 (Dev up to 7, DevOps 3).
+- **Paid budget.** Create runs: 10 approved on Oct 1; 2 used. Remaining: Dev 2,
+  Dev 3 3, DevOps 3. Dev 3 may also make up to 20 tiny direct model calls
+  (under 1k tokens each) for diagnosis.
   Log `Create run N/10` with the saved count in [#88](https://github.com/vanshulgoyal101/adbrain/issues/88).
   At the limit, stop and post; the coordinator asks the owner for the next 10.
   No Meta ad spend: campaigns stay PAUSED.
@@ -72,14 +74,18 @@ Routine steps never wait for the coordinator.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### Current focus (October 1)
+### Current focus (October 2)
+
+Create runs 1 and 2 saved 1 of 3; Prepare still fails in the AI planner call.
+Both show provider calls failing with zero tokens. That is the top blocker.
 
 | Worker | Queue |
 | --- | --- |
-| Dev | [#90](https://github.com/vanshulgoyal101/adbrain/issues/90) Create page crash (CSP blocks Zod eval), then [#88](https://github.com/vanshulgoyal101/adbrain/issues/88). Run 1/10 saved 1 of 3 (repeated-opening, unsupported-claim, one provider failure) |
-| Dev 2 | [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) campaign mechanics: one PAUSED test campaign in the Solaride account with a Solaride lead form, then sync, pause/resume, archive. `29db6cf` is ready-to-ship |
-| QA | Red tests for #90 and for whichever #88 rejection Dev is fixing, then [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) headless core smoke script |
-| DevOps | Ship `29db6cf` ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87)) and Dev's `9980189`, retry Prepare once. Then any `ready-to-ship`; between releases [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) worktree and read-only SQL helpers |
+| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) own the AI provider layer (`src/lib/llm`): find the real provider error, fix it, add a fallback model chain for Create and the planner, prove Prepare and Create 3/3 in production |
+| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) concept rejections: unsupported-commercial-claim, schema-or-other, repeated-opening. Ground claims in Brand facts in the brief and fix false rejections. Agree file boundaries with Dev 3 directly |
+| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) make Prepare not depend on AI: if the planner fails, fall back to a default plan from the owner's own choices (budget, audience, destination). Then run the PAUSED test campaign in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74). Provider fixes belong to Dev 3 |
+| QA | Ship [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) (open the PR, auto-merge). Then run its campaign mode once Dev 2 is ready |
+| DevOps | [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) helpers, plus any `ready-to-ship`. Help Dev 3 with production env and model settings |
 
 ## Historical Dispatch Receipts
 
