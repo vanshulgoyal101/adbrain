@@ -64,7 +64,16 @@ describe("LLM provider fallthrough", () => {
     const { complete } = await import("@/lib/llm");
     await expect(
       complete([{ role: "user", content: "hi" }]),
-    ).rejects.toThrow(/All LLM providers failed/);
+    ).rejects.toMatchObject({ name: "AllLLMProvidersFailedError", reason: "PROVIDER_SERVER", message: "All LLM providers failed (2 tried)" });
+  });
+
+  it("does not attribute mixed provider failures to one cause", async () => {
+    mockFetchByHost({
+      "api.groq.com": () => httpError(500),
+      "openrouter.ai": () => httpError(429),
+    });
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "hi" }])).rejects.toMatchObject({ reason: "MIXED" });
   });
 });
 
@@ -77,17 +86,13 @@ describe("LLM 429 cooldown", () => {
 
     const { complete } = await import("@/lib/llm");
 
-    await expect(complete([{ role: "user", content: "1" }])).rejects.toThrow(
-      /All LLM providers failed/,
-    );
+    await expect(complete([{ role: "user", content: "1" }])).rejects.toMatchObject({ reason: "RATE_LIMIT" });
     const callsAfterFirst = (fetchMock as unknown as { mock: { calls: unknown[] } })
       .mock.calls.length;
     expect(callsAfterFirst).toBe(1);
 
     // Second call: key is still in cooldown, so fetch must NOT be hit again.
-    await expect(complete([{ role: "user", content: "2" }])).rejects.toThrow(
-      /All LLM providers failed/,
-    );
+    await expect(complete([{ role: "user", content: "2" }])).rejects.toMatchObject({ reason: "COOLDOWN" });
     const callsAfterSecond = (fetchMock as unknown as { mock: { calls: unknown[] } })
       .mock.calls.length;
     expect(callsAfterSecond).toBe(1);
