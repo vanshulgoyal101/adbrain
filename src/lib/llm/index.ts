@@ -4,12 +4,14 @@ import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
 import { cacheKey, withCache } from "./cache";
 import { recordUsage } from "./usage";
 import {
+  AllLLMProvidersFailedError,
   LLMError,
   NoLLMKeysError,
   type ChatMessage,
   type CompletionOptions,
   type CompletionResult,
   type LLMProvider,
+  type ProviderFailureReason,
 } from "./types";
 
 export type {
@@ -18,7 +20,7 @@ export type {
   CompletionResult,
   TokenUsage,
 } from "./types";
-export { LLMError, NoLLMKeysError } from "./types";
+export { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "./types";
 export { clearLLMCache, llmCacheSize } from "./cache";
 export { usageSnapshot, resetUsage, type UsageTotals } from "./usage";
 
@@ -138,7 +140,7 @@ async function callProviders(
   options: CompletionOptions,
   registry: RegisteredProvider[],
 ): Promise<CompletionResult> {
-  const errors: string[] = [];
+  const failures: ProviderFailureReason[] = [];
   const now = Date.now();
 
   for (const { provider, keys, model } of registry) {
@@ -168,8 +170,9 @@ async function callProviders(
         }
         options.signal?.throwIfAborted();
         if (err instanceof LLMError && !err.retryable && err.status === undefined) throw err;
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push(`${provider.name}[key ${idx}]: ${message}`);
+        failures.push(err instanceof LLMError ? err.status === 429 ? "RATE_LIMIT"
+          : err.status && err.status >= 500 ? "PROVIDER_SERVER"
+            : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
         if (err instanceof LLMError && err.status === 429) {
           cooldownUntil.set(coolKey, Date.now() + COOLDOWN_MS);
         }
@@ -177,9 +180,8 @@ async function callProviders(
     }
   }
 
-  throw new Error(
-    `All LLM providers failed (${registry.length} tried):\n${errors.join("\n")}`,
-  );
+  throw new AllLLMProvidersFailedError(failures.length === 0 ? "COOLDOWN"
+    : failures.every((reason) => reason === failures[0]) ? failures[0] : "MIXED", registry.length);
 }
 
 /** Run a completion in JSON mode and parse the result. */

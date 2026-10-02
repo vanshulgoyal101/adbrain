@@ -113,6 +113,15 @@ export class LLMError extends Error {
   }
 }
 
+export type ProviderFailureReason = "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "UNKNOWN" | "MIXED" | "COOLDOWN";
+
+export class AllLLMProvidersFailedError extends Error {
+  constructor(readonly reason: ProviderFailureReason, providerCount: number) {
+    super(`All LLM providers failed (${providerCount} tried)`);
+    this.name = "AllLLMProvidersFailedError";
+  }
+}
+
 /** Thrown when no provider has any keys configured. */
 export class NoLLMKeysError extends Error {
   constructor() {
