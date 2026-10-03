@@ -71,6 +71,10 @@ Routine steps never wait for the coordinator.
   `/Users/vanshulgoyal/Development/copilot/arcade/.env` (parse into memory, never
   print), project `kmzuxrvfrwwpwmoovwcp`, `BEGIN READ ONLY` for checks. Vercel:
   `npx --yes vercel@60.1.3`. Docs: `node scripts/check-docs.mjs` after `npm ci`.
+- **Pre-approved: do not wait or ask.** One diagnostic Prepare request at any time
+  (no Meta create). Create runs inside your budget share. Opening and auto-merging
+  a finished low-risk PR, including scripts and docs. Read-only production queries.
+  Waiting for permission that this list already gives is the most common delay.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
@@ -81,11 +85,11 @@ Both show provider calls failing with zero tokens. That is the top blocker.
 
 | Worker | Queue |
 | --- | --- |
-| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) own the AI provider layer (`src/lib/llm`): find the real provider error, fix it, add a fallback model chain for Create and the planner, prove Prepare and Create 3/3 in production |
-| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) concept rejections: unsupported-commercial-claim, schema-or-other, repeated-opening. Ground claims in Brand facts in the brief and fix false rejections. Agree file boundaries with Dev 3 directly |
-| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) make Prepare not depend on AI: if the planner fails, fall back to a default plan from the owner's own choices (budget, audience, destination). Then run the PAUSED test campaign in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74). Provider fixes belong to Dev 3 |
-| QA | Ship [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) (open the PR, auto-merge). Then run its campaign mode once Dev 2 is ready |
-| DevOps | [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) helpers, plus any `ready-to-ship`. Help Dev 3 with production env and model settings |
+| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) own the AI provider layer (`src/lib/llm`): find the real provider error, fix it, add a fallback model chain for Create and the planner, prove Prepare and Create 3/3 in production. Not started yet: start now |
+| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) PR99 (270s deadline) is live. Do Create run 3 now, then fix the top remaining rejection (schema-or-other, unsupported-claim). Agree file boundaries with Dev 3 directly |
+| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) PR97 codes are live. Run one Prepare now and read its code. Then build the no-AI fallback plan so Prepare never blocks launch, and run the PAUSED test campaign in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
+| QA | [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) work is uncommitted: commit, rebase on main, open the PR and auto-merge it today |
+| DevOps | [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) branch `e22d9f4` is done: open the PR and auto-merge it. Then help Dev 3 with production model settings |
 
 ## Historical Dispatch Receipts
 
