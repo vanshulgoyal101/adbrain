@@ -28,7 +28,8 @@
     "test:workspace-browser": "node --env-file-if-exists=.env.local ./node_modules/@playwright/test/cli.js test",
     "test:workspace-ux": "node --env-file-if-exists=.env.local scripts/check-workspace-ux.mjs",
     "test:scroll-layout": "node scripts/check-scroll-layout.mjs",
-    "eval:creative": "node scripts/eval-creative.mjs"
+    "eval:creative": "node scripts/eval-creative.mjs",
+    "smoke:core": "node scripts/smoke-core.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.82",
