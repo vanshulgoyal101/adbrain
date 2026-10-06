@@ -35,6 +35,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `test:coverage` | V8 coverage, two thread workers, threshold gate and artifacts |
 | `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas |
 | `test:workspace-browser` | Playwright suite; explicitly loads `.env.local` if present, can access real accounts |
+| `smoke:core` | Headless production browser smoke; default signs in, views five pages, and suppresses automatic sync and telemetry writes. Opt-in flags below mutate production. |
 | `test:workspace-ux` | Workspace audit script; also loads `.env.local`, not an automatically isolated test |
 | `test:scroll-layout` | Offline React/CSS fixtures in Chromium and WebKit; no server, credentials or external requests |
 | `env:doctor` | Shell diagnostics for configuration/tooling; not proof of provider authorization |
@@ -43,6 +44,14 @@ tools beyond Node; inspect their prerequisites before executing.
 | `seed:demo-clinic` | Writes demo data; use only on the approved target |
 | `generate:icons` | Regenerates local icon assets |
 | `eval:creative` | Sends fixture copy to Google judge model; consumes provider quota/cost |
+
+### Production Core Smoke
+
+Run `npm run smoke:core` after a production release. It uses Playwright's headless Chromium and reads `SMOKE_EMAIL` and `SMOKE_PASSWORD` from the gitignored, mode-600 `/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke` in memory. Each page prints PASS or FAIL. A PASS for Campaigns or Enquiries in default mode means the view rendered, **not** that Meta or lead sync worked: those automatic POSTs are suppressed. No browser-side writes other than password sign-in reach production in the default mode.
+
+`npm run smoke:core -- --create` additionally interviews the user through Create, sends at most one three-ad generation request, waits for the result and prints the saved count. This is a paid provider run. Check the remaining approval in [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) before running it, log the resulting count there, and do not rerun after a partial or uncertain result until saved work is reconciled.
+
+`npm run smoke:core -- --campaign` requires the Solaride workspace, a Solaride lead form, approved creative, and a reviewed Solaride Meta account. It creates one uniquely named test campaign PAUSED, syncs, reconfirms PAUSED, and deletes only that campaign from Meta and AdBrain. A successful removal is labeled Archive in the smoke output; the product actually deletes it. On failure, reconcile by the printed campaign ID or unique test name before another run. The Resume check opens and closes the connection review only: it does not activate delivery or prove an actual status resume. The campaign mode has not been exercised against production as part of implementing this command.
 
 ### Focused Local Loop
 
