@@ -74,12 +74,12 @@ References are available to the image model, not visible to you; do not claim to
 Without references, do not pretend an invented person, facility or product is a documented real one.
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
-Return only JSON, with this shape:
+Return only JSON, with this shape. Character limits include spaces and are hard limits:
 {"headline":"up to 40 characters","primary_text":"up to 60 words","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
-"rationale":"why this message and visual belong together for this audience",
-"visual":{"medium":"chosen medium","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
+"rationale":"why this message and visual belong together for this audience; up to 600 characters",
+"visual":{"medium":"chosen medium; up to 120 characters","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
 "supportingText":"optional on-image supporting line up to 64 characters, or null",
-"sourceQuotes":["at least one verbatim quote from supplied facts supporting the message"]}
+"sourceQuotes":["1-8 verbatim quotes from supplied facts supporting the message, each up to 500 characters"]}
 The headline, primary_text and supportingText together should stay under 85 words. Avoid
 unsubstantiated health promises and personal-attribute assumptions. Customer stylistic preferences
 matter, but never override factual constraints. Use the requested language for all customer copy.`,
@@ -112,6 +112,7 @@ export function conceptValidationRules(issues: string[]): string[] {
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
   ]);
   return [...new Set(issues.map((issue) => {
+    if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
     const rule = issue.split(":", 1)[0];
     return allowedRules.has(rule) ? rule : issue.startsWith("Output must be valid JSON")
       ? "invalid-json" : issue.includes(":") ? "schema-or-other" : "other";
@@ -124,13 +125,18 @@ export function validateConcept(
 ):
   | { success: true; concept: CreativeConcept }
   | { success: false; issues: string[] } {
-  const parsed = creativeConceptSchema.safeParse(value);
+  const candidate = value && typeof value === "object" && !Array.isArray(value)
+    && (!("supportingText" in value) || (value as { supportingText?: unknown }).supportingText === "")
+    ? { ...value, supportingText: null } : value;
+  const parsed = creativeConceptSchema.safeParse(candidate);
   if (!parsed.success) {
     return {
       success: false,
-      issues: parsed.error.issues.map(
-        (issue) => `${issue.path.join(".")}: ${issue.message}`,
-      ),
+      issues: parsed.error.issues.map((issue) => {
+        const path = issue.path.join(".");
+        const field = path.replace(/\.\d+/g, ".*") || "root";
+        return `schema:${field}:${issue.code}: ${path}: ${issue.message}`;
+      }),
     };
   }
   const concept = parsed.data;
