@@ -37,7 +37,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `lint` | ESLint, no automatic fixes by default |
 | `typecheck` | TypeScript no-emit check; Next generated types may need a build first |
 | `docs:check` | Read-only local Markdown, links, JSON examples, command names and source inventories; no application imports or external requests |
-| `audit:dependencies` | npm registry advisory check, fails at high severity; requires network |
+| `audit:dependencies` | npm registry advisory check; fails at high severity for runtime dependencies and critical for dev tooling (unpatched `braces` advisory GHSA-vfj7-8cjw-p6xm in ESLint tooling, #102); requires network |
 | `test` | One Vitest run in Node, components opt into jsdom |
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
 | `test:coverage` | V8 coverage, two thread workers, threshold gate and artifacts |

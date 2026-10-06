@@ -313,6 +313,19 @@ describe("generateVariants", () => {
     expect(generateImage.mock.calls[0][0].prompt).toContain(concept.visual.direction);
   });
 
+  it("leaves time for persistence after the shared concept deadline", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    try {
+      const { generateVariants } = await import("@/lib/creative/generate");
+      await generateVariants({ brand, brief: "x", count: 3 });
+      expect(timeout).toHaveBeenCalledWith(270_000);
+      expect(timeout.mock.calls[0][0]).toBeLessThan(300_000);
+      expect(complete.mock.calls.every(([, options]) => options.signal === complete.mock.calls[0][1].signal)).toBe(true);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it("carries bounded advisory style through concept and image generation", async () => {
     const { generateVariants, generateOneVariant } = await import("@/lib/creative/generate");
     const advisoryPreferences = `PAST DECLARED PREFERENCES: tone: warm ${"x".repeat(2000)}`;
