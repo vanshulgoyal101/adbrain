@@ -6,7 +6,7 @@ import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, 
 import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "@/lib/llm/types";
-import { plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
+import { fallbackAudienceTargeting, plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -173,6 +173,9 @@ async function handlePOST(req: Request) {
         : "OTHER";
     recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "failed", businessId: business.id,
       attributes: { errorCode: `PLAN_${failureStage}_${failureClass}` } });
+    if (audienceDraft && failureStage === "MODEL" && failureClass !== "ABORTED") {
+      return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft) });
+    }
     return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
   }
 
