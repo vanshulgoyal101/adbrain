@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { draftInputSchema, type DraftInput } from "@/lib/campaign/connect-contracts";
+import { draftInputSchema, type DraftInput, type TargetingInputDTO } from "@/lib/campaign/connect-contracts";
 import { normalizeAgeRange } from "@/lib/campaign/targeting";
 
 export const plannerPlanSchema = z
@@ -52,6 +52,21 @@ function selectLocations(
     selected.push(location);
   }
   return selected;
+}
+
+export const FALLBACK_AUDIENCE_RATIONALE = "AI audience planning was unavailable, so this plan uses your choices plus defaults: ages 25-55 unless you chose them, your saved service areas, and a broad audience without interest narrowing.";
+
+/** Owner-chosen targeting plus fixed defaults, used when the AI planner fails. */
+export function fallbackAudienceTargeting(draft: DraftInput): TargetingInputDTO {
+  const location = draft.targeting.location ?? {};
+  const cityScope = location.cityScope ?? "city_only";
+  const { radiusKm, ...rest } = location;
+  return {
+    gender: draft.targeting.gender ?? "all",
+    location: { ...rest, mode: location.mode ?? "ai", cityScope, ...(cityScope === "radius" ? { radiusKm: radiusKm ?? 25 } : {}) },
+    age: draft.targeting.age?.mode === "manual" ? draft.targeting.age : { mode: "manual", min: 25, max: 55 },
+    audience: { interestNames: [], rationale: FALLBACK_AUDIENCE_RATIONALE },
+  };
 }
 
 export function plannerPlanToDraftInput(input: {

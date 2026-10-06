@@ -189,9 +189,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every selected service area or explicitly review nationwide targeting."));
   }
-  if (!draft.targeting.audience?.interestNames.length) {
+  if (!draft.targeting.audience) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Generate AI detailed targeting before reviewing the campaign."));
-  } else if (input.geo.unresolvedInterests?.length || !input.geo.audienceInterests?.length) {
+  } else if (draft.targeting.audience.interestNames.length && (input.geo.unresolvedInterests?.length || !input.geo.audienceInterests?.length)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every audience interest with Meta or edit the audience plan."));
   }
 

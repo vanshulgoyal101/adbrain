@@ -215,6 +215,26 @@ describe("guided planner route", () => {
     expect(mocks.friendlyMetaError).not.toHaveBeenCalled();
   });
 
+  it("falls back to owner choices and default targeting when the audience planner fails", async () => {
+    const audienceDraft = {
+      businessId: business.id, name: "Leads", goal: "Leads", mode: "manual", creativeIds: [creativeId],
+      dailyBudgetRupees: 500, leadFormId: null, abTest: false,
+      targeting: { gender: "women", location: { mode: "ai", cityScope: "city_only", radiusKm: 35 }, age: { mode: "ai" } },
+    };
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const request = () => new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Leads", audienceDraft }) });
+    mocks.runPlanner.mockRejectedValueOnce(new DOMException("timeout", "TimeoutError"));
+    const response = await POST(request());
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.fallback).toBe(true);
+    expect(body.targeting).toMatchObject({ gender: "women", location: { mode: "ai", cityScope: "city_only" }, age: { mode: "manual", min: 25, max: 55 }, audience: { interestNames: [] } });
+    expect(body.targeting.location).not.toHaveProperty("radiusKm");
+
+    mocks.runPlanner.mockRejectedValueOnce(new DOMException("gone", "AbortError"));
+    expect((await POST(request())).status).toBe(502);
+  });
+
   it("records a safe failure stage without exposing the error to the client", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
