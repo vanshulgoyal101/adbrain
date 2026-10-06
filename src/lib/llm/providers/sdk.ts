@@ -13,7 +13,7 @@ export async function sdkCompletion(
   maxOutputTokens = options.maxTokens,
 ): Promise<ProviderCompletion> {
   options.signal?.throwIfAborted();
-  const deadline = AbortSignal.timeout(90_000);
+  const deadline = AbortSignal.timeout(options.attemptTimeoutMs ?? 90_000);
   const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const output = options.responseSchema ? Output.object({ schema: options.responseSchema }) : Output.text();
   if ((options.json || options.responseSchema) && !(provider === "google" && options.responseSchema)) {
@@ -61,30 +61,30 @@ export async function sdkCompletion(
         : "Increase the task token budget or reduce reasoning effort.";
       throw new LLMError(`${provider}: ${options.task ?? "LLM task"} output token budget exhausted before completion. ${guidance}`, {
         provider, retryable: false, model: typeof model === "string" ? model : model.modelId, usage,
-        providerRequestId, providerFinalStatus: "completed",
+        providerRequestId, providerFinalStatus: "completed", code: "TRUNCATED",
       });
     }
     if (!result.text) {
       throw new LLMError(`${provider}: empty response (finish reason: ${result.finishReason})`, {
-        provider, retryable: true, providerRequestId, providerFinalStatus: "completed",
+        provider, retryable: true, providerRequestId, providerFinalStatus: "completed", code: "EMPTY",
       });
     }
     return { text: result.text, usage, providerRequestId, providerFinalStatus: "completed" };
   } catch (error) {
     options.signal?.throwIfAborted();
     if (deadline.aborted) {
-      throw new LLMError(`${provider}: request deadline exceeded`, { provider, retryable: false });
+      throw new LLMError(`${provider}: request deadline exceeded`, { provider, retryable: false, code: "TIMEOUT" });
     }
     if (error instanceof LLMError) throw error;
     if (APICallError.isInstance(error)) {
       const status = error.statusCode;
       const headers = error.responseHeaders;
       throw new LLMError(`${provider}: ${status ? `HTTP ${status}` : "provider request failed"}`, {
-        provider, status, providerFinalStatus: "unknown",
+        provider, status, providerFinalStatus: "unknown", code: status ? `HTTP_${status}` : "TRANSPORT",
         providerRequestId: providerId(headers?.["x-request-id"] ?? headers?.["x-openrouter-request-id"] ?? headers?.["x-goog-request-id"]),
         retryable: status === undefined || status === 429 || status >= 500 || status === 403 || (provider !== "google" && status === 401),
       });
     }
-    throw new LLMError(`${provider}: network or provider response error`, { provider, retryable: true });
+    throw new LLMError(`${provider}: network or provider response error`, { provider, retryable: true, code: "TRANSPORT" });
   }
 }

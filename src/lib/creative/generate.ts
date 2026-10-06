@@ -17,7 +17,7 @@ import { generateImage } from "@/lib/imageGen";
 import type { ImageAttempt } from "@/lib/imageGen/types";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
-import type { TokenUsage } from "@/lib/llm";
+import type { LLMFailureCode, TokenUsage } from "@/lib/llm";
 import { getEnv } from "@/lib/env";
 import {
   AD_ANGLES,
@@ -48,6 +48,7 @@ export interface GeneratedVariant {
     providerRequestId?: string;
     providerFinalStatus?: "completed" | "failed" | "unknown";
     status?: "success" | "error";
+    failure?: LLMFailureCode;
     validation?: { stage: "provider" | "parse" | "concept"; rules: string[] };
   }[];
   imageUsage: {
