@@ -166,7 +166,7 @@ describe("generateVariants", () => {
       businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
     });
     expect(events.map((event) => event.metadata)).toEqual([
-      { validationStage: "concept", validationRules: ["schema-or-other"] },
+      { validationStage: "concept", validationRules: ["schema:cta:invalid_value"] },
       { validationStage: "concept", validationRules: ["sourceQuotes"] },
     ]);
     expect(JSON.stringify(events)).not.toContain("private customer text");
@@ -184,7 +184,7 @@ describe("generateVariants", () => {
       businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
     });
     expect(events).toHaveLength(1);
-    expect(events[0].metadata).toEqual({ validationStage: "concept", validationRules: ["schema-or-other"] });
+    expect(events[0].metadata).toEqual({ validationStage: "concept", validationRules: ["schema:cta:invalid_value"] });
   });
 
   it("repairs repeated copy using history and earlier siblings before image generation", async () => {
@@ -387,8 +387,8 @@ describe("generateVariants", () => {
       businessId: "business", userId: "user", route: "creatives.generate", requestId: "request",
     });
     expect(events).toMatchObject([
-      { usage, attempt: 1, metadata: { validationStage: "concept", validationRules: ["schema-or-other"] } },
-      { usage, attempt: 2, metadata: { validationStage: "concept", validationRules: ["schema-or-other"] } },
+      { usage, attempt: 1, metadata: { validationStage: "concept", validationRules: ["schema:headline:invalid_type"] } },
+      { usage, attempt: 2, metadata: { validationStage: "concept", validationRules: ["schema:headline:invalid_type"] } },
     ]);
     expect(complete).toHaveBeenCalledTimes(2);
     expect(generateImage).not.toHaveBeenCalled();
