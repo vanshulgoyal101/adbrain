@@ -10,6 +10,7 @@ import {
   type ChatMessage,
   type CompletionOptions,
   type CompletionResult,
+  type LLMFailureCode,
   type LLMProvider,
   type ProviderFailureReason,
 } from "./types";
@@ -18,6 +19,7 @@ export type {
   ChatMessage,
   CompletionOptions,
   CompletionResult,
+  LLMFailureCode,
   TokenUsage,
 } from "./types";
 export { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "./types";
@@ -39,7 +41,7 @@ const rrCursor = new Map<string, number>();
 function buildRegistry(routing: "standard" | "budget" = "standard"): RegisteredProvider[] {
   const env = getEnv();
 
-  const registry: Record<string, RegisteredProvider | null> = {
+  const registry: Record<string, RegisteredProvider[] | RegisteredProvider | null> = {
     google: env.GOOGLE_AI_API_KEYS.length
       ? {
           provider: createGeminiProvider({
@@ -61,19 +63,19 @@ function buildRegistry(routing: "standard" | "budget" = "standard"): RegisteredP
         }
       : null,
     openrouter: env.OPENROUTER_API_KEYS.length
-      ? {
+      ? env.OPENROUTER_MODEL.split(",").map((s) => s.trim()).filter(Boolean).map((model) => ({
           provider: createOpenAICompatibleProvider({
             name: "openrouter",
             baseUrl: "https://openrouter.ai/api/v1/chat/completions",
-            defaultModel: env.OPENROUTER_MODEL,
+            defaultModel: model,
             extraHeaders: {
               "HTTP-Referer": env.NEXT_PUBLIC_SITE_URL,
               "X-Title": "AdBrain",
             },
           }),
           keys: env.OPENROUTER_API_KEYS,
-          model: env.OPENROUTER_MODEL,
-        }
+          model,
+        }))
       : null,
     cerebras: env.CEREBRAS_API_KEYS.length
       ? {
@@ -96,8 +98,7 @@ function buildRegistry(routing: "standard" | "budget" = "standard"): RegisteredP
     .filter(Boolean);
 
   return order
-    .map((name) => registry[name])
-    .filter((r): r is RegisteredProvider => r != null);
+    .flatMap((name) => registry[name] ?? []);
 }
 
 function nextKeyStart(providerName: string, keyCount: number): number {
@@ -141,6 +142,7 @@ async function callProviders(
   registry: RegisteredProvider[],
 ): Promise<CompletionResult> {
   const failures: ProviderFailureReason[] = [];
+  let terminal: LLMError | undefined;
   const now = Date.now();
 
   for (const { provider, keys, model } of registry) {
@@ -151,35 +153,45 @@ async function callProviders(
       const coolKey = `${provider.name}:${idx}`;
       if ((cooldownUntil.get(coolKey) ?? 0) > now) continue;
 
+      const attemptStart = Date.now();
       try {
         const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, options, {
           apiKey: keys[idx],
           model,
         });
         options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
-          providerFinalStatus: providerFinalStatus ?? "unknown", status: "success" });
+          providerFinalStatus: providerFinalStatus ?? "unknown", status: "success", latencyMs: Date.now() - attemptStart });
         return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
       } catch (err) {
+        const failure: LLMFailureCode = options.signal?.aborted
+          ? (options.signal.reason as { name?: string } | undefined)?.name === "TimeoutError" ? "DEADLINE" : "ABORTED"
+          : err instanceof LLMError ? err.code ?? "UNKNOWN" : "UNKNOWN";
         options.onAttempt?.({ provider: provider.name, model,
           usage: err instanceof LLMError ? err.usage : undefined,
           providerRequestId: err instanceof LLMError ? err.providerRequestId : undefined,
           providerFinalStatus: err instanceof LLMError ? err.providerFinalStatus ?? "unknown" : "unknown",
-          status: "error" });
+          status: "error", failure, latencyMs: Date.now() - attemptStart });
         if (err instanceof LLMError && err.usage) {
           recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
         }
         options.signal?.throwIfAborted();
-        if (err instanceof LLMError && !err.retryable && err.status === undefined) throw err;
-        failures.push(err instanceof LLMError ? err.status === 429 ? "RATE_LIMIT"
-          : err.status && err.status >= 500 ? "PROVIDER_SERVER"
-            : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
+        failures.push(failure === "TIMEOUT" ? "TIMEOUT" : failure === "TRUNCATED" ? "TRUNCATED"
+          : err instanceof LLMError ? err.status === 429 ? "RATE_LIMIT"
+            : err.status && err.status >= 500 ? "PROVIDER_SERVER"
+              : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
         if (err instanceof LLMError && err.status === 429) {
           cooldownUntil.set(coolKey, Date.now() + COOLDOWN_MS);
+        }
+        // Another key on the same model would time out or truncate the same way; try the next model.
+        if (err instanceof LLMError && !err.retryable && err.status === undefined) {
+          terminal = err;
+          break;
         }
       }
     }
   }
 
+  if (terminal && failures.length === 1) throw terminal;
   throw new AllLLMProvidersFailedError(failures.length === 0 ? "COOLDOWN"
     : failures.every((reason) => reason === failures[0]) ? failures[0] : "MIXED", registry.length);
 }

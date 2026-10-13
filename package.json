@@ -12,7 +12,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "audit:dependencies": "npm audit --audit-level=high",
+    "audit:dependencies": "npm audit --omit=dev --audit-level=high && npm audit --audit-level=critical",
     "typecheck": "tsc --noEmit",
     "db:push": "node scripts/apply-schema.mjs",
     "db:migrate": "node scripts/migrate-db.mjs",

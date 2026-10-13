@@ -15,6 +15,8 @@ export interface CompletionOptions {
   maxTokens?: number;
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   signal?: AbortSignal;
+  /** Per-provider attempt deadline; on expiry the next provider in the chain is tried. */
+  attemptTimeoutMs?: number;
   onAttempt?: (attempt: ProviderAttempt) => void;
   /** Stable cache identity for the selected routing policy/model. */
   provider?: string;
@@ -40,6 +42,9 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+/** Sanitized class of a failed provider attempt; never contains provider text. */
+export type LLMFailureCode = "TIMEOUT" | "DEADLINE" | "ABORTED" | "TRUNCATED" | "EMPTY" | "TRANSPORT" | "UNKNOWN" | `HTTP_${number}`;
+
 export interface ProviderAttempt {
   provider: string;
   model: string;
@@ -47,6 +52,8 @@ export interface ProviderAttempt {
   providerRequestId?: string;
   providerFinalStatus: "completed" | "failed" | "unknown";
   status: "success" | "error";
+  failure?: LLMFailureCode;
+  latencyMs?: number;
 }
 
 /** What a provider returns from a single completion call. */
@@ -95,11 +102,12 @@ export class LLMError extends Error {
   readonly usage?: TokenUsage;
   readonly providerRequestId?: string;
   readonly providerFinalStatus?: "completed" | "failed" | "unknown";
+  readonly code?: LLMFailureCode;
 
   constructor(
     message: string,
     opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage;
-      providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown" },
+      providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown"; code?: LLMFailureCode },
   ) {
     super(message);
     this.name = "LLMError";
@@ -110,10 +118,11 @@ export class LLMError extends Error {
     this.usage = opts.usage;
     this.providerRequestId = opts.providerRequestId;
     this.providerFinalStatus = opts.providerFinalStatus;
+    this.code = opts.code ?? (opts.status ? `HTTP_${opts.status}` : undefined);
   }
 }
 
-export type ProviderFailureReason = "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "UNKNOWN" | "MIXED" | "COOLDOWN";
+export type ProviderFailureReason = "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "TIMEOUT" | "TRUNCATED" | "UNKNOWN" | "MIXED" | "COOLDOWN";
 
 export class AllLLMProvidersFailedError extends Error {
   constructor(readonly reason: ProviderFailureReason, providerCount: number) {
