@@ -34,6 +34,9 @@ interface RegisteredProvider {
 
 // Keys that hit a 429 are parked for a cooldown so we stop hammering them.
 const COOLDOWN_MS = 60_000;
+// Groq keys share one organization tokens-per-minute limit; a few seconds' wait
+// beats falling through to a model that needs 60-90s.
+const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
@@ -144,53 +147,63 @@ async function callProviders(
 ): Promise<CompletionResult> {
   const failures: ProviderFailureReason[] = [];
   let terminal: LLMError | undefined;
-  const now = Date.now();
 
   for (const { provider, keys, model } of registry) {
-    const start = nextKeyStart(provider.name, keys.length);
-    for (let i = 0; i < keys.length; i++) {
-      options.signal?.throwIfAborted();
-      const idx = (start + i) % keys.length;
-      const coolKey = `${provider.name}:${idx}`;
-      if ((cooldownUntil.get(coolKey) ?? 0) > now) continue;
-
-      const attemptStart = Date.now();
-      try {
-        const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, options, {
-          apiKey: keys[idx],
-          model,
-        });
-        options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
-          providerFinalStatus: providerFinalStatus ?? "unknown", status: "success", latencyMs: Date.now() - attemptStart });
-        return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
-      } catch (err) {
-        const failure: LLMFailureCode = options.signal?.aborted
-          ? (options.signal.reason as { name?: string } | undefined)?.name === "TimeoutError" ? "DEADLINE" : "ABORTED"
-          : err instanceof LLMError ? err.code ?? "UNKNOWN" : "UNKNOWN";
-        options.onAttempt?.({ provider: provider.name, model,
-          usage: err instanceof LLMError ? err.usage : undefined,
-          providerRequestId: err instanceof LLMError ? err.providerRequestId : undefined,
-          providerFinalStatus: err instanceof LLMError ? err.providerFinalStatus ?? "unknown" : "unknown",
-          status: "error", failure, latencyMs: Date.now() - attemptStart });
-        if (err instanceof LLMError && err.usage) {
-          recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
-        }
+    for (let round = 0; round < 2; round++) {
+      const start = nextKeyStart(provider.name, keys.length);
+      for (let i = 0; i < keys.length; i++) {
         options.signal?.throwIfAborted();
-        failures.push(failure === "TIMEOUT" ? "TIMEOUT" : failure === "TRUNCATED" ? "TRUNCATED"
-          : err instanceof LLMError ? err.status === 429 ? "RATE_LIMIT"
-            : err.status && err.status >= 500 ? "PROVIDER_SERVER"
-              : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
-        if (err instanceof LLMError && err.status === 429) {
-          cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? COOLDOWN_MS, COOLDOWN_MS));
+        const idx = (start + i) % keys.length;
+        const coolKey = `${provider.name}:${idx}`;
+        if ((cooldownUntil.get(coolKey) ?? 0) > Date.now()) continue;
+
+        const attemptStart = Date.now();
+        try {
+          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, options, {
+            apiKey: keys[idx],
+            model,
+          });
+          options.onAttempt?.({ provider: provider.name, model, usage, providerRequestId,
+            providerFinalStatus: providerFinalStatus ?? "unknown", status: "success", latencyMs: Date.now() - attemptStart });
+          return { text, provider: provider.name, model, usage, providerRequestId, providerFinalStatus };
+        } catch (err) {
+          const failure: LLMFailureCode = options.signal?.aborted
+            ? (options.signal.reason as { name?: string } | undefined)?.name === "TimeoutError" ? "DEADLINE" : "ABORTED"
+            : err instanceof LLMError ? err.code ?? "UNKNOWN" : "UNKNOWN";
+          options.onAttempt?.({ provider: provider.name, model,
+            usage: err instanceof LLMError ? err.usage : undefined,
+            providerRequestId: err instanceof LLMError ? err.providerRequestId : undefined,
+            providerFinalStatus: err instanceof LLMError ? err.providerFinalStatus ?? "unknown" : "unknown",
+            status: "error", failure, latencyMs: Date.now() - attemptStart });
+          if (err instanceof LLMError && err.usage) {
+            recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
+          }
+          options.signal?.throwIfAborted();
+          failures.push(failure === "TIMEOUT" ? "TIMEOUT" : failure === "TRUNCATED" ? "TRUNCATED"
+            : err instanceof LLMError ? err.status === 429 ? "RATE_LIMIT"
+              : err.status && err.status >= 500 ? "PROVIDER_SERVER"
+                : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
+          if (err instanceof LLMError && err.status === 429) {
+            cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? COOLDOWN_MS, COOLDOWN_MS));
+          }
+          // Another key on the same model would time out or truncate the same way; try the next model.
+          if (err instanceof LLMError && !err.retryable && err.status === undefined) {
+            terminal = err;
+            break;
+          }
+          // A 5xx means the model is overloaded or down for every key.
+          if (err instanceof LLMError && err.status !== undefined && err.status >= 500) break;
         }
-        // Another key on the same model would time out or truncate the same way; try the next model.
-        if (err instanceof LLMError && !err.retryable && err.status === undefined) {
-          terminal = err;
-          break;
-        }
-        // A 5xx means the model is overloaded or down for every key.
-        if (err instanceof LLMError && err.status !== undefined && err.status >= 500) break;
       }
+      // Every key is rate-limited only briefly: wait once, then retry this model.
+      const wait = Math.min(...keys.map((_, idx) => cooldownUntil.get(`${provider.name}:${idx}`) ?? 0)) - Date.now();
+      if (round === 1 || wait <= 0 || wait > RATE_LIMIT_WAIT_MS) break;
+      options.signal?.throwIfAborted();
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => { clearTimeout(timer); reject(options.signal?.reason); };
+        const timer = setTimeout(() => { options.signal?.removeEventListener("abort", onAbort); resolve(); }, wait);
+        options.signal?.addEventListener("abort", onAbort, { once: true });
+      });
     }
   }
 
