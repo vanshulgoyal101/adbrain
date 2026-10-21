@@ -78,18 +78,22 @@ Routine steps never wait for the coordinator.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### Current focus (October 2)
+### Current focus (October 21)
 
-Create runs 1 and 2 saved 1 of 3; Prepare still fails in the AI planner call.
-Both show provider calls failing with zero tokens. That is the top blocker.
+Restart after a two-week stall. Everything was blocked by a failing CI audit
+(sharp, follow-redirects) and an unapplied production setting. The coordinator
+fixed both: PR108 patches the dependencies, and Production `LLM_PROVIDER_ORDER` is
+now `openrouter,google,groq` (live with the PR108 deploy). Root causes known from
+#98: the OpenRouter model is slow (65-80s per concept), the planner timed out at
+45s, and Create's "provider failures" were its own deadline. PR107 added fallback.
 
 | Worker | Queue |
 | --- | --- |
-| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) own the AI provider layer (`src/lib/llm`): find the real provider error, fix it, add a fallback model chain for Create and the planner, prove Prepare and Create 3/3 in production. Not started yet: start now |
-| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) PR99 (270s deadline) is live. Do Create run 3 now, then fix the top remaining rejection (schema-or-other, unsupported-claim). Agree file boundaries with Dev 3 directly |
-| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) PR97 codes are live. Run one Prepare now and read its code. Then build the no-AI fallback plan so Prepare never blocks launch, and run the PAUSED test campaign in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
-| QA | [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) work is uncommitted: commit, rebase on main, open the PR and auto-merge it today |
-| DevOps | [#93](https://github.com/vanshulgoyal101/adbrain/issues/93) branch `e22d9f4` is done: open the PR and auto-merge it. Then help Dev 3 with production model settings |
+| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) after PR108 deploys: one Prepare on Cedar Ridge, then Create runs (3 left). If concepts still take over 60s, switch Create to a faster primary model. Done at Prepare OK plus 3/3 twice |
+| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) PR103 (schema field logging) re-runs CI after PR108: `gh pr update-branch 103`. Then use your last run to find which field fails `schema-or-other` and fix it |
+| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) `gh pr update-branch 104` so the no-AI Prepare fallback ships. Then the PAUSED test campaign in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
+| QA | [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) `gh pr update-branch 101` so the smoke script ships, then run it after every deploy and post failures as `core` bugs |
+| DevOps | Confirm the PR108 deploy and the provider-order setting in production. Watch CI: a red audit blocks everyone, so fix it the same day |
 
 ## Historical Dispatch Receipts
 
