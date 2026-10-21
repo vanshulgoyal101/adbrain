@@ -40,7 +40,8 @@ describe("planner response validation", () => {
     vi.mocked(complete).mockResolvedValue({ text: JSON.stringify({ ready: false, questions: [question] }), provider: "test", model: "test" });
     const onCompletion = vi.fn();
     expect(await runPlanner(input, { onCompletion })).toEqual({ ready: false, questions: [question] });
-    expect(complete).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ json: true, cache: false, signal: expect.any(AbortSignal), maxTokens: 3000 }));
+    expect(complete).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ json: true, cache: false, signal: expect.any(AbortSignal), maxTokens: 3000,
+      routing: "budget", attemptTimeoutMs: 20_000 }));
     expect(onCompletion).toHaveBeenCalledWith(expect.any(Object), true, 1);
   });
   it("deduplicates reworded answered topics and keeps one new blocking question", async () => {

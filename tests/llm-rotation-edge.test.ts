@@ -105,7 +105,7 @@ describe("SDK facade safety", () => {
   });
 
   it.each([false, true])("records truncated Gemini usage once across shared callers (schema: %s)", async (structured) => {
-    setEnv({ GOOGLE_AI_API_KEYS: "google-first,google-second", GROQ_API_KEYS: "fallback-key", GEMINI_MODEL: "gemini-3.6-flash" });
+    setEnv({ GOOGLE_AI_API_KEYS: "google-first,google-second", GROQ_API_KEYS: "", OPENROUTER_API_KEYS: "", GEMINI_MODEL: "gemini-3.6-flash" });
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({
       candidates: [{ content: { parts: [{ text: '{"value":' }] }, finishReason: "MAX_TOKENS" }],
       usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 2, thoughtsTokenCount: 7, totalTokenCount: 17 },
@@ -129,18 +129,108 @@ describe("SDK facade safety", () => {
     });
   });
 
-  it.each(["caller", "deadline"] as const)("stops all key/provider fallthrough on %s cancellation", async (kind) => {
+  it("stops all key/provider fallthrough on caller cancellation", async () => {
     const controller = new AbortController();
-    if (kind === "deadline") vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
     vi.stubGlobal("fetch", vi.fn(async () => {
-      controller.abort(new DOMException("Stopped", kind === "deadline" ? "TimeoutError" : "AbortError"));
+      controller.abort(new DOMException("Stopped", "AbortError"));
       throw controller.signal.reason;
     }));
     const { complete } = await import("@/lib/llm");
+    const attempts: unknown[] = [];
     await expect(complete([{ role: "user", content: "test" }], {
-      signal: kind === "caller" ? controller.signal : undefined,
-    })).rejects.toThrow(kind === "deadline" ? "deadline exceeded" : "Stopped");
+      signal: controller.signal, onAttempt: (attempt) => attempts.push(attempt),
+    })).rejects.toThrow("Stopped");
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(attempts).toMatchObject([{ provider: "groq", status: "error", failure: "ABORTED" }]);
+  });
+
+  it("labels the caller's own deadline separately from a provider timeout", async () => {
+    const controller = new AbortController();
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      controller.abort(new DOMException("Late", "TimeoutError"));
+      throw controller.signal.reason;
+    }));
+    const { complete } = await import("@/lib/llm");
+    const attempts: unknown[] = [];
+    await expect(complete([{ role: "user", content: "test" }], {
+      signal: controller.signal, onAttempt: (attempt) => attempts.push(attempt),
+    })).rejects.toThrow("Late");
+    expect(attempts).toMatchObject([{ status: "error", failure: "DEADLINE" }]);
+  });
+
+  it("skips the timed-out provider's other keys and falls through to the next provider", async () => {
+    const deadlines: AbortController[] = [];
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      deadlines.push(new AbortController());
+      return deadlines.at(-1)!.signal;
+    });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("openrouter.ai")) return ok("from openrouter");
+      deadlines.at(-1)!.abort(new DOMException("Timed out", "TimeoutError"));
+      throw deadlines.at(-1)!.signal.reason;
+    }));
+    const { complete } = await import("@/lib/llm");
+    const attempts: unknown[] = [];
+    const result = await complete([{ role: "user", content: "test" }], {
+      attemptTimeoutMs: 1_234, onAttempt: (attempt) => attempts.push(attempt),
+    });
+    expect(result).toMatchObject({ provider: "openrouter", text: "from openrouter" });
+    expect(timeout).toHaveBeenCalledWith(1_234);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(attempts).toMatchObject([
+      { provider: "groq", status: "error", failure: "TIMEOUT" },
+      { provider: "openrouter", status: "success" },
+    ]);
+  });
+
+  it("keeps the original timeout error when no other provider exists", async () => {
+    setEnv({ GROQ_API_KEYS: "only-key" });
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      controller.abort(new DOMException("Timed out", "TimeoutError"));
+      throw controller.signal.reason;
+    }));
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "test" }])).rejects.toMatchObject({
+      name: "LLMError", code: "TIMEOUT", message: expect.stringContaining("deadline exceeded"),
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls through to the next provider when output is truncated", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).includes("openrouter.ai")
+      ? ok("complete")
+      : Response.json({ choices: [{ message: { content: '{"a":' }, finish_reason: "length" }],
+        usage: { prompt_tokens: 5, completion_tokens: 9, total_tokens: 14 } })));
+    const { complete } = await import("@/lib/llm");
+    const attempts: unknown[] = [];
+    const result = await complete([{ role: "user", content: "test" }], { onAttempt: (attempt) => attempts.push(attempt) });
+    expect(result).toMatchObject({ provider: "openrouter", text: "complete" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(attempts).toMatchObject([
+      { provider: "groq", status: "error", failure: "TRUNCATED", usage: { totalTokens: 14 } },
+      { provider: "openrouter", status: "success" },
+    ]);
+  });
+
+  it("tries each configured OpenRouter model in order", async () => {
+    setEnv({ OPENROUTER_API_KEYS: "ok", OPENROUTER_MODEL: "first/model, second/model", LLM_PROVIDER_ORDER: "openrouter" });
+    const models: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const model = JSON.parse(String(init?.body)).model as string;
+      models.push(model);
+      return model === "first/model" ? httpError(503) : ok("second");
+    }));
+    const { complete } = await import("@/lib/llm");
+    const attempts: unknown[] = [];
+    const result = await complete([{ role: "user", content: "test" }], { onAttempt: (attempt) => attempts.push(attempt) });
+    expect(models).toEqual(["first/model", "second/model"]);
+    expect(result).toMatchObject({ provider: "openrouter", model: "second/model", text: "second" });
+    expect(attempts).toMatchObject([
+      { model: "first/model", status: "error", failure: "HTTP_503" },
+      { model: "second/model", status: "success" },
+    ]);
   });
 
   it.each(['```json\n{"value":1}\n```', 'Result: {"value":1}'])
