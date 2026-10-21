@@ -229,9 +229,22 @@ async function handlePOST(req: Request) {
       questions: [note(draftResult.error)],
     });
   }
+  const audience = draftResult.draft.targeting.audience;
+  let noMetaInterests = false;
+  if (audience?.interestNames.length) {
+    // Meta has no interest for many AI suggestions (e.g. "Chiropractic"); preflight would block on them.
+    try {
+      const { interests } = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.resolveAudienceInterests(audience.interestNames));
+      if (interests.length) audience.interestNames = interests.map((interest) => interest.name);
+      else noMetaInterests = true;
+    } catch {
+      // Keep the AI names; preflight reports the lookup failure.
+    }
+  }
   if (audienceDraft) {
     const targeting = {
       ...draftResult.draft.targeting,
+      ...(noMetaInterests ? { audience: { interestNames: [], rationale: "Meta has none of the suggested interests, so this plan targets everyone in the chosen areas and ages." } } : {}),
       gender: audienceDraft.targeting.gender ?? "all",
       location: audienceDraft.targeting.location?.mode === "manual" ? audienceDraft.targeting.location : {
         ...draftResult.draft.targeting.location,
@@ -241,6 +254,10 @@ async function handlePOST(req: Request) {
       },
       ...(audienceDraft.targeting.age?.mode === "manual" ? { age: audienceDraft.targeting.age } : {}),
     };
+    if (noMetaInterests) {
+      recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "partial", businessId: business.id, attributes: { errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" } });
+      return NextResponse.json({ ready: true, fallback: true, targeting });
+    }
     return NextResponse.json({ ready: true, targeting });
   }
 

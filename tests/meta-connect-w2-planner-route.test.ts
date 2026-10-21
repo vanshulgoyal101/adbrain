@@ -288,7 +288,7 @@ describe("guided planner route", () => {
     }
   });
 
-  it("recommends targeting without saving a duplicate draft or reading Meta, retaining manual choices", async () => {
+  it("recommends targeting without saving a duplicate draft or writing to Meta, retaining manual choices", async () => {
     const audienceDraft = {
       businessId: business.id, name: "Owner name", goal: "Qualified leads", mode: "manual",
       creativeIds: [creativeId], dailyBudgetRupees: 700, leadFormId: "owner-form", abTest: false,
@@ -302,7 +302,8 @@ describe("guided planner route", () => {
     expect(body.targeting.age).toEqual(audienceDraft.targeting.age);
     expect(body.targeting.location).toEqual(audienceDraft.targeting.location);
     expect(body.targeting.audience.rationale).toBe("Use the approved local creative.");
-    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    // Only the read-only interest lookup; no lead forms or campaign writes.
+    expect(mocks.withMetaConnection).toHaveBeenCalledTimes(1);
     expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
   });
 
