@@ -43,6 +43,8 @@ export interface PreflightInput {
   creatives: PreflightCreative[];
   form: PreflightForm | null;
   whatsappNumber?: string | null;
+  /** Business website; undefined when the caller does not check it. */
+  website?: string | null;
   geo: PreflightGeo;
   hash: (payload: string) => string;
 }
@@ -82,6 +84,18 @@ export interface CanonicalReviewPayload {
 
 function blocker(code: ReviewDTO["blockers"][number]["code"], message: string) {
   return { code, message, action: null } as const;
+}
+
+function isAdvertiserWebsite(website: string | null): boolean {
+  let url: URL;
+  try {
+    url = new URL(website ?? "");
+  } catch {
+    return false;
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  return (url.protocol === "https:" || url.protocol === "http:") &&
+    !["facebook.com", "fb.com", "fb.me", "instagram.com", "m.me", "wa.me"].some((blocked) => host === blocked || host.endsWith(`.${blocked}`));
 }
 
 function canonicalize(value: unknown): unknown {
@@ -170,6 +184,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     }
   } else if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Choose an active lead form belonging to this business."));
+  }
+  if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook."));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "Daily budget must be greater than zero before preparation."));
