@@ -126,23 +126,71 @@ function clipAtWord(text: string, max: number): string {
   return (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:\-–—]+$/u, "");
 }
 
-// Models often overrun the 100-character link description and the internal visual.medium
-// label (Haiku, Oct 21 run 7); clip them rather than discard a paid concept.
-function clipOverruns(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  let result = value as Record<string, unknown>;
-  const description = result.description;
-  const descriptionMax = creativeConceptSchema.shape.description.maxLength ?? 100;
-  if (typeof description === "string" && description.trim().length > descriptionMax) {
-    result = { ...result, description: clipAtWord(description.trim(), descriptionMax) };
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+function clipField(value: unknown, max: number | null): unknown {
+  if (typeof value !== "string" || max === null) return value;
+  const text = value.trim();
+  return text.length > max ? clipAtWord(text, max) : text;
+}
+
+// The "center" layout is a left-side text panel, so "left" (Groq, Oct 21) maps there; "right" has no layout.
+function placement(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const text = value.trim().toLowerCase();
+  if (/\b(?:top|upper)\b/.test(text)) return "top";
+  if (/\b(?:bottom|lower)\b/.test(text)) return "bottom";
+  if (/\b(?:center|centre|middle|left)\b/.test(text)) return "center";
+  return value;
+}
+
+const ctaKey = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
+
+// Fix cosmetic slips once; headline and primary text are never clipped, so they still fail when too long.
+function normalizeDraft(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const shape = creativeConceptSchema.shape;
+  const visual = isRecord(value.visual) ? {
+    ...value.visual,
+    medium: clipField(value.visual.medium, shape.visual.shape.medium.maxLength),
+    direction: clipField(value.visual.direction, shape.visual.shape.direction.maxLength),
+    textPlacement: placement(value.visual.textPlacement),
+  } : value.visual;
+  const cta = typeof value.cta === "string"
+    ? META_CTAS.find((option) => ctaKey(option) === ctaKey(value.cta as string)) ?? value.cta
+    : value.cta;
+  const supportingText = typeof value.supportingText === "string" ? value.supportingText.trim() : null;
+  const quotes = typeof value.sourceQuotes === "string" ? [value.sourceQuotes] : value.sourceQuotes;
+  const sourceQuotes = Array.isArray(quotes)
+    ? quotes.map((quote) => (typeof quote === "string" ? quote.trim() : quote)).filter((quote) => quote !== "")
+    : quotes;
+  return {
+    ...value,
+    description: clipField(value.description, shape.description.maxLength),
+    rationale: clipField(value.rationale, shape.rationale.maxLength),
+    cta,
+    visual,
+    // An optional on-image line: drop it rather than cut it mid-thought.
+    supportingText: supportingText && supportingText.length <= (shape.supportingText.unwrap().maxLength ?? 64)
+      ? supportingText : null,
+    sourceQuotes,
+  };
+}
+
+const foldQuote = (text: string) => text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"');
+
+// A quote that differs from a fact only in case or curly quotes is stored as the fact's exact text.
+function verbatimQuote(quote: string, sources: string[]): string | null {
+  if (sources.some((source) => source.includes(quote))) return quote;
+  const folded = foldQuote(quote);
+  if (folded.length !== quote.length) return null;
+  for (const source of sources) {
+    const foldedSource = foldQuote(source);
+    const index = foldedSource.indexOf(folded);
+    if (index >= 0 && foldedSource.length === source.length) return source.slice(index, index + quote.length);
   }
-  const visual = result.visual;
-  const medium = visual && typeof visual === "object" ? (visual as { medium?: unknown }).medium : undefined;
-  const mediumMax = creativeConceptSchema.shape.visual.shape.medium.maxLength ?? 120;
-  if (typeof medium === "string" && medium.trim().length > mediumMax) {
-    result = { ...result, visual: { ...(visual as object), medium: clipAtWord(medium.trim(), mediumMax) } };
-  }
-  return result;
+  return null;
 }
 
 export function validateConcept(
@@ -151,11 +199,7 @@ export function validateConcept(
 ):
   | { success: true; concept: CreativeConcept }
   | { success: false; issues: string[] } {
-  const normalized = value && typeof value === "object" && !Array.isArray(value)
-    && (!("supportingText" in value) || (value as { supportingText?: unknown }).supportingText === "")
-    ? { ...value, supportingText: null } : value;
-  const candidate = clipOverruns(normalized);
-  const parsed = creativeConceptSchema.safeParse(candidate);
+  const parsed = creativeConceptSchema.safeParse(normalizeDraft(value));
   if (!parsed.success) {
     return {
       success: false,
@@ -166,7 +210,25 @@ export function validateConcept(
       }),
     };
   }
-  const concept = parsed.data;
+  const sources = [
+    input.brand.name,
+    input.brand.description,
+    input.brand.target_audience,
+    ...(input.brand.usps ?? []),
+    ...(input.brand.offers ?? []),
+    ...(input.brand.locations ?? []),
+    input.instructions ?? "",
+    ...(input.sourceFacts ?? []),
+  ].filter((value): value is string => typeof value === "string");
+  const quoteIssues: string[] = [];
+  const concept = {
+    ...parsed.data,
+    sourceQuotes: parsed.data.sourceQuotes.map((quote) => {
+      const verbatim = verbatimQuote(quote, sources);
+      if (verbatim === null) quoteIssues.push(`sourceQuotes: quote not present in supplied facts: ${quote}`);
+      return verbatim ?? quote;
+    }),
+  };
   const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
   const issues = scanAdCopy(
@@ -189,22 +251,7 @@ export function validateConcept(
   issues.push(...scanAdCopy(concept.description, {
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),
   }).map((finding) => `${finding.rule}: ${finding.detail}`));
-  const sources = [
-    input.brand.name,
-    input.brand.description,
-    input.brand.target_audience,
-    ...(input.brand.usps ?? []),
-    ...(input.brand.offers ?? []),
-    ...(input.brand.locations ?? []),
-    input.instructions ?? "",
-    ...(input.sourceFacts ?? []),
-  ].filter((value): value is string => typeof value === "string");
-  for (const quote of concept.sourceQuotes) {
-    if (!sources.some((source) => source.includes(quote)))
-      issues.push(
-        `sourceQuotes: quote not present in supplied facts: ${quote}`,
-      );
-  }
+  issues.push(...quoteIssues);
   // "text-free" is the visual the prompt asks for, not a free offer.
   const commercialTerms =
     /(?<!\btext-)\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
