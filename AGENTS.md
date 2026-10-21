@@ -35,39 +35,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Execution speed
 
-- This is the standing default for every new feature, improvement and bug fix,
-	not a payment-specific exception or temporary release mode. Apply it from scope
-	and architecture through implementation, testing and deployment. Choose the
-	simplest maintainable path to a complete customer outcome; add process only for
-	a concrete risk, not because a new feature or worker handoff has started.
-- September 28 owner direction: build and ship like a small startup. Default loop:
-	implement a complete useful slice, run focused checks and required CI, deploy,
-	then smoke-test in production. Staging and exhaustive local/browser replay are
-	not default prerequisites. Follow [the fast release policy](docs/RELEASING.md#startup-fast-path).
-- Assigned work includes routine implementation, scoped dependencies, tests,
-	isolated worktree setup, commits and permitted publication. Do not ask permission
-	again for each step. Production changes go through protected PRs and green CI;
-	preserve branch protection.
-- Production testing is authorized for bounded, reversible, non-financial checks
-	on owner-controlled or synthetic data. No blanket permission to charge/refund,
-	spend on providers, activate ads, expose secrets or damage customer data.
-- QA may run alongside implementation/CI; ordinary changes do not wait for a
-	separate QA session. Money, tenant/auth boundaries and irreversible data changes
-	need focused pre-release evidence. Reuse accepted evidence; a mechanical correction
-	with no behavioral change does not reset acceptance when the release owner verifies
-	the delta and its relevant check passes.
-- Let required CI perform full gates. Do not duplicate full suites/builds, audits,
-	installs or source scans without changed inputs or an actual failure. Never disable
-	required checks, hide failures or bypass financial/security protections for speed.
-- Fix ordinary UX failures in production or roll back promptly. A broken automation
-	bridge is not itself a release gate: use working CLI/API access and owner manual
-	smoke checks where appropriate. Missing authenticated target access remains real.
-- Report an actual blocker once with the exact missing action. Continue independent
-	work; do not turn waiting into repeated board edits, issue comments or user relays.
-	No new research report, test harness or process document for a routine change.
-- Deliver whole customer workflows and demonstrated fixes, not speculative polish.
-	Workers can finish independent assigned work while one release is blocked; do not
-	invent work just to occupy them. Historical holds do not override current authority.
+- **Owner rule (Oct 21): develop fast, directly in production, as long as the core
+	is not broken.** Build a small slice, open a PR, let it auto-merge on green CI,
+	check it in production, move on. No staging, no extra approvals, no reports.
+- The only things that slow this down on purpose: the core check and production
+	smoke (below), money (charges, refunds, ad spend) and secrets. Everything else is
+	the author's call.
+- Do not ask permission for routine steps. Report a real blocker once, with the
+	exact missing action, and keep working on something else meanwhile.
 
 ## Engineering priorities and reuse
 
@@ -89,53 +64,18 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Track work in GitHub: one issue per real problem with the `core` or `later`
 	label, linked commits/PRs, and close the issue when the fix is live. Close or
 	park stale issues rather than leaving them open with old status.
-- Prioritize complete, high-value customer workflows over isolated polish or rare
-	edge-case features. Retain essential financial, privacy and security protections.
-- Before building a substantial capability, check existing project dependencies,
-	official provider SDKs and maintained open-source solutions. Prefer integration
-	over recreating standard authentication, payment APIs, scheduling or parsing.
-- Evaluate actual feature coverage, maintenance, security history, license,
-	runtime compatibility and total operating cost; popularity alone is not trust.
-	Prefer the smallest suitable dependency and verify its current documented APIs.
-- Keep custom code focused on AdBrain's business rules and thin integration
-	boundaries. SDKs do not replace tenant authorization, local persistence,
-	allocation/reconciliation rules or approval to spend customer funds.
-- Briefly record the reuse choice and remaining gaps in the existing worker
-	handoff. Avoid a new research/documentation project for every dependency choice.
-- Replace existing custom code only when the benefit exceeds migration risk and
-	maintenance cost; preserve behavior and tests. Do not disrupt an active release
-	or start a broad rewrite merely to adopt a library.
-
-## Documentation
-
-- Use [docs/README.md](docs/README.md) to find the canonical guide and follow its
-	maintenance rules. Update the owning reference with route, schema, configuration,
-	workflow or operational changes; link shared definitions instead of duplicating them.
-- Ground examples and claims in deciding code, tests and exact release evidence.
-	Distinguish source, branch-only, migration-dependent, test-only, planned and deployed
-	behavior. A new date or a passing local test is not production verification.
-- Write for the reader's task: prerequisites, supported steps, expected result,
-	failure recovery and limitations. Keep examples synthetic and identify side effects.
-- Preserve historical receipts and stable links. Mark superseded plans explicitly;
-	do not rewrite old evidence as current fact. Run relevant documentation checks;
-	prose-only changes do not justify repeated application or provider tests.
+- Prefer existing dependencies, official SDKs and maintained libraries over
+	rebuilding standard pieces. Keep custom code to AdBrain's own business rules.
 
 ## Branches and deployments
 
-- Read [docs/RELEASING.md](docs/RELEASING.md) before branching, committing,
-	pushing, opening a release PR, deploying, migrating, or changing credentials.
-- Develop on `dev` or a feature branch based on it, not `main`. Preserve unrelated
-	local changes; never reset or stash them just to prepare a release.
-- `main` is live production. Promote only a tested, dependency-complete change
-	through a PR with passing required checks. Never bypass branch protection,
-	force-push, or merge all of `dev` when it contains unfinished work.
-- Do not run `vercel --prod`, `npm run db:push`, credential backfills, or enable
-	preview deployments without explicit authorization for that operation and
-	verification of the target environment. A Git push is not migration approval.
-- `dev` Git deployments are disabled. Other branches are not automatically
-	isolated: check Vercel deployment rules and credentials before pushing them.
-- Separate local tests, hosted CI, real-provider verification, and production
-	deployment evidence in reports. Mocked Meta consent is not real consent.
+- Branch from current `origin/main`, open a PR to `main`, enable auto-merge.
+	`main` is production; Vercel deploys it automatically. Branches do not need to
+	be up to date with `main`; required checks are build, test and secrets.
+- Migrations, production settings and rollbacks go through DevOps. Never
+	force-push or run `npm run db:push` against production.
+- Update the matching doc in the same PR when you change a route, schema or
+	setting. No separate documentation work.
 
 ## Local development servers
 
