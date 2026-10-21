@@ -71,8 +71,12 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     expect(medium.length).toBeGreaterThan(120);
     const input = { brand: run4.brand, brief: run4.brief, angle };
 
-    // The recorded reply no longer fails on the label; its unsupported "free" claim is still caught.
-    expect(validateConcept(overrun, input)).toEqual({
+    // The recorded reply no longer fails on the label, and "text-free" in its rationale is not a free offer.
+    expect(validateConcept(overrun, input)).toMatchObject({ success: true });
+    // A real free claim in the same reply still needs a supplied fact.
+    const rationale = (overrun as unknown as { rationale: string }).rationale;
+    expect(rationale).toContain("text-free graphic art");
+    expect(validateConcept({ ...overrun, rationale: rationale.replace("text-free graphic art", "free graphic art") }, input)).toEqual({
       success: false,
       issues: [expect.stringMatching(/^unsupported-commercial-claim: free/)],
     });
