@@ -6,7 +6,7 @@ on:
     branches: [main, dev]
 
 jobs:
-  # build, test and audit run in parallel; only build, test and secrets are required.
+  # build, test, core and audit run in parallel; build, test, core and secrets are required.
   build:
     runs-on: ubuntu-latest
     env:
@@ -45,6 +45,21 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db
+
+  # Core loop regression gate (#110); required on main on its own (#111).
+  core:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:core
 
   # Advisories are reported, not blocking: a new upstream CVE must not stop shipping.
   audit:
