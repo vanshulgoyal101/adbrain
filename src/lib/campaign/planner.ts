@@ -253,6 +253,9 @@ export async function runPlanner(
     });
     let value: unknown;
     try { value = parseJSON<unknown>(completion.text); } catch { value = null; }
+    const reply = value as { plan?: Record<string, unknown> } | null;
+    // City-only plans have no radius; models send 0 or null, which the schema rejects.
+    if (reply?.plan && typeof reply.plan === "object" && (reply.plan.radius_km === 0 || reply.plan.radius_km === null)) delete reply.plan.radius_km;
     const parsed = plannerResultSchema.safeParse(value);
     let result: PlannerLLMResult | null = null;
     if (parsed.success && parsed.data.ready) result = parsed.data;
