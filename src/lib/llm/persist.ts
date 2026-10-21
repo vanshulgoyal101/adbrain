@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEnv } from "@/lib/env";
-import type { TokenUsage } from "./types";
+import type { LLMFailureCode, TokenUsage } from "./types";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
 
@@ -25,6 +25,7 @@ export interface LLMUsageEvent {
   attempt?: number;
   status?: "success" | "error" | "fallback";
   errorCode?: string;
+  failure?: LLMFailureCode;
   imageWidth?: number;
   imageHeight?: number;
   estimatedCostUsd?: number;
@@ -125,7 +126,8 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
     attributes: { provider: event.provider, model: event.model, inputTokens: event.usage.promptTokens,
       outputTokens: event.usage.completionTokens, totalTokens: event.usage.totalTokens,
       estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
-      usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false },
+      usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false,
+      ...(event.failure ? { errorCode: `LLM_${event.failure}` } : event.errorCode ? { errorCode: event.errorCode } : {}) },
   });
   try {
     const supabase = createAdminClient();
@@ -158,6 +160,7 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
           ...event.metadata,
           ...(event.generationId ? { generationId: event.generationId } : {}),
           ...(event.providerRequestId ? { providerRequestId: event.providerRequestId } : {}),
+          ...(event.failure ? { failure: event.failure } : {}),
           providerFinalStatus: event.providerFinalStatus ?? "unknown",
         },
         request_id: event.requestId,

@@ -240,7 +240,9 @@ export async function runPlanner(
   const attempts = state.questionLimit === 0 ? 1 : 2;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     signal.throwIfAborted();
+    // The standard reasoning model needs 30-90s per plan, beyond the 45s planner limit.
     const completion = await complete(messages, {
+      routing: "budget", task: "campaign planner", attemptTimeoutMs: 20_000,
       json: true, responseSchema: plannerResultSchema, cache: false, signal,
       promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000,
     }).catch(async (error: unknown) => {

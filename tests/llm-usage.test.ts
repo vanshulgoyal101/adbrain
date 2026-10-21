@@ -19,9 +19,10 @@ function result(
   };
 }
 
-const { rpc, insert, abortSignal, browserFrom, adminFrom } = vi.hoisted(() => ({
-  rpc: vi.fn(), insert: vi.fn(), abortSignal: vi.fn(), browserFrom: vi.fn(), adminFrom: vi.fn(),
+const { rpc, insert, abortSignal, browserFrom, adminFrom, recordProductEvent } = vi.hoisted(() => ({
+  rpc: vi.fn(), insert: vi.fn(), abortSignal: vi.fn(), browserFrom: vi.fn(), adminFrom: vi.fn(), recordProductEvent: vi.fn(),
 }));
+vi.mock("@/lib/observability/logger", () => ({ recordProductEvent }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc, from: browserFrom }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: adminFrom }) }));
 
@@ -74,6 +75,23 @@ describe("persistent quota accounting", () => {
       request_id: "internal-request", status: "error", total_tokens: 0,
       metadata: { angle: "local", generationId: "generation-456", providerRequestId: "provider-image-123", providerFinalStatus: "unknown" },
     })]);
+  });
+
+  it("records the sanitized provider failure class for failed attempts", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    await persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "creatives.generate", provider: "openrouter",
+      model: "m", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, requestId: "request",
+      status: "error", errorCode: "CreativeValidationError", failure: "HTTP_402",
+    }]);
+    expect(insert).toHaveBeenCalledWith([expect.objectContaining({
+      error_code: "CreativeValidationError", metadata: expect.objectContaining({ failure: "HTTP_402" }),
+    })]);
+    expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({
+      name: "ai.completion", outcome: "failed", attributes: expect.objectContaining({ errorCode: "LLM_HTTP_402" }),
+    }));
   });
 
   it("bounds best-effort ledger writes without failing the completed operation", async () => {

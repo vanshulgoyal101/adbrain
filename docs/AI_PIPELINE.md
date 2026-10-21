@@ -52,7 +52,9 @@ response, and returns at most two useful questions per turn. After six supplied
 decisions it permits one final plan attempt but no more questions. Missing or
 repeated output gets at most one correction call under the same 45-second deadline;
 transport/provider failures are not retried by this progress check. Each completed
-attempt retains usage and validity metadata. Existing provider routing has its own
+attempt retains usage and validity metadata. The planner uses budget routing
+(`LLM_BUDGET_PROVIDER_ORDER`) with a 20-second attempt deadline, because the
+standard reasoning model needs 30-90 seconds per plan. Provider routing has its own
 bounded fallback behavior; two planner attempts are not a guarantee of only two
 physical provider requests.
 
@@ -216,9 +218,14 @@ not a guarantee against future advisories.
 The SDK receives direct configured provider models and keys, never a gateway
 model string. No AI Gateway account, new service, model change, or image adapter
 is required. SDK retries are explicitly zero; the facade alone rotates keys and
-providers. Caller cancellation or the adapter's 90-second deadline stops further
-attempts. Truncated output is a terminal error, including Gemini truncation.
-System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
+providers. Caller cancellation stops further attempts. An attempt deadline (90 seconds
+by default, `attemptTimeoutMs` per task) or truncated output skips the rest of
+that model's key pool and tries the next configured model or provider; with no
+other model left, the original timeout or truncation error is thrown. Each
+attempt reports a sanitized failure code (`TIMEOUT`, `DEADLINE` for the caller's
+own deadline, `ABORTED`, `TRUNCATED`, `EMPTY`, `TRANSPORT`, `HTTP_<status>`) and
+latency. Usage rows keep it in `metadata.failure` and `ai.completion` events as
+`errorCode: LLM_<code>`. System prompts, Gemini thinking headroom, OpenRouter reasoning exclusion, and
 provider-reported usage retain their facade semantics. SDK-recomputed totals are
 not substituted for the provider's original counts.
 

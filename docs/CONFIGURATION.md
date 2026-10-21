@@ -124,7 +124,7 @@ an application release.
 | `LLM_BUDGET_PROVIDER_ORDER` | `groq,google,cerebras` | Budget routing; not a free-service guarantee |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Google model |
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model |
-| `OPENROUTER_MODEL` | `qwen/qwen3.8-max-0902` | OpenRouter text model |
+| `OPENROUTER_MODEL` | `qwen/qwen3.8-max-0902` | OpenRouter text model; a comma list is tried in order |
 | `CREATIVE_MAX_TOKENS` | `6000` | Integer 1800-16000 |
 | `CREATIVE_REASONING_EFFORT` | `medium` | `minimal`, `low`, `medium`, `high` |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
