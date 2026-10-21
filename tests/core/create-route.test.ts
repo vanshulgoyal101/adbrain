@@ -83,6 +83,8 @@ type Replay = {
   text?: (angle: Angle, attempt: number) => string;
   /** Wait the recorded run-4 latencies (on the virtual clock) for text and image calls. */
   recordedLatency?: boolean;
+  /** Overrides the text latency, in virtual milliseconds. */
+  textLatency?: () => number;
 };
 
 let png: string;
@@ -146,7 +148,8 @@ function stubProviders(replay: Replay = {}) {
       const attempt = (attempts.get(angle.angleId) ?? 0) + 1;
       attempts.set(angle.angleId, attempt);
       const usage = angle.textAttempts[Math.min(attempt, angle.textAttempts.length) - 1];
-      if (replay.recordedLatency) await wait(usage.latencyMs, init?.signal);
+      if (replay.textLatency) await wait(replay.textLatency(), init?.signal);
+      else if (replay.recordedLatency) await wait(usage.latencyMs, init?.signal);
       const reply = text(angle, attempt);
       const tokens = { prompt: usage.promptTokens, completion: usage.completionTokens };
       if (provider === "google") return googleReply(reply, tokens);
@@ -244,6 +247,25 @@ describe("core: Create route on recorded run 4", () => {
     expect(elapsed).toBeLessThan(run4.routeDeadlineMs);
     // Value attempt 1 took 89 s in production; every attempt deadline must allow it.
     expect(Math.min(...clock.llmAttemptDeadlines)).toBeGreaterThan(value.textAttempts[0].latencyMs);
+  });
+
+  it("fits the 270 s route deadline at a 60 s attempt limit when every concept answers 1 ms before it", async () => {
+    vi.stubEnv("CREATIVE_ATTEMPT_TIMEOUT_MS", "60000");
+    mocks.fastRaster = true;
+    const post = await postCreate();
+    const clock = useVirtualDeadlines();
+    stubProviders({
+      down: { google: 503, groq: 503 },
+      text: valueRejectedFirst,
+      recordedLatency: true,
+      textLatency: () => clock.llmAttemptDeadlines.at(-1)! - 1,
+    });
+    const response = await settleInVirtualTime(post());
+    const elapsed = Date.now() - clock.startedAt;
+    await expectThreeSavedAds(response);
+    expect(textCalls("openrouter")).toHaveLength(4);
+    expect(new Set(clock.llmAttemptDeadlines)).toEqual(new Set([60_000]));
+    expect(elapsed).toBeLessThan(run4.routeDeadlineMs);
   });
 });
 
