@@ -205,7 +205,11 @@ chooses the source photo. Source uploads can remain if later steps fail.
 [The orchestrator](../src/lib/llm/index.ts) supports Google plus OpenAI-compatible
 Groq, OpenRouter, and Cerebras. It follows the selected standard/budget order,
 round-robins keys within each provider, skips missing pools, and parks HTTP-429
-keys for 60 seconds. First successful provider response wins. Cancellation and
+keys for the provider's Retry-After (at most 60 seconds). When every key of a
+model is parked for 20 seconds or less, it waits once and retries that model
+before falling through; Groq keys share one organization tokens-per-minute
+limit, so rotating keys does not add capacity. A 5xx skips that model's other
+keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
 The text adapters use pinned `ai@7.0.116`, `@ai-sdk/google@4.0.82`, and
