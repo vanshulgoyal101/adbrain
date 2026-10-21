@@ -130,6 +130,8 @@ type CampaignsProps = {
   leadFormError: string | null;
   metaReady: boolean;
   adAccountId: string;
+  /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored). */
+  newCampaign?: { creativeIds: string[] };
 };
 
 export function Campaigns(props: CampaignsProps) {
@@ -152,12 +154,16 @@ function BusinessCampaigns({
   leadFormError,
   metaReady,
   adAccountId,
+  newCampaign,
   scope,
   initialSetup,
   onSetupChange,
 }: CampaignsProps & { scope: string; initialSetup?: ComposerSetup; onSetupChange: (value: [string, ComposerSetup]) => void }) {
   const [hadInitialSetup] = useState(Boolean(initialSetup));
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSetup?.selected));
+  const [fromReview] = useState(Boolean(newCampaign) && !initialSetup);
+  const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
+    newCampaign?.creativeIds.filter(id => approved.some(creative => creative.id === id)),
+  ));
   const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
@@ -180,7 +186,7 @@ function BusinessCampaigns({
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
     ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
   });
-  const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? initialCampaigns.length === 0);
+  const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? (fromReview || initialCampaigns.length === 0));
   const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
   const nameInputRef = useRef<HTMLInputElement>(null);
   const guidedModeRef = useRef<HTMLInputElement>(null);
@@ -309,6 +315,8 @@ function BusinessCampaigns({
   useEffect(() => {
     const saved = readCampaignRecovery(window.sessionStorage, recoveryKey, business.id);
     if (!saved) return;
+    // A fresh campaign from Review starts clean unless a launch is still in flight; the old draft stays in Saved drafts.
+    if (fromReview && !saved.request) return;
     recoveryRef.current = saved;
     preparedDraftRef.current = saved.draft;
     const controller = new AbortController();
@@ -339,7 +347,7 @@ function BusinessCampaigns({
       }
     })();
     return () => { controller.abort(); operationControllerRef.current?.abort(); };
-  }, [business.id, recoveryKey, hadInitialSetup]);
+  }, [business.id, recoveryKey, hadInitialSetup, fromReview]);
 
   function saveRecovery(recovery: CampaignRecovery) {
     writeCampaignRecovery(window.sessionStorage, recoveryKey, recovery);

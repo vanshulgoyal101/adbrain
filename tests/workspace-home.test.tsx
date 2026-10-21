@@ -140,7 +140,7 @@ describe("Home workspace", () => {
     queries.getApprovedCreatives.mockReturnValue(new Promise<Creative[]>((resolve) => { resolveApproved = resolve; }));
     queries.getMetaConnection.mockReturnValue(new Promise<{ ready: boolean }>((resolve) => { resolveConnection = resolve; }));
     const { default: CampaignsPage } = await import("@/app/(app)/campaigns/page");
-    const page = CampaignsPage();
+    const page = CampaignsPage({ searchParams: Promise.resolve({}) });
     await vi.waitFor(() => expect(queries.getLatestResults).toHaveBeenCalledWith(["campaign-1"]));
     resolveApproved([]);
     resolveConnection({ ready: false });

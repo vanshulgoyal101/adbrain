@@ -1,10 +1,12 @@
 "use client";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   CheckCircle2,
   Download,
+  Megaphone,
   Eye,
   ImageIcon,
   RefreshCw,
@@ -289,7 +291,7 @@ export function Studio({
           ["01", "Brief", "Set the campaign goal"],
           ["02", "Generate", "Create on-brand variants"],
           ["03", "Review", `${reviewCount} awaiting approval`],
-          ["04", "Export", `${approvedCount} ready for launch`],
+          ["04", "Launch", `${approvedCount} ready for a campaign`],
         ].map(([number, label, detail], index) => (
           <li
             key={label}
@@ -406,16 +408,32 @@ export function Studio({
           Creatives{" "}
           <span className="font-normal text-slate-400">({items.length})</span>
         </h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={exportApproved}
-          data-product-event="creative.download"
-          disabled={approvedCount === 0 || exporting}
-        >
-          {exporting ? <Spinner /> : <Download className="h-4 w-4" />}
-          Export approved ({approvedCount})
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportApproved}
+            data-product-event="creative.download"
+            disabled={approvedCount === 0 || exporting}
+          >
+            {exporting ? <Spinner /> : <Download className="h-4 w-4" />}
+            Export approved ({approvedCount})
+          </Button>
+          {approvedCount > 0 ? (
+            <Link
+              href={`/campaigns?new=1&creatives=${items.filter((i) => i.status === "approved").map((i) => i.id).join(",")}`}
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              <Megaphone className="h-4 w-4" aria-hidden="true" />
+              Create campaign ({approvedCount})
+            </Link>
+          ) : (
+            <Button size="sm" disabled>
+              <Megaphone className="h-4 w-4" aria-hidden="true" />
+              Create campaign (0)
+            </Button>
+          )}
+        </div>
       </div>
 
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
