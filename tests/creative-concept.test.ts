@@ -55,7 +55,7 @@ describe("creative concept contract", () => {
     const result = validateConcept({ ...concept, headline: "x".repeat(41), sourceQuotes: ["ok", ""] }, input);
     expect(result.success).toBe(false);
     const rules = conceptValidationRules(result.success ? [] : result.issues);
-    expect(rules).toEqual(["schema:headline:too_big", "schema:sourceQuotes.*:too_small"]);
+    expect(rules).toEqual(["schema:headline:too_big"]);
     expect(JSON.stringify(rules)).not.toContain("xxx");
     const withoutLine: Record<string, unknown> = { ...concept };
     delete withoutLine.supportingText;
@@ -70,9 +70,9 @@ describe("creative concept contract", () => {
     expect(validateConcept({ ...concept, rationale: `${long} Offer $49 visits.` }, input)).toMatchObject({
       success: false, issues: [expect.stringContaining("unsupported-commercial-claim: $49")],
     });
-    expect(validateConcept({ ...concept, rationale: "x".repeat(1_201) }, input)).toMatchObject({
-      success: false, issues: [expect.stringContaining("schema:rationale:too_big")],
-    });
+    const clipped = validateConcept({ ...concept, rationale: `${long.repeat(2)} Offer $49 visits.` }, input);
+    expect(clipped.success).toBe(true);
+    if (clipped.success) expect(clipped.concept.rationale).toBe(long.repeat(2).slice(0, 1_200).trimEnd());
   });
 
   it("does not treat previous ads as evidence and checks description claims", () => {

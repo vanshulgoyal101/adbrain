@@ -117,6 +117,13 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
 3. For each angle, request a structured concept with caching disabled. First
    attempt temperature is 0.8; one repair attempt uses 0.4. Max output and
    reasoning effort are configured. Failed validation stops the variant.
+   Before validation, cosmetic slips are normalized once:
+   - Over-long link description, `visual.medium`, `visual.direction` and rationale are clipped at a word.
+   - Case and spacing variants of a CTA or `textPlacement` are mapped, and `left` becomes `center`.
+   - An empty or over-long `supportingText` becomes null, and empty quotes are dropped.
+   - A quote that differs from a fact only in case is stored as the fact's exact text.
+
+   Headline and primary text are never clipped, and every claim check still runs.
 4. Generate an image from the validated concept and up to three reference images.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.

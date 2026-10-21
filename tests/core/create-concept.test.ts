@@ -3,6 +3,7 @@ import { conceptValidationRules, validateConcept, type ConceptInput } from "@/li
 import { AD_ANGLES } from "@/lib/templates/ads";
 import recorded from "./fixtures/create/cedar-ridge-concept.json";
 import groq from "./fixtures/create/cedar-ridge-groq-drafts.json";
+import groqFields from "./fixtures/create/cedar-ridge-groq-fields.json";
 
 // A real saved qwen concept for the seeded Cedar Ridge demo clinic, validated with
 // the Brand facts and source facts it was generated from.
@@ -44,7 +45,27 @@ describe("core: Create concept validation on a recorded production concept", () 
     })).toContain("unsupported-commercial-claim");
     expect(rules({ ...recorded.concept, sourceQuotes: ["Voted best clinic in Austin"] })).toContain("sourceQuotes");
     expect(rules({ ...recorded.concept, headline: `${recorded.concept.headline} Book today` })).toEqual(["schema:headline:too_big"]);
-    expect(rules({ ...recorded.concept, supportingText: "x".repeat(65) })).toEqual(["schema:supportingText:too_big"]);
+  });
+
+  it("normalizes cosmetic field slips once and keeps fields it cannot repair failing", () => {
+    const result = validateConcept({
+      ...recorded.concept,
+      cta: "BOOK_NOW",
+      supportingText: "x".repeat(65),
+      visual: { ...recorded.concept.visual, direction: "d".repeat(2500), textPlacement: " Top " },
+      sourceQuotes: [...recorded.concept.sourceQuotes, "  "],
+    }, input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.concept.cta).toBe("Book Now");
+      expect(result.concept.supportingText).toBeNull();
+      expect(result.concept.visual).toMatchObject({ textPlacement: "top" });
+      expect(result.concept.visual.direction).toHaveLength(2400);
+      expect(result.concept.sourceQuotes).toEqual(recorded.concept.sourceQuotes);
+    }
+    expect(rules({ ...recorded.concept, cta: "Shop Now" })).toEqual(["schema:cta:invalid_value"]);
+    expect(rules({ ...recorded.concept, visual: { ...recorded.concept.visual, textPlacement: "right" } }))
+      .toEqual(["schema:visual.textPlacement:invalid_value"]);
   });
 });
 
@@ -73,6 +94,33 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
     for (const amount of ["$4", "$490", "$49.99"]) {
       const primary_text = price.concept.primary_text.replace("For $49,", `For ${amount},`);
       expect(draftRules(price.angle, { ...price.concept, primary_text }), amount).toEqual(["unsupported-commercial-claim"]);
+    }
+  });
+
+  // Rejected on main only for textPlacement "left" or a quote's capital letter.
+  it("saves drafts with a left text area or a quote differing only in case", () => {
+    expect(groqFields.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(3);
+    for (const draft of groqFields.drafts) {
+      expect(draft.rulesOnMain).not.toEqual(draft.rules);
+      expect(draftRules(draft.angle, draft.concept)).toEqual(draft.rules);
+    }
+    const [left] = groqFields.drafts.filter((draft) => draft.concept.visual.textPlacement === "left" && !draft.rules.length);
+    const angle = AD_ANGLES.find((candidate) => candidate.id === left.angle)!;
+    const saved = validateConcept(left.concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
+    expect(saved.success && saved.concept.visual.textPlacement).toBe("center");
+  });
+
+  it("stores the Brand's exact quote and still rejects a quote with different words", () => {
+    const [cased] = groqFields.drafts.filter((draft) => draft.concept.sourceQuotes.includes("Transparent cash pricing"));
+    const angle = AD_ANGLES.find((candidate) => candidate.id === cased.angle)!;
+    const check = (sourceQuotes: string[]) =>
+      validateConcept({ ...cased.concept, sourceQuotes }, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
+    const saved = check(cased.concept.sourceQuotes);
+    expect(saved.success && saved.concept.sourceQuotes).toContain("transparent cash pricing");
+    const others = cased.concept.sourceQuotes.filter((quote) => quote !== "Transparent cash pricing");
+    for (const quote of ["Transparent card pricing", "Transparent cash pricing guaranteed"]) {
+      const result = check([...others, quote]);
+      expect(result.success ? [] : conceptValidationRules(result.issues), quote).toEqual(["sourceQuotes"]);
     }
   });
 });
