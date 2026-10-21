@@ -78,7 +78,24 @@ Routine steps never wait for the coordinator.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### Current focus (October 21)
+### P0 (owner, October 21): stop everything else
+
+Only three issues matter until they are closed: [#98](https://github.com/vanshulgoyal101/adbrain/issues/98)
+Create works, [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) core
+regression gate and [#111](https://github.com/vanshulgoyal101/adbrain/issues/111)
+production protection. All other issues are parked (`later`). Do not start, review
+or release anything else. When a P0 issue closes, its workers join the remaining
+P0 issues; only when all three are closed do parked issues resume.
+
+| Worker | P0 work |
+| --- | --- |
+| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) lead: PR112 (faster Create model) then Create run 5. If not 3/3, revert `CREATIVE_PROVIDER_ORDER` at once. Done at 3/3 twice with time to spare |
+| Dev | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) with Dev 3: finish PR103 (schema fields) and fix whatever rejects drafts in runs 5 and 6. Split files with Dev 3 directly |
+| QA | [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) lead: `test:core` for Create 3/3 and CSP rendering from recorded real responses. Own the suite layout and CI job |
+| Dev 2 | [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) with QA: the campaign half (Prepare with fallback, PAUSED launch, sync, pause) from recorded real Graph responses. Recording them from one PAUSED test campaign is in scope |
+| DevOps | [#111](https://github.com/vanshulgoyal101/adbrain/issues/111): required check, post-deploy and daily smoke, automatic rollback, main-equals-production alert |
+
+### Earlier focus (October 21, before P0)
 
 Restart after a two-week stall. Everything was blocked by a failing CI audit
 (sharp, follow-redirects) and an unapplied production setting. The coordinator
