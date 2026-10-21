@@ -32,5 +32,12 @@
         "completion": 2638
       }
     }
-  ]
+  ],
+  "mediumOverrun": {
+    "note": "Bake-off run 1, first attempt: visual.medium ran past 120 characters (schema:visual.medium:too_big).",
+    "angleName": "Special offer / incentive",
+    "latencyMs": 12452,
+    "id": "gen-1792602586-1AY4SkGHiQu51s0Rraqu",
+    "content": "{\"headline\":\"Know your price before you book\",\"primary_text\":\"Thinking about a first visit? Our $49 new-patient exam and consultation gives you a set price to start with. Insurance is accepted, and cash pricing is transparent, so you can compare before you decide. Same-day appointments are available for new patients, plus evening and Saturday hours.\",\"description\":\"Same-day new-patient appointments and evening or Saturday hours in Austin, Round Rock and Cedar Park.\",\"cta\":\"Book Now\",\"rationale\":\"This ad leads with the price certainty of the $49 new-patient exam and consultation, a concrete reason to act now rather than a general wellness pitch. It targets Austin-area adults who are weighing a first visit and may be cost-conscious, so the copy focuses on transparent pricing, insurance acceptance and same-day availability. The visual is calm, text-free graphic art in the brand's blue and amber, which reads as clear and unhurried. Its quiet upper area leaves room for the headline without implying any health result.\",\"visual\":{\"medium\":\"Graphic art: layered matte paper-cut shapes in soft blue (#74A7FE) and warm amber (#FFC677) with subtle paper texture and soft shadows\",\"direction\":\"A calm, uncluttered composition. In the lower two-thirds, a single large rounded arch of soft blue sits on a warm amber ground, with a smaller amber arch layered slightly offset in front of it, creating a quiet sense of depth and balance. Lighting is soft and even, coming from the upper left, with gentle shadows falling to the lower right. The upper third stays a flat, lightly textured field of pale amber with very little contrast, leaving clear space for copy. Palette limited to the two brand colors plus a near-white. Flat, minimal, and unhurried. Exclusions: no people, no hands, no faces, no text, numbers, logos, price tags, calendars, clocks, spine or anatomy illustrations, medical equipment, stock-photo styling, glossy gradients, or decorative sparkles.\",\"textPlacement\":\"top\"},\"supportingText\":\"$49 new-patient exam and consultation\",\"sourceQuotes\":[\"$49 new-patient exam and consultation\",\"Insurance accepted, plus transparent cash pricing\",\"Same-day appointments for new patients\",\"Evening and Saturday hours\"]}"
+  }
 }

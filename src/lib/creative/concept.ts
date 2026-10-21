@@ -120,18 +120,29 @@ export function conceptValidationRules(issues: string[]): string[] {
   }))];
 }
 
-// Models often overrun the 100-character link description; clip it rather than discard a paid concept.
-function clipDescription(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const description = (value as { description?: unknown }).description;
-  if (typeof description !== "string") return value;
-  const text = description.trim();
-  const max = creativeConceptSchema.shape.description.maxLength ?? 100;
-  if (text.length <= max) return value;
+function clipAtWord(text: string, max: number): string {
   const cut = text.slice(0, max);
   const space = cut.lastIndexOf(" ");
-  const clipped = (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:\-–—]+$/u, "");
-  return { ...value, description: clipped };
+  return (space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:\-–—]+$/u, "");
+}
+
+// Models often overrun the 100-character link description and the internal visual.medium
+// label (Haiku, Oct 21 run 7); clip them rather than discard a paid concept.
+function clipOverruns(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  let result = value as Record<string, unknown>;
+  const description = result.description;
+  const descriptionMax = creativeConceptSchema.shape.description.maxLength ?? 100;
+  if (typeof description === "string" && description.trim().length > descriptionMax) {
+    result = { ...result, description: clipAtWord(description.trim(), descriptionMax) };
+  }
+  const visual = result.visual;
+  const medium = visual && typeof visual === "object" ? (visual as { medium?: unknown }).medium : undefined;
+  const mediumMax = creativeConceptSchema.shape.visual.shape.medium.maxLength ?? 120;
+  if (typeof medium === "string" && medium.trim().length > mediumMax) {
+    result = { ...result, visual: { ...(visual as object), medium: clipAtWord(medium.trim(), mediumMax) } };
+  }
+  return result;
 }
 
 export function validateConcept(
@@ -143,7 +154,7 @@ export function validateConcept(
   const normalized = value && typeof value === "object" && !Array.isArray(value)
     && (!("supportingText" in value) || (value as { supportingText?: unknown }).supportingText === "")
     ? { ...value, supportingText: null } : value;
-  const candidate = clipDescription(normalized);
+  const candidate = clipOverruns(normalized);
   const parsed = creativeConceptSchema.safeParse(candidate);
   if (!parsed.success) {
     return {
