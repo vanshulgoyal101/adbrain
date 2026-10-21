@@ -1,0 +1,87 @@
+[
+  {
+    "method": "GET",
+    "path": "120253646427440526?fields=id%2Caccount_id%2Cstatus%2Ceffective_status%2Cdaily_budget%2Clifetime_budget",
+    "status": 200,
+    "body": {
+      "id": "120253646427440526",
+      "account_id": "2398686420592052",
+      "status": "PAUSED",
+      "effective_status": "PAUSED"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253646427440526/ads?fields=id%2Cstatus%2Ceffective_status%2Cadset_id%2Ccreative%7Bid%7D&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253646430200526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS",
+          "adset_id": "120253646428630526",
+          "creative": {
+            "id": "1148404661464451"
+          }
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVG1zT3BSS3ZALdWllSFR1dUc5aFlnMjMyQ2VVUE5nMmItLWRnNDExRW55VG1yVlVzeHk1R0g5LWItUWpHYVpHTnFJdjhuSlROXzVuSEhZANElPSW9zTDFR",
+          "after": "QVFIVG1zT3BSS3ZALdWllSFR1dUc5aFlnMjMyQ2VVUE5nMmItLWRnNDExRW55VG1yVlVzeHk1R0g5LWItUWpHYVpHTnFJdjhuSlROXzVuSEhZANElPSW9zTDFR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253646427440526/adsets?fields=id%2Cstatus%2Ceffective_status%2Cdaily_budget%2Clifetime_budget%2Cpromoted_object%2Cdestination_type%2Ctargeting&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253646428630526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS",
+          "daily_budget": "20000",
+          "lifetime_budget": "0",
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "targeting": {
+            "age_max": 55,
+            "age_min": 25,
+            "geo_locations": {
+              "cities": [
+                {
+                  "country": "US",
+                  "distance_unit": "mile",
+                  "key": "2525495",
+                  "name": "Austin",
+                  "region": "Texas",
+                  "region_id": "3886"
+                }
+              ],
+              "location_types": [
+                "home",
+                "recent"
+              ]
+            },
+            "targeting_automation": {
+              "advantage_audience": 0
+            }
+          }
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHUwVVdEWHNUUmtGVzI4NWJFQVZAYSGdkeGxFaTVMNUVnSUhWUWFpOGdHRlNnNUREVzM2QV95ZAU1UY0lueW05cllaalVBNkRpYWFXY0w3LThaeUhIcHVR",
+          "after": "QVFIVHUwVVdEWHNUUmtGVzI4NWJFQVZAYSGdkeGxFaTVMNUVnSUhWUWFpOGdHRlNnNUREVzM2QV95ZAU1UY0lueW05cllaalVBNkRpYWFXY0w3LThaeUhIcHVR"
+        }
+      }
+    }
+  }
+]
