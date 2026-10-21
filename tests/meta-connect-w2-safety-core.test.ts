@@ -50,11 +50,16 @@ describe("campaign preflight", () => {
     expect(radius.planHash).not.toBe(review.planHash);
   });
 
-  it.each([undefined, { interestNames: [], rationale: "Broad audience" }])("blocks missing detailed targeting: %j", (audience) => {
-    const review = runPreflight(input({ draft: { ...draft, targeting: { ...draft.targeting, audience } } }));
+  it("blocks missing detailed targeting", () => {
+    const review = runPreflight(input({ draft: { ...draft, targeting: { ...draft.targeting, audience: undefined } } }));
     expect(review.canCreatePaused).toBe(false);
     expect(review.planHash).toBeNull();
     expect(review.blockers.some((item) => item.message.includes("detailed targeting"))).toBe(true);
+  });
+
+  it("allows an explicit broad audience without interest narrowing", () => {
+    const review = runPreflight(input({ draft: { ...draft, targeting: { ...draft.targeting, audience: { interestNames: [], rationale: "Broad audience" } } } }));
+    expect(review.blockers.some((item) => item.message.includes("detailed targeting") || item.message.includes("audience interest"))).toBe(false);
   });
 
   it("invalidates review when gender changes", () => {
