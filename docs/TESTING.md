@@ -56,14 +56,14 @@ Run `npm run smoke:core` after a production release. It uses Playwright's headle
 
 ### Core Regression Gate
 
-`npm run test:core` runs `tests/core` in about 5 seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against replayed responses, with deadlines in virtual time:
+`npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time:
 
-- **Create**: three ads saved, validator repair, Gemini outage falling back to OpenRouter, and the full run finishing inside the 270 s route deadline at the 45 s per-attempt limit. Five gold-labelled concepts from `evals/creative` must be accepted or rejected as graded.
-- **Prepare**: a planner plan, a 503 fallback and a hang that falls back after the 45 s planner deadline, inside the route's 60 s limit.
-- **Campaign**: lead campaign creation entirely PAUSED, list, sync, insights and pause against Graph v21 shapes.
-- **CSP**: the production policy is pinned, and the Create review renders three ads whose images and requests the policy allows, without `eval`.
+- **Create** (`create-route`, `create-concept`): three ads saved from production run 4 through the Groq-first order, validator repair, Groq overload falling back to OpenRouter without trying Groq's other keys, and run 4's recorded OpenRouter and image latencies fitting the 270 s route deadline. Recorded and gold-labelled `evals/creative` concepts must be accepted or rejected as graded.
+- **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
+- **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
+- **CSP** (`csp-render`): the production policy is pinned, and the Create review renders three ads whose images and requests the policy allows, without `eval`.
 
-Fixtures live in `tests/core/fixtures`. `create-cedar-ridge-run4.json` is production Create run 4 (brand ID replaced). Planner output and Graph bodies are schema-shaped because production keeps no raw responses; replace them with real captures when available. When a gate change is intended, update the fixture or pinned policy in the same PR and say why.
+Fixtures in `tests/core/fixtures` come from production recordings and `evals/creative`; each file or test notes its source and any synthetic part. When a gate change is intended, update the fixture or pinned policy in the same PR and say why.
 
 ### Focused Local Loop
 

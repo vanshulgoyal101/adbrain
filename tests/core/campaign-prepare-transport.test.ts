@@ -1,39 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { FALLBACK_AUDIENCE_RATIONALE } from "@/lib/campaign/planner-draft";
-import run4 from "./fixtures/create-cedar-ridge-run4.json";
+import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
 import { googleReply, openAIReply, requestBody, requestUrl, settleInVirtualTime, useVirtualDeadlines, wait } from "./replay";
 
-// Core regression gate (#110): Prepare. The route, planner, LLM routing and AI SDK are real;
-// provider HTTP, Supabase reads and the Meta connection check are replaced.
+// Prepare over the real provider transport: route, planner, LLM routing, AI SDK and the
+// planner's own deadline are real; only provider HTTP, Supabase and Meta access are replaced.
+// campaign-prepare.test.ts covers the route's handling of planner results with `complete` mocked.
 
-const creatives = [
-  { id: "6f1c1d64-3a51-4b41-9f6f-0c0de0000001", angle: "value", headline: run4.angles[0].concept.headline },
-  { id: "6f1c1d64-3a51-4b41-9f6f-0c0de0000002", angle: "problem", headline: run4.angles[1].concept.headline },
-  { id: "6f1c1d64-3a51-4b41-9f6f-0c0de0000003", angle: "offer", headline: run4.angles[2].concept.headline },
-];
-// No successful planner response is stored in production (only one PLANNER_VALIDATION error),
-// so this is a schema-shaped answer for the Cedar Ridge brand. Replace with a recorded plan
-// once one exists.
-const plan = {
-  ready: true,
-  plan: {
-    name: "Cedar Ridge new-patient leads",
-    daily_budget_rupees: 800,
-    lead_form_id: null,
-    creative_ids: creatives.map((creative) => creative.id),
-    age_min: 28,
-    age_max: 60,
-    radius_km: 25,
-    city_scope: "radius",
-    interests: ["Chiropractic", "Back pain", "Physical therapy"],
-    special_ad_category: "none",
-    locations: ["Austin, Texas"],
-    excluded_locations: [],
-    destination: "instant_form",
-    rationale: "Working adults near the clinic with back or neck pain, matching the brand's evening and weekend hours.",
-  },
+const business = {
+  id: "816aaafb-7ebc-4ad7-bbda-001beff172f8", name: "Cedar Ridge Chiropractic", vertical: "chiropractic clinic",
+  description: "Chiropractic care in Austin.", target_audience: null,
+  locations: ["Austin, Texas", "Round Rock", "Cedar Park"], offers: ["$49 new-patient exam"], website: null,
 };
+const creatives = [{
+  id: "e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1", angle: "value", headline: "Diwali Renewal, Starting With Your Spine",
+  image_url: "https://example.com/ad.png", primary_text: "A $49 new-patient exam.", cta: "Book Now",
+}];
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) } }),
@@ -45,7 +28,7 @@ vi.mock("@/lib/llm/persist", () => ({
   persistLLMUsage: async () => true,
 }));
 vi.mock("@/lib/supabase/queries", () => ({
-  getPrimaryBusiness: async () => run4.brand,
+  getPrimaryBusiness: async () => business,
   getApprovedCreatives: async () => creatives,
   getActiveInstructionsText: async () => "",
   getPerformanceContext: async () => "",
@@ -55,25 +38,19 @@ vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {
     code = "UNAVAILABLE";
   },
-  requireOwnedBusiness: async () => ({ userId: "owner", businessId: run4.brand.id }),
+  requireOwnedBusiness: async () => ({ userId: "owner", businessId: business.id }),
   withMetaConnection: async () => { throw new Error("Prepare must not read Meta for an audience recommendation."); },
 }));
 
 const audienceDraft = {
-  businessId: run4.brand.id,
-  name: "Cedar Ridge new-patient leads",
-  goal: "Book new-patient exams",
-  mode: "manual",
-  creativeIds: creatives.map((creative) => creative.id),
-  dailyBudgetRupees: 800,
-  leadFormId: "lead-form-core",
-  abTest: false,
-  targeting: { location: { mode: "ai", cityScope: "radius", radiusKm: 25 } },
+  businessId: business.id, name: "Cedar Ridge leads", goal: "Book new-patient exams", mode: "manual",
+  creativeIds: creatives.map((creative) => creative.id), dailyBudgetRupees: 500, leadFormId: "form-1", abTest: false,
+  targeting: { location: { mode: "ai", cityScope: "city_only" }, age: { mode: "ai" } },
 };
 
 let calls: string[];
 
-function stubPlanner(answer: "plan" | 503 | "hang") {
+function stubPlanner(answer: "recorded" | 503 | "hang") {
   calls = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = requestUrl(input);
@@ -81,7 +58,7 @@ function stubPlanner(answer: "plan" | 503 | "hang") {
     calls.push(new URL(url).host);
     if (answer === "hang") await wait(10 * 60_000, init?.signal);
     if (answer === 503) return Response.json({ error: { message: "Service unavailable" } }, { status: 503 });
-    const text = JSON.stringify(plan);
+    const text = JSON.stringify(groqCityOnly);
     return url.includes("generativelanguage") ? googleReply(text) : openAIReply(text, "qwen/qwen3.8-27b");
   }));
 }
@@ -100,7 +77,7 @@ async function expectTargeting(response: Response) {
   expect(response.status, JSON.stringify(body)).toBe(200);
   expect(body.ready).toBe(true);
   const targeting = targetingInputSchema.parse(body.targeting);
-  expect(targeting.location).toMatchObject({ cityScope: "radius" });
+  expect(targeting.location).toMatchObject({ cityScope: "city_only" });
   return { body, targeting };
 }
 
@@ -124,14 +101,14 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("Prepare core loop", () => {
-  it("turns a planner answer into launchable targeting", async () => {
-    stubPlanner("plan");
+describe("core: Prepare over the provider transport", () => {
+  it("turns the recorded Groq reply into launchable targeting", async () => {
+    stubPlanner("recorded");
     const { body, targeting } = await expectTargeting(await (await prepare())());
     expect(body.fallback).toBeUndefined();
     expect(calls).toEqual(["api.groq.com"]);
-    expect(targeting.age).toMatchObject({ min: 28, max: 60 });
-    expect(targeting.audience).toMatchObject({ interestNames: plan.plan.interests, rationale: plan.plan.rationale });
+    expect(targeting.age).toMatchObject({ min: 30, max: 60 });
+    expect(targeting.audience).toMatchObject({ interestNames: groqCityOnly.plan.interests, rationale: groqCityOnly.plan.rationale });
   });
 
   it("uses the no-AI fallback when every planner provider fails", async () => {

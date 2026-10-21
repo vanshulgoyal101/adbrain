@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Business } from "@/lib/types";
-import run4 from "./fixtures/create-cedar-ridge-run4.json";
+import run4 from "./fixtures/create/cedar-ridge-run4.json";
 import { requestUrl } from "./replay";
 
 // Core regression gate (#110): the Create result must render under the production CSP.
@@ -69,7 +69,7 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
 });
 
-describe("Create result under the production CSP", () => {
+describe("core: Create result under the production CSP", () => {
   it("serves the pinned policy on every route", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE);
     vi.resetModules();

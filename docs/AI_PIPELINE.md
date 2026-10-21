@@ -219,7 +219,7 @@ The SDK receives direct configured provider models and keys, never a gateway
 model string. No AI Gateway account, new service, model change, or image adapter
 is required. SDK retries are explicitly zero; the facade alone rotates keys and
 providers. Caller cancellation stops further attempts. An attempt deadline (90 seconds
-by default, `attemptTimeoutMs` per task) or truncated output skips the rest of
+by default, `attemptTimeoutMs` per task), truncated output or an HTTP 5xx skips the rest of
 that model's key pool and tries the next configured model or provider; with no
 other model left, the original timeout or truncation error is thrown. Each
 attempt reports a sanitized failure code (`TIMEOUT`, `DEADLINE` for the caller's

@@ -1,0 +1,31 @@
+{
+  "ready": true,
+  "plan": {
+    "name": "Cedar Ridge leads",
+    "daily_budget_rupees": 500,
+    "lead_form_id": null,
+    "creative_ids": [
+      "e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1"
+    ],
+    "age_min": 30,
+    "age_max": 60,
+    "city_scope": "city_only",
+    "radius_km": 0,
+    "interests": [
+      "Chiropractic",
+      "Sports medicine",
+      "Physical therapy",
+      "Yoga",
+      "Parenting"
+    ],
+    "special_ad_category": "none",
+    "locations": [
+      "Austin, Texas",
+      "Round Rock, Texas",
+      "Cedar Park, Texas"
+    ],
+    "excluded_locations": [],
+    "destination": "instant_form",
+    "rationale": "Targeting adults 30-60 in Austin, Round Rock, and Cedar Park based on the clinic's stated service areas and audience profile. Interests were selected to align with the advertised services (spinal adjustments, sports rehab) and the target demographic (desk workers, weekend athletes, new parents). The 'city_only' scope was preserved as requested, focusing on the defined municipal areas without adding a radius."
+  }
+}
