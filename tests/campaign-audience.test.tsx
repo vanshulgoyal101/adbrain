@@ -300,22 +300,42 @@ describe("unsaved campaign setup", () => {
     expect(screen.getByRole("radio", { name: "Plan with AdBrain" })).toHaveFocus();
   });
 
-  it("does not discard a campaign operation that needs reconciliation", async () => {
-    const confirm = vi.spyOn(window, "confirm");
+  it("lets the owner start fresh, after confirming, when Meta only partly created a campaign (#143)", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "needs_reconciliation", checkpoints: [], externalIds: {}, error: null });
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await screen.findByText("Campaign creation needs reconciliation. Do not retry the create operation.");
-    fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
-    fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    expect(screen.getByText(/Meta only partly created this campaign/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start a new campaign" }));
+    expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining("Meta only partly created the last campaign"));
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
+    expect(sessionStorage.length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Resolve the current campaign operation before starting another campaign.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Campaign creation needs reconciliation. Do not retry the create operation.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start a new campaign" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "false");
+    expect(sessionStorage.length).toBe(0);
+    expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a campaign launch with an unknown outcome locked", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    mocks.createCampaign.mockRejectedValue(new Error("Network lost"));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    await screen.findByText("Network lost");
     fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
     expect(screen.getByText("Resolve the current campaign operation before starting another campaign.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
     expect(confirm).not.toHaveBeenCalled();
     expect(sessionStorage.length).toBeGreaterThan(0);
-    expect(mocks.createCampaign).toHaveBeenCalledTimes(1);
   });
 
   it.each(["business", "owner"])("keeps unsaved setups separate when switching %s and back", (boundary) => {
