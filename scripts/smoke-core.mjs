@@ -16,7 +16,9 @@ if (modes.has("--help")) {
 }
 assert.ok(!(modes.has("--create") && modes.has("--campaign")), "Run only one mutating mode at a time.");
 
-const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = parseEnv(await readFile(envPath, "utf8"));
+const { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } = process.env.SMOKE_EMAIL
+  ? process.env
+  : parseEnv(await readFile(envPath, "utf8"));
 assert.ok(email && password, "Set SMOKE_EMAIL and SMOKE_PASSWORD in the ignored .env.smoke file.");
 
 let browser;
