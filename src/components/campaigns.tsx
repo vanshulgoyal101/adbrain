@@ -400,8 +400,13 @@ function BusinessCampaigns({
 
   function startNewCampaign() {
     if (preparing || creating) return;
-    if (unresolvedRecovery()) { setError("Resolve the current campaign operation before starting another campaign."); return; }
-    if (!window.confirm("Discard this campaign setup and start a new one? Saved drafts remain available.")) return;
+    // needs_reconciliation is terminal on the server; a new campaign uses a new request, so only in-flight work stays locked.
+    const reconciling = operation?.state === "needs_reconciliation";
+    if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
+    if (!window.confirm(reconciling
+      ? "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you do not want it. Start a new campaign?"
+      : "Discard this campaign setup and start a new one? Saved drafts remain available.")) return;
+    setError(null);
     preparedDraftRef.current = null;
     recoveryRef.current = null;
     operationRef.current = null;
@@ -1051,7 +1056,12 @@ function BusinessCampaigns({
                 )}
                 {operation?.state === "succeeded" && <span className="text-sm font-normal">Paused campaign created. Review it before activation.</span>}
                 {operation?.state === "failed" && <span className="text-sm font-normal">The operation failed before completion. Review the draft and start a new reviewed attempt.</span>}
-                {operation?.state === "needs_reconciliation" && <span className="text-sm font-normal">This operation needs reconciliation. Do not retry campaign creation.</span>}
+                {operation?.state === "needs_reconciliation" && (
+                  <>
+                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Sync imports anything it made as paused.</span>
+                    <Button size="sm" variant="outline" onClick={startNewCampaign}>Start a new campaign</Button>
+                  </>
+                )}
               </div>
             </>
           )}
