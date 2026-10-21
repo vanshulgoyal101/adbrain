@@ -59,4 +59,33 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     // Recorded latencies leave most of the 270 s route deadline for images and repairs.
     expect(haiku.responses.reduce((sum, { latencyMs }) => sum + latencyMs, 0)).toBeLessThan(60_000);
   });
+
+  it("clips Haiku's over-long visual.medium label instead of discarding the concept", async () => {
+    const { parseJSON } = await import("@/lib/llm");
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const angle = AD_ANGLES.find(({ name }) => name === haiku.mediumOverrun.angleName)!;
+    type Concept = { visual: Record<string, unknown> & { medium: string } };
+    const overrun = parseJSON<Concept>(haiku.mediumOverrun.content);
+    const medium = overrun.visual.medium;
+    expect(medium.length).toBeGreaterThan(120);
+    const input = { brand: run4.brand, brief: run4.brief, angle };
+
+    // The recorded reply no longer fails on the label; its unsupported "free" claim is still caught.
+    expect(validateConcept(overrun, input)).toEqual({
+      success: false,
+      issues: [expect.stringMatching(/^unsupported-commercial-claim: free/)],
+    });
+
+    // The saved Haiku offer concept with the same 134-character label now saves, label clipped at a word.
+    const offer = haiku.responses.find(({ angleName }) => angleName === angle.name)!;
+    const clean = parseJSON<Concept>(offer.content);
+    const result = validateConcept({ ...clean, visual: { ...clean.visual, medium } }, input);
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    if (result.success) {
+      expect(result.concept.visual.medium.length).toBeLessThanOrEqual(120);
+      expect(medium.startsWith(result.concept.visual.medium)).toBe(true);
+      expect(medium[result.concept.visual.medium.length]).toMatch(/\s/);
+    }
+  });
 });
