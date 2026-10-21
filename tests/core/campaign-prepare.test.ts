@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
 
 // Prepare (audience planning) through the real route and real runPlanner; only
 // the LLM transport, auth, rate limiting and data reads are stubbed.
@@ -70,6 +71,16 @@ describe("core: Prepare audience", () => {
     expect(body.fallback).toBeUndefined();
     expect(body.targeting.audience.interestNames).toEqual(plannerPlan.interests);
     expect(body.targeting.age).toMatchObject({ min: 28, max: 60 });
+  });
+
+  it("accepts the real Groq city-only reply that sends radius_km 0", async () => {
+    mocks.complete.mockResolvedValue({ text: JSON.stringify(groqCityOnly), provider: "groq", model: "qwen/qwen3.8-27b", usage });
+    const { status, body } = await prepare();
+    expect(status).toBe(200);
+    expect(body.fallback).toBeUndefined();
+    expect(body.targeting.audience.interestNames).toEqual(groqCityOnly.plan.interests);
+    expect(body.targeting.location).toMatchObject({ cityScope: "city_only" });
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
   });
 
   it.each([
