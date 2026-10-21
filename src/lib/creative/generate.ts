@@ -65,6 +65,16 @@ export interface GeneratedVariant {
   imageAttempts?: ImageAttempt[];
 }
 
+/** `ready` fires only after `onVariant` has saved the ad; `fixing` starts the one repair attempt. */
+export type CreateProgressStage = "queued" | "writing" | "checking" | "fixing" | "image" | "ready" | "failed";
+
+export interface CreateProgressEvent {
+  angleId: string;
+  angleName: string;
+  stage: CreateProgressStage;
+  at: number;
+}
+
 const MAX_BRIEF_CHARS = 2_000;
 const MAX_FIELD_CHARS = 1_000;
 const MAX_LIST_ITEMS = 10;
@@ -101,6 +111,7 @@ export async function generateVariants(params: {
   sourceFacts?: string[];
   onVariant?: (variant: GeneratedVariant) => Promise<void>;
   onFailure?: (angle: AdAngle, error: unknown) => Promise<void>;
+  onProgress?: (event: CreateProgressEvent) => void;
 }): Promise<GeneratedVariant[]> {
   const {
     brand: rawBrand,
@@ -126,6 +137,15 @@ export async function generateVariants(params: {
       : AD_ANGLES
   ).slice(0, count);
 
+  const progress = (angle: AdAngle, stage: CreateProgressStage) => {
+    try {
+      params.onProgress?.({ angleId: angle.id, angleName: angle.name, stage, at: Date.now() });
+    } catch {
+      // Progress is advisory; a broken listener must not cost a paid concept.
+    }
+  };
+  for (const angle of angles) progress(angle, "queued");
+
   const recentCopy = [...(params.recentCopy ?? []).slice(0, 12)];
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
@@ -141,17 +161,21 @@ export async function generateVariants(params: {
         });
         const planned = waitForTurn.then(() => {
           input.recentCopy = recentCopy.slice(0, 12);
-          return generateConcept(input, signal, earlierConcepts, notifyNext);
+          return generateConcept(input, signal, earlierConcepts, notifyNext, (stage) => progress(angle, stage));
         }).then((result) => {
           recentCopy.unshift(result.concept);
           return result;
         });
         planning = planned.then(() => undefined, () => undefined);
         void planning.then(notifyNext);
-        const variant = await renderVariant(input, signal, await planned);
+        const concept = await planned;
+        progress(angle, "image");
+        const variant = await renderVariant(input, signal, concept);
         await params.onVariant?.(variant);
+        progress(angle, "ready");
         return variant;
       } catch (error) {
+        progress(angle, "failed");
         await params.onFailure?.(angle, error);
         throw error;
       }
@@ -198,6 +222,7 @@ async function generateConcept(
   signal: AbortSignal,
   earlierConcepts: Promise<void> = Promise.resolve(),
   onRepair?: () => void,
+  onStage?: (stage: "writing" | "checking" | "fixing") => void,
 ): Promise<{ concept: CreativeConcept; usage: GeneratedVariant["llmUsage"] }> {
   const messages = buildConceptMessages(input);
   const usage: GeneratedVariant["llmUsage"] = [];
@@ -205,6 +230,7 @@ async function generateConcept(
   let stage: CreativeValidationError["stage"] = "concept";
   for (let attempt = 0; attempt < 2; attempt++) {
     const usageBeforeAttempt = usage.length;
+    onStage?.(attempt === 0 ? "writing" : "fixing");
     const env = getEnv();
     let sawProviderAttempt = false;
     const completion = await complete(messages, {
@@ -235,6 +261,7 @@ async function generateConcept(
       }
       throw error;
     });
+    onStage?.("checking");
     if (attempt === 0) {
       await earlierConcepts;
       messages[1] = buildConceptMessages(input)[1];
