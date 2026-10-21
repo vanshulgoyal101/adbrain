@@ -4,6 +4,7 @@
 //   drift <sha> <epochSecs>   fail if main HEAD <sha> is not live 15 minutes after it landed
 //   rollback <badSha>         roll production back to the newest earlier READY deployment
 import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 
 const team = "vanshul-goyals-projects";
 const domain = "adbrain.vanshul.com";
@@ -27,9 +28,17 @@ const [command, sha, landed] = process.argv.slice(2);
 if (command === "live") {
   console.log(JSON.stringify(await live()));
 } else if (command === "wait") {
+  const { deployments } = await vercel("/v6/deployments?app=adbrain&target=production&state=READY&limit=20");
+  const ours = deployments.find((deployment) => deployment.meta?.githubCommitSha === sha);
   for (let i = 0; ; i++) {
     const current = await live();
     if (current.sha === sha) { console.log(`Production serves ${sha.slice(0, 7)}`); break; }
+    if (ours && current.created > ours.created) {
+      // The newer deployment's own run smokes production.
+      console.log(`Superseded: production serves newer ${current.sha.slice(0, 7)}; skipping smoke for ${sha.slice(0, 7)}`);
+      if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, "superseded=true\n");
+      break;
+    }
     if (i >= 20) throw new Error(`Production still serves ${current.sha.slice(0, 7)}, not ${sha.slice(0, 7)}`);
     await new Promise((resolve) => setTimeout(resolve, 15_000));
   }

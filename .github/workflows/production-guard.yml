@@ -33,10 +33,12 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Wait until production serves this commit
+        id: wait
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs wait "$SHA"
       - name: Read-only core smoke (one retry)
         id: smoke
+        if: steps.wait.outputs.superseded != 'true'
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
