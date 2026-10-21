@@ -36,7 +36,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `test:core` | Offline core regression gate (`tests/core`); no network, credentials or provider cost |
 | `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas |
 | `test:workspace-browser` | Playwright suite; explicitly loads `.env.local` if present, can access real accounts |
-| `smoke:core` | Headless production browser smoke; default signs in, views five pages, and suppresses automatic sync and telemetry writes. Opt-in flags below mutate production. |
+| `smoke:core` | Headless production browser smoke; default signs in, views five pages, suppresses automatic sync and telemetry writes, then prepares one campaign review without sending it and deletes that draft. Opt-in flags below mutate production. |
 | `test:workspace-ux` | Workspace audit script; also loads `.env.local`, not an automatically isolated test |
 | `test:scroll-layout` | Offline React/CSS fixtures in Chromium and WebKit; no server, credentials or external requests |
 | `env:doctor` | Shell diagnostics for configuration/tooling; not proof of provider authorization |
@@ -48,7 +48,9 @@ tools beyond Node; inspect their prerequisites before executing.
 
 ### Production Core Smoke
 
-Run `npm run smoke:core` after a production release. It uses Playwright's headless Chromium and reads `SMOKE_EMAIL` and `SMOKE_PASSWORD` from the gitignored, mode-600 `/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke` in memory. Each page prints PASS or FAIL. A PASS for Campaigns or Enquiries in default mode means the view rendered, **not** that Meta or lead sync worked: those automatic POSTs are suppressed. No browser-side writes other than password sign-in reach production in the default mode.
+Run `npm run smoke:core` after a production release. It uses Playwright's headless Chromium and reads `SMOKE_EMAIL` and `SMOKE_PASSWORD` from the gitignored, mode-600 `/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke` in memory. Each page prints PASS or FAIL. A PASS for Campaigns or Enquiries in default mode means the view rendered, **not** that Meta or lead sync worked: those automatic POSTs are suppressed. Apart from password sign-in, the default mode writes only the Prepare preflight below.
+
+The default mode then runs **Prepare preflight** (#98, #109): it opens New campaign, picks the first approved ad and lead form at ₹350/day, and clicks Prepare campaign review. That sends one audience-planner call (about 2.7k tokens, counted in the workspace's monthly LLM usage), saves one uniquely named `QA preflight smoke …` draft, reads the Meta connection and runs the preflight, which uses Meta reads only. It passes only when the review has an INR account and either no blockers with Send to Meta (paused) offered, or only the missing Brand Brain website blocker with Send withheld. Any other blocker, planner error, browser error or non-200 fails. It never clicks Send or allows `/api/campaigns/create`, and it always deletes its draft (`PASS Remove preflight draft`; on failure remove the printed name from Saved drafts). `--campaign` runs its own Prepare instead.
 
 `npm run smoke:core -- --create` additionally interviews the user through Create, sends at most one three-ad generation request, waits for the result and prints the saved count. This is a paid provider run. Check the remaining approval in [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) before running it, log the resulting count there, and do not rerun after a partial or uncertain result until saved work is reconciled.
 

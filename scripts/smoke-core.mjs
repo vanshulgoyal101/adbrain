@@ -47,6 +47,8 @@ try {
   let planCount = 0;
   let draftCount = 0;
   let preflightCount = 0;
+  let savedDraft = null;
+  let draftDeleteCount = 0;
   page.on("pageerror", (error) => errors.push(error.name === "EvalError" ? "CSP eval error" : `page error (${error.name})`));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
@@ -87,10 +89,19 @@ try {
         return route.continue();
       }
     }
+    if (campaignSetup && request.method() === "POST" && url.origin === origin) {
+      if (url.pathname === "/api/campaigns/plan" && planCount++ === 0) return route.continue();
+      if (url.pathname === "/api/campaign-drafts" && draftCount++ === 0) {
+        const response = await route.fetch();
+        const draft = (await response.json().catch(() => null))?.data;
+        if (response.ok() && draft?.draftId) savedDraft = { id: draft.draftId, version: draft.version };
+        return route.fulfill({ response });
+      }
+      if (url.pathname === "/api/campaigns/preflight" && preflightCount++ === 0) return route.continue();
+    }
+    if (!modes.has("--campaign") && savedDraft && request.method() === "DELETE" && url.origin === origin
+      && url.pathname === `/api/campaign-drafts/${savedDraft.id}` && draftDeleteCount++ === 0) return route.continue();
     if (modes.has("--campaign") && url.origin === origin) {
-      if (campaignSetup && request.method() === "POST" && url.pathname === "/api/campaigns/plan" && planCount++ === 0) return route.continue();
-      if (campaignSetup && request.method() === "POST" && url.pathname === "/api/campaign-drafts" && draftCount++ === 0) return route.continue();
-      if (campaignSetup && request.method() === "POST" && url.pathname === "/api/campaigns/preflight" && preflightCount++ === 0) return route.continue();
       if (campaignReviewed && request.method() === "POST" && url.pathname === "/api/campaigns/create" && campaignCreateCount++ === 0) return route.continue();
       if (campaignId && url.pathname === `/api/campaigns/${campaignId}`) {
         if (request.method() === "PATCH" && request.postDataJSON()?.status === "paused" && campaignPauseCount++ < 2) return route.continue();
@@ -129,6 +140,65 @@ try {
     } catch (error) {
       console.log(`FAIL ${label}: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}`);
       process.exitCode = 1;
+    }
+  }
+  if (!modes.has("--campaign")) {
+    // Every deploy: Prepare one paused-campaign review, never send it, then delete its draft.
+    const name = `QA preflight smoke ${crypto.randomUUID().slice(0, 8)}`;
+    try {
+      assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; Prepare was not started");
+      errors.length = 0;
+      await page.goto(`${origin}/campaigns`);
+      const open = page.getByRole("button", { name: "New campaign", exact: true });
+      if (await open.isVisible()) await open.click();
+      const creative = page.locator('#campaign-composer button[aria-pressed="false"]').first();
+      await creative.waitFor({ state: "visible" });
+      await creative.click();
+      await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
+      await page.locator("#budget").fill("350");
+      const form = page.locator("#leadform");
+      const leadForm = await form.locator('option:not([value=""])').first().getAttribute("value");
+      assert.ok(leadForm, "No lead form to choose");
+      await form.selectOption(leadForm);
+      campaignSetup = true;
+      const preflight = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/preflight" && response.request().method() === "POST", { timeout: 90_000 });
+      preflight.catch(() => undefined);
+      await page.getByRole("button", { name: "Prepare campaign review" }).click();
+      const response = await preflight.catch(async (error) => {
+        const alert = page.getByRole("alert").first();
+        const message = await alert.isVisible() ? (await alert.innerText()).trim() : "";
+        throw message ? new Error(`Prepare stopped: ${message}`) : error;
+      });
+      campaignSetup = false;
+      const review = (await response.json().catch(() => null))?.data;
+      assert.equal(response.status(), 200, `Preflight returned HTTP ${response.status()}`);
+      const blockers = (review?.blockers ?? []).map((blocker) => blocker.message);
+      const unexpected = blockers.filter((message) => !message.startsWith("Add your business website in Brand Brain."));
+      assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected[0]}`);
+      assert.equal(review.selected?.currency, "INR", "No INR Meta ad account selected");
+      const result = page.getByRole("region", { name: "Campaign review result" });
+      await result.getByText(`Account: ${review.selected.accountName}`, { exact: false }).waitFor({ state: "visible" });
+      const send = result.getByRole("button", { name: "Send to Meta (paused)" });
+      if (blockers.length) assert.equal(await send.count(), 0, "Send to Meta is offered despite a blocker");
+      else await send.waitFor({ state: "visible" });
+      assert.equal(errors.length, 0, errors[0] ?? "Browser error during Prepare");
+      console.log(`PASS Prepare preflight (${review.selected.accountName}, ${review.resolvedAreaLabel ?? "area unresolved"}; ${blockers.length ? "Send held only by missing Brand Brain website" : "ready to send paused"}; nothing sent to Meta)`);
+    } catch (error) {
+      console.log(`FAIL Prepare preflight: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; nothing sent to Meta`);
+      process.exitCode = 1;
+    } finally {
+      campaignSetup = false;
+      if (savedDraft) {
+        const removed = await page.evaluate(async ({ id, version }) => {
+          const result = await fetch(`/api/campaign-drafts/${id}?version=${version}`, { method: "DELETE" });
+          return result.status;
+        }, savedDraft).catch(() => 0);
+        if (removed === 200) console.log("PASS Remove preflight draft");
+        else {
+          console.log(`FAIL Remove preflight draft: HTTP ${removed}; remove "${name}" from Saved drafts`);
+          process.exitCode = 1;
+        }
+      }
     }
   }
   if (modes.has("--create")) {
