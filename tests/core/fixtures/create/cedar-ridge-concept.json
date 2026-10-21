@@ -1,0 +1,55 @@
+{
+  "source": {
+    "model": [
+      {
+        "model": "qwen/qwen3.8-max-0902",
+        "provider": "openrouter"
+      }
+    ],
+    "recordedAt": "2026-10-02T03:56:16.686491+00:00"
+  },
+  "brand": {
+    "name": "Cedar Ridge Chiropractic",
+    "vertical": "chiropractic clinic",
+    "description": "A family chiropractic clinic in Austin, Texas offering spinal adjustments, posture care, and sports injury rehab. Same-day appointments for new patients.",
+    "target_audience": "Adults 30-60 with desk jobs, weekend athletes, and new parents in the Austin area.",
+    "usps": [
+      "Same-day appointments for new patients",
+      "Board-certified chiropractors with 15+ years combined experience",
+      "Insurance accepted, plus transparent cash pricing",
+      "Digital posture scan included on your first visit",
+      "Evening and Saturday hours"
+    ],
+    "offers": [
+      "$49 new-patient exam and consultation",
+      "Free 15-minute spine check"
+    ],
+    "locations": [
+      "Austin, Texas",
+      "Round Rock",
+      "Cedar Park"
+    ]
+  },
+  "sourceFacts": [
+    "Invite adults near Austin to learn about Cedar Ridge Chiropractic and enquire about a new-patient appointment. Create three distinct ideas using only saved Brand facts. Do not invent prices, discounts, deadlines, availability, credentials, reviews or health outcomes."
+  ],
+  "concept": {
+    "cta": "Book Now",
+    "visual": {
+      "medium": "Flat vector illustration with subtle paper-grain texture",
+      "direction": "A single slightly curled paper receipt floats against a warm off-white background (#FAF6EF). On the receipt, two short printed lines are suggested by soft horizontal dashes — no legible text. A small hand-drawn circle in secondary gold (#FFC677) highlights the lower line, implying the included scan. One sprig of simple green cedar foliage rests beside the receipt's lower corner. Palette limited to brand blue #74A7FE, gold #FFC677, warm cream, and a muted sage green. Composition: receipt centred-left, upper two-thirds kept quiet and uncluttered for headline overlay. No people, no spine diagrams, no X-ray imagery, no medical symbols, no currency signs, no text of any kind, no drop shadows heavier than a soft ambient one.",
+      "textPlacement": "top"
+    },
+    "headline": "$49 exam. Posture scan included.",
+    "rationale": "The value angle is served by pairing the concrete $49 price with the included posture scan and the insurance-plus-cash-pricing fact, framing value as transparency rather than a discount. Recent copy has led with 'one price' or 'no layered fees' phrasing; this ad leads with what is bundled inside the price and treats insurance acceptance as the second proof of straightforward value. The illustration shows a single receipt with two tidy line items, making the 'what you get for $49' idea visual without depicting a person, a clinic interior, or any medical imagery.",
+    "description": "Insurance accepted alongside transparent cash pricing. Same-day new-patient slots in Austin.",
+    "primary_text": "Cedar Ridge Chiropractic in Austin: a $49 new-patient exam and consultation that includes a digital posture scan. Insurance accepted alongside transparent cash pricing, so the number you see is the number you pay. Same-day appointments for new patients, evening and Saturday hours.",
+    "sourceQuotes": [
+      "$49 new-patient exam and consultation",
+      "Digital posture scan included on your first visit",
+      "Insurance accepted, plus transparent cash pricing",
+      "Same-day appointments for new patients"
+    ],
+    "supportingText": "Insurance accepted. Transparent cash pricing."
+  }
+}
