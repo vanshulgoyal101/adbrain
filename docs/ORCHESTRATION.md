@@ -38,7 +38,8 @@ Routine steps never wait for the coordinator.
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
    (about 3 minutes) and Vercel deploys. Branches no longer need to be up to date
    with `main` to merge. After deploy, smoke the changed flow in production,
-   close the issue with the PR link and start your next issue.
+   close the issue with the PR link (plus one `Lesson:` line if you learned
+   something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not
    hold finished work on a branch or batch it. A green PR that is still open after
    30 minutes gets merged by whoever sees it (`gh pr merge <n> --squash`). A branch
@@ -61,13 +62,18 @@ Routine steps never wait for the coordinator.
   Never edit the owner's checkout (`adbrain/`).
 - **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
   Do not rerun full suites or re-review unchanged code.
+- **Subagents.** Split your issue across subagents and do small cross-role tasks
+  yourself instead of handing them off; rules in [AGENTS.md](../AGENTS.md#subagents).
+  Hand off only migrations, money, production settings, secrets and rollback
+  (DevOps), independent review of high-risk changes (QA), or files someone else
+  is editing right now.
 - **Browser.** Signed in to the owner's demo account: Cedar Ridge Chiropractic,
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, post in #74 and the coordinator signs in.
-- **Paid budget.** Create runs: 10 approved on Oct 1; 2 used. Remaining: Dev 2,
-  Dev 3 3, DevOps 3. Dev 3 may also make up to 20 tiny direct model calls
-  (under 1k tokens each) for diagnosis.
+- **Paid budget.** Create runs: 10 approved on Oct 1; 6 used (runs 1-6).
+  Remaining: Dev 1, DevOps 3. The #98 model bake-off has its own $1 cap and does
+  not count as Create runs.
   Log `Create run N/10` with the saved count in [#88](https://github.com/vanshulgoyal101/adbrain/issues/88).
   At the limit, stop and post; the coordinator asks the owner for the next 10.
   No Meta ad spend: campaigns stay PAUSED.
@@ -84,20 +90,22 @@ Routine steps never wait for the coordinator.
 
 ### P0 (owner, October 21): stop everything else
 
-Only three issues matter until they are closed: [#98](https://github.com/vanshulgoyal101/adbrain/issues/98)
-Create works, [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) core
-regression gate and [#111](https://github.com/vanshulgoyal101/adbrain/issues/111)
-production protection. All other issues are parked (`later`). Do not start, review
-or release anything else. When a P0 issue closes, its workers join the remaining
-P0 issues; only when all three are closed do parked issues resume.
+Only these issues matter until they are closed: [#98](https://github.com/vanshulgoyal101/adbrain/issues/98)
+Create works, [#109](https://github.com/vanshulgoyal101/adbrain/issues/109) live
+PAUSED campaign test and [#111](https://github.com/vanshulgoyal101/adbrain/issues/111)
+production protection. [#110](https://github.com/vanshulgoyal101/adbrain/issues/110)
+(core regression gate) is done: `test:core` runs as the required `core` check.
+All other issues are parked (`later`). Do not start, review or release anything
+else. When a P0 issue closes, its workers join the remaining P0 issues; only when
+all are closed do parked issues resume.
 
 | Worker | P0 work |
 | --- | --- |
-| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) lead: PR112 (faster Create model) then Create run 5. If not 3/3, revert `CREATIVE_PROVIDER_ORDER` at once. Done at 3/3 twice with time to spare |
-| Dev | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) with Dev 3: finish PR103 (schema fields) and fix whatever rejects drafts in runs 5 and 6. Split files with Dev 3 directly |
-| QA | [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) lead: `test:core` for Create 3/3 and CSP rendering from recorded real responses. Own the suite layout and CI job |
-| Dev 2 | [#109](https://github.com/vanshulgoyal101/adbrain/issues/109) (P0, unparked): launch one PAUSED test campaign on Meta, sync, pause, delete; fix any failure with a core test. #110 campaign half and production Prepare are done |
-| DevOps | [#111](https://github.com/vanshulgoyal101/adbrain/issues/111): required check, post-deploy and daily smoke, automatic rollback, main-equals-production alert |
+| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) lead: model bake-off for a faster OpenRouter primary (up to $1), set `OPENROUTER_MODEL` with a recorded before/after, then confirm with Create runs. Done at 3/3 twice with time to spare |
+| Dev | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) with Dev 3: stop the `repeated-opening` rejections and any rule the new model trips, each with a core test. Split files with Dev 3 directly |
+| QA | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98): add the bake-off winner's recorded response to `test:core` and restore the worst-case deadline test once the faster model lands |
+| Dev 2 | [#109](https://github.com/vanshulgoyal101/adbrain/issues/109): launch one PAUSED test campaign on Meta, sync, pause, delete; fix any failure with a core test |
+| DevOps | [#111](https://github.com/vanshulgoyal101/adbrain/issues/111): `core` is required. Left: move `drift` into its own scheduled workflow, automate main-to-dev sync, propose a rollback drill to the owner |
 
 ### Earlier focus (October 21, before P0)
 

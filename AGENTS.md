@@ -28,6 +28,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Hand off the commit, result and any real blocker in the existing issue/PR.
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
+- When you close an issue, add one `Lesson:` line if you learned something reusable
+	(what failed, the check that proved it, the fix). The coordinator publishes
+	these to the shared `skills` and `vbrain-private` repos.
 - Keep the owner's checkout (`adbrain/`) clean: it is what the owner sees in
 	Source Control. Workers edit, test, merge and release only in isolated worktrees
 	under `~/Development/copilot/adbrain-wt/`. The coordinator edits only docs there and commits and pushes them
@@ -44,6 +47,23 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Do not ask permission for routine steps. Report a real blocker once, with the
 	exact missing action, and keep working on something else meanwhile.
 
+## Subagents
+
+- **Use subagents to go faster** (owner, Oct 21). Split an issue into independent
+	parts and run them in parallel: research, CI logs, running tests, reviewing your
+	own diff, a red test, a small adjacent fix, the doc update.
+- **Do small cross-role tasks yourself** with a subagent instead of handing them
+	off. DevOps needing a quick QA-style check starts a subagent; it does not route
+	the task to QA. Hand off only what needs another owner: migrations, money,
+	production settings, secrets and rollback (DevOps), independent review of a
+	high-risk change (QA), or files another worker is editing right now.
+- **You own the result.** Brief each subagent (goal, files it may change, checks,
+	what to return), review its output and commit it yourself. Subagents work in your
+	worktree or their own under `adbrain-wt/`, one writer per file. No paid AI runs,
+	Meta writes, production settings or secrets unless the brief allows them. At most
+	one heavy job per worker at a time (full suite, build, dev server or browser):
+	all workers share one Mac. Read-only subagents can run in parallel.
+
 ## Engineering priorities and reuse
 
 - **Core features come first, always.** AdBrain's core is: Brand, Create ads,
@@ -54,7 +74,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	help a customer make and run ads today?
 - **Never break the core.** Generating ads and running campaigns must keep working
 	after every change. No change merges unless the core regression check
-	(`test:core`, #110) passes; once it exists it is a required check. Any change to
+	(`test:core`, the required `core` CI job) passes. Any change to
 	generation, validation, prompts, models, timeouts, the planner, Meta calls or
 	CSP must add or update a core test with recorded real responses, not only mocks.
 	After every production deploy the core smoke runs; if it fails, roll back first
@@ -71,7 +91,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Branch from current `origin/main`, open a PR to `main`, enable auto-merge.
 	`main` is production; Vercel deploys it automatically. Branches do not need to
-	be up to date with `main`; required checks are build, test and secrets.
+	be up to date with `main`; required checks are build, test, core and secrets.
 - Migrations, production settings and rollbacks go through DevOps. Never
 	force-push or run `npm run db:push` against production.
 - Update the matching doc in the same PR when you change a route, schema or
