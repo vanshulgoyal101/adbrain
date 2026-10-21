@@ -229,6 +229,17 @@ describe("creative concept contract", () => {
     }
   });
 
+  it("does not read a text-free visual as a free offer, but still requires a fact for free claims", () => {
+    expect(validateConcept({ ...concept, rationale: "A calm, text-free photograph keeps the copy area clear." }, input))
+      .toMatchObject({ success: true });
+    expect(validateConcept({ ...concept, visual: { ...concept.visual, direction: `${concept.visual.direction} Keep the scene Text-Free.` } }, input))
+      .toMatchObject({ success: true });
+    for (const text of ["Free survey this week.", "Interest-free finance available.", "Text free to book a survey.", "A free, text-free survey report."]) {
+      expect(validateConcept({ ...concept, primary_text: text }, input), text)
+        .toMatchObject({ success: false, issues: [expect.stringMatching(/^unsupported-commercial-claim: free;/i)] });
+    }
+  });
+
   it("applies healthcare checks to the on-image supporting line too", () => {
     expect(
       validateConcept(

@@ -205,8 +205,9 @@ export function validateConcept(
         `sourceQuotes: quote not present in supplied facts: ${quote}`,
       );
   }
+  // "text-free" is the visual the prompt asks for, not a free offer.
   const commercialTerms =
-    /\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
+    /(?<!\btext-)\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
   // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
   const cites = (quote: string, term: string) => {
     if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase());
