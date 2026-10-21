@@ -86,4 +86,14 @@ describe("core: Prepare audience", () => {
     });
     expect(body.targeting.audience.rationale).toBeTruthy();
   });
+
+  it.each([
+    ["re-asks a known topic (handoff)", { ready: false, questions: [{ id: "budget", topic: "budget", question: "What daily budget?" }] }],
+    ["asks a new question", { ready: false, questions: [{ id: "location", topic: "location", question: "Which neighbourhoods do you serve?" }] }],
+  ])("still produces usable targeting when the planner %s", async (_label, reply) => {
+    mocks.complete.mockResolvedValue({ text: JSON.stringify(reply), provider: "google", model: "gemini", usage });
+    const { status, body } = await prepare();
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ready: true, fallback: true, targeting: { audience: { interestNames: [] } } });
+  });
 });
