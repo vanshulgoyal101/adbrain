@@ -1,0 +1,326 @@
+[
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Posture&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Physical+therapy&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6004930400792",
+          "name": "Commission on Accreditation in Physical Therapy Education",
+          "audience_size_lower_bound": 21768,
+          "audience_size_upper_bound": 25600,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Commission on Accreditation in Physical Therapy Education"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Business and industry"
+        },
+        {
+          "id": "6003220949667",
+          "name": "Education in the United States",
+          "audience_size_lower_bound": 1738571,
+          "audience_size_upper_bound": 2044560,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Education in the United States"
+          ],
+          "description": null,
+          "topic": "Education"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Chiropractic&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003245530324",
+          "name": "Parker University",
+          "audience_size_lower_bound": 44574,
+          "audience_size_upper_bound": 52420,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Parker University"
+          ],
+          "description": null,
+          "disambiguation_category": "College & university",
+          "topic": "Education"
+        },
+        {
+          "id": "6003314313314",
+          "name": "Northwestern Health Sciences University",
+          "audience_size_lower_bound": 30068,
+          "audience_size_upper_bound": 35360,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Northwestern Health Sciences University"
+          ],
+          "description": null,
+          "disambiguation_category": "College & university",
+          "topic": "Education"
+        },
+        {
+          "id": "6003013439481",
+          "name": "University of Western States",
+          "audience_size_lower_bound": 8265,
+          "audience_size_upper_bound": 9720,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "University of Western States"
+          ],
+          "description": null,
+          "disambiguation_category": "School",
+          "topic": "Education"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Wellness&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6840321905207",
+          "name": "Wellness",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Wellness"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business"
+        },
+        {
+          "id": "6003384248805",
+          "name": "Fitness and wellness",
+          "audience_size_lower_bound": 1083752219,
+          "audience_size_upper_bound": 1274492610,
+          "path": [
+            "Interests",
+            "Fitness and wellness"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003258544357",
+          "name": "Health & wellness",
+          "audience_size_lower_bound": 207178347,
+          "audience_size_upper_bound": 243641737,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Health & wellness"
+          ],
+          "description": null,
+          "topic": "Hobbies and activities"
+        },
+        {
+          "id": "6791955808599",
+          "name": "General wellness",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "General wellness"
+          ],
+          "description": null,
+          "disambiguation_category": "Nonprofit Organization"
+        },
+        {
+          "id": "6829526388417",
+          "name": "Wellness content",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Wellness content"
+          ],
+          "description": null,
+          "disambiguation_category": "Magazine"
+        },
+        {
+          "id": "6003624161183",
+          "name": "Wellness Natural Pet Food for Dogs and Cats",
+          "audience_size_lower_bound": 488739,
+          "audience_size_upper_bound": 574758,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Wellness Natural Pet Food for Dogs and Cats"
+          ],
+          "description": null,
+          "disambiguation_category": "Pet Supplies",
+          "topic": "Hobbies and activities"
+        },
+        {
+          "id": "6003337142136",
+          "name": "Animal Wellness Magazine",
+          "audience_size_lower_bound": 129991,
+          "audience_size_upper_bound": 152870,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Animal Wellness Magazine"
+          ],
+          "description": null,
+          "disambiguation_category": "Magazine",
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003421670257",
+          "name": "Wellness Coach",
+          "audience_size_lower_bound": 97246,
+          "audience_size_upper_bound": 114362,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Wellness Coach"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003108985500",
+          "name": "RiminiWellness",
+          "audience_size_lower_bound": 53945,
+          "audience_size_upper_bound": 63440,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "RiminiWellness"
+          ],
+          "description": null,
+          "disambiguation_category": "Arts & Entertainment"
+        },
+        {
+          "id": "6003246823885",
+          "name": "Health and Wellness Center (Marshall University)",
+          "audience_size_lower_bound": 29447,
+          "audience_size_upper_bound": 34630,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Health and Wellness Center (Marshall University)"
+          ],
+          "description": null,
+          "topic": "Lifestyle and culture"
+        },
+        {
+          "id": "6003152657675",
+          "name": "Wellness SPA",
+          "audience_size_lower_bound": 25918,
+          "audience_size_upper_bound": 30480,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Wellness SPA"
+          ],
+          "description": null,
+          "disambiguation_category": "Massage Therapist",
+          "topic": "Travel, places and events"
+        },
+        {
+          "id": "6003277229371",
+          "name": "Physical fitness",
+          "audience_size_lower_bound": 678866522,
+          "audience_size_upper_bound": 798347030,
+          "path": [
+            "Interests",
+            "Fitness and wellness",
+            "Physical fitness"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Sports+medicine&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6014630218086",
+          "name": "National Academy of Sports Medicine (NASM)",
+          "audience_size_lower_bound": 525960,
+          "audience_size_upper_bound": 618530,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "National Academy of Sports Medicine (NASM)"
+          ],
+          "description": null,
+          "disambiguation_category": "Sports & Fitness Instruction",
+          "topic": "Business and industry"
+        },
+        {
+          "id": "6003327060545",
+          "name": "Education",
+          "audience_size_lower_bound": 725918801,
+          "audience_size_upper_bound": 853680510,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Education"
+          ],
+          "description": null,
+          "topic": "Business and industry"
+        },
+        {
+          "id": "6003277229371",
+          "name": "Physical fitness",
+          "audience_size_lower_bound": 678866522,
+          "audience_size_upper_bound": 798347030,
+          "path": [
+            "Interests",
+            "Fitness and wellness",
+            "Physical fitness"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=targetingoptionstatus&targeting_option_list=%5B%226840321905207%22%5D",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6840321905207",
+          "current_status": "NORMAL"
+        }
+      ]
+    }
+  }
+]
