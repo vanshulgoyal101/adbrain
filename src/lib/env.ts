@@ -54,6 +54,8 @@ const schema = z.object({
   // non-thinking model to avoid paying for unused output tokens.
   GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
   LLM_MONTHLY_TOKEN_LIMIT: z.coerce.number().int().min(0).optional().default(2_000_000),
+  // Per-attempt limit before the next model/provider takes over; explicit call limits win.
+  LLM_ATTEMPT_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(240_000).optional().default(90_000),
 
   // Image generation
   IMAGE_PROVIDER: z.string().optional().default("pollinations"),

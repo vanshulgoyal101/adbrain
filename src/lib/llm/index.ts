@@ -144,6 +144,7 @@ async function callProviders(
   const failures: ProviderFailureReason[] = [];
   let terminal: LLMError | undefined;
   const now = Date.now();
+  options = { ...options, attemptTimeoutMs: options.attemptTimeoutMs ?? getEnv().LLM_ATTEMPT_TIMEOUT_MS };
 
   for (const { provider, keys, model } of registry) {
     const start = nextKeyStart(provider.name, keys.length);

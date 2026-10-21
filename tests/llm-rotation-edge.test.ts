@@ -9,6 +9,7 @@ function setEnv(overrides: Record<string, string>) {
   process.env.OPENROUTER_API_KEYS = "";
   process.env.CEREBRAS_API_KEYS = "";
   process.env.LLM_PROVIDER_ORDER = "google,groq,openrouter,cerebras";
+  delete process.env.LLM_ATTEMPT_TIMEOUT_MS;
   Object.assign(process.env, overrides);
   vi.resetModules();
 }
@@ -181,6 +182,15 @@ describe("SDK facade safety", () => {
       { provider: "groq", status: "error", failure: "TIMEOUT" },
       { provider: "openrouter", status: "success" },
     ]);
+  });
+
+  it("uses LLM_ATTEMPT_TIMEOUT_MS when the call sets no attempt limit", async () => {
+    setEnv({ GROQ_API_KEYS: "gk", OPENROUTER_API_KEYS: "ok", LLM_ATTEMPT_TIMEOUT_MS: "60000" });
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    vi.stubGlobal("fetch", vi.fn(async () => ok("done")));
+    const { complete } = await import("@/lib/llm");
+    await complete([{ role: "user", content: "test" }]);
+    expect(timeout).toHaveBeenCalledWith(60_000);
   });
 
   it("keeps the original timeout error when no other provider exists", async () => {

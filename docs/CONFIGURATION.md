@@ -129,6 +129,7 @@ an application release.
 | `CREATIVE_REASONING_EFFORT` | `medium` | `minimal`, `low`, `medium`, `high` |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
 | `LLM_MONTHLY_TOKEN_LIMIT` | `2000000` | Nonnegative integer; 0 disables quota checking |
+| `LLM_ATTEMPT_TIMEOUT_MS` | `90000` | Integer 5000-240000; one model attempt's limit before the next model or provider takes over. Calls with their own limit (planner 20s) keep it |
 
 The parser does not validate live account quota or model availability. The
 monthly limit is a per-business preflight check, **not an atomic reservation,
