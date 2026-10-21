@@ -36,9 +36,13 @@ Routine steps never wait for the coordinator.
    changed, proof, risk, PR link, next step.
 4. **Low-risk PRs ship themselves.** No migration, money, tenant/auth or config
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
-   (about 3 minutes) and Vercel deploys. If `main` moved, run
-   `gh pr update-branch <n>`. After deploy, smoke the changed flow in production,
+   (about 3 minutes) and Vercel deploys. Branches no longer need to be up to date
+   with `main` to merge. After deploy, smoke the changed flow in production,
    close the issue with the PR link and start your next issue.
+   **Ship the same day.** Open the PR as soon as one small slice works; do not
+   hold finished work on a branch or batch it. A green PR that is still open after
+   30 minutes gets merged by whoever sees it (`gh pr merge <n> --squash`). A branch
+   older than a day is either merged or closed.
 5. **DevOps ships the rest**: anything with a migration, money, tenant/auth or
    config change. Label it `ready-to-ship` and `owner:devops`. DevOps applies
    migrations first, merges, smokes and closes. Money and tenant changes get
