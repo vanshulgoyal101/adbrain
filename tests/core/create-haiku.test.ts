@@ -110,6 +110,58 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     });
   });
 
+  it("parallel schedule (#142): starts all three concepts at once on recorded latencies and still saves 3/3", async () => {
+    vi.stubEnv("CREATIVE_CONCEPT_SCHEDULE", "parallel");
+    // Recorded Haiku latencies, replayed at 1/100 speed.
+    const scale = 100;
+    let inFlight = 0;
+    let peak = 0;
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(requestBody(init));
+      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+      peak = Math.max(peak, ++inFlight);
+      await new Promise((resolve) => setTimeout(resolve, reply.latencyMs / scale));
+      inFlight--;
+      return openAIReply(reply.content, haiku.model, reply.usage);
+    }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const started = Date.now();
+    const variants = await generateVariants({ brand: run4.brand, brief: run4.brief, count: 3 });
+    const wallMs = (Date.now() - started) * scale;
+
+    expect(peak).toBe(3);
+    expect(variants.map(({ angleName }) => angleName)).toEqual(haiku.responses.map(({ angleName }) => angleName));
+    expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
+    const latencies = haiku.responses.map(({ latencyMs }) => latencyMs);
+    // Concept time is the slowest call, not the sum of all three.
+    expect(wallMs).toBeLessThan(Math.max(...latencies) + latencies.reduce((a, b) => a + b, 0) / 3);
+  });
+
+  it("parallel schedule (#142): a concept that repeats an earlier concurrent headline is repaired against it", async () => {
+    vi.stubEnv("CREATIVE_CONCEPT_SCHEDULE", "parallel");
+    const [first, second] = haiku.responses;
+    const repairPrompts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(requestBody(init));
+      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+      const repair = body.messages.length > 2;
+      if (repair) repairPrompts.push(body.messages[1].content);
+      // The second angle's first reply copies the first angle's concept.
+      const content = reply === second && !repair ? first.content : reply.content;
+      return openAIReply(content, haiku.model, reply.usage);
+    }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const variants = await generateVariants({ brand: run4.brand, brief: run4.brief, count: 3 });
+    const { parseJSON } = await import("@/lib/llm");
+    const firstHeadline = parseJSON<{ headline: string }>(first.content).headline;
+
+    expect(variants).toHaveLength(3);
+    expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
+    expect(repairPrompts).toHaveLength(1);
+    expect(repairPrompts[0]).toContain(firstHeadline);
+    expect(variants[1].llmUsage.map(({ validation }) => validation?.rules)).toEqual([["repeated-headline", "repeated-opening"], undefined]);
+  });
+
   it("clips Haiku's over-long visual.medium label instead of discarding the concept", async () => {
     const { parseJSON } = await import("@/lib/llm");
     const { validateConcept } = await import("@/lib/creative/concept");
