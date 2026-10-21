@@ -50,6 +50,19 @@ describe("creative concept contract", () => {
     });
   });
 
+  it("records schema failures by field without copy and accepts an omitted optional line", async () => {
+    const { conceptValidationRules } = await import("@/lib/creative/concept");
+    const result = validateConcept({ ...concept, headline: "x".repeat(41), sourceQuotes: ["ok", ""] }, input);
+    expect(result.success).toBe(false);
+    const rules = conceptValidationRules(result.success ? [] : result.issues);
+    expect(rules).toEqual(["schema:headline:too_big", "schema:sourceQuotes.*:too_small"]);
+    expect(JSON.stringify(rules)).not.toContain("xxx");
+    const withoutLine: Record<string, unknown> = { ...concept };
+    delete withoutLine.supportingText;
+    expect(validateConcept(withoutLine, input)).toMatchObject({ success: true, concept: { supportingText: null } });
+    expect(validateConcept({ ...concept, supportingText: "" }, input)).toMatchObject({ success: true, concept: { supportingText: null } });
+  });
+
   it("does not treat previous ads as evidence and checks description claims", () => {
     expect(validateConcept({ ...concept, description: "Free installation" }, {
       ...input, recentCopy: [{ headline: "Free installation", primary_text: "Free installation" }],
