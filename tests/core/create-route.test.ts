@@ -267,6 +267,21 @@ describe("core: Create route on recorded run 4", () => {
     expect(new Set(clock.llmAttemptDeadlines)).toEqual(new Set([60_000]));
     expect(elapsed).toBeLessThan(run4.routeDeadlineMs);
   });
+
+  // #138: nine such runs held 1.67M of a 2M monthly allowance as "unknown usage" and blocked Create.
+  // The database harness proves a settled run then keeps only its recorded usage.
+  it("settles a 2/3 run with every token recorded, so its quota hold is released", async () => {
+    stubProviders({ text: (angle) => angle.angleId === "value"
+      ? JSON.stringify({ ...angle.concept, primary_text: `${angle.concept.primary_text} Results guaranteed.` })
+      : recorded(angle) });
+    const response = await (await postCreate())();
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    expect(body.creatives).toHaveLength(2);
+    expect(body.failures).toHaveLength(1);
+    expect(mocks.progress.some((call) => call.p_uncertain)).toBe(false);
+    expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false, p_failed: false });
+  });
 });
 
 describe("core: Create validator on gold-labelled eval concepts", () => {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AD_ANGLES } from "@/lib/templates/ads";
 import { NoLLMKeysError } from "@/lib/llm";
-import { CreativeImageError } from "@/lib/creative/generate";
+import { CreativeImageError, CreativeValidationError } from "@/lib/creative/generate";
 import { advisoryPreferenceContext } from "@/lib/preferences/context";
 
 const mocks = vi.hoisted(() => ({
@@ -513,7 +513,7 @@ describe("creative generation route", () => {
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
-  it("keeps the hold when a no-provider angle has a saved sibling", async () => {
+  it("keeps the hold when an angle never reports an outcome", async () => {
     mocks.generateVariants.mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void>; onVariant: (value: typeof variant) => Promise<void> }) => {
       await params.onFailure(AD_ANGLES[0], new NoLLMKeysError());
       await params.onVariant(variant);
@@ -521,7 +521,19 @@ describe("creative generation route", () => {
     const { POST } = await import("@/app/api/creatives/generate/route");
     expect((await POST(request())).status).toBe(200);
     expect(mocks.progress.mock.calls.every(([args]) => !args.p_failed)).toBe(true);
-    expect(mocks.progress).toHaveBeenLastCalledWith(expect.objectContaining({ p_uncertain: true, p_complete: false }));
+    expect(mocks.progress).toHaveBeenLastCalledWith(expect.objectContaining({ p_uncertain: true, p_complete: true }));
+  });
+
+  it("settles a partial run whose every angle has known usage (#138)", async () => {
+    mocks.generateVariants.mockImplementationOnce(async (params: { onFailure: (angle: typeof AD_ANGLES[number], error: Error) => Promise<void>; onVariant: (value: typeof variant) => Promise<void> }) => {
+      await params.onFailure(AD_ANGLES[0], new NoLLMKeysError());
+      await params.onFailure(AD_ANGLES[1], new CreativeValidationError(["unsupported-commercial-claim"], []));
+      await params.onVariant(variant);
+    });
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    expect((await POST(request())).status).toBe(200);
+    expect(mocks.progress.mock.calls.some(([args]) => args.p_uncertain)).toBe(false);
+    expect(mocks.progress).toHaveBeenLastCalledWith(expect.objectContaining({ p_complete: true, p_uncertain: false, p_failed: false }));
   });
 
   it("saves completed variants and their receipt while reporting failed siblings", async () => {

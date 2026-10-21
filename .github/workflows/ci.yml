@@ -54,12 +54,17 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
       - uses: actions/checkout@v4
+        with:
+          # the generation hold check replays a historical schema blob with git show
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run test:core
+      # Generation quota holds on real Postgres: settled partial runs must not lock Create (#138).
+      - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db -- --generation-only
 
   # Advisories are reported, not blocking: a new upstream CVE must not stop shipping.
   audit:
