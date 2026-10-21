@@ -15,7 +15,8 @@ export const creativeConceptSchema = z.object({
   primary_text: z.string().trim().min(1).max(900),
   description: z.string().trim().min(1).max(100),
   cta: z.enum(META_CTAS),
-  rationale: z.string().trim().min(1).max(600),
+  // Internal note, never ad copy; the prompt asks for 600 so slight overruns aren't discarded.
+  rationale: z.string().trim().min(1).max(1_200),
   visual: z.object({
     medium: z.string().trim().min(1).max(120),
     direction: z.string().trim().min(20).max(2400),
