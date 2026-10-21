@@ -16,7 +16,12 @@ import {
 
 export const metadata = { title: "Campaigns" };
 
-export default async function CampaignsPage() {
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = await searchParams;
   const business = await getPrimaryBusiness();
 
   if (!business) {
@@ -51,6 +56,7 @@ export default async function CampaignsPage() {
   ]);
   const metaReady = connection.ready;
   const campaigns = page.campaigns;
+  const requested = typeof params.creatives === "string" ? params.creatives.split(",") : [];
 
   return (
     <div>
@@ -70,6 +76,7 @@ export default async function CampaignsPage() {
           leadFormError={null}
           metaReady={metaReady}
           adAccountId={connection.adAccountId ?? ""}
+          newCampaign={params.new === "1" ? { creativeIds: requested } : undefined}
         />
       </div>
     </div>
