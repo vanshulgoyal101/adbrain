@@ -49,7 +49,8 @@ const schema = z.object({
   // Groq retires models with little notice (llama-3.3-70b-versatile now 404s),
   // so the model is configurable rather than hardcoded.
   GROQ_MODEL: z.string().optional().default("qwen/qwen3.8-27b"),
-  OPENROUTER_MODEL: z.string().optional().default("qwen/qwen3.8-max-0902"),
+  // #98 bake-off: 13-15 s per Create concept and 6/6 saved, vs 65-90 s on qwen3.8-max.
+  OPENROUTER_MODEL: z.string().optional().default("anthropic/claude-haiku-5.5"),
   CREATIVE_MAX_TOKENS: z.coerce.number().int().min(1800).max(16000).default(6000),
   CREATIVE_REASONING_EFFORT: z.enum(["minimal", "low", "medium", "high"]).default("medium"),
   // Output-token headroom for Gemini "thinking" models. Set to 0 for a paid
