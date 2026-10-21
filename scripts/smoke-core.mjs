@@ -149,16 +149,23 @@ try {
       assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; Prepare was not started");
       errors.length = 0;
       await page.goto(`${origin}/campaigns`);
-      const open = page.getByRole("button", { name: "New campaign", exact: true });
-      if (await open.isVisible()) await open.click();
+      // A click that lands before hydration is lost, so reopen until an approved ad is offered.
+      const toggle = page.locator('button[aria-controls="campaign-composer"]');
       const creative = page.locator('#campaign-composer button[aria-pressed="false"]').first();
-      await creative.waitFor({ state: "visible" });
+      for (let attempt = 0; attempt < 6 && !await creative.isVisible(); attempt++) {
+        if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+        await creative.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
+      }
+      if (!await creative.isVisible()) {
+        const ads = await page.locator("#campaign-composer button[aria-pressed]").count();
+        throw new Error(`No selectable approved ad (setup ${await toggle.getAttribute("aria-expanded") === "true" ? "open" : "closed"}, ${ads} ads shown)`);
+      }
       await creative.click();
       await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
       await page.locator("#budget").fill("350");
       const form = page.locator("#leadform");
-      const leadForm = await form.locator('option:not([value=""])').first().getAttribute("value");
-      assert.ok(leadForm, "No lead form to choose");
+      const leadForm = await form.locator('option:not([value=""])').first().getAttribute("value", { timeout: 30_000 }).catch(() => null);
+      assert.ok(leadForm, `No lead form loaded (${(await form.locator("option").first().innerText().catch(() => "no lead form field")).trim()})`);
       await form.selectOption(leadForm);
       campaignSetup = true;
       const preflight = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/preflight" && response.request().method() === "POST", { timeout: 90_000 });
