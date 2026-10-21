@@ -195,7 +195,13 @@ export function validateConcept(
       );
   }
   const commercialTerms =
-    /\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d[\d,.]*/gi;
+    /\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
+  // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
+  const cites = (quote: string, term: string) => {
+    if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase());
+    const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote);
+  };
   const visualClaims = concept.visual.direction
     .split(/(?:[.!?;](?=\s|$)\s*|\s+\bbut\b\s+)/i)
     .filter((clause) => !/^(?:avoid|do not|don't|omit|exclude|never (?:show|include|add|render|depict|use))\b/i.test(clause.trim()))
@@ -212,7 +218,7 @@ export function validateConcept(
     if (
       !concept.sourceQuotes.some(
         (quote) =>
-          quote.toLowerCase().includes(term.toLowerCase()) &&
+          cites(quote, term) &&
           !/\b(no|not|never|without|avoid)\b/i.test(quote),
       )
     ) {

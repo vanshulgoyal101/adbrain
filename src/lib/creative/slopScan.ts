@@ -57,7 +57,10 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
   }
 
   for (const claim of opts.bannedClaims ?? []) {
-    if (claim && lower.includes(claim.toLowerCase())) {
+    const term = claim.toLowerCase();
+    // "heal" (heals, healed, healing) is a health claim; "health" is not.
+    const found = term === "heal" ? /heal(?!th)/.test(lower) : lower.includes(term);
+    if (claim && found) {
       findings.push({ rule: "banned-claim", detail: claim });
     }
   }
