@@ -44,8 +44,25 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
       return openAIReply(reply.content, haiku.model, reply.usage);
     }));
     const { generateVariants } = await import("@/lib/creative/generate");
-    const variants = await generateVariants({ brand: run4.brand, brief: run4.brief, count: 3 });
+    const events: { angleName: string; stage: string; at: number }[] = [];
+    const saved: string[] = [];
+    const variants = await generateVariants({
+      brand: run4.brand, brief: run4.brief, count: 3,
+      onVariant: async ({ angleName }) => { saved.push(angleName); },
+      onProgress: (event) => {
+        events.push(event);
+        throw new Error("A broken progress listener must not fail generation.");
+      },
+    });
 
+    // #141 live progress: every angle reports real stages in order, and "ready" only after its save.
+    for (const { angleName } of haiku.responses) {
+      expect(events.filter((event) => event.angleName === angleName).map(({ stage }) => stage))
+        .toEqual(["queued", "writing", "checking", "image", "ready"]);
+    }
+    expect(events.slice(0, 3).map(({ stage }) => stage)).toEqual(["queued", "queued", "queued"]);
+    expect(events.filter(({ stage }) => stage === "ready").map(({ angleName }) => angleName)).toEqual(saved);
+    expect(events.every(({ at }, index) => index === 0 || at >= events[index - 1].at)).toBe(true);
     expect(haiku.responses[0].content.startsWith("```json")).toBe(true);
     expect(variants.map(({ angleName }) => angleName)).toEqual(haiku.responses.map(({ angleName }) => angleName));
     expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
@@ -58,6 +75,39 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     }
     // Recorded latencies leave most of the 270 s route deadline for images and repairs.
     expect(haiku.responses.reduce((sum, { latencyMs }) => sum + latencyMs, 0)).toBeLessThan(60_000);
+  });
+
+  it("reports fixing on a repair and failed when the repair is also rejected", async () => {
+    const offer = haiku.responses.find(({ angleName }) => angleName === "Special offer / incentive")!;
+    // A reply cut off mid-JSON, as when a model hits max_tokens.
+    const truncated = offer.content.slice(0, Math.floor(offer.content.length / 2));
+    let repairFails = false;
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(requestBody(init));
+      const repair = body.messages.length > 2;
+      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+      const content = reply === offer && (!repair || repairFails) ? truncated : reply.content;
+      return openAIReply(content, haiku.model, reply.usage);
+    }));
+    const { generateVariants } = await import("@/lib/creative/generate");
+    const stagesFor = async () => {
+      const events: string[] = [];
+      const failures: string[] = [];
+      const variants = await generateVariants({
+        brand: run4.brand, brief: run4.brief, count: 3,
+        onProgress: ({ angleName, stage }) => { if (angleName === offer.angleName) events.push(stage); },
+        onFailure: async ({ name }) => { failures.push(name); },
+      });
+      return { events, failures, saved: variants.length };
+    };
+
+    expect(await stagesFor()).toEqual({
+      events: ["queued", "writing", "checking", "fixing", "checking", "image", "ready"], failures: [], saved: 3,
+    });
+    repairFails = true;
+    expect(await stagesFor()).toEqual({
+      events: ["queued", "writing", "checking", "fixing", "checking", "failed"], failures: [offer.angleName], saved: 2,
+    });
   });
 
   it("clips Haiku's over-long visual.medium label instead of discarding the concept", async () => {
