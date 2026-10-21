@@ -92,8 +92,8 @@ now `openrouter,google,groq` (live with the PR108 deploy). Root causes known fro
 | Dev 3 | **Create works** ([#98](https://github.com/vanshulgoyal101/adbrain/issues/98), lead). All 5 Create runs in 30 days ended unresolved at 1 of 3. PR107 and the new provider order (live with PR108) are untested. Run Create now (3 runs). If a concept takes over 60s, make a faster model primary for Create so 3 concepts fit the deadline. Done at 3/3 twice in a row |
 | Dev | **Create rejections** ([#88](https://github.com/vanshulgoyal101/adbrain/issues/88)). PR103 (schema field logging) is re-queued to merge. Then read which field fails `schema-or-other` in Dev 3's runs and fix it without weakening fact checks. Share runs with Dev 3; you have 1 |
 | Dev 2 | **Prepare, then launch** ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87), then [#109](https://github.com/vanshulgoyal101/adbrain/issues/109)). PR104 (no-AI fallback) is re-queued to merge. Then Prepare on Cedar Ridge must succeed. Then #109: one PAUSED test campaign on Meta, sync, pause (never Resume), archive |
-| QA | PR101 shipped the headless core smoke to main. Run it after every deploy and post failures as `core` bugs with a red test. When #109 passes manually, make it repeatable with its campaign mode |
-| DevOps | Watch PR103/PR104 merge and deploy. Confirm in production usage events that Google or Groq takes over when OpenRouter is slow. Keep CI green the same day |
+| QA | **Core regression gate** ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)): `test:core` covering Create 3/3, Prepare with fallback, PAUSED launch, sync and pause, and CSP rendering, built from recorded real responses. Keep running the headless smoke after every deploy |
+| DevOps | **Protect production** ([#111](https://github.com/vanshulgoyal101/adbrain/issues/111)): make `test:core` required, run the smoke after every production deploy and daily, roll back automatically on failure. Also confirm the Google/Groq fallback in production usage events |
 
 ## Historical Dispatch Receipts
 

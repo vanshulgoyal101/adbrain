@@ -77,6 +77,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	(polish, performance, docs, compliance, support, analytics) only while the core
 	loop is healthy, or when the owner asks for it. When in doubt, ask: does this
 	help a customer make and run ads today?
+- **Never break the core.** Generating ads and running campaigns must keep working
+	after every change. No change merges unless the core regression check
+	(`test:core`, #110) passes; once it exists it is a required check. Any change to
+	generation, validation, prompts, models, timeouts, the planner, Meta calls or
+	CSP must add or update a core test with recorded real responses, not only mocks.
+	After every production deploy the core smoke runs; if it fails, roll back first
+	and debug second. Change production AI or Meta settings only with a recorded
+	before and after, followed by the smoke. A non-core change that breaks the core
+	is reverted, not patched forward.
 - Track work in GitHub: one issue per real problem with the `core` or `later`
 	label, linked commits/PRs, and close the issue when the fix is live. Close or
 	park stale issues rather than leaving them open with old status.
