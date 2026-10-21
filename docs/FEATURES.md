@@ -127,7 +127,8 @@ uniqueness across simultaneous requests or better campaign performance.
 
 Descriptions are stored in the existing generation receipt, visible in Create and
 Studio, included in copy exports and campaign review hashes, and sent to Meta as
-the link description. Legacy creatives are not automatically rewritten. Meta
+the link description. Create asks the model for up to 80 characters and rejects
+descriptions over 100. Legacy creatives are not automatically rewritten. Meta
 decides which placements display descriptions; filling the field does not guarantee
 it appears in every preview. No live ads change when this generation behavior changes.
 

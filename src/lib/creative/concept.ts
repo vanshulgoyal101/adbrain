@@ -13,6 +13,7 @@ export const CONCEPT_VERSION = "creative-concept-v2";
 export const creativeConceptSchema = z.object({
   headline: z.string().trim().min(1).max(40),
   primary_text: z.string().trim().min(1).max(900),
+  // Published ad copy: the prompt asks for 80 because models aim at the stated limit.
   description: z.string().trim().min(1).max(100),
   cta: z.enum(META_CTAS),
   // Internal note, never ad copy; the prompt asks for 600 so slight overruns aren't discarded.
@@ -76,7 +77,7 @@ Without references, do not pretend an invented person, facility or product is a 
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
 Return only JSON, with this shape. Character limits include spaces and are hard limits:
-{"headline":"up to 40 characters","primary_text":"up to 60 words","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
+{"headline":"up to 40 characters","primary_text":"up to 60 words","description":"nonempty Meta link description up to 80 characters","cta":"${META_CTAS.join('" | "')}",
 "rationale":"why this message and visual belong together for this audience; up to 600 characters",
 "visual":{"medium":"chosen medium; up to 120 characters","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
 "supportingText":"optional on-image supporting line up to 64 characters, or null",
