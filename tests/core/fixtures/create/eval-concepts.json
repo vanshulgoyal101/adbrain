@@ -1,0 +1,19 @@
+{
+  "source": "evals/creative/fixtures.jsonl rows (1-based line numbers), copy verbatim. Meta CTA mapped to the nearest META_CTAS value because the eval CTAs are free text. Brand facts are synthetic Solaride facts that state the claims the gold rows make.",
+  "brand": {
+    "name": "Solaride",
+    "vertical": "solar",
+    "description": "Rooftop solar installer for homes and businesses in Rajasthan and Punjab.",
+    "target_audience": "Homeowners in Jaipur with high electricity bills",
+    "usps": ["Subsidy paperwork handled end to end"],
+    "offers": ["Free 15-minute consultation", "PM Surya Ghar subsidy applications close March 31"],
+    "locations": ["Jaipur"]
+  },
+  "cases": [
+    { "line": 6, "gold": 5, "verdict": "accept", "headline": "Subsidy ends March 31", "primary_text": "Lock in the PM Surya Ghar subsidy before it closes. Book your rooftop survey this week.", "cta": "Book Now", "sourceQuotes": ["PM Surya Ghar subsidy"] },
+    { "line": 10, "gold": 4, "verdict": "accept", "headline": "Not sure if solar fits your roof?", "primary_text": "Book a free 15-minute consultation. We check your roof, bill, and subsidy eligibility.", "cta": "Book Now", "sourceQuotes": ["Free 15-minute consultation"] },
+    { "line": 2, "gold": 1, "verdict": "reject", "headline": "UNLOCK the POWER of solar — elevate your home today!!!", "primary_text": "In today's fast-paced world, harness cutting-edge seamless energy.", "cta": "Learn More", "sourceQuotes": ["Solaride"] },
+    { "line": 5, "gold": 2, "verdict": "reject", "headline": "Solar energy solutions for everyone", "primary_text": "We provide world-class, state-of-the-art solar. Empower your future and dive in.", "cta": "Learn More", "sourceQuotes": ["Solaride"] },
+    { "line": 9, "gold": 1, "verdict": "reject", "headline": "BEST SOLAR DEALS EVER!!!", "primary_text": "AMAZING PRICES! LIMITED TIME! ACT NOW!", "cta": "Get Offer", "sourceQuotes": ["Solaride"] }
+  ]
+}
