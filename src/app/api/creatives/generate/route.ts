@@ -2,7 +2,7 @@ import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observ
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
-import { generateVariants } from "@/lib/creative/generate";
+import { CreativeImageError, CreativeValidationError, generateVariants } from "@/lib/creative/generate";
 import {
   persistCreativeImage,
   renderAndPersistDesign,
@@ -178,6 +178,9 @@ async function handlePOST(req: Request) {
   const inserted: Creative[] = [];
   const failures: { angle: string; error: string }[] = [];
   let noProviderFailures = 0;
+  // Usage is unknown only when recording it failed or an unexpected error hid provider calls (#138).
+  let usageUnknown = false;
+  const recordedAngles = new Set<string>();
   let admitted = false;
   let admin: ReturnType<typeof createAdminClient> | null = null;
   async function progress(tokens = 0, complete = false, uncertain = false, failed = false) {
@@ -234,6 +237,8 @@ async function handlePOST(req: Request) {
             generationId: variantGroup,
           });
         const recorded = await persistLLMUsage(events);
+        if (recorded) recordedAngles.add(variant.angleId);
+        else usageUnknown = true;
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded);
         const photoUrl = await persistCreativeImage(
           supabase,
@@ -284,7 +289,10 @@ async function handlePOST(req: Request) {
           });
         const recorded = await persistLLMUsage(events);
         if (recorded && error instanceof NoLLMKeysError) noProviderFailures++;
-        await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, !recorded || !(error instanceof NoLLMKeysError));
+        const unknown = !recorded || !(error instanceof CreativeValidationError || error instanceof CreativeImageError
+          || error instanceof NoLLMKeysError || recordedAngles.has(angle.id));
+        if (unknown) usageUnknown = true;
+        await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, unknown);
         failures.push({
           angle: angle.name,
           error: "This creative could not be generated or saved. Check saved results before trying again.",
@@ -292,8 +300,7 @@ async function handlePOST(req: Request) {
       },
     });
     const noProvider = !inserted.length && failures.length === count && noProviderFailures === count;
-    await progress(0, (inserted.length === count && !failures.length) || noProvider,
-      !noProvider && (inserted.length < count || failures.length > 0), noProvider);
+    await progress(0, true, usageUnknown || inserted.length + failures.length < count, !inserted.length);
     if (noProvider) return NextResponse.json({ error: new NoLLMKeysError().message, code: "NO_LLM_KEYS" }, { status: 400 });
   } catch (err) {
     const noProvider = err instanceof NoLLMKeysError;

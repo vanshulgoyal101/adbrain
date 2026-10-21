@@ -13,6 +13,7 @@ const operatorPaymentMigration = await readFile(join(root, "db/migrations/202609
 const customerAllowanceMigration = await readFile(join(root, "db/migrations/20260926_customer_ad_allowance.sql"), "utf8");
 const creativeIntentMigration = await readFile(join(root, "db/migrations/20260927_creative_generation_intents.sql"), "utf8");
 const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
+const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -721,6 +722,32 @@ async function verifyCreativeGenerationAdmission(db, database) {
     const late=await service("select public.creative_generation_progress($1,$2,$3,0,false,false,false) as result",[freshBusiness,owner,id]);
     assert.deepEqual({ nextAdmission: second.action, lateProgress: late.status }, { nextAdmission: 'quota', lateProgress: 'partial' });
   });
+  await check(`${database}: nine settled partial runs never lock a business out (#138)`, async () => {
+    const freshBusiness=randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Partial runs')",[freshBusiness,owner]);
+    // Production admission: 3 angles x (50k + 2 x 18k) reserved, 3 x 10k image floor, 2M monthly limit.
+    const reserve=186_000,floor=30_000,limit=2_000_000,used=31_000;
+    const admitRun=(id,hash)=>service("select public.creative_generation_admit($1,$2,$3,$4,3,$5,$6,$7) as result",
+      [freshBusiness,owner,id,hash,reserve,floor,limit]);
+    const hold=async (id)=>(await db.query("select reserved_tokens,accounted_tokens from private.creative_generation_intents where generation_id=$1",[id]))
+      .rows.map(row=>({reserved:Number(row.reserved_tokens),accounted:Number(row.accounted_tokens)}))[0];
+    // A run with unknown usage (like #54) keeps its whole hold.
+    const unknown=randomUUID();
+    assert.equal((await admitRun(unknown,'0'.repeat(64))).action,'start');
+    assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,true,false) as result",[freshBusiness,owner,unknown])).status,'unresolved');
+    for (let run=1;run<=9;run++) {
+      const id=randomUUID();
+      assert.equal((await admitRun(id,String(run).repeat(64))).action,'start',`run ${run}`);
+      await db.query("insert into public.llm_usage_events(business_id,user_id,route,provider,model,total_tokens) values ($1,$2,'creatives.generate','fixture','fixture',$3)",[freshBusiness,owner,used]);
+      await db.query("insert into public.creatives(business_id,brief,variant_group) values ($1,'One of three',$2)",[freshBusiness,id]);
+      assert.equal((await service("select public.creative_generation_progress($1,$2,$3,$4,false,false,false) as result",[freshBusiness,owner,id,used])).status,'partial');
+      assert.deepEqual(await hold(id),{reserved:reserve,accounted:used},'an in-flight run keeps its hold');
+      assert.equal((await service("select public.creative_generation_progress($1,$2,$3,0,true,false,false) as result",[freshBusiness,owner,id])).status,'partial');
+      assert.deepEqual(await hold(id),{reserved:used+floor/3,accounted:used},'a settled run keeps only its usage and saved image share');
+    }
+    assert.equal((await admitRun(randomUUID(),'a'.repeat(64))).action,'start');
+    assert.deepEqual(await hold(unknown),{reserved:reserve,accounted:0});
+  });
 }
 async function verify(database, source, integrityMigration, customerOnly = false) {
   const admin = client();
@@ -772,6 +799,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(creativeIntentMigration);
       await db.query(creativeReconcileMigration);
       await db.query(creativeReconcileMigration);
+      await db.query(creativeSettleMigration);
+      await db.query(creativeSettleMigration);
       await verifyCreativeGenerationAdmission(db, database);
       return;
     }
@@ -1876,6 +1905,7 @@ try {
   assert.ok(schema.includes(customerAllowanceMigration.trim()), "Canonical schema must include the exact customer allowance migration");
   assert.ok(schema.includes(creativeIntentMigration.trim()), "Canonical schema must include the exact creative generation intent migration");
   assert.ok(schema.includes(creativeReconcileMigration.trim()), "Canonical schema must include the exact creative reconciliation migration");
+  assert.ok(schema.indexOf(creativeReconcileMigration.trim()) < schema.indexOf(creativeSettleMigration.trim()), "Canonical schema must include the exact settle-holds migration after reconciliation");
   assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
   assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
   if (process.argv.includes("--analytics-only")) {
