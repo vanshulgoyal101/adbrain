@@ -1,0 +1,23 @@
+[
+  {
+    "method": "POST",
+    "path": "120253646427440526",
+    "form": {
+      "status": "ARCHIVED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253646427440526?fields=id%2Cstatus%2Ceffective_status",
+    "status": 200,
+    "body": {
+      "id": "120253646427440526",
+      "status": "ARCHIVED",
+      "effective_status": "ARCHIVED"
+    }
+  }
+]
