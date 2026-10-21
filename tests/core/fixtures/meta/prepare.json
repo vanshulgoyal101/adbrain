@@ -1,0 +1,129 @@
+[
+  {
+    "method": "GET",
+    "path": "885223068001054?fields=access_token",
+    "status": 200,
+    "body": {
+      "access_token": "REDACTED",
+      "id": "885223068001054"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "885223068001054/leadgen_forms?fields=id%2Cname%2Cstatus&limit=200",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "2531491190682703",
+          "name": "Solaride | Free Survey | CHD-PKL | Homeowners | Sep 2026",
+          "status": "ACTIVE"
+        },
+        {
+          "id": "1732372914636573",
+          "name": "Solaride | Free Site Visit | test A",
+          "status": "ACTIVE"
+        },
+        {
+          "id": "1667547894289050",
+          "name": "Solaride | Free Site Visit | Hisar | April",
+          "status": "ACTIVE"
+        },
+        {
+          "id": "1206878731403456",
+          "name": "Solaride | Free Site Visit | CHD-PKL | Jan",
+          "status": "ACTIVE"
+        },
+        {
+          "id": "851588111247082",
+          "name": "Solaride | CHD-PKL | Free Site Visit Form 04/01/2026, 19:21",
+          "status": "ACTIVE"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFRfdzJIOEtpNk5qeTRBaDRXcXFTeTF4LUhGRWx1UmgzQnJHaUtmVW1Lb3VmT05MS3RhUFVWYlNvazY1eHhVckVDd0JLYVE1ZAk9laG5oa2VmNzdiVTdn",
+          "after": "QVFIVGRibzBROVo0R0ZAYRTVZAbTZAqMjNSWXU3cXFDM1B6VmRlS0x0cFNzczc1c3g5VnNma0ZAKQlB6ZAXlPSUhHRXZApN0dBZAURSQXRwT295ZAE1ocnFMSXU3ZAEVR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Austin%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "2525495",
+          "name": "Austin",
+          "type": "city",
+          "country_code": "US",
+          "country_name": "अमेरिका",
+          "region": "Texas",
+          "region_id": 3886,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MAZDZD"
+        },
+        "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&q=Austin%2C+Texas&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10&access_token=REDACTED&after=MAZDZD"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Chiropractic&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003245530324",
+          "name": "Parker University",
+          "audience_size_lower_bound": 44574,
+          "audience_size_upper_bound": 52420,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Parker University"
+          ],
+          "description": null,
+          "disambiguation_category": "College & university",
+          "topic": "Education"
+        },
+        {
+          "id": "6003314313314",
+          "name": "Northwestern Health Sciences University",
+          "audience_size_lower_bound": 30068,
+          "audience_size_upper_bound": 35360,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Northwestern Health Sciences University"
+          ],
+          "description": null,
+          "disambiguation_category": "College & university",
+          "topic": "Education"
+        },
+        {
+          "id": "6003013439481",
+          "name": "University of Western States",
+          "audience_size_lower_bound": 8265,
+          "audience_size_upper_bound": 9720,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "University of Western States"
+          ],
+          "description": null,
+          "disambiguation_category": "School",
+          "topic": "Education"
+        }
+      ]
+    }
+  }
+]

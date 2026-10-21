@@ -1,0 +1,45 @@
+[
+  {
+    "method": "GET",
+    "path": "120253646427440526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253646427440526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253646427440526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253646428630526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHUwVVdEWHNUUmtGVzI4NWJFQVZAYSGdkeGxFaTVMNUVnSUhWUWFpOGdHRlNnNUREVzM2QV95ZAU1UY0lueW05cllaalVBNkRpYWFXY0w3LThaeUhIcHVR",
+          "after": "QVFIVHUwVVdEWHNUUmtGVzI4NWJFQVZAYSGdkeGxFaTVMNUVnSUhWUWFpOGdHRlNnNUREVzM2QV95ZAU1UY0lueW05cllaalVBNkRpYWFXY0w3LThaeUhIcHVR"
+        }
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253646427440526",
+    "form": {
+      "status": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]

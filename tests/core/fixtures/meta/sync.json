@@ -1,0 +1,94 @@
+[
+  {
+    "method": "GET",
+    "path": "act_2398686420592052/campaigns?fields=id%2Cname%2Cstatus%2Cobjective%2Cdaily_budget%2Clifetime_budget%2Caccount_id&limit=20",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253646427440526",
+          "name": "AdBrain core fixture 2026-10-21T15:54 (PAUSED test)",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "account_id": "2398686420592052"
+        },
+        {
+          "id": "120253256980050526",
+          "name": "Solaride | Free Survey | CHD-PKL | Sep 2026",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "daily_budget": "20000",
+          "account_id": "2398686420592052"
+        },
+        {
+          "id": "120253164673180526",
+          "name": "new year",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "account_id": "2398686420592052"
+        },
+        {
+          "id": "120252972379040526",
+          "name": "solar energy — leads",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "account_id": "2398686420592052"
+        },
+        {
+          "id": "120252255485900526",
+          "name": "Solaride — leads",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "account_id": "2398686420592052"
+        },
+        {
+          "id": "120240970807630526",
+          "name": "SOLARIDE | CHD-PKL | Lead forms | Jan",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "account_id": "2398686420592052"
+        },
+        {
+          "id": "120240969992630526",
+          "name": "SOLARIDE | CHD-PKL | WhatsApp | Jan",
+          "status": "PAUSED",
+          "objective": "OUTCOME_LEADS",
+          "daily_budget": "17000",
+          "account_id": "2398686420592052"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHFBb3RCa19rbjhkYTM4cEtlMDg4NjV6ZA1ptVWt3ZATdoYzBrWG5ZAOExhQTBkZAUNTNDh4NTh3c1BNMVlxVkk1UkNNenNfWUZAydnhSRHdvbzBvbXBtenJn",
+          "after": "QVFIVDZAzZAzFmVjFRYnVHalRLQXgtb0UxNlNVbFNYZA2JwajhlVUFKR3NqNGdKR2M1RE1IRldQV0hoa2lOMnpHMmk3ZAnRRelFmY0p0eTgzZAFh3YUJvTzFuend3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253646427440526/adsets?fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cpromoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253646428630526",
+          "status": "PAUSED",
+          "daily_budget": "20000",
+          "lifetime_budget": "0",
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHUwVVdEWHNUUmtGVzI4NWJFQVZAYSGdkeGxFaTVMNUVnSUhWUWFpOGdHRlNnNUREVzM2QV95ZAU1UY0lueW05cllaalVBNkRpYWFXY0w3LThaeUhIcHVR",
+          "after": "QVFIVHUwVVdEWHNUUmtGVzI4NWJFQVZAYSGdkeGxFaTVMNUVnSUhWUWFpOGdHRlNnNUREVzM2QV95ZAU1UY0lueW05cllaalVBNkRpYWFXY0w3LThaeUhIcHVR"
+        }
+      }
+    }
+  }
+]

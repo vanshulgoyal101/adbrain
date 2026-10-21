@@ -1,0 +1,86 @@
+[
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/campaigns",
+    "form": {
+      "name": "AdBrain core fixture 2026-10-21T15:54 (PAUSED test)",
+      "objective": "OUTCOME_LEADS",
+      "status": "PAUSED",
+      "special_ad_categories": "[]",
+      "is_adset_budget_sharing_enabled": "false"
+    },
+    "status": 200,
+    "body": {
+      "id": "120253646427440526"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adimages",
+    "form": {
+      "bytes": "<image bytes>"
+    },
+    "status": 200,
+    "body": {
+      "images": {
+        "bytes": {
+          "hash": "7839ac3ef1c222d741cc3ca2ea664c20",
+          "height": 1350,
+          "url": "https://scontent.fixc1-11.fna.fbcdn.net/v/t45.1600-4/856748275_122127668823427106_5802747266381728291_n.png?stp=dst-jpg_tt6&_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=d5bd00&_nc_ohc=7J9CxnVd92wQ7kNvwGuEv8o&_nc_oc=AdoIzHHimXYLdB-w8sx2hk8JmhwL4AJtIz17jouSr0ZUJjjB6daEJV54jsfRHQh0uMsgLVGvXyGJsOx64v-Lmwhr&_nc_zt=1&_nc_ht=scontent.fixc1-11.fna&edm=AJNyvH4EAAAA&_nc_gid=rxlmFZRexHbHNkM6A9uFig&_nc_tpa=Q5bMBQKJNdOTM-i_6PambQBQWPlwPiyDcZsa2BW7ZnFk_Jc6-artfzu34me7b8Y-1-Nkpp7-DXDjOc33iA&oh=00_AQNnmiKs6kHt0I11XWFXxxuGs-wwlp0RhZkSrHc30DDncA&oe=6ADEAD3D",
+          "name": "bytes",
+          "url_128": "https://scontent.fixc1-11.fna.fbcdn.net/v/t45.1600-4/856748275_122127668823427106_5802747266381728291_n.png?stp=dst-jpg_s160x160_tt6&_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=d73f9c&_nc_ohc=7J9CxnVd92wQ7kNvwGuEv8o&_nc_oc=AdoIzHHimXYLdB-w8sx2hk8JmhwL4AJtIz17jouSr0ZUJjjB6daEJV54jsfRHQh0uMsgLVGvXyGJsOx64v-Lmwhr&_nc_zt=1&_nc_ht=scontent.fixc1-11.fna&edm=AJNyvH4EAAAA&_nc_gid=rxlmFZRexHbHNkM6A9uFig&_nc_tpa=Q5bMBQJ_6Kq0lCnOtHl-tYKdH9HDLIkqfv5Wf6B4vKA16GTi-AkiZhnGTErt6-rfrWhr70SCIFS958Cv7g&oh=00_AQNdLawEu75Z_CUIbFFApYPcRJw0tLgvC_nPoos_fv-Vqw&oe=6ADEAD3D",
+          "width": 1080,
+          "url_256": "https://scontent.fixc1-11.fna.fbcdn.net/v/t45.1600-4/856748275_122127668823427106_5802747266381728291_n.png?stp=dst-jpg_s320x320_tt6&_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=d73f9c&_nc_ohc=7J9CxnVd92wQ7kNvwGuEv8o&_nc_oc=AdoIzHHimXYLdB-w8sx2hk8JmhwL4AJtIz17jouSr0ZUJjjB6daEJV54jsfRHQh0uMsgLVGvXyGJsOx64v-Lmwhr&_nc_zt=1&_nc_ht=scontent.fixc1-11.fna&edm=AJNyvH4EAAAA&_nc_gid=rxlmFZRexHbHNkM6A9uFig&_nc_tpa=Q5bMBQJo47mxps4qq34IKmqp4cbLE_hF_nZquxJjoY50SGuVqP5AsVJxpjqNDsRGXVga6OTQOUiehlwOqQ&oh=00_AQN-HZejagKkW-AIdXqLGZijlS60QIKo0S36eOEpiAY86Q&oe=6ADEAD3D",
+          "url_256_height": "320",
+          "url_256_width": "256"
+        }
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adsets",
+    "form": {
+      "name": "AdBrain core fixture 2026-10-21T15:54 (PAUSED test) — Ad set",
+      "campaign_id": "120253646427440526",
+      "status": "PAUSED",
+      "daily_budget": "20000",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "LEAD_GENERATION",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "ON_AD",
+      "promoted_object": "{\"page_id\":\"885223068001054\"}",
+      "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"2525495\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":55,\"targeting_automation\":{\"advantage_audience\":0}}"
+    },
+    "status": 200,
+    "body": {
+      "id": "120253646428630526"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adcreatives",
+    "form": {
+      "name": "Diwali Renewal, Starting With Your Spine",
+      "object_story_spec": "{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"7839ac3ef1c222d741cc3ca2ea664c20\",\"message\":\"A $49 new-patient exam with a digital posture scan. Same-day and Saturday appointments.\",\"name\":\"Diwali Renewal, Starting With Your Spine\",\"link\":\"https://adbrain.vanshul.com\",\"call_to_action\":{\"type\":\"LEARN_MORE\",\"value\":{\"lead_gen_form_id\":\"2531491190682703\"}}}}"
+    },
+    "status": 200,
+    "body": {
+      "id": "1148404661464451"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/ads",
+    "form": {
+      "name": "Diwali Renewal, Starting With Your Spine",
+      "adset_id": "120253646428630526",
+      "status": "PAUSED",
+      "creative": "{\"creative_id\":\"1148404661464451\"}"
+    },
+    "status": 200,
+    "body": {
+      "id": "120253646430200526"
+    }
+  }
+]
