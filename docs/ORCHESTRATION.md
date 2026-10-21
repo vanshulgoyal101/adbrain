@@ -96,7 +96,7 @@ P0 issues; only when all three are closed do parked issues resume.
 | Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) lead: PR112 (faster Create model) then Create run 5. If not 3/3, revert `CREATIVE_PROVIDER_ORDER` at once. Done at 3/3 twice with time to spare |
 | Dev | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) with Dev 3: finish PR103 (schema fields) and fix whatever rejects drafts in runs 5 and 6. Split files with Dev 3 directly |
 | QA | [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) lead: `test:core` for Create 3/3 and CSP rendering from recorded real responses. Own the suite layout and CI job |
-| Dev 2 | [#110](https://github.com/vanshulgoyal101/adbrain/issues/110) with QA: the campaign half (Prepare with fallback, PAUSED launch, sync, pause) from recorded real Graph responses. Recording them from one PAUSED test campaign is in scope |
+| Dev 2 | [#109](https://github.com/vanshulgoyal101/adbrain/issues/109) (P0, unparked): launch one PAUSED test campaign on Meta, sync, pause, delete; fix any failure with a core test. #110 campaign half and production Prepare are done |
 | DevOps | [#111](https://github.com/vanshulgoyal101/adbrain/issues/111): required check, post-deploy and daily smoke, automatic rollback, main-equals-production alert |
 
 ### Earlier focus (October 21, before P0)
