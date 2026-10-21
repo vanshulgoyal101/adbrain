@@ -806,6 +806,18 @@ describe("campaign audience workflow", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("continues with default targeting when the AI planner is unavailable", async () => {
+    const rationale = "AI audience planning was unavailable, so this plan uses defaults.";
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ ready: true, fallback: true, targeting: { ...recommended, audience: { interestNames: [], rationale } } }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(screen.getAllByText(rationale).length).toBeGreaterThan(0);
+    expect(saved.input.targeting.audience).toEqual({ interestNames: [], rationale });
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("surfaces failed eligibility checks without offering a Meta submission", async () => {
     mocks.preflight.mockResolvedValueOnce({
       canCreatePaused: false, planHash: null, currency: "INR", selected,

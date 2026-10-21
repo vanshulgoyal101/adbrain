@@ -554,11 +554,12 @@ function BusinessCampaigns({
       body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
       signal,
     });
-    const data = await response.json() as { ready?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
+    const data = await response.json() as { ready?: boolean; fallback?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
     signal.throwIfAborted();
     if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "Could not recommend an audience."));
     const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
-    if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
+    if (data.fallback && recommended.audience) setNotice(recommended.audience.rationale);
+    else if (!recommended.audience?.interestNames.length) throw new Error("The detailed targeting recommendation is incomplete. Try again.");
     setTargeting(targetingToEditor(recommended));
     setIncludedNames((recommended.location?.includedNames ?? []).join("\n"));
     setExcludedNames((recommended.location?.excludedNames ?? []).join("\n"));
@@ -610,7 +611,7 @@ function BusinessCampaigns({
     }
     const signal = beginPreparation();
     try {
-      if (reviewAfterSave && (input.targeting.age?.mode === "ai" || !input.targeting.audience?.interestNames.length)) {
+      if (reviewAfterSave && (input.targeting.age?.mode === "ai" || !input.targeting.audience)) {
         input = await recommendAudience(input, signal);
       }
       signal.throwIfAborted();
