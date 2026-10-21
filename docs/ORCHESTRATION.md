@@ -89,11 +89,11 @@ now `openrouter,google,groq` (live with the PR108 deploy). Root causes known fro
 
 | Worker | Queue |
 | --- | --- |
-| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) after PR108 deploys: one Prepare on Cedar Ridge, then Create runs (3 left). If concepts still take over 60s, switch Create to a faster primary model. Done at Prepare OK plus 3/3 twice |
-| Dev | [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) PR103 (schema field logging) re-runs CI after PR108: `gh pr update-branch 103`. Then use your last run to find which field fails `schema-or-other` and fix it |
-| Dev 2 | [#87](https://github.com/vanshulgoyal101/adbrain/issues/87) `gh pr update-branch 104` so the no-AI Prepare fallback ships. Then the PAUSED test campaign in [#74](https://github.com/vanshulgoyal101/adbrain/issues/74) |
-| QA | [#92](https://github.com/vanshulgoyal101/adbrain/issues/92) `gh pr update-branch 101` so the smoke script ships, then run it after every deploy and post failures as `core` bugs |
-| DevOps | Confirm the PR108 deploy and the provider-order setting in production. Watch CI: a red audit blocks everyone, so fix it the same day |
+| Dev 3 | **Create works** ([#98](https://github.com/vanshulgoyal101/adbrain/issues/98), lead). All 5 Create runs in 30 days ended unresolved at 1 of 3. PR107 and the new provider order (live with PR108) are untested. Run Create now (3 runs). If a concept takes over 60s, make a faster model primary for Create so 3 concepts fit the deadline. Done at 3/3 twice in a row |
+| Dev | **Create rejections** ([#88](https://github.com/vanshulgoyal101/adbrain/issues/88)). PR103 (schema field logging) is re-queued to merge. Then read which field fails `schema-or-other` in Dev 3's runs and fix it without weakening fact checks. Share runs with Dev 3; you have 1 |
+| Dev 2 | **Prepare, then launch** ([#87](https://github.com/vanshulgoyal101/adbrain/issues/87), then [#109](https://github.com/vanshulgoyal101/adbrain/issues/109)). PR104 (no-AI fallback) is re-queued to merge. Then Prepare on Cedar Ridge must succeed. Then #109: one PAUSED test campaign on Meta, sync, pause (never Resume), archive |
+| QA | PR101 shipped: `npm run smoke:core` is on main. Run it after every deploy and post failures as `core` bugs with a red test. When #109 passes manually, make it repeatable with `--campaign` |
+| DevOps | Watch PR103/PR104 merge and deploy. Confirm in production usage events that Google or Groq takes over when OpenRouter is slow. Keep CI green the same day |
 
 ## Historical Dispatch Receipts
 
