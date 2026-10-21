@@ -104,7 +104,7 @@ all are closed do parked issues resume.
 | Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) lead: model bake-off for a faster OpenRouter primary (up to $1), set `OPENROUTER_MODEL` with a recorded before/after, then confirm with Create runs. Done at 3/3 twice with time to spare |
 | Dev | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) with Dev 3: stop the `repeated-opening` rejections and any rule the new model trips, each with a core test. Split files with Dev 3 directly |
 | QA | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98): add the bake-off winner's recorded response to `test:core` and restore the worst-case deadline test once the faster model lands |
-| Dev 2 | [#109](https://github.com/vanshulgoyal101/adbrain/issues/109): launch one PAUSED test campaign on Meta, sync, pause, delete; fix any failure with a core test |
+| Dev 2 | First [#134](https://github.com/vanshulgoyal101/adbrain/issues/134): a "Create campaign" button on Review that opens the Campaigns composer with the approved ads selected (owner hit this in production). Then [#109](https://github.com/vanshulgoyal101/adbrain/issues/109) through that button: launch one PAUSED test campaign on Meta, sync, pause, delete; fix any failure with a core test |
 | DevOps | [#111](https://github.com/vanshulgoyal101/adbrain/issues/111): `core` is required. Left: move `drift` into its own scheduled workflow, automate main-to-dev sync, propose a rollback drill to the owner |
 
 ### Earlier focus (October 21, before P0)
