@@ -214,6 +214,7 @@ async function generateConcept(
       temperature: attempt === 0 ? 0.8 : 0.4,
       maxTokens: env.CREATIVE_MAX_TOKENS,
       reasoningEffort: env.CREATIVE_REASONING_EFFORT,
+      attemptTimeoutMs: env.CREATIVE_ATTEMPT_TIMEOUT_MS,
       cache: false,
       signal,
       onAttempt: (entry) => {
