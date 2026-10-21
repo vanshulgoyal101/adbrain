@@ -71,6 +71,16 @@ describe("scanAdCopy with healthcare claims", () => {
     }
   });
 
+  it("flags healing claims but not the word health", () => {
+    for (const text of ["We heal back pain", "Adjustments that heals", "Healing starts here", "Self-healing care"]) {
+      expect(scanAdCopy(text, { bannedClaims: claims }).some((f) => f.rule === "banned-claim"), text).toBe(true);
+    }
+    for (const text of ["Questions about your spinal health?", "Healthy posture habits", "Healthcare in Austin"]) {
+      expect(scanAdCopy(text, { bannedClaims: claims }), text).toEqual([]);
+    }
+    expect(scanAdCopy("Your health matters", { bannedClaims: ["health"] })).toEqual([{ rule: "banned-claim", detail: "health" }]);
+  });
+
   it("passes compliant service-led copy", () => {
     const findings = scanAdCopy(
       "Chiropractic care in Austin. Same-day appointments for new patients.",

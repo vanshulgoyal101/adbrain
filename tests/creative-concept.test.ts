@@ -216,6 +216,19 @@ describe("creative concept contract", () => {
     ).toBe(false);
   });
 
+  it("accepts a cited amount before punctuation and requires the whole amount", () => {
+    const priced = { ...input, brand: { ...input.brand, offers: ["$1,200 rebate on 5 kW systems", "15% off for the first 50 homes"] } };
+    const quoted = { ...concept, sourceQuotes: ["$1,200 rebate on 5 kW systems", "15% off for the first 50 homes"] };
+    expect(validateConcept({ ...quoted, primary_text: "Ask about the $1,200 rebate. Then get 15% off." }, priced))
+      .toMatchObject({ success: true });
+    expect(validateConcept({ ...quoted, primary_text: "For $1,200, upgrade your roof." }, priced))
+      .toMatchObject({ success: true });
+    for (const [text, term] of [["Pay $1 today.", "$1"], ["Pay $1,20 today.", "$1,20"], ["Get 5% off.", "5%"]]) {
+      expect(validateConcept({ ...quoted, primary_text: text }, priced), text)
+        .toMatchObject({ success: false, issues: [expect.stringContaining(`unsupported-commercial-claim: ${term};`)] });
+    }
+  });
+
   it("applies healthcare checks to the on-image supporting line too", () => {
     expect(
       validateConcept(
