@@ -224,7 +224,11 @@ but retains 10,000 units per completed image; paid image rows carry zero tokens,
 and their estimated USD costs may be unknown. Unresolved work keeps its ID and
 hold across restarts and months. Only a settled whole-request failure with no
 saved results can release unused reservation; one failed angle cannot fail the
-intent while sibling work remains in flight. An unknown owner recovery lookup claims a
+intent while sibling work remains in flight. After the
+[settle-holds migration](../db/migrations/20261021_creative_generation_settle_holds.sql)
+(#138), a settled partial run whose every angle recorded its usage keeps only
+that usage plus 10,000 units per saved image; runs with unknown usage stay
+`unresolved` with their full hold. An unknown owner recovery lookup claims a
 zero-quota `abandoned` ID under the same lock, preventing a delayed POST from
 starting after the client receives a 404. This is a conservative quota fence, **not** a
 payment ledger or provider cost reconciliation. The [API contract](API_REFERENCE.md#generate-and-recover)
@@ -316,6 +320,7 @@ alone is not a safe deployment plan.
 | [20260918_product_events.sql](../db/migrations/20260918_product_events.sql) | Structured event table/retention; enable database logging only after application |
 | [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
 | [20261001_creative_regeneration_claims.sql](../db/migrations/20261001_creative_regeneration_claims.sql) | Service-only paid regeneration fence; apply before serving the updated route and verify private grants |
+| [20261021_creative_generation_settle_holds.sql](../db/migrations/20261021_creative_generation_settle_holds.sql) | Same-signature progress RPC; settled partial runs release unused holds (#138); apply before serving the updated route |
 
 For each upgrade: inventory deployed objects and grants, review existing data,
 test fresh/repeated-upgrade/concurrency paths locally, prepare backup and code
