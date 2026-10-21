@@ -78,6 +78,63 @@ describe("LLM provider fallthrough", () => {
 });
 
 describe("LLM 429 cooldown", () => {
+  it("skips an overloaded model's other keys after a 5xx", async () => {
+    setEnv({ GROQ_API_KEYS: "a,b,c", OPENROUTER_API_KEYS: "ok" });
+    mockFetchByHost({ "api.groq.com": () => httpError(503), "openrouter.ai": () => ok("fallback") });
+    const { complete } = await import("@/lib/llm");
+    expect(await complete([{ role: "user", content: "hi" }])).toMatchObject({ provider: "openrouter" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits out a short rate limit on every key instead of falling through", async () => {
+    vi.useFakeTimers();
+    try {
+      setEnv({ GROQ_API_KEYS: "a,b", OPENROUTER_API_KEYS: "ok" });
+      let groqCalls = 0;
+      mockFetchByHost({
+        "api.groq.com": () => ++groqCalls <= 2
+          ? new Response("slow down", { status: 429, headers: { "retry-after": "3" } })
+          : ok("fast"),
+        "openrouter.ai": () => ok("slow fallback"),
+      });
+      const { complete } = await import("@/lib/llm");
+      const result = complete([{ role: "user", content: "hi" }]);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(result).resolves.toMatchObject({ provider: "groq", text: "fast" });
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls through when the rate limit outlasts the wait cap", async () => {
+    setEnv({ GROQ_API_KEYS: "a,b", OPENROUTER_API_KEYS: "ok" });
+    mockFetchByHost({
+      "api.groq.com": () => new Response("slow down", { status: 429, headers: { "retry-after": "45" } }),
+      "openrouter.ai": () => ok("fallback"),
+    });
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "hi" }])).resolves.toMatchObject({ provider: "openrouter" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops a rate-limit wait when the caller aborts", async () => {
+    vi.useFakeTimers();
+    try {
+      setEnv({ GROQ_API_KEYS: "solo" });
+      global.fetch = vi.fn(async () => new Response("slow down", { status: 429, headers: { "retry-after": "10" } })) as unknown as typeof fetch;
+      const { complete } = await import("@/lib/llm");
+      const controller = new AbortController();
+      const result = expect(complete([{ role: "user", content: "hi" }], { signal: controller.signal })).rejects.toThrow("caller gone");
+      await vi.advanceTimersByTimeAsync(1_000);
+      controller.abort(new Error("caller gone"));
+      await result;
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("parks a rate-limited key so it isn't retried on the next call", async () => {
     // Single provider, single key: once it 429s it must be skipped next time.
     setEnv({ GROQ_API_KEYS: "solo" });

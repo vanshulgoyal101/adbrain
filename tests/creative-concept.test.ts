@@ -63,6 +63,18 @@ describe("creative concept contract", () => {
     expect(validateConcept({ ...concept, supportingText: "" }, input)).toMatchObject({ success: true, concept: { supportingText: null } });
   });
 
+  it("keeps a verbose rationale but still checks its claims", () => {
+    const long = `${"Plain reason to enquire. ".repeat(28)}`;
+    expect(long.length).toBeGreaterThan(600);
+    expect(validateConcept({ ...concept, rationale: long }, input).success).toBe(true);
+    expect(validateConcept({ ...concept, rationale: `${long} Offer $49 visits.` }, input)).toMatchObject({
+      success: false, issues: [expect.stringContaining("unsupported-commercial-claim: $49")],
+    });
+    expect(validateConcept({ ...concept, rationale: "x".repeat(1_201) }, input)).toMatchObject({
+      success: false, issues: [expect.stringContaining("schema:rationale:too_big")],
+    });
+  });
+
   it("does not treat previous ads as evidence and checks description claims", () => {
     expect(validateConcept({ ...concept, description: "Free installation" }, {
       ...input, recentCopy: [{ headline: "Free installation", primary_text: "Free installation" }],

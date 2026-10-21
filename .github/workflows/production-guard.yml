@@ -1,0 +1,87 @@
+name: Production guard
+on:
+  deployment_status:
+  schedule:
+    - cron: "*/15 * * * *" # main equals production
+    - cron: "30 3 * * *" # daily read-only core smoke
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  smoke:
+    if: >-
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success'
+      && github.event.deployment.environment == 'Production')
+      || github.event.schedule == '30 3 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency: production-smoke
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SHA: ${{ github.event.deployment.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Wait until production serves this commit
+        id: wait
+        if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
+        run: node scripts/production-guard.mjs wait "$SHA"
+      - name: Read-only core smoke (one retry)
+        id: smoke
+        if: steps.wait.outputs.superseded != 'true'
+        env:
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+        run: |
+          node scripts/smoke-core.mjs | tee smoke.txt && exit 0
+          sleep 60
+          node scripts/smoke-core.mjs | tee smoke.txt
+      - name: Roll production back
+        if: failure() && steps.smoke.outcome == 'failure' && github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
+        run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
+      - name: Open core bug
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          smoke=$(grep -E '^(PASS|FAIL)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
+          rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, wait failed, or no VERCEL_TOKEN)")
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops \
+            -t "Production smoke failed on ${SHA::7} ($GITHUB_EVENT_NAME)" \
+            -b "$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/RELEASING.md#production-guard\n' "$run" "$smoke" "$rollback")"
+
+  drift:
+    if: github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Main equals production
+        run: |
+          [ -n "$VERCEL_TOKEN" ] || { echo "::warning::VERCEL_TOKEN is not set; drift check skipped"; exit 0; }
+          node scripts/production-guard.mjs drift "$(git rev-parse HEAD)" "$(git log -1 --format=%ct)" | tee drift.txt
+      - name: Alert once
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Production is not main HEAD"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = "0" ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+            -b "$(printf '%s\n\nRun: %s/%s/actions/runs/%s\nRecovery: docs/RELEASING.md#production-guard\n' "$(cat drift.txt 2>/dev/null)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"

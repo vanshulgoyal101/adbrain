@@ -41,6 +41,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `test` | One Vitest run in Node, components opt into jsdom |
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
 | `test:coverage` | V8 coverage, two thread workers, threshold gate and artifacts |
+| `test:core` | Offline core regression gate (`tests/core`); no network, credentials or provider cost |
 | `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas |
 | `test:workspace-browser` | Playwright suite; explicitly loads `.env.local` if present, can access real accounts |
 | `smoke:core` | Headless production browser smoke; default signs in, views five pages, and suppresses automatic sync and telemetry writes. Opt-in flags below mutate production. |
@@ -62,6 +63,17 @@ Run `npm run smoke:core` after a production release. It uses Playwright's headle
 `npm run smoke:core -- --create` additionally interviews the user through Create, sends at most one three-ad generation request, waits for the result and prints the saved count. This is a paid provider run. Check the remaining approval in [#88](https://github.com/vanshulgoyal101/adbrain/issues/88) before running it, log the resulting count there, and do not rerun after a partial or uncertain result until saved work is reconciled.
 
 `npm run smoke:core -- --campaign` requires the Solaride workspace, a Solaride lead form, approved creative, and a reviewed Solaride Meta account. It creates one uniquely named test campaign PAUSED, syncs, reconfirms PAUSED, and deletes only that campaign from Meta and AdBrain. A successful removal is labeled Archive in the smoke output; the product actually deletes it. On failure, reconcile by the printed campaign ID or unique test name before another run. The Resume check opens and closes the connection review only: it does not activate delivery or prove an actual status resume. The campaign mode has not been exercised against production as part of implementing this command.
+
+### Core Regression Gate
+
+`npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time:
+
+- **Create** (`create-route`, `create-concept`): three ads saved from production run 4 through the production provider order, validator repair, OpenRouter overload falling back to Gemini without trying OpenRouter's other keys, and run 4's recorded OpenRouter and image latencies fitting the 270 s route deadline. Recorded and gold-labelled `evals/creative` concepts must be accepted or rejected as graded.
+- **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
+- **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
+- **CSP** (`csp-render`): the production policy is pinned, and the Create review renders three ads whose images and requests the policy allows, without `eval`.
+
+Fixtures in `tests/core/fixtures` come from production recordings and `evals/creative`; each file or test notes its source and any synthetic part. When a gate change is intended, update the fixture or pinned policy in the same PR and say why.
 
 ### Focused Local Loop
 

@@ -103,11 +103,13 @@ export class LLMError extends Error {
   readonly providerRequestId?: string;
   readonly providerFinalStatus?: "completed" | "failed" | "unknown";
   readonly code?: LLMFailureCode;
+  readonly retryAfterMs?: number;
 
   constructor(
     message: string,
     opts: { provider: string; status?: number; retryable: boolean; model?: string; usage?: TokenUsage;
-      providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown"; code?: LLMFailureCode },
+      providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown"; code?: LLMFailureCode;
+      retryAfterMs?: number },
   ) {
     super(message);
     this.name = "LLMError";
@@ -119,6 +121,7 @@ export class LLMError extends Error {
     this.providerRequestId = opts.providerRequestId;
     this.providerFinalStatus = opts.providerFinalStatus;
     this.code = opts.code ?? (opts.status ? `HTTP_${opts.status}` : undefined);
+    this.retryAfterMs = opts.retryAfterMs;
   }
 }
 

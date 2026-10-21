@@ -244,7 +244,11 @@ chooses the source photo. Source uploads can remain if later steps fail.
 [The orchestrator](../src/lib/llm/index.ts) supports Google plus OpenAI-compatible
 Groq, OpenRouter, and Cerebras. It follows the selected standard/budget order,
 round-robins keys within each provider, skips missing pools, and parks HTTP-429
-keys for 60 seconds. First successful provider response wins. Cancellation and
+keys for the provider's Retry-After (at most 60 seconds). When every key of a
+model is parked for 20 seconds or less, it waits once and retries that model
+before falling through; Groq keys share one organization tokens-per-minute
+limit, so rotating keys does not add capacity. A 5xx skips that model's other
+keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
 The text adapters use pinned `ai@7.0.116`, `@ai-sdk/google@4.0.82`, and
@@ -258,7 +262,7 @@ The SDK receives direct configured provider models and keys, never a gateway
 model string. No AI Gateway account, new service, model change, or image adapter
 is required. SDK retries are explicitly zero; the facade alone rotates keys and
 providers. Caller cancellation stops further attempts. An attempt deadline (90 seconds
-by default, `attemptTimeoutMs` per task) or truncated output skips the rest of
+by default, `attemptTimeoutMs` per task), truncated output or an HTTP 5xx skips the rest of
 that model's key pool and tries the next configured model or provider; with no
 other model left, the original timeout or truncation error is thrown. Each
 attempt reports a sanitized failure code (`TIMEOUT`, `DEADLINE` for the caller's

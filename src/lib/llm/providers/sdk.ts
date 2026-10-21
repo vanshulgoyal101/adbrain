@@ -79,8 +79,10 @@ export async function sdkCompletion(
     if (APICallError.isInstance(error)) {
       const status = error.statusCode;
       const headers = error.responseHeaders;
+      const retryAfter = Number(headers?.["retry-after"]);
       throw new LLMError(`${provider}: ${status ? `HTTP ${status}` : "provider request failed"}`, {
         provider, status, providerFinalStatus: "unknown", code: status ? `HTTP_${status}` : "TRANSPORT",
+        retryAfterMs: Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : undefined,
         providerRequestId: providerId(headers?.["x-request-id"] ?? headers?.["x-openrouter-request-id"] ?? headers?.["x-goog-request-id"]),
         retryable: status === undefined || status === 429 || status >= 500 || status === 403 || (provider !== "google" && status === 401),
       });

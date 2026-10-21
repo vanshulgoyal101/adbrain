@@ -179,6 +179,14 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
   }
 
+  // The editor cannot answer interview questions; give it usable default targeting instead.
+  const audienceFallback = (errorCode: string) => {
+    recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "partial", businessId: business.id, attributes: { errorCode } });
+    return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft!) });
+  };
+  if (audienceDraft && result.handoff) return audienceFallback("PLAN_AUDIENCE_HANDOFF");
+  if (audienceDraft && (!result.ready || !result.plan)) return audienceFallback("PLAN_AUDIENCE_QUESTIONS");
+
   if (result.handoff) {
     recordProductEvent({ kind: "workflow", name: "campaign.interview", outcome: "partial", businessId: business.id,
       attributes: { errorCode: result.handoff.reason === "interview_limit" ? "INTERVIEW_LIMIT" : "NO_PROGRESS" } });
@@ -215,6 +223,7 @@ async function handlePOST(req: Request) {
     leadFormIds: leadForms.map((form) => form.id),
   });
   if (!draftResult.ok) {
+    if (audienceDraft) return audienceFallback("PLAN_AUDIENCE_INVALID");
     return NextResponse.json({
       ready: false,
       questions: [note(draftResult.error)],

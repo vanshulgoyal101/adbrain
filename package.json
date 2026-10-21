@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --pool=threads --maxWorkers=2",
+    "test:core": "vitest run tests/core",
     "test:workspace-browser": "node --env-file-if-exists=.env.local ./node_modules/@playwright/test/cli.js test",
     "test:workspace-ux": "node --env-file-if-exists=.env.local scripts/check-workspace-ux.mjs",
     "test:scroll-layout": "node scripts/check-scroll-layout.mjs",

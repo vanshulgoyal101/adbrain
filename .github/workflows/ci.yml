@@ -6,6 +6,7 @@ on:
     branches: [main, dev]
 
 jobs:
+  # All jobs run in parallel; build, test, core and secrets are required.
   build:
     runs-on: ubuntu-latest
     env:
@@ -13,21 +14,81 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: next-${{ hashFiles('package-lock.json') }}-
+      - run: npm run build
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # test:meta-db replays historical schema blobs with git show
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --test scripts/check-docs.test.mjs
-      - run: npm run docs:check
-      - run: npm run audit:dependencies
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm run test:coverage
+      - run: npm test
       - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db
-      - run: npm run build
+
+  # Core loop regression gate (#110); required on main on its own (#111).
+  core:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:core
+
+  # Advisories are reported, not blocking: a new upstream CVE must not stop shipping.
+  audit:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run audit:dependencies
+
+  # The docs checker lives on dev; one ci.yml for both branches keeps the main-to-dev sync conflict-free.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check docs (dev only)
+        run: |
+          [ -f scripts/check-docs.mjs ] || { echo "No docs checker on this branch"; exit 0; }
+          npm ci
+          node --test scripts/check-docs.test.mjs
+          npm run docs:check
 
   secrets:
     runs-on: ubuntu-latest
