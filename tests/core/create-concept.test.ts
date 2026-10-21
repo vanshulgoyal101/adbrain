@@ -25,6 +25,17 @@ describe("core: Create concept validation on a recorded production concept", () 
     expect(rules(overrun)).toEqual([]);
   });
 
+  it("clips an over-long link description instead of discarding the concept", () => {
+    const long = `${recorded.concept.description} with flexible evening and weekend appointments for busy adults`;
+    expect(long.length).toBeGreaterThan(100);
+    const result = validateConcept({ ...recorded.concept, description: long }, input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.concept.description.length).toBeLessThanOrEqual(100);
+      expect(long.startsWith(result.concept.description)).toBe(true);
+    }
+  });
+
   it("still rejects uncited or invented claims and over-length ad copy", () => {
     expect(rules({
       ...recorded.concept,
