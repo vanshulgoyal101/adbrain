@@ -92,7 +92,7 @@ function buildRegistry(routing: "standard" | "budget" | "creative" = "standard")
 
   const orderValue = routing === "budget"
     ? env.LLM_BUDGET_PROVIDER_ORDER
-    : routing === "creative" ? env.CREATIVE_PROVIDER_ORDER
+    : routing === "creative" ? env.CREATIVE_PROVIDER_ORDER || env.LLM_PROVIDER_ORDER
       : env.LLM_PROVIDER_ORDER;
   const order = orderValue.split(",")
     .map((s) => s.trim())

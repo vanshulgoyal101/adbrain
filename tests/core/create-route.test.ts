@@ -106,7 +106,7 @@ beforeEach(() => {
     OPENROUTER_API_KEYS: "core-openrouter",
     GROQ_API_KEYS: "core-groq",
     CEREBRAS_API_KEYS: "",
-    // Production values; CREATIVE_PROVIDER_ORDER is unset there, so the code default applies.
+    // Production values; CREATIVE_PROVIDER_ORDER is unset there, so Create follows LLM_PROVIDER_ORDER.
     LLM_PROVIDER_ORDER: "openrouter,google,groq",
     CREATIVE_PROVIDER_ORDER: undefined,
     IMAGE_PROVIDER: "openrouter",
@@ -201,8 +201,8 @@ describe("core: Create route on recorded run 4", () => {
   it("saves all three recorded concepts through the production creative route", async () => {
     stubProviders();
     await expectThreeSavedAds(await (await postCreate())());
-    // CREATIVE_PROVIDER_ORDER default: Groq first.
-    expect(textCalls("groq")).toHaveLength(3);
+    // Run 4's provider: OpenRouter, first in LLM_PROVIDER_ORDER.
+    expect(textCalls("openrouter")).toHaveLength(3);
     expect(calls.filter(({ url }) => !url.includes("/images"))).toHaveLength(3);
     expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(3);
   });
@@ -210,26 +210,26 @@ describe("core: Create route on recorded run 4", () => {
   it("repairs the rejected first value concept and still saves 3/3", async () => {
     stubProviders({ text: valueRejectedFirst });
     await expectThreeSavedAds(await (await postCreate())());
-    const value = textCalls("groq").filter(({ body }) => body.includes("Save money / value"));
+    const value = textCalls("openrouter").filter(({ body }) => body.includes("Save money / value"));
     expect(value).toHaveLength(2);
     expect(value[1].body).toContain("unsupported-commercial-claim");
   });
 
-  it("falls back to OpenRouter when Groq is overloaded, without retrying Groq's other keys", async () => {
-    vi.stubEnv("GROQ_API_KEYS", "core-groq-1,core-groq-2");
-    stubProviders({ down: { groq: 503 } });
+  it("falls back to Gemini when OpenRouter is overloaded, without retrying OpenRouter's other keys", async () => {
+    vi.stubEnv("OPENROUTER_API_KEYS", "core-openrouter-1,core-openrouter-2");
+    stubProviders({ down: { openrouter: 503 } });
     await expectThreeSavedAds(await (await postCreate())());
-    expect(textCalls("groq")).toHaveLength(3);
     expect(textCalls("openrouter")).toHaveLength(3);
-    expect(textCalls("google")).toHaveLength(0);
+    expect(textCalls("google")).toHaveLength(3);
+    expect(textCalls("groq")).toHaveLength(0);
   });
 
   it("fits the 270 s route deadline at run 4's recorded OpenRouter and image latencies", async () => {
     mocks.fastRaster = true;
     const post = await postCreate();
     const clock = useVirtualDeadlines();
-    // Run 4 was answered by OpenRouter only; Groq and Gemini are down here so it is again.
-    stubProviders({ down: { groq: 503, google: 503 }, text: valueRejectedFirst, recordedLatency: true });
+    // Run 4 was answered by OpenRouter only; the fallbacks are down so a cut-off attempt fails here too.
+    stubProviders({ down: { google: 503, groq: 503 }, text: valueRejectedFirst, recordedLatency: true });
     const response = await settleInVirtualTime(post());
     const elapsed = Date.now() - clock.startedAt;
     await expectThreeSavedAds(response);
