@@ -38,7 +38,7 @@ const cooldownUntil = new Map<string, number>();
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
-function buildRegistry(routing: "standard" | "budget" = "standard"): RegisteredProvider[] {
+function buildRegistry(routing: "standard" | "budget" | "creative" = "standard"): RegisteredProvider[] {
   const env = getEnv();
 
   const registry: Record<string, RegisteredProvider[] | RegisteredProvider | null> = {
@@ -92,7 +92,8 @@ function buildRegistry(routing: "standard" | "budget" = "standard"): RegisteredP
 
   const orderValue = routing === "budget"
     ? env.LLM_BUDGET_PROVIDER_ORDER
-    : env.LLM_PROVIDER_ORDER;
+    : routing === "creative" ? env.CREATIVE_PROVIDER_ORDER
+      : env.LLM_PROVIDER_ORDER;
   const order = orderValue.split(",")
     .map((s) => s.trim())
     .filter(Boolean);

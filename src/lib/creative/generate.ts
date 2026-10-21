@@ -208,6 +208,8 @@ async function generateConcept(
     const env = getEnv();
     let sawProviderAttempt = false;
     const completion = await complete(messages, {
+      routing: "creative",
+      attemptTimeoutMs: 45_000,
       json: true,
       responseSchema: creativeConceptSchema,
       temperature: attempt === 0 ? 0.8 : 0.4,

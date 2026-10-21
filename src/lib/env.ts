@@ -43,6 +43,11 @@ const schema = z.object({
     .string()
     .optional()
     .default("groq,google,cerebras"),
+  // OpenRouter qwen3.8-max takes 65-90s per concept; three must fit the 270s Create deadline.
+  CREATIVE_PROVIDER_ORDER: z
+    .string()
+    .optional()
+    .default("google,openrouter,groq"),
   GEMINI_MODEL: z.string().optional().default("gemini-3.6-flash"),
   // Groq retires models with little notice (llama-3.3-70b-versatile now 404s),
   // so the model is configurable rather than hardcoded.
