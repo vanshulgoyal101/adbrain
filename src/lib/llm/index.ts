@@ -181,13 +181,15 @@ async function callProviders(
             : err.status && err.status >= 500 ? "PROVIDER_SERVER"
               : err.status ? "PROVIDER_CLIENT" : "TRANSPORT" : "UNKNOWN");
         if (err instanceof LLMError && err.status === 429) {
-          cooldownUntil.set(coolKey, Date.now() + COOLDOWN_MS);
+          cooldownUntil.set(coolKey, Date.now() + Math.min(err.retryAfterMs ?? COOLDOWN_MS, COOLDOWN_MS));
         }
         // Another key on the same model would time out or truncate the same way; try the next model.
         if (err instanceof LLMError && !err.retryable && err.status === undefined) {
           terminal = err;
           break;
         }
+        // A 5xx means the model is overloaded or down for every key.
+        if (err instanceof LLMError && err.status !== undefined && err.status >= 500) break;
       }
     }
   }
