@@ -23,6 +23,18 @@ describe("task-aware LLM routing", () => {
     expect(result.provider).toBe("openrouter");
   });
 
+  it("routes Create concepts through the creative pool, Gemini first by default", async () => {
+    delete process.env.CREATIVE_PROVIDER_ORDER;
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({
+      candidates: [{ content: { parts: [{ text: "fast" }] }, finishReason: "STOP" }],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { complete } = await import("@/lib/llm");
+    const result = await complete([{ role: "user", content: "concept" }], { routing: "creative" });
+    expect(result.provider).toBe("google");
+    expect(String(fetchMock.mock.calls[0][0])).toContain("generativelanguage.googleapis.com");
+  });
+
   it("keeps budget tasks off OpenRouter even when it is first globally", async () => {
     const fetchMock = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: "budget" } }] }));
     vi.stubGlobal("fetch", fetchMock);

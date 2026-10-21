@@ -122,6 +122,7 @@ an application release.
 | `CEREBRAS_API_KEYS` | Empty | Cerebras key pool |
 | `LLM_PROVIDER_ORDER` | `google,groq,openrouter,cerebras` | Standard routing order |
 | `LLM_BUDGET_PROVIDER_ORDER` | `groq,google,cerebras` | Budget routing; not a free-service guarantee |
+| `CREATIVE_PROVIDER_ORDER` | `google,openrouter,groq` | Create concept routing; 45s per attempt before the next provider |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Google model |
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model |
 | `OPENROUTER_MODEL` | `qwen/qwen3.8-max-0902` | OpenRouter text model; a comma list is tried in order |
