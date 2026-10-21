@@ -10,6 +10,7 @@ beforeEach(() => {
   process.env.OPENROUTER_API_KEYS = "openrouter-key";
   process.env.LLM_PROVIDER_ORDER = "openrouter,groq,google,cerebras";
   process.env.LLM_BUDGET_PROVIDER_ORDER = "groq,google,cerebras";
+  delete process.env.CREATIVE_PROVIDER_ORDER;
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -23,14 +24,19 @@ describe("task-aware LLM routing", () => {
     expect(result.provider).toBe("openrouter");
   });
 
-  it("routes Create concepts through the creative pool, Groq first by default", async () => {
-    delete process.env.CREATIVE_PROVIDER_ORDER;
-    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: "fast" } }] }));
+  it("routes Create concepts by LLM_PROVIDER_ORDER unless CREATIVE_PROVIDER_ORDER is set", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: "concept" } }] }));
     vi.stubGlobal("fetch", fetchMock);
     const { complete } = await import("@/lib/llm");
-    const result = await complete([{ role: "user", content: "concept" }], { routing: "creative" });
-    expect(result.provider).toBe("groq");
-    expect(String(fetchMock.mock.calls[0][0])).toContain("api.groq.com");
+    const standard = await complete([{ role: "user", content: "concept" }], { routing: "creative" });
+    expect(standard.provider).toBe("openrouter");
+
+    vi.resetModules();
+    process.env.CREATIVE_PROVIDER_ORDER = "groq,openrouter,google";
+    const { complete: completeOverride } = await import("@/lib/llm");
+    const override = await completeOverride([{ role: "user", content: "concept" }], { routing: "creative" });
+    expect(override.provider).toBe("groq");
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("api.groq.com");
   });
 
   it("keeps budget tasks off OpenRouter even when it is first globally", async () => {
