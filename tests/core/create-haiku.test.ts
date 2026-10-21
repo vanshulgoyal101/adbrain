@@ -162,6 +162,22 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     expect(variants[1].llmUsage.map(({ validation }) => validation?.rules)).toEqual([["repeated-headline", "repeated-opening"], undefined]);
   });
 
+  it("does not read repeated prices like '$49,' as all-caps shouting (#98 run 9)", async () => {
+    const { parseJSON } = await import("@/lib/llm");
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { scanAdCopy } = await import("@/lib/creative/slopScan");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const angle = AD_ANGLES.find(({ name }) => name === haiku.priceToken.angleName)!;
+    const reply = parseJSON<{ primary_text: string; supportingText: string }>(haiku.priceToken.content);
+    expect(reply.primary_text).toContain("$49,");
+    // The recorded reply with its price stated a second time, as Haiku's value ads often do.
+    const repeated = { ...reply, supportingText: `${reply.supportingText}, $49.` };
+    expect(validateConcept(repeated, { brand: run4.brand, brief: run4.brief, angle })).toMatchObject({ success: true });
+    // Real shouting is still rejected.
+    expect(scanAdCopy("BOOK YOUR $49, VISIT TODAY").map(({ rule }) => rule)).toContain("all-caps");
+    expect(scanAdCopy("Visits from $49, $49.00 in 2026").map(({ rule }) => rule)).not.toContain("all-caps");
+  });
+
   it("clips Haiku's over-long visual.medium label instead of discarding the concept", async () => {
     const { parseJSON } = await import("@/lib/llm");
     const { validateConcept } = await import("@/lib/creative/concept");

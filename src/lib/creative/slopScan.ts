@@ -49,7 +49,8 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
   const bangs = (text.match(/!/g) ?? []).length;
   if (bangs > 2) findings.push({ rule: "exclamation-spam", detail: String(bangs) });
 
-  const caps = words.filter((w) => w.length > 3 && w === w.toUpperCase()).length;
+  // Shouting needs letters: "$49," or "2026" equal their uppercase but are not caps.
+  const caps = words.filter((w) => w.length > 3 && w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w)).length;
   if (caps > 1) findings.push({ rule: "all-caps", detail: `${caps} words` });
 
   if (opts.maxWords && words.length > opts.maxWords) {
