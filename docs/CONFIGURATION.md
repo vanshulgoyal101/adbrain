@@ -233,6 +233,7 @@ an application release.
 | `CREATIVE_MAX_TOKENS` | `6000` | Integer 1800-16000 |
 | `CREATIVE_REASONING_EFFORT` | `medium` | `minimal`, `low`, `medium`, `high` |
 | `CREATIVE_ATTEMPT_TIMEOUT_MS` | `90000` | Integer 15000-120000; per Create concept attempt. The 90 s default fits qwen3.8-max (65-90 s). With a faster model set 60000: three concepts that each answer just before the limit, plus the last image, then fit the 270 s Create deadline (`test:core`) |
+| `CREATIVE_CONCEPT_SCHEDULE` | `serial` | `serial` or `parallel`. `parallel` starts all Create concept calls at once; each still validates against earlier concepts (repeated headline/opening → normal repair). #142 measure on Haiku, 3 briefs × 2: p50 60.1 s → 28.2 s, first-attempt pass 12/18 → 16/18, judge 3.88 → 4.39 |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
 | `LLM_MONTHLY_TOKEN_LIMIT` | `2000000` | Nonnegative integer; 0 disables quota checking |
 

@@ -147,13 +147,16 @@ export async function generateVariants(params: {
   for (const angle of angles) progress(angle, "queued");
 
   const recentCopy = [...(params.recentCopy ?? []).slice(0, 12)];
+  // Parallel: every concept call starts at once; each still validates against the
+  // concepts before it (repeated headline/opening), which then trigger the usual repair.
+  const parallel = getEnv().CREATIVE_CONCEPT_SCHEDULE === "parallel";
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
   const outcomes = await Promise.allSettled(
     angles.map(async (angle) => {
       try {
         const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts };
-        const waitForTurn = startNext;
+        const waitForTurn = parallel ? Promise.resolve() : startNext;
         let notifyNext!: () => void;
         startNext = new Promise<void>((resolve) => { notifyNext = resolve; });
         const earlierConcepts = planning.then(() => {
