@@ -151,8 +151,10 @@ and [the matched comparison](qa/flare-quality-2026-09-13.md).
 7. Verify main CI and Vercel deployment success for the resulting merge SHA.
    Check the canonical production URL and the actual affected user workflow.
    A homepage HTTP 200 is not verification of an authenticated feature.
-8. Sync the production merge back into `dev`, leave the working branch on `dev`,
-   and record the PR, SHAs, CI/deployment links, smoke results, and remaining gaps.
+8. [`sync-dev.yml`](../.github/workflows/sync-dev.yml) merges every push to `main`
+   into `dev`. On a conflict it opens one `dev cannot merge main automatically`
+   issue; merge by hand, push `dev` and rerun it. Record the PR, SHAs,
+   CI/deployment links, smoke results, and remaining gaps.
 
 Useful read-only checks (run from this repository):
 
@@ -227,8 +229,11 @@ anyone watching (owner-approved automatic rollback, #111):
   `core` `bug` issue with the failing step.
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
   (no rollback).
-- **Every 15 minutes** it fails and opens one `Production is not main HEAD` issue
-  if main HEAD is not live 15 minutes after it landed.
+- **Every 15 minutes**
+  [`production-drift.yml`](../.github/workflows/production-drift.yml) fails and
+  opens one `Production is not main HEAD` issue if main HEAD is not live
+  15 minutes after it landed. It is a separate workflow so commits only show
+  checks that ran.
 
 It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift

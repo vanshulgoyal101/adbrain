@@ -1,0 +1,34 @@
+name: Production drift
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Main equals production
+        run: |
+          [ -n "$VERCEL_TOKEN" ] || { echo "::warning::VERCEL_TOKEN is not set; drift check skipped"; exit 0; }
+          node scripts/production-guard.mjs drift "$(git rev-parse HEAD)" "$(git log -1 --format=%ct)" | tee drift.txt
+      - name: Alert once
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Production is not main HEAD"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = "0" ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+            -b "$(printf '%s\n\nRun: %s/%s/actions/runs/%s\nRecovery: docs/RELEASING.md#production-guard\n' "$(cat drift.txt 2>/dev/null)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
