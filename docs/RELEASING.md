@@ -215,6 +215,31 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
    database as an improvised code rollback. Data recovery needs its own plan.
 5. Verify the affected workflow after recovery and record the cause and evidence.
 
+### Production guard
+
+[`production-guard.yml`](../.github/workflows/production-guard.yml) runs without
+anyone watching (owner-approved automatic rollback, #111):
+
+- **After each successful Production deployment** it waits until
+  `adbrain.vanshul.com` serves that commit, then runs the read-only
+  `npm run smoke:core` (one retry after 60 s). If the smoke still fails, it rolls
+  production back to the newest earlier READY production deployment and opens a
+  `core` `bug` issue with the failing step.
+- **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
+  (no rollback).
+- **Every 15 minutes** it fails and opens one `Production is not main HEAD` issue
+  if main HEAD is not live 15 minutes after it landed.
+
+It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
+Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
+check are skipped.
+
+Recovery after an automatic rollback: Vercel stops promoting new production
+deployments until one is promoted manually. Fix forward or revert through a PR.
+When the fixed commit's deployment is READY, run
+`npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`,
+then rerun the workflow with `workflow_dispatch` and close the issue.
+
 ## Publication Receipt: 2026-09-07
 
 Production `main` at `660b9ac` includes only release controls from
