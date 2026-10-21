@@ -334,7 +334,7 @@ count; filename is `adbrain-ad-pack.zip`. No raw HTML is accepted as an image.
 | `mode` | `manual` or `guided` |
 | `creativeIds` | UUID array, 0-50; preflight requires nonempty unique approved selections |
 | `dailyBudgetRupees` | Finite integer 0-10000000; preflight requires positive |
-| `leadFormId` | Null or trimmed string 1-128; preflight requires active bound form |
+| `leadFormId` | Null or trimmed string 1-128; preflight requires active bound form and an own business website (not Facebook/Instagram), which Meta requires for lead ads |
 | `targeting` | Strict object below; `{}` can be saved but is not launch-ready |
 | `abTest` | Required boolean; true produces two age-band ad sets |
 
