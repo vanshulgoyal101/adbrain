@@ -62,6 +62,10 @@ export function buildCampaignPreflightLoaders(
         return null;
       }
     },
+    findWebsite: async (actor) => {
+      const { data } = await supabase.from("businesses").select("website").eq("id", actor.businessId).maybeSingle();
+      return data?.website ?? null;
+    },
     getConnection: async () => {
       const connection = await getConnectionStatus(authorizedBusiness);
       return {

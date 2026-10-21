@@ -564,7 +564,7 @@ count; filename is `adbrain-ad-pack.zip`. No raw HTML is accepted as an image.
 | `mode` | `manual` or `guided` |
 | `creativeIds` | UUID array, 0-50; preflight requires nonempty unique approved selections |
 | `dailyBudgetRupees` | Finite integer 0-10000000; preflight requires positive |
-| `leadFormId` | Null or trimmed string 1-128; instant-form preflight requires an active bound form |
+| `leadFormId` | Null or trimmed string 1-128; instant-form preflight requires an active bound form and an own business website (not Facebook/Instagram), which Meta requires for lead ads |
 | `destination` | Optional `instant_form` or `whatsapp`; absent means instant form; WhatsApp requires verified Page-linked Business number instead of a form |
 | `targeting` | Strict object below; `{}` can be saved but is not launch-ready |
 | `abTest` | Required boolean; true produces two age-band ad sets |

@@ -1,7 +1,7 @@
 // Production checks for .github/workflows/production-guard.yml. Needs VERCEL_TOKEN.
 //   live                      print the commit the production domain serves
 //   wait <sha>                wait up to 5 minutes for production to serve <sha>
-//   drift <sha> <epochSecs>   fail if main HEAD <sha> is not live 15 minutes after it landed
+//   drift <sha> <epochSecs>   wait until 15 minutes after main HEAD <sha> landed; fail if it is not live
 //   rollback <badSha>         roll production back to the newest earlier READY deployment
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -24,6 +24,15 @@ const live = async () => {
   return { id: deployment.id, url: deployment.url, sha: deployment.meta?.githubCommitSha ?? "unknown", created: deployment.createdAt };
 };
 
+const mainHead = async () => {
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!repo) return null;
+  const headers = { Accept: "application/vnd.github.sha" };
+  if (process.env.GH_TOKEN) headers.Authorization = `Bearer ${process.env.GH_TOKEN}`;
+  const response = await fetch(`https://api.github.com/repos/${repo}/commits/main`, { headers });
+  return response.ok ? (await response.text()).trim() : null;
+};
+
 const [command, sha, landed] = process.argv.slice(2);
 if (command === "live") {
   console.log(JSON.stringify(await live()));
@@ -43,10 +52,19 @@ if (command === "live") {
     await new Promise((resolve) => setTimeout(resolve, 15_000));
   }
 } else if (command === "drift") {
-  const current = await live();
+  const deadline = (Number(landed) + 15 * 60) * 1000;
+  let current = await live();
+  while (current.sha !== sha && Date.now() < deadline) {
+    const head = await mainHead();
+    if (head && head !== sha) {
+      console.log(`main moved on to ${head.slice(0, 7)}; that commit's run checks production`);
+      process.exit(0);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30_000));
+    current = await live();
+  }
   const minutes = Math.round((Date.now() / 1000 - Number(landed)) / 60);
-  if (current.sha === sha) console.log(`OK: production serves main HEAD ${sha.slice(0, 7)}`);
-  else if (minutes < 15) console.log(`Waiting: main HEAD ${sha.slice(0, 7)} landed ${minutes} min ago; production serves ${current.sha.slice(0, 7)}`);
+  if (current.sha === sha) console.log(`OK: production serves main HEAD ${sha.slice(0, 7)} (${minutes} min after it landed)`);
   else {
     console.log(`DRIFT: main HEAD ${sha.slice(0, 7)} landed ${minutes} min ago but production serves ${current.sha.slice(0, 7)} (${current.url})`);
     process.exitCode = 1;

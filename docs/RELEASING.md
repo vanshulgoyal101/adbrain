@@ -411,11 +411,11 @@ anyone watching (owner-approved automatic rollback, #111):
   `core` `bug` issue with the failing step.
 - **Daily at 03:30 UTC** it runs the same smoke and opens an issue on failure
   (no rollback).
-- **Every 15 minutes**
-  [`production-drift.yml`](../.github/workflows/production-drift.yml) fails and
-  opens one `Production is not main HEAD` issue if main HEAD is not live
-  15 minutes after it landed. It is a separate workflow so commits only show
-  checks that ran.
+- **After each push to `main`, and every 15 minutes if GitHub fires the schedule**
+  [`production-drift.yml`](../.github/workflows/production-drift.yml) waits until
+  15 minutes after main HEAD landed, then fails and opens one
+  `Production is not main HEAD` issue if that commit is not live. A run whose
+  commit is no longer main HEAD passes and leaves the check to the newer run.
 
 It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
