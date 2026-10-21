@@ -55,6 +55,7 @@ const schema = z.object({
   CREATIVE_REASONING_EFFORT: z.enum(["minimal", "low", "medium", "high"]).default("medium"),
   // Three chained concept attempts plus the last image must fit Create's 270 s deadline.
   CREATIVE_ATTEMPT_TIMEOUT_MS: z.coerce.number().int().min(15_000).max(120_000).default(90_000),
+  CREATIVE_CONCEPT_SCHEDULE: z.enum(["serial", "parallel"]).default("serial"),
   // Output-token headroom for Gemini "thinking" models. Set to 0 for a paid
   // non-thinking model to avoid paying for unused output tokens.
   GEMINI_THINKING_HEADROOM: z.coerce.number().int().min(0).optional().default(3000),
