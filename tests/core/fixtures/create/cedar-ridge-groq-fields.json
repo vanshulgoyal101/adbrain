@@ -1,0 +1,123 @@
+{
+ "source": {
+  "provider": "groq",
+  "model": "qwen/qwen3.8-27b",
+  "note": "Real Create concept drafts from local calls on the input of production generations 0149d45d and 397c83c7 (same brief and Brand as cedar-ridge-groq-drafts.json, no source facts), rejected on main only for textPlacement \"left\" or a quote whose case differs from the Brand fact. Demo data only."
+ },
+ "drafts": [
+  {
+   "angle": "value",
+   "recordedAt": "2026-10-21T16:55:45.316Z",
+   "providerRequestId": "chatcmpl-8b9e3570-ce90-4d61-ad41-b062e50666c0",
+   "rulesOnMain": [
+    "sourceQuotes"
+   ],
+   "rules": [],
+   "concept": {
+    "headline": "See what a spine check costs",
+    "primary_text": "First visit? Grab the $49 new-patient exam and consultation. It’s a straightforward way to see if chiropractic fits your routine, with transparent pricing and no surprises. Same-day appointments are often available for new patients.",
+    "description": "Includes a digital posture scan. Book your $49 exam today.",
+    "cta": "Book Now",
+    "rationale": "This ad targets value-conscious adults by front-loading the specific price point ($49) to reduce perceived risk. The visual uses a calm, clinical still life to reinforce professionalism and transparency, avoiding generic stock imagery. The copy focuses on the 'learning' aspect of the first visit, aligning with the brief's request to invite users to learn about the consultation.",
+    "visual": {
+     "medium": "Clean product still life photography",
+     "direction": "A top-down view of a clean, light-colored oak desk surface. In the center, a simple, unbranded digital tablet displays a subtle, abstract line-art representation of a spine alignment (no text on screen). To the left, a pair of folded, neutral-toned reading glasses rests on a small stack of three crisp, white notepads. Soft, natural light enters from the top left, casting gentle, long shadows. The background is a plain, warm beige wall. The lower third of the image is a clean, empty space with a soft gradient shadow to allow for text overlay. No people, no logos, no medical instruments.",
+     "textPlacement": "bottom"
+    },
+    "supportingText": "Transparent pricing, no surprises.",
+    "sourceQuotes": [
+     "$49 new-patient exam and consultation",
+     "Transparent cash pricing",
+     "Digital posture scan included on your first visit",
+     "Same-day appointments for new patients"
+    ]
+   }
+  },
+  {
+   "angle": "problem",
+   "recordedAt": "2026-10-21T16:56:06.594Z",
+   "providerRequestId": "chatcmpl-4b658181-25ca-41ad-99fb-6d7ef30199aa",
+   "rulesOnMain": [
+    "schema:visual.textPlacement:invalid_value"
+   ],
+   "rules": [],
+   "concept": {
+    "headline": "Stop guessing what hurts.",
+    "primary_text": "If your back aches after a long day at a desk or weekend game, you need a real answer, not a guess. Our board-certified chiropractors offer a $49 new-patient exam to pinpoint the source of your discomfort. No pressure, just clear insights and a plan for relief. Book your same-day appointment today.",
+    "description": "See what’s causing your pain with our $49 new-patient exam.",
+    "cta": "Book Now",
+    "rationale": "This ad targets adults in Austin with chronic desk-job or weekend-athlete pain who hesitate to commit to a full treatment plan. By leading with the frustration of uncertainty ('stop guessing') and anchoring the solution in the specific, low-risk $49 exam, it reduces the barrier to entry. The visual of a calm, professional consultation room reinforces the promise of clear, non-pushy care, aligning the message with the warm, plain-spoken tone requested.",
+    "visual": {
+     "medium": "Photography",
+     "direction": "A medium shot of a bright, clean chiropractic consultation room in Austin. Focus on a chiropractor in business casual attire leaning slightly forward, speaking attentively to a patient who is seated comfortably on an exam table, looking relaxed and listening. The background is softly blurred, showing neutral beige walls and natural light from a window. The mood is welcoming, professional, and calm. No text or logos in the image. The focal point is the interaction between the two individuals, positioned slightly to the right to leave space on the left for text.",
+     "textPlacement": "left"
+    },
+    "supportingText": "Same-day appointments available",
+    "sourceQuotes": [
+     "$49 new-patient exam and consultation",
+     "Board-certified chiropractors with 15+ years combined experience",
+     "Same-day appointments for new patients"
+    ]
+   }
+  },
+  {
+   "angle": "problem",
+   "recordedAt": "2026-10-21T16:57:10.439Z",
+   "providerRequestId": "chatcmpl-72f557ac-2eb2-4e4c-8311-c91f29fa0a58",
+   "rulesOnMain": [
+    "schema:visual.textPlacement:invalid_value"
+   ],
+   "rules": [],
+   "concept": {
+    "headline": "Weekend soreness, Monday ready.",
+    "primary_text": "If weekend activity leaves you stiff for work, a clear plan helps. Cedar Ridge offers a $49 new-patient exam and consultation. Our board-certified chiropractors assess your spine and posture in Austin, Round Rock, or Cedar Park. Same-day appointments are available for new patients. See what a first visit involves.",
+    "description": "Book your $49 exam in Austin, Round Rock, or Cedar Park.",
+    "cta": "Get Quote",
+    "rationale": "This ad targets the friction between active weekends and desk-job stiffness. By leading with the specific physical tension of being 'sore' on Monday, it resonates with the 30-60 age group and weekend athletes. The visual focuses on the release of tension rather than a clinical setting, making the $49 exam feel like an accessible solution to a recurring problem. The copy strictly adheres to supplied facts regarding price, locations, and staff credentials without promising specific outcomes.",
+    "visual": {
+     "medium": "Lifestyle photography",
+     "direction": "A medium shot of a person in their 30s or 40s in a bright, neutral home environment, such as a living room or home office. They are seated comfortably, stretching their upper back or rolling their shoulders loosely, with a relaxed expression that suggests relief. The lighting is warm and natural. The background is soft and uncluttered. The subject is positioned on the right side of the frame, leaving the left side clear and quiet for text placement. No logos, medical equipment, or other people are visible.",
+     "textPlacement": "left"
+    },
+    "supportingText": "$49 New-Patient Exam",
+    "sourceQuotes": [
+     "$49 new-patient exam and consultation",
+     "Board-certified chiropractors with 15+ years combined experience",
+     "Same-day appointments for new patients",
+     "Austin, Texas",
+     "Round Rock",
+     "Cedar Park"
+    ]
+   }
+  },
+  {
+   "angle": "problem",
+   "recordedAt": "2026-10-21T16:50:12.235Z",
+   "providerRequestId": "chatcmpl-0a531856-a51d-49ae-b4ef-693ba4efa5d8",
+   "rulesOnMain": [
+    "schema:visual.textPlacement:invalid_value"
+   ],
+   "rules": [
+    "sourceQuotes"
+   ],
+   "concept": {
+    "headline": "Desk work doesn't have to hurt",
+    "primary_text": "If long hours at a computer leave you stiff or sore, it’s time to see what’s going on with your spine. Cedar Ridge Chiropractic in Austin offers a $49 new-patient exam and consultation. We take time to listen and check out your alignment. See if we’re a good fit for your back care.",
+    "description": "New patients get a $49 exam and consultation at our Austin clinic.",
+    "cta": "Book Now",
+    "rationale": "This ad targets the primary pain point of desk-bound adults: chronic stiffness. By leading with the specific cause (desk work) and the specific solution (a low-cost initial exam), it lowers the barrier to entry. The visual avoids generic medical tropes, focusing instead on the relief of standing and stretching, which directly answers the 'relief' aspect of the brief. The tone is professional but approachable, emphasizing the consultation over aggressive treatment promises.",
+    "visual": {
+     "medium": "Photography",
+     "direction": "A candid, medium shot of a person standing in a bright, modern office or home space, stretching their arms overhead and leaning slightly to one side, showing visible relief. The person is dressed in casual business attire. The background is softly blurred, showing a clean, minimalist interior with warm wood tones and natural light. The composition places the subject on the right third, leaving the left side open and uncluttered for text. The mood is calm and relieving. No chiropractic table is visible. No logos or text in the image.",
+     "textPlacement": "left"
+    },
+    "supportingText": "New patient exam & consultation: $49",
+    "sourceQuotes": [
+     "$49 new-patient exam and consultation",
+     "Cedar Ridge Chiropractic in Austin, Texas",
+     "Adults 30-60 with desk jobs"
+    ]
+   }
+  }
+ ]
+}
