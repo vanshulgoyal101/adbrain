@@ -1,0 +1,34 @@
+{
+  "source": "Graph API v21.0 response shapes for a PAUSED instant-form lead campaign with 3 ads, then sync, results and pause. Production stores no raw Graph bodies (campaigns.raw is null), so IDs and hashes are synthetic. Replace with a recorded #109 capture when available; keep tokens and real IDs out.",
+  "adAccountId": "act_100000000000001",
+  "pageId": "100000000000002",
+  "leadFormId": "100000000000003",
+  "campaignId": "120200000000000001",
+  "adSetId": "120200000000000002",
+  "routes": [
+    { "method": "POST", "path": "act_100000000000001/campaigns", "responses": [{ "id": "120200000000000001" }] },
+    { "method": "POST", "path": "act_100000000000001/adimages", "responses": [
+      { "images": { "bytes": { "hash": "0a1b2c3d4e5f60718293a4b5c6d7e8f9", "url": "https://scontent.xx.fbcdn.net/v/t45.1600-4/core-value.png" } } },
+      { "images": { "bytes": { "hash": "1b2c3d4e5f60718293a4b5c6d7e8f90a", "url": "https://scontent.xx.fbcdn.net/v/t45.1600-4/core-problem.png" } } },
+      { "images": { "bytes": { "hash": "2c3d4e5f60718293a4b5c6d7e8f90a1b", "url": "https://scontent.xx.fbcdn.net/v/t45.1600-4/core-offer.png" } } }
+    ] },
+    { "method": "POST", "path": "act_100000000000001/adsets", "responses": [{ "id": "120200000000000002" }] },
+    { "method": "POST", "path": "act_100000000000001/adcreatives", "responses": [{ "id": "120200000000000011" }, { "id": "120200000000000012" }, { "id": "120200000000000013" }] },
+    { "method": "POST", "path": "act_100000000000001/ads", "responses": [{ "id": "120200000000000021" }, { "id": "120200000000000022" }, { "id": "120200000000000023" }] },
+    { "method": "GET", "path": "act_100000000000001/campaigns", "fields": "id,name,status,objective,daily_budget,lifetime_budget,account_id", "responses": [
+      { "data": [{ "id": "120200000000000001", "name": "Cedar Ridge new-patient leads", "status": "PAUSED", "objective": "OUTCOME_LEADS", "lifetime_budget": "0", "account_id": "100000000000001" }],
+        "paging": { "cursors": { "before": "QVFIUmNvcmViZWZvcmU", "after": "QVFIUmNvcmVhZnRlcg" } } }
+    ] },
+    { "method": "GET", "path": "120200000000000001/adsets", "fields": "id,status,daily_budget,lifetime_budget,promoted_object,destination_type", "responses": [
+      { "data": [{ "id": "120200000000000002", "status": "PAUSED", "daily_budget": "80000", "lifetime_budget": "0", "promoted_object": { "page_id": "100000000000002" }, "destination_type": "ON_AD" }],
+        "paging": { "cursors": { "before": "QVFIUmFkc2V0YmVmb3Jl", "after": "QVFIUmFkc2V0YWZ0ZXI" } } }
+    ] },
+    { "method": "GET", "path": "120200000000000001", "fields": "id,account_id", "responses": [{ "id": "120200000000000001", "account_id": "100000000000001" }] },
+    { "method": "GET", "path": "120200000000000001/adsets", "fields": "promoted_object,destination_type", "responses": [
+      { "data": [{ "promoted_object": { "page_id": "100000000000002" }, "destination_type": "ON_AD", "id": "120200000000000002" }],
+        "paging": { "cursors": { "before": "QVFIUmFkc2V0YmVmb3Jl", "after": "QVFIUmFkc2V0YWZ0ZXI" } } }
+    ] },
+    { "method": "GET", "path": "120200000000000001/insights", "fields": "impressions,clicks,spend,actions,date_start,date_stop", "responses": [{ "data": [] }] },
+    { "method": "POST", "path": "120200000000000001", "responses": [{ "success": true }] }
+  ]
+}
