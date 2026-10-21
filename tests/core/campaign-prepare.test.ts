@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
+import chiropracticInterests from "./fixtures/meta/interests-chiropractic.json";
+import { MetaClient } from "@/lib/meta/client";
 
 // Prepare (audience planning) through the real route and real runPlanner; only
 // the LLM transport, auth, rate limiting and data reads are stubbed.
-const mocks = vi.hoisted(() => ({ complete: vi.fn(), persist: vi.fn() }));
+const mocks = vi.hoisted(() => ({ complete: vi.fn(), persist: vi.fn(), meta: vi.fn() }));
 
 const business = {
   id: "816aaafb-7ebc-4ad7-bbda-001beff172f8", name: "Cedar Ridge Chiropractic", vertical: "chiropractic clinic",
@@ -35,7 +37,7 @@ vi.mock("@/lib/supabase/queries", () => ({
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error { code = "UNAVAILABLE"; },
   requireOwnedBusiness: async () => ({ businessId: business.id, userId: "user-1" }),
-  withMetaConnection: async () => { throw new Error("Prepare must not call Meta for an audience draft."); },
+  withMetaConnection: mocks.meta,
 }));
 
 const audienceDraft = {
@@ -61,7 +63,24 @@ async function prepare() {
   return { status: response.status, body: await response.json() };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+  mocks.meta.mockRejectedValue(new Error("Meta unavailable"));
+});
+
+/** Runs the interest lookup on a real MetaClient against recorded Graph responses. */
+function replayMeta(tape: { method: string; path: string; status: number; body: unknown }[]) {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = new URL(String(input));
+    url.searchParams.delete("access_token");
+    const exchange = tape.find(entry => entry.path === url.pathname.replace("/v21.0/", "") + url.search);
+    if (!exchange) throw new Error(`Unrecorded Graph call: ${url.pathname}${url.search}`);
+    return Response.json(exchange.body, { status: exchange.status });
+  });
+  mocks.meta.mockImplementation(async (_actor: unknown, _options: unknown, run: (meta: MetaClient) => unknown) =>
+    run(new MetaClient({ accessToken: "token", adAccountId: "act_2398686420592052", pageId: "885223068001054" })));
+}
 
 describe("core: Prepare audience", () => {
   it("returns planner targeting when the model answers", async () => {
@@ -81,6 +100,25 @@ describe("core: Prepare audience", () => {
     expect(body.targeting.audience.interestNames).toEqual(groqCityOnly.plan.interests);
     expect(body.targeting.location).toMatchObject({ cityScope: "city_only" });
     expect(mocks.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps only interests Meta has (real Cedar Ridge reply and Graph search, Oct 21)", async () => {
+    const plan = { ...plannerPlan, interests: ["Chiropractic", "Sports medicine", "Posture", "Physical therapy", "Wellness"] };
+    mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
+    replayMeta(chiropracticInterests);
+    const { status, body } = await prepare();
+    expect(status).toBe(200);
+    expect(body.targeting.audience.interestNames).toEqual(["Wellness"]);
+  });
+
+  it("explains a broad audience when Meta has none of the interests", async () => {
+    const plan = { ...plannerPlan, interests: ["Chiropractic", "Posture"] };
+    mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
+    replayMeta(chiropracticInterests);
+    const { status, body } = await prepare();
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ready: true, fallback: true, targeting: { age: { min: 28, max: 60 }, audience: { interestNames: [] } } });
+    expect(body.targeting.audience.rationale).toMatch(/Meta has none/);
   });
 
   it.each([
