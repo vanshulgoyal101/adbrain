@@ -94,7 +94,7 @@ describe("getEnv: optional values and defaults", () => {
     const withDefaults = await loadEnv();
     expect(withDefaults.GEMINI_MODEL).toBe("gemini-3.6-flash");
     expect(withDefaults.DEMO_USER_EMAIL).toBe("demo@adbrain.vanshul.com");
-    expect(withDefaults.OPENROUTER_MODEL).toBe("qwen/qwen3.8-max-0902");
+    expect(withDefaults.OPENROUTER_MODEL).toBe("anthropic/claude-haiku-5.5");
     expect(withDefaults.OPENROUTER_IMAGE_MODEL).toBe("openai/gpt-image-2.5-flare");
     expect(withDefaults.IMAGE_PROVIDER_FALLBACK).toBe("none");
     expect(withDefaults.GEMINI_THINKING_HEADROOM).toBe(3000);

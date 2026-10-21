@@ -125,7 +125,7 @@ an application release.
 | `CREATIVE_PROVIDER_ORDER` | Unset (uses `LLM_PROVIDER_ORDER`) | Create concept routing; 90s per attempt before the next provider |
 | `GEMINI_MODEL` | `gemini-3.6-flash` | Google model |
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model |
-| `OPENROUTER_MODEL` | `qwen/qwen3.8-max-0902` | OpenRouter text model; a comma list is tried in order |
+| `OPENROUTER_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter text model; a comma list is tried in order. Oct 21 Create bake-off: Haiku 5.5 saved 6/6 at 13-15 s per concept; qwen3.8-max took 65-90 s |
 | `CREATIVE_MAX_TOKENS` | `6000` | Integer 1800-16000 |
 | `CREATIVE_REASONING_EFFORT` | `medium` | `minimal`, `low`, `medium`, `high` |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
