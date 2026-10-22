@@ -11,6 +11,27 @@ deployment changes. Never use that prefix for secrets. Empty strings are not
 universally equivalent to missing values: omit optional numeric values instead
 of leaving blank assignments.
 
+## Loading and Secrets
+
+The owner checkout's `.env.local` targets production. Do not overwrite, source,
+copy or print it as setup. Next loads environment files; a standalone shell or
+Node script does not unless its command loads one. `test:workspace-browser` and
+`test:workspace-ux` use `--env-file-if-exists=.env.local`, and the campaign
+worker loads none. Inspect a command before running it; "test" in its name is
+not isolation.
+
+| Classification | Variables | Handling |
+| --- | --- | --- |
+| Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; the public Supabase key is safe only with correct RLS |
+| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
+| Provider secret | All four `*_API_KEYS` pools, `META_APP_SECRET`, `META_SYSTEM_USER_TOKEN`, `FALAI_API_KEY`, `OPENAI_API_KEY`, Razorpay key/webhook secrets | Can grant paid/external access; least privilege and target-specific storage |
+| Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay key/account IDs, limits and rollout values | Not secrets, but keep tenant/account details out of examples |
+| Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD` and their emails | Passwords are secrets; emails may be personal data; use synthetic examples |
+
+Generate and store secrets outside chat and command history. Production
+settings, credentials and encryption keys are DevOps-owned changes; see the
+[release policy](RELEASING.md#startup-fast-path).
+
 ## Core Services
 
 | Variable | Default / validation | Purpose |
@@ -49,7 +70,12 @@ Local test checkout uses `PAYMENTS_TEST_ENABLED=true` with
 `RAZORPAY_TEST_KEY_ID`, `RAZORPAY_TEST_KEY_SECRET`,
 `RAZORPAY_TEST_ACCOUNT_ID` and `RAZORPAY_TEST_WEBHOOK_SECRET` (or matching
 generic key aliases). It is unavailable in production or any Vercel environment;
-never place those test variables in live production configuration.
+never place those test variables in live production configuration. The
+[test adapter](../src/lib/payments/razorpay-test.ts) also requires an
+`rzp_test_` key ID, an `acc_` account ID, a webhook secret of at least 16
+characters that differs from the key secret, and a loopback
+`NEXT_PUBLIC_SUPABASE_URL`; populated alias pairs must match exactly. Any failed
+check disables test checkout. A loopback tunnel does not prove a local database.
 
 ### Configurable Live Amounts
 
@@ -213,6 +239,35 @@ The example includes `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_EMAIL`,
 seed/review scripts. They do not replace runtime variables. Operational scripts
 may require additional guards; inspect the exact script before execution.
 
-`npm run env:doctor` and `npm run env:doctor:strict` inspect configuration, not
-end-to-end provider readiness. Keep diagnostic output private. A passing doctor
+`APP_URL` / `ADBRAIN_URL` are script-origin overrides, not aliases for
+`NEXT_PUBLIC_SITE_URL`. The migration runner uses `PGHOST`, `PGPORT` (default
+5432), `PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
+[Release Workflow](RELEASING.md#database-and-credential-safety).
+
+`npm run env:doctor` and `npm run env:doctor:strict` run
+[env-doctor.sh](../scripts/env-doctor.sh), which only reports whether the
+traffic-runner, legacy Meta and reviewer variables are set in the **current
+shell**. It does not load `.env.local`, parse `getEnv()`, contact a provider or
+check the database, so it can fail for a valid application setup. Strict mode
+also fails on missing recommended variables. Keep its output private. A passing
 check does not authorize seeds, backfills, paid evaluations, or remote writes.
+
+### Local Launcher Modes
+
+`node scripts/local-meta-qa.mjs <mode>` ([source](../scripts/local-meta-qa.mjs))
+reads `supabase status` through the `adbrain-qa` Colima socket and rejects
+non-loopback API/database URLs. It blanks every name found in `.env.local`, then
+points the app at the local project with synthetic Meta app values, empty AI key
+pools, no image provider, no cron secret and test payments off. Other variables
+exported in your shell are still inherited; this is not a network sandbox.
+
+| Mode | Behavior |
+| --- | --- |
+| `setup` | Applies `db/schema.sql` to the local database and creates a local Auth user, QA business and two draft creatives; writes, not a check |
+| `dev` | `npm run dev` on port 3939 |
+| `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
+| `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |
+| `payments-dev` | Reads Razorpay test credentials from `.env`, enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
+
+Each mode runs immediately; none is an environment inspector. Stop only the
+servers and fixtures you started.

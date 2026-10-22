@@ -161,6 +161,17 @@ model-echoed memory. An in-flight paid request cannot retract context already
 sent to a provider after a later forget; older creative output may still reflect
 the guidance.
 
+### Recover a Lost Response
+
+[Studio](../src/components/studio.tsx) stores a generation UUID and count in local
+storage before POST. On reload or an unconfirmed response it calls the generation
+GET with that UUID/count and shows saved rows before allowing a new request; it
+clears the stored intent only after saved creatives, `complete`, `failed`, 404 or
+a definitive 4xx rejection. Repeating POST with the same UUID returns 202 without starting another
+producer. `processing` does not prove a worker is alive, and `unresolved` needs
+investigation rather than another paid request. Exact statuses are in
+[Generate and Recover](API_REFERENCE.md#generate-and-recover).
+
 ### Product References
 
 [Reference selection](../src/lib/creative/references.ts) reads the latest 12
@@ -258,9 +269,11 @@ such as the interviewer/concept validator apply their own runtime checks.
 
 Cache is opt-in, in-process only, default TTL ten minutes and maximum 500 entries.
 It shares identical in-flight requests within that process and marks cache hits.
+Waiters share the first producer's outcome; a failed result is not cached.
 It is not a distributed billing guarantee or durable job lock. Current key inputs
 are prompt version, messages, optional provider/model options, temperature,
-maxTokens, JSON mode, and the optional response schema. It does **not** independently fingerprint the full
+maxTokens, JSON mode, and the optional response schema. It does **not** include
+the API key or tenant identity, nor fingerprint the full
 effective environment/routing configuration; restart/clear cache after routing
 changes and review key semantics before extending cached tasks. Extraction and
 summary opt in; concept generation intentionally seeks fresh variation.

@@ -152,6 +152,52 @@ before retrying. Creation idempotency does not make activation atomic with Meta.
 [Operations](OPERATIONS.md) owns incident procedures and
 [Release Policy](RELEASING.md) owns authorization for live changes.
 
+## Lead Import and Follow-Up
+
+Import covers accessible instant-form enquiries on the selected Page, not WhatsApp
+conversations, call logs or other Pages. The [sync route](../src/app/api/leads/sync/route.ts)
+requires `read_leads` connection access and runs the resumable importer
+`syncMetaLeads` in [lead sync](../src/lib/leads/sync.ts).
+
+An empty POST resumes the newest unfinished run for the current binding or starts
+a new one; `{"syncId":"11111111-1111-4111-8111-111111111111"}` resumes that run.
+The POST reads Meta and writes local rows; it is not an offline diagnostic. The
+response is `{leads,imported,failedForms,sync:{id,state,hasMore},error?}`.
+`imported` counts new inserts in this request only; a repeated Meta lead ID is
+ignored, so owner follow-up fields stay untouched. `state: "partial"` /
+`hasMore: true` means saved continuation, not "up to date". `leads` is the newest
+200 saved rows, not the whole inbox.
+
+Each request makes at most 24 Graph page reads (forms and leads, 200 items per
+page), reads up to three forms concurrently, and stops at a 40-second deadline.
+Each page commits rows and progress together through `lead_sync_checkpoint`
+(3-second timeout), so a later failure keeps earlier saves. A failed read or a
+repeated/malformed cursor marks that form failed; it stays queued for the next run
+while other forms proceed, and the response is 502 with `failedForms` and the saved
+`sync.id`. Only opaque `after` cursors are stored; `paging.next` URLs are not
+followed. Campaign attribution is not inferred from form names.
+
+A foreign or unknown `syncId` returns 404. A changed binding/generation or a
+concurrent writer returns 409; after reconnecting, an empty POST starts a fresh
+run. Other checkpoint failures return 503; retry to resume. Keep the sync ID and
+saved rows rather than clearing the inbox after a partial or uncertain result.
+
+[Scheduled lead sync](../src/app/api/cron/sync-leads/route.ts) runs the same import
+for every business with a connected account and Page, without a `syncId`. It
+requires the `CRON_SECRET` bearer, allows 20 seconds per business within a
+45-second run, and returns per-business outcomes (503 if any failed). The
+[scheduled jobs workflow](../.github/workflows/scheduled-jobs.yml) calls it four
+times an hour.
+
+The saved inbox (`GET /api/leads`) pages up to 100 enquiries with search, status,
+contact and sort filters. `PATCH /api/leads/[id]` saves `workflow_status` (`new`,
+`contacted`, `qualified`, `booked`, `closed`) and/or a `follow_up_note` of at most
+2000 characters. See [API Reference](API_REFERENCE.md#sync-insights-leads-and-settings).
+The [lead sync migration](../db/migrations/20260926_lead_sync_progress.sql) adds
+`lead_sync_runs`, `lead_sync_start` and `lead_sync_checkpoint`, granted only to the
+service role; the [follow-up migration](../db/migrations/20260926_lead_follow_up.sql)
+adds the follow-up columns and `get_lead_page`. Both are in the fresh schema.
+
 ## Recovery and Destructive Actions
 
 | Situation | Safe action |

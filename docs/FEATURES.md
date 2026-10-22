@@ -5,6 +5,28 @@ inventory of shipped features and proposals. Deployment evidence lives in
 [release receipts](releases/) and [QA records](qa/); priorities belong in
 [Roadmap](ROADMAP.md). Start at [the documentation index](README.md).
 
+## Source and Availability
+
+This guide describes source behavior. Source alone does not prove that a target
+database has the required migrations or that a deployment has the required
+configuration; check [Data Model](DATA_MODEL.md#migration-map) and
+[Configuration](CONFIGURATION.md) before demonstrating a workflow there.
+
+| Workflow | Availability boundary |
+| --- | --- |
+| Resumable lead sync, enquiry follow-up and server inbox paging | Lead sync-progress and follow-up migrations |
+| WhatsApp conversation results | WhatsApp reporting migration |
+| Declared preferences, customer allowance | Their additive migrations |
+| Worker campaign creation | `CAMPAIGN_EXECUTION_MODE=worker`, worker migration and a running worker; default is inline |
+| Live checkout | Live payment flags on a production `main` deployment; see [API Reference](API_REFERENCE.md#configurable-live-payments) |
+| Test checkout | Local only: `PAYMENTS_TEST_ENABLED=true`, loopback Supabase, no Vercel environment; see [test payments](API_REFERENCE.md#local-test-payments) |
+| Scheduled jobs | `vercel.json` schedules only the keepalive and the daily spend-enforcement sweep |
+
+No checkout path, test or live, makes money spendable or activates ads. Mocked
+consent, a green build or merchant approval do not prove live delivery, payment
+settlement or provider eligibility. Use [Demo Runbook](DEMO-RUNBOOK.md) to pick a
+safe demonstration mode.
+
 ## Product Model
 
 A user owns a business. Most workspace pages select that user's oldest business
@@ -301,9 +323,11 @@ Creation reruns preflight and rejects a stale draft, hash, or connection generat
 
 The durable creation operation uses an idempotency key and checkpoints external
 IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
-`needs_reconciliation` state. A created campaign is paused. Activation requires a
+`needs_reconciliation` state. Optional worker mode queues that same operation and
+does not fall back to inline execution when the queue is unavailable. A created campaign is paused. Activation requires a
 fresh confirmation digest, connection recheck, provider verification, and spend
-guardrail check. See [API Reference](API_REFERENCE.md) for payloads and states.
+guardrail check. Creation idempotency does not extend to activation or paid
+generation. See [API Reference](API_REFERENCE.md) for payloads and states.
 
 Pause and delete verify account/Page binding too. Missing legacy binding requires
 reconciliation, not guessing. Meta writes and local mirrors are not atomic: a
@@ -318,22 +342,34 @@ for continuation and accumulates skipped counts. Unsupported/deleted/archived
 statuses are not imported as paused. A completed scan does not prune local rows
 for campaigns absent from Meta.
 
-Results refresh fetches insights, attempts to store them and produces a
-plain-language summary; it can also trigger spend-limit auto-pause. It is not a
-read-only diagnostic. A null stored result needs investigation. Reports
+Results refresh fetches insights and saves a snapshot before producing a
+plain-language summary or checking spend-limit auto-pause. Failed persistence
+returns 503 before summary and auto-pause; resolve storage availability before an
+explicit retry. A successful refresh can pause delivery, so it is not a
+read-only diagnostic. Reports
 are Markdown exports of stored performance, not a live refresh. They escape
 campaign names (including pipes/newlines), count impressions/clicks as delivery,
 and do not declare a lead winner when nobody has leads.
 
-Lead sync reads active Page forms, normalizes contact fields, and ignores duplicate
-`(business_id, meta_lead_id)` rows. `imported` counts new inserts, not fetched rows.
-Some unreadable forms produce a partial result with `failedForms`; all forms
-failing returns an error. Zero imports can mean duplicates or no leads, not a
-broken campaign. Existing duplicates are not updated by this sync strategy.
+Lead sync reads Page instant forms and their leads page by page, normalizes
+contact fields, and ignores duplicate `(business_id, meta_lead_id)` rows, so
+imports keep existing follow-up fields. `imported` counts new inserts, not fetched
+rows. Each request is bounded and checkpointed; when more pages or failed forms
+remain, the UI reports the sync as incomplete and the next Sync continues the same
+run. Only a complete run reports "up to date". Opening Enquiries starts a sync when
+this browser has no recent complete sync. Zero imports can mean duplicates or no
+leads, not a broken campaign. WhatsApp conversations are not imported.
 
-The copy-ready digest summarizes the last seven days with at most ten contacts,
-including email where available. It is not a WhatsApp send, CRM, notification
-service, or revenue attribution system.
+The inbox searches, filters (follow-up status, contact details), sorts and pages
+saved enquiries on the server, with matching totals. Owners can record a
+follow-up status (`new`, `contacted`, `qualified`, `booked`, `closed`) and a
+note up to 2000 characters; a failed save keeps the edits for retry. Follow-up is
+local record-keeping only and sends nothing.
+
+The copy-ready digest summarizes the last seven days of the currently loaded
+enquiries with at most ten contacts, including email where available. It is not
+a WhatsApp send, CRM, notification service, complete export, or revenue
+attribution system.
 
 ## Spend Guardrails
 

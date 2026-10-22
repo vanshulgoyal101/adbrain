@@ -1,5 +1,13 @@
 # Meta Instant Connect and Guided Activation
 
+> Historical design proposal and implementation record. Current consent,
+> capabilities, paused creation and recovery are documented in
+> [Meta Connection](META_CONNECT.md); external review gates are in
+> [Meta Approval Readiness](META_APPROVAL_ACTION_PLAN.md). This September 26, 2026
+> redirect preserves the evidence and proposals below. In particular, proposed
+> automatic provisioning is not implemented by the current connection flow, and
+> the #34/#35 enquiry candidates are not production acceptance.
+
 > Historical specification and coordination record. Use [Meta Connect](META_CONNECT.md),
 > [API Reference](API_REFERENCE.md), and [Data Model](DATA_MODEL.md) for the current
 > implementation. Baseline weaknesses and proposed endpoints below are not current
