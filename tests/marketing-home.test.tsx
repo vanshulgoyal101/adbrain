@@ -56,15 +56,25 @@ describe("public product example", () => {
 });
 
 describe("privacy requests", () => {
-  it("directs users to signed-in Settings without promising immediate deletion or an unverified mailbox", () => {
+  it("directs users to signed-in Settings without promising immediate deletion or an unverified mailbox", async () => {
     render(<PrivacyPolicyPage />);
     expect(screen.getAllByRole("link", { name: "Settings" })[0]).toHaveAttribute("href", "/settings");
     expect(screen.getByText(/submitting a request does not automatically export or delete/)).toBeInTheDocument();
     expect(screen.getByText(/Payment, invoice, refund and security records may need to be retained/)).toBeInTheDocument();
     expect(screen.queryByText(/privacy@adbrain/)).not.toBeInTheDocument();
-    render(<DataDeletionPage />);
+    render(await DataDeletionPage({ searchParams: Promise.resolve({}) }));
     expect(screen.getAllByRole("link", { name: "Settings" }).at(-1)).toHaveAttribute("href", "/settings");
     expect(screen.getByText(/there is no one-click full-account export or deletion/)).toBeInTheDocument();
     expect(screen.getByText(/does not delete provider-side campaigns or lead data/)).toBeInTheDocument();
+    expect(screen.queryByText(/Confirmation code/)).not.toBeInTheDocument();
+  });
+
+  it("shows the Meta data deletion confirmation code only when it is well formed", async () => {
+    const { unmount } = render(await DataDeletionPage({ searchParams: Promise.resolve({ code: "0123456789abcdef" }) }));
+    expect(screen.getByText("0123456789abcdef")).toBeInTheDocument();
+    expect(screen.getByText(/disconnected AdBrain from your Meta/)).toBeInTheDocument();
+    unmount();
+    render(await DataDeletionPage({ searchParams: Promise.resolve({ code: "<script>" }) }));
+    expect(screen.queryByText(/Confirmation code/)).not.toBeInTheDocument();
   });
 });

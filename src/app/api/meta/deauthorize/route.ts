@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
@@ -27,7 +28,15 @@ async function handlePOST(request: Request) {
     p_subject_id: signed.userId,
   });
   if (error) return NextResponse.json({ error: "Deauthorization could not be recorded." }, { status: 503 });
+  // Meta's data deletion callback contract: a status URL plus an alphanumeric
+  // confirmation code. The code is a stable keyed digest, so retries match.
+  const env = getEnv();
+  const confirmationCode = createHmac("sha256", env.META_APP_SECRET || env.SUPABASE_SERVICE_ROLE_KEY || "")
+    .update(`meta-deletion:${signed.userId}`)
+    .digest("hex")
+    .slice(0, 16);
   return NextResponse.json({
-    url: `${getEnv().NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/data-deletion`,
+    url: `${env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/data-deletion?code=${confirmationCode}`,
+    confirmation_code: confirmationCode,
   });
 }
