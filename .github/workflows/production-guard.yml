@@ -9,6 +9,10 @@ on:
         description: Replace the smoke with a FAIL line to prove the guard goes red (no rollback on dispatch)
         type: boolean
         default: false
+      drill:
+        description: Rollback drill (#111) - force a FAIL, roll production back and open a [DRILL] core bug
+        type: boolean
+        default: false
 permissions:
   contents: read
   issues: write
@@ -49,23 +53,24 @@ jobs:
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
-          FORCE_FAIL: ${{ inputs.force_fail && 'true' || '' }}
+          FORCE_FAIL: ${{ (inputs.force_fail || inputs.drill) && 'true' || '' }}
         run: |
           smoke() { if [ -n "$FORCE_FAIL" ]; then echo "FAIL forced by dispatch"; return 1; fi; node scripts/smoke-core.mjs; }
           smoke | tee smoke.txt && exit 0
           sleep 60
           smoke | tee smoke.txt
       - name: Roll production back
-        if: failure() && steps.smoke.outcome == 'failure' && github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
+        if: failure() && steps.smoke.outcome == 'failure' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
       - name: Open core bug
         if: failure() && !inputs.force_fail
         env:
           GH_TOKEN: ${{ github.token }}
+          PREFIX: ${{ inputs.drill && '[DRILL] ' || '' }}
         run: |
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           smoke=$(grep -E '^(PASS|FAIL)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
           rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, wait failed, or no VERCEL_TOKEN)")
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops \
-            -t "Production smoke failed on ${SHA::7} ($GITHUB_EVENT_NAME)" \
+            -t "${PREFIX}Production smoke failed on ${SHA::7} ($GITHUB_EVENT_NAME)" \
             -b "$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/RELEASING.md#production-guard\n' "$run" "$smoke" "$rollback")"
