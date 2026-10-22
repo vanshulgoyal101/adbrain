@@ -88,26 +88,23 @@ Routine steps never wait for the coordinator.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### P0 (owner, October 21): stop everything else
+### Now (October 22): finish the core, then prepare the first real lead
 
-Only these issues matter until they are closed: [#138](https://github.com/vanshulgoyal101/adbrain/issues/138)
-quota holds that block Create, [#98](https://github.com/vanshulgoyal101/adbrain/issues/98)
-Create works, [#134](https://github.com/vanshulgoyal101/adbrain/issues/134) and
-[#109](https://github.com/vanshulgoyal101/adbrain/issues/109) Review to a live
-PAUSED campaign, and [#111](https://github.com/vanshulgoyal101/adbrain/issues/111)
-production protection. [#110](https://github.com/vanshulgoyal101/adbrain/issues/110)
-(core regression gate) is done: `test:core` runs as the required `core` check.
-All other issues are parked (`later`). Do not start, review or release anything
-else. When a P0 issue closes, its workers join the remaining P0 issues; only when
-all are closed do parked issues resume.
+Done October 21: Review to a live PAUSED campaign (#134, #109), quota holds no
+longer block Create (#138 fix live), draft normalization, parallel Create (opt-in;
+p50 60 s to 28 s with better quality scores), Prepare preflight in the smoke.
+Finish the open core items first, then the next milestone: **first real lead**
+(Meta App Review readiness, safe activation, a first-time user walkthrough). The
+real ad spend and the App Review submission wait for the owner. Parked issues
+(`later`) stay parked.
 
-| Worker | P0 work |
+| Worker | Work, in order |
 | --- | --- |
-| Dev 3 | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) lead: Haiku 5.5 is live. Post the model before/after, set `CREATIVE_ATTEMPT_TIMEOUT_MS=60000` with it, then two consecutive 3/3 Create runs once #138 unblocks Create. Then stop changing routing. Then [#142](https://github.com/vanshulgoyal101/adbrain/issues/142) (owner): first a small PR adding an `onProgress` callback in `generateVariants` for #141, then faster Create (p50 35 s or less) behind the quality guard |
-| Dev | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) with Dev 3: normalize every draft field once before validation (lengths, enums such as `textPlacement`, empty optionals), so fixes stop arriving one field per PR; core test from recorded replies. Then [#141](https://github.com/vanshulgoyal101/adbrain/issues/141) (owner): live per-ad progress while ads generate (skeleton cards, real stages, each ad appears when saved) |
-| QA | [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) and [#109](https://github.com/vanshulgoyal101/adbrain/issues/109): add the Prepare/launch preflight to the production smoke, so a broken campaign step cannot hide behind green page checks |
-| Dev 2 | First [#134](https://github.com/vanshulgoyal101/adbrain/issues/134): a "Create campaign" button on Review that opens the Campaigns composer with the approved ads selected (owner hit this in production). Then [#109](https://github.com/vanshulgoyal101/adbrain/issues/109) through that button: launch one PAUSED test campaign on Meta, sync, pause, delete; fix any failure with a core test |
-| DevOps | First [#138](https://github.com/vanshulgoyal101/adbrain/issues/138): unblock Create today (release stale holds, recorded before/after), then shrink holds to actual usage with a core test. Then [#111](https://github.com/vanshulgoyal101/adbrain/issues/111) rollback drill once the owner says "drill ok" |
+| DevOps | [#153](https://github.com/vanshulgoyal101/adbrain/issues/153) first: the guard turns a FAIL green, so add `shell: bash` (pipefail) to the smoke and rollback steps and prove it with a forced FAIL. Then flip `CREATIVE_CONCEPT_SCHEDULE=parallel` for [#142](https://github.com/vanshulgoyal101/adbrain/issues/142) with a recorded before/after. Close [#138](https://github.com/vanshulgoyal101/adbrain/issues/138) after Dev 3's next run settles small. [#111](https://github.com/vanshulgoyal101/adbrain/issues/111) rollback drill when the owner says "drill ok" |
+| Dev 3 | After the parallel flip: Create run 10/10 on [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) (report the generation for #138), more runs once the owner approves the next 10, then close #98 and #142. Then [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): Meta-side cap, review status and one-click pause, from recorded responses only |
+| Dev | [#141](https://github.com/vanshulgoyal101/adbrain/issues/141) (owner): live per-ad progress while ads generate, on the `onProgress` events from #147; the parallel schedule means stages run at the same time |
+| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156): Meta App Review packet up to the submit button (permissions table, policy URLs, connect flow with a no-role test user, screencast script, owner checklist) |
+| QA | [#158](https://github.com/vanshulgoyal101/adbrain/issues/158): walk the core loop as a first-time owner on 390 px and desktop; file each dead end as a `core` bug and fix tiny ones yourself. Verify #153 with DevOps |
 
 ### Earlier focus (October 21, before P0)
 
