@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   enforceAutoPauseWithStatus: vi.fn(),
   logEvent: vi.fn(),
   saveResult: vi.fn(),
+  readAdReview: vi.fn(),
 }));
 
 const campaign = {
@@ -65,8 +66,12 @@ beforeEach(() => {
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business-1", userId: "user-1" });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ getCampaignInsights: vi.fn().mockResolvedValue({ impressions: 1, clicks: 2, leads: 1, spend: 3, cpl: 3 }) }),
+    execute({
+      getCampaignInsights: vi.fn().mockResolvedValue({ impressions: 1, clicks: 2, leads: 1, spend: 3, cpl: 3 }),
+      readAdReview: mocks.readAdReview,
+    }),
   );
+  mocks.readAdReview.mockResolvedValue([{ adId: "ad-1", state: "in_review", effectiveStatus: "IN_PROCESS", reasons: [] }]);
   mocks.summarizeInsights.mockResolvedValue("Summary");
   mocks.enforceAutoPauseWithStatus.mockResolvedValue({ paused: [], confirmed: true });
   mocks.saveResult.mockResolvedValue({ data: { id: "result-1" }, error: null });
@@ -117,6 +122,16 @@ describe("campaign refresh binding boundary", () => {
     const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ autoPaused: ["campaign-1"], protectionConfirmed: false });
+  });
+
+  it("returns Meta's ad review status, and still refreshes results when the review read fails", async () => {
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    expect(await (await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) })).json())
+      .toMatchObject({ review: [{ adId: "ad-1", state: "in_review" }] });
+    mocks.readAdReview.mockRejectedValueOnce(new Error("Meta review read failed"));
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ result: { id: "result-1" }, review: null });
   });
 
   it("still attempts protective enforcement when the provider read fails", async () => {

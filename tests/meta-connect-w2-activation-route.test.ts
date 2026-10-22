@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getSpendLimits: vi.fn(),
   getCampaignSpend: vi.fn(),
   updateCampaignStatus: vi.fn(),
+  pauseCampaignTree: vi.fn(),
   verifyCampaignActivation: vi.fn(),
   readCampaignDelivery: vi.fn(),
   saveCampaign: vi.fn(),
@@ -105,6 +106,7 @@ beforeEach(() => {
   mocks.dailyBudget = 500;
   mocks.storedAdSetIds = ["set-1"];
   mocks.updateCampaignStatus.mockResolvedValue(undefined);
+  mocks.pauseCampaignTree.mockResolvedValue({ confirmed: true, objects: [{ id: "meta-campaign-1", level: "campaign", status: "PAUSED", effectiveStatus: "PAUSED" }] });
   mocks.reserveCustomerCampaign.mockResolvedValue({ reservationId: "reservation-1", mediaLimitPaise: 677966 });
   mocks.enforceCampaignSpendCap.mockResolvedValue(undefined);
   mocks.confirmCustomerCampaign.mockResolvedValue(undefined);
@@ -121,7 +123,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -266,7 +268,7 @@ describe("campaign activation generation fence", () => {
     const { PATCH } = await import("@/app/api/campaigns/[id]/route");
     const response = await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) });
     expect(response.status).toBe(200);
-    expect(mocks.getCustomerBalance.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+    expect(mocks.getCustomerBalance.mock.invocationCallOrder[0]).toBeLessThan(mocks.pauseCampaignTree.mock.invocationCallOrder[0]);
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "paused");
     mocks.getCustomerBalance.mockRejectedValueOnce(new Error("Accounting unavailable"));
     expect((await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) })).status).toBe(200);
@@ -307,7 +309,17 @@ describe("campaign activation generation fence", () => {
     expect(response.status).toBe(200);
     expect(mocks.getSpendLimits).not.toHaveBeenCalled();
     expect(mocks.getCampaignSpend).not.toHaveBeenCalled();
-    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1"], adIds: ["ad-1"] });
+  });
+
+  it("does not record a pause Meta did not confirm on the campaign", async () => {
+    mocks.pauseCampaignTree.mockResolvedValueOnce({ confirmed: false, objects: [{ id: "meta-campaign-1", level: "campaign", status: "ACTIVE", effectiveStatus: "ACTIVE" }] });
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/Ads Manager/);
+    expect(mocks.saveCampaign).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
   });
 
   it("does not activate when fresh provider verification fails", async () => {
@@ -351,7 +363,6 @@ describe("campaign activation generation fence", () => {
   });
 
   it("keeps pause compatible without requiring an activation confirmation", async () => {
-    mocks.metaClientForBusiness.mockResolvedValue({ updateCampaignStatus: mocks.updateCampaignStatus });
     const { PATCH } = await import("@/app/api/campaigns/[id]/route");
 
     const response = await PATCH(
@@ -360,7 +371,8 @@ describe("campaign activation generation fence", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1"], adIds: ["ad-1"] });
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
     expect(mocks.recheckMetaConnection).not.toHaveBeenCalled();
     expect(mocks.verifyCampaignActivation).not.toHaveBeenCalled();
   });

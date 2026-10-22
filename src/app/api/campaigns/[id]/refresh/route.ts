@@ -1,6 +1,6 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
-import { friendlyMetaError } from "@/lib/meta/client";
+import { friendlyMetaError, type AdReview } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
 import { enforceAutoPauseWithStatus } from "@/lib/campaign/spend-enforce";
@@ -59,9 +59,10 @@ async function handlePOST(
   }
 
   let insights;
+  let review: AdReview[] | null = null;
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
-    insights = await withMetaConnection(
+    ({ insights, review } = await withMetaConnection(
       context,
       {
         purpose: "read_insights",
@@ -71,8 +72,11 @@ async function handlePOST(
         },
         expectedGeneration: storedBinding.metaConnectionGeneration,
       },
-      (meta) => meta.getCampaignInsights(campaign.meta_campaign_id!),
-    );
+      async (meta) => ({
+        insights: await meta.getCampaignInsights(campaign.meta_campaign_id!),
+        review: await meta.readAdReview(campaign.meta_campaign_id!).catch(() => null),
+      }),
+    ));
   } catch (err) {
     const enforcement = await enforceAutoPauseWithStatus(campaign.business_id);
     if (err instanceof ConnectionAccessError) {
@@ -112,5 +116,5 @@ async function handlePOST(
     }),
   ]);
 
-  return NextResponse.json({ result, summary, insights, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed });
+  return NextResponse.json({ result, summary, insights, review, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed });
 }

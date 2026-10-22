@@ -1096,7 +1096,7 @@ export class MetaClient {
           await this.graph(encodeURIComponent(id), { method: "POST", form: { status: "PAUSED" } });
           return;
         } catch (error) {
-          if (!(error instanceof MetaError) || error.code !== 613 || attempt >= 2) throw error;
+          if (!(error instanceof MetaError) || error.code !== 613 || attempt >= 1) throw error;
           await new Promise(resolve => setTimeout(resolve, STATUS_RATE_LIMIT_WAIT_MS));
         }
       }
