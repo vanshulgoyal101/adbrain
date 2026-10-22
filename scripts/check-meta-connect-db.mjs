@@ -749,6 +749,7 @@ async function verifyCreativeGenerationAdmission(db, database) {
     assert.deepEqual(await hold(unknown),{reserved:reserve,accounted:0});
   });
 }
+
 async function verify(database, source, integrityMigration, customerOnly = false) {
   const admin = client();
   await admin.connect();
