@@ -171,6 +171,8 @@ export type PausedCampaignTree = {
   objects: Array<{ id: string; level: "campaign" | "adset" | "ad"; status: string; effectiveStatus: string | null }>;
 };
 
+export type CappedAdSet = { adSetId: string; adIds: string[]; lifetimeBudgetPaise: number; endTime: string };
+
 export type AdReviewState = "in_review" | "approved" | "rejected" | "issues" | "unknown";
 export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[] };
 
@@ -1070,6 +1072,86 @@ export class MetaClient {
     );
     if (confirmed.id !== campaignId || confirmed.account_id !== current.account_id || !/^\d+$/.test(confirmed.spend_cap ?? "")
       || Number(confirmed.spend_cap) !== target) throw new MetaError("Campaign spending limit changed. Keep the campaign paused.");
+  }
+
+  /**
+   * Caps total spend on Meta's side when the amount is below the campaign spend-cap
+   * minimum (₹5,000 for INR): a new PAUSED ad set with lifetime_budget = the approved
+   * amount and an end date, holding PAUSED copies of the reviewed ads. Everything is
+   * read back; on any difference the new ad set is removed and nothing is returned.
+   * Never writes anything but PAUSED.
+   */
+  async createCappedAdSet(
+    campaignId: string,
+    input: { sourceAdSetId: string; sourceAdIds: string[]; lifetimeBudgetPaise: number; endTime: Date },
+  ): Promise<CappedAdSet> {
+    const { sourceAdSetId, sourceAdIds, lifetimeBudgetPaise, endTime } = input;
+    if (!Number.isSafeInteger(lifetimeBudgetPaise) || lifetimeBudgetPaise <= 0 || !sourceAdIds.length
+      || new Set(sourceAdIds).size !== sourceAdIds.length || !(endTime.getTime() > Date.now())) {
+      throw new MetaError("Invalid approved spending limit.");
+    }
+    await this.verifyCampaignBinding(campaignId);
+    const source = await this.graph<{
+      id?: string; campaign_id?: string; billing_event?: string; optimization_goal?: string; bid_strategy?: string;
+      destination_type?: string; promoted_object?: { page_id?: string }; targeting?: unknown;
+    }>(`${encodeURIComponent(sourceAdSetId)}?fields=id,campaign_id,billing_event,optimization_goal,bid_strategy,destination_type,promoted_object,targeting`);
+    if (source.id !== sourceAdSetId || source.campaign_id !== campaignId || source.promoted_object?.page_id !== this.creds.pageId
+      || !source.billing_event || !source.optimization_goal || !source.targeting) {
+      throw new CampaignDeliveryError("The reviewed ad set could not be verified. Keep the campaign paused.");
+    }
+    const endSeconds = Math.floor(endTime.getTime() / 1000);
+    const created = await this.graph<{ id?: string }>(`${this.creds.adAccountId}/adsets`, {
+      method: "POST",
+      form: {
+        name: `AdBrain capped ${(lifetimeBudgetPaise / 100).toFixed(2)} until ${new Date(endSeconds * 1000).toISOString().slice(0, 10)}`,
+        campaign_id: campaignId,
+        status: "PAUSED",
+        lifetime_budget: String(lifetimeBudgetPaise),
+        end_time: new Date(endSeconds * 1000).toISOString(),
+        billing_event: source.billing_event,
+        optimization_goal: source.optimization_goal,
+        bid_strategy: source.bid_strategy ?? "LOWEST_COST_WITHOUT_CAP",
+        ...(source.destination_type ? { destination_type: source.destination_type } : {}),
+        promoted_object: JSON.stringify(source.promoted_object),
+        targeting: JSON.stringify(source.targeting),
+      },
+    });
+    if (typeof created.id !== "string" || !created.id) throw new CampaignDeliveryError("Meta did not create the capped ad set. Keep the campaign paused.");
+    const adSetId = created.id;
+    try {
+      const adIds: string[] = [];
+      for (const adId of sourceAdIds) {
+        const copy = await this.graph<{ copied_ad_id?: string }>(`${encodeURIComponent(adId)}/copies`, {
+          method: "POST",
+          form: { adset_id: adSetId, status_option: "PAUSED" },
+        });
+        if (typeof copy.copied_ad_id !== "string" || !copy.copied_ad_id) throw new CampaignDeliveryError("Meta did not copy a reviewed ad.");
+        adIds.push(copy.copied_ad_id);
+      }
+      const node = encodeURIComponent(adSetId);
+      const [adSet, ads] = await Promise.all([
+        this.graph<{ id?: string; campaign_id?: string; status?: string; daily_budget?: string; lifetime_budget?: string; budget_remaining?: string; end_time?: string }>(
+          `${node}?fields=id,campaign_id,status,daily_budget,lifetime_budget,budget_remaining,end_time`,
+        ),
+        this.graph<{ data?: Array<{ id: string; status?: string; adset_id?: string }>; paging?: { next?: string } }>(
+          `${node}/ads?fields=id,status,adset_id&limit=100`,
+        ),
+      ]);
+      const paise = String(lifetimeBudgetPaise);
+      if (adSet.id !== adSetId || adSet.campaign_id !== campaignId || adSet.status !== "PAUSED"
+        || Number(adSet.daily_budget ?? 0) !== 0 || adSet.lifetime_budget !== paise || adSet.budget_remaining !== paise
+        || Math.floor(Date.parse(adSet.end_time ?? "") / 1000) !== endSeconds
+        || !Array.isArray(ads.data) || ads.paging?.next || ads.data.length !== adIds.length
+        || ads.data.some(ad => !adIds.includes(ad.id) || ad.status !== "PAUSED" || ad.adset_id !== adSetId)) {
+        throw new CampaignDeliveryError("Meta did not confirm the approved spending limit.");
+      }
+      return { adSetId, adIds, lifetimeBudgetPaise, endTime: new Date(endSeconds * 1000).toISOString() };
+    } catch (error) {
+      await this.graph(encodeURIComponent(adSetId), { method: "DELETE" }).catch(() => undefined);
+      throw error instanceof CampaignDeliveryError
+        ? new CampaignDeliveryError(`${error.message} The campaign stays paused.`)
+        : error;
+    }
   }
 
   /** Pause or resume a campaign after verifying its account and Page. */
