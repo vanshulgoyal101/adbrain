@@ -198,6 +198,12 @@ describe("Home workspace", () => {
     expect(container.querySelector("a button")).toBeNull();
   });
 
+  it("shows the small saved thumbnail instead of the full image", () => {
+    const base = "https://example.supabase.co/storage/v1/object/public/creatives/biz-1/group-1";
+    render(<WorkspaceHome {...empty} business={business} creatives={[{ ...creative, image_url: `${base}/originals-v1/value-ad-1.png` }]} />);
+    expect(screen.getByRole("img", { name: creative.headline! })).toHaveAttribute("src", `${base}/thumbnails-v1/value-ad-1.webp`);
+  });
+
   it("loads independent dashboard reads concurrently", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     let resolveCreatives!: (value: Creative[]) => void;
