@@ -71,7 +71,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
-import type { CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
 
@@ -789,12 +789,14 @@ function BusinessCampaigns({
       const data = (await res.json()) as {
         result?: CampaignResult;
         summary?: string;
+        review?: AdReview[] | null;
         error?: string;
         protectionConfirmed?: boolean;
       };
       if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
+        if (data.review) setReviews((p) => ({ ...p, [id]: data.review! }));
         if (data.protectionConfirmed === false) setError("Results refreshed, but spend protection could not be verified. Check campaign delivery in Meta.");
       } else {
         setError(data.error ?? "Couldn't refresh results.");
@@ -818,6 +820,7 @@ function BusinessCampaigns({
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
   async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO, delivery: CampaignDeliverySnapshot): Promise<string> {
     const payload = activationConfirmationPayload(campaign, connection, delivery);
@@ -1462,6 +1465,7 @@ function BusinessCampaigns({
                         >
                           {c.status === "active" ? "Requested active" : c.status}
                         </Badge>
+                        {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                       </div>
                       <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <span className="text-sm text-slate-500">
@@ -1601,6 +1605,30 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="text-lg font-bold text-slate-900">{value}</p>
       <p className="text-xs text-slate-500">{label}</p>
     </div>
+  );
+}
+
+const REVIEW_LABELS: Record<AdReview["state"], { label: string; style: string }> = {
+  rejected: { label: "Rejected by Meta", style: "bg-red-50 text-red-700" },
+  issues: { label: "Meta flagged issues", style: "bg-red-50 text-red-700" },
+  in_review: { label: "In Meta review", style: "bg-slate-100 text-slate-700" },
+  unknown: { label: "Review status unknown", style: "bg-slate-100 text-slate-600" },
+  approved: { label: "Approved by Meta", style: "bg-emerald-50 text-emerald-700" },
+};
+
+/** The least-ready ad decides the badge; rejection reasons are shown as Meta wrote them. */
+function AdReviewBadge({ reviews }: { reviews: AdReview[] }) {
+  const order: AdReview["state"][] = ["rejected", "issues", "in_review", "unknown", "approved"];
+  const state = order.find(candidate => reviews.some(review => review.state === candidate))!;
+  const reasons = [...new Set(reviews.filter(review => review.state === state).flatMap(review => review.reasons))];
+  const count = reviews.filter(review => review.state === state).length;
+  return (
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
+      <Badge className={REVIEW_LABELS[state].style}>
+        {REVIEW_LABELS[state].label}{reviews.length > 1 ? ` (${count} of ${reviews.length} ads)` : ""}
+      </Badge>
+      {reasons.length > 0 && <span className="text-xs text-slate-600">{reasons.join(" ")}</span>}
+    </span>
   );
 }
 

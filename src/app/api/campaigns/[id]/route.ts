@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot } from "@/lib/meta/client";
+import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot, type PausedCampaignTree } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -152,6 +152,7 @@ async function handlePATCH(
   }
 
   let deliveryAfter: CampaignDeliverySnapshot | null = null;
+  let pauseResult: PausedCampaignTree | null = null;
   try {
     if (action === "active") {
       await recheckMetaConnection(context, storedBinding.metaConnectionGeneration);
@@ -205,7 +206,13 @@ async function handlePATCH(
         const reservation = await getCustomerBalance(context)
           .then(balance => balance.reservations.find(item => item.campaignId === id && item.state !== "closed"))
           .catch(() => undefined);
-        await meta.updateCampaignStatus(campaign.meta_campaign_id!, "PAUSED");
+        pauseResult = await meta.pauseCampaignTree(
+          campaign.meta_campaign_id!,
+          intendedCampaignChildren(campaign) ?? { adSetIds: [], adIds: [] },
+        );
+        if (!pauseResult.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
+          throw new CampaignDeliveryError("Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
+        }
         if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => undefined);
       },
     );
@@ -239,7 +246,7 @@ async function handlePATCH(
     reason: `${action === "active" ? "Resumed" : "Paused"} campaign "${campaign.name ?? id}"`,
   });
 
-  return NextResponse.json({ ok: true, status: action, delivery: deliveryAfter });
+  return NextResponse.json({ ok: true, status: action, delivery: deliveryAfter, pause: pauseResult });
 }
 
 /** Delete a campaign from Meta (best-effort) and remove it from AdBrain. */

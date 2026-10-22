@@ -86,9 +86,9 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/[id]` | Path ID -> `{delivery}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation |
-| PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery}` | Live parent Meta mutation + local mirror; activation uses customer reservation |
+| PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery,pause}` | Live Meta mutation (pause: campaign, ad sets and ads) + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
-| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
+| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
@@ -490,6 +490,11 @@ unexpected children and stale review return 409 before reservation. Success is
 `{ok:true,status,delivery}`; `status:"active"` is a requested parent state,
 not proof of effective delivery or Meta eligibility. An uncertain post-request
 result holds the reservation for reconciliation. Pause/delete also verify binding.
+Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
+after Meta's 613 status rate limit), and reads all three levels back; `pause` is
+`{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only
+when the campaign itself reads back PAUSED; otherwise 409 asks the owner to pause
+in Ads Manager. `confirmed:false` means a child did not read back PAUSED.
 Deletion preserves the local row when remote deletion cannot be confirmed.
 Remote success followed by local failure is possible; inspect before retrying.
 
@@ -503,7 +508,10 @@ failure is not a successful import; partial writes before an error can exist.
 Failed Meta binding reads return a generic 502 before local imports; only a
 confirmed unmatched binding counts as skipped.
 
-Refresh returns `{result,summary,insights,autoPaused,protectionConfirmed}`. **This
+Refresh returns `{result,summary,insights,review,autoPaused,protectionConfirmed}`.
+`review` is Meta's per-ad review (`[{adId,state,effectiveStatus,reasons}]`, state
+`in_review|approved|rejected|issues|unknown`, reasons as Meta wrote them) or
+`null` when the review read failed; it does not fail the refresh. **This
 can invoke an LLM summary and pause live campaigns through spend enforcement**; it
 is not a read-only smoke test. `autoPaused` lists only confirmed remote and local
 pauses. `protectionConfirmed:false` means the spend decision or a required pause
