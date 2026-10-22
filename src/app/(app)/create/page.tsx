@@ -37,6 +37,12 @@ export default async function CreatePage() {
     );
   }
 
+  const missing = [
+    [business.offers?.length, "offers or prices"],
+    [business.locations?.length, "service areas"],
+    [business.phone, "phone number"],
+  ].filter(([present]) => !present).map(([, label]) => label);
+
   return (
     <div>
       <PageHeader
@@ -50,8 +56,13 @@ export default async function CreatePage() {
           <p className="text-xs font-medium text-slate-500">Brand context</p>
           <h2 className="mt-2 font-semibold text-slate-900">{business.name}</h2>
           <dl className="mt-5 space-y-5 text-sm">
-            {[["Voice", business.brand_voice], ["Audience", business.target_audience], ["Service areas", business.locations.join(", ")]].map(([label, value]) => <div key={label}><dt className="mb-1 text-xs text-slate-400">{label}</dt><dd className="break-words leading-6 text-slate-600">{value || "Not added"}</dd></div>)}
+            {[["Voice", business.brand_voice], ["Audience", business.target_audience], ["Offers", (business.offers ?? []).join(", ")], ["Service areas", (business.locations ?? []).join(", ")], ["Phone", business.phone]].map(([label, value]) => <div key={label}><dt className="mb-1 text-xs text-slate-400">{label}</dt><dd className="break-words leading-6 text-slate-600">{value || "Not added"}</dd></div>)}
           </dl>
+          {missing.length > 0 && (
+            <p className="mt-5 text-sm leading-6 text-amber-800">
+              Not in your Brand yet: {missing.join(", ")}. Ads only state facts your Brand has, so they will leave these out.
+            </p>
+          )}
           <Link href="/brand" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700">Edit Brand Brain <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
         </aside>
       </div>
