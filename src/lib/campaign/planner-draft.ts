@@ -54,6 +54,21 @@ function selectLocations(
   return selected;
 }
 
+/** The planner's rationale describes the interests it asked for; once Meta drops some, state what is actually targeted. */
+export function rationaleForMatchedInterests(rationale: string, kept: string[], dropped: string[]): string {
+  if (!dropped.length) return rationale;
+  const describesInterests = (sentence: string) =>
+    /\binterest/i.test(sentence) || dropped.some((name) => sentence.toLowerCase().includes(name.toLowerCase()));
+  const rest = (rationale.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [])
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !describesInterests(sentence))
+    .join(" ");
+  const targeted = kept.length
+    ? `Interests targeted: ${kept.join(", ")}.`
+    : "No interests are targeted, so this plan reaches everyone in the chosen areas and ages.";
+  return `${rest} Meta couldn't match: ${dropped.join(", ")}. ${targeted}`.trim().slice(0, 2_000);
+}
+
 export const FALLBACK_AUDIENCE_RATIONALE = "AI audience planning was unavailable, so this plan uses your choices plus defaults: ages 25-55 unless you chose them, your saved service areas, and a broad audience without interest narrowing.";
 
 /** Owner-chosen targeting plus fixed defaults, used when the AI planner fails. */
