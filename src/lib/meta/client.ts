@@ -152,10 +152,28 @@ export class MetaError extends Error {
     message: string,
     readonly status?: number,
     readonly code?: number,
+    readonly subcode?: number,
   ) {
     super(message);
     this.name = "MetaError";
   }
+}
+
+type GraphErrorBody = { message?: string; error_user_msg?: string; code?: number; error_subcode?: number };
+
+const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
+  2446307: userMessage =>
+    `Meta's minimum campaign spending limit for this currency is ${userMessage.match(/₹\s?[\d,]+(?:\.\d+)?/)?.[0] ?? "higher than this amount"}.`,
+  1885257: () => "Meta does not allow changing a daily budget ad set to a lifetime budget.",
+};
+
+/** English text for a Graph error; error_user_msg follows the token user's locale (#185). */
+export function metaErrorMessage(error: GraphErrorBody | undefined, status: number): string {
+  const userMessage = error?.error_user_msg ?? "";
+  const mapped = error?.error_subcode ? META_SUBCODE_MESSAGES[error.error_subcode]?.(userMessage) : undefined;
+  if (mapped) return mapped;
+  if (userMessage && /^[\p{Script=Latin}\p{N}\p{P}\p{S}\s]+$/u.test(userMessage)) return userMessage;
+  return error?.message || `Meta HTTP ${status}`;
 }
 
 export class CampaignDeliveryError extends MetaError {}
@@ -214,6 +232,9 @@ export function friendlyMetaError(
   }
   if (/targeting|geo|location|age_min|age_max|audience/.test(normalized)) {
     return "Meta rejected the audience settings. Review the locations and age range, then try again.";
+  }
+  if (/minimum campaign spending limit/.test(normalized)) {
+    return `${message} The campaign stays paused.`;
   }
   if (/bid_strategy|bid strategy|bidding strategy/.test(normalized)) {
     return "Meta rejected the bidding strategy. Changing the daily budget alone may not fix this; the campaign bidding configuration needs review.";
@@ -477,14 +498,8 @@ export class MetaClient {
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
-      const err = (
-        json as { error?: { message?: string; error_user_msg?: string; code?: number } }
-      ).error;
-      throw new MetaError(
-        err?.error_user_msg || err?.message || `Meta HTTP ${res.status}`,
-        res.status,
-        err?.code,
-      );
+      const err = (json as { error?: GraphErrorBody }).error;
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode);
     }
     return json as T;
   }

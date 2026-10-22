@@ -11,8 +11,10 @@ import statusRateLimit from "./fixtures/meta/safety/status-rate-limit.json";
 import cappedAdSet from "./fixtures/meta/safety/capped-adset.json";
 import cappedAdSetDelete from "./fixtures/meta/safety/capped-adset-delete.json";
 import { settleInVirtualTime, useVirtualDeadlines } from "./replay";
-import { adReviewState, MetaClient } from "@/lib/meta/client";
+import { adReviewState, friendlyMetaError, MetaClient, MetaError, metaErrorMessage } from "@/lib/meta/client";
 import { decodeCampaignInsights } from "@/lib/meta/insights";
+import { weeklySpendDecision } from "@/lib/campaign/spend";
+import type { Campaign } from "@/lib/types";
 
 // #157: Graph responses recorded from one PAUSED Solaride test campaign by
 // scripts/record-meta-safety-fixtures.ts (never ACTIVE; archived afterwards).
@@ -57,6 +59,20 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
     await expect(new MetaClient(creds).enforceCampaignSpendCap(campaignId, 60_000)).rejects.toThrow(/₹5,000/);
     expect(tape.pending).toEqual([]);
     expect(tape.sent.filter(call => call.method === "POST")).toEqual([{ method: "POST", path: campaignId, form: { spend_cap: "60000" } }]);
+  });
+
+  it("locale (#185): Meta's Hindi spend-cap refusal reaches the customer in English, keeping the minimum", async () => {
+    replay(campaignSpendCap as Exchange[]);
+    const error = await new MetaClient(creds).enforceCampaignSpendCap(campaignId, 60_000).catch(caught => caught);
+    expect(error).toBeInstanceOf(MetaError);
+    expect(error).toMatchObject({ code: 100, subcode: 2446307, message: "Meta's minimum campaign spending limit for this currency is ₹5,000.00." });
+    expect(friendlyMetaError(error)).toBe("Meta's minimum campaign spending limit for this currency is ₹5,000.00. The campaign stays paused.");
+
+    const [refused] = switchDailyToLifetime as Exchange[];
+    const message = metaErrorMessage((refused.body as { error: Parameters<typeof metaErrorMessage>[0] }).error, refused.status);
+    expect(message).toBe("Meta does not allow changing a daily budget ad set to a lifetime budget.");
+    expect(metaErrorMessage({ message: "Invalid parameter", error_user_msg: "अमान्य पैरामीटर" }, 400)).toBe("Invalid parameter");
+    expect(metaErrorMessage({ message: "Invalid parameter", error_user_msg: "Budget is too low" }, 400)).toBe("Budget is too low");
   });
 
   it("cap: a daily ad set cannot become lifetime, but a new lifetime ad set reads back the exact ₹600 and end date", () => {
@@ -175,5 +191,25 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
       await expect(create(new MetaClient(creds))).rejects.toThrow(/did not confirm/);
       expect(tape.sent.at(-1)).toMatchObject({ method: "DELETE", path: capped.adSetId });
     });
+  });
+
+  it("spend: a just-activated campaign with no delivery yet (no insight rows) counts as ₹0, not as an unverifiable reading", async () => {
+    const [lifetime, , newCampaign] = insights as Exchange[];
+    const limits = { weeklyCapRupees: 600, alertPct: 80, autoPause: true };
+    const active = { id: "c1", status: "active", daily_budget: 200, meta_campaign_id: campaignId } as unknown as Campaign;
+    const now = new Date("2026-10-22T06:00:00Z");
+    const observe = (body: unknown) => async () => ({
+      insights: decodeCampaignInsights(body, "instant_form", { requireSpend: true }), currency: "INR", timezoneName: "Asia/Kolkata",
+    });
+
+    expect(decodeCampaignInsights(newCampaign.body, "instant_form", { requireSpend: true })).toMatchObject({ spend: 0, noDelivery: true });
+    expect(await weeklySpendDecision([active], limits, observe(newCampaign.body), now)).toEqual({ toPause: [], verified: true });
+
+    // A real row (with Meta's dates) over the cap still pauses; a row with no spend field is still unverified.
+    const row = (lifetime.body as { data: Array<Record<string, unknown>> }).data[0];
+    const thisWeek = { ...row, spend: "650.00", date_start: "2026-10-19", date_stop: "2026-10-22" };
+    expect(await weeklySpendDecision([active], limits, observe({ data: [thisWeek] }), now)).toEqual({ toPause: ["c1"], verified: true });
+    const noSpend = Object.fromEntries(Object.entries(thisWeek).filter(([key]) => key !== "spend"));
+    expect(await weeklySpendDecision([active], limits, observe({ data: [noSpend] }), now)).toEqual({ toPause: ["c1"], verified: false });
   });
 });

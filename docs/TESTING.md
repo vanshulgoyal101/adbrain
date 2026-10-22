@@ -12,8 +12,10 @@ or a blocked browser request does not isolate server-side Supabase/Meta/AI calls
 Use disposable local services or a separately authorized test environment. Never
 load production secrets into a test merely to make it pass.
 
-Unit tests use [tests/setup.ts](../tests/setup.ts), mocked dependencies and synthetic
-fixtures. Check each script before executing it: package scripts have very
+Unit tests use mocked dependencies and synthetic fixtures.
+[tests/setup.ts](../tests/setup.ts) only registers DOM matchers; it does **not**
+block network access or replace configuration. Check each script before
+executing it: package scripts have very
 different side effects. Do not invoke database seeding, image generation, or a
 spend-enforcement route as a generic smoke test.
 
@@ -29,6 +31,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `start` | Serves an existing production build; real routes remain live |
 | `lint` | ESLint, no automatic fixes by default |
 | `typecheck` | TypeScript no-emit check; Next generated types may need a build first |
+| `docs:check` | Read-only Markdown links/anchors, fences, JSON examples, command names and source inventories; no application imports or external requests |
 | `audit:dependencies` | npm registry advisory check; fails at high severity for runtime dependencies and critical for dev tooling (unpatched `braces` advisory GHSA-vfj7-8cjw-p6xm in ESLint tooling, #102); requires network |
 | `test` | One Vitest run in Node, components opt into jsdom |
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
@@ -42,6 +45,8 @@ tools beyond Node; inspect their prerequisites before executing.
 | `env:doctor` | Shell diagnostics for configuration/tooling; not proof of provider authorization |
 | `env:doctor:strict` | Strict diagnostic variant |
 | `db:push` | Applies schema to configured database; requires explicit target verification/authorization |
+| `db:migrate` | Applies one named migration through the checksum ledger; inspect its target first, not an automatic test |
+| `worker:campaigns` | Executes queued campaign work against configured services; can mutate Meta and the database |
 | `seed:demo-clinic` | Writes demo data; use only on the approved target |
 | `generate:icons` | Regenerates local icon assets |
 | `eval:creative` | Sends fixture copy to Google judge model; consumes provider quota/cost |
@@ -75,6 +80,21 @@ npm run lint
 npm run typecheck
 ```
 
+To keep inherited service credentials out of a mocked test, run it from a
+worktree without environment files and a scrubbed environment:
+
+```sh
+env -i PATH="$PATH" HOME="$HOME" TMPDIR=/tmp CI=1 RUN_PAID_CREATIVE_EVAL=0 \
+	NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co \
+	NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder-anon-key \
+	npm test -- tests/spend.test.ts --maxWorkers=1
+```
+
+Scrubbing variables is not a network sandbox: test doubles or the optional
+[unit network guard](../scripts/qa-unit-network-guard.mjs) must prevent
+unintended transport. Do not attach that guard to browser/database checks that
+need their own isolated services.
+
 Choose an existing test file for the behavior being changed. For a shared contract,
 run both its pure schema tests and affected route/component tests. Mock failure
 paths as well as success: returned Supabase errors are not always thrown `Error`
@@ -83,7 +103,7 @@ instances, and HTTP 200 can represent partial work.
 ### CI Gates
 
 [CI](../.github/workflows/ci.yml) runs on push/PR to `dev`/`main` with placeholder
-Supabase configuration and Node 22:
+Supabase configuration and Node 24:
 
 ```sh
 npm ci
@@ -120,6 +140,10 @@ PostgreSQL 17 binaries at `/opt/homebrew/opt/postgresql@17/bin`; override
 cluster, synthetic roles/auth/storage, and fresh/upgrade databases, then cleans
 up. It does not require production Supabase credentials.
 
+On macOS a scrubbed environment may need `LC_ALL=C LANG=C` for PostgreSQL
+startup. A harness setup failure is not a failed application assertion; never
+substitute a production database URL or run schema-push commands to repair it.
+
 Coverage includes grants/RLS, tenant isolation, token/attempt transitions,
 idempotent claim/lease behavior, draft fences, concurrent rate limiting, usage
 aggregate integrity, and product-event retention. It is not a hosted Supabase
@@ -147,6 +171,24 @@ keyboard scrolling, vertical resizing, and reader position during delayed
 responses. Network requests are fulfilled with fixtures or blocked; server
 actions throw. Screenshots go to ignored `test-results/scroll-layout/`.
 This does not replace authenticated workflow tests or real-device Safari testing.
+
+### Enquiry Checks
+
+For the saved-enquiry workflow, with installed Google Chrome and fully synthetic
+transport (no application server, credentials or provider calls):
+
+```sh
+node scripts/check-workspace-ux.mjs --offline-leads
+LC_ALL=C LANG=C node scripts/check-meta-connect-db.mjs --leads-only
+npm test -- tests/leads.test.ts tests/lead-inbox.test.tsx tests/meta-connect-w2-leads-sync-route.test.ts
+```
+
+The browser check renders the real inbox and CSS at 1440/390/320px: paging,
+failed save and retry, reload persistence, filters, partial sync/resume and error
+recovery; screenshots go to ignored `test-results/lead-inbox/`. The database
+check uses its own temporary cluster for fresh/upgrade schemas, 225-row cursor
+ordering, defaults, re-import preservation and tenant denials. Neither is live
+Meta evidence.
 
 [Playwright configuration](../playwright.config.ts) uses one worker, base URL
 `http://localhost:3939`, and an existing production build via `npm run start`.
@@ -179,7 +221,29 @@ without credentials. Do not repeatedly run a failing paid job until it passes.
 User participation is required for real Meta consent; connect verification is not
 authorization to create campaigns, activate spend, or delete assets.
 
+Razorpay test-mode evidence is a separate layer: mocked responses, provider test
+captures, production merchant activation and live collection are distinct facts.
+The local test gate rejects production/Vercel and non-loopback Supabase targets;
+do not enable a test flag to exercise production payments. See the
+[payment implementation receipt](PAYMENTS-PLAN.md#9-implementation-receipt).
+
 ## Documentation Checks
+
+```sh
+npm run docs:check
+npm run docs:check -- docs/TESTING.md
+npm run docs:check -- --all --json
+node --test scripts/check-docs.test.mjs
+```
+
+[The checker](../scripts/check-docs.mjs) parses Markdown and fails current guides
+on broken local links/anchors or source-line links, unclosed fences, invalid JSON
+examples, missing `node scripts/...` files and unknown `npm run` names. Historical
+records (`docs/qa/`, `docs/releases/`, dated history files) are checked only with
+`--all`, as warnings. `--json` also lists API routes, environment keys and
+migrations not mentioned in their owning guides; these are review leads, not
+contract validation. `--root <worktree>` inspects another checkout. It does not
+fetch external links, run snippets, load `.env` or validate route schemas.
 
 When changing a route, environment field, migration, or lifecycle, update the
 corresponding reference in the same change. Check API inventory against exported

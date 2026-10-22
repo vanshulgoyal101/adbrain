@@ -15,6 +15,7 @@ const creativeIntentMigration = await readFile(join(root, "db/migrations/2026092
 const creativeReconcileMigration = await readFile(join(root, "db/migrations/20260930_creative_generation_reconcile.sql"), "utf8");
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
+const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -419,6 +420,23 @@ async function verifyConfigurablePayments(db, database) {
     assert.equal(invalid.refunded_paise,1000);
     assert.equal((await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner])).held,true);
   });
+  await check(`${database}: webhook health counts captures without a capture event (#178)`, async () => {
+    const health = () => service("select public.production_payment_webhook_health('acc_pricing') as result");
+    const recent = await health();
+    assert.equal(recent.capturedWithoutEvent,0,'fresh captures are inside the grace period');
+    await db.query("update private.production_payment_orders set updated_at=clock_timestamp()-interval '1 hour' where account_id='acc_pricing'");
+    const captured = (await db.query("select count(*)::int as count from private.production_payment_orders where account_id='acc_pricing' and captured_paise>0")).rows[0].count;
+    assert.ok(captured > 0);
+    assert.equal((await health()).capturedWithoutEvent,captured);
+    const receive = eventId => service("select public.production_payment_event_receive('acc_pricing','rzp_live_pricing',$1,$2,$3,'pay_verification','order_verification',null,'capture') as result",[randomUUID(),eventId,'a'.repeat(64)]);
+    await receive('evt_health');
+    await receive('evt_health');
+    const after = await health();
+    assert.equal(after.capturedWithoutEvent,captured-1);
+    assert.equal(after.events7d,1,'a duplicate delivery is stored once');
+    assert.equal(after.unprocessed,0,'unprocessed counts only events older than an hour');
+    assert.equal((await service("select public.production_payment_webhook_health('acc_other') as result")).events7d,0);
+  });
   await check(`${database}: pricing objects remain inaccessible to browser roles`, async () => {
     for (const role of ['anon','authenticated']) {
       const session = client(database);
@@ -427,6 +445,7 @@ async function verifyConfigurablePayments(db, database) {
         await session.query(`set role ${role}`);
         await assert.rejects(session.query("select * from private.production_payment_orders"),{code:'42501'});
         await assert.rejects(session.query("select public.production_payment_orders_list($1,$2)",[business,owner]),{code:'42501'});
+        await assert.rejects(session.query("select public.production_payment_webhook_health('acc_pricing')"),{code:'42501'});
       } finally { await session.end(); }
     }
   });
@@ -791,6 +810,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
         });
         const after = (await db.query("select to_jsonb(payment)-'purpose' as saved from private.production_payment_orders payment where id=$1",[order])).rows[0].saved;
         await check(`${database}: existing accepted order is preserved by migration`,async () => assert.deepEqual(after,before));
+      }
+      if (!(await db.query("select to_regprocedure('public.production_payment_webhook_health(text)') is not null as installed")).rows[0].installed) {
+        await check(`${database}: webhook health migration applies once and skips replay`,async () => {
+          assert.equal(await applyMigration(db,"20261022_payment_webhook_health.sql",webhookHealthMigration),'applied');
+          assert.equal(await applyMigration(db,"20261022_payment_webhook_health.sql",webhookHealthMigration),'already_applied');
+        });
       }
       await verifyConfigurablePayments(db,database);
       return;
@@ -1908,6 +1933,7 @@ try {
   assert.ok(schema.includes(creativeReconcileMigration.trim()), "Canonical schema must include the exact creative reconciliation migration");
   assert.ok(schema.indexOf(creativeReconcileMigration.trim()) < schema.indexOf(creativeSettleMigration.trim()), "Canonical schema must include the exact settle-holds migration after reconciliation");
   assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
+  assert.ok(schema.indexOf(configurablePaymentMigration.trim()) < schema.indexOf(webhookHealthMigration.trim()), "Canonical schema must include the exact webhook health migration after configurable pricing");
   assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);

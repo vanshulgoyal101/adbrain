@@ -60,3 +60,25 @@ describe("core: Campaigns shows Meta's ad review status (#157)", () => {
     expect(await screen.findByText("Approved by Meta (2 of 2 ads)")).toBeTruthy();
   });
 });
+
+describe("Campaigns: a campaign with no spend says so once (#173)", () => {
+  it.each([
+    ["paused", "Paused — nothing has spent. Resume when you're ready."],
+    ["active", "Waiting for Meta to start delivery."],
+  ])("a %s zero-spend card shows exactly one no-spend message after Refresh results", async (status, message) => {
+    const campaign = { ...launched, status } as Campaign;
+    const result = { id: "r1", campaign_id: "c1", impressions: 0, clicks: 0, leads: 0, spend: 0, cpl: null };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/refresh")
+      ? Response.json({
+        result,
+        summary: "No delivery yet — this campaign hasn't spent or shown to anyone. It may be paused or still in review.",
+        review: [],
+      })
+      : Response.json({ campaigns: [campaign], results: { c1: result }, nextCursor: null })));
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[campaign]} initialResults={{}}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_2398686420592052" />);
+    fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.queryAllByText(/spen[dt]|deliver|Next step/i)).toHaveLength(1);
+  });
+});

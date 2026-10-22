@@ -15,6 +15,41 @@ A failed response does not prove no side effect occurred. A successful response
 can be partial, and a local row is not authoritative proof of remote delivery.
 Inspect durable evidence before retrying anything that can create objects or spend.
 
+### First Response
+
+1. Identify the failing target: deployment SHA, Supabase origin, owner/business
+	scope and last known good request. Do not load the owner checkout's
+	`.env.local` to discover values; it targets production.
+2. Preserve the original request/operation identity and existing successes.
+	Separate a timeout from a confirmed remote rejection. Never retry a creation,
+	payment or activation with a fresh key to get past an error.
+3. Start with scoped logs, saved status and read-only metadata. Compare the
+	deployed handler and schema with the [API](API_REFERENCE.md) and
+	[data](DATA_MODEL.md) guides. A migration file is not proof its objects exist remotely.
+4. If the core loop is broken after a deploy, roll back first and debug second
+	(see [Production guard](RELEASING.md#production-guard)). Migrations, production
+	settings, secrets, money and rollback are DevOps-owned; dashboard access is not
+	permission to change them.
+5. Verify the fix through the original workflow. Opening Campaigns or Leads can
+	auto-sync (below), and a homepage 200 is not an authenticated recovery.
+
+### Process and Probe Safety
+
+| Action | What it can do |
+| --- | --- |
+| Read logs, Git status or reviewed metadata queries | Diagnosis only; still protect identifiers |
+| Open Campaigns or Leads, or press Sync/Refresh | Each page auto-syncs from Meta when this browser's last sync is over 15 minutes old and saves campaigns/leads; Refresh also runs spend enforcement and can pause campaigns |
+| Call a cron URL or `gh workflow run scheduled-jobs.yml` | Keepalive prunes old product events; enforce-spend can pause campaigns; sync-leads imports leads. All are GET (see [Scheduled Jobs](#scheduled-jobs)) |
+| `npm run smoke:core` | Signs in to production, views pages and prepares one campaign review without sending it, then deletes that draft |
+| `npm run worker:campaigns -- --once` | Claims and executes one queued job; can create paused Meta objects |
+| Local QA `setup`, seed, backfill or migration scripts | Write their target database and possibly Auth/Storage; inspect guards and target first |
+
+Do temporary local work in your own worktree under `adbrain-wt/` with the local
+Supabase project ([launcher modes](CONFIGURATION.md#local-launcher-modes)). Start
+servers with `npm run dev` for its memory limit and stop them after validation.
+Never stop another worker's process, reuse its test database, delete its
+artifacts or switch the shared branch.
+
 ## Privacy Request Operations
 
 Before publishing the Settings request controls, DevOps applies the reviewed
@@ -62,7 +97,7 @@ Financial/security retention and provider-held Meta data remain separate.
 | Sync incomplete | Cursor, skipped count, account/Page binding, status, save error | Continue pages or retry failed page; do not prune local rows based on one page |
 | Refresh result cannot be saved | `campaign_results` persistence and request logs | 503 before summary/enforcement; inspect the saved row before retrying, and verify delivery in Meta |
 | Spend protection unconfirmed | Refresh `protectionConfirmed:false` or cron `ok:false`, stored binding, provider insight period/currency, remote/local pause state | Confirm the campaign status in the original Meta account; repair reporting/connection/storage before retry. Do not read an empty `autoPaused`/`swept` as a safe spend total |
-| Leads partly sync | `failedForms`, newly inserted count, reload result | Retry failed forms after permission fix; repeated IDs are ignored, not counted as new leads |
+| Leads partly sync | `failedForms`, newly inserted count, `sync.hasMore`, reload result | Keep saved rows and retry failed forms after a permission fix; `sync.hasMore` means the import is incomplete. Repeated IDs are ignored, not counted as new leads |
 | Disconnect fails | Explicit business UUID, owner check, RPC/schema availability | Keep existing UI state until confirmed; disconnect is not an emergency pause |
 | Telemetry missing | Enable flags, applied migration, hosting logs, retention, request cap | Events are best effort; a missing event does not prove no action occurred |
 
@@ -221,13 +256,13 @@ This does not certify attribution equivalence with every Ads Manager report.
 [vercel.json](../vercel.json) schedules keepalive and enforce-spend at
 `0 6 * * *` (UTC), the most a Vercel Hobby cron can run. Every 15 minutes
 [`scheduled-jobs.yml`](../.github/workflows/scheduled-jobs.yml) also calls
-enforce-spend and `sync-leads` (GitHub schedules are best-effort and can run
+enforce-spend, `sync-leads` and `payment-health` (GitHub schedules are best-effort and can run
 late). It needs repository secret `CRON_SECRET` equal to the production value,
 logs only counts, fails red on any non-200 and opens one
 `Scheduled jobs failed twice in a row` `core` bug on two consecutive failures.
 Pause it with `gh workflow disable scheduled-jobs.yml`; resume with
 `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
-All three require `Authorization: Bearer <CRON_SECRET>`, return 404 if unset and 401
+All cron routes require `Authorization: Bearer <CRON_SECRET>`, return 404 if unset and 401
 for a mismatch. Do not log the header or paste it into support evidence.
 
 | Job | Behavior |
@@ -235,9 +270,13 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/keepalive` | Database activity and bounded product-event retention cleanup when configured; retention failure is visible |
 | `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend. `unverified` lists businesses whose spend could not be read (503), never ₹0 |
 | `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it |
+| `/api/cron/payment-health` | Read-only Razorpay webhook counts (#178): events in 7 days, events unprocessed after 1 hour, captured orders with no capture event after 30 minutes. `payments:"disabled"` when live payments are off. When `ok` is false the workflow opens one `Razorpay webhook missing for a captured payment` `core` bug (counts only) and stays green. Triage: in the Razorpay Live dashboard confirm the webhook URL `https://adbrain.vanshul.com/api/payments/live/webhook`, its secret matches `RAZORPAY_LIVE_WEBHOOK_SECRET` and capture/refund/dispute events are enabled, then resend the delivery; never re-charge |
 
 Weekly protection requires a complete Monday-to-today INR spend observation;
-missing metrics are not zero spend. Unlaunched drafts do not contribute, but
+missing metrics are not zero spend. A row without `spend` stays unverified. Meta
+answers `{"data":[]}` when nothing delivered in the period (recorded in
+`tests/core/fixtures/meta/safety/insights.json`); that counts as ₹0, so a newly
+activated campaign is not paused before it delivers. Unlaunched drafts do not contribute, but
 launched or paused campaigns can. The scheduled sweep can return 503 with partial
 progress; inspect `swept` and remaining failures rather than declaring every
 campaign paused. Missing bindings, credentials, read errors, or local save failures

@@ -81,6 +81,11 @@ as `X-Request-Id`. Immutable responses may not accept that header. Internal
 operation IDs and idempotency keys remain unchanged. Overlapping requests use
 isolated async contexts; one account cannot inherit another request's identity.
 
+Request outcomes map HTTP statuses below 400 to `success`, 4xx to `rejected` and
+5xx to `failed`; workflow events can also be `started` or `partial`, so a
+successful request can still carry a partial business result. The `release`
+attribute appears only for a 7-40 character hexadecimal `VERCEL_GIT_COMMIT_SHA`.
+
 ## Privacy and Access
 
 The new product stream never copies request/response bodies, URL queries, raw
@@ -139,6 +144,22 @@ action summary is retained if the batch is full. Structured runtime events remai
 available even when the database is unavailable. Collection is best effort, not
 an exactly-once or tamper-proof audit ledger; a process crash can lose events.
 Do not retry business operations to compensate for missing logs.
+
+### Missing-Event Triage
+
+| Observation | Next check |
+| --- | --- |
+| No product JSON | `PRODUCT_LOGGING_ENABLED`, whether the path is instrumented, runtime log source and time window |
+| JSON but no database row | `PRODUCT_LOGGING_DATABASE_ENABLED`, service-role target, schema/grants and `PERSIST_FAILED` |
+| `SCHEDULE_FAILED` | Whether the code ran inside a Next request/action lifecycle where `after` is available |
+| `INVALID_EVENT` | Caller metadata against the [event schema](../src/lib/observability/events.ts); fix the emitter without logging the payload |
+| No browser event | Build-time client flag, DNT/GPC, authenticated same-origin session, tracked page, 2 KiB/60-per-minute limits; no retry |
+| Missing account IDs | Authentication/ownership had not resolved; never fill the gap from a client-supplied ID |
+
+The flags are independent: product logging defaults on, the database sink off,
+and browser collection on unless disabled or denied by DNT/GPC. Turning off
+`PRODUCT_LOGGING_ENABLED` also drops browser events at `/api/events`. Disabling
+the sink does not remove existing rows or runtime log copies.
 
 ## Retention and Health
 
