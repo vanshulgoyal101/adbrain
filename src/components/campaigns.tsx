@@ -58,6 +58,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
 import type { LeadForm } from "@/lib/meta/client";
@@ -1229,10 +1230,13 @@ function BusinessCampaigns({
                           <div className="aspect-square bg-slate-100">
                             {c.image_url && (
                               <img
-                                src={c.image_url}
+                                src={creativeThumbnailUrl(c.image_url)}
                                 alt={c.headline || "Ad creative preview"}
                                 className="h-full w-full object-contain"
                                 loading="lazy"
+                                onError={(event) => {
+                                  if (c.image_url && event.currentTarget.src !== c.image_url) event.currentTarget.src = c.image_url;
+                                }}
                               />
                             )}
                           </div>

@@ -10,6 +10,7 @@ import {
 import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue, missingBrandContext } from "@/lib/work-queue";
 import { describeAuditEvent } from "@/lib/audit-labels";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatDateShort } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CreativePreview } from "@/lib/types";
@@ -290,7 +291,7 @@ export function WorkspaceHome({
                   <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
                     {creative.image_url ? (
                       <img
-                        src={creative.image_url}
+                        src={creativeThumbnailUrl(creative.image_url)}
                         alt={creative.headline || "Ad creative"}
                         className="h-full w-full object-contain"
                         loading="lazy"
