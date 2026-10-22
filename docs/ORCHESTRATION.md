@@ -102,11 +102,11 @@ real ad spend and the App Review submission wait for the owner. Parked issues
 
 | Worker | Work, in order |
 | --- | --- |
-| DevOps | Done: #153 guard pipefail, parallel Create live (#142), #138 closed. Now [#111](https://github.com/vanshulgoyal101/adbrain/issues/111) rollback drill (owner approved Oct 22): add a `drill` dispatch input that forces the FAIL and runs the real rollback, run it, verify, restore main HEAD, close #111. Then [#165](https://github.com/vanshulgoyal101/adbrain/issues/165): lead sync and spend enforcement every 15 minutes |
-| Dev 3 | Done: #98 (3/3 twice, 48 s and 40 s, Haiku + parallel). Close [#142](https://github.com/vanshulgoyal101/adbrain/issues/142) with the timings, then finish [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): Meta-side cap, review status and one-click pause, from recorded responses only |
-| Dev | Done: #141 live progress. One production Create through the UI to see it (timing on #142), then [#169](https://github.com/vanshulgoyal101/adbrain/issues/169): first run for a brand-new business, sign in to 3 saved ads in under 5 minutes |
-| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3: the owner is signing into a no-role Facebook account in the shared browser. Stop at the asset picker; never save it over Cedar Ridge's Solaride connection; disconnect afterwards |
-| QA | [#158](https://github.com/vanshulgoyal101/adbrain/issues/158): walk the core loop as a first-time owner on 390 px and desktop; file each dead end as a `core` bug and fix tiny ones yourself. Verify #153 with DevOps |
+| DevOps | Done: #153, #142 flip, #138, #111 drill, #165 (lead sync + spend checks every 15 min). Now [#170](https://github.com/vanshulgoyal101/adbrain/issues/170): stop main-to-dev sync failures (they email the owner), then [#178](https://github.com/vanshulgoyal101/adbrain/issues/178): prove Razorpay webhooks reach production and are recorded once (no charges) |
+| Dev 3 | Done: #98, #142 at 36.5 s (QA run 13). Close [#142](https://github.com/vanshulgoyal101/adbrain/issues/142). Finish [#157](https://github.com/vanshulgoyal101/adbrain/issues/157) step 1: activation sets a Meta-side cap equal to the approved amount and reads it back, else refuses; recorded responses only. PR164 waits on QA's money-path review |
+| Dev | Done: #141 (QA verified it live). First QA's walkthrough bugs [#174](https://github.com/vanshulgoyal101/adbrain/issues/174) (planner rationale names an interest the audience lacks) and [#173](https://github.com/vanshulgoyal101/adbrain/issues/173) ("No spend yet" repeated), then [#169](https://github.com/vanshulgoyal101/adbrain/issues/169): first run for a brand-new business |
+| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3: the owner is signed in to the no-role Facebook account in the shared browser (since 05:25Z). Run consent and discovery, stop at the asset picker, never replace Cedar Ridge's Solaride connection, disconnect, post what consent showed per permission |
+| QA | [#158](https://github.com/vanshulgoyal101/adbrain/issues/158) walkthrough done; close it when #176 is live. Then review PR164 (money path, weekly spend), then re-walk the first run once #169 lands |
 
 ### Earlier focus (October 21, before P0)
 
