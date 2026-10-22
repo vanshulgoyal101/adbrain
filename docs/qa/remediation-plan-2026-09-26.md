@@ -2,7 +2,7 @@
 
 Date: September 26, 2026. Status: execution plan; acceptance remains packet-specific.
 
-Current coordination: [Worker Orchestration](../ORCHESTRATION.md) is the single
+Current coordination: [Worker Orchestration](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) is the single
 assignment/ownership board for Dev, Dev 2, DevOps and QA; it supersedes worker
 routing below without changing these technical packet requirements. The later
 [independent acceptance report](independent-acceptance-2026-09-26.md) accepts DB-A

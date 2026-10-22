@@ -1,15 +1,9 @@
 # Meta Connection and Publishing
 
-Use this guide to connect an owner's existing Meta assets, return to saved work,
-and recover without repeating an uncertain mutation. AdBrain binds each local
-business to one selected ad account and Facebook Page. AdBrain login and Meta
-consent are separate: matching email addresses do not establish asset access.
-[API Reference](API_REFERENCE.md) owns exact request bodies.
-
-This guide describes the combined dev/main source, not a target's migration ledger
-or a real-provider acceptance result. Trusted-write and #34/#35 enquiry callers
-require their matching migrations. No real consent, lead download or activation
-was performed for this documentation.
+AdBrain binds each local business to one selected Meta ad account and Facebook
+Page. Application login and Meta authorization are separate. A Google login to
+AdBrain does not grant access to Facebook assets, and matching email addresses
+do not establish ownership. See [API Reference](API_REFERENCE.md) for exact bodies.
 
 ## Prerequisites
 
@@ -29,11 +23,6 @@ Do not populate global `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, or
 `META_PAGE_ID` and assume a tenant is connected. Current publishing resolves the
 business-bound encrypted credential. Public customer access also depends on Meta's
 external review process; see [Approval Readiness](META_APPROVAL_ACTION_PLAN.md).
-
-Before asking the owner to reconnect, check [pilot access](../src/lib/meta/pilot-access.ts),
-[configuration](CONFIGURATION.md), and the actual target's migrations. Reconnection
-does not repair a missing database function or an incompatible encryption key.
-Never copy production environment files into a local test to bypass setup work.
 
 ## Attempt Lifecycle
 
@@ -86,22 +75,6 @@ attempt/status and review again; do not overwrite newer choices. Retry is for
 retryable `failed`/`action_required` attempts with their current revision. Expired
 attempts require a new authorization flow.
 
-The deciding modules are [OAuth and token inspection](../src/lib/meta/oauth.ts),
-[callback](../src/app/api/meta/oauth/callback/route.ts),
-[selection](../src/lib/meta/selection.ts), and
-[connection repository](../src/lib/meta/connection-repository.ts).
-Discovery's next-page helper validates Meta Graph URLs; do not confuse that
-existing mechanism with #34's opaque lead cursors. They are different read paths.
-
-| What the owner sees | Next action |
-| --- | --- |
-| Consent denied/cancelled | Return to the saved draft; reconnect only when the owner chooses |
-| Several eligible pairs | Choose the server-issued pair, then confirm replacement if requested |
-| No eligible pair after complete discovery | Inspect account status, Page tasks, currency/timezone and relationship; complete setup in Meta |
-| Incomplete discovery or a retryable provider failure | Retry the saved attempt with its current revision; do not infer that assets are absent |
-| Expired attempt | Start fresh authorization; an expired revision cannot be revived |
-| Selection conflict | Reload current attempt/connection and review the newer binding |
-
 ## Four Independent Capabilities
 
 Each capability is `available`, `blocked`, or `unknown`, with structured blockers
@@ -120,12 +93,6 @@ Permission lookup failure leaves capabilities unknown. Its task lookup reads up
 to 200 Pages in that probe; a large account can require investigation rather than
 assuming absent evidence means the user has no Page. Meta permissions, Graph
 version behavior, and account restrictions can change outside AdBrain.
-
-[Capability verification](../src/lib/meta/capability-verification.ts) currently
-uses Graph v21.0. A successful forms probe is not a download of every lead; a
-funding-source ID is not proof of sufficient balance, a mandate, or automated
-funding feasibility. `canActivate` also does not establish approval of the ad
-creative, delivery eligibility forever, or a provider-enforced spending ceiling.
 
 Recovery actions are `reconnect`, `retry_check`, `choose_assets`, `contact_admin`,
 `open_brand` (the Prepare website blocker links to Brand Brain), or `open_meta`
@@ -150,12 +117,6 @@ Changing the encryption key without migration makes existing ciphertext unreadab
 Plan an authorized decrypt/re-encrypt or owner reauthorization process; preserve
 the old key in approved secret storage until rollback/recovery is complete.
 
-[Connection access](../src/lib/meta/connection-access.ts) is the provider boundary:
-`requireOwnedBusiness` establishes the actor, and `withMetaConnection` enforces
-the requested purpose. Read/pause/delete exemptions from publishing rollout do
-not bypass ownership, token validity or required campaign binding. Never use the
-legacy global-credential helper as a fallback for a failed tenant check.
-
 ## From Draft to Campaign
 
 1. Save manual/guided intent. Incomplete drafts are allowed; saving does not
@@ -179,12 +140,6 @@ Draft version, attempt revision, connection generation, review hash, activation
 digest, and idempotency key are different controls. Never substitute one for
 another or recompute server hashes in an integration. See [Architecture](ARCHITECTURE.md).
 
-[Create service](../src/lib/campaign/create-service.ts) and
-[operation orchestration](../src/lib/campaign/operations.ts) own the durable
-creation path. An optional [worker](../src/lib/campaign/worker.ts) uses the same
-service; it is not enabled merely by deploying a cron route. Account, campaign,
-ad-set and ad evidence must remain available when local finalization fails.
-
 [Activation review and PATCH](../src/app/api/campaigns/[id]/route.ts) verify
 stored child IDs, binding, generation, account/Page/budget and current Meta
 campaign, ad-set and ad settings. A fresh delivery snapshot joins the
@@ -199,49 +154,49 @@ before retrying. Creation idempotency does not make activation atomic with Meta.
 
 ## Lead Import and Follow-Up
 
-Import covers accessible instant-form enquiries on the selected Page, not
-WhatsApp conversations, call logs, arbitrary Pages or every historical Meta
-contact. `read_leads` authorization remains mandatory. The current
-[sync route](../src/app/api/leads/sync/route.ts) uses the #34 durable importer;
-the [saved inbox](API_REFERENCE.md#enquiry-candidates) includes #35 follow-up.
-The former first-page-only import is not the current source contract.
+Import covers accessible instant-form enquiries on the selected Page, not WhatsApp
+conversations, call logs or other Pages. The [sync route](../src/app/api/leads/sync/route.ts)
+requires `read_leads` connection access and runs the resumable importer
+`syncMetaLeads` in [lead sync](../src/lib/leads/sync.ts).
 
-An empty POST starts or recovers unfinished work for the current binding. To
-resume exactly, the synthetic body shape is:
+An empty POST resumes the newest unfinished run for the current binding or starts
+a new one; `{"syncId":"11111111-1111-4111-8111-111111111111"}` resumes that run.
+The POST reads Meta and writes local rows; it is not an offline diagnostic. The
+response is `{leads,imported,failedForms,sync:{id,state,hasMore},error?}`.
+`imported` counts new inserts in this request only; a repeated Meta lead ID is
+ignored, so owner follow-up fields stay untouched. `state: "partial"` /
+`hasMore: true` means saved continuation, not "up to date". `leads` is the newest
+200 saved rows, not the whole inbox.
 
-```json
-{"syncId":"11111111-1111-4111-8111-111111111111"}
-```
+Each request makes at most 24 Graph page reads (forms and leads, 200 items per
+page), reads up to three forms concurrently, and stops at a 40-second deadline.
+Each page commits rows and progress together through `lead_sync_checkpoint`
+(3-second timeout), so a later failure keeps earlier saves. A failed read or a
+repeated/malformed cursor marks that form failed; it stays queued for the next run
+while other forms proceed, and the response is 502 with `failedForms` and the saved
+`sync.id`. Only opaque `after` cursors are stored; `paging.next` URLs are not
+followed. Campaign attribution is not inferred from form names.
 
-This POST reads real provider data and writes local rows when real credentials
-are configured; it is not an offline diagnostic. The response includes `leads`,
-`imported`, `failedForms` and `sync: {id,state,hasMore}`. `imported` counts verified
-inserts during this request, not fetched or cumulative rows. `partial`/`hasMore:
-true` means recorded continuation, never "up to date". The at-most-200 saved
-leads are only a compatibility snapshot, not the whole inbox.
+A foreign or unknown `syncId` returns 404. A changed binding/generation or a
+concurrent writer returns 409; after reconnecting, an empty POST starts a fresh
+run. Other checkpoint failures return 503; retry to resume. Keep the sync ID and
+saved rows rather than clearing the inbox after a partial or uncertain result.
 
-Limits are 24 form/lead page calls per request, 200 items per page, three
-concurrent lead reads, a 40-second provider deadline and three-second checkpoint/
-snapshot timeouts. Legacy array helpers stop with an error after 100 pages.
-Successful pages commit before progress advances. Malformed/repeated cursors and
-later failures preserve prior saves; failed forms remain queued while others can
-proceed. No `paging.next` URL is followed or saved for lead continuation. Duplicate
-imports leave owner follow-up and existing source/campaign fields untouched;
-campaign attribution is not guessed from form names.
+[Scheduled lead sync](../src/app/api/cron/sync-leads/route.ts) runs the same import
+for every business with a connected account and Page, without a `syncId`. It
+requires the `CRON_SECRET` bearer, allows 20 seconds per business within a
+45-second run, and returns per-business outcomes (503 if any failed). The
+[scheduled jobs workflow](../.github/workflows/scheduled-jobs.yml) calls it four
+times an hour.
 
-Foreign/missing runs are rejected; changed binding/generation or stale writers
-require conflict recovery. After a changed binding, an empty POST can begin a
-fresh run. An inaccessible form may remain partial until permissions are repaired;
-`hasMore` is not a promise that Meta will continue serving that cursor forever.
-
-The [lead sync migration](../db/migrations/20260926_lead_sync_progress.sql)
-adds `lead_sync_runs`, `lead_sync_start` and `lead_sync_checkpoint` with
-service-only grants. It and the separate
-[follow-up migration](../db/migrations/20260926_lead_follow_up.sql) are included
-in the fresh schema; verify each target's migration ledger before using these
-routes. An application rollback may retain the additive tables. Earlier #34
-author tests used synthetic provider/checkpoint fixtures and disposable Postgres;
-they are not evidence of a live Meta download or production acceptance.
+The saved inbox (`GET /api/leads`) pages up to 100 enquiries with search, status,
+contact and sort filters. `PATCH /api/leads/[id]` saves `workflow_status` (`new`,
+`contacted`, `qualified`, `booked`, `closed`) and/or a `follow_up_note` of at most
+2000 characters. See [API Reference](API_REFERENCE.md#sync-insights-leads-and-settings).
+The [lead sync migration](../db/migrations/20260926_lead_sync_progress.sql) adds
+`lead_sync_runs`, `lead_sync_start` and `lead_sync_checkpoint`, granted only to the
+service role; the [follow-up migration](../db/migrations/20260926_lead_follow_up.sql)
+adds the follow-up columns and `get_lead_page`. Both are in the fresh schema.
 
 ## Recovery and Destructive Actions
 
@@ -256,8 +211,6 @@ they are not evidence of a live Meta download or production acceptance.
 | Wrong account selected | Confirm intended replacement; existing campaigns retain their original binding |
 | Disconnect requested | Confirm the business; existing remote campaigns are **not paused or deleted** |
 | Meta deauthorization | Signed callback revokes matching subject credentials; owner must reauthorize |
-| Inbox seems complete after one sync | Check `sync.hasMore`, failed forms and saved inbox pagination; one response is not a complete export |
-| Lead sync returns partial or uncertain save/read | Keep the known sync ID and saved rows; retry/reconcile rather than clearing the inbox |
 
 Pause/delete are delivery-reducing operations, but still require original binding,
 connection generation, and management permission. Manual mutation routes verify
@@ -268,10 +221,3 @@ Deletion confirms the Meta operation before deleting the local mirror; external
 success and local persistence are not a distributed transaction. Sync imports
 supported ACTIVE/PAUSED campaigns page by page, reports skips, and does not prune
 all local rows absent from a page. Use [Operations](OPERATIONS.md) for incidents.
-
-For local contract evidence, see [access tests](../tests/meta-connection-access.test.ts),
-[activation route tests](../tests/meta-connect-w2-activation-route.test.ts), and
-the [historical connection verification](meta-connect-workers/VERIFICATION-2026-09-07.md).
-That historical receipt explicitly distinguishes mocked consent from real
-customer authorization. External review readiness is tracked separately in
-[Meta Approval Readiness](META_APPROVAL_ACTION_PLAN.md).

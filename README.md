@@ -76,7 +76,7 @@ checks. Do not commit credentials or generated private artifacts.
 
 ## Working on AdBrain
 
-Read [AGENTS.md](AGENTS.md) and the [current dispatch](docs/ORCHESTRATION.md#current-dispatch)
+Read [AGENTS.md](AGENTS.md) and the [current dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#current-dispatch)
 before editing shared resources. Make focused changes at the owning abstraction,
 reuse maintained dependencies, test meaningful risks and update the corresponding
 reference guide. Documentation standards and the distinction between current

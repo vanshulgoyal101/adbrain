@@ -1,21 +1,9 @@
 # AI and Creative Pipeline
 
-Use this guide to follow a creative request, recover saved results, or diagnose
-provider and usage failures without accidentally repeating paid work.
-Parameters belong in [Configuration](CONFIGURATION.md); route contracts belong
-in [API Reference](API_REFERENCE.md).
-
-Source baseline: development `672eb132ad57bb3ba31f118afaffddaa878b4923`, reviewed
-September 26, 2026. The text SDK and truncation-accounting repair shipped in
-[PR #36](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
-That receipt does not certify new live model output, image quality, or every
-development migration. [Creative Generation Plan](CREATIVE-GENERATION-PLAN.md)
-preserves design history; [QA](qa/) preserves candidate-specific evidence.
-
-Before a paid request, the owner needs a saved business/brief, usable configured
-providers, and approval for the intended generation/evaluation budget. Brand
-instructions and reference assets are sent to providers as part of the request.
-A local URL or test-looking brief does not make configured keys free or isolated.
+This guide describes model calls, image processing, retries, and accounting.
+Parameters are in [Configuration](CONFIGURATION.md) and [API Reference](API_REFERENCE.md).
+Design history and experiments remain in [Creative Generation Plan](CREATIVE-GENERATION-PLAN.md)
+and [QA](qa/); they do not override current code.
 
 ## Task Boundaries
 
@@ -141,12 +129,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    poster when enabled, persist the final image, then insert a draft creative row.
 6. Save usage receipts and report partial failures independently of successful rows.
 
-The batch uses `Promise.allSettled`, but concept planning is chained so each angle
-can see recent concepts and avoid repetition. Rendering/persistence can overlap
-after each concept is ready. The shared generation signal is 240 seconds; the
-POST route declares 300 seconds. These are implementation budgets, not an SLA:
-persistence has its own calls and hosting limits still apply. Closing the browser
-does not automatically cancel the batch or undo provider charges.
+Variants run concurrently using `Promise.allSettled` with a shared 240-second
+generation signal. POST route duration is 300 seconds. These are implementation
+budgets, not an SLA: persistence has its own calls and hosting limits still apply.
+The batch is not automatically cancelled merely because a browser stopped waiting.
 
 `CreativeValidationError` retains usage from invalid concepts; image failure also
 retains preceding text usage. The #54 prevention candidate records each text and
@@ -177,28 +163,14 @@ the guidance.
 
 ### Recover a Lost Response
 
-[Studio](../src/components/studio.tsx) records a generation UUID and expected
-count before POST. On reload or an ambiguous response it uses the existing
-[generation GET handler](../src/app/api/creatives/generate/route.ts) to reconcile
-saved rows before allowing another request. For example, in an authenticated
-isolated fixture, the read-only request shape is:
-
-```http
-GET /api/creatives/generate?businessId=11111111-1111-4111-8111-111111111111&generationId=22222222-2222-4222-8222-222222222222&expectedCount=3
-```
-
-Both UUIDs above are synthetic. GET returns `creatives`, `count`, `expectedCount`
-and `status`: `complete` when enough rows exist, `partial` when some exist, or
-`processing` when none exist. **Processing is inferred from row count**, not proof
-that a worker is alive. A failed read is 503, not an empty successful recovery.
-RLS scopes these reads to the signed-in owner.
-
-Keep the same identity/count while reconciling. Late completion may clear only
-its own pending identity, not a newer request from another tab. This preserves
-client recovery state but is not atomic cross-tab admission. The generation UUID
-is not a server-side paid-request idempotency key: repeating POST can invoke paid
-work again. Regeneration likewise needs a deliberate new action, not an automatic
-response to an unavailable usage or status read.
+[Studio](../src/components/studio.tsx) stores a generation UUID and count in local
+storage before POST. On reload or an unconfirmed response it calls the generation
+GET with that UUID/count and shows saved rows before allowing a new request; it
+clears the stored intent only after saved creatives, `complete`, `failed`, 404 or
+a definitive 4xx rejection. Repeating POST with the same UUID returns 202 without starting another
+producer. `processing` does not prove a worker is alive, and `unresolved` needs
+investigation rather than another paid request. Exact statuses are in
+[Generate and Recover](API_REFERENCE.md#generate-and-recover).
 
 ### Product References
 
@@ -295,33 +267,16 @@ but image routing remains independently selected. `parseJSON` can remove fences
 or recover a JSON block; a successful parse is not schema validation. Callers
 such as the interviewer/concept validator apply their own runtime checks.
 
-### Retry Ownership
-
-| Layer | Behavior and stopping condition |
-| --- | --- |
-| [SDK adapter](../src/lib/llm/providers/sdk.ts) | One physical attempt, `maxRetries: 0`; combines the caller signal with its 90-second deadline |
-| [Facade](../src/lib/llm/index.ts) | Walks configured provider/key pools; 429 parks a key for 60 seconds. Caller abort or a terminal local error without HTTP status stops the walk |
-| [Concept generation](../src/lib/creative/generate.ts) | At most two concept attempts for validation repair; truncation remains terminal and retains known usage |
-| [Interview](../src/lib/creative/interview.ts) | One bounded repair, sharing the task's 45-second signal |
-| [Images](../src/lib/imageGen/index.ts) | Only an explicitly configured different provider can be a fallback; caller abort/timeout does not trigger it |
-
-Provider fallback and task repair are separate paid attempts. Do not wrap the
-facade in an unbounded retry or assume an SDK error means no provider work occurred.
-
-### Cache Ownership
-
-[Cache](../src/lib/llm/cache.ts) is opt-in, process-local, ten-minute default TTL
-and 500 entries. Identical in-flight requests share one producer; later waiters
-are marked cached. Failed producers are removed. The producer's physical request
-owns its signal; the cache is not independent per-waiter cancellation or durable
-job coordination across instances.
-
-The key contains prompt version, messages, optional provider/model options,
-temperature, maxTokens, JSON mode and response schema. It does **not** independently
-include tenant identity or the full effective environment/routing configuration.
-Review key suitability before enabling caching for another task; restart/clear
-cache after routing changes. Extraction and summary opt in; concept generation
-does not. Cache savings do not guarantee once-only billing.
+Cache is opt-in, in-process only, default TTL ten minutes and maximum 500 entries.
+It shares identical in-flight requests within that process and marks cache hits.
+Waiters share the first producer's outcome; a failed result is not cached.
+It is not a distributed billing guarantee or durable job lock. Current key inputs
+are prompt version, messages, optional provider/model options, temperature,
+maxTokens, JSON mode, and the optional response schema. It does **not** include
+the API key or tenant identity, nor fingerprint the full
+effective environment/routing configuration; restart/clear cache after routing
+changes and review key semantics before extending cached tasks. Extraction and
+summary opt in; concept generation intentionally seeks fresh variation.
 
 Rollback the SDK integration as one dependency-complete change: adapters,
 facade/schema call sites, tests, `package.json`, and `package-lock.json` together,
@@ -352,23 +307,6 @@ in row metadata; the latter remains unknown on transport/HTTP failures. Do not
 store raw prompts, secrets, provider response bodies or image bytes there.
 Creative rows contain separate user-facing provenance receipts.
 
-Keep three accounting layers separate:
-
-| Layer | Meaning |
-| --- | --- |
-| [Process counters](../src/lib/llm/usage.ts) | Reported physical completions and cache savings in this warm process; not a durable billing ledger |
-| Task callbacks and receipts | Interview/planner pass attempt validity and known usage; creative failures retain preceding concept attempts for `failedVariantUsage` |
-| Database usage rows | Best-effort persisted provenance and cost estimates for supported callers, dependent on schema and privileges |
-
-For truncated SDK output, `LLMError` carries model and original reported usage.
-The facade records that failed physical attempt inside the shared producer, once
-rather than once per cache waiter. Interview/planner forward retained usage to
-their existing failure callbacks; creative generation wraps it with earlier
-attempt receipts. No extra completion/image call is made to recover token counts.
-The [regression fixtures](../tests/llm-providers.test.ts) include a Gemini response
-with 8 prompt, 2 candidate and 17 total tokens: the original total is preserved,
-not recomputed as 10. This is synthetic accounting evidence, not an invoice.
-
 Quota checks use a UTC calendar-month start and an owner-scoped database aggregate.
 If configured positive and usage cannot be verified, generation/interview/planning
 gates fail closed. A zero configured limit disables that check.
@@ -396,21 +334,6 @@ explicitly authorized small provider evaluation with a fixed budget and saved
 artifacts. Record model/provider, prompt version, source inputs, human review,
 latency, partial failures, and cost. A JSON-valid output is not a quality score.
 See [Testing](TESTING.md) for safe commands.
-
-| Symptom | Inspect before another paid request |
-| --- | --- |
-| No configured text provider | [Registry and environment parser](../src/lib/env.ts); image configuration alone does not supply every text provider |
-| Truncated/invalid concept | Task token/reasoning budget, schema issues and retained usage; do not silently accept incomplete text |
-| Reference-capability failure | Selected image provider and reference count; never silently discard required product references |
-| Overlay or persistence failure | Saved source/final assets and variant receipt; bare-photo fallback is not implicit |
-| Browser timeout or missing receipt | Reconcile saved variants first; a missing record does not prove no charge |
-
-Existing [SDK fixtures](../tests/llm-providers.test.ts),
-[rotation tests](../tests/llm-rotation.test.ts),
-[pipeline tests](../tests/creative-pipeline.test.tsx), and
-[recovery tests](../tests/creative-generation-recovery.test.ts) cover these local
-contracts. Reuse their exact-candidate evidence for a prose change; do not run
-the live creative evaluation merely to refresh documentation.
 
 To add a provider: implement the existing interface, wire selection deliberately,
 document required keys and formats/references, propagate deadlines, enforce media

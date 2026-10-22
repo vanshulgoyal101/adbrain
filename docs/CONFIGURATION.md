@@ -3,73 +3,7 @@
 Sources: [environment schema](../src/lib/env.ts), [example](../.env.example),
 [rollout policy](../src/lib/meta/pilot-access.ts), and
 [logging implementation](../src/lib/observability/logger.ts).
-Verified against dev `672eb13`. Defaults below are source defaults, **not
-production configuration**; the published `6291dc2` release excludes local test
-checkout and DB-A-dependent changes. Deployment evidence belongs in the
-[release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
-
-## Production Payment Candidate
-
-Repaired integration `954e44a` adds the following server-only configuration beyond
-the baseline below. It is disabled and unreleased; QA accepted the repair deltas
-conditional on integrated CI. Live setup and financial prerequisites remain separate;
-see the [separate rollout packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
-Deciding code: [production gate](../src/lib/payments/production-config.ts).
-
-| Configuration | Requirement |
-| --- | --- |
-| `PAYMENTS_LIVE_ENABLED` | Defaults false; recovery/webhooks need explicit true plus all target/identity checks |
-| `PAYMENTS_LIVE_COLLECTION_ENABLED`, `PAYMENTS_LIVE_POLICY_JSON` | Separate false-default collection flag; in #48, blank JSON selects the recorded `operator-managed-v1` offer. Explicit JSON must validate as approved operator terms or the legacy policy shape |
-| `PAYMENTS_LIVE_REFUNDS_ENABLED` | Separate false-default refund flag; approved operator and per-operation authority still required |
-| `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_LIVE_ACCOUNT_ID` | Explicit live identities; never reuse test credentials |
-| `RAZORPAY_LIVE_WEBHOOK_SECRET`, `PAYMENTS_LIVE_WEBHOOK_ID` | Distinct secret and immutable configuration UUID; neither replaces signature/merchant checks |
-| `PAYMENTS_LIVE_PROJECT_ID`, `PAYMENTS_LIVE_SUPABASE_URL` | Exact matches to `VERCEL_PROJECT_ID` and `NEXT_PUBLIC_SUPABASE_URL` |
-| `NODE_ENV`, `VERCEL_ENV`, `VERCEL_GIT_COMMIT_REF`, `VERCEL_TARGET_ENV` | Production Node/Vercel/main; reject any explicit non-production target |
-
-Test-payment flags/aliases must not coexist with live configuration. Populated
-generic key aliases must exactly match the explicit live keys. Policy fields and
-operator prerequisites are listed in the [author contract](qa/dev2-devc-contract-o1.md#schema-and-configuration-delta).
-Do not enable these values as setup verification. CSP changes need an approved
-rebuild. Suspend collection independently from recovery after live operations.
-
-### Operator-Managed Offer
-
-Issue #48 pins the [actual September 26 approval](https://github.com/vanshulgoyal101/adbrain/issues/48#issuecomment-5848530300)
-in `OPERATOR_MANAGED_POLICY`: INR 10,000 total for 12 months, one business/offer/service
-area, up to two creatives and one capped Meta campaign. It retains the 2,000/8,000
-allocation, absorbed fees, no automatic renewal and the approved conditional refund
-policy. Blank `PAYMENTS_LIVE_POLICY_JSON` selects this exact version only when live
-collection is explicitly enabled; it does not enable collection by itself.
-
-The operator pays Meta separately. No automatic-funding approval UUID, funding
-evidence row or customer Meta connection is needed for this new mode. Do not invent
-those records. Existing legacy JSON/orders remain distinct and recoverable.
-Apply [the additive policy migration](../db/migrations/20260926_production_payment_policy_v2.sql)
-after the original payment schema; do not change an applied migration checksum.
-Future commercial changes require a new reviewed policy version and customer consent,
-not edits to stored terms. Invoice wording claims no GST registration; verify actual
-operator tax status in live invoice setup. Real charges/refunds remain separately scoped.
-
-## Choose a Configuration Boundary
-
-| Task | Required configuration | Side effects and target |
-| --- | --- | --- |
-| Mocked unit tests | Synthetic public Supabase values when the tested path parses the environment | Do not inherit provider credentials; tests are not provider acceptance |
-| Authenticated local workspace | Isolated Supabase URL/public key, site origin and real local Auth session | Reads/writes the selected database; localhost does not imply a local backend |
-| Generation | Workspace configuration, a configured text pool, selected image provider and server usage/limit support | Can incur text/image charges; token quota is not a cash limit |
-| Meta connect and campaign work | Explicit rollout, app credentials, stable encryption key, server role and tenant binding | Consent/discovery contact Meta; creation and activation are distinct authorized actions |
-| Campaign worker | Exact target origin, worker mode, server role and queue schema | Claims jobs and can create external campaign assets; not a health probe |
-| Local payment tests | All test-payment gates below and the test-order schema | Calls Razorpay test APIs and writes local evidence, never advertising credit |
-| Database event sink | Explicit logging flag, server role and product-events schema | Writes sanitized events; this flag does not create its tables |
-
-### Loading and Secrets
-
-The shared checkout's `.env.local` targets production. Do not overwrite, source,
-copy or print it as setup. Use [Quick Start](QUICK_START.md) in an isolated checkout.
-Next loads environment files; a standalone shell or Node script does not inherit
-that behavior unless its command or implementation explicitly loads a file.
-In particular, the browser npm scripts use `--env-file-if-exists=.env.local`.
-Inspect the command before invoking it; "test" in its name is not isolation.
+Defaults below are source defaults, **not production configuration**.
 
 `getEnv()` validates lazily and caches per process. Restart after changes.
 `NEXT_PUBLIC_*` values can be bundled into browser code and require a rebuild for
@@ -77,17 +11,26 @@ deployment changes. Never use that prefix for secrets. Empty strings are not
 universally equivalent to missing values: omit optional numeric values instead
 of leaving blank assignments.
 
+## Loading and Secrets
+
+The owner checkout's `.env.local` targets production. Do not overwrite, source,
+copy or print it as setup. Next loads environment files; a standalone shell or
+Node script does not unless its command loads one. `test:workspace-browser` and
+`test:workspace-ux` use `--env-file-if-exists=.env.local`, and the campaign
+worker loads none. Inspect a command before running it; "test" in its name is
+not isolation.
+
 | Classification | Variables | Handling |
 | --- | --- | --- |
-| Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; public Supabase key is safe only with correct RLS |
+| Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; the public Supabase key is safe only with correct RLS |
 | Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
 | Provider secret | All four `*_API_KEYS` pools, `META_APP_SECRET`, `META_SYSTEM_USER_TOKEN`, `FALAI_API_KEY`, `OPENAI_API_KEY`, Razorpay key/webhook secrets | Can grant paid/external access; least privilege and target-specific storage |
-| Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay test key/account IDs, limits and rollout values | Not authentication secrets, but still avoid copying tenant/account details into examples |
-| Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD`; associated email addresses | Passwords are secrets; emails may be personal data; use synthetic examples |
+| Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay key/account IDs, limits and rollout values | Not secrets, but keep tenant/account details out of examples |
+| Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD` and their emails | Passwords are secrets; emails may be personal data; use synthetic examples |
 
-Generate/store secrets outside chat and command history. Changing credentials,
-targets, encryption keys or paid provider settings is an operational action, not
-documentation or release approval. See [release policy](RELEASING.md).
+Generate and store secrets outside chat and command history. Production
+settings, credentials and encryption keys are DevOps-owned changes; see the
+[release policy](RELEASING.md#startup-fast-path).
 
 ## Core Services
 
@@ -127,7 +70,12 @@ Local test checkout uses `PAYMENTS_TEST_ENABLED=true` with
 `RAZORPAY_TEST_KEY_ID`, `RAZORPAY_TEST_KEY_SECRET`,
 `RAZORPAY_TEST_ACCOUNT_ID` and `RAZORPAY_TEST_WEBHOOK_SECRET` (or matching
 generic key aliases). It is unavailable in production or any Vercel environment;
-never place those test variables in live production configuration.
+never place those test variables in live production configuration. The
+[test adapter](../src/lib/payments/razorpay-test.ts) also requires an
+`rzp_test_` key ID, an `acc_` account ID, a webhook secret of at least 16
+characters that differs from the key secret, and a loopback
+`NEXT_PUBLIC_SUPABASE_URL`; populated alias pairs must match exactly. Any failed
+check disables test checkout. A loopback tunnel does not prove a local database.
 
 ### Configurable Live Amounts
 
@@ -186,32 +134,6 @@ Keep a quote-aware runtime after any nondefault order exists: the old fixed-pric
 runtime cannot read those orders. Suspend collection and use a compatible
 forward fix rather than deleting orders or undoing the migration.
 
-## Local Test Payments
-
-The [Razorpay test adapter](../src/lib/payments/razorpay-test.ts) validates these
-settings separately from `getEnv()`. The gate denies production Node mode, every
-Vercel environment and non-loopback Supabase URLs. Verify the actual local
-database; a tunnel's loopback address does not prove isolation. Merchant account
-activation is a separate provider fact, not permission to enable live collection.
-
-| Variable | Default / validation | Purpose |
-| --- | --- | --- |
-| `PAYMENTS_TEST_ENABLED` | Disabled unless exactly `true` | Local test APIs, Settings checkout and scoped CSP allowances |
-| `RAZORPAY_TEST_KEY_ID` | Required `rzp_test_` identifier when enabled; generic alias `RAZORPAY_KEY_ID` | Public test key; never use a live key |
-| `RAZORPAY_TEST_KEY_SECRET` | Required nonempty server secret; generic alias `RAZORPAY_KEY_SECRET` | SDK authentication and callback HMAC |
-| `RAZORPAY_TEST_ACCOUNT_ID` | Required `acc_` identifier | Expected test merchant identity |
-| `RAZORPAY_TEST_WEBHOOK_SECRET` | At least 16 characters; different from key secret | Raw webhook HMAC; server-only |
-
-The private test-order migration and real local Supabase login are also required.
-Use one complete key pair; populated alias pairs must match exactly, and partial
-or conflicting pairs fail closed. The public key comes from the order endpoint;
-never prefix a secret with `NEXT_PUBLIC_`. Do not overwrite or use the production
-environment file for QA. Restart `npm run dev` after configuration changes so the
-page and CSP agree. Checkout is absent in Settings > Managed billing when the
-gate fails. Mocked component tests need no provider credentials. See
-[setup and limitations](PAYMENTS-PLAN.md#9-implementation-receipt) before using
-provider test mode or exposing a webhook endpoint.
-
 ## Text Models
 
 Key pools split commas, trim whitespace, and discard empty entries. Empty pools
@@ -262,8 +184,7 @@ lower cost.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `META_APP_ID` | Empty | OAuth app identifier; not a secret |
-| `META_APP_SECRET` | Empty | Server-only OAuth app secret |
+| `META_APP_ID`, `META_APP_SECRET` | Empty | Server-side OAuth app credentials |
 | `META_LOGIN_CONFIG_ID` | Empty | Optional Facebook Login for Business configuration |
 | `META_TOKEN_ENCRYPTION_KEY` | Empty | Base64 32-byte encryption key for token store |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
@@ -318,46 +239,35 @@ The example includes `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_EMAIL`,
 seed/review scripts. They do not replace runtime variables. Operational scripts
 may require additional guards; inspect the exact script before execution.
 
-`APP_URL` / `ADBRAIN_URL` are script-origin overrides, not aliases for the app's
-canonical site URL. PostgreSQL tooling uses its own `PGHOST`, `PGPORT`,
-`PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
-[Deployment](DEPLOY.md). Browser/evaluation harness overrides and paid-evaluation
-opt-ins belong to [Testing](TESTING.md), not a production environment template.
+`APP_URL` / `ADBRAIN_URL` are script-origin overrides, not aliases for
+`NEXT_PUBLIC_SITE_URL`. The migration runner uses `PGHOST`, `PGPORT` (default
+5432), `PGDATABASE`, `PGUSER`, `PGPASSWORD` and optional `PGSSLROOTCERT`; see
+[Release Workflow](RELEASING.md#database-and-credential-safety).
 
-### What the Doctor Actually Checks
-
-[env-doctor.sh](../scripts/env-doctor.sh) checks whether legacy traffic/reviewer
-variables are set in the **current shell**. It does not load `.env.local`, parse
-`getEnv()`, contact a provider, verify a token, test RLS or check the database.
-It can fail for an otherwise valid ordinary application setup because it expects
-traffic-runner credentials. Its output shows set/missing names, not values;
-keep even that configuration inventory private.
-
-```sh
-npm run env:doctor
-npm run env:doctor:strict
-```
-
-Strict mode also fails on absent recommended variables. These commands do not
-authorize populating production credentials or executing the scripts they check.
-Ignore any generic copy-environment suggestion when an environment file exists.
+`npm run env:doctor` and `npm run env:doctor:strict` run
+[env-doctor.sh](../scripts/env-doctor.sh), which only reports whether the
+traffic-runner, legacy Meta and reviewer variables are set in the **current
+shell**. It does not load `.env.local`, parse `getEnv()`, contact a provider or
+check the database, so it can fail for a valid application setup. Strict mode
+also fails on missing recommended variables. Keep its output private. A passing
+check does not authorize seeds, backfills, paid evaluations, or remote writes.
 
 ### Local Launcher Modes
 
-[local-meta-qa.mjs](../scripts/local-meta-qa.mjs) obtains an existing local
-Supabase project's status through the `adbrain-qa` Colima socket and rejects
-non-loopback API/database URLs. It reads `.env.local` to clear inherited names;
-most modes replace provider credentials with empty/synthetic values. This is
-not an OS network sandbox, and a loopback tunnel is not proof of a local target.
+`node scripts/local-meta-qa.mjs <mode>` ([source](../scripts/local-meta-qa.mjs))
+reads `supabase status` through the `adbrain-qa` Colima socket and rejects
+non-loopback API/database URLs. It blanks every name found in `.env.local`, then
+points the app at the local project with synthetic Meta app values, empty AI key
+pools, no image provider, no cron secret and test payments off. Other variables
+exported in your shell are still inherited; this is not a network sandbox.
 
-| Mode | Additional behavior |
+| Mode | Behavior |
 | --- | --- |
-| `setup` | Applies the full schema and creates local Auth/business/creative fixtures; destructive-risk setup, not a check |
-| `dev`, `build`, browser modes | Run their mapped command against that local project; normal dev binds using Next defaults on port 3939 |
-| `oauth-dev` | Copies actual Meta app credentials from `.env.local`; this is real-provider work requiring its own authorization |
-| `payments-dev` | Reads `.env` test credentials, enables test checkout/dev login, derives a local webhook secret if absent, binds 127.0.0.1:3939 and disables product logging |
+| `setup` | Applies `db/schema.sql` to the local database and creates a local Auth user, QA business and two draft creatives; writes, not a check |
+| `dev` | `npm run dev` on port 3939 |
+| `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
+| `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |
+| `payments-dev` | Reads Razorpay test credentials from `.env`, enables test checkout and the dev auth bypass, derives a webhook secret if absent, disables product logging and binds 127.0.0.1:3939 |
 
-Do not use a mode as an environment inspector: the launcher immediately runs it.
-The supported command mapping, rather than its error-message list, is authoritative.
-Own the local project, server and generated fixtures before starting any mode;
-stop only processes you started. No launcher action is required to read this guide.
+Each mode runs immediately; none is an environment inspector. Stop only the
+servers and fixtures you started.

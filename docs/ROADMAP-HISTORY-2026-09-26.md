@@ -1,4 +1,4 @@
-> Historical snapshot preserved September 26, 2026. Old task queues and readiness claims are not current instructions; use [the current roadmap](ROADMAP.md) and [worker dispatch](ORCHESTRATION.md).
+> Historical snapshot preserved September 26, 2026. Old task queues and readiness claims are not current instructions; use [the current roadmap](ROADMAP.md) and [worker dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md).
 
 # Roadmap
 

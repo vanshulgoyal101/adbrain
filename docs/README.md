@@ -67,6 +67,20 @@ duplicate guidance into its owning reference; retain a short redirect when a
 published document moves. Historical receipts should not be rewritten to appear
 current.
 
+## Plans and Records
+
+Current instructions live in the reference library above. These documents give
+intent, assignments or dated evidence; they are not alternative setup guides.
+
+| Material | Use |
+| --- | --- |
+| [Worker dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) | Current work assignments and ownership; maintained on the `dev` branch only |
+| [Operating brief](OPERATING-BRIEF.md) | Owner outcome, risk decisions and evidence needed to operate the product; not a deployment or spend approval |
+| [Payment plan](PAYMENTS-PLAN.md) | Payment decisions and implementation boundaries; rollout authority lives in the dispatch |
+| [Product audit](PRODUCT-AUDIT-2026-09.md) | Dated September 2026 assessment; later fixes may supersede findings |
+| [QA records](qa/) | Dated verification and handoff receipts for specific changes |
+| Historical snapshots (September 26, 2026): [operating brief](OPERATING-BRIEF-HISTORY-2026-09-26.md), [roadmap](ROADMAP-HISTORY-2026-09-26.md), [payments](PAYMENTS-HISTORY-2026-09-26.md), [orchestration](ORCHESTRATION-HISTORY-2026-09-26.md) | Historical context only; not current instructions, status or assignments |
+
 ## Terminology
 
 | Term | Meaning |

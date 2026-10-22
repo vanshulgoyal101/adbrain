@@ -1,159 +1,33 @@
 # Release Workflow
 
-This is the canonical policy for publishing and promoting AdBrain code. Target
-setup and SQL mechanics are in [Deployment](DEPLOY.md); incident response is in
-[Operations](OPERATIONS.md). It applies to this repository, not every checkout
-or project in the workspace. Recheck remote controls for a release; dated receipts
-are evidence, not a continuing grant of operational authority.
+This is AdBrain's deployment reference. It applies to this repository, not every
+repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
+settings before a release; the historical receipts below are not current status.
 
 ## Startup Fast Path
 
-**Controlling owner direction, September 28, 2026.** This section supersedes
-older procedural approval, staging and blanket QA waits below. Dated release
-receipts remain historical evidence. Ship complete useful changes, not paperwork.
+The current release process ([AGENTS.md](../AGENTS.md)). Where older sections
+below describe dev-first promotion or extra approvals, this path governs.
 
-This is the permanent default for all future features, improvements and bug fixes,
-from initial scope/design through implementation and release. It is not limited
-to payments, PR72 or the current pre-customer milestone. Prefer simple maintainable
-implementations, complete customer workflows, existing tools and rapid production
-feedback. Do not reintroduce approval chains, speculative architecture or exhaustive
-validation merely because the next feature starts. Extra checks must address a
-specific material risk; the financial, security and data protections below remain.
-
-1. The author implements the customer outcome and runs the smallest meaningful
-   checks. Use one existing issue/PR and exact commits; no separate approval packet.
-2. The release owner uses required CI as the full gate, integrates only completed
-   dependencies and deploys through protected main. No extra coordinator approval
-   or mandatory separate QA session for ordinary UI, performance or reversible
-   application changes. Do not replay unchanged green tests locally.
-3. Smoke-test the actual workflow in production immediately after deployment.
-   Bounded non-financial checks with synthetic or owner-controlled data are
-   authorized. Record the result briefly in the same PR; fix or roll back concrete
-   regressions. Staging, automated browser availability and exhaustive pre-release
-   visual checks are not universal prerequisites. Owner manual smoke is valid;
-   distinguish it from automated or provider verification.
-
-Money movement, authorization/tenant boundaries and irreversible data changes
-still require focused checks before exposure. QA can review these alongside CI.
-Once accepted, only a material behavioral/integration change reopens review;
-the release owner can verify a mechanical correction and its focused check without
-another QA round. Non-blocking suggestions go to the backlog. Preserve required
-CI, branch protection, secrets, tenant isolation and financial invariants.
-
-DevOps is the current sole production executor, authorized to complete scoped
-releases without another permission round. Necessary compatible, data-preserving
-migrations and scoped nonsecret rollout configuration are included in an approved
-feature release: authenticate the exact target, check the current schema/ledger,
-apply only the intended migration and retain an appropriate recovery/forward-fix
-path. Take a recoverable snapshot for risky data/schema changes; do not invent a
-new backup-platform or staging project as a release prerequisite. Applied migration
-history remains immutable. Destructive changes, credential rotation, new paid
-infrastructure and unapproved provider spending require explicit authorization.
-
-A broken browser tool is not the same as missing production access. Use an already
-authorized CLI/API/dashboard path where available; never extract browser credentials
-or bypass authentication. Ask once for the precise secure login/input only when
-access genuinely requires the owner. Continue independent work while blocked.
-
-For the current custom-amount release, [PR72](https://github.com/vanshulgoyal101/adbrain/pull/72)
-already has source acceptance and green release CI. Finish that release, not another
-review cycle. Apply the accepted schema with authenticated target access before
-serving dependent callers, configure the private pilot and test the visible field
-in production. Manual owner inspection may replace unavailable browser automation.
-Confirm the displayed, server and Razorpay amount before the owner alone submits
-the approved INR 10 payment. No agent-initiated charge/refund or Meta activation
-is authorized. Keep a quote-aware runtime after any nondefault order exists.
-
-## Current Release Boundary
-
-Historical September 26 context follows; use Startup Fast Path and Current Dispatch
-for present authority and [PR72](https://github.com/vanshulgoyal101/adbrain/pull/72)
-for current release state. Do not resurrect old collection or review holds.
-
-Latest September 26 release: [PR #47](https://github.com/vanshulgoyal101/adbrain/pull/47)
-deployed trusted campaign/audit safeguards and the combined enquiry workflow as
-`f639cc398146fedb271fc3d57a64186525a61bbf`. Six pinned migrations committed with
-zero preflight violations and unchanged original row counts; required PR/main CI,
-exact Vercel deployment and authenticated follow-up save/reload/filter smoke passed.
-See the [production receipt](qa/ops-environment-2026-09-26.md#enquiry-production-release)
-for the scoped encrypted recovery artifact, transition and provider-evidence limits.
-Payment checkout remains outside this release.
-
-Issue #48's operator-managed checkout is a separate default-disabled integration
-candidate; it removes the automatic Meta funding requirement for new orders without
-altering historical funding-bound orders. Do not serve payment callers before the
-ordered billing, payment-order and additive policy migrations are applied. New
-customer collection still requires live gateway/merchant/webhook configuration,
-the recorded offer, exact CI and changed-scope acceptance. Campaign spending
-remains fail-closed pending #49; code publication does not permit a charge.
-
-Earlier September 26: [PR #36](https://github.com/vanshulgoyal101/adbrain/pull/36)
-released SDK/query candidate `4c8dd56` as production `6291dc2`. Shared dev
-`672eb13` also preserves the earlier local backlog; its 71 differing paths were
-not all promoted. DB-A migrations and dependent callers, local test checkout,
-and #34/#35 enquiry candidates were outside that earlier release. See the exact
-[CI/deployment/smoke receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
-
-The deployment-policy investigation is complete and #33 is closed. Corrected
-feature/release/dev heads produced no deployment in the bounded hosted checks;
-main intentionally deployed. There is no blanket publication hold. Every new
-candidate must still retain the corrected config and satisfy the controls below.
-Do not replay a completed release because an older paragraph calls it pending.
-
-| Operation | Required authority and evidence |
-| --- | --- |
-| Local implementation/docs commits | Assigned scope and isolated ownership; preserve unpublished work |
-| Feature/dev publication | Correct candidate deployment policy, verified target/environment scope and applicable checks; not migration approval |
-| Production code promotion | Dependency-complete subset, protected main PR, green required checks and compatible recovery; additional review only for material high-risk behavior |
-| Compatible migration and rollout config | Included in approved feature scope under Startup Fast Path; authenticated target, schema/ledger and appropriate recovery checks |
-| Destructive data or credential change | Explicit target-specific authorization and recovery plan |
-| Paid providers, ad activation, live payments or paid infrastructure | Separate financial/provider authorization; not implied by deployment or merchant activation |
-
-For an already-authorized operation, do not ask for approval again merely because
-CI finished. If the candidate, target or scope changes, reassess the changed part.
-Only DevOps executes shared integration and production; feature writers keep their
-own branches and the coordinator/QA retain their independent responsibilities.
-
-### Current Pre-Customer Authority
-
-September 26 owner authorization, recorded in the
-[current dispatch](ORCHESTRATION.md#current-dispatch), permits DevOps to open the
-necessary dev/main PRs, run required CI, and execute the bounded AdBrain target
-preflight, recoverable migrations and protected enquiry release. This supersedes
-older approval-pending statements for that scope. Production validation with
-owner-controlled non-financial test data is authorized; no further generic
-PR/CI or migration permission round is required.
-
-Use focused changed-behavior checks, existing accepted SQL/QA evidence, required
-candidate CI and an actual production workflow smoke. Separate staging or backup
-infrastructure projects and elaborate independent rollback rehearsals are not
-required for this pre-customer increment. Verify the actual target and immutable
-SQL, preserve existing data/credentials, take a suitable recoverable snapshot for
-risky changes, and retain a compatible rollback or forward-fix path. A brief
-controlled maintenance window is permitted for an incompatible transition; it
-does not permit destructive resets, unsafe grants or bypassing branch protection.
-
-Enquiries ship independently of payment repairs. Payment collection remains off
-until its known defects and live prerequisites are resolved; disabled code is not
-enabled collection. Real charges/refunds, bank operations, Meta funding/ad spend
-and arbitrary paid infrastructure still require specific financial authorization.
-
-## Publication Policy Repair: 2026-09-26
-
-[PR #32](https://github.com/vanshulgoyal101/adbrain/pull/32) published the owner-approved
-configuration-only repair at `174d3585ed3357dbd10131b2ed68434763589d32` on main/dev.
-The old `*: false` rule did not match branch names containing `/`: Vercel uses
-minimatch and unmatched branches default to enabled. #27, #28 and the G-2 release
-branch created previews. The corrected `**: false` rule passed nine local cases;
-the controlled repair branch produced no preview after dev/PR CI, while main
-deployed successfully at the exact repair merge. All four release CI runs passed.
-See [the current DevOps evidence](qa/ops-environment-2026-09-26.md#o-11-preview-policy-hold).
-The old #27/#28 heads described in the repair receipt were subsequently corrected
-and integrated through PR #36. The candidate-specific hold is satisfied for those
-exact heads, not automatically for other branches. Incorporate the correction or
-updated dev before publishing a branch based on older source, and check the
-resulting committed rules. Repair of a deployment policy is not itself approval
-for a feature, schema, credential or financial change.
+1. Branch from current `origin/main` in an isolated worktree under
+   `adbrain-wt/`, build a small complete slice and open a PR to `main` with
+   auto-merge enabled. The branch need not be up to date with `main`.
+2. Required checks are `build`, `test`, `core` and `secrets`
+   ([ci.yml](../.github/workflows/ci.yml)); `audit` and `docs` also run but do
+   not block. A change to generation, validation, prompts, models, timeouts, the
+   planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
+   responses. Update the matching doc in the same PR.
+3. Low-risk PRs (no migration, money, tenant/auth or config change) merge
+   automatically on green CI. QA reviews high-risk changes only; there is no
+   coordinator or second-QA approval gate.
+4. Vercel deploys `main` only ([vercel.json](../vercel.json)). The
+   [production guard](#production-guard) runs `npm run smoke:core` after each
+   Production deployment and rolls back automatically on failure. The author
+   also checks the change in production. If the core breaks, roll back first and
+   debug second; a non-core change that breaks the core is reverted.
+5. DevOps owns migrations, money and tenant releases, production settings,
+   secrets and rollback. Never force-push or run `npm run db:push` against
+   production. Charges, refunds and ad spend need explicit financial authorization.
 
 ## Current Release Boundary
 
@@ -175,10 +49,6 @@ Neither code deployment nor capture activates Meta advertising. Real charges,
 refunds and ad spend need separate financial authorization.
 
 ## Latest Application Release: 2026-09-18
-
-**Historical receipt.** This heading is retained for existing links; the current
-verified September 26 release is identified above. The following outcomes describe
-September 18 only and must not be rewritten as new verification.
 
 [PR #10](https://github.com/vanshulgoyal101/adbrain/pull/10) released the platform
 reliability fixes and privacy-safe product telemetry at merge
@@ -216,19 +86,17 @@ documentation-only synchronization is recorded in its PR.
 - Never bypass protection, force-push, or use `vercel --prod` to skip review.
 - Preserve local work. Do not reset, stash, or discard unrelated changes to make
   a release branch clean. Use an isolated worktree when appropriate.
-- Publication, deployment, migration and live-provider results are distinct facts.
-   Startup Fast Path grants scoped release authority, not permission for destructive
-   operations, credential changes or unapproved financial/provider actions.
+- Git publication, production deployment, migrations, credential changes, and
+  live provider mutations are separate actions requiring appropriate approval.
 
 ## Enforced Controls and Limits
 
 | Control | Verified setting |
 | --- | --- |
 | CI triggers | Pushes and PRs targeting `main` or `dev` |
-| CI runtime in dev source | Node 24; use the committed package lock |
-| Build job (current source) | `npm ci`, documentation-checker fixtures and `docs:check`, dependency audit, lint, typecheck, coverage, local PostgreSQL tests, production build |
+| CI jobs (current source) | `build` (`npm ci`, production build); separate `test` (lint, typecheck, unit tests, PostgreSQL checks), `core` (`test:core`, generation holds), non-blocking `audit` and `docs` jobs, all on Node 24 |
 | Secret job | Gitleaks with repository configuration |
-| Main protection | PR required; strict, up-to-date `build` and `secrets` checks |
+| Main protection | PR required; required checks `build`, `test`, `core` and `secrets`; branches need not be up to date |
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
@@ -239,10 +107,8 @@ These controls are split between [.github/workflows/ci.yml](../.github/workflows
 not enforce that every release originated on `dev`; the promotion procedure does.
 Direct CLI deployments are not blocked by Git branch protection.
 
-**A single `*` does not disable slash-containing Git branches.** The corrected
-checked-in `**: false` rule defaults to deny, with an explicit `main: true`
-exception. Validate the exact branch's committed configuration and observed
-hosted behavior; historical single-star receipts describe the earlier failure.
+**The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
+single-star configurations did not, and historical receipts below describe that failure mode.
 Before pushing a feature or release branch, inspect effective remote deployment
 rules and preview credentials rather than relying on an old receipt or local JSON
 alone. Do not assume a preview URL implies a preview database, harmless cron
@@ -291,11 +157,6 @@ and [the matched comparison](qa/flare-quality-2026-09-13.md).
    before their first push.
 5. Record unresolved gates honestly. Keep unverified features development-only.
 
-Keep the shared checkout on dev. When it is dirty, create an isolated release
-worktree instead of resetting, stashing or staging everything. Stage explicit
-paths and inspect the diff, including new files. A concurrent worker receipt is
-not permission to commit an incomplete application change from another owner.
-
 ## Production Promotion Checklist
 
 1. Identify the precise user-visible change and its dependency-complete commits.
@@ -305,13 +166,9 @@ not permission to commit an incomplete application change from another owner.
    copying whole files from `dev` without reviewing the extra changes.
 3. Decide the preview deployment policy before pushing that branch. Verify schema
    compatibility, required environment variables, and rollback before promotion.
-4. Validate the assembled release, not only its source branches. Required CI must
-   pass audit, lint, typecheck, coverage, database/build and secret gates on the
-   current candidate. Reuse existing local and QA evidence when source,
-   dependencies, configuration and runtime match. Test changed integration code
-   and review actual conflicts; do not rerun unchanged full suites or ask QA to
-   repeat acceptance just to transcribe green checks. Real-provider behavior
-   still needs real-provider evidence; local mocks cannot satisfy that gate.
+4. Test the assembled release, not only its source branch. Run lint, typecheck,
+   coverage, build, and relevant browser/database checks. Real-provider behavior
+   needs real-provider evidence; local mocks cannot satisfy that gate.
 5. Open a PR to `main` listing included changes, deferred work, tests, schema/env
    prerequisites, deployment effects, and rollback. Inspect the complete PR diff.
 6. Require passing checks on the current PR head. If commits or the base change,
@@ -320,22 +177,11 @@ not permission to commit an incomplete application change from another owner.
    Check the canonical production URL and the actual affected user workflow.
    A homepage HTTP 200 is not verification of an authenticated feature.
 8. [`sync-dev.yml`](../.github/workflows/sync-dev.yml) merges every push to `main`
-   into `dev`. On a conflict it opens one `dev cannot merge main automatically`
-   issue; merge by hand, push `dev` and rerun it. Record the PR, SHAs,
-   CI/deployment links, smoke results, and remaining gaps.
-
-When integrating multiple reviewed PRs, refresh dev after each merge. Preserve
-both dependency sets and use the package manager's lock semantics: a package can
-legitimately change from dev-only to runtime when a new runtime consumer needs it.
-Do not discard a dependency or silently change its version to resolve text
-conflicts. Publish and validate the assembled result before selective promotion.
-Keep unrelated migrations and their dependent callers together outside production
-until the schema rollout is approved; a code-only release must exclude both.
-
-Record local author checks, independent QA, hosted CI, provider evidence and
-production smoke separately. A release identifier plus its diff is sufficient
-for routine handoff; use source manifests for genuinely uncommitted candidates,
-not as a reason to repeat whole-tree scans after every status update.
+   into `dev`. If only Markdown files conflict, it takes main's version, except
+   `AGENTS.md` and `docs/ORCHESTRATION.md`, which keep dev's. Any other conflict
+   opens one `dev cannot merge main automatically` issue; merge by hand, push
+   `dev` and rerun it. Edit shared docs on `main` (through a PR), not on `dev`.
+   Record the PR, SHAs, CI/deployment links, smoke results, and remaining gaps.
 
 Useful read-only checks (run from this repository):
 
@@ -360,8 +206,8 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
    tunnel can still point at a remote database; verify what is behind the address.
 - `npm run db:migrate -- --migration <filename.sql>` previews one migration and
    its SHA-256 without connecting. Applying requires `--apply`, explicit `PGHOST`,
-   `PGDATABASE`, `PGUSER`, a verified port (`PGPORT` defaults to 5432), and secure
-   authentication. Set the port explicitly for operations. Remote targets
+   `PGDATABASE`, `PGUSER`, a verified port (`PGPORT` defaults to 5432), and a
+   securely supplied password. Remote targets
    additionally require `--target 'host:port/database@user'` matching exactly.
    Remote TLS certificate verification is mandatory; use `PGSSLROOTCERT` when needed.
 - The runner serializes migrations under a transaction advisory lock and records
@@ -434,9 +280,6 @@ then rerun the workflow with `workflow_dispatch` and close the issue.
 
 ## Publication Receipt: 2026-09-07
 
-**Historical evidence, not the current production state or permission to replay
-these operations.** Current promotion and rollback rules are above.
-
 Production `main` at `660b9ac` includes only release controls from
 [PR #1](https://github.com/vanshulgoyal101/adbrain/pull/1): CI configuration, this
 guide's initial version, and Vercel Git deployment controls. No pending Meta
@@ -464,12 +307,6 @@ and full new-history secret scanning passed. Hosted
 passed. These are dated receipts, not approval to release the Meta feature set.
 
 ## Current Meta Connect Work
-
-**Historical September 8-11 scope and infrastructure receipts.** The original
-heading is retained for stable links. "Current" and authorization statements
-below refer to those dated packets, not today's dispatch, deployed schema or
-permission for another migration. Use [Meta Connect](META_CONNECT.md) and the
-[current dispatch](ORCHESTRATION.md) for active work.
 
 ### Staging promotion authorized: 2026-09-11
 

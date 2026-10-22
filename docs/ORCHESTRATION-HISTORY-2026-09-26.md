@@ -1,4 +1,4 @@
-> Historical reference frozen before O-11. The [current plan](ORCHESTRATION.md)
+> Historical reference frozen before O-11. The [current plan](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md)
 > supersedes all dispatch and permission instructions here. Do not execute old
 > assignments or treat historical status as current acceptance.
 

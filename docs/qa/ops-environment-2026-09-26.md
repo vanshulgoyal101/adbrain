@@ -953,7 +953,7 @@ These blockers prohibit treating this receipt as unattended managed-delivery rea
 ## O-2 Source Assembly and Resource Handoff
 
 Worker: DevOps. Packet: QA-A infrastructure / I-0 source preparation. Board:
-[O-2](../ORCHESTRATION.md). CONTRACT-BC remains DRAFT. This section records the
+[O-2](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md). CONTRACT-BC remains DRAFT. This section records the
 next concrete deliverable, not a new candidate acceptance or release approval.
 The earlier QA-stack observations above remain historical; those temporary stacks
 were removed. B's later independent local DB-A/F5/F8 acceptance is recognized as

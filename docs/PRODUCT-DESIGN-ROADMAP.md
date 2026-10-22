@@ -4,7 +4,7 @@
 > as design history, not current deployment status or an active assignment.
 > Use [Brand Identity](BRAND-IDENTITY.md) for the existing visual conventions,
 > [Features](FEATURES.md) for source behavior, and
-> [current dispatch](ORCHESTRATION.md#current-dispatch) for ownership.
+> [current dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#current-dispatch) for ownership.
 > Enquiry candidates #34/#35 require their own combined acceptance; the older
 > follow-up proposals below do not certify those implementations.
 

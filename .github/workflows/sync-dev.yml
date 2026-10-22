@@ -29,9 +29,19 @@ jobs:
             git reset -q --hard origin/dev
             if git merge-base --is-ancestor origin/main HEAD; then echo "dev already contains main"; exit 0; fi
             if ! git merge -q --no-edit -m "Sync main $(git rev-parse --short origin/main) into dev" origin/main; then
-              git diff --name-only --diff-filter=U | tee "$RUNNER_TEMP/conflicts.txt"
-              git merge --abort
-              exit 1
+              git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicts.txt"
+              cat "$RUNNER_TEMP/conflicts.txt"
+              # Docs: main is canonical, except the coordinator's dev-only files. Code conflicts still fail.
+              if grep -qv '\.md$' "$RUNNER_TEMP/conflicts.txt"; then git merge --abort; exit 1; fi
+              while read -r f; do
+                case "$f" in
+                  AGENTS.md|docs/ORCHESTRATION.md) git checkout --ours -- "$f" ;;
+                  *) git checkout --theirs -- "$f" ;;
+                esac
+                git add -- "$f"
+              done < "$RUNNER_TEMP/conflicts.txt"
+              git commit -q --no-edit
+              echo "resolved doc conflicts: $(paste -sd' ' "$RUNNER_TEMP/conflicts.txt")"
             fi
             git push -q origin HEAD:dev && { echo "dev now contains main $(git rev-parse --short origin/main)"; exit 0; }
           done

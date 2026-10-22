@@ -1,4 +1,4 @@
-> Historical assessment preserved September 26, 2026. Original findings, counts and assignments retain their tested scope; use [the current operating brief](OPERATING-BRIEF.md) and [worker dispatch](ORCHESTRATION.md).
+> Historical assessment preserved September 26, 2026. Original findings, counts and assignments retain their tested scope; use [the current operating brief](OPERATING-BRIEF.md) and [worker dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md).
 
 # AdBrain Operating Brief
 
@@ -6,7 +6,7 @@ Updated September 26, 2026. Working context and execution priorities for the own
 coordinator, Dev, Dev 2, DevOps and QA. This is not a deployment or launch approval.
 
 Current assignments, file/resource ownership, integration queue and decisions live
-in [Worker Orchestration](ORCHESTRATION.md). Its current four-worker plan supersedes the
+in [Worker Orchestration](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md). Its current four-worker plan supersedes the
 original three-worker queue. The later [independent QA receipt](qa/independent-acceptance-2026-09-26.md)
 accepts DB-A and F5/F8 only for candidate B's local scope; the
 [DevOps receipt](qa/ops-environment-2026-09-26.md) supplies newer environment evidence.
@@ -159,7 +159,7 @@ orders/evidence for investigation; do not create replacements to clear uncertain
 
 ## Worker Coordination
 
-Use [Worker Orchestration](ORCHESTRATION.md) as the single current assignment board.
+Use [Worker Orchestration](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) as the single current assignment board.
 Dev owns DEV-B, Dev 2 owns DEV-C, DevOps owns isolated CI/release/recovery work and
 QA owns independent acceptance. Both developers first agree CONTRACT-BC. Shared
 files have one writer; accepted local scopes are not automatically released.

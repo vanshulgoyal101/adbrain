@@ -1,7 +1,7 @@
 # Roadmap
 
 This guide describes priorities and unfinished outcomes, not delivery promises.
-The [current dispatch](ORCHESTRATION.md#current-dispatch) owns assignments;
+The [current dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#current-dispatch) owns assignments;
 [Features](FEATURES.md) describes source behavior. Deployment and provider claims
 require dated evidence. The next customer milestone was agreed on September 27,
 2026; dated earlier release snapshots below remain historical context.

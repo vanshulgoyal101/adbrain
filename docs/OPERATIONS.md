@@ -4,13 +4,6 @@ Use this guide for diagnosis, not as blanket authorization for remote changes.
 [Release policy](RELEASING.md) governs publication/migrations/credentials;
 [Observability](OBSERVABILITY.md) defines safe logs and operator queries.
 
-Source baseline: dev `672eb13`; verified production `6291dc2`. The
-[release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release)
-separates shipped SDK/query changes from deferred DB-A callers, local test
-payments and the #34/#35 enquiry candidates. Check the incident's deployed SHA
-before using source behavior as a diagnosis. A migration file is not evidence
-that its objects exist remotely.
-
 ## Before Taking Action
 
 Record the affected environment, exact deployment SHA, route, approximate time,
@@ -24,37 +17,38 @@ Inspect durable evidence before retrying anything that can create objects or spe
 
 ### First Response
 
-1. Identify the failing target and source: deployment SHA, Supabase origin,
-	owner/business scope and last known good request. Do not load the shared
+1. Identify the failing target: deployment SHA, Supabase origin, owner/business
+	scope and last known good request. Do not load the owner checkout's
 	`.env.local` to discover values; it targets production.
 2. Preserve the original request/operation identity and existing successes.
-	Separate a response timeout from confirmed remote rejection. Do not retry a
-	creation, payment or activation with a fresh key to get past an error.
-3. Start with scoped logs, saved status and authorized read-only metadata. Keep
-	incident exports minimal and redacted. Compare the actual deployed handler
-	and schema with the relevant [API](API_REFERENCE.md) and [data](DATA_MODEL.md) guide.
-4. Name the proposed action and its effects. A configuration correction, token
-	rotation, database repair, provider mutation or rollback needs the matching
-	operational authority; access to a dashboard is not permission.
-5. Verify the result using the original workflow and record remaining uncertainty.
-	A read-only smoke must account for automatic page effects, such as Campaigns
-	auto-sync. Do not substitute a homepage 200 for authenticated recovery.
+	Separate a timeout from a confirmed remote rejection. Never retry a creation,
+	payment or activation with a fresh key to get past an error.
+3. Start with scoped logs, saved status and read-only metadata. Compare the
+	deployed handler and schema with the [API](API_REFERENCE.md) and
+	[data](DATA_MODEL.md) guides. A migration file is not proof its objects exist remotely.
+4. If the core loop is broken after a deploy, roll back first and debug second
+	(see [Production guard](RELEASING.md#production-guard)). Migrations, production
+	settings, secrets, money and rollback are DevOps-owned; dashboard access is not
+	permission to change them.
+5. Verify the fix through the original workflow. Opening Campaigns or Leads can
+	auto-sync (below), and a homepage 200 is not an authenticated recovery.
 
 ### Process and Probe Safety
 
 | Action | What it can do |
 | --- | --- |
-| Read logs, Git status or reviewed metadata queries | Diagnosis; still protect identifiers and operator access |
-| Open Campaigns or run sync/refresh | May read Meta, save snapshots and trigger refresh-time enforcement; not a pure health probe |
-| Invoke either cron URL | Keepalive can delete old events; enforcement can pause campaigns, despite using GET |
-| `npm run worker:campaigns -- --once` | Claims/executes a queued job and can create paused Meta objects |
-| Local QA `setup` / seed / backfill / migration scripts | Write their target database and possibly Auth/Storage; inspect guards and target first |
+| Read logs, Git status or reviewed metadata queries | Diagnosis only; still protect identifiers |
+| Open Campaigns or Leads, or press Sync/Refresh | Each page auto-syncs from Meta when this browser's last sync is over 15 minutes old and saves campaigns/leads; Refresh also runs spend enforcement and can pause campaigns |
+| Call a cron URL or `gh workflow run scheduled-jobs.yml` | Keepalive prunes old product events; enforce-spend can pause campaigns; sync-leads imports leads. All are GET (see [Scheduled Jobs](#scheduled-jobs)) |
+| `npm run smoke:core` | Signs in to production, views pages and prepares one campaign review without sending it, then deletes that draft |
+| `npm run worker:campaigns -- --once` | Claims and executes one queued job; can create paused Meta objects |
+| Local QA `setup`, seed, backfill or migration scripts | Write their target database and possibly Auth/Storage; inspect guards and target first |
 
-For temporary local work, use an isolated checkout and the owned local Supabase
-project. Use `npm run dev` for its configured heap limit, reserve an unused port,
-and stop your server after validation. Never kill another worker's process, reuse
-its active test database, delete its artifacts or switch the shared branch.
-The launcher-mode effects are documented in [Configuration](CONFIGURATION.md#local-launcher-modes).
+Do temporary local work in your own worktree under `adbrain-wt/` with the local
+Supabase project ([launcher modes](CONFIGURATION.md#local-launcher-modes)). Start
+servers with `npm run dev` for its memory limit and stop them after validation.
+Never stop another worker's process, reuse its test database, delete its
+artifacts or switch the shared branch.
 
 ## Privacy Request Operations
 
@@ -103,30 +97,9 @@ Financial/security retention and provider-held Meta data remain separate.
 | Sync incomplete | Cursor, skipped count, account/Page binding, status, save error | Continue pages or retry failed page; do not prune local rows based on one page |
 | Refresh result cannot be saved | `campaign_results` persistence and request logs | 503 before summary/enforcement; inspect the saved row before retrying, and verify delivery in Meta |
 | Spend protection unconfirmed | Refresh `protectionConfirmed:false` or cron `ok:false`, stored binding, provider insight period/currency, remote/local pause state | Confirm the campaign status in the original Meta account; repair reporting/connection/storage before retry. Do not read an empty `autoPaused`/`swept` as a safe spend total |
-| Leads partly sync | `failedForms`, newly inserted count, `sync.hasMore`, form/page coverage | Keep the sync ID and saved rows; retry failed forms after permission fix. Repeated IDs are ignored, not counted as new leads; a partial page is not proof of complete import |
+| Leads partly sync | `failedForms`, newly inserted count, `sync.hasMore`, reload result | Keep saved rows and retry failed forms after a permission fix; `sync.hasMore` means the import is incomplete. Repeated IDs are ignored, not counted as new leads |
 | Disconnect fails | Explicit business UUID, owner check, RPC/schema availability | Keep existing UI state until confirmed; disconnect is not an emergency pause |
 | Telemetry missing | Enable flags, applied migration, hosting logs, retention, request cap | Events are best effort; a missing event does not prove no action occurred |
-
-The refresh row follows [the current handler](../src/app/api/campaigns/[id]/refresh/route.ts).
-In dev, its trusted-write helper also needs DB-A schema compatibility; that helper
-was not part of the code-only production release. Do not turn a migration mismatch
-into a browser-role privilege workaround.
-
-### Generation and Payment Uncertainty
-
-For interrupted Studio generation, retain the business/generation UUID and count,
-then use saved-result recovery before authorizing another paid batch. The released
-cleanup removes only the matching completed identity; a late result must not erase
-newer work. This client recovery is not server-side once-only execution or an
-atomic cross-tab admission lock. Partial success means preserve and review saved
-creatives, not automatically regenerate the whole batch.
-
-Test checkout is local-only in this baseline. Retain the stored order and callback
-proof, ask the server to verify provider state, and do not automatically reopen an
-uncertain checkout. Razorpay account approval does not make the test adapter a live
-payment implementation. Never grant ad credit based on a browser callback or a
-test capture. See [the payment plan](PAYMENTS-PLAN.md) for current owner decisions
-and separately verified provider evidence.
 
 ### Creative Generation Reconciliation
 
@@ -187,18 +160,12 @@ there is no documented one-command automatic repair API.
 
 ### Campaign Worker Rollout
 
-The worker exists in source; the release receipts do not establish a supervised
-production worker. Obtain separate approval for migrations, hosting, credentials
-and mode changes. Sources: [entry point](../scripts/campaign-worker.ts),
-[execution](../src/lib/campaign/worker.ts),
-[queue claims](../db/migrations/20260919_campaign_worker.sql).
+The worker is implemented but not deployed by the local hardening work. Obtain
+separate approval for migrations, hosting, credentials, and environment changes.
 
-1. Back up and verify the target and existing schema. The worker requires the reviewed
+1. Back up and verify the target. Apply the reviewed
 	`20260919_campaign_reporting_identity.sql` before deploying the new web code;
-	`20260919_campaign_worker.sql` before enabling the queue. Check whether those
-   objects are already applied; never replay historical migrations solely because
-   their ledger entries are absent. Dev DB-A trusted writes add a separate
-   compatibility requirement. Use the named
+	apply `20260919_campaign_worker.sql` before enabling the queue. Use the named
 	migration runner described in [Release Workflow](RELEASING.md), not the schema file.
 2. Deploy the same dependency-complete application revision to a supervised Node
 	process with production dependencies installed. Run `npm run worker:campaigns`.
@@ -304,11 +271,6 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend. `unverified` lists businesses whose spend could not be read (503), never ₹0 |
 | `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it |
 
-Keep cron monitoring outside the job itself: observe completion time, status,
-partial outcomes and the age of the last useful spend evidence. The checked-in
-daily schedule cannot satisfy a five-minute spend-stop objective. Do not promise
-that capability based on an unprovisioned scheduler or a hosting-plan upgrade.
-
 Weekly protection requires a complete Monday-to-today INR spend observation;
 missing metrics are not zero spend. Unlaunched drafts do not contribute, but
 launched or paused campaigns can. The scheduled sweep can return 503 with partial
@@ -328,11 +290,6 @@ Database snapshots, public Storage media, external Meta objects, encryption keys
 and provider accounts have different backup/retention boundaries. Test restore
 procedures before relying on them. Code rollback does not undo ads, restore rows,
 or recreate a deleted encryption key.
-
-No backup/PITR setting, restore objective or alert service is guaranteed by this
-repository. Use the dated [environment inventory](qa/ops-environment-2026-09-26.md)
-as evidence, then confirm the current target's retention and restore capabilities
-before promising recovery. Proposed RPO/RTO targets are not a tested restore drill.
 
 Before cleanup, inventory rows plus creative references in campaigns/drafts/
 operations, dependent results/leads, external IDs and storage paths. Obtain a

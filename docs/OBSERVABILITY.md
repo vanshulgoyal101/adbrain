@@ -31,10 +31,6 @@ Implementation owners: [event schema](../src/lib/observability/events.ts),
 
 ## Production Database Rollout: 2026-09-18
 
-**Historical rollout checkpoint.** Preserve these outcomes; do not reapply this
-migration or assume its configuration must be enabled again. Later hosted evidence
-is recorded in release receipts. Current enablement procedures are below.
-
 The owner authorized database logging and retention enablement. The exact
 `20260918_product_events.sql` migration was applied transactionally to the
 verified AdBrain production project after focused tests and disposable PostgreSQL
@@ -51,7 +47,7 @@ External alerting and hosting-log retention remain separate operator concerns.
 
 ## What Is Recorded
 
-Instrumented API/auth handlers and server actions emit structured JSON with
+All API/auth handlers and the five server actions emit structured JSON with
 `source=adbrain.product`, a versioned schema, unique event ID, server-generated
 request ID, timestamp, outcome and duration. Verified Supabase user UUIDs and
 authorized business UUIDs attach account context when available. Anonymous
@@ -85,21 +81,17 @@ as `X-Request-Id`. Immutable responses may not accept that header. Internal
 operation IDs and idempotency keys remain unchanged. Overlapping requests use
 isolated async contexts; one account cannot inherit another request's identity.
 
-HTTP statuses below 400 map to `success`, 4xx to `rejected`, and 5xx to `failed`;
-workflow events can also be `started` or `partial`. A successful request can
-contain a partial business result, so inspect the workflow outcome too. Durations
-are nonnegative integer milliseconds, not an end-to-end billing measurement.
-The `release` attribute is present only for a bounded hexadecimal
-`VERCEL_GIT_COMMIT_SHA`; a missing attribute does not identify a particular build.
+Request outcomes map HTTP statuses below 400 to `success`, 4xx to `rejected` and
+5xx to `failed`; workflow events can also be `started` or `partial`, so a
+successful request can still carry a partial business result. The `release`
+attribute appears only for a 7-40 character hexadecimal `VERCEL_GIT_COMMIT_SHA`.
 
 ## Privacy and Access
 
-The product stream's emitters must not copy request/response bodies, URL queries, raw
+The new product stream never copies request/response bodies, URL queries, raw
 paths containing object IDs, cookies, tokens, email addresses, IP addresses,
 user agents, prompts, creative copy, lead contact details, error messages or
-stack traces. An allowlist strips unknown metadata; supported label fields still
-must be populated with safe codes/templates, not arbitrary user strings. This is
-not a general-purpose secret-redaction engine. Malformed events produce a
+stack traces. An allowlist strips unknown metadata; malformed events produce a
 fixed `INVALID_EVENT` diagnostic without echoing the rejected data.
 
 User/business UUIDs are pseudonymous identifiers, not anonymous data. Limit
@@ -157,18 +149,17 @@ Do not retry business operations to compensate for missing logs.
 
 | Observation | Next check |
 | --- | --- |
-| No product JSON | Exact global flag, whether the path is instrumented, runtime log source and time window |
-| JSON but no database row | Database flag, service-role target, schema/grants and `PERSIST_FAILED` |
-| `SCHEDULE_FAILED` | Whether code ran inside a supported Next request/action lifecycle; scheduling is not guaranteed in arbitrary background code |
-| `INVALID_EVENT` | Caller metadata against the schema; fix the emitter without logging the rejected payload |
-| No browser page event | Build-time client flag, DNT/GPC, authenticated same-origin session, 2 KiB body/60-per-minute limit; there is no delivery retry |
-| Missing account identifiers | Authentication/ownership may not have completed; never fill the gap from a supplied client user ID |
+| No product JSON | `PRODUCT_LOGGING_ENABLED`, whether the path is instrumented, runtime log source and time window |
+| JSON but no database row | `PRODUCT_LOGGING_DATABASE_ENABLED`, service-role target, schema/grants and `PERSIST_FAILED` |
+| `SCHEDULE_FAILED` | Whether the code ran inside a Next request/action lifecycle where `after` is available |
+| `INVALID_EVENT` | Caller metadata against the [event schema](../src/lib/observability/events.ts); fix the emitter without logging the payload |
+| No browser event | Build-time client flag, DNT/GPC, authenticated same-origin session, tracked page, 2 KiB/60-per-minute limits; no retry |
+| Missing account IDs | Authentication/ownership had not resolved; never fill the gap from a client-supplied ID |
 
-The three flags are independent: global product logging defaults on, the database
-sink defaults off, and optional client collection defaults on unless explicitly
-disabled or privacy preferences deny it. Disabling client collection does not
-disable server request logging. Disabling the database sink does not remove older
-rows or runtime log copies. See [Configuration](CONFIGURATION.md#observability).
+The flags are independent: product logging defaults on, the database sink off,
+and browser collection on unless disabled or denied by DNT/GPC. Turning off
+`PRODUCT_LOGGING_ENABLED` also drops browser events at `/api/events`. Disabling
+the sink does not remove existing rows or runtime log copies.
 
 ## Retention and Health
 
@@ -213,10 +204,6 @@ Disable the database sink to stop new writes without disabling operational JSON.
 Run these only with an authorized operator connection, never browser credentials.
 Filter `attributes->>'environment' = 'production'` for production-only analysis
 when a database receives more than one environment. SQL below is read-only.
-Use a read-only transaction/session, a bounded statement timeout and the smallest
-time/account scope that answers the question. Do not paste query results containing
-account identifiers into public tickets. The examples are analysis patterns, not
-an instruction to open a production connection or an application endpoint.
 
 ### Request Failures and Latency
 
@@ -300,8 +287,7 @@ select created_at, request_id, user_id, business_id, kind, name,
        outcome, duration_ms, attributes
 from public.product_events
 where request_id = '00000000-0000-4000-8000-000000000000'
-order by created_at, event_id
-limit 200;
+order by created_at, event_id;
 ```
 
 Replace the placeholder with `X-Request-Id` or the API response's request ID.

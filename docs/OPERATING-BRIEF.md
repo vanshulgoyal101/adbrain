@@ -11,7 +11,7 @@ authorized payment/funding -> reviewed delivery -> qualified enquiries -> follow
 and reconciled costs. Improve useful existing workflows before adding channels,
 agency administration or generalized automation.
 
-The immediate assignment is the [documentation rebuild](ORCHESTRATION.md#current-dispatch).
+The immediate assignment is the [documentation rebuild](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#current-dispatch).
 All four workers have distinct packets. Existing enquiry and database candidates
 remain preserved; rewriting their documentation does not accept or deploy them.
 
@@ -93,7 +93,7 @@ campaign spending waits for #49's customer guardrails.
 
 ## Worker Coordination
 
-The [current board](ORCHESTRATION.md) owns scheduling and file boundaries;
+The [current board](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) owns scheduling and file boundaries;
 GitHub issues own scope and acceptance. Authors own implementation and focused
 checks, QA owns independent acceptance, DevOps owns shared integration/release,
 and the coordinator resolves priority and material cross-owner decisions.

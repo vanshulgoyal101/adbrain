@@ -264,7 +264,7 @@ there is no allocation or dependency-install approval blocker.
 Read-only source review used dirty dev at
 `9da5b07b00e54fb552796cbcf01cc5fc7c2f02e7`, two commits behind the local origin/dev
 reference. This is not a frozen candidate and no source reconstruction was done.
-The [O-2 board](../ORCHESTRATION.md) assigns reconstruction once to DevOps.
+The [O-2 board](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) assigns reconstruction once to DevOps.
 
 The [independent QA report](independent-acceptance-2026-09-26.md) identifies B by
 that HEAD plus manifest SHA-256
@@ -739,7 +739,7 @@ being changed. No ownership transfer or product implementation is implied.
 
 ### Delivered Inputs Consumed
 
-Read [O-4](../ORCHESTRATION.md#file-based-handoffs),
+Read [O-4](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#file-based-handoffs),
 [Dev B-2](db-a-dev-a-handoff-2026-09-26.md#money-period-and-exposure),
 [QA-BC-cases-1 and R1-R6](qa-a-o1-handoff.md#contract-bc-review), and
 [DevOps' allocation](ops-environment-2026-09-26.md#workspace-and-resource-register)

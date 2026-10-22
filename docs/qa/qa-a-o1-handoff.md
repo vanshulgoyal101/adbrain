@@ -268,7 +268,7 @@ All approvals remain conditional on assembled documentation checks/required CI.
 | --- | --- | --- |
 | [Root README](../../README.md) | C / #39 | Reviewed entry points, stack and feature/release limits |
 | [Documentation index](../README.md) | C / #39 | Reviewed canonical ownership, terminology and archive links |
-| [Orchestration](../ORCHESTRATION.md) | C / #39 | Reviewed current scope, authority and resolved publication hold |
+| [Orchestration](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) | C / #39 | Reviewed current scope, authority and resolved publication hold |
 | [Specification](../SPEC.md) | C / #39 | Reviewed requirements versus implementation and commercial limits |
 | [Roadmap](../ROADMAP.md) | C / #39 | Reviewed released/dev/candidate separation and unresolved risks |
 | [Operating brief](../OPERATING-BRIEF.md) | C / #39 | Reviewed evidence layers, operator and payment boundaries |
@@ -1248,7 +1248,7 @@ they are not overwritten or relabeled as passing on this revision.
    No skipped/inverted expectation or weakened original assertion was found.
 
 Reuse the coordinator's reported 35 passing Studio tests, touched lint and
-non-incremental typecheck from [O-10 Fast Path](../ORCHESTRATION.md#o-10-fast-path).
+non-incremental typecheck from [O-10 Fast Path](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md#o-10-fast-path).
 Those are author checks, not a QA rerun. Independent evidence here is changed-code
 and regression review, with exact candidate identity verification. No application
 suite, G-1 check, browser, provider or production operation was repeated.
