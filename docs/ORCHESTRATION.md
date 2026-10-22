@@ -102,11 +102,11 @@ real ad spend and the App Review submission wait for the owner. Parked issues
 
 | Worker | Work, in order |
 | --- | --- |
-| DevOps | Done: #153, #142 flip, #138, #111 drill, #165 (lead sync + spend checks every 15 min). Now [#170](https://github.com/vanshulgoyal101/adbrain/issues/170): stop main-to-dev sync failures (they email the owner), then [#178](https://github.com/vanshulgoyal101/adbrain/issues/178): prove Razorpay webhooks reach production and are recorded once (no charges) |
-| Dev 3 | Done: #98, #142 at 36.5 s (QA run 13). Close [#142](https://github.com/vanshulgoyal101/adbrain/issues/142). Finish [#157](https://github.com/vanshulgoyal101/adbrain/issues/157) step 1: activation sets a Meta-side cap equal to the approved amount and reads it back, else refuses; recorded responses only. PR164 waits on QA's money-path review |
-| Dev | Done: #141 (QA verified it live). First QA's walkthrough bugs [#174](https://github.com/vanshulgoyal101/adbrain/issues/174) (planner rationale names an interest the audience lacks) and [#173](https://github.com/vanshulgoyal101/adbrain/issues/173) ("No spend yet" repeated), then [#169](https://github.com/vanshulgoyal101/adbrain/issues/169): first run for a brand-new business |
-| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3: the owner is signed in to the no-role Facebook account in the shared browser (since 05:25Z). Run consent and discovery, stop at the asset picker, never replace Cedar Ridge's Solaride connection, disconnect, post what consent showed per permission |
-| QA | [#158](https://github.com/vanshulgoyal101/adbrain/issues/158) walkthrough done; close it when #176 is live. Then review PR164 (money path, weekly spend), then re-walk the first run once #169 lands |
+| DevOps | Done: #153, #142 flip, #138, #111 drill, #165, #170. Now: create Dev's fresh test account for [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) (credentials in a gitignored mode-600 file, path only on the issue), merge PR184 after QA's review, then [#178](https://github.com/vanshulgoyal101/adbrain/issues/178) Razorpay webhooks |
+| Dev 3 | Done: #98, #142, #157 capped ad set (#182). Now: rebase and merge PR164 (QA approved), then the [#157](https://github.com/vanshulgoyal101/adbrain/issues/157) activation wiring PR (owner approves total + days; money path, so QA reviews and DevOps merges) |
+| Dev | Done: #141, #173, #174. Now [#169](https://github.com/vanshulgoyal101/adbrain/issues/169): empty-workspace fixes in code now; the timed walk once DevOps posts the test account |
+| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) waits on the owner's Meta dashboard fix ("Facebook Login is currently unavailable"); rerun step 3 after. Meanwhile [#185](https://github.com/vanshulgoyal101/adbrain/issues/185): Meta errors arrive in Hindi, so request `locale=en_US` or map by code, with a core test |
+| QA | Done: #158. Now review PR184 (auth/tenant: deauthorize scope), then [#188](https://github.com/vanshulgoyal101/adbrain/issues/188): our ads vs the business's own before first spend. Then Dev 3's activation PR (money) and the #169 re-walk |
 
 ### Earlier focus (October 21, before P0)
 
