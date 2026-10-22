@@ -43,6 +43,8 @@ export interface ConceptInput {
   language?: string;
   format?: AdFormat;
   referenceImages?: string[];
+  /** The business's own photo used as this ad's image (#195); the model never sees it. */
+  ownerPhoto?: string;
   recentCopy?: { headline: string; primary_text: string }[];
   advisoryPreferences?: string;
   sourceFacts?: string[];
@@ -78,6 +80,8 @@ Choose an appropriate visual medium (photography, illustration, product still li
 or another deliberate treatment). Do not default to stock people or generic luxury adjectives.
 References are available to the image model, not visible to you; do not claim to have inspected them.
 Without references, do not pretend an invented person, facility or product is a documented real one.
+When imageSource is "owner_photo", the ad image is the business's own photo, which you cannot see: write
+copy that works with any genuine photo of the business and never describe or claim what it shows.
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
 Return only JSON, with this shape. Character limits include spaces and are hard limits:
@@ -101,6 +105,7 @@ matter, but never override factual constraints. Use the requested language for a
         angle: { name: input.angle.name, intent: input.angle.description },
         placement: { format, ...formatDimensions(format) },
         referenceImageCount: input.referenceImages?.slice(0, 3).length ?? 0,
+        imageSource: input.ownerPhoto ? "owner_photo" : "generated",
         recentCopy: (input.recentCopy ?? []).slice(0, 12).map((copy) => ({
           headline: copy.headline.slice(0, 100),
           primary_text: copy.primary_text.slice(0, 900),
