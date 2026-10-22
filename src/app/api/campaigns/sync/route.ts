@@ -5,6 +5,7 @@ import { getCampaignPage, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection, getConnectionStatus } from "@/lib/meta/connection-access";
 import { z } from "zod";
 import { saveCampaign } from "@/lib/campaign/trusted-write";
+import { storedCappedAdSetIds } from "@/lib/campaign/activation";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,7 +38,10 @@ async function handlePOST(request?: Request) {
       for (let offset = 0; offset < page.campaigns.length; offset += 5) {
         const batch = await Promise.all(page.campaigns.slice(offset, offset + 5).map(async (campaign) => {
           if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") return { campaign, binding: null };
-          return { campaign, binding: await meta.readBoundCampaign(campaign) };
+          const { data: stored, error } = await supabase.from("campaigns").select("raw")
+            .eq("business_id", context.businessId).eq("meta_campaign_id", campaign.id).maybeSingle();
+          if (error) throw new Error("Campaign storage unavailable.");
+          return { campaign, binding: await meta.readBoundCampaign(campaign, storedCappedAdSetIds(stored?.raw)) };
         }));
         for (const { campaign, binding } of batch) {
           if (!binding) { skipped += 1; continue; }

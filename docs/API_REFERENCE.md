@@ -571,6 +571,12 @@ them. It then re-reads the cap and writes ACTIVE to the copies, the capped ad se
 the campaign only, and reads them back; if that fails the whole tree is paused and
 the reservation stays uncertain. Success adds `cap:{campaign,adSet,ads}`; original
 ad sets stay PAUSED.
+Repeat capped runs (#197): every capped ad set id is kept in `raw.cappedAdSetIds`
+(the first run's `raw.cap.adSetId` also counts). Review, activation and sync accept a
+lifetime budget only on those ad sets; their daily budget must be 0 and they are left
+out of the daily total and the bound `meta_adset_id`. A new run still needs every
+child PAUSED (Pause first), then copies only the original ads into a new capped ad
+set; earlier capped sets stay PAUSED.
 Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
 after Meta's 613 status rate limit), and reads all three levels back; `pause` is
 `{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only

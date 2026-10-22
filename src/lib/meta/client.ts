@@ -953,24 +953,28 @@ export class MetaClient {
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
   }
 
-  async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }) {
+  async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }, cappedAdSetIds: readonly string[] = []) {
     if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "") || Number(campaign.lifetime_budget ?? 0) !== 0
       || !["ACTIVE", "PAUSED"].includes(campaign.status)) return null;
     const response = await this.graph<{ data?: Array<{ id: string; status: string; destination_type?: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
       `${campaign.id}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object,destination_type&limit=100`,
     );
     if (!response.data?.length || response.paging?.next) return null;
+    const daily = response.data.filter(adSet => !cappedAdSetIds.includes(adSet.id));
+    if (!daily.length) return null;
     let adSetBudget = 0;
     for (const adSet of response.data) {
-      if (adSet.promoted_object?.page_id !== this.creds.pageId || Number(adSet.lifetime_budget ?? 0) !== 0
-        || !["ACTIVE", "PAUSED"].includes(adSet.status) || !/^\d+$/.test(adSet.daily_budget ?? "0")) return null;
-      adSetBudget += Number(adSet.daily_budget ?? 0);
+      if (adSet.promoted_object?.page_id !== this.creds.pageId || !["ACTIVE", "PAUSED"].includes(adSet.status)
+        || !/^\d+$/.test(adSet.daily_budget ?? "0") || !/^\d+$/.test(adSet.lifetime_budget ?? "0")) return null;
+      const capped = cappedAdSetIds.includes(adSet.id);
+      if (capped ? Number(adSet.daily_budget ?? 0) !== 0 || Number(adSet.lifetime_budget ?? 0) <= 0 : Number(adSet.lifetime_budget ?? 0) !== 0) return null;
+      if (!capped) adSetBudget += Number(adSet.daily_budget ?? 0);
     }
     if (!/^\d+$/.test(campaign.daily_budget ?? "0")) return null;
     const campaignBudget = Number(campaign.daily_budget ?? 0);
     const total = campaignBudget > 0 && adSetBudget === 0 ? campaignBudget : campaignBudget === 0 ? adSetBudget : Number.NaN;
     if (!Number.isSafeInteger(total) || total <= 0) return null;
-    return { dailyBudgetRupees: total / 100, adSetId: response.data[0].id, destination: destinationFromAdSets(response.data) };
+    return { dailyBudgetRupees: total / 100, adSetId: daily[0].id, destination: destinationFromAdSets(daily) };
   }
 
   private async verifyCampaignBinding(campaignId: string): Promise<CampaignDestination> {
@@ -1002,7 +1006,7 @@ export class MetaClient {
 
   async readCampaignDelivery(
     campaignId: string,
-    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[] },
+    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[]; cappedAdSetIds?: string[] },
   ): Promise<CampaignDeliverySnapshot> {
     const [campaign, adSets, ads] = await Promise.all([
       this.graph<{ id: string; account_id: string; status: string; effective_status?: string; daily_budget?: string; lifetime_budget?: string }>(
@@ -1030,13 +1034,15 @@ export class MetaClient {
       || ads.data.some(ad => !expected.adIds.includes(ad.id) || !expected.adSetIds.includes(ad.adset_id))) {
       throw new CampaignDeliveryError("Campaign children changed or could not be verified. Reconcile the intended ads in Meta before reviewing again.");
     }
+    const cappedAdSetIds = expected.cappedAdSetIds ?? [];
     let adSetBudget = 0;
     for (const adSet of adSets.data) {
-      if (!["ACTIVE", "PAUSED"].includes(adSet.status) || adSet.promoted_object?.page_id !== this.creds.pageId
-        || !adSet.targeting || minorUnits(adSet.lifetime_budget) !== 0) {
+      const capped = cappedAdSetIds.includes(adSet.id);
+      if (!["ACTIVE", "PAUSED"].includes(adSet.status) || adSet.promoted_object?.page_id !== this.creds.pageId || !adSet.targeting
+        || (capped ? minorUnits(adSet.daily_budget) !== 0 || !(minorUnits(adSet.lifetime_budget) > 0) : minorUnits(adSet.lifetime_budget) !== 0)) {
         throw new CampaignDeliveryError("Campaign Page or ad-set delivery settings changed. Review the intended children in Meta before activation.");
       }
-      adSetBudget += minorUnits(adSet.daily_budget);
+      if (!capped) adSetBudget += minorUnits(adSet.daily_budget);
     }
     if (ads.data.some(ad => !["ACTIVE", "PAUSED"].includes(ad.status) || !ad.creative?.id)) {
       throw new CampaignDeliveryError("An intended ad has missing or changed delivery settings. Review it in Meta before activation.");
@@ -1062,7 +1068,7 @@ export class MetaClient {
 
   async verifyCampaignActivation(
     campaignId: string,
-    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[] },
+    expected: { dailyBudgetRupees: number; status: string; adSetIds: string[]; adIds: string[]; cappedAdSetIds?: string[] },
   ): Promise<CampaignDeliverySnapshot> {
     const snapshot = await this.readCampaignDelivery(campaignId, expected);
     if (snapshot.adSets.some(adSet => adSet.status !== "ACTIVE") || snapshot.ads.some(ad => ad.status !== "ACTIVE")) {

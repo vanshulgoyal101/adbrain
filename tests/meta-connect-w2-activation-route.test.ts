@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   getCustomerBalance: vi.fn(),
   dailyBudget: 500,
   storedAdSetIds: ["set-1"],
+  storedAdIds: ["ad-1"],
+  storedCap: {} as Record<string, unknown>,
 }));
 
 class MockConnectionAccessError extends Error {
@@ -49,8 +51,8 @@ vi.mock("@/lib/supabase/server", () => ({
                   business_id: "business-1",
                   meta_campaign_id: "meta-campaign-1",
                   meta_adset_id: "set-1",
-                  meta_ad_ids: ["ad-1"],
-                  raw: { source: "campaign_operation", metaResult: { campaignId: "meta-campaign-1", adSetIds: mocks.storedAdSetIds, adIds: ["ad-1"] } },
+                  meta_ad_ids: mocks.storedAdIds,
+                  raw: { source: "campaign_operation", metaResult: { campaignId: "meta-campaign-1", adSetIds: mocks.storedAdSetIds, adIds: mocks.storedAdIds }, ...mocks.storedCap },
                   daily_budget: mocks.dailyBudget,
                   status: "paused",
                   name: "Campaign",
@@ -107,6 +109,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.dailyBudget = 500;
   mocks.storedAdSetIds = ["set-1"];
+  mocks.storedAdIds = ["ad-1"];
+  mocks.storedCap = {};
   mocks.updateCampaignStatus.mockResolvedValue(undefined);
   mocks.pauseCampaignTree.mockResolvedValue({ confirmed: true, objects: [{ id: "meta-campaign-1", level: "campaign", status: "PAUSED", effectiveStatus: "PAUSED" }] });
   mocks.reserveCustomerCampaign.mockResolvedValue({ reservationId: "reservation-1", mediaLimitPaise: 677966 });
@@ -146,7 +150,7 @@ describe("campaign activation generation fence", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect((await response.json()).delivery).toEqual(reviewedDelivery);
-    expect(mocks.readCampaignDelivery).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"] });
+    expect(mocks.readCampaignDelivery).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"], cappedAdSetIds: [] });
     expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
@@ -232,7 +236,7 @@ describe("campaign activation generation fence", () => {
     expect(response.status).toBe(200);
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
     expect(mocks.recheckMetaConnection).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, 4);
-    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"] });
+    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"], cappedAdSetIds: [] });
     expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
     expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
     expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
@@ -520,5 +524,48 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
     expect(mocks.saveCampaign).not.toHaveBeenCalledWith(expect.anything(), { status: "active" }, "campaign-1");
+  });
+
+  it("after one capped run, reviews the stored capped set and copies only the original ads into the next capped run (#197)", async () => {
+    mocks.storedAdSetIds = ["set-1", "capped-set"];
+    mocks.storedAdIds = ["ad-1", "capped-ad"];
+    mocks.storedCap = { cap: { ...capped, days: 3 } };
+    const rerunDelivery = {
+      ...pausedDelivery,
+      adSets: [...pausedDelivery.adSets, { ...pausedDelivery.adSets[0], id: "capped-set", dailyBudgetPaise: 0 }],
+      ads: [...pausedDelivery.ads, { ...pausedDelivery.ads[0], id: "capped-ad", adSetId: "capped-set" }],
+    };
+    mocks.readCampaignDelivery.mockResolvedValue(rerunDelivery);
+    const next = { adSetId: "capped-set-2", adIds: ["capped-ad-2"], lifetimeBudgetPaise: 100_000, endTime: "2026-10-24T06:00:00.000Z" };
+    mocks.createCappedAdSet.mockResolvedValue(next);
+    const rerunDigest = createHash("sha256").update(activationConfirmationPayload(
+      { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+      { generation: 4, selected }, rerunDelivery, 2,
+    )).digest("hex");
+
+    expect((await activate({ capDays: 2, confirmationDigest: rerunDigest })).status).toBe(200);
+    expect(mocks.readCampaignDelivery).toHaveBeenCalledWith("meta-campaign-1", expect.objectContaining({
+      adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"], cappedAdSetIds: ["capped-set"],
+    }));
+    expect(mocks.createCappedAdSet).toHaveBeenCalledWith("meta-campaign-1", expect.objectContaining({
+      sourceAdSetId: "set-1", sourceAdIds: ["ad-1"], lifetimeBudgetPaise: 100_000,
+    }));
+    expect(mocks.saveCampaign.mock.calls[0][1]).toMatchObject({
+      meta_ad_ids: ["ad-1", "capped-ad", "capped-ad-2"],
+      raw: {
+        metaResult: { adSetIds: ["set-1", "capped-set", "capped-set-2"], adIds: ["ad-1", "capped-ad", "capped-ad-2"] },
+        cap: { ...next, days: 2 }, cappedAdSetIds: ["capped-set", "capped-set-2"],
+      },
+    });
+    expect(mocks.activateCappedTree).toHaveBeenCalledWith("meta-campaign-1", next);
+  });
+
+  it("pause after a capped run stops the original and every capped child", async () => {
+    mocks.storedAdSetIds = ["set-1", "capped-set"];
+    mocks.storedAdIds = ["ad-1", "capped-ad"];
+    mocks.storedCap = { cap: { ...capped, days: 3 } };
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    expect((await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) })).status).toBe(200);
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
   });
 });
