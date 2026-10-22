@@ -63,7 +63,7 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     expect(events.slice(0, 3).map(({ stage }) => stage)).toEqual(["queued", "queued", "queued"]);
     expect(events.filter(({ stage }) => stage === "ready").map(({ angleName }) => angleName)).toEqual(saved);
     expect(events.every(({ at }, index) => index === 0 || at >= events[index - 1].at)).toBe(true);
-    expect(haiku.responses[0].content.startsWith("```json")).toBe(true);
+    expect(haiku.responses.some(({ content }) => content.startsWith("```json"))).toBe(true);
     expect(variants.map(({ angleName }) => angleName)).toEqual(haiku.responses.map(({ angleName }) => angleName));
     expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
     expect(bodies).toHaveLength(3);
@@ -209,5 +209,56 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
       expect(medium.startsWith(result.concept.visual.medium)).toBe(true);
       expect(medium[result.concept.visual.medium.length]).toMatch(/\s/);
     }
+  });
+
+  describe("hook and offer above Meta's 125-character mobile fold (#194)", () => {
+    const fold = 125;
+    const firstOffer = (text: string) => text.search(/[$\u20b9]\s*\d/);
+
+    it("saves the recorded #194-prompt replies as short lines with the hook and offer in the first line", async () => {
+      vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = JSON.parse(requestBody(init));
+        const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+        expect(body.messages).toHaveLength(2);
+        return openAIReply(reply.content, haiku.model, reply.usage);
+      }));
+      const { generateVariants } = await import("@/lib/creative/generate");
+      const variants = await generateVariants({ brand: run4.brand, brief: run4.brief, count: 3 });
+      expect(variants).toHaveLength(3);
+      for (const { primaryText } of variants) {
+        const lines = primaryText.split("\n");
+        expect(lines.length, primaryText).toBeGreaterThanOrEqual(2);
+        expect(lines[0].length, primaryText).toBeLessThanOrEqual(fold);
+        expect(firstOffer(primaryText), primaryText).toBeGreaterThanOrEqual(0);
+        expect(firstOffer(primaryText), primaryText).toBeLessThan(lines[0].length);
+      }
+    });
+
+    it("splits Haiku's recorded one-paragraph replies into sentence lines and repairs the one with its offer below the fold", async () => {
+      const { parseJSON } = await import("@/lib/llm");
+      const { validateConcept, conceptValidationRules } = await import("@/lib/creative/concept");
+      const { AD_ANGLES } = await import("@/lib/templates/ads");
+      const outcomes = haiku.paragraphResponses.responses.map(({ angleName, content }) => {
+        const angle = AD_ANGLES.find(({ name }) => name === angleName)!;
+        const draft = parseJSON<{ primary_text: string }>(content);
+        expect(draft.primary_text).not.toContain("\n");
+        expect(draft.primary_text.length).toBeGreaterThan(fold);
+        const result = validateConcept(draft, { brand: run4.brand, brief: run4.brief, angle });
+        return { angleName, offerAt: firstOffer(draft.primary_text), draft, result };
+      });
+      for (const { offerAt, draft, result } of outcomes) {
+        if (offerAt < fold) {
+          expect(result.success).toBe(true);
+          if (!result.success) continue;
+          const lines = result.concept.primary_text.split("\n");
+          expect(lines.length).toBeGreaterThanOrEqual(2);
+          expect(lines[0].length).toBeLessThanOrEqual(fold);
+          expect(lines.join(" ")).toBe(draft.primary_text);
+        } else {
+          expect(result.success ? [] : conceptValidationRules(result.issues)).toEqual(["offer-below-fold"]);
+        }
+      }
+      expect(outcomes.filter(({ offerAt }) => offerAt >= fold).map(({ angleName }) => angleName)).toEqual(["Solve a pain point"]);
+    });
   });
 });

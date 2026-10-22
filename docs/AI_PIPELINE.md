@@ -122,8 +122,14 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    - Case and spacing variants of a CTA or `textPlacement` are mapped, and `left` becomes `center`.
    - An empty or over-long `supportingText` becomes null, and empty quotes are dropped.
    - A quote that differs from a fact only in case is stored as the fact's exact text.
+   - Primary text written as one paragraph over 125 characters is split into
+     sentence lines (words unchanged), because Meta shows about 125 characters on
+     mobile before "See more" (#194).
 
    Headline and primary text are never clipped, and every claim check still runs.
+   A first line over 125 characters (`hook-length`) or an offer (price, %, free)
+   that starts after character 125 (`offer-below-fold`) is repaired once like any
+   other validation failure.
 4. Generate an image from the validated concept and up to three reference images.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
