@@ -1,0 +1,141 @@
+[
+  {
+    "method": "GET",
+    "path": "120253655093920526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253655093920526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253655093920526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253655094860526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFA1LVJfX2hCUmVjX1pXRk50dGNzS0gwZAHphbmpPLU1SdWh2a256ZAnRPVzJZAUWQxYVdWVjR3TkRwbG1xamhwSkhCQXhZAWU1wbW1DcUpzczA5NHRGbHNn",
+          "after": "QVFIVFA1LVJfX2hCUmVjX1pXRk50dGNzS0gwZAHphbmpPLU1SdWh2a256ZAnRPVzJZAUWQxYVdWVjR3TkRwbG1xamhwSkhCQXhZAWU1wbW1DcUpzczA5NHRGbHNn"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253655094860526?fields=id%2Ccampaign_id%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting",
+    "status": 200,
+    "body": {
+      "id": "120253655094860526",
+      "campaign_id": "120253655093920526",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "LEAD_GENERATION",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "ON_AD",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false
+      },
+      "targeting": {
+        "age_max": 55,
+        "age_min": 25,
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "US",
+              "distance_unit": "mile",
+              "key": "2525495",
+              "name": "Austin",
+              "region": "Texas",
+              "region_id": "3886"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 0
+        }
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adsets",
+    "form": {
+      "name": "AdBrain capped 600.00 until 2026-10-25",
+      "campaign_id": "120253655093920526",
+      "status": "PAUSED",
+      "lifetime_budget": "60000",
+      "end_time": "2026-10-25T06:08:28.000Z",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "LEAD_GENERATION",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "ON_AD",
+      "promoted_object": "{\"page_id\":\"885223068001054\",\"smart_pse_enabled\":false}",
+      "targeting": "{\"age_max\":55,\"age_min\":25,\"geo_locations\":{\"cities\":[{\"country\":\"US\",\"distance_unit\":\"mile\",\"key\":\"2525495\",\"name\":\"Austin\",\"region\":\"Texas\",\"region_id\":\"3886\"}],\"location_types\":[\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":0}}"
+    },
+    "status": 200,
+    "body": {
+      "id": "120253655095920526"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253655095660526/copies",
+    "form": {
+      "adset_id": "120253655095920526",
+      "status_option": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "copied_ad_id": "120253655096690526"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253655095920526/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253655096690526",
+          "status": "PAUSED",
+          "adset_id": "120253655095920526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHl4bVZANUDlBVXZAIUUtRUkZA3dE9wREl3RG9qS0ZAhMU0tRUowTHRhWkRnTUFJQUo0MnFKWWQyYkQ0Nldvek9UUVJ0N0N1eEczU3k5clRySkY2aklkajJ3",
+          "after": "QVFIVHl4bVZANUDlBVXZAIUUtRUkZA3dE9wREl3RG9qS0ZAhMU0tRUowTHRhWkRnTUFJQUo0MnFKWWQyYkQ0Nldvek9UUVJ0N0N1eEczU3k5clRySkY2aklkajJ3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253655095920526?fields=id%2Ccampaign_id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253655095920526",
+      "campaign_id": "120253655093920526",
+      "status": "PAUSED",
+      "daily_budget": "0",
+      "lifetime_budget": "60000",
+      "budget_remaining": "60000",
+      "end_time": "2026-10-25T11:38:28+0530"
+    }
+  }
+]

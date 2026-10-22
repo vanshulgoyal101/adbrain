@@ -1,0 +1,10 @@
+[
+  {
+    "method": "DELETE",
+    "path": "120253655095920526",
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]

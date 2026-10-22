@@ -8,6 +8,8 @@ import reviewAccountExamples from "./fixtures/meta/safety/review-account-example
 import pauseAll from "./fixtures/meta/safety/pause-all.json";
 import insights from "./fixtures/meta/safety/insights.json";
 import statusRateLimit from "./fixtures/meta/safety/status-rate-limit.json";
+import cappedAdSet from "./fixtures/meta/safety/capped-adset.json";
+import cappedAdSetDelete from "./fixtures/meta/safety/capped-adset-delete.json";
 import { settleInVirtualTime, useVirtualDeadlines } from "./replay";
 import { adReviewState, MetaClient } from "@/lib/meta/client";
 import { decodeCampaignInsights } from "@/lib/meta/insights";
@@ -128,5 +130,50 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
     }
     expect(daily.body).toEqual({ data: [] });
     expect(newCampaign.body).toEqual({ data: [] });
+  });
+
+  describe("cap below the ₹5,000 campaign minimum: a ₹600 lifetime ad set with an end date", () => {
+    const capped = { campaignId: "120253655093920526", sourceAdSetId: "120253655094860526", sourceAdId: "120253655095660526", adSetId: "120253655095920526", adId: "120253655096690526" };
+    const endTime = new Date("2026-10-25T06:08:28.000Z");
+    const create = (meta: MetaClient) => meta.createCappedAdSet(capped.campaignId, {
+      sourceAdSetId: capped.sourceAdSetId, sourceAdIds: [capped.sourceAdId], lifetimeBudgetPaise: 60_000, endTime,
+    });
+    const recordedAt = () => vi.useFakeTimers({ toFake: ["Date"], now: endTime.getTime() - 3 * 86_400_000 });
+
+    it("creates it PAUSED with PAUSED ad copies and returns it only after Meta reads back the exact amount and end date", async () => {
+      recordedAt();
+      const tape = replay(cappedAdSet as Exchange[]);
+      await expect(create(new MetaClient(creds))).resolves.toEqual({
+        adSetId: capped.adSetId, adIds: [capped.adId], lifetimeBudgetPaise: 60_000, endTime: endTime.toISOString(),
+      });
+      expect(tape.pending).toEqual([]);
+      const posts = tape.sent.filter(call => call.method === "POST");
+      expect(posts.map(call => call.path)).toEqual([`${creds.adAccountId}/adsets`, `${capped.sourceAdId}/copies`]);
+      expect(posts[0].form).toMatchObject({ campaign_id: capped.campaignId, status: "PAUSED", lifetime_budget: "60000", end_time: endTime.toISOString() });
+      expect(posts[0].form).not.toHaveProperty("daily_budget");
+      expect(posts[1].form).toEqual({ adset_id: capped.adSetId, status_option: "PAUSED" });
+      expect(JSON.stringify(tape.sent)).not.toContain("ACTIVE");
+    });
+
+    it("refuses and removes the new ad set when Meta reads back a different amount", async () => {
+      recordedAt();
+      const changed = (cappedAdSet as Exchange[]).map(exchange => exchange.method === "GET" && exchange.path.startsWith(`${capped.adSetId}?`)
+        ? { ...exchange, body: { ...(exchange.body as object), lifetime_budget: "600000", budget_remaining: "600000" } }
+        : exchange);
+      const tape = replay(changed, cappedAdSetDelete as Exchange[]);
+      await expect(create(new MetaClient(creds))).rejects.toThrow("Meta did not confirm the approved spending limit. The campaign stays paused.");
+      expect(tape.pending).toEqual([]);
+      expect(tape.sent.at(-1)).toMatchObject({ method: "DELETE", path: capped.adSetId });
+    });
+
+    it("refuses and removes the new ad set when the read-back end date differs", async () => {
+      recordedAt();
+      const changed = (cappedAdSet as Exchange[]).map(exchange => exchange.method === "GET" && exchange.path.startsWith(`${capped.adSetId}?`)
+        ? { ...exchange, body: { ...(exchange.body as object), end_time: "2026-11-25T11:38:28+0530" } }
+        : exchange);
+      const tape = replay(changed, cappedAdSetDelete as Exchange[]);
+      await expect(create(new MetaClient(creds))).rejects.toThrow(/did not confirm/);
+      expect(tape.sent.at(-1)).toMatchObject({ method: "DELETE", path: capped.adSetId });
+    });
   });
 });
