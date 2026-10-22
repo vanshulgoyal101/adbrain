@@ -72,7 +72,8 @@ not prove those claims are true or authorize scraping private pages. The UI
 preserves fields edited during extraction, discards a response when the website
 changes, and prevents save while extraction is pending. Review suggestions before
 saving. Network, validation, extraction, and storage failures are distinct from
-an empty brand.
+an empty brand. After a successful extraction the form lists what it filled and
+which key facts are still empty (offers or prices, service areas, phone, audience).
 
 Assets have types `logo`, `product_photo`, and `past_ad`. Uploading a logo and
 selecting it as the business logo are separate persistence steps. Storage and

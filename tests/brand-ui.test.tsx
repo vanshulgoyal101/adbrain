@@ -281,6 +281,17 @@ describe("<BrandAssets> persistence", () => {
 });
 
 describe("<BrandForm> autofill", () => {
+  it("says in plain words what a new business's website filled and what is still missing (#169)", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ extraction: { description: "Family chiropractic in Austin", brand_voice: "calm", target_audience: "desk workers" } }),
+    }) as typeof fetch;
+    render(<BrandForm business={business({ description: null, brand_voice: null, target_audience: null, locations: [], usps: [], offers: [] } as Partial<Business>)} />);
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    expect(await screen.findByText(
+      "Filled from your website: description, voice, audience. Still missing: offers or prices, service areas, phone number. Add them below; ads only state facts your Brand has.",
+    )).toBeInTheDocument();
+  });
   it("preserves edits made while website extraction is in flight", async () => {
     let finish!: (response: unknown) => void;
     global.fetch = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof fetch;
