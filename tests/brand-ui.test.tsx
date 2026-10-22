@@ -146,6 +146,18 @@ describe("<BrandForm> prefill", () => {
     expect(preview).toHaveTextContent("4 of 4 ready");
   });
 
+  it("is not ready for lead ads without a website, even with a phone number", () => {
+    render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
+    const preview = screen.getByRole("region", { name: "Live brand context" });
+    expect(preview).toHaveTextContent("3 of 4 ready");
+
+    fireEvent.change(screen.getByPlaceholderText("example.com"), {
+      target: { value: "https://example.com" },
+    });
+
+    expect(preview).toHaveTextContent("4 of 4 ready");
+  });
+
   it("does not claim a newly edited brand is still saved", async () => {
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));

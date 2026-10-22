@@ -34,7 +34,7 @@ type ConnectIntent =
   | { kind: "review_activation"; campaignId: string };
 
 type RecoveryAction =
-  | { kind: "reconnect" | "retry_check" | "choose_assets" | "contact_admin" }
+  | { kind: "reconnect" | "retry_check" | "choose_assets" | "contact_admin" | "open_brand" }
   | { kind: "open_meta"; url: string; label: string };
 
 type Blocker = { code: ErrorCode; message: string; action: RecoveryAction | null };
