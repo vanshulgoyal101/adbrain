@@ -1564,7 +1564,14 @@ function BusinessCampaigns({
                         />
                       </div>
                     )}
-                    {r && outcome === "instant_form" &&
+                    {r && outcome === "instant_form" && !(r.spend > 0) && (
+                      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                        {c.status === "paused" ? "Paused — nothing has spent. Resume when you're ready."
+                          : c.status === "active" ? "Waiting for Meta to start delivery."
+                          : "Nothing has spent yet."}
+                      </p>
+                    )}
+                    {r && outcome === "instant_form" && r.spend > 0 &&
                       (() => {
                         const h = spendHealth(
                           { spend: r.spend, leads: r.leads, cpl: r.cpl },
@@ -1596,7 +1603,7 @@ function BusinessCampaigns({
                           </div>
                         );
                       })()}
-                    {summaries[c.id] && (
+                    {summaries[c.id] && !(r && outcome === "instant_form" && !(r.spend > 0)) && (
                       <p className="text-sm text-slate-600">{summaries[c.id]}</p>
                     )}
                   </CardContent>
