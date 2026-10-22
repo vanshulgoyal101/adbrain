@@ -16,6 +16,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
+import { applyCreateLine, CreateProgress, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
@@ -122,6 +123,7 @@ export function AdAssistant({ business }: { business: Business }) {
   const followConversationRef = useRef(true);
   const inFlightRef = useRef(false);
   const [generationId, setGenerationId] = useState<string | null>(null);
+  const [live, setLive] = useState<LiveAd[] | null>(null);
 
   // Restore after mount (never during SSR) so server and client markup agree.
   const mounted = useMounted();
@@ -173,7 +175,7 @@ export function AdAssistant({ business }: { business: Business }) {
     const node = scrollRef.current;
     if (!node || !followConversationRef.current) return;
     node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
-  }, [turns, loading]);
+  }, [turns, loading, live]);
 
   const lastTurn = turns[turns.length - 1];
   const activeQuestion =
@@ -249,10 +251,11 @@ export function AdAssistant({ business }: { business: Business }) {
       ...t,
       { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
     ]);
+    setLive(Array.from({ length: 3 }, () => ({ stage: "starting" as const })));
     try {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
           businessId: business.id, brief, count: 3, language, generationId: newGenerationId,
           sourceFacts: [goal.trim().slice(0, 500), ...answers
@@ -260,12 +263,14 @@ export function AdAssistant({ business }: { business: Business }) {
             .map((answer) => answer.answer.trim().slice(0, 500))].filter(Boolean).slice(0, 12),
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as {
+      const { status, data: body } = await readCreateResponse(res, (line) =>
+        setLive((current) => current && applyCreateLine(current, line)));
+      const data = (body ?? {}) as {
         creatives?: Creative[];
         error?: string;
       };
-      if (!res.ok) {
-        if (res.status >= 500 || res.status === 408) {
+      if (status < 200 || status >= 300) {
+        if (status >= 500 || status === 408) {
           const recovered = await recoverPersistedGeneration(newGenerationId);
           if (recovered) return;
           setError("The generation result is not confirmed. Check again shortly or open Creative Studio. No new generation was started.");
@@ -275,7 +280,7 @@ export function AdAssistant({ business }: { business: Business }) {
         setGenerationId(null);
         setError(
           data.error ??
-            `Couldn't create the ad (server returned ${res.status}). Please try again.`,
+            `Couldn't create the ad (server returned ${status}). Please try again.`,
         );
         setPhase("chat");
         return;
@@ -296,6 +301,7 @@ export function AdAssistant({ business }: { business: Business }) {
         setPhase("chat");
       }
     } finally {
+      setLive(null);
       if (ownsLock) inFlightRef.current = false;
     }
   }
@@ -482,7 +488,9 @@ export function AdAssistant({ business }: { business: Business }) {
             />
           ))}
 
-          {(loading || phase === "generating") && (
+          {phase === "generating" && live ? (
+            <CreateProgress ads={live} renderReady={(creative) => <ResultCard creative={creative} />} />
+          ) : (loading || phase === "generating") && (
             <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}
             </div>
