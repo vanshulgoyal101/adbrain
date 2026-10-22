@@ -128,7 +128,8 @@ funding feasibility. `canActivate` also does not establish approval of the ad
 creative, delivery eligibility forever, or a provider-enforced spending ceiling.
 
 Recovery actions are `reconnect`, `retry_check`, `choose_assets`, `contact_admin`,
-or `open_meta` with a validated HTTPS destination. Account/billing changes happen
+`open_brand` (the Prepare website blocker links to Brand Brain), or `open_meta`
+with a validated HTTPS destination. Account/billing changes happen
 in Meta; the current workflow does not automatically provision accounts or forms.
 
 ## Token Security

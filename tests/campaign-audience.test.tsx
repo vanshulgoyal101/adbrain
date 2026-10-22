@@ -8,6 +8,7 @@ import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
+import { recoveryStorageKey, writeCampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
@@ -426,7 +427,13 @@ describe("campaign Ads Manager links", () => {
     });
     view();
     if (state === "unavailable") await screen.findByText("Status unavailable");
+    else if (state === "succeeded") await screen.findByText("Paused campaign created. Review it before activating spend.");
     else await screen.findByRole("region", { name: "Campaign review result" });
+    if (state === "succeeded") {
+      expect(screen.queryByRole("region", { name: "Campaign review result" })).toBeNull();
+      expect(sessionStorage.length).toBe(0);
+      fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
+    }
     const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
     if (state === "succeeded" || state === "failed") {
       expect(destination).toBeEnabled();
@@ -1078,6 +1085,60 @@ describe("campaign audience workflow", () => {
     expect(await screen.findByText("Your answers are saved. Finish the remaining settings in the campaign editor.")).toBeVisible();
     expect(screen.getByLabelText("Planned areas")).toHaveValue("Hisar");
     expect(mocks.saveDraft).not.toHaveBeenCalled();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+});
+
+describe("campaign review walkthrough dead ends (#158)", () => {
+  const websiteMessage = "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.";
+
+  it("links the website blocker to Brand Brain", async () => {
+    mocks.preflight.mockImplementation(async () => ({
+      draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
+      canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: websiteMessage, action: { kind: "open_brand" } }],
+      planHash: null, currency: "INR", perAdSetDailyBudgetRupees: 200, totalDailyBudgetRupees: 200, adSetCount: 1,
+      resolvedAreaLabel: "Jaipur", selected,
+    }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    expect(await screen.findByRole("link", { name: "Open Brand Brain" })).toHaveAttribute("href", "/brand");
+    expect(screen.getByText(websiteMessage)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
+  });
+
+  it("shows the owner's own send as sending, not as a locked previous request", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.createCampaign.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
+    expect(await screen.findByRole("button", { name: "Sending to Meta…" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeDisabled();
+    expect(screen.queryByText("Destination is locked until the previous campaign request is resolved.")).toBeNull();
+    expect(screen.queryByText("The previous campaign request has not been confirmed.")).toBeNull();
+    await act(async () => { finish({ operationId: "44444444-4444-4444-8444-444444444444", state: "succeeded", checkpoints: [], externalIds: {}, error: null }); });
+    await screen.findByText("Paused campaign created. Review it before activating spend.");
+    expect(screen.queryByRole("button", { name: "Sending to Meta…" })).toBeNull();
+  });
+
+  it("reports a restored finished launch once without reopening its draft", async () => {
+    const draft: DraftDTO = { draftId: "33333333-3333-4333-8333-333333333333", version: 1, expiresAt: "2099-01-01T00:00:00.000Z",
+      input: { businessId: business.id, name: "Sent launch", goal: "Leads", mode: "manual", creativeIds: [creative.id], dailyBudgetRupees: 200, leadFormId: "form-1", targeting: {}, abTest: false } };
+    const key = recoveryStorageKey(business.owner_id, business.id);
+    writeCampaignRecovery(sessionStorage, key, { draft, operationId: null, request: {
+      businessId: business.id, draftId: draft.draftId, draftVersion: 1, planHash: "a".repeat(64), connectionGeneration: 1, idempotencyKey: "original-request-identity",
+    } });
+    mocks.operationForRequest.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "succeeded", checkpoints: [], externalIds: {}, error: null });
+    view();
+    await screen.findByText("Paused campaign created. Review it before activating spend.");
+    expect(sessionStorage.getItem(key)).toBeNull();
+    expect(document.getElementById("campaign-composer")!.hidden).toBe(true);
+    expect(screen.getByLabelText("Campaign name")).not.toHaveValue("Sent launch");
+    expect(screen.queryByRole("region", { name: "Campaign review result" })).toBeNull();
+    expect(mocks.draft).not.toHaveBeenCalled();
+    expect(mocks.preflight).not.toHaveBeenCalled();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 });

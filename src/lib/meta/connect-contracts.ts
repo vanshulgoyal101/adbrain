@@ -67,6 +67,7 @@ export const recoveryActionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("retry_check") }),
   z.object({ kind: z.literal("choose_assets") }),
   z.object({ kind: z.literal("contact_admin") }),
+  z.object({ kind: z.literal("open_brand") }),
   z.object({
     kind: z.literal("open_meta"),
     url: z.string().url().refine((value) => value.startsWith("https://")),
