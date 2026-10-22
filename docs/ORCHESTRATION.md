@@ -78,7 +78,9 @@ Routine steps never wait for the coordinator.
   not count as Create runs.
   Log `Create run N/20` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
   At the limit, stop and post; the coordinator asks the owner for the next 10.
-  No Meta ad spend: campaigns stay PAUSED.
+  No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 22): ₹600
+  total for Solaride's first watched run, capped on Meta, run by Dev 3 with QA's
+  checklist on [#157](https://github.com/vanshulgoyal101/adbrain/issues/157).
 - **Access.** Production DB: Supabase Management API with `SUPABASE_TOKEN` from
   `/Users/vanshulgoyal/Development/copilot/arcade/.env` (parse into memory, never
   print), project `kmzuxrvfrwwpwmoovwcp`, `BEGIN READ ONLY` for checks. Vercel:
