@@ -292,7 +292,10 @@ export function validateConcept(
   const visualClaims = concept.visual.direction
     .split(/(?:[.!?;](?=\s|$)\s*|\s+\bbut\b\s+)/i)
     .filter((clause) => !/^(?:avoid|do not|don't|omit|exclude|never (?:show|include|add|render|depict|use))\b/i.test(clause.trim()))
-    .join(" ");
+    .join(" ")
+    // Layout notes, not offers (#202): "55% of the frame height", "45% opacity", "kept free of detail".
+    .replace(/\d+(?:\.\d+)?\s*%\s*(?:of\s+(?:the\s+)?(?:\w+\s+)?(?:frame|image|canvas|height|width|area|composition|layout|space|screen)|opacity|transparen\w*)/gi, "")
+    .replace(/\bfree\s+(?:of|from)\b|\b[a-z]+-free\b/gi, "");
   const output = [
     concept.headline,
     concept.primary_text,

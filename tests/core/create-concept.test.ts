@@ -89,7 +89,8 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
   });
 
   it("saves drafts that mention health or punctuate a cited price, keeping real claim failures", () => {
-    expect(groq.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(6);
+    // One draft's only "claim" was the layout note "The top 40% of the image is uncluttered" (#202).
+    expect(groq.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(7);
     for (const draft of groq.drafts) {
       expect(draft.rulesOnMain.length).toBeGreaterThan(0);
       expect(draftRules(draft.angle, draft.concept)).toEqual(draft.rules);
