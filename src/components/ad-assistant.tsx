@@ -1,5 +1,6 @@
 "use client";
 import { savedCreativeDescription } from "@/lib/creative/concept";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -739,11 +740,14 @@ function ResultCard({ creative, onStatus }: { creative: Creative; onStatus?: (st
       <div className="relative aspect-square bg-slate-100">
         {creative.image_url && !errored ? (
           <img
-            src={creative.image_url}
+            src={creativeThumbnailUrl(creative.image_url)}
             alt={creative.headline ?? "Ad creative"}
             className="h-full w-full object-cover"
             loading="lazy"
-            onError={() => setErrored(true)}
+            onError={(event) => {
+              if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
+              else setErrored(true);
+            }}
           />
         ) : (
           <div className="h-full w-full animate-pulse bg-slate-200" />
