@@ -9,6 +9,8 @@ import { formatDimensions, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
 
 export const CONCEPT_VERSION = "creative-concept-v2";
+// Primary text Meta shows on mobile before "See more" (#194).
+const FOLD_CHARACTERS = 125;
 
 export const creativeConceptSchema = z.object({
   headline: z.string().trim().min(1).max(40),
@@ -61,6 +63,9 @@ Recent copy is supplied only to avoid repetition, not as evidence for claims. Ch
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
+Meta shows only about the first 125 characters of primary_text on mobile before "See more". Put the
+hook, and the supplied offer when the brief is about one, in the first line (at most 125 characters).
+Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
 Use only supplied facts for commercial claims. Do not invent prices, offers, reviews, deadlines,
 credentials, outcomes or product features. An angle is a suggestion, not evidence: if no offer or
 deadline exists, use a truthful reason to enquire instead. Do not assume a country or audience.
@@ -76,7 +81,7 @@ Without references, do not pretend an invented person, facility or product is a 
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
 Return only JSON, with this shape. Character limits include spaces and are hard limits:
-{"headline":"up to 40 characters","primary_text":"up to 60 words","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
+{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 125 characters with the hook and offer","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
 "rationale":"why this message and visual belong together for this audience; up to 600 characters",
 "visual":{"medium":"chosen medium; up to 120 characters","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
 "supportingText":"optional on-image supporting line up to 64 characters, or null",
@@ -111,6 +116,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
+    "hook-length", "offer-below-fold",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -147,6 +153,18 @@ function placement(value: unknown): unknown {
 
 const ctaKey = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
 
+// One paragraph becomes sentence lines of at most FOLD_CHARACTERS, without changing a word.
+function shortLines(value: unknown): unknown {
+  if (typeof value !== "string" || value.includes("\n") || value.trim().length <= FOLD_CHARACTERS) return value;
+  const lines: string[] = [];
+  for (const sentence of value.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+    const last = lines.length - 1;
+    if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
+    else lines.push(sentence);
+  }
+  return lines.join("\n");
+}
+
 // Fix cosmetic slips once; headline and primary text are never clipped, so they still fail when too long.
 function normalizeDraft(value: unknown): unknown {
   if (!isRecord(value)) return value;
@@ -167,6 +185,7 @@ function normalizeDraft(value: unknown): unknown {
     : quotes;
   return {
     ...value,
+    primary_text: shortLines(value.primary_text),
     description: clipField(value.description, shape.description.maxLength),
     rationale: clipField(value.rationale, shape.rationale.maxLength),
     cta,
@@ -252,6 +271,10 @@ export function validateConcept(
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),
   }).map((finding) => `${finding.rule}: ${finding.detail}`));
   issues.push(...quoteIssues);
+  const firstLine = concept.primary_text.split("\n", 1)[0].trim();
+  if (firstLine.length > FOLD_CHARACTERS) {
+    issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
+  }
   // "text-free" is the visual the prompt asks for, not a free offer.
   const commercialTerms =
     /(?<!\btext-)\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
@@ -285,6 +308,10 @@ export function validateConcept(
         `unsupported-commercial-claim: ${term}; remove it or cite a supplied positive fact supporting it`,
       );
     }
+  }
+  const offer = new RegExp(commercialTerms.source, "i").exec(concept.primary_text);
+  if (offer && offer.index >= FOLD_CHARACTERS) {
+    issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
   }
   return issues.length
     ? { success: false, issues }

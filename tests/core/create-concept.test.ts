@@ -75,8 +75,18 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
   const draftRules = (angleId: string, concept: unknown) => {
     const angle = AD_ANGLES.find((candidate) => candidate.id === angleId)!;
     const result = validateConcept(concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
-    return result.success ? [] : conceptValidationRules(result.issues);
+    // These drafts pin claim rules; offer placement (#194) is asserted on its own below.
+    return result.success ? [] : conceptValidationRules(result.issues).filter((rule) => rule !== "offer-below-fold");
   };
+
+  it("flags only the recorded drafts whose $49 offer starts after Meta's 125-character fold (#194)", () => {
+    const flagged = [...groq.drafts, ...groqFields.drafts].filter((draft) => {
+      const angle = AD_ANGLES.find((candidate) => candidate.id === draft.angle)!;
+      const result = validateConcept(draft.concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
+      return !result.success && conceptValidationRules(result.issues).includes("offer-below-fold");
+    });
+    expect(flagged.map((draft) => draft.concept.primary_text.indexOf("$49"))).toEqual([128, 142, 147]);
+  });
 
   it("saves drafts that mention health or punctuate a cited price, keeping real claim failures", () => {
     expect(groq.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(6);
@@ -104,7 +114,7 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
       expect(draft.rulesOnMain).not.toEqual(draft.rules);
       expect(draftRules(draft.angle, draft.concept)).toEqual(draft.rules);
     }
-    const [left] = groqFields.drafts.filter((draft) => draft.concept.visual.textPlacement === "left" && !draft.rules.length);
+    const [left] = groqFields.drafts.filter((draft) => draft.concept.visual.textPlacement === "left" && !draft.rules.length && draft.concept.primary_text.indexOf("$49") < 125);
     const angle = AD_ANGLES.find((candidate) => candidate.id === left.angle)!;
     const saved = validateConcept(left.concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
     expect(saved.success && saved.concept.visual.textPlacement).toBe("center");
