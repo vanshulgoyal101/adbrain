@@ -156,6 +156,7 @@ const activationConfirmationSchema = z.object({
   status: z.literal("active"),
   confirmationDigest: z.string().regex(/^[a-f0-9]{64}$/),
   connectionGeneration: safeVersion,
+  capDays: z.number().int().min(1).max(7).optional(),
 }).strict();
 
 const pauseSchema = z.object({ status: z.literal("paused") }).strict();

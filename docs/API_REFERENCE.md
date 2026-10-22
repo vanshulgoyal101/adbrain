@@ -559,6 +559,18 @@ unexpected children and stale review return 409 before reservation. Success is
 `{ok:true,status,delivery}`; `status:"active"` is a requested parent state,
 not proof of effective delivery or Meta eligibility. An uncertain post-request
 result holds the reservation for reconciliation. Pause/delete also verify binding.
+
+Capped activation (#157): add `capDays` (integer 1-7); the digest then also covers
+`{days,totalPaise}` with total = daily budget × days. Every reviewed child must be
+PAUSED (409 otherwise, before reservation). After the #49 reservation (409 if the
+total exceeds its media limit), AdBrain creates a PAUSED ad set with
+`lifetime_budget` = total and `end_time` = now + days, copies the reviewed ads into
+it PAUSED, and reads both back (mismatch deletes it and refuses). The capped IDs are
+saved into the campaign's stored children before any ACTIVE write, so Pause covers
+them. It then re-reads the cap and writes ACTIVE to the copies, the capped ad set and
+the campaign only, and reads them back; if that fails the whole tree is paused and
+the reservation stays uncertain. Success adds `cap:{campaign,adSet,ads}`; original
+ad sets stay PAUSED.
 Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
 after Meta's 613 status rate limit), and reads all three levels back; `pause` is
 `{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only

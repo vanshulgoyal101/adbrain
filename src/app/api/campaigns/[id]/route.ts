@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot, type PausedCampaignTree } from "@/lib/meta/client";
+import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -152,6 +152,7 @@ async function handlePATCH(
   }
 
   let deliveryAfter: CampaignDeliverySnapshot | null = null;
+  let cappedAfter: CappedActivation | null = null;
   let pauseResult: PausedCampaignTree | null = null;
   try {
     if (action === "active") {
@@ -178,10 +179,16 @@ async function handlePATCH(
           if (!Number.isFinite(campaign.daily_budget) || (campaign.daily_budget ?? 0) <= 0 || connection.selected?.currency !== "INR") {
             throw new ConnectionAccessError("UNAVAILABLE", "Campaign budget and currency must be verified before activation.");
           }
-          const delivery = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
-            dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!,
-          });
-          const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery)).digest("hex");
+          const capDays = parsed.data.capDays;
+          const delivery = capDays
+            ? await meta.readCampaignDelivery(campaign.meta_campaign_id!, { dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children! })
+            : await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
+              dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!,
+            });
+          if (capDays && (delivery.adSets.some(adSet => adSet.status !== "PAUSED") || delivery.ads.some(ad => ad.status !== "PAUSED"))) {
+            throw new CampaignDeliveryError("Pause the reviewed ad sets and ads in Meta first. AdBrain turns on only the capped copy.");
+          }
+          const expectedDigest = createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery, capDays)).digest("hex");
           if (parsed.data.confirmationDigest !== expectedDigest) {
             throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
           }
@@ -191,11 +198,33 @@ async function handlePATCH(
             requestKey: parsed.data.confirmationDigest,
           });
           try {
-            await meta.enforceCampaignSpendCap(campaign.meta_campaign_id!, reservation.mediaLimitPaise);
-            await meta.updateCampaignStatus(campaign.meta_campaign_id!, "ACTIVE");
-            deliveryAfter = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
-              dailyBudgetRupees: campaign.daily_budget!, status: "active", ...children!,
-            });
+            if (capDays) {
+              const capPaise = Math.round(campaign.daily_budget! * 100) * capDays;
+              if (capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
+              const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
+                sourceAdSetId: children!.adSetIds[0], sourceAdIds: children!.adIds, lifetimeBudgetPaise: capPaise,
+                endTime: new Date(Date.now() + capDays * 86_400_000),
+              });
+              const tree = { adSetIds: [...children!.adSetIds, capped.adSetId], adIds: [...children!.adIds, ...capped.adIds] };
+              const stored = campaign.raw as { metaResult: Record<string, unknown> } & Record<string, unknown>;
+              const { error: recordError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, {
+                meta_ad_ids: tree.adIds,
+                raw: { ...stored, metaResult: { ...stored.metaResult, ...tree }, cap: { ...capped, days: capDays } },
+              }, id).catch(() => ({ error: new Error("Campaign storage unavailable.") }));
+              if (recordError) throw new CampaignDeliveryError("The capped ad set could not be recorded. Nothing was activated.");
+              try {
+                cappedAfter = await meta.activateCappedTree(campaign.meta_campaign_id!, capped);
+              } catch (error) {
+                await meta.pauseCampaignTree(campaign.meta_campaign_id!, tree).catch(() => undefined);
+                throw error;
+              }
+            } else {
+              await meta.enforceCampaignSpendCap(campaign.meta_campaign_id!, reservation.mediaLimitPaise);
+              await meta.updateCampaignStatus(campaign.meta_campaign_id!, "ACTIVE");
+              deliveryAfter = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
+                dailyBudgetRupees: campaign.daily_budget!, status: "active", ...children!,
+              });
+            }
             await confirmCustomerCampaign(context, id, reservation.reservationId, "active");
           } catch (error) {
             await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
@@ -246,7 +275,7 @@ async function handlePATCH(
     reason: `${action === "active" ? "Resumed" : "Paused"} campaign "${campaign.name ?? id}"`,
   });
 
-  return NextResponse.json({ ok: true, status: action, delivery: deliveryAfter, pause: pauseResult });
+  return NextResponse.json({ ok: true, status: action, delivery: deliveryAfter, cap: cappedAfter, pause: pauseResult });
 }
 
 /** Delete a campaign from Meta (best-effort) and remove it from AdBrain. */
