@@ -127,6 +127,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
      mobile before "See more" (#194).
 
    Headline and primary text are never clipped, and every claim check still runs.
+   In `visual.direction`, layout notes such as "55% of the frame height", "45%
+   opacity" and "free of detail" are not read as offers (#202); a price, "20% off"
+   or "FREE" shown in the visual still needs a supporting fact.
    A first line over 125 characters (`hook-length`) or an offer (price, %, free)
    that starts after character 125 (`offer-below-fold`) is repaired once like any
    other validation failure.
