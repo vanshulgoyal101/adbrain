@@ -113,7 +113,7 @@ function firstLine(value: string): string {
 
 type BrandSaveState = SaveState & { submittedRevision?: number };
 
-export function BrandForm({ business }: { business: Business | null }) {
+export function BrandForm({ business, photoCount = 0 }: { business: Business | null; photoCount?: number }) {
   const [form, setForm] = useState(() => ({ fields: fromBusiness(business), revision: 0 }));
   const { fields, revision } = form;
   function setFields(update: (current: FieldsState) => FieldsState) {
@@ -173,6 +173,8 @@ export function BrandForm({ business }: { business: Business | null }) {
       label: "Website for lead ads",
       ready: Boolean(fields.website.trim()),
     },
+    { label: "Logo", ready: Boolean(fields.logo_url.trim()), href: business ? "#brand-assets" : undefined },
+    { label: "Real photos", ready: photoCount > 0, href: business ? "#brand-assets" : undefined },
   ];
   const readinessCount = readinessChecks.filter((check) => check.ready).length;
 
@@ -272,15 +274,15 @@ export function BrandForm({ business }: { business: Business | null }) {
             This updates as you edit. It is the foundation for copy, visuals,
             targeting, and contact details.
           </p>
-          <div className="mt-4" aria-label={`${readinessCount} of 4 brand signals ready`}>
+          <div className="mt-4" aria-label={`${readinessCount} of ${readinessChecks.length} brand signals ready`}>
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-slate-700">Brand readiness</span>
-              <span className="text-slate-500">{readinessCount} of 4 ready</span>
+              <span className="text-slate-500">{readinessCount} of {readinessChecks.length} ready</span>
             </div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
               <div
                 className="h-full rounded-full bg-blue-600 transition-[width]"
-                style={{ width: `${readinessCount * 25}%` }}
+                style={{ width: `${(readinessCount / readinessChecks.length) * 100}%` }}
               />
             </div>
           </div>
@@ -307,7 +309,13 @@ export function BrandForm({ business }: { business: Business | null }) {
                 ) : (
                   <Circle className="h-4 w-4" />
                 )}
-                {check.label}
+                {!check.ready && check.href ? (
+                  <a href={check.href} className="font-medium text-blue-700 underline-offset-2 hover:underline">
+                    Add {check.label.toLowerCase()}
+                  </a>
+                ) : (
+                  check.label
+                )}
               </li>
             ))}
           </ul>

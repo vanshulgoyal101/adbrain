@@ -219,7 +219,9 @@ export function BrandAssets({
 
         {assets.length === 0 ? (
           <p className="text-sm text-slate-500">
-            No assets yet. Upload your logo, product photos, or past ads.
+            No assets yet. Add your logo and 1–3 real photos of your team,
+            premises or finished work; Create uses them as references for ad
+            images. You can skip this and add them later.
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">

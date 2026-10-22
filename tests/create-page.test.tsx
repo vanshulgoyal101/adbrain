@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Business } from "@/lib/types";
 
 const getPrimaryBusiness = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness }));
+const getBrandAssets = vi.hoisted(() => vi.fn(async () => [] as { type: string }[]));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness, getBrandAssets }));
 vi.mock("@/components/ad-assistant", () => ({ AdAssistant: () => <div>Assistant</div> }));
 
 const sparse = {
@@ -43,5 +44,19 @@ describe("Create page Brand context (#169)", () => {
     expect(screen.getByText("Rs 99 loaf")).toBeInTheDocument();
     expect(screen.getByText("+91 98765 43210")).toBeInTheDocument();
     expect(screen.queryByText(/Not in your Brand yet/)).not.toBeInTheDocument();
+  });
+
+  it("asks for a logo and real photos until the Brand has them (#195)", async () => {
+    getPrimaryBusiness.mockResolvedValue(sparse);
+    const { default: CreatePage } = await import("@/app/(app)/create/page");
+    const { unmount } = render(await CreatePage());
+    expect(screen.getByText(/Add your logo and 1–3 real photos/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add photos" })).toHaveAttribute("href", "/brand#brand-assets");
+    unmount();
+
+    getPrimaryBusiness.mockResolvedValue({ ...sparse, logo_url: "https://example.com/logo.png" });
+    getBrandAssets.mockResolvedValue([{ type: "product_photo" }]);
+    render(await CreatePage());
+    expect(screen.queryByRole("link", { name: "Add photos" })).not.toBeInTheDocument();
   });
 });

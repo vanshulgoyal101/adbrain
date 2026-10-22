@@ -103,7 +103,7 @@ export default async function BrandPage() {
         ))}
       </nav>
       <div className="mt-6 flex flex-col gap-6">
-        <BrandForm business={business} />
+        <BrandForm business={business} photoCount={assets.filter((a) => a.type === "product_photo").length} />
         {business && (
           <>
             <section id="brand-guidance" className="scroll-mt-6">
