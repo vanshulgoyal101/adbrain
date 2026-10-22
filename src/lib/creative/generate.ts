@@ -13,7 +13,7 @@ import {
   type CreativeConcept,
   type ConceptInput,
 } from "@/lib/creative/concept";
-import { generateImage } from "@/lib/imageGen";
+import { downloadImage, generateImage } from "@/lib/imageGen";
 import type { ImageAttempt } from "@/lib/imageGen/types";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
@@ -63,7 +63,11 @@ export interface GeneratedVariant {
     providerFinalStatus?: "completed" | "failed" | "unknown";
   };
   imageAttempts?: ImageAttempt[];
+  /** Set when the image is the business's own uploaded photo (#195), not a generated one. */
+  ownerPhotoUrl?: string;
 }
+
+export const OWNER_PHOTO_PROVIDER = "owner-photo";
 
 /** `ready` fires only after `onVariant` has saved the ad; `fixing` starts the one repair attempt. */
 export type CreateProgressStage = "queued" | "writing" | "checking" | "fixing" | "image" | "ready" | "failed";
@@ -106,6 +110,8 @@ export async function generateVariants(params: {
   language?: string;
   format?: AdFormat;
   referenceImages?: string[];
+  /** The business's own photos; the first ad uses the newest one as its image (#195). */
+  ownerPhotos?: string[];
   recentCopy?: ConceptInput["recentCopy"];
   advisoryPreferences?: string;
   sourceFacts?: string[];
@@ -153,9 +159,10 @@ export async function generateVariants(params: {
   let planning = Promise.resolve();
   let startNext = Promise.resolve();
   const outcomes = await Promise.allSettled(
-    angles.map(async (angle) => {
+    angles.map(async (angle, index) => {
       try {
-        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts };
+        const ownerPhoto = index === 0 ? params.ownerPhotos?.[0] : undefined;
+        const input: ConceptInput = { brand, brief, angle, instructions, language, format, referenceImages, advisoryPreferences, sourceFacts, ...(ownerPhoto ? { ownerPhoto } : {}) };
         const waitForTurn = parallel ? Promise.resolve() : startNext;
         let notifyNext!: () => void;
         startNext = new Promise<void>((resolve) => { notifyNext = resolve; });
@@ -349,16 +356,24 @@ async function renderVariant(
   const dims = formatDimensions(format ?? "portrait");
   const { concept, usage } = planned;
   const imageAttempts: ImageAttempt[] = [];
-  const image = await generateImage({
-    prompt: conceptImagePrompt(concept, input),
-    width: dims.width,
-    height: dims.height,
-    referenceImages: referenceImages?.slice(0, 3),
-    signal,
-    onAttempt: (entry) => imageAttempts.push(entry),
-  }).catch((error) => {
-    throw new CreativeImageError(error, usage, imageAttempts);
-  });
+  // A photo that can't be read falls back to a generated image rather than losing the ad.
+  const ownerRaster = input.ownerPhoto
+    ? await downloadImage(input.ownerPhoto, signal).catch(() => undefined)
+    : undefined;
+  const ownerPhoto = ownerRaster ? input.ownerPhoto : undefined;
+  const image = ownerRaster && ownerPhoto
+    ? { url: ownerPhoto, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: ownerRaster.width, height: ownerRaster.height,
+      latencyMs: undefined, fallbackFrom: undefined, providerRequestId: undefined, providerFinalStatus: undefined }
+    : await generateImage({
+      prompt: conceptImagePrompt(concept, input),
+      width: dims.width,
+      height: dims.height,
+      referenceImages: referenceImages?.slice(0, 3),
+      signal,
+      onAttempt: (entry) => imageAttempts.push(entry),
+    }).catch((error) => {
+      throw new CreativeImageError(error, usage, imageAttempts);
+    });
 
   return {
     concept,
@@ -368,7 +383,9 @@ async function renderVariant(
     primaryText: concept.primary_text,
     cta: concept.cta,
     imageUrl: image.url,
-    imagePrompt: input.advisoryPreferences
+    imagePrompt: ownerPhoto
+      ? "[No image prompt: this ad uses the business's own photo from Brand assets.]"
+      : input.advisoryPreferences
       ? "[Image prompt omitted because declared preferences were applied; the generated concept may reflect their style.]"
       : image.prompt,
     design: buildAdDesign({
@@ -392,5 +409,6 @@ async function renderVariant(
       providerFinalStatus: image.providerFinalStatus,
     },
     imageAttempts,
+    ...(ownerPhoto ? { ownerPhotoUrl: ownerPhoto } : {}),
   };
 }

@@ -45,6 +45,7 @@ export function generationReceipt(
         estimatedCostUsd: variant.imageUsage.estimatedCostUsd ?? null,
       },
       imageAttempts: variant.imageAttempts ?? [],
+      ownerPhoto: variant.ownerPhotoUrl ?? null,
     }),
   ) as Json;
 }
@@ -64,7 +65,7 @@ export function variantUsageEvents(
         validationStage: validation.stage, validationRules: validation.rules,
       } : {}) },
     })),
-    ...(variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
+    ...(variant.ownerPhotoUrl ? [] : variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
       entry, context, index + 1, variant.angleId,
       index === variant.imageAttempts!.length - 1 && entry.status === "success" ? variant.imageUsage : undefined,
     )) : [{

@@ -1,0 +1,19 @@
+{
+  "source": "OpenRouter anthropic/claude-haiku-5.5 through generateVariants with ownerPhotos (#195), 2026-10-23; production settings; image model blocked; real uploaded JPEG (Solaride product_photo, 1170x1510) downloaded and validated.",
+  "model": "anthropic/claude-haiku-5.5",
+  "angleName": "Save money / value",
+  "response": {
+    "latencyMs": 11990,
+    "id": "gen-1792697729-NEa5Yi5edHKidLwZdJzZ",
+    "content": "```json\n{\"headline\":\"$49 New-Patient Exam in Austin\",\"primary_text\":\"A $49 new-patient exam and consultation, with insurance accepted and transparent cash pricing.\\nSame-day appointments are available for new patients at our Austin clinic, including evening and Saturday hours.\\nLearn what the consultation covers, then book the time that works for you.\",\"description\":\"Evening and Saturday hours, with Round Rock and Cedar Park locations also available.\",\"cta\":\"Book Now\",\"rationale\":\"Value-focused readers in Austin want to know what a first visit costs before committing. This ad leads with the $49 new-patient exam and consultation, then pairs it with transparent cash pricing and insurance acceptance so the cost feels clear and predictable. Same-day availability and evening or Saturday hours address the practical barriers for desk workers, weekend athletes and new parents. The visual is a calm, owner-supplied photograph with a light warm grade and a quiet top band, so the price message stays readable and the ad reads as plain-spoken rather than promotional.\",\"visual\":{\"medium\":\"Owner's own photograph with a light, warm colour grade and a subtle graphic gradient band\",\"direction\":\"Use the business's own photograph, cropped to portrait 1080x1350. Keep the photo's main subject in the lower two-thirds of the frame so the upper area stays visually quiet for text. Apply a restrained grade that softens contrast and shifts highlights toward the warm secondary tone (#FFC677), with a gentle fade into the primary blue (#74A7FE) along the top edge, reserved for the headline. Keep the image natural and uncluttered, with clean edges and generous negative space. Do not add stock-style posed people, luxury staging, sparkle effects, exclamation-style graphics, or added props. Do not add any text, logos or badges inside the image; typography will be composited separately. Avoid heavy vignettes or dark, moody treatment.\",\"textPlacement\":\"top\"},\"supportingText\":\"Same-day new-patient appointments\",\"sourceQuotes\":[\"$49 new-patient exam and consultation\",\"Insurance accepted, plus transparent cash pricing\",\"Same-day appointments for new patients\",\"Evening and Saturday hours\"]}\n```",
+    "usage": {
+      "prompt": 2068,
+      "completion": 2325
+    }
+  },
+  "firstAttempt": {
+    "id": "gen-1792697714-ZMh5rDZwg1Xv470OgdtZ",
+    "note": "Repaired once; its visual.direction said \"roughly 45% opacity\", the #202 false positive.",
+    "direction": "Use the business's own genuine photo as the base image, cropped to portrait 4:5 so the main subject sits in the lower two-thirds of the frame. Apply a soft vertical gradient from the top edge, fading from primary blue #74A7FE at roughly 45% opacity to transparent by mid-frame, with a faint warm #FFC677 tint in the lower right corner for contrast and warmth. Keep the upper third visually calm and uncluttered, with no detail competing with the headline area. Keep the lighting natural and the grading neutral and slightly warm, with no heavy filters, vignettes or glow. Use a clean sans-serif-friendly composition with generous negative space. Exclusions: no text, no logos, no stock people, no invented staff or patients, no medical imagery such as spine scans or x-rays, no exclamation-style graphics, no price tags, badges or star ratings, and no claims about what the photo shows."
+  }
+}
