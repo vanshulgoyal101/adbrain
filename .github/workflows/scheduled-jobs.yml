@@ -40,6 +40,22 @@ jobs:
           code=$(curl -sS --max-time 75 -o leads.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/sync-leads") || code=000
           echo "HTTP $code $(jq -c '{ok, imported, businesses: (.businesses // [] | length), failed: ([.businesses[]? | select(.error)] | length), hasMore: ([.businesses[]? | select(.sync.hasMore)] | length), error}' leads.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
           [ "$code" = 200 ]
+      - name: Payment webhook health
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 30 -o payments.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/payment-health") || code=000
+          echo "HTTP $code $(jq -c '{ok, payments, events7d, unprocessed, capturedWithoutEvent, error}' payments.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          [ "$code" = 200 ]
+          # A capture without its webhook event, or an event stuck unprocessed: open one issue, keep the job green.
+          [ "$(jq -r '.ok' payments.json)" = false ] || exit 0
+          title="Razorpay webhook missing for a captured payment"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = 0 ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+            -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour. Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
       - name: Alert on the second consecutive failure
         if: failure()
         env:
@@ -51,4 +67,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'Spend enforcement or lead sync failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'Spend enforcement, lead sync or payment health failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
