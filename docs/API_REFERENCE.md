@@ -126,6 +126,7 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
+| GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta) |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
 ### Configurable Live Payments

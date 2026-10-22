@@ -218,15 +218,23 @@ This does not certify attribution equivalence with every Ads Manager report.
 
 ### Scheduled Jobs
 
-[vercel.json](../vercel.json) schedules both endpoints at `0 6 * * *` (UTC).
-Hosting-plan timing and execution guarantees must be checked with the host.
-Both require `Authorization: Bearer <CRON_SECRET>`, return 404 if unset and 401
+[vercel.json](../vercel.json) schedules keepalive and enforce-spend at
+`0 6 * * *` (UTC), the most a Vercel Hobby cron can run. Every 15 minutes
+[`scheduled-jobs.yml`](../.github/workflows/scheduled-jobs.yml) also calls
+enforce-spend and `sync-leads` (GitHub schedules are best-effort and can run
+late). It needs repository secret `CRON_SECRET` equal to the production value,
+logs only counts, fails red on any non-200 and opens one
+`Scheduled jobs failed twice in a row` `core` bug on two consecutive failures.
+Pause it with `gh workflow disable scheduled-jobs.yml`; resume with
+`gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
+All three require `Authorization: Bearer <CRON_SECRET>`, return 404 if unset and 401
 for a mismatch. Do not log the header or paste it into support evidence.
 
 | Job | Behavior |
 | --- | --- |
 | `/api/cron/keepalive` | Database activity and bounded product-event retention cleanup when configured; retention failure is visible |
-| `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend |
+| `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend. `unverified` lists businesses whose spend could not be read (503), never ₹0 |
+| `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it |
 
 Weekly protection requires a complete Monday-to-today INR spend observation;
 missing metrics are not zero spend. Unlaunched drafts do not contribute, but

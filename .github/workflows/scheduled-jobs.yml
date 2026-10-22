@@ -1,0 +1,54 @@
+name: Scheduled jobs
+on:
+  # Off-peak minutes: GitHub delays or drops schedules at :00/:15/:30/:45 under load.
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: scheduled-jobs
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BASE: https://adbrain.vanshul.com
+    steps:
+      - name: Spend enforcement
+        id: spend
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 75 -o spend.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/enforce-spend") || code=000
+          # Public repo: log counts only, never business IDs.
+          echo "HTTP $code $(jq -c '{ok, paused: ([.swept[]?.paused[]] | length), unverified: (.unverified // [] | length), error}' spend.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          [ "$code" = 200 ]
+      - name: Lead sync
+        if: always()
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 75 -o leads.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/sync-leads") || code=000
+          echo "HTTP $code $(jq -c '{ok, imported, businesses: (.businesses // [] | length), failed: ([.businesses[]? | select(.error)] | length), hasMore: ([.businesses[]? | select(.sync.hasMore)] | length), error}' leads.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          [ "$code" = 200 ]
+      - name: Alert on the second consecutive failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(gh run list -R "$GITHUB_REPOSITORY" -w scheduled-jobs.yml --status completed -L 1 --json conclusion --jq '.[0].conclusion // ""')
+          [ "$previous" = failure ] || { echo "First failure (previous: ${previous:-none}); alerting on the next one."; exit 0; }
+          title="Scheduled jobs failed twice in a row"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = 0 ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+            -b "$(printf 'Spend enforcement or lead sync failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
