@@ -2,7 +2,7 @@ import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observ
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
-import { CreativeImageError, CreativeValidationError, generateVariants } from "@/lib/creative/generate";
+import { CreativeImageError, CreativeValidationError, generateVariants, type CreateProgressEvent } from "@/lib/creative/generate";
 import {
   persistCreativeImage,
   renderAndPersistDesign,
@@ -93,7 +93,49 @@ async function handleGET(req: Request) {
 
 export const POST = observeRoute("/api/creatives/generate", "POST", handlePOST);
 
-async function handlePOST(req: Request) {
+/** Live Create (#141): one JSON line per event, then `{ type: "result", status, body }` with the normal response. */
+export type CreateStreamLine =
+  | ({ type: "progress" } & CreateProgressEvent)
+  | { type: "creative"; angleId: string; creative: Creative }
+  | { type: "result"; status: number; body: unknown };
+
+interface LiveCreate {
+  onAdmitted: () => void;
+  onProgress: (event: CreateProgressEvent) => void;
+  onCreative: (angleId: string, creative: Creative) => void;
+}
+
+async function handlePOST(req: Request): Promise<Response> {
+  if (!req.headers.get("accept")?.includes("application/x-ndjson")) return generate(req);
+  const encoder = new TextEncoder();
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const write = (line: CreateStreamLine) => {
+    writer.write(encoder.encode(`${JSON.stringify(line)}\n`)).catch(() => {});
+  };
+  let admitted!: () => void;
+  const started = new Promise<null>((resolve) => { admitted = () => resolve(null); });
+  const result = generate(req, {
+    onAdmitted: admitted,
+    onProgress: (event) => write({ type: "progress", ...event }),
+    onCreative: (angleId, creative) => write({ type: "creative", angleId, creative }),
+  });
+  // Rejections before admission (auth, limits, quota) keep their normal status and JSON body.
+  const early = await Promise.race([started, result]);
+  if (early) {
+    writer.close().catch(() => {});
+    return early;
+  }
+  void result
+    .then(async (response) => write({ type: "result", status: response.status, body: await response.json() }))
+    .catch(() => write({ type: "result", status: 502, body: { error: "Creative generation could not be completed. Check saved results before trying again." } }))
+    .finally(() => writer.close().catch(() => {}));
+  return new Response(readable, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
+  });
+}
+
+async function generate(req: Request, live?: LiveCreate) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -216,6 +258,7 @@ async function handlePOST(req: Request) {
       return NextResponse.json({ variantGroup, status: admission.status, creatives: [], count: 0, expectedCount: count }, { status: 202 });
     }
     admitted = true;
+    live?.onAdmitted();
     const advisoryPreferences = await preferenceContext(businessId, "creative", [brief, instructions].filter(Boolean).join("\n")).catch(() => "");
     await generateVariants({
       brand: business,
@@ -228,6 +271,7 @@ async function handlePOST(req: Request) {
       recentCopy,
       advisoryPreferences,
       sourceFacts,
+      onProgress: live?.onProgress,
       onVariant: async (variant) => {
         const events = variantUsageEvents(variant, {
             businessId,
@@ -277,6 +321,7 @@ async function handlePOST(req: Request) {
             "Could not save the creative. Check the generation schema migration.",
           );
         inserted.push(data);
+        live?.onCreative(variant.angleId, data);
         await progress();
       },
       onFailure: async (angle, error) => {

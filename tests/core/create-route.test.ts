@@ -284,6 +284,58 @@ describe("core: Create route on recorded run 4", () => {
   });
 });
 
+// #141: live Create streams each ad's stages and saved ad, then the same final response.
+describe("core: Create route streams live progress on recorded run 4", () => {
+  async function postStream(body: Record<string, unknown> = { businessId: run4.brand.id, brief: run4.brief, count: 3, generationId: "6d0e7324-171e-45df-894a-28ef6c910196" }) {
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    return POST(new Request("http://localhost/api/creatives/generate", {
+      method: "POST", headers: { Accept: "application/x-ndjson" }, body: JSON.stringify(body),
+    }));
+  }
+  const order = ["queued", "writing", "checking", "fixing", "image", "ready"];
+
+  it("sends every stage in order, each saved ad before its ready, then today's response", async () => {
+    stubProviders({ text: valueRejectedFirst });
+    const response = await postStream();
+    expect(response.headers.get("content-type")).toContain("application/x-ndjson");
+    const lines = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+    const result = lines.at(-1);
+    expect(lines.filter((line) => line.type === "result")).toHaveLength(1);
+    expect(result).toMatchObject({ type: "result", status: 200 });
+    expect(result.body.failures).toEqual([]);
+    expect(result.body.creatives.map((creative: { headline: string }) => creative.headline).sort())
+      .toEqual(run4.angles.map((angle) => angle.concept.headline).sort());
+    expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false });
+
+    for (const angle of run4.angles) {
+      const mine = lines.filter((line) => line.angleId === angle.angleId);
+      const stages = mine.filter((line) => line.type === "progress").map((line) => line.stage);
+      expect(stages[0]).toBe("queued");
+      expect(stages.at(-1)).toBe("ready");
+      for (const stage of ["writing", "checking", "image"]) expect(stages).toContain(stage);
+      for (let i = 1; i < stages.length; i += 1) {
+        // A repair goes back from fixing to checking; otherwise stages only move forward.
+        const repair = stages[i - 1] === "fixing" && stages[i] === "checking";
+        expect(repair || order.indexOf(stages[i]) >= order.indexOf(stages[i - 1]), stages.join(",")).toBe(true);
+      }
+      const saved = mine.findIndex((line) => line.type === "creative");
+      expect(saved).toBeGreaterThan(-1);
+      expect(saved).toBeLessThan(mine.findIndex((line) => line.type === "progress" && line.stage === "ready"));
+      expect(result.body.creatives).toContainEqual(mine[saved].creative);
+    }
+    const value = lines.filter((line) => line.angleId === "value" && line.type === "progress").map((line) => line.stage);
+    expect(value).toContain("fixing");
+  });
+
+  it("answers a request rejected before admission with its normal JSON status", async () => {
+    stubProviders();
+    const response = await postStream({ businessId: run4.brand.id, brief: "", count: 3 });
+    expect(response.status).toBe(400);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(mocks.inserts).toHaveLength(0);
+  });
+});
+
 describe("core: Create validator on gold-labelled eval concepts", () => {
   it.each(evalRows.cases)("line $line (gold $gold) $verdict: $headline", async ({ verdict, headline, primary_text, cta, sourceQuotes }) => {
     const { validateConcept } = await import("@/lib/creative/concept");
