@@ -191,6 +191,44 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
       await expect(create(new MetaClient(creds))).rejects.toThrow(/did not confirm/);
       expect(tape.sent.at(-1)).toMatchObject({ method: "DELETE", path: capped.adSetId });
     });
+
+    // ACTIVE is never recorded (#157 rule); these reads reuse the recorded capped ad set and ads bodies with the status the write would set.
+    const recorded = cappedAdSet as Exchange[];
+    const recordedAdSet = recorded.find(exchange => exchange.method === "GET" && exchange.path.startsWith(`${capped.adSetId}?`))!.body as Record<string, unknown>;
+    const recordedAds = recorded.find(exchange => exchange.path.startsWith(`${capped.adSetId}/ads?`))!.body as { data: Array<Record<string, unknown>> };
+    const graphPath = (path: string) => {
+      const url = new URL(`https://graph.facebook.com/v21.0/${path}`);
+      url.searchParams.delete("access_token");
+      return url.pathname.replace("/v21.0/", "") + url.search;
+    };
+    const reads = (status: string, adSetOverride: Record<string, unknown> = {}): Exchange[] => [
+      { method: "GET", path: graphPath(`${capped.campaignId}?fields=id,status,effective_status`), status: 200, body: { id: capped.campaignId, status, effective_status: status } },
+      { method: "GET", path: graphPath(`${capped.adSetId}?fields=id,campaign_id,status,effective_status,daily_budget,lifetime_budget,budget_remaining,end_time`), status: 200, body: { ...recordedAdSet, status, effective_status: status, ...adSetOverride } },
+      { method: "GET", path: graphPath(`${capped.adSetId}/ads?fields=id,status,effective_status,adset_id&limit=100`), status: 200, body: { ...recordedAds, data: recordedAds.data.map(ad => ({ ...ad, status, effective_status: status })) } },
+    ];
+    const write = (id: string): Exchange => ({ method: "POST", path: id, status: 200, body: { success: true } });
+    const cap = { adSetId: capped.adSetId, adIds: [capped.adId], lifetimeBudgetPaise: 60_000, endTime: endTime.toISOString() };
+
+    it("activation turns on only the capped copy, its ad set and the campaign, after re-reading the cap, and reads all three back", async () => {
+      const tape = replay(recorded.slice(0, 2), reads("PAUSED"), [write(capped.adId), write(capped.adSetId), write(capped.campaignId)], reads("ACTIVE"));
+      const result = await new MetaClient(creds).activateCappedTree(capped.campaignId, cap);
+      expect(result.adSet).toMatchObject({ id: capped.adSetId, status: "ACTIVE", lifetimeBudgetPaise: 60_000, budgetRemainingPaise: 60_000 });
+      expect(tape.pending).toEqual([]);
+      const posts = tape.sent.filter(call => call.method === "POST");
+      expect(posts.map(call => call.path)).toEqual([capped.adId, capped.adSetId, capped.campaignId]);
+      expect(posts.every(call => call.form.status === "ACTIVE")).toBe(true);
+    });
+
+    it("activation writes nothing when the cap read back before activation no longer matches", async () => {
+      const tape = replay(recorded.slice(0, 2), reads("PAUSED", { lifetime_budget: "6000000" }));
+      await expect(new MetaClient(creds).activateCappedTree(capped.campaignId, cap)).rejects.toThrow("The approved spending limit changed in Meta. Nothing was activated.");
+      expect(tape.sent.filter(call => call.method === "POST")).toEqual([]);
+    });
+
+    it("activation is refused when Meta does not read back ACTIVE", async () => {
+      replay(recorded.slice(0, 2), reads("PAUSED"), [write(capped.adId), write(capped.adSetId), write(capped.campaignId)], reads("PAUSED"));
+      await expect(new MetaClient(creds).activateCappedTree(capped.campaignId, cap)).rejects.toThrow("Meta did not confirm the capped activation.");
+    });
   });
 
   it("spend: a just-activated campaign with no delivery yet (no insight rows) counts as ₹0, not as an unverifiable reading", async () => {

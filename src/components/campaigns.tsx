@@ -205,6 +205,10 @@ function BusinessCampaigns({
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
+  const [capDays, setCapDays] = useState(3);
+  const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
+  const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
+  const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
@@ -837,8 +841,8 @@ function BusinessCampaigns({
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
-  async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO, delivery: CampaignDeliverySnapshot): Promise<string> {
-    const payload = activationConfirmationPayload(campaign, connection, delivery);
+  async function buildActivationDigest(campaign: Campaign, connection: ConnectionDTO, delivery: CampaignDeliverySnapshot, days?: number): Promise<string> {
+    const payload = activationConfirmationPayload(campaign, connection, delivery, days);
     if (!crypto.subtle) throw new Error("Activation confirmation is unavailable in this browser.");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payload));
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -872,13 +876,12 @@ function BusinessCampaigns({
       setConnectOpen(true);
       return;
     }
-    if (next === "active" && (!activationDigest || !reviewConnection || !activationDelivery
-      || activationDelivery.adSets.some(adSet => adSet.status !== "ACTIVE")
-      || activationDelivery.ads.some(ad => ad.status !== "ACTIVE"))) {
+    if (next === "active" && (!activationDigest || !reviewConnection || !activationDelivery || !activationReady)) {
       setError("Review the current connection before activating this campaign.");
       return;
     }
-    const reviewedDigest = activationDigest;
+    const reviewedDays = next === "active" && activationCapped ? capDays : undefined;
+    const reviewedDigest = reviewedDays ? await buildActivationDigest(c, reviewConnection!, activationDelivery!, reviewedDays) : activationDigest;
     const reviewedConnection = reviewConnection;
     setStatusChangingId(c.id);
     setError(null);
@@ -887,14 +890,18 @@ function BusinessCampaigns({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(next === "active"
-          ? buildActivationPatch(reviewedDigest!, reviewedConnection!.generation)
+          ? buildActivationPatch(reviewedDigest!, reviewedConnection!.generation, reviewedDays)
           : { status: "paused" }),
       });
       if (res.ok) {
         setCampaigns((prev) =>
           prev.map((x) => (x.id === c.id ? { ...x, status: next } : x)),
         );
-        setNotice(next === "active" ? "Activation requested. Check Meta for effective delivery and eligibility." : "Campaign paused.");
+        setNotice(next === "active"
+          ? reviewedDays
+            ? `Activated with a ${formatCurrency((c.daily_budget ?? 0) * reviewedDays)} total limit on Meta for ${reviewedDays} ${reviewedDays === 1 ? "day" : "days"}. Meta reviews the ads before they deliver.`
+            : "Activation requested. Check Meta for effective delivery and eligibility."
+          : "Campaign paused.");
         if (next === "active") {
           setActivationReview(null);
           setActivationDigest(null);
@@ -971,7 +978,9 @@ function BusinessCampaigns({
       {activationReview && (
         <Alert variant="warning">
           <span className="block">
-            Review {activationReview.name ?? "this campaign"} before it can run. AdBrain will request only the parent campaign to become active; it will not change any ad sets or ads.
+            Review {activationReview.name ?? "this campaign"} before it can run. {activationCapped
+              ? "AdBrain will copy these ads into a new ad set with a fixed total budget and end date, then turn on only that ad set, its ads and the campaign."
+              : "AdBrain will request only the parent campaign to become active; it will not change any ad sets or ads."}
           </span>
           {reviewConnection?.selected && (
             <span className="mt-2 block text-sm font-normal text-amber-900">
@@ -989,24 +998,31 @@ function BusinessCampaigns({
               </li>)}
               {activationDelivery.ads.map(ad => <li key={ad.id}>Ad {ad.id} (set {ad.adSetId}, creative {ad.creativeId}): requested {ad.status}, effective {ad.effectiveStatus ?? "unconfirmed"}</li>)}
             </ul>
-            {activationDelivery.adSets.some(adSet => adSet.status !== "ACTIVE") || activationDelivery.ads.some(ad => ad.status !== "ACTIVE")
-              ? <p className="mt-2">An intended child is paused. Activate only the listed children in Meta, then refresh this review. No child will be changed here.</p>
-              : <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>}
+            {activationCapped
+              ? <div className="mt-2">
+                <label htmlFor="cap-days" className="font-medium">Run for </label>
+                <select id="cap-days" value={capDays} onChange={event => setCapDays(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm">
+                  {[1, 2, 3, 4, 5, 6, 7].map(days => <option key={days} value={days}>{days} {days === 1 ? "day" : "days"}</option>)}
+                </select>
+                <p className="mt-1 font-medium">Total limit on Meta: {formatCurrency((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
+                <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
+              </div>
+              : activationReady
+                ? <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>
+                : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
             <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
             <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!)}>Refresh review</Button>
           </div>}
           <Button
             size="sm"
             className="ml-3"
-            disabled={!activationDigest || !activationDelivery
-              || activationDelivery.adSets.some(adSet => adSet.status !== "ACTIVE")
-              || activationDelivery.ads.some(ad => ad.status !== "ACTIVE")
+            disabled={!activationDigest || !activationReady
               || statusChangingId === activationReview.id}
             onClick={() => void setCampaignStatus(activationReview, "active", true)}
             data-product-event="campaign.activate"
           >
             {statusChangingId === activationReview.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Request activation
+            {activationCapped ? "Approve total and activate" : "Request activation"}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setActivationReview(null)}>Cancel</Button>
         </Alert>

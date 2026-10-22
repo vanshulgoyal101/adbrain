@@ -40,6 +40,7 @@ export function activationConfirmationPayload(
   campaign: Pick<Campaign, "id" | "meta_campaign_id" | "daily_budget" | "status">,
   connection: Pick<ConnectionDTO, "selected" | "generation">,
   delivery: CampaignDeliverySnapshot,
+  capDays?: number,
 ): string {
   if (!connection.selected) throw new Error("Meta assets are unavailable. Review the connection again.");
   const selected = connection.selected;
@@ -59,6 +60,7 @@ export function activationConfirmationPayload(
     },
     connectionGeneration: connection.generation,
     delivery,
+    ...(capDays ? { cap: { days: capDays, totalPaise: Math.round((campaign.daily_budget ?? 0) * 100) * capDays } } : {}),
     status: "active",
   });
 }

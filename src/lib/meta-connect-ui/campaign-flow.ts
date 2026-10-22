@@ -44,6 +44,7 @@ export function buildCreateCampaignRequest(
 export function buildActivationPatch(
   confirmationDigest: string,
   connectionGeneration: number,
+  capDays?: number,
 ) {
   if (!/^[a-f0-9]{64}$/.test(confirmationDigest)) {
     throw new Error("A reviewed activation digest is required.");
@@ -52,6 +53,7 @@ export function buildActivationPatch(
     status: "active" as const,
     confirmationDigest,
     connectionGeneration,
+    ...(capDays ? { capDays } : {}),
   };
 }
 
