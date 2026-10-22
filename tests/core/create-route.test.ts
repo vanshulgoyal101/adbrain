@@ -9,11 +9,15 @@ import { googleReply, openAIReply, requestBody, requestUrl, settleInVirtualTime,
 // only the provider network, Supabase and storage are replaced.
 
 const SUPABASE = "https://core-test.supabase.co";
+const OWNER_PHOTO = `${SUPABASE}/storage/v1/object/public/brand-assets/cedar-ridge/front-desk.jpg`;
 const IMAGE_MODEL = "openai/gpt-image-2.5-flare";
 const mocks = vi.hoisted(() => ({
   inserts: [] as Record<string, unknown>[],
   progress: [] as Record<string, unknown>[],
   fastRaster: false,
+  ownerPhotos: [] as string[],
+  ownerPhotoStatus: 200,
+  usage: [] as Record<string, unknown>[],
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -43,7 +47,7 @@ vi.mock("@/lib/supabase/server", () => ({
     }),
   }),
 }));
-vi.mock("@/lib/creative/references", () => ({ creativeReferences: async () => [], recentCreativeCopy: async () => [] }));
+vi.mock("@/lib/creative/references", () => ({ creativeAssets: async () => ({ references: [], photos: mocks.ownerPhotos }), recentCreativeCopy: async () => [] }));
 vi.mock("@/lib/preferences/store", () => ({ preferenceContext: async () => "" }));
 vi.mock("@/lib/creative/persist", () => ({
   persistCreativeImage: async (_client: unknown, businessId: string, group: string, angle: string) =>
@@ -53,7 +57,7 @@ vi.mock("@/lib/creative/persist", () => ({
 vi.mock("@/lib/llm/persist", () => ({
   configuredMonthlyTokenLimit: () => 0,
   monthlyTokenUsage: async () => 0,
-  persistLLMUsage: async () => true,
+  persistLLMUsage: async (events: Record<string, unknown>[]) => { mocks.usage.push(...events); return true; },
 }));
 vi.mock("@/lib/supabase/queries", () => ({ getActiveInstructionsText: async () => "" }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
@@ -100,6 +104,9 @@ beforeEach(() => {
   mocks.inserts.length = 0;
   mocks.progress.length = 0;
   mocks.fastRaster = false;
+  mocks.ownerPhotos = [];
+  mocks.ownerPhotoStatus = 200;
+  mocks.usage.length = 0;
   calls = [];
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE,
@@ -141,6 +148,11 @@ function stubProviders(replay: Replay = {}) {
     const body = requestBody(init);
     calls.push({ url, body });
     const provider = (Object.keys(TEXT_URLS) as TextProvider[]).find((name) => url.startsWith(TEXT_URLS[name]));
+    if (url === OWNER_PHOTO) {
+      return mocks.ownerPhotoStatus === 200
+        ? new Response(Buffer.from(png, "base64"), { headers: { "content-type": "image/png" } })
+        : new Response("Not found", { status: mocks.ownerPhotoStatus });
+    }
     if (provider) {
       const status = replay.down?.[provider];
       if (status) return Response.json({ error: { code: status, message: "Service unavailable", status: "UNAVAILABLE" } }, { status });
@@ -281,6 +293,33 @@ describe("core: Create route on recorded run 4", () => {
     expect(body.failures).toHaveLength(1);
     expect(mocks.progress.some((call) => call.p_uncertain)).toBe(false);
     expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false, p_failed: false });
+  });
+
+  it("uses the business's own photo as one ad's image, with no image call or image charge for it (#195)", async () => {
+    mocks.ownerPhotos = [OWNER_PHOTO];
+    stubProviders();
+    await expectThreeSavedAds(await (await postCreate())());
+    expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(2);
+    const withPhoto = mocks.inserts.filter((row) => (row.generation as { ownerPhoto?: string }).ownerPhoto === OWNER_PHOTO);
+    expect(withPhoto).toHaveLength(1);
+    const [photoAd] = withPhoto;
+    expect(photoAd.generation).toMatchObject({ image: { provider: "owner-photo", estimatedCostUsd: 0, width: 64, height: 96 }, imageAttempts: [] });
+    // Only that ad's concept is told its image is the owner's unseen photo.
+    const conceptCalls = textCalls("openrouter");
+    expect(conceptCalls.filter(({ body }) => body.includes("\\\"imageSource\\\":\\\"owner_photo\\\""))).toHaveLength(1);
+    expect(conceptCalls.find(({ body }) => body.includes("owner_photo\\\""))!.body).toContain(String(photoAd.angle));
+    const imageEvents = mocks.usage.filter((event) => event.usageKind === "image");
+    expect(imageEvents).toHaveLength(2);
+    expect(imageEvents.every((event) => event.provider !== "owner-photo")).toBe(true);
+  });
+
+  it("generates the image as usual when the owner's photo can't be read", async () => {
+    mocks.ownerPhotos = [OWNER_PHOTO];
+    mocks.ownerPhotoStatus = 404;
+    stubProviders();
+    await expectThreeSavedAds(await (await postCreate())());
+    expect(calls.filter(({ url }) => url === "https://openrouter.ai/api/v1/images")).toHaveLength(3);
+    expect(mocks.inserts.every((row) => (row.generation as { ownerPhoto?: string }).ownerPhoto === null)).toBe(true);
   });
 });
 

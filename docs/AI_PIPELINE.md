@@ -131,6 +131,11 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    that starts after character 125 (`offer-below-fold`) is repaired once like any
    other validation failure.
 4. Generate an image from the validated concept and up to three reference images.
+   When the business has uploaded product photos (Brand assets), the first ad
+   uses the newest one as its image instead (#195): no image call or image cost,
+   its concept is told the image is the owner's unseen photo, and the receipt
+   records `ownerPhoto`. If that photo can't be downloaded or validated, the ad
+   gets a generated image as usual.
 5. Download and validate the raster, persist the source image, render the designed
    poster when enabled, persist the final image, then insert a draft creative row.
 6. Save usage receipts and report partial failures independently of successful rows.

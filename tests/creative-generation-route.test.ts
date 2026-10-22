@@ -101,6 +101,7 @@ vi.mock("@/lib/creative/generate", async (importOriginal) => ({
 }));
 vi.mock("@/lib/creative/references", () => ({
   creativeReferences: mocks.references,
+  creativeAssets: async (...args: unknown[]) => ({ references: await mocks.references(...args), photos: [] }),
   recentCreativeCopy: mocks.recentCopy,
 }));
 vi.mock("@/lib/preferences/store", () => ({ preferenceContext: mocks.preferenceContext }));

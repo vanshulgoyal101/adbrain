@@ -25,7 +25,7 @@ import {
   failedVariantUsage,
 } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
-import { creativeReferences, recentCreativeCopy } from "@/lib/creative/references";
+import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -233,9 +233,9 @@ async function generate(req: Request, live?: LiveCreate) {
     if (error || !data || data.status === "unknown") throw new Error("Generation progress is unavailable");
   }
   try {
-    const [instructions, referenceImages, recentCopy] = await Promise.all([
+    const [instructions, { references: referenceImages, photos: ownerPhotos }, recentCopy] = await Promise.all([
       getActiveInstructionsText(businessId),
-      creativeReferences(supabase, businessId),
+      creativeAssets(supabase, businessId),
       recentCreativeCopy(supabase, businessId),
     ]);
     const requestHash = createHash("sha256").update(JSON.stringify([businessId, brief, count, language, body.format, ...(sourceFacts.length ? [sourceFacts] : [])])).digest("hex");
@@ -268,6 +268,7 @@ async function generate(req: Request, live?: LiveCreate) {
       language,
       format: body.format,
       referenceImages,
+      ownerPhotos,
       recentCopy,
       advisoryPreferences,
       sourceFacts,
