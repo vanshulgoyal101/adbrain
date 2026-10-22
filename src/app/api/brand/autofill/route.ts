@@ -5,6 +5,7 @@ import { parse } from "node-html-parser";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
 import { fetchPublicUrlText, parsePublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
+import { isValidPhone } from "@/lib/brand/validation";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildBrandExtractionMessages,
@@ -25,6 +26,19 @@ function extractText(html: string): string {
     "";
   const body = root.querySelector("body")?.text ?? root.text;
   return `${title}\n${metaDesc}\n${body}`.replace(/\s+/g, " ").trim();
+}
+
+/** First international-format tel: link; national numbers are skipped because the country is unknown. */
+function extractPhone(html: string): string | undefined {
+  for (const link of parse(html).querySelectorAll('a[href^="tel:"]')) {
+    let phone: string;
+    try {
+      phone = decodeURIComponent(link.getAttribute("href")!.slice(4)).replace(/[.\u00a0]/g, " ").trim();
+    } catch {
+      continue;
+    }
+    if (phone.startsWith("+") && isValidPhone(phone)) return phone;
+  }
 }
 
 export const POST = observeRoute("/api/brand/autofill", "POST", handlePOST);
@@ -99,7 +113,7 @@ async function handlePOST(req: Request) {
         cache: true,
       },
     );
-    return NextResponse.json({ extraction });
+    return NextResponse.json({ extraction: { ...extraction, phone: extractPhone(html) } });
   } catch (err) {
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

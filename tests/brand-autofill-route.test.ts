@@ -50,6 +50,22 @@ describe("brand autofill boundary", () => {
     expect(completeJSON).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ routing: "budget" }));
   });
 
+  it("reads the phone from the first international tel: link, never from the model", async () => {
+    fetchPublicUrlText.mockResolvedValue(
+      '<html><body><a href="tel:5125550100">Call</a><a href="tel:%2B1.512.555.0199">Call us</a></body></html>',
+    );
+    completeJSON.mockResolvedValue({ description: "Example", phone: "+1 999 999 9999" });
+    const { extraction } = await (await POST(request({ url: "example.com" }))).json();
+    expect(extraction).toEqual({ description: "Example", phone: "+1 512 555 0199" });
+  });
+
+  it("leaves the phone out when the page has no usable tel: link", async () => {
+    fetchPublicUrlText.mockResolvedValue('<html><body><a href="tel:%E0%A4">x</a><a href="tel:5125550100">Call</a></body></html>');
+    completeJSON.mockResolvedValue({ description: "Example", phone: "+1 999 999 9999" });
+    const { extraction } = await (await POST(request({ url: "example.com" }))).json();
+    expect(extraction).toEqual({ description: "Example" });
+  });
+
   it("does not expose provider diagnostics to the browser", async () => {
     completeJSON.mockRejectedValue(new Error("private upstream details"));
     const response = await POST(request({ url: "example.com" }));

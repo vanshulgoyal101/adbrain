@@ -50,6 +50,8 @@ export interface BrandExtraction {
   offers?: string[];
   languages?: string[];
   vertical?: string;
+  /** Read from the page's tel: link, not from the model. */
+  phone?: string;
 }
 
 /** Meta's supported call-to-action buttons for Leads/Traffic objectives. */

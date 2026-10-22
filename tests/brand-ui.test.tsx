@@ -292,6 +292,18 @@ describe("<BrandForm> autofill", () => {
       "Filled from your website: description, voice, audience. Still missing: offers or prices, service areas, phone number. Add them below; ads only state facts your Brand has.",
     )).toBeInTheDocument();
   });
+  it("fills the phone from the website's tel: link (#169)", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ extraction: { description: "Family chiropractic in Austin", phone: "+1 512 555 0199" } }),
+    }) as typeof fetch;
+    render(<BrandForm business={business({ description: null, target_audience: null, locations: [], offers: [], phone: null } as Partial<Business>)} />);
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    expect(await screen.findByText(
+      "Filled from your website: description, phone number. Still missing: offers or prices, service areas, audience. Add them below; ads only state facts your Brand has.",
+    )).toBeInTheDocument();
+    expect(document.querySelector<HTMLInputElement>('input[name="phone"]')?.value).toBe("+1 512 555 0199");
+  });
   it("preserves edits made while website extraction is in flight", async () => {
     let finish!: (response: unknown) => void;
     global.fetch = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof fetch;

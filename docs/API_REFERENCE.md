@@ -251,7 +251,8 @@ Supabase Auth client APIs rather than an invented `/api/login` endpoint.
 policy and redirect/DNS checks apply. Returns `{extraction}` with suggested brand
 fields; the caller must review and save separately. Blocked URL: 400; fetch/model
 failure: 502; no readable text: 422. Extraction is a model result, not a factual
-verification. Website fetch deadline is 10 seconds; route duration setting is 30.
+verification. `extraction.phone` comes only from the page's first `tel:` link in
+international `+` format (never from the model). Website fetch deadline is 10 seconds; route duration setting is 30.
 
 ### Interview
 
