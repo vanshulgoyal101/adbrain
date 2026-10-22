@@ -82,6 +82,7 @@ const AUTOFILL_LABELS: Partial<Record<keyof FieldsState, string>> = {
   usps: "selling points",
   offers: "offers",
   languages: "languages",
+  phone: "phone number",
 };
 // Facts Create may only state when the Brand has them; a website rarely gives all of them.
 const KEY_FACTS: [keyof FieldsState, string][] = [
@@ -234,6 +235,7 @@ export function BrandForm({ business }: { business: Business | null }) {
         usps: e.usps?.length ? e.usps.join("\n") : undefined,
         offers: e.offers?.length ? e.offers.join("\n") : undefined,
         languages: e.languages?.length ? e.languages.join("\n") : undefined,
+        phone: e.phone,
       };
       setFields((current) => {
         const merged = { ...current };
