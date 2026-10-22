@@ -102,11 +102,11 @@ real ad spend and the App Review submission wait for the owner. Parked issues
 
 | Worker | Work, in order |
 | --- | --- |
-| DevOps | Done: #153, #142 flip, #138, #111 drill, #165, #170. Now: create Dev's fresh test account for [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) (credentials in a gitignored mode-600 file, path only on the issue), merge PR184 after QA's review, then [#178](https://github.com/vanshulgoyal101/adbrain/issues/178) Razorpay webhooks |
-| Dev 3 | Done: #98, #142, #157 capped ad set (#182). Now: rebase and merge PR164 (QA approved), then the [#157](https://github.com/vanshulgoyal101/adbrain/issues/157) activation wiring PR (owner approves total + days; money path, so QA reviews and DevOps merges) |
-| Dev | Done: #141, #173, #174. Now [#169](https://github.com/vanshulgoyal101/adbrain/issues/169): empty-workspace fixes in code now; the timed walk once DevOps posts the test account |
-| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) waits on the owner's Meta dashboard fix ("Facebook Login is currently unavailable"); rerun step 3 after. Meanwhile [#185](https://github.com/vanshulgoyal101/adbrain/issues/185): Meta errors arrive in Hindi, so request `locale=en_US` or map by code, with a core test |
-| QA | Done: #158. Now review PR184 (auth/tenant: deauthorize scope), then [#188](https://github.com/vanshulgoyal101/adbrain/issues/188): our ads vs the business's own before first spend. Then Dev 3's activation PR (money) and the #169 re-walk |
+| DevOps | Done: #153, #138, #111, #165, #170, #181, #189. Now, in order: the fresh test account for [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) (blocking Dev since 06:14Z), merge PR193 (QA approved for the first watched run), then close [#190](https://github.com/vanshulgoyal101/adbrain/issues/190)/[#178](https://github.com/vanshulgoyal101/adbrain/issues/178) after the owner fixes the Razorpay webhook. Check whether the production Gemini key is free tier (about 20 calls a day) |
+| Dev 3 | Done: #98, #142, #182, PR164, PR193 (activation wiring). Now [#194](https://github.com/vanshulgoyal101/adbrain/issues/194): hook and offer in the first 125 characters, in short lines (QA's #188 found the offer after "See more" in most ads) |
+| Dev | Done: #141, #173, #174, #169 parts 1-3. Now [#195](https://github.com/vanshulgoyal101/adbrain/issues/195): ask for real photos and logo in setup and use one in at least one ad; the [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) timed walk once DevOps posts the test account |
+| Dev 2 | Done: #185, #181 fix. Now [#197](https://github.com/vanshulgoyal101/adbrain/issues/197): capped campaigns must resume and sync after their first capped run (needed before a second capped run). [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) reruns after the owner's Meta dashboard fix |
+| QA | Done: #158, #188, PR184 and PR193 reviews. Now the first watched-run checklist on [#157](https://github.com/vanshulgoyal101/adbrain/issues/157), then verify #197 and re-walk #169 |
 
 ### Earlier focus (October 21, before P0)
 
