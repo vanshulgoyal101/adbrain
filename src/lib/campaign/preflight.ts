@@ -82,8 +82,10 @@ export interface CanonicalReviewPayload {
   audienceInterests?: ReviewDTO["audienceInterests"];
 }
 
-function blocker(code: ReviewDTO["blockers"][number]["code"], message: string) {
-  return { code, message, action: null } as const;
+type ReviewBlocker = ReviewDTO["blockers"][number];
+
+function blocker(code: ReviewBlocker["code"], message: string, action: ReviewBlocker["action"] = null): ReviewBlocker {
+  return { code, message, action };
 }
 
 function isAdvertiserWebsite(website: string | null): boolean {
@@ -186,7 +188,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "Choose an active lead form belonging to this business."));
   }
   if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "Daily budget must be greater than zero before preparation."));

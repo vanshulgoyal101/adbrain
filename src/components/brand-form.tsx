@@ -138,8 +138,9 @@ export function BrandForm({ business }: { business: Business | null }) {
       ),
     },
     {
-      label: "Customer contact",
-      ready: Boolean(fields.phone.trim() || fields.email.trim() || fields.website.trim()),
+      // Prepare blocks lead-form campaigns without the advertiser's own website.
+      label: "Website for lead ads",
+      ready: Boolean(fields.website.trim()),
     },
   ];
   const readinessCount = readinessChecks.filter((check) => check.ready).length;

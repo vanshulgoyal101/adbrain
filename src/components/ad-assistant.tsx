@@ -182,6 +182,15 @@ export function AdAssistant({ business }: { business: Business }) {
     phase === "chat" && !loading && lastTurn?.role === "question"
       ? lastTurn.question
       : null;
+  const selectedIds = (turns.findLast((t): t is Extract<Turn, { role: "result" }> => t.role === "result")?.creatives ?? [])
+    .filter((c) => c.status === "approved")
+    .map((c) => c.id);
+
+  function setResultStatus(id: string, status: "draft" | "approved") {
+    setTurns((t) => t.map((turn) => turn.role === "result"
+      ? { ...turn, creatives: turn.creatives.map((c) => (c.id === id ? { ...c, status } : c)) }
+      : turn));
+  }
 
   async function step(nextAnswers: Answer[]) {
     if (loading || inFlightRef.current) return;
@@ -485,6 +494,7 @@ export function AdAssistant({ business }: { business: Business }) {
               custom={custom}
               setCustom={setCustom}
               onAnswer={answer}
+              onStatus={setResultStatus}
             />
           ))}
 
@@ -523,8 +533,15 @@ export function AdAssistant({ business }: { business: Business }) {
 
         {phase === "done" && (
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            {selectedIds.length > 0 && (
+              <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}`}>
+                <Button>
+                  Create campaign ({selectedIds.length}) <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            )}
             <Link href="/studio">
-              <Button>
+              <Button variant={selectedIds.length > 0 ? "outline" : "primary"}>
                 Open in Creative Studio <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
@@ -550,6 +567,7 @@ function TurnView({
   custom,
   setCustom,
   onAnswer,
+  onStatus,
 }: {
   turn: Turn;
   active: boolean;
@@ -557,6 +575,7 @@ function TurnView({
   custom: string;
   setCustom: (v: string) => void;
   onAnswer: (q: Question, text: string, displayText?: string) => void;
+  onStatus: (id: string, status: "draft" | "approved") => void;
 }) {
   if (turn.role === "user") {
     return (
@@ -583,11 +602,12 @@ function TurnView({
     return (
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-          <Sparkles className="h-4 w-4 text-blue-600" /> Your ad is ready — pick your favourite:
+          <Sparkles className="h-4 w-4 text-blue-600" />
+          {turn.creatives.length > 1 ? "Your ads are ready — pick your favourites:" : "Your ad is ready — pick your favourite:"}
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {turn.creatives.map((c) => (
-            <ResultCard key={c.id} creative={c} />
+            <ResultCard key={c.id} creative={c} onStatus={(status) => onStatus(c.id, status)} />
           ))}
         </div>
         <p className="text-xs text-slate-500">
@@ -683,11 +703,18 @@ function TurnView({
   );
 }
 
-function ResultCard({ creative }: { creative: Creative }) {
+function ResultCard({ creative, onStatus }: { creative: Creative; onStatus?: (status: "draft" | "approved") => void }) {
   const [errored, setErrored] = useState(false);
-  const [approved, setApproved] = useState(creative.status === "approved");
+  // Live cards are not in turns yet, so they keep their own state.
+  const [localApproved, setLocalApproved] = useState(creative.status === "approved");
+  const approved = onStatus ? creative.status === "approved" : localApproved;
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function setApproved(value: boolean) {
+    if (onStatus) onStatus(value ? "approved" : "draft");
+    else setLocalApproved(value);
+  }
 
   function toggle() {
     const next = !approved;

@@ -95,7 +95,8 @@ assuming absent evidence means the user has no Page. Meta permissions, Graph
 version behavior, and account restrictions can change outside AdBrain.
 
 Recovery actions are `reconnect`, `retry_check`, `choose_assets`, `contact_admin`,
-or `open_meta` with a validated HTTPS destination. Account/billing changes happen
+`open_brand` (the Prepare website blocker links to Brand Brain), or `open_meta`
+with a validated HTTPS destination. Account/billing changes happen
 in Meta; the current workflow does not automatically provision accounts or forms.
 
 ## Token Security

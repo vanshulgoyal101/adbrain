@@ -42,6 +42,7 @@ describe("core: launch preflight", () => {
       expect(result.canCreatePaused).toBe(false);
       expect(result.planHash).toBeNull();
       expect(result.blockers.map((item) => item.message).join(" ")).toMatch(/website/);
+      expect(result.blockers.find((item) => /website/.test(item.message))?.action).toEqual({ kind: "open_brand" });
     });
 
   it("allows the launch with the business's own website", () => {

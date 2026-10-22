@@ -180,6 +180,7 @@ function BusinessCampaigns({
   const [excludedNames, setExcludedNames] = useState(initialSetup?.excludedNames ?? "");
   const [abTest, setAbTest] = useState(initialSetup?.abTest ?? false);
   const [creating, setCreating] = useState(false);
+  const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
@@ -226,6 +227,7 @@ function BusinessCampaigns({
   const recoveryRef = useRef<CampaignRecovery | null>(null);
   const [recoveryPending, setRecoveryPending] = useState(false);
   const destinationRecoveryLocked = recoveryPending || Boolean(operation && !["succeeded", "failed"].includes(operation.state));
+  const showDestinationLock = destinationRecoveryLocked && !sendingNew;
   const [savedDrafts, setSavedDrafts] = useState<DraftDTO[]>([]);
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
@@ -327,10 +329,20 @@ function BusinessCampaigns({
         if (saved.request) {
           const found = await client.operationForRequest(business.id, saved.request.idempotencyKey, controller.signal);
           if (controller.signal.aborted) return;
+          if (found?.state === "succeeded") {
+            // A finished launch is reported once; replaying it would reopen an already-sent draft.
+            window.sessionStorage.removeItem(recoveryKey);
+            recoveryRef.current = null;
+            preparedDraftRef.current = null;
+            operationRef.current = null;
+            setRecoveryPending(false);
+            setShowComposer(false);
+            setNotice("Paused campaign created. Review it before activating spend.");
+            return;
+          }
           setOperation(found);
           setRecoveryPending(!found);
           setRetryAllowed(!found);
-          if (found?.state === "succeeded") setNotice("Paused campaign created. Review it before activating spend.");
         }
         const draft = await client.draft(saved.draft.draftId, controller.signal);
         if (controller.signal.aborted) return;
@@ -706,6 +718,7 @@ function BusinessCampaigns({
     setError(null);
     setNotice(null);
     setCreating(true);
+    setSendingNew(!recoveryRef.current?.request);
     operationControllerRef.current?.abort();
     const controller = new AbortController();
     operationControllerRef.current = controller;
@@ -733,6 +746,7 @@ function BusinessCampaigns({
       }
     } finally {
       setCreating(false);
+      setSendingNew(false);
     }
   }
 
@@ -993,7 +1007,7 @@ function BusinessCampaigns({
           <Button variant="ghost" size="sm" onClick={() => setActivationReview(null)}>Cancel</Button>
         </Alert>
       )}
-      {recoveryPending && !operation && (
+      {recoveryPending && !operation && !sendingNew && (
         <Alert variant="warning">
           The previous campaign request has not been confirmed.
           <div className="mt-3 flex gap-2">
@@ -1035,14 +1049,17 @@ function BusinessCampaigns({
               </span>
               {prepareReview.review.blockers.length > 0 && (
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
-                  {prepareReview.review.blockers.map((blocker) => <li key={`${blocker.code}:${blocker.message}`}>{blocker.message}</li>)}
+                  {prepareReview.review.blockers.map((blocker) => <li key={`${blocker.code}:${blocker.message}`}>
+                    {blocker.message}
+                    {blocker.action?.kind === "open_brand" && <> <Link href="/brand" className="font-medium underline underline-offset-4">Open Brand Brain</Link></>}
+                  </li>)}
                 </ul>
               )}
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                {prepareReview.review.canCreatePaused && prepareReview.review.planHash && !operation && !recoveryPending && (
+                {prepareReview.review.canCreatePaused && prepareReview.review.planHash && !operation && (!recoveryPending || sendingNew) && (
                   <Button size="sm" data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>
                     {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                    Send to Meta (paused)
+                    {creating ? "Sending to Meta…" : "Send to Meta (paused)"}
                   </Button>
                 )}
                 {operation && (operation.state === "pending" || operation.state === "running") && (
@@ -1140,11 +1157,11 @@ function BusinessCampaigns({
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={destinationRecoveryLocked ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
+          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
             {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          {destinationRecoveryLocked && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
+          {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}
