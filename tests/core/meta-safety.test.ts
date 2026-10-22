@@ -11,7 +11,7 @@ import statusRateLimit from "./fixtures/meta/safety/status-rate-limit.json";
 import cappedAdSet from "./fixtures/meta/safety/capped-adset.json";
 import cappedAdSetDelete from "./fixtures/meta/safety/capped-adset-delete.json";
 import { settleInVirtualTime, useVirtualDeadlines } from "./replay";
-import { adReviewState, MetaClient } from "@/lib/meta/client";
+import { adReviewState, friendlyMetaError, MetaClient, MetaError, metaErrorMessage } from "@/lib/meta/client";
 import { decodeCampaignInsights } from "@/lib/meta/insights";
 import { weeklySpendDecision } from "@/lib/campaign/spend";
 import type { Campaign } from "@/lib/types";
@@ -59,6 +59,20 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
     await expect(new MetaClient(creds).enforceCampaignSpendCap(campaignId, 60_000)).rejects.toThrow(/₹5,000/);
     expect(tape.pending).toEqual([]);
     expect(tape.sent.filter(call => call.method === "POST")).toEqual([{ method: "POST", path: campaignId, form: { spend_cap: "60000" } }]);
+  });
+
+  it("locale (#185): Meta's Hindi spend-cap refusal reaches the customer in English, keeping the minimum", async () => {
+    replay(campaignSpendCap as Exchange[]);
+    const error = await new MetaClient(creds).enforceCampaignSpendCap(campaignId, 60_000).catch(caught => caught);
+    expect(error).toBeInstanceOf(MetaError);
+    expect(error).toMatchObject({ code: 100, subcode: 2446307, message: "Meta's minimum campaign spending limit for this currency is ₹5,000.00." });
+    expect(friendlyMetaError(error)).toBe("Meta's minimum campaign spending limit for this currency is ₹5,000.00. The campaign stays paused.");
+
+    const [refused] = switchDailyToLifetime as Exchange[];
+    const message = metaErrorMessage((refused.body as { error: Parameters<typeof metaErrorMessage>[0] }).error, refused.status);
+    expect(message).toBe("Meta does not allow changing a daily budget ad set to a lifetime budget.");
+    expect(metaErrorMessage({ message: "Invalid parameter", error_user_msg: "अमान्य पैरामीटर" }, 400)).toBe("Invalid parameter");
+    expect(metaErrorMessage({ message: "Invalid parameter", error_user_msg: "Budget is too low" }, 400)).toBe("Budget is too low");
   });
 
   it("cap: a daily ad set cannot become lifetime, but a new lifetime ad set reads back the exact ₹600 and end date", () => {
