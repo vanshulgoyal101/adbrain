@@ -137,25 +137,35 @@ describe("<BrandForm> prefill", () => {
   it("updates brand readiness as missing context is supplied", () => {
     render(<BrandForm business={business({ target_audience: "" })} />);
     const preview = screen.getByRole("region", { name: "Live brand context" });
-    expect(preview).toHaveTextContent("3 of 4 ready");
+    expect(preview).toHaveTextContent("3 of 6 ready");
 
     fireEvent.change(screen.getByLabelText("Target audience"), {
       target: { value: "apartment owners" },
     });
 
-    expect(preview).toHaveTextContent("4 of 4 ready");
+    expect(preview).toHaveTextContent("4 of 6 ready");
   });
 
   it("is not ready for lead ads without a website, even with a phone number", () => {
     render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
     const preview = screen.getByRole("region", { name: "Live brand context" });
-    expect(preview).toHaveTextContent("3 of 4 ready");
+    expect(preview).toHaveTextContent("3 of 6 ready");
 
     fireEvent.change(screen.getByPlaceholderText("example.com"), {
       target: { value: "https://example.com" },
     });
 
-    expect(preview).toHaveTextContent("4 of 4 ready");
+    expect(preview).toHaveTextContent("4 of 6 ready");
+  });
+
+  it("asks for a logo and real photos, linking to the asset section (#195)", () => {
+    const { rerender } = render(<BrandForm business={business()} />);
+    expect(screen.getByRole("link", { name: "Add logo" })).toHaveAttribute("href", "#brand-assets");
+    expect(screen.getByRole("link", { name: "Add real photos" })).toHaveAttribute("href", "#brand-assets");
+
+    rerender(<BrandForm business={business({ logo_url: "https://example.com/logo.png" })} photoCount={2} />);
+    expect(screen.queryByRole("link", { name: "Add logo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add real photos" })).not.toBeInTheDocument();
   });
 
   it("does not claim a newly edited brand is still saved", async () => {

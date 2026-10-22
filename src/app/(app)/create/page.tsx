@@ -4,7 +4,7 @@ import { AdAssistant } from "@/components/ad-assistant";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = {
   title: "Create marketing",
@@ -42,6 +42,8 @@ export default async function CreatePage() {
     [business.locations?.length, "service areas"],
     [business.phone, "phone number"],
   ].filter(([present]) => !present).map(([, label]) => label);
+  const hasPhotos = (await getBrandAssets(business.id)).some((a) => a.type === "product_photo");
+  const visualsMissing = [!business.logo_url && "your logo", !hasPhotos && "1–3 real photos (team, premises or finished work)"].filter(Boolean);
 
   return (
     <div>
@@ -61,6 +63,13 @@ export default async function CreatePage() {
           {missing.length > 0 && (
             <p className="mt-5 text-sm leading-6 text-amber-800">
               Not in your Brand yet: {missing.join(", ")}. Ads only state facts your Brand has, so they will leave these out.
+            </p>
+          )}
+          {visualsMissing.length > 0 && (
+            <p className="mt-4 text-sm leading-6 text-slate-600">
+              Add {visualsMissing.join(" and ")} so ads look like your business.{" "}
+              <Link href="/brand#brand-assets" className="font-medium text-blue-700 underline-offset-2 hover:underline">Add photos</Link>{" "}
+              or skip for now.
             </p>
           )}
           <Link href="/brand" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700">Edit Brand Brain <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
