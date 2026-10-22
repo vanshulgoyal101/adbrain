@@ -76,6 +76,15 @@ describe("verified campaign sync", () => {
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ business_id: "business", daily_budget: 500, meta_ad_account_id: "act_123", meta_page_id: "page_1", meta_connection_generation: 4, status: "paused" }));
   });
 
+  it("passes the campaign's stored capped ad sets to the binding check (#197)", async () => {
+    mocks.existing = { id: "stored", meta_ad_account_id: "act_123", meta_page_id: "page_1", raw: { cap: { adSetId: "capped-2" }, cappedAdSetIds: ["capped-1", "capped-2"] } };
+    mocks.update.mockResolvedValue({ error: null });
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect((await POST()).status).toBe(200);
+    expect(mocks.readBoundCampaign).toHaveBeenCalledWith(expect.objectContaining({ id: "campaign" }), ["capped-1", "capped-2"]);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ meta_adset_id: "set" }));
+  });
+
   it("reports unmatched campaigns without saving them", async () => {
     mocks.readBoundCampaign.mockResolvedValue(null);
     mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign" }], nextCursor: "next-page" });
