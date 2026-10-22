@@ -190,6 +190,11 @@ export type PausedCampaignTree = {
 };
 
 export type CappedAdSet = { adSetId: string; adIds: string[]; lifetimeBudgetPaise: number; endTime: string };
+export type CappedActivation = {
+  campaign: { id: string; status: "ACTIVE"; effectiveStatus: string | null };
+  adSet: { id: string; status: "ACTIVE"; effectiveStatus: string | null; lifetimeBudgetPaise: number; budgetRemainingPaise: number; endTime: string };
+  ads: Array<{ id: string; status: "ACTIVE"; effectiveStatus: string | null }>;
+};
 
 export type AdReviewState = "in_review" | "approved" | "rejected" | "issues" | "unknown";
 export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[] };
@@ -1187,18 +1192,7 @@ export class MetaClient {
    */
   async pauseCampaignTree(campaignId: string, children: { adSetIds: string[]; adIds: string[] }): Promise<PausedCampaignTree> {
     await this.verifyCampaignBinding(campaignId);
-    const pause = async (id: string) => {
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await this.graph(encodeURIComponent(id), { method: "POST", form: { status: "PAUSED" } });
-          return;
-        } catch (error) {
-          if (!(error instanceof MetaError) || error.code !== 613 || attempt >= 1) throw error;
-          await new Promise(resolve => setTimeout(resolve, STATUS_RATE_LIMIT_WAIT_MS));
-        }
-      }
-    };
-    for (const id of [campaignId, ...children.adSetIds, ...children.adIds]) await pause(id);
+    for (const id of [campaignId, ...children.adSetIds, ...children.adIds]) await this.writeStatus(id, "PAUSED");
 
     type Node = { id: string; status: string; effective_status?: string };
     const node = encodeURIComponent(campaignId);
@@ -1215,6 +1209,60 @@ export class MetaClient {
     const paused = (id: string) => objects.some(object => object.id === id && object.status === "PAUSED");
     const confirmed = campaign.id === campaignId && [campaignId, ...children.adSetIds, ...children.adIds].every(paused);
     return { confirmed, objects };
+  }
+
+  /** Status write with one retry after Meta's 613 (one status change per object per 30 s). */
+  private async writeStatus(id: string, status: "ACTIVE" | "PAUSED") {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.graph(encodeURIComponent(id), { method: "POST", form: { status } });
+        return;
+      } catch (error) {
+        if (!(error instanceof MetaError) || error.code !== 613 || attempt >= 1) throw error;
+        await new Promise(resolve => setTimeout(resolve, STATUS_RATE_LIMIT_WAIT_MS));
+      }
+    }
+  }
+
+  /**
+   * Turns on only the capped ad set from createCappedAdSet, its ad copies and the
+   * campaign, after re-reading that Meta still holds the approved lifetime cap.
+   */
+  async activateCappedTree(campaignId: string, capped: CappedAdSet): Promise<CappedActivation> {
+    await this.verifyCampaignBinding(campaignId);
+    type Node = { id: string; status?: string; effective_status?: string };
+    const read = async () => {
+      const [campaign, adSet, ads] = await Promise.all([
+        this.graph<Node>(`${encodeURIComponent(campaignId)}?fields=id,status,effective_status`),
+        this.graph<Node & { campaign_id?: string; daily_budget?: string; lifetime_budget?: string; budget_remaining?: string; end_time?: string }>(
+          `${encodeURIComponent(capped.adSetId)}?fields=id,campaign_id,status,effective_status,daily_budget,lifetime_budget,budget_remaining,end_time`,
+        ),
+        this.graph<{ data?: Array<Node & { adset_id?: string }>; paging?: { next?: string } }>(
+          `${encodeURIComponent(capped.adSetId)}/ads?fields=id,status,effective_status,adset_id&limit=100`,
+        ),
+      ]);
+      const capHolds = campaign.id === campaignId && adSet.id === capped.adSetId && adSet.campaign_id === campaignId
+        && Number(adSet.daily_budget ?? 0) === 0 && adSet.lifetime_budget === String(capped.lifetimeBudgetPaise)
+        && Math.floor(Date.parse(adSet.end_time ?? "") / 1000) === Math.floor(Date.parse(capped.endTime) / 1000)
+        && Array.isArray(ads.data) && !ads.paging?.next && ads.data.length === capped.adIds.length
+        && ads.data.every(ad => capped.adIds.includes(ad.id) && ad.adset_id === capped.adSetId);
+      return { campaign, adSet, ads: ads.data ?? [], capHolds };
+    };
+    const before = await read();
+    if (!before.capHolds) throw new CampaignDeliveryError("The approved spending limit changed in Meta. Nothing was activated.");
+    for (const id of [...capped.adIds, capped.adSetId, campaignId]) await this.writeStatus(id, "ACTIVE");
+    const after = await read();
+    if (!after.capHolds || after.campaign.status !== "ACTIVE" || after.adSet.status !== "ACTIVE" || after.ads.some(ad => ad.status !== "ACTIVE")) {
+      throw new CampaignDeliveryError("Meta did not confirm the capped activation.");
+    }
+    return {
+      campaign: { id: campaignId, status: "ACTIVE", effectiveStatus: after.campaign.effective_status ?? null },
+      adSet: {
+        id: capped.adSetId, status: "ACTIVE", effectiveStatus: after.adSet.effective_status ?? null,
+        lifetimeBudgetPaise: capped.lifetimeBudgetPaise, budgetRemainingPaise: Number(after.adSet.budget_remaining ?? Number.NaN), endTime: capped.endTime,
+      },
+      ads: after.ads.map(ad => ({ id: ad.id, status: "ACTIVE", effectiveStatus: ad.effective_status ?? null })),
+    };
   }
 
   /** Meta's review state for every ad in the campaign. */

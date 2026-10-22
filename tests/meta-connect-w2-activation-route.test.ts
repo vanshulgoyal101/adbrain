@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   readCampaignDelivery: vi.fn(),
   saveCampaign: vi.fn(),
   enforceCampaignSpendCap: vi.fn(),
+  createCappedAdSet: vi.fn(),
+  activateCappedTree: vi.fn(),
   recheckMetaConnection: vi.fn(),
   deleteCampaign: vi.fn(),
   reserveCustomerCampaign: vi.fn(),
@@ -123,7 +125,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -427,5 +429,96 @@ describe("campaign activation generation fence", () => {
     const response = await DELETE(new Request("http://localhost/api/campaigns/campaign-1", { method: "DELETE" }), { params: Promise.resolve({ id: "campaign-1" }) });
     expect(response.status).toBe(502);
     expect(mocks.deleteCampaign).not.toHaveBeenCalled();
+  });
+});
+
+describe("capped activation: the owner approves daily budget × days and Meta holds that total (#157)", () => {
+  const capped = { adSetId: "capped-set", adIds: ["capped-ad"], lifetimeBudgetPaise: 150_000, endTime: "2026-10-25T06:00:00.000Z" };
+  const pausedDelivery = {
+    ...reviewedDelivery,
+    adSets: reviewedDelivery.adSets.map(adSet => ({ ...adSet, status: "PAUSED" })),
+    ads: reviewedDelivery.ads.map(ad => ({ ...ad, status: "PAUSED" })),
+  };
+  const selected = { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" };
+  const digest = (capDays?: number) => createHash("sha256").update(activationConfirmationPayload(
+    { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+    { generation: 4, selected }, pausedDelivery, capDays,
+  )).digest("hex");
+  const activate = async (body: Record<string, unknown> = { capDays: 3, confirmationDigest: digest(3) }) => {
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    return PATCH(patch({ status: "active", connectionGeneration: 4, ...body }), { params: Promise.resolve({ id: "campaign-1" }) });
+  };
+
+  beforeEach(() => {
+    mocks.readCampaignDelivery.mockResolvedValue(pausedDelivery);
+    mocks.createCappedAdSet.mockResolvedValue(capped);
+    mocks.activateCappedTree.mockResolvedValue({ campaign: { id: "meta-campaign-1", status: "ACTIVE", effectiveStatus: "ACTIVE" }, adSet: { ...capped, id: capped.adSetId, status: "ACTIVE", effectiveStatus: "IN_PROCESS", budgetRemainingPaise: 150_000 }, ads: [] });
+  });
+
+  it("caps ₹500 × 3 days on Meta, records the capped children before anything turns on, and never uses the campaign spend cap", async () => {
+    const response = await activate();
+    expect(response.status).toBe(200);
+    expect((await response.json()).cap.adSet).toMatchObject({ lifetimeBudgetPaise: 150_000 });
+    expect(mocks.createCappedAdSet).toHaveBeenCalledWith("meta-campaign-1", expect.objectContaining({
+      sourceAdSetId: "set-1", sourceAdIds: ["ad-1"], lifetimeBudgetPaise: 150_000,
+    }));
+    const days = (mocks.createCappedAdSet.mock.calls[0][1].endTime.getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(2.99);
+    expect(days).toBeLessThanOrEqual(3);
+    expect(mocks.saveCampaign.mock.calls[0][1]).toMatchObject({
+      meta_ad_ids: ["ad-1", "capped-ad"],
+      raw: { metaResult: { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] }, cap: { ...capped, days: 3 } },
+    });
+    expect(mocks.saveCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.activateCappedTree.mock.invocationCallOrder[0]);
+    expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.createCappedAdSet.mock.invocationCallOrder[0]);
+    expect(mocks.activateCappedTree).toHaveBeenCalledWith("meta-campaign-1", capped);
+    expect(mocks.enforceCampaignSpendCap).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "active");
+    expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active" }, "campaign-1");
+  });
+
+  it("rejects a digest reviewed for a different number of days", async () => {
+    expect((await activate({ capDays: 7, confirmationDigest: digest(3) })).status).toBe(409);
+    expect((await activate({ capDays: 3, confirmationDigest: digest() })).status).toBe(409);
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    expect(mocks.createCappedAdSet).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 8, 2.5])("rejects %s days", async capDays => {
+    expect((await activate({ capDays, confirmationDigest: digest(3) })).status).toBe(400);
+    expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+  });
+
+  it("refuses while an original ad set or ad is still on in Meta, before reserving", async () => {
+    mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/Pause the reviewed ad sets and ads/);
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+  });
+
+  it("refuses a total above the customer's available media funds without creating anything", async () => {
+    mocks.reserveCustomerCampaign.mockResolvedValueOnce({ reservationId: "reservation-1", mediaLimitPaise: 149_999 });
+    expect((await activate()).status).toBe(409);
+    expect(mocks.createCappedAdSet).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+  });
+
+  it("does not turn anything on when the capped children cannot be recorded", async () => {
+    mocks.saveCampaign.mockResolvedValueOnce({ error: new Error("write failed") });
+    expect((await activate()).status).toBe(409);
+    expect(mocks.activateCappedTree).not.toHaveBeenCalled();
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+  });
+
+  it("pauses the whole tree, including the capped copy, when activation is not confirmed", async () => {
+    const { CampaignDeliveryError } = await import("@/lib/meta/client");
+    mocks.activateCappedTree.mockRejectedValueOnce(new CampaignDeliveryError("Meta did not confirm the capped activation."));
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
+    expect(mocks.saveCampaign).not.toHaveBeenCalledWith(expect.anything(), { status: "active" }, "campaign-1");
   });
 });

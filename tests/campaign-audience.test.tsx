@@ -550,6 +550,37 @@ describe("campaign sync feedback", () => {
     expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
   });
 
+  it("offers a capped run when every reviewed child is paused, and sends the approved days with a digest covering them (#157)", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    const delivery = {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+      adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
+      if (url === "/api/campaigns/campaign-1" && init?.method === "PATCH") return Response.json({ ok: true, status: "active" });
+      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery });
+      return Response.json({ campaigns: [], nextCursor: null });
+    }));
+    const connection = { authorization: "connected", selected, generation: 1 } as ConnectionDTO;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected(connection); });
+    expect(await screen.findByText(/Total limit on Meta: ₹1,500 over 3 days/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "2" } });
+    expect(screen.getByText(/Total limit on Meta: ₹1,000 over 2 days/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve total and activate" }));
+    await screen.findByText(/₹1,000 total limit on Meta for 2 days/);
+    const [, init] = vi.mocked(fetch).mock.calls.find(([, call]) => call?.method === "PATCH")!;
+    const { createHash } = await import("node:crypto");
+    const { activationConfirmationPayload } = await import("@/lib/campaign/activation");
+    expect(JSON.parse(String(init!.body))).toEqual({
+      status: "active", connectionGeneration: 1, capDays: 2,
+      confirmationDigest: createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery, 2)).digest("hex"),
+    });
+  });
+
   it("labels the stored active state as a request, not confirmed delivery", () => {
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "active" } as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
