@@ -213,6 +213,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
+| GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta) |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 | POST | `/api/payments/test/orders` | Business UUID + idempotency UUID -> stored test order/checkout configuration | Local-only synthetic Razorpay test order; no real collection or ad credit |
 | GET | `/api/payments/test/orders` | `orderId` UUID -> owned test-order status | Local-only owner-scoped read |
