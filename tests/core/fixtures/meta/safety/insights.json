@@ -1,0 +1,135 @@
+[
+  {
+    "method": "GET",
+    "path": "act_2398686420592052/insights?level=campaign&fields=campaign_id%2Cspend%2Cimpressions%2Cclicks%2Cactions%2Caccount_currency%2Cdate_start%2Cdate_stop&date_preset=maximum&limit=25",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "campaign_id": "120240942395020526",
+          "spend": "9.74",
+          "impressions": "117",
+          "clicks": "0",
+          "actions": [
+            {
+              "action_type": "post_reaction",
+              "value": "1"
+            },
+            {
+              "action_type": "post_engagement",
+              "value": "24"
+            },
+            {
+              "action_type": "post_interaction_gross",
+              "value": "1"
+            },
+            {
+              "action_type": "page_engagement",
+              "value": "24"
+            },
+            {
+              "action_type": "post_interaction_net",
+              "value": "1"
+            },
+            {
+              "action_type": "onsite_conversion.post_net_like",
+              "value": "1"
+            },
+            {
+              "action_type": "video_view",
+              "value": "23"
+            }
+          ],
+          "account_currency": "INR",
+          "date_start": "2026-01-04",
+          "date_stop": "2026-10-22"
+        },
+        {
+          "campaign_id": "120240969992630526",
+          "spend": "32.63",
+          "impressions": "439",
+          "clicks": "7",
+          "actions": [
+            {
+              "action_type": "link_click",
+              "value": "3"
+            },
+            {
+              "action_type": "post_reaction",
+              "value": "3"
+            },
+            {
+              "action_type": "onsite_conversion.total_messaging_connection",
+              "value": "2"
+            },
+            {
+              "action_type": "post_engagement",
+              "value": "109"
+            },
+            {
+              "action_type": "post_interaction_gross",
+              "value": "3"
+            },
+            {
+              "action_type": "page_engagement",
+              "value": "109"
+            },
+            {
+              "action_type": "post_interaction_net",
+              "value": "3"
+            },
+            {
+              "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+              "value": "1"
+            },
+            {
+              "action_type": "onsite_conversion.messaging_first_reply",
+              "value": "1"
+            },
+            {
+              "action_type": "onsite_conversion.messaging_user_depth_3_message_send",
+              "value": "1"
+            },
+            {
+              "action_type": "onsite_conversion.post_net_like",
+              "value": "3"
+            },
+            {
+              "action_type": "onsite_conversion.messaging_conversation_started_7d",
+              "value": "1"
+            },
+            {
+              "action_type": "video_view",
+              "value": "103"
+            }
+          ],
+          "account_currency": "INR",
+          "date_start": "2026-01-04",
+          "date_stop": "2026-10-22"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MQZDZD"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "act_2398686420592052/insights?level=campaign&fields=campaign_id%2Cspend%2Caccount_currency%2Cdate_start%2Cdate_stop&time_increment=1&date_preset=last_30d&limit=25",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253654207670526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  }
+]
