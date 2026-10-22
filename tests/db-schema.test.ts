@@ -75,7 +75,7 @@ describe("schema: tables", () => {
     for (const definition of [SQL, migration]) {
       const start = definition.indexOf("function public.meta_revoke_subject");
       const body = definition.slice(start, definition.indexOf("$$;", start));
-      expect(body).toContain("where connection.token_id in (select id from revoked)");
+      expect(body).toContain("where connection.token_id = any(revoked_ids)");
       expect(body).not.toContain("connection.business_id in");
     }
   });
