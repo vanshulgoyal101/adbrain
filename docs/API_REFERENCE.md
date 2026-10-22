@@ -372,7 +372,9 @@ All three top-level targeting fields are optional for draft persistence:
 Meta IDs. Preflight resolves them and checks targeting-option status. The plan
 route drops AI interests Meta has no exact match for; if none match, an audience
 recommendation returns `fallback: true` with no interests and a rationale saying
-so. No silent nationwide fallback is promised for missing or unresolved service areas.
+so. When only some match, the rationale drops the model's sentences about
+interests and ends with "Meta couldn't match: …. Interests targeted: …".
+No silent nationwide fallback is promised for missing or unresolved service areas.
 
 Draft DTO: `{draftId, version, expiresAt, input}`. New version is 1, expiry seven
 days from creation, cap 50 active editable drafts. PUT requires

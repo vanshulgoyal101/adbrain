@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
 import chiropracticInterests from "./fixtures/meta/interests-chiropractic.json";
 import { MetaClient } from "@/lib/meta/client";
+import { rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
 
 // Prepare (audience planning) through the real route and real runPlanner; only
 // the LLM transport, auth, rate limiting and data reads are stubbed.
@@ -53,6 +54,8 @@ const plannerPlan = {
   rationale: "Adults in the clinic's service area with back-pain and wellness interests.",
 };
 const usage = { promptTokens: 1200, completionTokens: 300, totalTokens: 1500 };
+// Saved on production draft 4839bca0 (Oct 22, #174), where Meta kept only "Parenting".
+const issue174Rationale = "Targeting adults 25-55 in Austin, Round Rock, and Cedar Park based on the clinic's service areas and the creative's focus on desk workers. Interests were selected to align with the 'Posture care for long desk days' message, targeting professionals and active individuals likely to seek chiropractic care. The age range and location scope were preserved as per the owner's manual settings.";
 
 async function prepare() {
   const { POST } = await import("@/app/api/campaigns/plan/route");
@@ -109,6 +112,24 @@ describe("core: Prepare audience", () => {
     const { status, body } = await prepare();
     expect(status).toBe(200);
     expect(body.targeting.audience.interestNames).toEqual(["Wellness"]);
+  });
+
+  it("rationale names only the interests Meta matched (#174 rationale, recorded Graph search)", async () => {
+    const plan = { ...plannerPlan, rationale: issue174Rationale, interests: ["Chiropractic", "Sports medicine", "Posture", "Physical therapy", "Wellness"] };
+    mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
+    replayMeta(chiropracticInterests);
+    const { body } = await prepare();
+    expect(body.targeting.audience).toEqual({
+      interestNames: ["Wellness"],
+      rationale: "Targeting adults 25-55 in Austin, Round Rock, and Cedar Park based on the clinic's service areas and the creative's focus on desk workers. The age range and location scope were preserved as per the owner's manual settings. Meta couldn't match: Chiropractic, Sports medicine, Posture, Physical therapy. Interests targeted: Wellness.",
+    });
+  });
+
+  it("#174: the saved production rationale no longer promises professionals when only Parenting is kept", () => {
+    const rationale = rationaleForMatchedInterests(issue174Rationale, ["Parenting"], ["Office workers", "Posture", "Fitness and wellness"]);
+    expect(rationale).not.toMatch(/professionals|Interests were selected/);
+    expect(rationale).toMatch(/Meta couldn't match: Office workers, Posture, Fitness and wellness\. Interests targeted: Parenting\.$/);
+    expect(rationaleForMatchedInterests(issue174Rationale, ["Parenting"], [])).toBe(issue174Rationale);
   });
 
   it("explains a broad audience when Meta has none of the interests", async () => {
