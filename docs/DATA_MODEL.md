@@ -269,7 +269,7 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `change_declared_preferences` | Owner-checked, namespace-locked opt-in/save/forget/clear/pause with monotonic epoch; only authenticated callers can execute and direct table writes are denied |
 | `meta_token_*` | Business-bound encrypted token insertion/read/delete |
 | `meta_attempt_*` | OAuth claim, discovery, revision, selection commit and failure transitions |
-| `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation |
+| `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation (revoke clears only connections using that Meta user's token) |
 | `update_campaign_draft_if_version` | Owner/version-checked draft update, blocks unsafe operation overlap |
 | `claim_campaign_operation` | Durable idempotency/lease claim |
 | `enqueue_campaign_operation`, `claim_next_campaign_job` | Service-only durable enqueue and exclusive pending-job claim |

@@ -618,19 +618,18 @@ returns integer language plpgsql security definer set search_path = private, pub
 as $$
 declare affected_count integer;
 begin
-  with affected as (
-    select distinct business_id from private.meta_tokens where subject_id = p_subject_id
-  ), revoked as (
+  -- #181: only connections using this subject's token are revoked.
+  with revoked as (
     update private.meta_tokens
     set revoked_at = coalesce(revoked_at, now())
     where subject_id = p_subject_id
-    returning business_id
+    returning id
   )
   update public.meta_connections connection
   set token_id = null, ad_account_id = null, page_id = null,
       authorization_status = 'revoked', generation = connection.generation + 1,
       updated_at = now()
-  where connection.business_id in (select business_id from affected);
+  where connection.token_id in (select id from revoked);
   get diagnostics affected_count = row_count;
   return affected_count;
 end;
