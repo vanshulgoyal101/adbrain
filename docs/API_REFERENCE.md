@@ -266,6 +266,16 @@ No configured text keys can return 400/`NO_LLM_KEYS`; exceeded quota returns
 429/`LLM_MONTHLY_QUOTA_EXCEEDED`. Generation/regeneration declare a 300-second
 route duration; host execution limits still apply.
 
+Live progress (Create): send `Accept: application/x-ndjson`. A request rejected
+before admission still gets its normal JSON status. After admission the route
+answers 200 `application/x-ndjson`, one JSON object per line:
+`{type:"progress", angleId, angleName, stage, at}` (stage `queued`, `writing`,
+`checking`, `fixing`, `image`, `ready` or `failed`; angles run concurrently),
+`{type:"creative", angleId, creative}` once that ad is saved (before its
+`ready`), and last `{type:"result", status, body}` carrying the status and body
+the JSON mode would have returned. A stream that ends without `result` must be
+treated as unconfirmed and recovered with the GET below.
+
 POST atomically claims the
 generation UUID and normalized request inputs before paid work. Repeating the
 same ID returns 202 with `{variantGroup, status, creatives: [], count: 0,
