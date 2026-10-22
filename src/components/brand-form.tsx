@@ -74,6 +74,35 @@ function fromBusiness(b: Business | null): FieldsState {
   };
 }
 
+const AUTOFILL_LABELS: Partial<Record<keyof FieldsState, string>> = {
+  description: "description",
+  vertical: "category",
+  brand_voice: "voice",
+  target_audience: "audience",
+  usps: "selling points",
+  offers: "offers",
+  languages: "languages",
+};
+// Facts Create may only state when the Brand has them; a website rarely gives all of them.
+const KEY_FACTS: [keyof FieldsState, string][] = [
+  ["offers", "offers or prices"],
+  ["locations", "service areas"],
+  ["phone", "phone number"],
+  ["target_audience", "audience"],
+];
+
+/** Plain words for what autofill filled and which key facts the owner still has to add. */
+function autofillSummary(extracted: Partial<FieldsState>, before: FieldsState): string {
+  const filled = (Object.keys(AUTOFILL_LABELS) as (keyof FieldsState)[])
+    .filter((key) => extracted[key]?.trim())
+    .map((key) => AUTOFILL_LABELS[key]!);
+  const missing = KEY_FACTS.filter(([key]) => !(extracted[key] ?? before[key]).trim()).map(([, label]) => label);
+  const found = filled.length ? `Filled from your website: ${filled.join(", ")}.` : "Your website didn't give us any Brand details.";
+  return missing.length
+    ? `${found} Still missing: ${missing.join(", ")}. Add them below; ads only state facts your Brand has.`
+    : `${found} Check the fields below, then save.`;
+}
+
 function firstLine(value: string): string {
   return value
     .split("\n")
@@ -102,6 +131,7 @@ export function BrandForm({ business }: { business: Business | null }) {
   );
   const [autofilling, setAutofilling] = useState(false);
   const [autofillError, setAutofillError] = useState<string | null>(null);
+  const [autofillNote, setAutofillNote] = useState<string | null>(null);
   const websiteRevision = useRef(0);
   const [savedLogo, setSavedLogo] = useState(business?.logo_url ?? "");
   const incomingLogo = business?.logo_url ?? "";
@@ -152,6 +182,7 @@ export function BrandForm({ business }: { business: Business | null }) {
 
   async function autofill() {
     setAutofillError(null);
+    setAutofillNote(null);
     if (!fields.website.trim()) {
       setAutofillError("Enter your website URL first.");
       return;
@@ -212,6 +243,7 @@ export function BrandForm({ business }: { business: Business | null }) {
         }
         return merged;
       });
+      setAutofillNote(autofillSummary(extracted, fields));
     } catch {
       setAutofillError("Autofill failed — could not reach the site.");
     } finally {
@@ -336,6 +368,11 @@ export function BrandForm({ business }: { business: Business | null }) {
           {autofillError && (
             <div className="sm:col-span-2">
               <Alert variant="error">{autofillError}</Alert>
+            </div>
+          )}
+          {autofillNote && (
+            <div className="sm:col-span-2" aria-live="polite">
+              <Alert>{autofillNote}</Alert>
             </div>
           )}
         </CardContent>
