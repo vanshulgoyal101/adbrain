@@ -3,7 +3,7 @@
  * PAUSED test campaign (cap, review status, three-level pause), plus read-only ad
  * account insights, then archives the campaign. Any ACTIVE write is refused.
  *
- *   npx tsx --env-file=.env.local scripts/record-meta-safety-fixtures.ts <imageUrl>
+ *   npx tsx --env-file=.env.local scripts/record-meta-safety-fixtures.ts <imageUrl> [capped-adset]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,7 +31,7 @@ globalThis.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
   if (!url.startsWith(GRAPH)) return realFetch(input, init);
   const formEntries = init?.body instanceof URLSearchParams ? [...init.body] : [];
-  if (formEntries.some(([key, value]) => key === "status" && value !== "PAUSED" && value !== "ARCHIVED")) {
+  if (formEntries.some(([key, value]) => (key === "status" || key === "status_option") && value !== "PAUSED" && value !== "ARCHIVED")) {
     throw new Error("Recorder refuses any status other than PAUSED or ARCHIVED.");
   }
   const response = await realFetch(input, init);
@@ -96,7 +96,8 @@ async function main() {
   const [adId] = created.adIds;
   console.log(JSON.stringify(created));
   try {
-    await record(meta, account, campaignId, adSetId, adId);
+    if (process.argv[3] === "capped-adset") await recordCappedAdSet(meta, campaignId, adSetId, adId);
+    else await record(meta, account, campaignId, adSetId, adId);
   } finally {
     if (tape.length) save("failed");
     await raw(campaignId, { status: "ARCHIVED" });
@@ -158,6 +159,19 @@ async function record(meta: NonNullable<ReturnType<typeof metaClientFromEnv>>, a
   await raw(`${account}/insights?level=campaign&fields=campaign_id,spend,account_currency,date_start,date_stop&time_increment=1&date_preset=last_30d&limit=25`);
   await raw(`${campaignId}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop`);
   save("insights");
+}
+
+type Meta = NonNullable<ReturnType<typeof metaClientFromEnv>>;
+
+// Below the ₹5,000 campaign spend-cap minimum: lifetime-budget ad set with PAUSED ad copies, read back.
+async function recordCappedAdSet(meta: Meta, campaignId: string, adSetId: string, adId: string) {
+  const capped = await meta.createCappedAdSet(campaignId, {
+    sourceAdSetId: adSetId, sourceAdIds: [adId], lifetimeBudgetPaise: CAP_PAISE, endTime: new Date(Date.now() + 3 * 86_400_000),
+  });
+  console.log(JSON.stringify(capped));
+  save("capped-adset");
+  await fetch(`${GRAPH}${capped.adSetId}?access_token=${encodeURIComponent(process.env.META_SYSTEM_USER_TOKEN!)}`, { method: "DELETE" });
+  save("capped-adset-delete");
 }
 
 main().catch((error) => {
