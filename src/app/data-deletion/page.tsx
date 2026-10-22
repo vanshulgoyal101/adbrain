@@ -18,7 +18,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function DataDeletionPage() {
+export default async function DataDeletionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string | string[] }>;
+}) {
+  const { code } = await searchParams;
+  const confirmationCode = typeof code === "string" && /^[a-f0-9]{16}$/.test(code) ? code : null;
   return (
     <>
       <JsonLd
@@ -29,6 +35,18 @@ export default function DataDeletionPage() {
         })}
       />
       <LegalPage title={TITLE} updated="30 September 2026">
+        {confirmationCode && (
+          <>
+            <h2>Your Meta deletion request</h2>
+            <p>
+              Confirmation code <strong>{confirmationCode}</strong>. We received
+              your request from Facebook and disconnected AdBrain from your Meta
+              account. Stored Meta access for this account no longer works. To
+              remove the rest of your AdBrain data, follow the steps below and
+              include this code in your request.
+            </p>
+          </>
+        )}
         <p>
           To request an export or deletion of data AdBrain holds, sign in and use
           the Privacy and data requests section in <a href="/settings">Settings</a>.

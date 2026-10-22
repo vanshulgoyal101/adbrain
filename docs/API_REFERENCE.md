@@ -200,7 +200,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/oauth/callback` | Provider callback | Signed/bound OAuth completion and redirect |
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |
 | POST | `/api/meta/connect` | Business/account/Page | Retired selection, 410 after validation |
-| POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections |
+| POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections; returns Meta's `{url, confirmation_code}` (status at `/data-deletion?code=`) |
 | GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
 | POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
 | POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |

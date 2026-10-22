@@ -103,6 +103,74 @@ source SHA, UTC observation time, intended permission/use case, actor class
 and the specific unresolved decision. Store reviewer access material only through
 the approved private channel, never in this entry or a URL query string.
 
+## App Review Packet (#156, 22 Oct 2026)
+
+Login uses Facebook Login, Graph v21.0, redirect
+`https://adbrain.vanshul.com/api/meta/oauth/callback`. Scopes come from
+`META_LOGIN_SCOPES` in [oauth.ts](../src/lib/meta/oauth.ts). All seven are used;
+none can be dropped without breaking the core loop.
+
+| Permission | Why AdBrain needs it | Where the reviewer sees it |
+| --- | --- | --- |
+| `ads_management` | Upload images, create creatives, create the campaign/ad set/ads paused, pause and sync | `/campaigns` → Send to Meta (paused), Pause, Sync from Meta |
+| `ads_read` | List ad accounts (`me/adaccounts`) and read campaign insights | `/settings` → Connect Meta → ad account picker; `/campaigns` results |
+| `leads_retrieval` | Read the leads submitted to the customer's own lead forms | `/leads` → Sync leads |
+| `pages_show_list` | List the Pages the user manages (`me/accounts`) | `/settings` → Connect Meta → Page picker |
+| `pages_read_engagement` | Read lead forms and the Page's WhatsApp number for the ad destination | `/campaigns` → lead form dropdown; WhatsApp destination |
+| `pages_manage_ads` | Run ads and lead forms on behalf of the selected Page | `/campaigns` → Launch with the selected Page |
+| `business_management` | Read the owning Business of each ad account and Page so only valid account/Page pairs are offered | `/settings` → Connect Meta → paired account/Page choices |
+
+### Dashboard URLs
+
+| Dashboard field | Value |
+| --- | --- |
+| Privacy Policy URL | `https://adbrain.vanshul.com/privacy` |
+| Terms of Service URL | `https://adbrain.vanshul.com/terms` |
+| Data deletion callback URL | `https://adbrain.vanshul.com/api/meta/deauthorize` (returns `{url, confirmation_code}`) |
+| Deauthorize callback URL (Facebook Login settings) | `https://adbrain.vanshul.com/api/meta/deauthorize` |
+| Valid OAuth redirect URI | `https://adbrain.vanshul.com/api/meta/oauth/callback` |
+| App domain / site URL | `adbrain.vanshul.com` / `https://adbrain.vanshul.com` |
+
+If the dashboard prefers an instructions URL instead of a callback, use
+`https://adbrain.vanshul.com/data-deletion`. All four pages are public.
+
+### Screencast Script (one recording per permission, English UI, no secrets)
+
+Common opening for every recording: open `https://adbrain.vanshul.com`, sign in
+as the reviewer account, open `/settings`, click **Connect Meta**, show the Meta
+consent dialog listing the permission, approve it, and return to AdBrain.
+
+1. `pages_show_list`, `business_management`, `ads_read`: on return, show the ad
+   account and Page pickers filled from Meta. Choose one pair and save it.
+2. `ads_management`, `pages_manage_ads`: on `/studio`, approve ads and click
+   **Create campaign**. In `/campaigns`, pick the Page, audience and budget,
+   review the plan and click **Send to Meta (paused)**. Show the campaign
+   arriving **paused** in Meta Ads Manager, then **Sync from Meta** and
+   **Pause** in AdBrain. Do not activate or spend.
+3. `pages_read_engagement`: in the campaign composer, open the lead form dropdown
+   so it lists the Page's forms (and the WhatsApp destination if the Page has a number).
+4. `leads_retrieval`: on `/leads`, click **Sync leads** and show a test lead
+   (submitted with Meta's Lead Ads Testing Tool) appear in the inbox.
+5. Close each recording with **Disconnect** in `/settings`.
+
+### Owner Checklist (one sitting)
+
+1. **Business verification** (Business Settings → Security Center): legal business
+   name, address, phone, website `adbrain.vanshul.com`, a verified domain or email,
+   and one official document showing the legal name and address (e.g. GST
+   certificate, certificate of incorporation or a recent utility bill).
+2. **App settings → Basic**: icon (1024×1024), category, contact email, and the
+   URLs in the table above. Save and confirm there are no red warnings.
+3. **Facebook Login → Settings**: redirect URI and deauthorize callback as above.
+4. **App Review → Permissions and Features**: request advanced access for each
+   of the seven permissions (and Ads Management Standard Access if it is listed).
+   For each one, paste the "Why" text from the table, attach its screencast,
+   and give the reviewer login through the dashboard's secure test-credentials field.
+5. Complete **Data Use Checkup** and any Access Verification the dashboard asks
+   for, then click **Submit**.
+6. Wait: Meta usually answers within days to a few weeks. Business verification
+   can add more time. Reply to the feedback point by point.
+
 ## After Submission
 
 There is no repository-defined minimum call count or guaranteed approval date.
