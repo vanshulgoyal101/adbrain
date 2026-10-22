@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import run4 from "./fixtures/create/cedar-ridge-run4.json";
 import haiku from "./fixtures/create/cedar-ridge-haiku.json";
-import { openAIReply, requestBody, requestUrl } from "./replay";
+import { openAIReply, requestBody, requestUrl, settleInVirtualTime, useVirtualDeadlines, wait } from "./replay";
 
 // Create's OpenRouter model (#98): three real Claude Haiku 5.5 replies recorded through the
 // production route. Text calls, parsing and validation are real; only the network and images are replaced.
@@ -112,22 +112,22 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
 
   it("parallel schedule (#142): starts all three concepts at once on recorded latencies and still saves 3/3", async () => {
     vi.stubEnv("CREATIVE_CONCEPT_SCHEDULE", "parallel");
-    // Recorded Haiku latencies, replayed at 1/100 speed.
-    const scale = 100;
     let inFlight = 0;
     let peak = 0;
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(requestBody(init));
       const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
       peak = Math.max(peak, ++inFlight);
-      await new Promise((resolve) => setTimeout(resolve, reply.latencyMs / scale));
+      await wait(reply.latencyMs);
       inFlight--;
       return openAIReply(reply.content, haiku.model, reply.usage);
     }));
     const { generateVariants } = await import("@/lib/creative/generate");
-    const started = Date.now();
-    const variants = await generateVariants({ brand: run4.brand, brief: run4.brief, count: 3 });
-    const wallMs = (Date.now() - started) * scale;
+    // Recorded Haiku latencies on a virtual clock, so a busy machine cannot skew the timing.
+    const { startedAt } = useVirtualDeadlines();
+    const variants = await settleInVirtualTime(generateVariants({ brand: run4.brand, brief: run4.brief, count: 3 }));
+    const wallMs = Date.now() - startedAt;
+    vi.useRealTimers();
 
     expect(peak).toBe(3);
     expect(variants.map(({ angleName }) => angleName)).toEqual(haiku.responses.map(({ angleName }) => angleName));

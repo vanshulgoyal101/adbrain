@@ -13,6 +13,8 @@ import cappedAdSetDelete from "./fixtures/meta/safety/capped-adset-delete.json";
 import { settleInVirtualTime, useVirtualDeadlines } from "./replay";
 import { adReviewState, MetaClient } from "@/lib/meta/client";
 import { decodeCampaignInsights } from "@/lib/meta/insights";
+import { weeklySpendDecision } from "@/lib/campaign/spend";
+import type { Campaign } from "@/lib/types";
 
 // #157: Graph responses recorded from one PAUSED Solaride test campaign by
 // scripts/record-meta-safety-fixtures.ts (never ACTIVE; archived afterwards).
@@ -175,5 +177,25 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
       await expect(create(new MetaClient(creds))).rejects.toThrow(/did not confirm/);
       expect(tape.sent.at(-1)).toMatchObject({ method: "DELETE", path: capped.adSetId });
     });
+  });
+
+  it("spend: a just-activated campaign with no delivery yet (no insight rows) counts as ₹0, not as an unverifiable reading", async () => {
+    const [lifetime, , newCampaign] = insights as Exchange[];
+    const limits = { weeklyCapRupees: 600, alertPct: 80, autoPause: true };
+    const active = { id: "c1", status: "active", daily_budget: 200, meta_campaign_id: campaignId } as unknown as Campaign;
+    const now = new Date("2026-10-22T06:00:00Z");
+    const observe = (body: unknown) => async () => ({
+      insights: decodeCampaignInsights(body, "instant_form", { requireSpend: true }), currency: "INR", timezoneName: "Asia/Kolkata",
+    });
+
+    expect(decodeCampaignInsights(newCampaign.body, "instant_form", { requireSpend: true })).toMatchObject({ spend: 0, noDelivery: true });
+    expect(await weeklySpendDecision([active], limits, observe(newCampaign.body), now)).toEqual({ toPause: [], verified: true });
+
+    // A real row (with Meta's dates) over the cap still pauses; a row with no spend field is still unverified.
+    const row = (lifetime.body as { data: Array<Record<string, unknown>> }).data[0];
+    const thisWeek = { ...row, spend: "650.00", date_start: "2026-10-19", date_stop: "2026-10-22" };
+    expect(await weeklySpendDecision([active], limits, observe({ data: [thisWeek] }), now)).toEqual({ toPause: ["c1"], verified: true });
+    const noSpend = Object.fromEntries(Object.entries(thisWeek).filter(([key]) => key !== "spend"));
+    expect(await weeklySpendDecision([active], limits, observe({ data: [noSpend] }), now)).toEqual({ toPause: ["c1"], verified: false });
   });
 });
