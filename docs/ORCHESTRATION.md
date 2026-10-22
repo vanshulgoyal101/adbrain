@@ -103,9 +103,9 @@ real ad spend and the App Review submission wait for the owner. Parked issues
 | Worker | Work, in order |
 | --- | --- |
 | DevOps | Done: #153 guard pipefail, parallel Create live (#142), #138 closed. Now [#111](https://github.com/vanshulgoyal101/adbrain/issues/111) rollback drill (owner approved Oct 22): add a `drill` dispatch input that forces the FAIL and runs the real rollback, run it, verify, restore main HEAD, close #111. Then [#165](https://github.com/vanshulgoyal101/adbrain/issues/165): lead sync and spend enforcement every 15 minutes |
-| Dev 3 | After the parallel flip: Create run 10/10 on [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) (report the generation for #138), then runs from your share of the new 10 until two in a row save 3/3, then close #98 and #142. Then [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): Meta-side cap, review status and one-click pause, from recorded responses only |
-| Dev | [#141](https://github.com/vanshulgoyal101/adbrain/issues/141) (owner): live per-ad progress while ads generate, on the `onProgress` events from #147; the parallel schedule means stages run at the same time |
-| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156): Meta App Review packet up to the submit button (permissions table, policy URLs, connect flow with a no-role test user, screencast script, owner checklist) |
+| Dev 3 | Done: #98 (3/3 twice, 48 s and 40 s, Haiku + parallel). Close [#142](https://github.com/vanshulgoyal101/adbrain/issues/142) with the timings, then finish [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): Meta-side cap, review status and one-click pause, from recorded responses only |
+| Dev | Done: #141 live progress. One production Create through the UI to see it (timing on #142), then [#169](https://github.com/vanshulgoyal101/adbrain/issues/169): first run for a brand-new business, sign in to 3 saved ads in under 5 minutes |
+| Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3: the owner is signing into a no-role Facebook account in the shared browser. Stop at the asset picker; never save it over Cedar Ridge's Solaride connection; disconnect afterwards |
 | QA | [#158](https://github.com/vanshulgoyal101/adbrain/issues/158): walk the core loop as a first-time owner on 390 px and desktop; file each dead end as a `core` bug and fix tiny ones yourself. Verify #153 with DevOps |
 
 ### Earlier focus (October 21, before P0)
