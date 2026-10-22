@@ -1,0 +1,38 @@
+[
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adsets",
+    "form": {
+      "name": "AdBrain safety fixture lifetime ad set (PAUSED test)",
+      "campaign_id": "120253654207670526",
+      "status": "PAUSED",
+      "lifetime_budget": "60000",
+      "end_time": "2026-10-25T04:48:32.988Z",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "LEAD_GENERATION",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "ON_AD",
+      "promoted_object": "{\"page_id\":\"885223068001054\"}",
+      "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"2525495\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":55,\"targeting_automation\":{\"advantage_audience\":0}}"
+    },
+    "status": 200,
+    "body": {
+      "id": "120253654209590526"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253654209590526?fields=id%2Cstatus%2Ceffective_status%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cstart_time%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253654209590526",
+      "status": "PAUSED",
+      "effective_status": "IN_PROCESS",
+      "daily_budget": "0",
+      "lifetime_budget": "60000",
+      "budget_remaining": "60000",
+      "start_time": "2026-10-22T10:18:33+0530",
+      "end_time": "2026-10-25T10:18:32+0530"
+    }
+  }
+]

@@ -1,0 +1,90 @@
+[
+  {
+    "method": "POST",
+    "path": "120253654207670526",
+    "form": {
+      "status": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253654208240526",
+    "form": {
+      "status": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253654209040526",
+    "form": {
+      "status": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253654207670526?fields=id%2Cstatus%2Ceffective_status",
+    "status": 200,
+    "body": {
+      "id": "120253654207670526",
+      "status": "PAUSED",
+      "effective_status": "PAUSED"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253654207670526/adsets?fields=id%2Cstatus%2Ceffective_status&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253654209590526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS"
+        },
+        {
+          "id": "120253654208240526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHh6d2VWNTJzUmJsX3AtNGdRc0xyNFFlaTFObUc4RGs1RlhqWEUtVWJ4V0s3aUdHQnRJTS14enlMMWZAsRWJMUmJSeHYtbThVYzQ5eGtRNmxWdW5fSDRB",
+          "after": "QVFIVEROempTYjFuWWJiMmFoc1dwQ2xOVUdIdUpOVnZAmaktQVjNMNHJZAZAmRQS2hvYUFBMlJtd25iWHRWUUFZAckYtTER6NWdzWlJCTUVCRGpQT2xmenZAHRll3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253654207670526/ads?fields=id%2Cstatus%2Ceffective_status&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253654209040526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVDBXLUtuLTJRZA1VlUEpHTENpbEZAXdTB1Y1ZABY25zS1lOSDMzSTFlcVQ5UVFrZA2tHWXpoYmVwZAEhpT0R6bDgySUFvaW5tOUxGUlk0UkdBcmhxVFFHaDF3",
+          "after": "QVFIVDBXLUtuLTJRZA1VlUEpHTENpbEZAXdTB1Y1ZABY25zS1lOSDMzSTFlcVQ5UVFrZA2tHWXpoYmVwZAEhpT0R6bDgySUFvaW5tOUxGUlk0UkdBcmhxVFFHaDF3"
+        }
+      }
+    }
+  }
+]
