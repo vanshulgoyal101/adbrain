@@ -6,7 +6,7 @@ import { DRAFT_TTL_MS, MAX_ACTIVE_DRAFTS, draftRecordFromRow, draftRecordToDTO, 
 import { formatAnswers, runPlanner, plannerAnswerSchema, PLANNER_PROMPT_VERSION, type PlannerQuestion, type PlannerTopic } from "@/lib/campaign/planner";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { AllLLMProvidersFailedError, LLMError, NoLLMKeysError } from "@/lib/llm/types";
-import { fallbackAudienceTargeting, plannerPlanToDraftInput } from "@/lib/campaign/planner-draft";
+import { fallbackAudienceTargeting, plannerPlanToDraftInput, rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
 import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { friendlyMetaError, type LeadForm } from "@/lib/meta/client";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
@@ -234,9 +234,11 @@ async function handlePOST(req: Request) {
   if (audience?.interestNames.length) {
     // Meta has no interest for many AI suggestions (e.g. "Chiropractic"); preflight would block on them.
     try {
-      const { interests } = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.resolveAudienceInterests(audience.interestNames));
-      if (interests.length) audience.interestNames = interests.map((interest) => interest.name);
-      else noMetaInterests = true;
+      const { interests, unresolved } = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.resolveAudienceInterests(audience.interestNames));
+      if (interests.length) {
+        audience.interestNames = interests.map((interest) => interest.name);
+        audience.rationale = rationaleForMatchedInterests(audience.rationale, audience.interestNames, unresolved);
+      } else noMetaInterests = true;
     } catch {
       // Keep the AI names; preflight reports the lookup failure.
     }
