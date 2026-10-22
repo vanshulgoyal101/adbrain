@@ -240,6 +240,9 @@ Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
 check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
 failed smoke green (#153). To prove that, run the workflow manually with
 `force_fail`: it must end red, without a rollback or an issue.
+The rollback drill input `drill` forces the same FAIL, then really rolls
+production back and opens a `[DRILL]` core bug; restore with the recovery steps
+below.
 
 Recovery after an automatic rollback: Vercel stops promoting new production
 deployments until one is promoted manually. Fix forward or revert through a PR.
