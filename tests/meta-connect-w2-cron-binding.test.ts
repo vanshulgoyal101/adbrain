@@ -168,7 +168,7 @@ describe("scheduled spend binding boundary", () => {
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ ok: false, swept: [{ businessId: "business-1", paused: ["campaign-1"] }] });
+    expect(await response.json()).toMatchObject({ ok: false, swept: [{ businessId: "business-1", paused: ["campaign-1"] }], unverified: ["business-1"] });
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
   });
 

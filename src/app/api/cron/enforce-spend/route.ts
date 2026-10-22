@@ -57,6 +57,8 @@ async function handleGET(request: Request) {
   }
 
   const swept: Array<{ businessId: string; paused: string[] }> = [];
+  // Businesses whose spend data is missing: never reported as ₹0 (#49, #165).
+  const unverified: string[] = [];
   let incomplete = false;
   let activeCampaigns;
   try {
@@ -85,7 +87,7 @@ async function handleGET(request: Request) {
           .eq("business_id", businessId).order("id").limit(100);
         return after ? query.gt("id", after) : query;
       }, "Campaigns could not be loaded.", campaign => campaign.id);
-    } catch { incomplete = true; continue; }
+    } catch { incomplete = true; unverified.push(businessId); continue; }
     if (!campaigns.some(campaign => campaign.status === "active")) continue;
 
     let context;
@@ -93,6 +95,7 @@ async function handleGET(request: Request) {
       context = await requireScheduledBusiness(businessId, request);
     } catch {
       incomplete = true;
+      unverified.push(businessId);
       continue;
     }
     const customerBalance = await getCustomerBalance(context).catch(() => null);
@@ -114,7 +117,7 @@ async function handleGET(request: Request) {
           timezoneName: connection.selected?.timezoneName ?? null,
         }));
       });
-    if (!decision.verified) incomplete = true;
+    if (!decision.verified) { incomplete = true; unverified.push(businessId); }
 
     const paused: string[] = [];
     const toPause = decision.toPause;
@@ -167,5 +170,5 @@ async function handleGET(request: Request) {
     if (paused.length) swept.push({ businessId, paused });
   }
 
-  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept }, { status: incomplete ? 503 : 200 });
+  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept, unverified }, { status: incomplete ? 503 : 200 });
 }
