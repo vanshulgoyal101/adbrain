@@ -272,7 +272,10 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it |
 
 Weekly protection requires a complete Monday-to-today INR spend observation;
-missing metrics are not zero spend. Unlaunched drafts do not contribute, but
+missing metrics are not zero spend. A row without `spend` stays unverified. Meta
+answers `{"data":[]}` when nothing delivered in the period (recorded in
+`tests/core/fixtures/meta/safety/insights.json`); that counts as ₹0, so a newly
+activated campaign is not paused before it delivers. Unlaunched drafts do not contribute, but
 launched or paused campaigns can. The scheduled sweep can return 503 with partial
 progress; inspect `swept` and remaining failures rather than declaring every
 campaign paused. Missing bindings, credentials, read errors, or local save failures

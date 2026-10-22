@@ -194,7 +194,7 @@ export async function weeklySpendDecision(
         return { toPause: active, verified: false };
       }
       const week = currentWeekRange(timezoneName, now);
-      if (insights.periodStart !== week.start || insights.periodEnd !== week.end) {
+      if (!insights.noDelivery && (insights.periodStart !== week.start || insights.periodEnd !== week.end)) {
         return { toPause: active, verified: false };
       }
       spends.push({ id: campaign.id, status: campaign.status, dailyBudget: campaign.daily_budget, spend: insights.spend });

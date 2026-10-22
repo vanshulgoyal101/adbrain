@@ -12,6 +12,8 @@ export interface CampaignInsights {
   cpl: number | null;
   conversations?: number;
   costPerConversation?: number | null;
+  /** Meta returned no rows: nothing delivered in the requested period. */
+  noDelivery?: true;
 }
 
 const amountSchema = z.string().regex(/^\d+(?:\.\d+)?$/).transform(Number)
@@ -33,7 +35,7 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
   const parsed = insightsSchema.safeParse(payload);
   if (!parsed.success || parsed.data.paging?.next) throw new Error("Campaign insights are incomplete or invalid.");
   const row = parsed.data.data[0];
-  if (options?.requireSpend && row?.spend === undefined) throw new Error("Campaign spend observation is unavailable.");
+  if (options?.requireSpend && row && row.spend === undefined) throw new Error("Campaign spend observation is unavailable.");
   if (row?.date_start && row.date_stop && row.date_start > row.date_stop) throw new Error("Campaign insight dates are invalid.");
   const actionCount = (names: string[]) => {
     for (const name of names) {
@@ -58,5 +60,6 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
     clicks: row?.clicks ?? 0,
     spend, leads, cpl: leads > 0 ? spend / leads : null,
     ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null } : {}),
+    ...(row ? {} : { noDelivery: true as const }),
   };
 }
