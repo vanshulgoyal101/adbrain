@@ -72,8 +72,9 @@ Routine steps never wait for the coordinator.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, post in #74 and the coordinator signs in.
 - **Paid budget.** Create runs: 10 approved on Oct 1 (runs 1-10) and 10 more
-  approved by the owner on Oct 22 (runs 11-20). Shares of the new 10: Dev 3 5,
-  Dev 2, QA 2, DevOps 1. The #98 model bake-off has its own $1 cap and does
+  approved by the owner on Oct 22 (runs 11-20). Shares of run 10 plus the new 10:
+  Dev 3 5 (run 10 + 4), Dev 2 (#141), QA 2 (#158), DevOps 2 (after the parallel
+  flip). The #98 model bake-off has its own $1 cap and does
   not count as Create runs.
   Log `Create run N/20` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
   At the limit, stop and post; the coordinator asks the owner for the next 10.
