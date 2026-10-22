@@ -105,6 +105,11 @@ cleanup; a failed logo assignment is visible; deletion clears matching logo
 references and confirms row deletion before file removal. Manual edits are not
 silently overwritten by a refresh.
 
+Brand readiness counts six checks, including a logo and at least one real photo
+(`product_photo`); unready ones link to the asset section. Create also asks for a
+missing logo or photos, linking to `/brand#brand-assets`. Both can be skipped.
+Real photos are reference hints for image generation, not the ad image itself.
+
 Instruction files have a title, Markdown body, and active flag. Active instructions
 are included by generation/planning call sites; an instruction is guidance to a
 model, not deterministic enforcement. Never put credentials or sensitive lead
