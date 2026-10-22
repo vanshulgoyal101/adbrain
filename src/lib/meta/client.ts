@@ -151,6 +151,7 @@ export class MetaError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly code?: number,
   ) {
     super(message);
     this.name = "MetaError";
@@ -164,6 +165,37 @@ export type CampaignDeliverySnapshot = {
   adSets: Array<{ id: string; status: string; effectiveStatus: string | null; dailyBudgetPaise: number; pageId: string; destinationType: string | null; targeting: unknown }>;
   ads: Array<{ id: string; status: string; effectiveStatus: string | null; adSetId: string; creativeId: string }>;
 };
+
+export type PausedCampaignTree = {
+  confirmed: boolean;
+  objects: Array<{ id: string; level: "campaign" | "adset" | "ad"; status: string; effectiveStatus: string | null }>;
+};
+
+export type AdReviewState = "in_review" | "approved" | "rejected" | "issues" | "unknown";
+export type AdReview = { adId: string; state: AdReviewState; effectiveStatus: string | null; reasons: string[] };
+
+/** Meta's review outcome for one ad, from `effective_status`, `ad_review_feedback` and `issues_info`. */
+export function adReviewState(ad: { id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }): AdReview {
+  const status = ad.effective_status ?? null;
+  const feedback = ad.ad_review_feedback && typeof ad.ad_review_feedback === "object"
+    ? Object.values(ad.ad_review_feedback as Record<string, unknown>).flatMap(group =>
+      group && typeof group === "object" ? Object.values(group as Record<string, unknown>) : [group])
+      .filter((reason): reason is string => typeof reason === "string").map(reason => reason.trim()).filter(Boolean)
+    : [];
+  const issues = Array.isArray(ad.issues_info)
+    ? ad.issues_info.map(issue => (issue as { error_message?: unknown }).error_message)
+      .filter((reason): reason is string => typeof reason === "string" && reason.trim() !== "")
+    : [];
+  const state: AdReviewState = status === "DISAPPROVED" ? "rejected"
+    : status === "WITH_ISSUES" ? "issues"
+    : status === "IN_PROCESS" || status === "PENDING_REVIEW" ? "in_review"
+    : status && ["ACTIVE", "PAUSED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "PREAPPROVED"].includes(status) ? "approved"
+    : "unknown";
+  return { adId: ad.id, state, effectiveStatus: status, reasons: [...feedback, ...issues] };
+}
+
+/** Graph allows about one status write per object per 30 s (error 613). */
+const STATUS_RATE_LIMIT_WAIT_MS = 30_000;
 
 /** Convert raw Graph API text into stable customer-facing copy. */
 export function friendlyMetaError(
@@ -444,11 +476,12 @@ export class MetaClient {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (
-        json as { error?: { message?: string; error_user_msg?: string } }
+        json as { error?: { message?: string; error_user_msg?: string; code?: number } }
       ).error;
       throw new MetaError(
         err?.error_user_msg || err?.message || `Meta HTTP ${res.status}`,
         res.status,
+        err?.code,
       );
     }
     return json as T;
@@ -1049,5 +1082,51 @@ export class MetaClient {
       method: "POST",
       form: { status },
     });
+  }
+
+  /**
+   * Emergency stop: pauses the campaign, then its intended ad sets and ads, and
+   * reads all three levels back. Never writes anything but PAUSED.
+   */
+  async pauseCampaignTree(campaignId: string, children: { adSetIds: string[]; adIds: string[] }): Promise<PausedCampaignTree> {
+    await this.verifyCampaignBinding(campaignId);
+    const pause = async (id: string) => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await this.graph(encodeURIComponent(id), { method: "POST", form: { status: "PAUSED" } });
+          return;
+        } catch (error) {
+          if (!(error instanceof MetaError) || error.code !== 613 || attempt >= 2) throw error;
+          await new Promise(resolve => setTimeout(resolve, STATUS_RATE_LIMIT_WAIT_MS));
+        }
+      }
+    };
+    for (const id of [campaignId, ...children.adSetIds, ...children.adIds]) await pause(id);
+
+    type Node = { id: string; status: string; effective_status?: string };
+    const node = encodeURIComponent(campaignId);
+    const [campaign, adSets, ads] = await Promise.all([
+      this.graph<Node>(`${node}?fields=id,status,effective_status`),
+      this.graph<{ data?: Node[]; paging?: { next?: string } }>(`${node}/adsets?fields=id,status,effective_status&limit=100`),
+      this.graph<{ data?: Node[]; paging?: { next?: string } }>(`${node}/ads?fields=id,status,effective_status&limit=100`),
+    ]);
+    const objects: PausedCampaignTree["objects"] = [
+      { id: campaign.id, level: "campaign", status: campaign.status, effectiveStatus: campaign.effective_status ?? null },
+      ...(adSets.data ?? []).map(item => ({ id: item.id, level: "adset" as const, status: item.status, effectiveStatus: item.effective_status ?? null })),
+      ...(ads.data ?? []).map(item => ({ id: item.id, level: "ad" as const, status: item.status, effectiveStatus: item.effective_status ?? null })),
+    ];
+    const paused = (id: string) => objects.some(object => object.id === id && object.status === "PAUSED");
+    const confirmed = campaign.id === campaignId && [campaignId, ...children.adSetIds, ...children.adIds].every(paused);
+    return { confirmed, objects };
+  }
+
+  /** Meta's review state for every ad in the campaign. */
+  async readAdReview(campaignId: string): Promise<AdReview[]> {
+    await this.verifyCampaignBinding(campaignId);
+    const ads = await this.graph<{ data?: Array<{ id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }>; paging?: { next?: string } }>(
+      `${encodeURIComponent(campaignId)}/ads?fields=id,status,effective_status,configured_status,ad_review_feedback,issues_info&limit=100`,
+    );
+    if (!Array.isArray(ads.data) || ads.paging?.next) throw new MetaError("Ad review status could not be read completely.");
+    return ads.data.map(adReviewState);
   }
 }

@@ -1,0 +1,29 @@
+[
+  {
+    "method": "POST",
+    "path": "120253654207670526",
+    "form": {
+      "status": "ARCHIVED"
+    },
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "(#613) Calls to this API have exceeded the concurrent request rate limit of 1 calls per 30 seconds.",
+        "type": "OAuthException",
+        "code": 613,
+        "error_subcode": 4841018,
+        "fbtrace_id": "A_p0F4TiZqan1v-Oisx-ogf"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253654207670526?fields=id%2Cstatus%2Ceffective_status",
+    "status": 200,
+    "body": {
+      "id": "120253654207670526",
+      "status": "PAUSED",
+      "effective_status": "PAUSED"
+    }
+  }
+]

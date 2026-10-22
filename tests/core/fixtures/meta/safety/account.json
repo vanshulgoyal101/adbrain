@@ -1,0 +1,15 @@
+[
+  {
+    "method": "GET",
+    "path": "act_2398686420592052?fields=id%2Ccurrency%2Cmin_campaign_group_spend_cap%2Cmin_daily_budget%2Cspend_cap%2Camount_spent",
+    "status": 200,
+    "body": {
+      "id": "act_2398686420592052",
+      "currency": "INR",
+      "min_campaign_group_spend_cap": "500000",
+      "min_daily_budget": 9546,
+      "spend_cap": "4237",
+      "amount_spent": "4237"
+    }
+  }
+]

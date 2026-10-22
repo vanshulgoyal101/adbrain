@@ -1,0 +1,36 @@
+[
+  {
+    "method": "GET",
+    "path": "act_2398686420592052/ads?fields=id%2Cstatus%2Ceffective_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253654209040526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS"
+        },
+        {
+          "id": "120253256980040526",
+          "status": "PAUSED",
+          "effective_status": "DISAPPROVED",
+          "ad_review_feedback": {
+            "global": {
+              "लीड विज्ञापन": " लगता है कि आपके विज्ञापन में ऐसा कंटेंट शामिल है, जिसे Meta के विज्ञापन प्लेटफ़ॉर्म पर दिखाने की परमिशन नहीं है. यह हमारे विज्ञापन स्टैंडर्ड, कम्युनिटी स्टैंडर्ड या सेवा की शर्तों का उल्लंघन करता है. इस बारे में जानने कि आपका विज्ञापन क्यों हटाया गया है और उसे कैसे ठीक करें, इसके लिए बिज़नेस सपोर्ट होम पर जाएँ."
+            }
+          }
+        },
+        {
+          "id": "120253164674630526",
+          "status": "PAUSED",
+          "effective_status": "PAUSED"
+        },
+        {
+          "id": "120240970807640526",
+          "status": "ACTIVE",
+          "effective_status": "CAMPAIGN_PAUSED"
+        }
+      ]
+    }
+  }
+]

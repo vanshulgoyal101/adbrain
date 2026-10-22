@@ -1,0 +1,23 @@
+[
+  {
+    "method": "GET",
+    "path": "120253654207670526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253654209040526",
+          "status": "PAUSED",
+          "effective_status": "IN_PROCESS",
+          "configured_status": "PAUSED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVEg1RDNWX2xubXFwVkN5el9uVFdjTlNFaGZAsQ2FnSmFJbm5XWmtVWWM3UU1PT29Bb2VJY0ZAqSmVINHRJRC1xSjEtbFFMSmI1UzVhNjJYd3R4X052QUVn",
+          "after": "QVFIVEg1RDNWX2xubXFwVkN5el9uVFdjTlNFaGZAsQ2FnSmFJbm5XWmtVWWM3UU1PT29Bb2VJY0ZAqSmVINHRJRC1xSjEtbFFMSmI1UzVhNjJYd3R4X052QUVn"
+        }
+      }
+    }
+  }
+]
