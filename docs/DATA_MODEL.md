@@ -399,6 +399,7 @@ alone is not a safe deployment plan.
 | [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
 | [20261001_creative_regeneration_claims.sql](../db/migrations/20261001_creative_regeneration_claims.sql) | Service-only paid regeneration fence; apply before serving the updated route and verify private grants |
 | [20261021_creative_generation_settle_holds.sql](../db/migrations/20261021_creative_generation_settle_holds.sql) | Same-signature progress RPC; settled partial runs release unused holds (#138); apply before serving the updated route |
+| [20261022_payment_webhook_health.sql](../db/migrations/20261022_payment_webhook_health.sql) | Service-only `production_payment_webhook_health` counts (#178); apply before serving `/api/cron/payment-health` |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and
