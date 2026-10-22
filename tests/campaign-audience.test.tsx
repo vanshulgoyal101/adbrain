@@ -1092,6 +1092,15 @@ describe("campaign audience workflow", () => {
 describe("campaign review walkthrough dead ends (#158)", () => {
   const websiteMessage = "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.";
 
+  it("shows the small saved thumbnail in the ad picker and falls back to the original", () => {
+    const base = "https://example.supabase.co/storage/v1/object/public/creatives/biz-1/group-1";
+    render(<Campaigns business={business} approved={[{ ...creative, image_url: `${base}/originals-v1/value-ad-1.png` }]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    const image = screen.getByRole("img", { name: creative.headline! });
+    expect(image).toHaveAttribute("src", `${base}/thumbnails-v1/value-ad-1.webp`);
+    fireEvent.error(image);
+    expect(image).toHaveAttribute("src", `${base}/originals-v1/value-ad-1.png`);
+  });
+
   it("links the website blocker to Brand Brain", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
