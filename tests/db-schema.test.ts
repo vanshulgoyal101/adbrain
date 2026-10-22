@@ -70,6 +70,16 @@ const OWNED_TABLES = [
 const ALL_TABLES = [...OWNED_TABLES, "profiles", "rate_limit_hits", "meta_connections"] as const;
 
 describe("schema: tables", () => {
+  it("revokes only connections that use the deauthorized Meta user's token (#181)", () => {
+    const migration = readFileSync(join(process.cwd(), "db/migrations/20261022_meta_revoke_subject_scope.sql"), "utf8").toLowerCase();
+    for (const definition of [SQL, migration]) {
+      const start = definition.indexOf("function public.meta_revoke_subject");
+      const body = definition.slice(start, definition.indexOf("$$;", start));
+      expect(body).toContain("where connection.token_id = any(revoked_ids)");
+      expect(body).not.toContain("connection.business_id in");
+    }
+  });
+
   it("keeps privacy requests owner-scoped and operator access restricted", () => {
     const migration = readFileSync(join(process.cwd(), "db/migrations/20260930_privacy_requests.sql"), "utf8").toLowerCase();
     for (const definition of [SQL, migration]) {
