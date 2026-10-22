@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdAssistant } from "@/components/ad-assistant";
@@ -81,5 +81,18 @@ describe("<AdAssistant> next step after Create", () => {
     doneDraft([ad("ad-1")]);
     render(<AdAssistant business={business} />);
     expect(await screen.findByText("Your ad is ready — pick your favourite:")).toBeInTheDocument();
+  });
+
+  it("shows the small thumbnail and falls back to the original image", async () => {
+    const base = "https://example.supabase.co/storage/v1/object/public/creatives/biz-1/group-1";
+    doneDraft([{ ...ad("ad-1"), image_url: `${base}/originals-v1/value-ad-1.png` } as Creative]);
+    render(<AdAssistant business={business} />);
+    const image = await screen.findByRole("img", { name: "Headline ad-1" });
+    expect(image).toHaveAttribute("src", `${base}/thumbnails-v1/value-ad-1.webp`);
+
+    fireEvent.error(image);
+    expect(image).toHaveAttribute("src", `${base}/originals-v1/value-ad-1.png`);
+    fireEvent.error(image);
+    expect(screen.queryByRole("img", { name: "Headline ad-1" })).toBeNull();
   });
 });
