@@ -71,10 +71,11 @@ Routine steps never wait for the coordinator.
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, post in #74 and the coordinator signs in.
-- **Paid budget.** Create runs: 10 approved on Oct 1; 6 used (runs 1-6).
-  Remaining: Dev 1, DevOps 3. The #98 model bake-off has its own $1 cap and does
+- **Paid budget.** Create runs: 10 approved on Oct 1 (runs 1-10) and 10 more
+  approved by the owner on Oct 22 (runs 11-20). Shares of the new 10: Dev 3 5,
+  Dev 2, QA 2, DevOps 1. The #98 model bake-off has its own $1 cap and does
   not count as Create runs.
-  Log `Create run N/10` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
+  Log `Create run N/20` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
   At the limit, stop and post; the coordinator asks the owner for the next 10.
   No Meta ad spend: campaigns stay PAUSED.
 - **Access.** Production DB: Supabase Management API with `SUPABASE_TOKEN` from
@@ -100,8 +101,8 @@ real ad spend and the App Review submission wait for the owner. Parked issues
 
 | Worker | Work, in order |
 | --- | --- |
-| DevOps | [#153](https://github.com/vanshulgoyal101/adbrain/issues/153) first: the guard turns a FAIL green, so add `shell: bash` (pipefail) to the smoke and rollback steps and prove it with a forced FAIL. Then flip `CREATIVE_CONCEPT_SCHEDULE=parallel` for [#142](https://github.com/vanshulgoyal101/adbrain/issues/142) with a recorded before/after. Close [#138](https://github.com/vanshulgoyal101/adbrain/issues/138) after Dev 3's next run settles small. [#111](https://github.com/vanshulgoyal101/adbrain/issues/111) rollback drill when the owner says "drill ok" |
-| Dev 3 | After the parallel flip: Create run 10/10 on [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) (report the generation for #138), more runs once the owner approves the next 10, then close #98 and #142. Then [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): Meta-side cap, review status and one-click pause, from recorded responses only |
+| DevOps | [#153](https://github.com/vanshulgoyal101/adbrain/issues/153) first: the guard turns a FAIL green, so add `shell: bash` (pipefail) to the smoke and rollback steps and prove it with a forced FAIL. Then flip `CREATIVE_CONCEPT_SCHEDULE=parallel` for [#142](https://github.com/vanshulgoyal101/adbrain/issues/142) with a recorded before/after. Close [#138](https://github.com/vanshulgoyal101/adbrain/issues/138) after Dev 3's next run settles small. [#111](https://github.com/vanshulgoyal101/adbrain/issues/111) rollback drill (owner approved Oct 22), after #153 lands |
+| Dev 3 | After the parallel flip: Create run 10/10 on [#98](https://github.com/vanshulgoyal101/adbrain/issues/98) (report the generation for #138), then runs from your share of the new 10 until two in a row save 3/3, then close #98 and #142. Then [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): Meta-side cap, review status and one-click pause, from recorded responses only |
 | Dev | [#141](https://github.com/vanshulgoyal101/adbrain/issues/141) (owner): live per-ad progress while ads generate, on the `onProgress` events from #147; the parallel schedule means stages run at the same time |
 | Dev 2 | [#156](https://github.com/vanshulgoyal101/adbrain/issues/156): Meta App Review packet up to the submit button (permissions table, policy URLs, connect flow with a no-role test user, screencast script, owner checklist) |
 | QA | [#158](https://github.com/vanshulgoyal101/adbrain/issues/158): walk the core loop as a first-time owner on 390 px and desktop; file each dead end as a `core` bug and fix tiny ones yourself. Verify #153 with DevOps |
