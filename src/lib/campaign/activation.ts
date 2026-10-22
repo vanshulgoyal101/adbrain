@@ -25,15 +25,29 @@ export const campaignDeliverySnapshotSchema = z.object({
   })),
 });
 
+const storedCapsSchema = z.object({
+  cap: z.object({ adSetId: z.string().min(1) }).optional(),
+  cappedAdSetIds: z.array(z.string().min(1)).optional(),
+});
+
+/** Lifetime-budget ad sets AdBrain created for capped runs (#157); no other ad set may carry a lifetime budget. */
+export function storedCappedAdSetIds(raw: unknown): string[] {
+  const parsed = storedCapsSchema.safeParse(raw);
+  if (!parsed.success) return [];
+  return [...new Set([...parsed.data.cappedAdSetIds ?? [], ...parsed.data.cap ? [parsed.data.cap.adSetId] : []])];
+}
+
 export function intendedCampaignChildren(campaign: Pick<Campaign, "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw">) {
   const parsed = storedChildrenSchema.safeParse(campaign.raw);
   if (!parsed.success) return null;
   const { campaignId, adSetIds, adIds } = parsed.data.metaResult;
+  const cappedAdSetIds = storedCappedAdSetIds(campaign.raw);
   if (campaignId !== campaign.meta_campaign_id || adSetIds[0] !== campaign.meta_adset_id
     || adIds.length !== campaign.meta_ad_ids.length
     || new Set(adSetIds).size !== adSetIds.length || new Set(adIds).size !== adIds.length
-    || adIds.some(id => !campaign.meta_ad_ids.includes(id))) return null;
-  return { adSetIds, adIds };
+    || adIds.some(id => !campaign.meta_ad_ids.includes(id))
+    || cappedAdSetIds.includes(adSetIds[0]) || cappedAdSetIds.some(id => !adSetIds.includes(id))) return null;
+  return { adSetIds, adIds, cappedAdSetIds };
 }
 
 export function activationConfirmationPayload(

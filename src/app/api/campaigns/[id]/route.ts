@@ -201,15 +201,19 @@ async function handlePATCH(
             if (capDays) {
               const capPaise = Math.round(campaign.daily_budget! * 100) * capDays;
               if (capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
+              const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
               const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
-                sourceAdSetId: children!.adSetIds[0], sourceAdIds: children!.adIds, lifetimeBudgetPaise: capPaise,
+                sourceAdSetId: children!.adSetIds[0], sourceAdIds: children!.adIds.filter(adId => !priorCappedAds.has(adId)), lifetimeBudgetPaise: capPaise,
                 endTime: new Date(Date.now() + capDays * 86_400_000),
               });
               const tree = { adSetIds: [...children!.adSetIds, capped.adSetId], adIds: [...children!.adIds, ...capped.adIds] };
               const stored = campaign.raw as { metaResult: Record<string, unknown> } & Record<string, unknown>;
               const { error: recordError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, {
                 meta_ad_ids: tree.adIds,
-                raw: { ...stored, metaResult: { ...stored.metaResult, ...tree }, cap: { ...capped, days: capDays } },
+                raw: {
+                  ...stored, metaResult: { ...stored.metaResult, ...tree }, cap: { ...capped, days: capDays },
+                  cappedAdSetIds: [...children!.cappedAdSetIds, capped.adSetId],
+                },
               }, id).catch(() => ({ error: new Error("Campaign storage unavailable.") }));
               if (recordError) throw new CampaignDeliveryError("The capped ad set could not be recorded. Nothing was activated.");
               try {
@@ -235,9 +239,10 @@ async function handlePATCH(
         const reservation = await getCustomerBalance(context)
           .then(balance => balance.reservations.find(item => item.campaignId === id && item.state !== "closed"))
           .catch(() => undefined);
+        const stopChildren = intendedCampaignChildren(campaign);
         pauseResult = await meta.pauseCampaignTree(
           campaign.meta_campaign_id!,
-          intendedCampaignChildren(campaign) ?? { adSetIds: [], adIds: [] },
+          stopChildren ? { adSetIds: stopChildren.adSetIds, adIds: stopChildren.adIds } : { adSetIds: [], adIds: [] },
         );
         if (!pauseResult.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
           throw new CampaignDeliveryError("Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
