@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Main equals production
+        shell: bash
         run: |
           [ -n "$VERCEL_TOKEN" ] || { echo "::warning::VERCEL_TOKEN is not set; drift check skipped"; exit 0; }
           node scripts/production-guard.mjs drift "$(git rev-parse HEAD)" "$(git log -1 --format=%ct)" | tee drift.txt
