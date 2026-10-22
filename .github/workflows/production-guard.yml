@@ -4,7 +4,11 @@ on:
   schedule:
     - cron: "30 3 * * *" # daily read-only core smoke
   workflow_dispatch:
-
+    inputs:
+      force_fail:
+        description: Replace the smoke with a FAIL line to prove the guard goes red (no rollback on dispatch)
+        type: boolean
+        default: false
 permissions:
   contents: read
   issues: write
@@ -18,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency: production-smoke
+    # Explicit bash adds pipefail, so `| tee` cannot hide a failed smoke or rollback (#153).
+    defaults:
+      run:
+        shell: bash
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       SHA: ${{ github.event.deployment.sha || github.sha }}
@@ -41,15 +49,17 @@ jobs:
         env:
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          FORCE_FAIL: ${{ inputs.force_fail && 'true' || '' }}
         run: |
-          node scripts/smoke-core.mjs | tee smoke.txt && exit 0
+          smoke() { if [ -n "$FORCE_FAIL" ]; then echo "FAIL forced by dispatch"; return 1; fi; node scripts/smoke-core.mjs; }
+          smoke | tee smoke.txt && exit 0
           sleep 60
-          node scripts/smoke-core.mjs | tee smoke.txt
+          smoke | tee smoke.txt
       - name: Roll production back
         if: failure() && steps.smoke.outcome == 'failure' && github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
       - name: Open core bug
-        if: failure()
+        if: failure() && !inputs.force_fail
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

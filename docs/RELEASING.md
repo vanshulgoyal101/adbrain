@@ -419,7 +419,9 @@ anyone watching (owner-approved automatic rollback, #111):
 
 It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
-check are skipped.
+check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
+failed smoke green (#153). To prove that, run the workflow manually with
+`force_fail`: it must end red, without a rollback or an issue.
 
 Recovery after an automatic rollback: Vercel stops promoting new production
 deployments until one is promoted manually. Fix forward or revert through a PR.
