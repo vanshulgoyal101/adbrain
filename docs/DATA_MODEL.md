@@ -81,9 +81,11 @@ The additive [customer allowance migration](../db/migrations/20260926_customer_a
 follows the payment policy and trusted campaign objects in the canonical fresh
 schema. It adds five private RLS-protected tables for cumulative campaign
 media/tax costs and evidence, campaign reservations, verified refund allocations
-and their evidence. Direct table access is denied even to the service role;
-service-only RPCs verify owner/operator authority and share the payment
-transaction lock with refunds. Existing payment orders supply captured/refunded
+and their evidence (`customer_ad_costs`, `customer_ad_cost_evidence`,
+`customer_ad_reservations`, `customer_refund_allocations`,
+`customer_refund_allocation_evidence`). Direct table access is denied even to
+the service role; service-only `customer_ad_*` RPCs verify owner/operator
+authority and share the payment transaction lock with refunds. Existing payment orders supply captured/refunded
 allocations; test orders do not. Reservations pin the Meta campaign ID and
 connection generation, and financially attributed campaigns cannot rebind that
 provider ID while paused. Uncertain activation and cost evidence hold funds;
@@ -119,7 +121,7 @@ database length bounds; prompt builders truncate selected fields independently.
 | --- | --- |
 | `public.creatives` | Business, brief, angle, headline, primary text, CTA, image URL, `variant_group` UUID, status `draft`/`approved`, optional `generation` JSON, timestamps |
 | `public.campaigns` | Business, name, objective, total daily budget, status `draft`/`active`/`paused`/`completed`, creative UUID array, Meta campaign/adset/ad IDs, account/Page/generation binding, raw metadata, launch/create times |
-| `public.campaign_results` | Campaign FK, impressions/clicks/leads, spend, nullable CPL, fetch timestamp; ownership follows campaign -> business |
+| `public.campaign_results` | Campaign FK, impressions/clicks/leads, spend, nullable CPL, nullable conversations/cost-per-conversation, destination/period, fetch timestamp; ownership follows campaign -> business |
 | `public.campaign_drafts` | Business/owner, version >= 1, input JSON, expiry, creation/update times; composite unique `(business_id,id)` |
 | `public.campaign_operations` | Business/draft/version/generation, kind `campaign_create`, idempotency key, request hash, state/phase, lease, attempt count, payload/result/external IDs, sanitized error, timestamps |
 
@@ -139,7 +141,7 @@ Phases: `campaign`, `adset`, `creative`, `ad`, `reconcile`, `complete`.
 Draft FK deletion is restricted while an operation references it; campaign FK
 deletion sets operation `campaign_id` null while retaining recovery evidence.
 
-Local hardening adds `destination` to campaigns and snapshots with a constrained
+Reporting migrations add `destination` to campaigns and snapshots with a constrained
 set of `instant_form`, `whatsapp`, `call`, `mixed`, `unknown` (default).
 Snapshot `period_start`/`period_end` record provider dates when available; legacy
 rows remain null. No historical range or destination is invented. A snapshot's
@@ -177,7 +179,8 @@ columns to restore an obsolete UI.
 
 | Table | Important fields and guarantees |
 | --- | --- |
-| `public.leads` | Business, nullable campaign, unique `(business_id,meta_lead_id)`, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time |
+| `public.leads` | Business, nullable campaign, unique `(business_id,meta_lead_id)`, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time; `workflow_status` `new`/`contacted`/`qualified`/`booked`/`closed` (default `new`) and `follow_up_note` (default empty, <=2000 characters) |
+| `public.lead_sync_runs` | Business/owner, connection generation, ad account and Page, state `partial`/`complete`, version, progress JSON (form cursor, seen forms, pending forms); RLS with browser roles revoked, service-role only |
 | `public.spend_limits` | One per business; nullable integer weekly cap, alert percentage 1-100 default 80, auto-pause default false, updated time |
 | `public.audit_log` | Business/actor, action, entity type/ID, Meta object ID, reason, detail JSON, timestamp |
 | `public.llm_usage_events` | Business/user/request, route, text/image kind, provider/model, tokens, estimated USD, prompt version, character counts, temperature/max tokens, cache/latency/attempt/status/error, image dimensions, metadata, timestamp; new candidate metadata binds a generation UUID to bounded provider request IDs and provider finality when available |
@@ -194,16 +197,36 @@ Use the [observability guide](OBSERVABILITY.md#retention-and-health) for metrics
 privacy, retention limitations and queries spanning raw and aggregate data.
 
 Leads use duplicate-ignore inserts, so later provider edits do not update an
-existing lead. Campaign deletion sets lead `campaign_id` null rather than deleting
+existing lead, and repeated imports keep its campaign and follow-up fields.
+Campaign deletion sets lead `campaign_id` null rather than deleting
 the enquiry. Contact data remains personal data; do not put it in telemetry.
 
-The spend API enforces positive caps or null. The SQL column itself is a nullable
-integer without the same positive check, so direct database writes are not
-equivalent to passing the route schema.
+Lead sync progress lives in `lead_sync_runs`. Service-only `lead_sync_start`
+resumes or creates a run bound to the business owner and the current connected
+generation/account/Page; `lead_sync_checkpoint` inserts up to 200 rows and
+advances progress in one transaction, rejecting a stale version or changed
+binding. A run becomes `complete` only when form discovery is done and no forms
+are pending. Browser roles cannot supply progress.
 
-Owner audit rows can be selected and inserted by owners but not normally updated
-or deleted. This is append-only for that role, not a cryptographically trustworthy
-or tamper-proof audit system. Service administrators and cascades remain relevant.
+`get_lead_page` is security-invoker, owner-checked and granted to authenticated
+only, so RLS still applies. It filters by status, contact availability and a
+case-insensitive search over name/phone/email/city/form, and returns rows, the
+exact filtered total and a keyset position. Microsecond time keys, C-collated
+names, missing values last and UUID tie-breakers give deterministic continuation,
+not a frozen snapshot under concurrent edits.
+
+The API and integrity SQL require a positive integer spend cap or null.
+Integrity constraints also reject negative/nonfinite campaign budgets and costs,
+unsafe metric counts and invalid reporting periods. Composite foreign keys bind
+lead/operation campaigns and operation drafts to the same business. On upgrade
+these are added `NOT VALID`: new writes are checked, historical rows are not
+certified until the separate validation migration runs after the
+[read-only preflight](../db/preflight/20260926_campaign_integrity.sql) and any
+approved repair. They do not establish a spend ledger.
+
+Audit rows are owner-readable, not owner-insertable. Inspect `authority` before
+treating historical rows as server evidence. This is not a cryptographically
+tamper-proof audit system; database administrators and cascades remain relevant.
 Legacy audit details can include brief text; product-event privacy rules are not
 retroactive sanitization of that store.
 
@@ -261,6 +284,42 @@ Product events are server-only (no browser read/write policy), with bounded JSON
 attributes and a 90-day retention target. Pruning deletes at most 10000 old rows
 per call. See [Observability](OBSERVABILITY.md) for exceptions and retention backlog.
 
+### Effective Authority
+
+Authenticated owners can read their campaign, result and audit rows but cannot
+insert, update or delete them; server callers write after owner/binding checks.
+Business delete/truncate is revoked from browser roles so cascades cannot remove
+retained evidence. Audit insertion goes through service-only
+`append_verified_audit_event`, which verifies the business owner or an explicit
+`cron`/`worker` system actor, assigns the label/time and sets `authority=server`;
+older rows stay `legacy_unverified`, and direct service-role audit writes are
+revoked. Draft owners keep select/insert, but an insert trigger sets
+version/expiry and a 50-open-draft limit, and update/delete go through
+version-checked RPCs. RLS and grants both apply: an `all own` policy is not
+evidence of write access after a revoke. Sources:
+[trusted writes](../db/migrations/20260926_trusted_campaign_writes.sql) and
+[draft authority](../db/migrations/20260926_draft_authority.sql).
+
+### Optional Payment Storage
+
+These migration-defined tables support billing evidence and local test checkout.
+They do not implement campaign activation authority; see the
+[Payment Plan](PAYMENTS-PLAN.md).
+
+| Table | Persistence / authority |
+| --- | --- |
+| `public.meta_billing_profiles` | Business/environment billing identity; owner-readable, service select/insert |
+| `public.meta_funding_evidence` | Append-oriented verified funding evidence; service select/insert |
+| `public.meta_funding_revocations` | Separate revocation records; original evidence is not rewritten |
+| `public.meta_billing_events`, `public.meta_billing_event_conflicts` | Provider charge observations and conflicting evidence, not an account balance; service read, RPC-mediated writes; migration-only, not in the fresh schema |
+| `private.razorpay_test_orders`, `private.razorpay_test_events` | Fixed-amount INR test orders and deduplicated observations; migration-only, not in the fresh schema |
+
+Test order/event tables deny direct access even to the service role; only the
+`razorpay_test_order_*` RPCs reach them. Test order states are `creating`,
+`created`, `captured` and `needs_reconciliation`. A capture is not Meta funding
+or spendable credit, and installing the tables does not enable checkout; see
+[local test payments](API_REFERENCE.md#local-test-payments).
+
 ## RPC Ownership Boundaries
 
 | RPC family | Purpose |
@@ -270,7 +329,10 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `meta_token_*` | Business-bound encrypted token insertion/read/delete |
 | `meta_attempt_*` | OAuth claim, discovery, revision, selection commit and failure transitions |
 | `meta_disconnect`, `meta_revoke_subject` | Disconnect/revoke and invalidate connection generation |
-| `update_campaign_draft_if_version` | Owner/version-checked draft update, blocks unsafe operation overlap |
+| `update_campaign_draft_if_version`, `delete_campaign_draft_if_version` | Authenticated owner/version-checked draft update/delete; update blocks unsafe operation overlap; direct update/delete revoked |
+| `append_verified_audit_event` | Service-only verified actor/time/provenance audit insertion |
+| `get_lead_page` | Authenticated, owner-checked filtered enquiry page with total and keyset position |
+| `lead_sync_start`, `lead_sync_checkpoint` | Service-only binding-checked sync run resume and atomic lead import/progress commit |
 | `claim_campaign_operation` | Durable idempotency/lease claim |
 | `enqueue_campaign_operation`, `claim_next_campaign_job` | Service-only durable enqueue and exclusive pending-job claim |
 | `checkpoint_campaign_operation` | Fenced phase and external-ID persistence |
@@ -281,6 +343,10 @@ per call. See [Observability](OBSERVABILITY.md) for exceptions and retention bac
 | `creative_regeneration_claim/finish` | Migration-dependent service-only, owner-checked per-creative paid-operation claim and guarded release/hold |
 | `check_rate_limit` | Service-only advisory-lock-protected count and insert |
 | `prune_product_events` | Service-only bounded retention cleanup |
+| `customer_ad_*` | Service-only allowance balance, reservation, activation result, cost reconciliation and refund allocation |
+| `meta_funding_latest_record` | Service-only business/environment funding evidence lookup |
+| `meta_billing_event_record`, `meta_billing_charge_observations` | Service-only billing event/conflict persistence and observation lookup |
+| `razorpay_test_order_claim/result/get/find/observe` | Service-only local test order creation, recovery and verified observations |
 
 Do not expose service RPCs as arbitrary browser-callable utilities. SQL grants and
 application owner checks serve different purposes and both must remain intact.
@@ -318,9 +384,29 @@ alone is not a safe deployment plan.
 | [20260907_campaign_connect.sql](../db/migrations/20260907_campaign_connect.sql) | Requires connection schema; drafts, durable operations, campaign bindings and fences |
 | [20260916_trusted_usage_and_rate_limits.sql](../db/migrations/20260916_trusted_usage_and_rate_limits.sql) | Trusted usage privileges, quota aggregate, atomic shared limiter |
 | [20260918_product_events.sql](../db/migrations/20260918_product_events.sql) | Structured event table/retention; enable database logging only after application |
+| [20260918_whatsapp_results.sql](../db/migrations/20260918_whatsapp_results.sql) | Nullable conversation metrics; required before callers write WhatsApp results |
+| [20260919_campaign_reporting_identity.sql](../db/migrations/20260919_campaign_reporting_identity.sql) | Destination/period columns and campaign-list index; historical values stay `unknown`/null |
+| [20260919_campaign_worker.sql](../db/migrations/20260919_campaign_worker.sql) | Requires campaign operations; service enqueue/claim RPCs before worker mode |
+| [20260924_managed_billing.sql](../db/migrations/20260924_managed_billing.sql) | Billing profiles, funding evidence and revocations |
+| [20260924_meta_billing_events.sql](../db/migrations/20260924_meta_billing_events.sql) | Billing observation/conflict storage; managed billing first |
+| [20260926_campaign_integrity.sql](../db/migrations/20260926_campaign_integrity.sql) | Requires WhatsApp metrics and reporting identity; `NOT VALID` checks and same-business FKs |
+| [20260926_validate_campaign_integrity.sql](../db/migrations/20260926_validate_campaign_integrity.sql) | Validates those constraints; only after the preflight and approved repair |
+| [20260926_draft_authority.sql](../db/migrations/20260926_draft_authority.sql) | Draft insert trigger and RPC-only update/delete; deploy with compatible callers |
+| [20260926_trusted_campaign_writes.sql](../db/migrations/20260926_trusted_campaign_writes.sql) | Revokes owner campaign/result/audit writes; adds verified audit RPC; deploy with server callers |
+| [20260926_lead_sync_progress.sql](../db/migrations/20260926_lead_sync_progress.sql) | `lead_sync_runs` and service-only sync RPCs; before resumable lead sync |
+| [20260926_lead_follow_up.sql](../db/migrations/20260926_lead_follow_up.sql) | Lead workflow status/note, inbox indexes and `get_lead_page`; before the enquiry inbox routes |
+| [20260926_razorpay_test_orders.sql](../db/migrations/20260926_razorpay_test_orders.sql) | Local test orders/events and service RPCs; never live activation |
 | [20260930_declared_preferences.sql](../db/migrations/20260930_declared_preferences.sql) | Additive opt-in personal/business memory; apply before exposing Settings controls or relying on retrieval |
 | [20261001_creative_regeneration_claims.sql](../db/migrations/20261001_creative_regeneration_claims.sql) | Service-only paid regeneration fence; apply before serving the updated route and verify private grants |
 | [20261021_creative_generation_settle_holds.sql](../db/migrations/20261021_creative_generation_settle_holds.sql) | Same-signature progress RPC; settled partial runs release unused holds (#138); apply before serving the updated route |
+
+Payment, allowance and quote migrations are described above. The map is not a
+replay script: a fresh database starts from the canonical schema, and
+already-represented incremental files must not be blindly reapplied. The
+[migration runner](../scripts/database-migrations.mjs) needs explicit connection
+settings (an exact `--target` and verified TLS for remote hosts), serializes
+runs with an advisory lock, records each SHA-256 checksum and rejects a changed
+already-applied file.
 
 For each upgrade: inventory deployed objects and grants, review existing data,
 test fresh/repeated-upgrade/concurrency paths locally, prepare backup and code

@@ -4,6 +4,31 @@ This is AdBrain's deployment reference. It applies to this repository, not every
 repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
 settings before a release; the historical receipts below are not current status.
 
+## Startup Fast Path
+
+The current release process ([AGENTS.md](../AGENTS.md)). Where older sections
+below describe dev-first promotion or extra approvals, this path governs.
+
+1. Branch from current `origin/main` in an isolated worktree under
+   `adbrain-wt/`, build a small complete slice and open a PR to `main` with
+   auto-merge enabled. The branch need not be up to date with `main`.
+2. Required checks are `build`, `test`, `core` and `secrets`
+   ([ci.yml](../.github/workflows/ci.yml)); `audit` and `docs` also run but do
+   not block. A change to generation, validation, prompts, models, timeouts, the
+   planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
+   responses. Update the matching doc in the same PR.
+3. Low-risk PRs (no migration, money, tenant/auth or config change) merge
+   automatically on green CI. QA reviews high-risk changes only; there is no
+   coordinator or second-QA approval gate.
+4. Vercel deploys `main` only ([vercel.json](../vercel.json)). The
+   [production guard](#production-guard) runs `npm run smoke:core` after each
+   Production deployment and rolls back automatically on failure. The author
+   also checks the change in production. If the core breaks, roll back first and
+   debug second; a non-core change that breaks the core is reverted.
+5. DevOps owns migrations, money and tenant releases, production settings,
+   secrets and rollback. Never force-push or run `npm run db:push` against
+   production. Charges, refunds and ad spend need explicit financial authorization.
+
 ## Current Release Boundary
 
 Before this candidate, production `main` served the enquiry workflow at `f639cc3`;
@@ -69,9 +94,9 @@ documentation-only synchronization is recorded in its PR.
 | Control | Verified setting |
 | --- | --- |
 | CI triggers | Pushes and PRs targeting `main` or `dev` |
-| Build job (current source) | `npm ci`, dependency audit, lint, typecheck, coverage, local PostgreSQL tests, production build |
+| CI jobs (current source) | `build` (`npm ci`, production build); separate `test` (lint, typecheck, unit tests, PostgreSQL checks), `core` (`test:core`, generation holds), non-blocking `audit` and `docs` jobs, all on Node 24 |
 | Secret job | Gitleaks with repository configuration |
-| Main protection | PR required; strict, up-to-date `build` and `secrets` checks |
+| Main protection | PR required; required checks `build`, `test`, `core` and `secrets`; branches need not be up to date |
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
@@ -152,9 +177,11 @@ and [the matched comparison](qa/flare-quality-2026-09-13.md).
    Check the canonical production URL and the actual affected user workflow.
    A homepage HTTP 200 is not verification of an authenticated feature.
 8. [`sync-dev.yml`](../.github/workflows/sync-dev.yml) merges every push to `main`
-   into `dev`. On a conflict it opens one `dev cannot merge main automatically`
-   issue; merge by hand, push `dev` and rerun it. Record the PR, SHAs,
-   CI/deployment links, smoke results, and remaining gaps.
+   into `dev`. If only Markdown files conflict, it takes main's version, except
+   `AGENTS.md` and `docs/ORCHESTRATION.md`, which keep dev's. Any other conflict
+   opens one `dev cannot merge main automatically` issue; merge by hand, push
+   `dev` and rerun it. Edit shared docs on `main` (through a PR), not on `dev`.
+   Record the PR, SHAs, CI/deployment links, smoke results, and remaining gaps.
 
 Useful read-only checks (run from this repository):
 
@@ -179,7 +206,8 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
    tunnel can still point at a remote database; verify what is behind the address.
 - `npm run db:migrate -- --migration <filename.sql>` previews one migration and
    its SHA-256 without connecting. Applying requires `--apply`, explicit `PGHOST`,
-   `PGPORT`, `PGDATABASE`, `PGUSER`, and a securely supplied password. Remote targets
+   `PGDATABASE`, `PGUSER`, a verified port (`PGPORT` defaults to 5432), and a
+   securely supplied password. Remote targets
    additionally require `--target 'host:port/database@user'` matching exactly.
    Remote TLS certificate verification is mandatory; use `PGSSLROOTCERT` when needed.
 - The runner serializes migrations under a transaction advisory lock and records

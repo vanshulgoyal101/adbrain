@@ -15,6 +15,41 @@ A failed response does not prove no side effect occurred. A successful response
 can be partial, and a local row is not authoritative proof of remote delivery.
 Inspect durable evidence before retrying anything that can create objects or spend.
 
+### First Response
+
+1. Identify the failing target: deployment SHA, Supabase origin, owner/business
+	scope and last known good request. Do not load the owner checkout's
+	`.env.local` to discover values; it targets production.
+2. Preserve the original request/operation identity and existing successes.
+	Separate a timeout from a confirmed remote rejection. Never retry a creation,
+	payment or activation with a fresh key to get past an error.
+3. Start with scoped logs, saved status and read-only metadata. Compare the
+	deployed handler and schema with the [API](API_REFERENCE.md) and
+	[data](DATA_MODEL.md) guides. A migration file is not proof its objects exist remotely.
+4. If the core loop is broken after a deploy, roll back first and debug second
+	(see [Production guard](RELEASING.md#production-guard)). Migrations, production
+	settings, secrets, money and rollback are DevOps-owned; dashboard access is not
+	permission to change them.
+5. Verify the fix through the original workflow. Opening Campaigns or Leads can
+	auto-sync (below), and a homepage 200 is not an authenticated recovery.
+
+### Process and Probe Safety
+
+| Action | What it can do |
+| --- | --- |
+| Read logs, Git status or reviewed metadata queries | Diagnosis only; still protect identifiers |
+| Open Campaigns or Leads, or press Sync/Refresh | Each page auto-syncs from Meta when this browser's last sync is over 15 minutes old and saves campaigns/leads; Refresh also runs spend enforcement and can pause campaigns |
+| Call a cron URL or `gh workflow run scheduled-jobs.yml` | Keepalive prunes old product events; enforce-spend can pause campaigns; sync-leads imports leads. All are GET (see [Scheduled Jobs](#scheduled-jobs)) |
+| `npm run smoke:core` | Signs in to production, views pages and prepares one campaign review without sending it, then deletes that draft |
+| `npm run worker:campaigns -- --once` | Claims and executes one queued job; can create paused Meta objects |
+| Local QA `setup`, seed, backfill or migration scripts | Write their target database and possibly Auth/Storage; inspect guards and target first |
+
+Do temporary local work in your own worktree under `adbrain-wt/` with the local
+Supabase project ([launcher modes](CONFIGURATION.md#local-launcher-modes)). Start
+servers with `npm run dev` for its memory limit and stop them after validation.
+Never stop another worker's process, reuse its test database, delete its
+artifacts or switch the shared branch.
+
 ## Privacy Request Operations
 
 Before publishing the Settings request controls, DevOps applies the reviewed
@@ -62,7 +97,7 @@ Financial/security retention and provider-held Meta data remain separate.
 | Sync incomplete | Cursor, skipped count, account/Page binding, status, save error | Continue pages or retry failed page; do not prune local rows based on one page |
 | Refresh result cannot be saved | `campaign_results` persistence and request logs | 503 before summary/enforcement; inspect the saved row before retrying, and verify delivery in Meta |
 | Spend protection unconfirmed | Refresh `protectionConfirmed:false` or cron `ok:false`, stored binding, provider insight period/currency, remote/local pause state | Confirm the campaign status in the original Meta account; repair reporting/connection/storage before retry. Do not read an empty `autoPaused`/`swept` as a safe spend total |
-| Leads partly sync | `failedForms`, newly inserted count, reload result | Retry failed forms after permission fix; repeated IDs are ignored, not counted as new leads |
+| Leads partly sync | `failedForms`, newly inserted count, `sync.hasMore`, reload result | Keep saved rows and retry failed forms after a permission fix; `sync.hasMore` means the import is incomplete. Repeated IDs are ignored, not counted as new leads |
 | Disconnect fails | Explicit business UUID, owner check, RPC/schema availability | Keep existing UI state until confirmed; disconnect is not an emergency pause |
 | Telemetry missing | Enable flags, applied migration, hosting logs, retention, request cap | Events are best effort; a missing event does not prove no action occurred |
 

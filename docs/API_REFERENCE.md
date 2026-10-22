@@ -62,6 +62,24 @@ Common statuses: 400 invalid/blocked input, 401 unauthenticated, 403 forbidden,
 dependency unavailable. Exact mapping is route-specific; some legacy ownership
 failures use 400. A 404 does not reveal another tenant's existence.
 
+### Recovery Identities
+
+| Value | Scope and correct recovery |
+| --- | --- |
+| Generation UUID | Claims one generation request; GET it before considering another paid POST |
+| Draft ID/version | Versioned saved input; reload on conflict, save, then review again |
+| `planHash` | Server review of current inputs, creatives and verified binding; never synthesize it |
+| Connection generation | Invalidates stale binding-dependent work after the connection changes |
+| Attempt revision | Optimistic concurrency for one consent/discovery attempt, not a campaign version |
+| Creation `idempotencyKey` | Durable operation identity; keep it across ambiguous create responses |
+| Activation digest | Confirms current activation inputs; not a creation key or spend reservation |
+| Lead `syncId` | Resumes one lead import run under the same connection binding |
+| Payment `idempotencyKey` | Reuse for the same live or test order after an unknown create result |
+| Cursor | Continues only its own list or provider scan; campaign list, Meta discovery and enquiry cursors are not interchangeable |
+
+A mutation timeout is ambiguous. Inspect persisted/provider evidence using the
+same identity; do not change a key or clear local recovery data to force progress.
+
 ## Route Inventory
 
 `Envelope` means the typed family above; `plain` means route-specific JSON.
@@ -92,7 +110,9 @@ failures use 400. A 404 does not reveal another tenant's existence.
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
-| POST | `/api/leads/sync` | Empty body or `{syncId}` -> `{leads,imported,failedForms,sync}`; failed Meta reads return 502 with saved rows and a resumable `sync.id` | Provider read + per-business deduplicated inserts; incomplete runs are not up to date |
+| GET | `/api/leads` | Filters/cursor -> `{leads,total,nextCursor}` | Owned saved enquiries only; no provider sync |
+| PATCH | `/api/leads/[id]` | `workflow_status` and/or `follow_up_note` -> `{lead}` | Owned local follow-up only; no outreach or provider write |
+| POST | `/api/leads/sync` | Empty body or `{syncId}` -> `{leads,imported,failedForms,sync}`; failed Meta reads return 502 with saved rows and a resumable `sync.id` | Bounded provider pages + atomic per-business deduplicated inserts/checkpoints; incomplete runs are not up to date |
 | GET | `/api/leads/unseen` | `since` (ISO viewed time) -> `{count}` | Authenticated owner business only; exact count of locally imported leads after `since`, private no-store; no provider sync |
 | POST | `/api/spend-limits` | Complete settings -> `{ok:true}` | DB write |
 | GET | `/api/preferences` | `businessId` -> `{enabled,epoch,notes}` | Authenticated owner-scoped read, no cache |
@@ -149,6 +169,42 @@ within that range. POST accepts the same integer alongside the returned
 price. Owner, expiry, ceiling and consent changes fail closed; a saved
 verification order cannot be repriced. Without an amount parameter, reads recover
 the saved eligible verification quote rather than replacing it with the default.
+
+Live routes return 404 unless `PAYMENTS_LIVE_ENABLED=true` on a production `main`
+deployment without test configuration; order creation also needs
+`PAYMENTS_LIVE_COLLECTION_ENABLED=true` (409 when blocked). Authenticated writes
+require the exact configured origin (403 otherwise). Create is strict
+`{businessId,idempotencyKey,termsHash,acceptTerms:true}` plus the optional
+verification amount; amounts are integer paise. A changed `termsHash` is 409 and
+an unconfirmed provider create is 503 `needs_reconciliation`: retry with the same
+key. Every order response keeps `spendablePaise: 0` and `canActivateCampaign: false`.
+
+### Local Test Payments
+
+The `/api/payments/test/*` routes return 404 unless `PAYMENTS_TEST_ENABLED=true`,
+the process is not production Node or any Vercel environment, and Supabase is a
+loopback URL; they also need the optional
+[test-order migration](../db/migrations/20260926_razorpay_test_orders.sql).
+Responses are no-store and always carry `spendablePaise: 0` and
+`canActivateCampaign: false`.
+
+- Create (POST `orders`) accepts only `{businessId: UUID, idempotencyKey: UUID}`;
+  the amount is fixed at 1,000,000 paise. It returns 201 for a new provider order,
+  200 for an idempotent replay, and `checkout` only while `status` is `created`.
+  An unconfirmed provider create returns 503 with the local `orderId`.
+- Read (GET `orders?orderId=<uuid>`) returns the owned order.
+- Verify accepts `{orderId, paymentId, signature, providerOrderId?}`; the HMAC
+  uses the stored provider order ID and a mismatched `providerOrderId` is 400.
+  The server then fetches provider payment/order state with test keys.
+- The webhook reads at most 65,536 bytes, verifies `X-Razorpay-Signature` on the
+  raw body and `account_id`, and handles `payment.captured`, `payment.authorized`,
+  `payment.failed`, `refund.processed` and `order.paid` (others are acknowledged
+  as ignored); handled events need `X-Razorpay-Event-Id` and a payment reference.
+
+States are `creating`, `created`, `captured` and `needs_reconciliation`.
+Mutations other than the webhook require a same-origin request (403). A changed
+test merchant is 409; storage or provider uncertainty is 503. Nothing here issues
+refunds, moves real money or grants advertising credit.
 
 ### Customer Advertising Allowance
 
@@ -345,17 +401,20 @@ count; filename is `adbrain-ad-pack.zip`. No raw HTML is accepted as an image.
 | `mode` | `manual` or `guided` |
 | `creativeIds` | UUID array, 0-50; preflight requires nonempty unique approved selections |
 | `dailyBudgetRupees` | Finite integer 0-10000000; preflight requires positive |
-| `leadFormId` | Null or trimmed string 1-128; preflight requires active bound form and an own business website (not Facebook/Instagram), which Meta requires for lead ads |
+| `leadFormId` | Null or trimmed string 1-128; instant-form preflight requires an active bound form and an own business website (not Facebook/Instagram), which Meta requires for lead ads |
+| `destination` | Optional `instant_form` or `whatsapp`; absent means instant form |
 | `targeting` | Strict object below; `{}` can be saved but is not launch-ready |
 | `abTest` | Required boolean; true produces two age-band ad sets |
 
 ### Targeting
 
-All three top-level targeting fields are optional for draft persistence:
+Top-level `gender`, `location`, `age` and `audience` are optional for persistence:
 
 | Field | Contract |
 | --- | --- |
+| `gender` | Optional `all`, `men`, `women` |
 | `location.mode` | Optional `ai` or `manual` |
+| `location.cityScope` | Optional `city_only` or `radius` |
 | `location.included`, `location.excluded` | Optional arrays, maximum 50 objects each |
 | Location item `key` | Trimmed provider string 1-128 |
 | Location item `name` | Trimmed string, maximum 200 |
@@ -448,6 +507,7 @@ nonnegative-safe-integer}`. Review data includes:
 | `selected` | Verified Meta assets or null |
 | `resolvedAreaLabel`, `resolvedLocation`, `resolvedExcludedLocation` | Human label and provider-resolved geography |
 | `audienceInterests` | Resolved `{id,name}` entries, up to five |
+| `destination`, `whatsappNumber` | Optional destination and nullable E.164 number (`+` and 7-15 digits) |
 
 Create body: `businessId`, `draftId` (UUIDs), `draftVersion`,
 `connectionGeneration` (nonnegative safe integers), `planHash` (64 lowercase hex),
@@ -458,7 +518,11 @@ The server reruns review, claims a 60-second operation lease, checkpoints remote
 IDs, and finalizes a paused local campaign. It returns an operation envelope, not
 the old direct campaign result. New execution returns 200 for success or 202 for
 an unresolved/failed execution result; terminal replays can return 200. Inspect
-the operation `state`, not just the HTTP status.
+the operation `state`, not just the HTTP status. With `CAMPAIGN_EXECUTION_MODE=worker`
+the route enqueues the persisted operation and returns 202; a queue failure is 503
+with no inline fallback, and any mode other than `inline`/`worker` is 503. Worker
+mode needs the [worker migration](DATA_MODEL.md#migration-map) and a running
+`worker:campaigns` process.
 
 | State | Client action |
 | --- | --- |
@@ -504,7 +568,8 @@ Remote success followed by local failure is possible; inspect before retrying.
 ## Sync, Insights, Leads, and Settings
 
 Campaign sync accepts optional query `after` of 1-2000 characters. Returns
-`{campaigns,skipped,nextCursor}`. It processes one provider page, verifies bindings
+`{campaigns,skipped,nextCursor,pageCursor}`. `nextCursor` continues Meta discovery;
+`pageCursor` continues the bounded saved list. It processes one provider page, verifies bindings
 and budgets, and imports only ACTIVE/PAUSED status. Local unsupported/unmatched
 records remain unchanged. No remote-deletion pruning occurs. Concurrent insert
 failure is not a successful import; partial writes before an error can exist.
@@ -520,14 +585,51 @@ is not a read-only smoke test. `autoPaused` lists only confirmed remote and loca
 pauses. `protectionConfirmed:false` means the spend decision or a required pause
 could not be verified; inspect the bound campaign in Meta, since a local error
 does not prove remote delivery stopped. Provider refresh failures can still attempt
-protective pauses. An unsaved result returns 503 before summary and enforcement.
+protective pauses. An unsaved result returns 503 before summary and enforcement
+(`Could not save refreshed results. Retry the refresh.`, `protectionConfirmed:false`);
+a successful retry can still trigger the summary and protective pauses.
 
-Lead sync returns `{leads,imported,failedForms}`; each failed form has `id,name`.
-`imported` is actual new inserts, duplicates are ignored, partial unreadable forms
-are reported, and all-form failure is 502. A failed count/reload after insert can
-mean data was saved even though the response failed. Report export returns
+Saved campaigns are read with `GET /api/campaigns/list`. `businessId` is an owned
+UUID; `query` is at most 200 characters; `status` is `draft`, `active`, `paused`
+or `completed` (omit it for all; `status=all` is invalid). Rows are ordered by
+creation time then ID, descending, 50 per page, with `nextCursor` null at the end.
+There is no global total, and the route runs no provider sync.
+
+Lead sync returns `{leads,imported,failedForms,sync,error}`; each failed form has
+`id,name` and `sync` is `{id,state:"complete"|"partial",hasMore}`. An empty POST
+starts or resumes the unfinished run for the current connection binding;
+`{syncId}` resumes that run. Business, owner, Page, ad account and connection
+generation are derived and rechecked on each save: a foreign or missing run is
+404 and a changed binding or stale writer is 409 (start again with an empty POST
+after reconnecting). Continue with the same ID while `hasMore` is true.
+
+Each request reads at most 24 provider pages of 200 items, at most three forms
+concurrently, within a 40-second provider deadline; checkpoints time out after
+three seconds. Only opaque `after` cursors are saved. Successful pages stay saved
+when another form or page fails; failed forms stay queued and are listed in
+`failedForms`. A failed provider read returns 502 and unverifiable progress 503,
+both with the known `imported`/`sync`. `imported` counts rows newly inserted by
+this request; duplicates are ignored and keep their campaign and follow-up fields.
+`leads` is a snapshot of at most 200 newest saved rows, not the inbox list; a
+failed reload after import returns 503 even though rows were saved. Report export returns
 `text/markdown` with dated attachment filename and uses stored primary-business
 performance; it does not refresh Meta.
+
+The saved inbox uses `GET /api/leads` for the primary business. Strict filters:
+`query` (trimmed, up to 200 characters; matches name, phone, email, city, form),
+`status` (`all`, `new`, `contacted`, `qualified`, `booked`, `closed`), `contact`
+(`all`, `ready`, `missing`), `sort` (`newest`, `oldest`, `name`), `limit` (1-100,
+default 50) and an opaque `cursor`. Cursors are bound to the business, query,
+status, contact and sort; changed scope rejects them. `total` counts every
+matching saved row. Ordering is deterministic keyset paging (missing values last,
+UUID tie-break), not a frozen snapshot. Responses are private/no-store; invalid
+filters or cursor are 400, no business is 404 and unavailable reads are 503.
+
+`PATCH /api/leads/[id]` takes a UUID path and a nonempty strict body with
+`workflow_status` (one of the five statuses) and/or `follow_up_note` (at most
+2000 characters); other fields are 400. The update is scoped to the owned
+business: missing or foreign rows are 404 and failed saves 503. It sends no
+outreach and changes no provider data.
 
 Spend settings are strict and complete:
 
@@ -641,6 +743,10 @@ body (413 if exceeded), 60/minute/user. Normally 204; disabled logging also retu
 | ZIP export | 10 / 5 minutes |
 | Internal traffic | 10 / 10 minutes |
 | Client events | 60 / minute |
+| Customer balance reads | 60 / minute |
+| Customer accounting evidence | 20 / 5 minutes |
+| Test order creation | 10 / 5 minutes |
+| Test order read / verification | 60 / 5 minutes, per action |
 
 Shared DB enforcement returns 429/Retry-After for saturation and fails closed in
 production if unavailable. These are not blanket limits on every route. Quota
