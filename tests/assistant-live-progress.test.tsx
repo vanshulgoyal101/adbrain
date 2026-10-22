@@ -121,6 +121,23 @@ describe("<AdAssistant> live Create progress", () => {
     expect(screen.getByText(/Your ad is ready/)).toBeInTheDocument();
   });
 
+  it("keeps finished ads in the slots they were watched in, not save order (#177)", async () => {
+    const valueAd = { ...proofAd, id: "creative-value", headline: "Fair prices, no surprises", angle: "Clear value" } as Creative;
+    const { send, close } = streamedCreate();
+    await startGenerating();
+    await send(
+      progress("proof", "Customer proof", "queued"),
+      progress("value", "Clear value", "queued"),
+      { type: "creative", angleId: "value", creative: valueAd },
+      { type: "creative", angleId: "proof", creative: proofAd },
+    );
+    await close({ type: "result", status: 200, body: { variantGroup: "group-1", creatives: [valueAd, proofAd], failures: [] } });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Ads being created" })).toBeNull());
+
+    const headlines = screen.getAllByText(/Trusted by 400 local families|Fair prices, no surprises/).map((el) => el.textContent);
+    expect(headlines).toEqual(["Trusted by 400 local families", "Fair prices, no surprises"]);
+  });
+
   it("recovers saved results when the stream ends without a result line", async () => {
     const { fetchMock, send, close } = streamedCreate();
     await startGenerating();

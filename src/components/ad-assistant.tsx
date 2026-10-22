@@ -17,7 +17,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
-import { applyCreateLine, CreateProgress, readCreateResponse, type LiveAd } from "@/components/create-progress";
+import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
@@ -261,7 +261,8 @@ export function AdAssistant({ business }: { business: Business }) {
       ...t,
       { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
     ]);
-    setLive(Array.from({ length: 3 }, () => ({ stage: "starting" as const })));
+    let slots: LiveAd[] = Array.from({ length: 3 }, () => ({ stage: "starting" as const }));
+    setLive(slots);
     try {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
@@ -273,8 +274,10 @@ export function AdAssistant({ business }: { business: Business }) {
             .map((answer) => answer.answer.trim().slice(0, 500))].filter(Boolean).slice(0, 12),
         }),
       });
-      const { status, data: body } = await readCreateResponse(res, (line) =>
-        setLive((current) => current && applyCreateLine(current, line)));
+      const { status, data: body } = await readCreateResponse(res, (line) => {
+        slots = applyCreateLine(slots, line);
+        setLive(slots);
+      });
       const data = (body ?? {}) as {
         creatives?: Creative[];
         error?: string;
@@ -302,7 +305,7 @@ export function AdAssistant({ business }: { business: Business }) {
         setPhase("chat");
         return;
       }
-      setTurns((t) => [...t, { role: "result", creatives: data.creatives! }]);
+      setTurns((t) => [...t, { role: "result", creatives: orderBySlots(slots, data.creatives!) }]);
       setPhase("done");
     } catch {
       const recovered = await recoverPersistedGeneration(newGenerationId);

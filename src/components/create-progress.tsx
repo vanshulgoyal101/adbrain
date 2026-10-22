@@ -55,6 +55,16 @@ export function applyCreateLine(ads: LiveAd[], line: Exclude<CreateStreamLine, {
   return next;
 }
 
+/** Orders saved creatives by the live slot that showed them; creatives no slot showed go last. */
+export function orderBySlots(ads: LiveAd[], creatives: Creative[]): Creative[] {
+  const slotIds = ads.map((ad) => ad.creative?.id).filter((id): id is string => Boolean(id));
+  const rank = (c: Creative) => {
+    const i = slotIds.indexOf(c.id);
+    return i < 0 ? slotIds.length : i;
+  };
+  return [...creatives].sort((a, b) => rank(a) - rank(b));
+}
+
 const STEPS = [
   { rank: 1, label: "Writing the copy" },
   { rank: 2, label: "Checking facts and claims against your Brand" },
