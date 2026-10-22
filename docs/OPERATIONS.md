@@ -273,7 +273,10 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/payment-health` | Read-only Razorpay webhook counts (#178): events in 7 days, events unprocessed after 1 hour, captured orders with no capture event after 30 minutes. `payments:"disabled"` when live payments are off. When `ok` is false the workflow opens one `Razorpay webhook missing for a captured payment` `core` bug (counts only) and stays green. Triage: in the Razorpay Live dashboard confirm the webhook URL `https://adbrain.vanshul.com/api/payments/live/webhook`, its secret matches `RAZORPAY_LIVE_WEBHOOK_SECRET` and capture/refund/dispute events are enabled, then resend the delivery; never re-charge |
 
 Weekly protection requires a complete Monday-to-today INR spend observation;
-missing metrics are not zero spend. Unlaunched drafts do not contribute, but
+missing metrics are not zero spend. A row without `spend` stays unverified. Meta
+answers `{"data":[]}` when nothing delivered in the period (recorded in
+`tests/core/fixtures/meta/safety/insights.json`); that counts as ₹0, so a newly
+activated campaign is not paused before it delivers. Unlaunched drafts do not contribute, but
 launched or paused campaigns can. The scheduled sweep can return 503 with partial
 progress; inspect `swept` and remaining failures rather than declaring every
 campaign paused. Missing bindings, credentials, read errors, or local save failures
