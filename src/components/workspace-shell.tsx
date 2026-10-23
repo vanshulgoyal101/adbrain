@@ -23,6 +23,8 @@ function saveViewedAt(key: string, time: string) {
   try { localStorage.setItem(key, time); } catch { return; }
 }
 
+const UNSEEN_POLL_MS = 120_000;
+
 export function WorkspaceShell({ children, email, ownerId, businessId, businessName }: {
   children: ReactNode;
   email: string | null;
@@ -52,7 +54,9 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
       saveViewedAt(viewedKey, since);
     }
     const controller = new AbortController();
+    let lastLoad = 0;
     const loadCount = async () => {
+      lastLoad = Date.now();
       try {
         const response = await fetch(`/api/leads/unseen?since=${encodeURIComponent(since)}`, { cache: "no-store", signal: controller.signal });
         if (!response.ok) return;
@@ -62,9 +66,13 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
         }
       } catch { return; }
     };
-    void loadCount();
-    const timer = window.setInterval(() => { void loadCount(); }, 60_000);
-    const onFocus = () => { void loadCount(); };
+    // #270: the badge was 55 calls/hour; poll only while visible, at most every 2 minutes, plus on focus.
+    const visible = () => document.visibilityState !== "hidden";
+    if (visible()) void loadCount();
+    const timer = window.setInterval(() => {
+      if (visible() && Date.now() - lastLoad >= UNSEEN_POLL_MS) void loadCount();
+    }, 30_000);
+    const onFocus = () => { if (visible()) void loadCount(); };
     window.addEventListener("focus", onFocus);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", onFocus); };
   }, [inInbox, viewedKey]);
