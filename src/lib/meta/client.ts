@@ -276,6 +276,20 @@ export function destinationPlan(dest: AdDestination): DestinationPlan {
   }
 }
 
+/** Meta's click-to-WhatsApp `page_welcome_message`: a greeting plus a message pre-typed for the customer. */
+export function whatsappWelcomeMessage(texts: { autofill: string; greeting: string }): string {
+  return JSON.stringify({
+    type: "VISUAL_EDITOR",
+    version: 2,
+    landing_screen_type: "welcome_message",
+    media_type: "text",
+    text_format: {
+      customer_action_type: "autofill_message",
+      message: { autofill_message: { content: texts.autofill }, text: texts.greeting },
+    },
+  });
+}
+
 /** The creative call-to-action for a lead destination. */
 export function destinationCTA(
   dest: AdDestination,
@@ -722,6 +736,7 @@ export class MetaClient {
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
     whatsappNumber?: string;
+    whatsappGreeting?: { autofill: string; greeting: string };
     phone?: string;
     variants?: AdSetVariant[];
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
@@ -893,6 +908,9 @@ export class MetaClient {
                   name: c.headline,
                   ...(c.description?.trim() ? { description: c.description.trim() } : {}),
                   link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
+                  ...(destination === "whatsapp" && params.whatsappGreeting
+                    ? { page_welcome_message: whatsappWelcomeMessage(params.whatsappGreeting) }
+                    : {}),
                   call_to_action: destinationCTA(destination, {
                     leadFormId: params.leadFormId,
                     phone: destination === "whatsapp" ? params.whatsappNumber : phone,

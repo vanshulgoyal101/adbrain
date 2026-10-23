@@ -198,7 +198,7 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       if (table === "businesses") {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { website: "https://example.com", locations: ["Jaipur"] }, error: null }) }) }),
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: "Solaride", website: "https://example.com", locations: ["Jaipur"], offers: [] }, error: null }) }) }),
         };
       }
       if (table === "campaigns") {
@@ -316,7 +316,8 @@ describe("durable campaign create route", () => {
       expect(response.status).toBe(200);
       expect((await response.json()).data.state).toBe("succeeded");
       expect(create).toHaveBeenCalledOnce();
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, leadFormId: undefined, gender: "women" }));
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, leadFormId: undefined, gender: "women",
+        whatsappGreeting: { autofill: "Namaste! Mujhe Solaride ke baare mein jaankari chahiye.", greeting: expect.stringContaining("Solaride") } }));
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(create).not.toHaveBeenCalled();
