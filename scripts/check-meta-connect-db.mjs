@@ -583,13 +583,18 @@ async function verifyCappedRunBound(db, database) {
     serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
     metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
   const account = "acc_capped";
-  const fixture = async (dailyRupees) => {
+  // Replaying older payment migrations restores a pre-priced funding check; reinstate the current one.
+  await db.query("alter table private.production_payment_orders drop constraint if exists production_payment_funding_mode_check");
+  await db.query(configurablePaymentMigration.match(/alter table private\.production_payment_orders add constraint production_payment_funding_mode_check[\s\S]*?\) is true\);/)[0]);
+  const fixture = async (dailyRupees, amountPaise = 1000000) => {
     const owner = randomUUID(), business = randomUUID(), order = randomUUID(), campaign = randomUUID();
     await db.query("insert into auth.users(id) values ($1)", [owner]);
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic capped run')", [business,owner]);
     await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [business]);
-    await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id) values ($1,$2,$3,$4,$5,'rzp_live_fixture',$6,$7,$8,$9)",
-      [order,business,owner,randomUUID(),account,quote,{version:'operator-managed-v1',fundingMode:'operator_managed'},'a'.repeat(64),`order_${order.replaceAll("-","")}`]);
+    const contract = amountPaise === 1000000 ? { quote, terms: {version:'operator-managed-v1',fundingMode:'operator_managed'} }
+      : (await db.query("select q as quote, private.production_payment_priced_policy(q,null) as terms from private.production_payment_quote($1::bigint,false) q",[amountPaise])).rows[0];
+    await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id,amount_paise) values ($1,$2,$3,$4,$5,'rzp_live_fixture',$6,$7,$8,$9,$10)",
+      [order,business,owner,randomUUID(),account,contract.quote,contract.terms,'a'.repeat(64),`order_${order.replaceAll("-","")}`,amountPaise]);
     await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',$3,$4,'act_123','123',1)", [campaign,business,dailyRupees,`meta_${campaign}`]);
     await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')", [owner,randomUUID()]);
     await service("select public.production_payment_observe($1,$2,'rzp_live_fixture',$3,true,0,false,$4)",[order,account,`pay_${order.replaceAll("-","")}`,'f'.repeat(64)]);
@@ -656,6 +661,44 @@ async function verifyCappedRunBound(db, database) {
   await check(`${database}: cost evidence above the capped bound holds the balance`, async () => {
     await capped.costs(300001,54001);
     assert.equal((await capped.balance()).held,true);
+  });
+  // #212 plan: a ₹1,250 order leaves ₹1,000 for ads; ₹280 × 3 = 84000 needs ceil(84000 × 1.18) = 99120.
+  await check(`${database}: ₹1,000 for ads runs ₹280 × 3 capped and rejects it uncapped (#208/#212)`, async () => {
+    const run = await fixture(280, 125000);
+    await assert.rejects(run.reserve(), {code:'23514'});
+    const { reservationId: id } = await run.reserve(84000);
+    await run.activate(id);
+    assert.equal(Number(await run.bound()),84000);
+    await run.age();
+    assert.equal((await run.balance()).held,false);
+    await run.costs(84001,15121);
+    assert.equal((await run.balance()).held,true);
+  });
+  await check(`${database}: capped admission boundary is cap × 1.18 (99120 accepted, 99119 rejected)`, async () => {
+    // amount − amount/5: 123898 leaves 99119 for ads, 123900 leaves 99120.
+    await assert.rejects((await fixture(280, 123898)).reserve(84000), {code:'23514'});
+    const run = await fixture(280, 123900);
+    const { reservationId: id } = await run.reserve(84000);
+    await run.activate(id);
+    assert.equal((await run.balance()).held,false);
+  });
+  await check(`${database}: the guard still rejects an uncapped activation under seven-day headroom`, async () => {
+    const run = await fixture(280, 125000);
+    const { reservationId: id } = await run.reserve(84000);
+    await db.query("update private.customer_ad_reservations set bounded_media_paise=null where id=$1",[id]);
+    await assert.rejects(run.activate(id), {code:'23514'});
+  });
+  await check(`${database}: an uncapped reservation after a capped run clears the bound`, async () => {
+    const run = await fixture(280);
+    const first = await run.reserve(84000);
+    await run.activate(first.reservationId);
+    await run.pause(first.reservationId);
+    const next = await run.reserve();
+    assert.notEqual(next.reservationId,first.reservationId);
+    assert.equal(await run.bound(),null);
+    await run.activate(next.reservationId);
+    await run.age();
+    assert.equal((await run.balance()).held,true);
   });
 }
 

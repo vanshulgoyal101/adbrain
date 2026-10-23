@@ -198,6 +198,7 @@ async function handlePATCH(
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
             requestKey: parsed.data.confirmationDigest, lifetimeCapPaise: capPaise,
           });
+          let liveTree = { adSetIds: children!.adSetIds, adIds: children!.adIds };
           try {
             if (capDays && capPaise) {
               if (capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
@@ -207,6 +208,7 @@ async function handlePATCH(
                 endTime: new Date(Date.now() + capDays * 86_400_000),
               });
               const tree = { adSetIds: [...children!.adSetIds, capped.adSetId], adIds: [...children!.adIds, ...capped.adIds] };
+              liveTree = tree;
               const stored = campaign.raw as { metaResult: Record<string, unknown> } & Record<string, unknown>;
               const { error: recordError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, {
                 meta_ad_ids: tree.adIds,
@@ -233,6 +235,18 @@ async function handlePATCH(
           } catch (error) {
             await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
             throw error;
+          }
+          // #208: never leave Meta running while AdBrain shows the campaign paused.
+          const { error: activeError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: "active" }, id)
+            .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
+          if (activeError) {
+            const paused = await meta.pauseCampaignTree(campaign.meta_campaign_id!, liveTree).catch(() => null);
+            if (!paused?.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
+              await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
+              throw new CampaignDeliveryError("AdBrain could not record the activation and Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
+            }
+            await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => undefined);
+            throw new CampaignDeliveryError("AdBrain could not record the activation, so the campaign was paused again in Meta. Try again.");
           }
           return;
         }
@@ -265,7 +279,7 @@ async function handlePATCH(
     return serverError("campaign.status", err, "Could not update the campaign.");
   }
 
-  const { error } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: action }, id)
+  const { error } = action === "active" ? { error: null } : await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: action }, id)
     .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
   if (error) {
     return serverError("campaign.status", error, "Could not update the campaign.");

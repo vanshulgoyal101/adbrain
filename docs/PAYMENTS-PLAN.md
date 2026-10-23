@@ -197,7 +197,9 @@ guards to enable production or reinterpret existing test captures as real money.
   is held when its cost evidence is older than 15 minutes. A Meta-capped run
   reserves its lifetime cap + GST instead and is bounded by attributed media plus
   that cap, so aging evidence within the bound does not hold it. Evidence above
-  the bound, explicit cost holds and payment/refund holds still hold.
+  the bound, explicit cost holds and payment/refund holds still hold. The
+  campaign guard uses the same headroom; if AdBrain cannot save `active` after
+  Meta activation, the route pauses the Meta tree and records the run paused.
 - Direct Ads Manager changes can invalidate assumptions. Reconcile effective
   parent and child state, funding and budget drift; a failed pause is an incident.
 - Serialize refunds against new reservations. Freeze affected entitlement,
