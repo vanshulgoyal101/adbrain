@@ -87,7 +87,7 @@ Changing Vercel Production environment values requires a new deployment.
 
 | Variable | Default / validation | Purpose |
 | --- | --- | --- |
-| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: `1000000`; integer 100-1000000 | Normal annual total; 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
+| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: `1000000`; integer 100-1000000 | Default annual total when a request names no amount. Customers normally choose their own amount, INR 500-10,000 (see below); 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
 | `PAYMENTS_LIVE_VERIFICATION_ENABLED` | Unset/empty/`false`: off; exactly `true`: on | Separate one-time real payment verification, not the annual service |
 | `PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE` | Unset: `1000`; integer 100-1000000 | Default and maximum selectable verification total, INR 10 by default; zero service/ad allocation |
 | `PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID` | Required UUID when enabled | Exact privately verified pilot business |
@@ -119,8 +119,26 @@ The normal default preserves the original quote and policy. Other totals produce
 a versioned quote and matching service/refund terms, requiring fresh hash-bound
 consent. Nondefault pricing or enabled verification cannot be combined with an
 explicit `PAYMENTS_LIVE_POLICY_JSON` override. Stored amounts, quotes, consent and
-identities are immutable. A changed configuration never reprices an old order or
-permits creating a replacement for an unresolved order.
+identities are immutable. A changed configuration never reprices an old order;
+only a customer's own new amount replaces an unpaid order (see below).
+
+### Customer-chosen annual amount
+
+Billing asks for an amount from INR 500 to INR 10,000 (`50000`-`1000000`
+paise, at most two decimals) and shows the split before payment: 80% ad money
+including Meta GST and 20% AdBrain service. Service is floor(total/5) and ad
+money is the remainder, so any odd paisa goes to ad money and the two always add
+up exactly. The same approved terms apply with the amount filled in; the terms
+hash covers the amount. `PAYMENTS_LIVE_AMOUNT_PAISE` is only the default when a
+request names no amount, and a default outside INR 500-10,000 is refused.
+
+A customer can pay again at any time; ad money from every captured payment adds
+up. At most one unpaid annual order is open per business. Choosing a new amount
+replaces it: the old row is kept and marked `superseded` (shown as "Replaced by a
+newer payment request", no Pay button). Paid, refunded, held, review-required or
+event-pending orders are never replaced, and a new amount is refused until they
+are reconciled. Razorpay cannot cancel an order, so if a replaced order is paid
+later the capture is recorded and credited once like any top-up.
 
 Verification creates at most one recoverable order per business, including after
 a refund. A verified capture or expiry restores the normal quote on the next

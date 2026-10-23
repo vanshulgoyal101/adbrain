@@ -17,6 +17,7 @@ const creativeSettleMigration = await readFile(join(root, "db/migrations/2026102
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
+const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -314,13 +315,13 @@ async function verifyConfigurablePayments(db, database) {
       RAZORPAY_LIVE_KEY_SECRET:'synthetic-key-only',RAZORPAY_LIVE_WEBHOOK_SECRET:'synthetic-webhook-only',RAZORPAY_LIVE_ACCOUNT_ID:'acc_fixture',
       PAYMENTS_LIVE_WEBHOOK_ID:randomUUID(),VERCEL_PROJECT_ID:'prj_fixture',PAYMENTS_LIVE_PROJECT_ID:'prj_fixture',
       NEXT_PUBLIC_SUPABASE_URL:'https://fixture.supabase.co',PAYMENTS_LIVE_SUPABASE_URL:'https://fixture.supabase.co' };
-    for (const [amount,scope] of [[100,null],[1005,null],[50000,null],[999999,null],[1000,verification]]) {
-      const settings = { ...environment,PAYMENTS_LIVE_AMOUNT_PAISE:String(amount),...(scope ? {
+    for (const [amount,scope,chosen] of [[100,null],[1005,null],[50000,null],[999999,null],[1000,verification],[125000,null,true],[50005,null,true]]) {
+      const settings = { ...environment,PAYMENTS_LIVE_AMOUNT_PAISE:chosen ? '1000000' : String(amount),...(scope ? {
         PAYMENTS_LIVE_VERIFICATION_ENABLED:'true',PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE:String(amount),
         PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID:business,PAYMENTS_LIVE_VERIFICATION_USER_ID:owner,PAYMENTS_LIVE_VERIFICATION_EXPIRES_AT:scope.expiresAt } : {}) };
       const actual = JSON.parse(execFileSync(process.execPath,['--import','tsx','-e',
         'const {getProductionCollectionPolicy}=require("./src/lib/payments/production-config.ts"); const {hash,...policy}=getProductionCollectionPolicy(JSON.parse(process.argv[1]),Date.now(),JSON.parse(process.argv[2])); process.stdout.write(JSON.stringify(policy));',
-        JSON.stringify(settings),JSON.stringify({businessId:business,userId:owner})],{cwd:root,encoding:'utf8'}));
+        JSON.stringify(settings),JSON.stringify({businessId:business,userId:owner,...(chosen ? {annualAmountPaise:amount} : {})})],{cwd:root,encoding:'utf8'}));
       assert.deepEqual(actual,await terms(await quote(amount,Boolean(scope)),scope));
       assert.equal((await db.query("select private.production_payment_contract_valid($1,$2,$3) as valid",[amount,actual.quote,actual])).rows[0].valid,true);
     }
@@ -385,22 +386,138 @@ async function verifyConfigurablePayments(db, database) {
   await check(`${database}: configurable annual allocations conserve paise and bound earning`, async () => {
     const other = randomUUID();
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic revised price')",[other,owner]);
-    const value = await quote(1005);
+    const value = await quote(50005);
     const payment = (await claim(value,await terms(value),randomUUID(),other)).order;
     await complete(payment,'revised');
     await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,clock_timestamp()+interval '1 hour')",[owner,randomUUID()]);
-    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,201,$4) as result",[other,owner,payment.id,randomUUID()]);
+    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,10001,$4) as result",[other,owner,payment.id,randomUUID()]);
     await assert.rejects(service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,0,200000,$4) as result",[other,owner,payment.id,randomUUID()]),{code:'23514'});
     const balance = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
-    assert.equal(balance.serviceAllocationPaise,201);
-    assert.equal(balance.advertisingAllocationPaise,804);
-    assert.equal(balance.serviceEarnedPaise,201);
+    assert.equal(balance.serviceAllocationPaise,10001);
+    assert.equal(balance.advertisingAllocationPaise,40004);
+    assert.equal(balance.serviceEarnedPaise,10001);
     await service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing','pay_revised',true,33,false,$2,'rfnd_revised',33,'processed') as result",[payment.id,'e'.repeat(64)]);
     assert.equal((await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner])).held,true);
-    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,33,201,$4) as result",[other,owner,payment.id,randomUUID()]);
+    await service("select public.customer_ad_refund_allocation($1,$2,'acc_pricing',$3,0,33,10001,$4) as result",[other,owner,payment.id,randomUUID()]);
     const adjusted = await service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[other,owner]);
     assert.equal(adjusted.held,false);
-    assert.equal(adjusted.remainingPaise,771);
+    assert.equal(adjusted.remainingPaise,39971);
+  });
+  const shop = async name => {
+    const id = randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,$3)",[id,owner,name]);
+    return id;
+  };
+  const claimFor = async (amount,businessId,key = randomUUID()) => {
+    const value = await quote(amount);
+    return claim(value,await terms(value),key,businessId);
+  };
+  const ready = (order,suffix) => service("select public.production_payment_order_result($1,'acc_pricing','rzp_live_pricing',$2) as result",[order.id,`order_${suffix.replace(/\W|_/g,'')}`]);
+  const capture = (order,suffix) => service("select public.production_payment_observe($1,'acc_pricing','rzp_live_pricing',$2,true,0,false,$3) as result",[order.id,`pay_${suffix.replace(/\W|_/g,'')}`,'c'.repeat(64)]);
+  const stateOf = async order => (await db.query("select state,captured_paise::int as captured_paise,superseded_at is not null as superseded from private.production_payment_orders where id=$1",[order.id])).rows[0];
+  const balanceOf = businessId => service("select public.customer_ad_balance($1,$2,'acc_pricing') as result",[businessId,owner]);
+  await check(`${database}: customer-chosen annual amounts stay inside INR 500 to INR 10,000 and split exactly (#212)`, async () => {
+    for (const amount of [100,49999]) await assert.rejects(claimFor(amount,await shop('Synthetic below minimum')),{code:'23514'});
+    await assert.rejects(claim({ ...await quote(1000000),totalPaise:1000001 },legacyPolicy,randomUUID(),await shop('Synthetic above maximum')),{code:'23514'});
+    for (const amount of [50000,50005,1000000]) {
+      const order = (await claimFor(amount,await shop('Synthetic bounds'))).order;
+      assert.equal(order.amount_paise,amount);
+      assert.equal(order.quote.serviceAllocationPaise,Math.floor(amount/5));
+      assert.equal(order.quote.serviceAllocationPaise+order.quote.metaAllocationPaise,amount);
+    }
+  });
+  await check(`${database}: an unpaid order is replaced and kept, and a duplicate request reuses it (#212)`, async () => {
+    const business = await shop('Synthetic replace');
+    const [keyA,keyB] = [randomUUID(),randomUUID()];
+    const first = await claimFor(100000,business,keyA);
+    assert.equal(first.claimed,true);
+    assert.equal(first.order.state,'creating');
+    await assert.rejects(claimFor(250000,business),{code:'23514'});
+    assert.equal((await ready(first.order,'replace_a')).state,'created');
+    const duplicate = await claimFor(100000,business);
+    assert.equal(duplicate.claimed,false);
+    assert.equal(duplicate.order.id,first.order.id);
+    const second = await claimFor(250000,business,keyB);
+    assert.equal(second.claimed,true);
+    assert.notEqual(second.order.id,first.order.id);
+    assert.deepEqual(await stateOf(first.order),{ state:'superseded',captured_paise:0,superseded:true });
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_orders where business_id=$1 and purpose='annual'",[business])).rows[0].count,2);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_orders where business_id=$1 and purpose='annual' and captured_paise=0 and superseded_at is null",[business])).rows[0].count,1);
+    assert.equal((await claimFor(250000,business,keyB)).order.id,second.order.id);
+    const replayed = await claimFor(100000,business,keyA);
+    assert.equal(replayed.claimed,false);
+    assert.equal(replayed.order.state,'superseded');
+    const sameBusiness = await shop('Synthetic double click');
+    const duplicates = await Promise.all([claimFor(125000,sameBusiness),claimFor(125000,sameBusiness)]);
+    assert.equal(duplicates.filter(result => result.claimed).length,1);
+    assert.equal(duplicates[0].order.id,duplicates[1].order.id);
+  });
+  await check(`${database}: an order that is paid, held or has unprocessed events is never replaced (#212)`, async () => {
+    const business = await shop('Synthetic unreplaceable');
+    const open = (await claimFor(100000,business)).order;
+    await ready(open,'hold_a');
+    for (const column of ['review_required','refund_hold']) {
+      await db.query(`update private.production_payment_orders set ${column}=true where id=$1`,[open.id]);
+      await assert.rejects(claimFor(200000,business),{code:'23514'});
+      await db.query(`update private.production_payment_orders set ${column}=false where id=$1`,[open.id]);
+    }
+    await service("select public.production_payment_event_receive('acc_pricing','rzp_live_pricing',$1,'evt_replace_pending',$2,'pay_replacepending','order_holda',null,'pending') as result",[randomUUID(),'a'.repeat(64)]);
+    await assert.rejects(claimFor(200000,business),{code:'23514'});
+    await db.query("update private.production_payment_events set processed_at=clock_timestamp() where event_id='evt_replace_pending'");
+    assert.equal((await claimFor(200000,business)).claimed,true);
+    assert.equal((await stateOf(open)).state,'superseded');
+    const next = (await claimFor(200000,business)).order;
+    await ready(next,'hold_n');
+    const paid = (await claimFor(300000,business)).order;
+    assert.equal((await stateOf(next)).state,'superseded');
+    await ready(paid,'hold_b');
+    await capture(paid,'hold_b');
+    const topUp = await claimFor(300000,business);
+    assert.equal(topUp.claimed,true);
+    assert.notEqual(topUp.order.id,paid.id);
+    assert.equal((await stateOf(paid)).state,'captured');
+    await db.query("delete from private.production_payment_events where event_id='evt_replace_pending'");
+  });
+  await check(`${database}: paid top-ups add up, including the same amount twice, and a duplicate capture counts once (#212)`, async () => {
+    const business = await shop('Synthetic top-ups');
+    const payments = [];
+    for (const [index,amount] of [250000,100000,100000].entries()) {
+      const order = (await claimFor(amount,business)).order;
+      await ready(order,`topup_${index}`);
+      assert.equal((await capture(order,`topup_${index}`)).state,'captured');
+      payments.push(order);
+    }
+    assert.equal(new Set(payments.map(order => order.id)).size,3);
+    await capture(payments[2],'topup_2');
+    const balance = await balanceOf(business);
+    assert.equal(balance.capturedPaise,450000);
+    assert.equal(balance.serviceAllocationPaise,90000);
+    assert.equal(balance.advertisingAllocationPaise,360000);
+    assert.equal(balance.remainingPaise,360000);
+    assert.equal(balance.held,false);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[payments[2].id])).rows[0].count,1);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_orders where business_id=$1 and superseded_at is not null",[business])).rows[0].count,0);
+  });
+  await check(`${database}: a late payment on a replaced order is credited exactly once (#212)`, async () => {
+    const business = await shop('Synthetic late payment');
+    const replaced = (await claimFor(100000,business)).order;
+    await ready(replaced,'late_a');
+    const current = (await claimFor(150000,business)).order;
+    assert.equal((await stateOf(replaced)).state,'superseded');
+    assert.equal((await balanceOf(business)).advertisingAllocationPaise,0);
+    const late = await capture(replaced,'late_a');
+    assert.equal(late.state,'captured');
+    assert.equal(late.captured_paise,100000);
+    await capture(replaced,'late_a');
+    const balance = await balanceOf(business);
+    assert.equal(balance.capturedPaise,100000);
+    assert.equal(balance.advertisingAllocationPaise,80000);
+    assert.equal(balance.held,false);
+    assert.equal((await db.query("select count(*)::int as count from private.production_payment_effects where order_id=$1 and kind='capture'",[replaced.id])).rows[0].count,1);
+    assert.equal((await stateOf(current)).state,'creating');
+    await ready(current,'late_b');
+    assert.equal((await claimFor(200000,business)).claimed,true);
+    assert.equal((await stateOf(replaced)).state,'captured');
   });
   await check(`${database}: expired saved verification can still capture and refund its own amount`, async () => {
     const other = randomUUID();
@@ -946,6 +1063,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await check(`${database}: webhook health migration applies once and skips replay`,async () => {
           assert.equal(await applyMigration(db,"20261022_payment_webhook_health.sql",webhookHealthMigration),'applied');
           assert.equal(await applyMigration(db,"20261022_payment_webhook_health.sql",webhookHealthMigration),'already_applied');
+        });
+      }
+      if (!(await db.query("select exists(select 1 from information_schema.columns where table_schema='private' and table_name='production_payment_orders' and column_name='superseded_at') as installed")).rows[0].installed) {
+        await check(`${database}: custom payment amount migration applies once and skips replay`,async () => {
+          assert.equal(await applyMigration(db,"20261023_custom_payment_amount.sql",customAmountMigration),'applied');
+          assert.equal(await applyMigration(db,"20261023_custom_payment_amount.sql",customAmountMigration),'already_applied');
         });
       }
       await verifyConfigurablePayments(db,database);
@@ -2072,6 +2195,8 @@ try {
   assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
   assert.ok(schema.indexOf(configurablePaymentMigration.trim()) < schema.indexOf(webhookHealthMigration.trim()), "Canonical schema must include the exact webhook health migration after configurable pricing");
   assert.ok(schema.indexOf(webhookHealthMigration.trim()) < schema.indexOf(cappedBoundMigration.trim()), "Canonical schema must include the exact capped bound migration after webhook health");
+  assert.ok(schema.includes(customAmountMigration.trim()), "Canonical schema must include the exact custom payment amount migration");
+  assert.ok(schema.indexOf(webhookHealthMigration.trim()) < schema.indexOf(customAmountMigration.trim()), "Canonical schema must include the custom payment amount migration after webhook health");
   assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);

@@ -290,6 +290,86 @@ describe("production checkout with synthetic responses", () => {
     expect(screen.queryByRole("spinbutton", { name: "Verification amount (INR)" })).not.toBeInTheDocument();
   });
 
+  describe("custom annual amount (#212)", () => {
+    const annualRange = { minPaise: 50_000, maxPaise: 1_000_000 };
+    const chosenQuote = createAnnualPaymentQuote(125_000);
+    const chosen = { policy: { ...livePolicy, hash: "b".repeat(64) }, quote: chosenQuote, annualAmountRange: annualRange };
+    const chosenOrder = { ...liveOrder, amountPaise: 125_000, quote: chosenQuote, checkout: { ...liveOrder.checkout, amount: 125_000 } };
+    async function mountAnnual(orders: unknown[] = []) {
+      fetchMock.mockImplementation(async (path: string) => Response.json(path.includes("amountPaise=125000") ? { ...chosen, orders }
+        : path.includes("orders?") ? { policy: livePolicy, quote: createAnnualPaymentQuote(), annualAmountRange: annualRange, orders }
+          : chosenOrder));
+      render(<ProductionCheckout businessId={businessId} />);
+      await screen.findByText(orders.length ? /Payment confirmed|Awaiting payment/ : "Ready for payment");
+      fireEvent.load(screen.getByTestId("checkout-script"));
+    }
+
+    it("takes an amount, shows the 80% ad money and 20% service split, and creates the order for that amount", async () => {
+      await mountAnnual();
+      const input = screen.getByRole("spinbutton", { name: "Amount to pay (INR)" });
+      expect(input).toHaveValue(10_000);
+      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("8,000.00");
+      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("2,000.00");
+      fireEvent.change(input, { target: { value: "1250" } });
+      expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
+      await screen.findByText("Amount updated.");
+      expect(fetchMock.mock.calls.at(-1)![0]).toContain("amountPaise=125000");
+      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("1,000.00");
+      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("250.00");
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Pay INR 1,250" }));
+      await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+      expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toMatchObject({ amountPaise: 125_000, termsHash: "b".repeat(64), acceptTerms: true });
+      expect(options).toMatchObject({ amount: 125_000 });
+      expect(sessionStorage.length).toBe(0);
+    });
+
+    it.each(["0", "5", "499.99", "10000.01", "20000", "1e3"])("rejects %s before asking the server for a quote", async value => {
+      await mountAnnual();
+      fireEvent.change(screen.getByRole("spinbutton", { name: "Amount to pay (INR)" }), { target: { value } });
+      fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Enter an amount from INR 500 to INR 10000"));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("says a new amount replaces an unpaid request and never offers to pay the replaced one", async () => {
+      await mountAnnual([liveOrder]);
+      expect(screen.getByRole("button", { name: "Continue saved checkout" })).toBeInTheDocument();
+      fireEvent.change(screen.getByRole("spinbutton", { name: "Amount to pay (INR)" }), { target: { value: "1250" } });
+      fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
+      await screen.findByText("Amount updated.");
+      expect(screen.getByText(/replaces your unpaid request for .*10,000\.00/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Pay INR 1,250" })).toBeInTheDocument();
+    });
+
+    it("lists a replaced order as replaced with no Pay button", async () => {
+      fetchMock.mockImplementation(async () => Response.json({ policy: livePolicy, quote: createAnnualPaymentQuote(), annualAmountRange: annualRange,
+        orders: [{ ...liveOrder, status: "superseded", checkout: null }] }));
+      render(<ProductionCheckout businessId={businessId} />);
+      await screen.findByText("Ready for payment");
+      fireEvent.click(screen.getByText("Previous payments"));
+      expect(screen.getByText(/Annual service: .*10,000\.00 - Replaced by a newer payment request/)).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
+    });
+
+    it("lets the customer pay again after a payment is captured and keeps the earlier one in history", async () => {
+      await mountAnnual([captured]);
+      expect(screen.getByText("Payment confirmed")).toBeInTheDocument();
+      expect(screen.queryByRole("spinbutton", { name: "Amount to pay (INR)" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Add more ad money" }));
+      expect(screen.getByText("Ready for payment")).toBeInTheDocument();
+      expect(screen.getByRole("spinbutton", { name: "Amount to pay (INR)" })).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Previous payments"));
+      expect(screen.getByText(/Captured: .*10,000\.00/)).toBeVisible();
+      fireEvent.click(screen.getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+      await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+      expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toMatchObject({ amountPaise: 1_000_000 });
+    });
+  });
+
   it("restores annual checkout while preserving the verification capture and refund history", async () => {
     const previous = { ...captured, amountPaise: 1_000, quote: createVerificationPaymentQuote(),
       status: "partially_refunded", capturedPaise: 1_000, refundedPaise: 250,

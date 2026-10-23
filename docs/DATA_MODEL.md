@@ -26,9 +26,12 @@ paise; generated payment state and capture/refund effects use each saved total.
 An identity trigger prevents repricing accepted orders. Existing default-priced
 rows, policies and funding evidence are preserved without backfill.
 
-Generated `purpose` separates annual orders from verification. Annual active-order
-uniqueness remains; a second index permits only one verification order per business,
-including after refund. Claims require matching owner/business, current expiry and
+Generated `purpose` separates annual orders from verification. A second index permits only one verification order per business,
+including after refund. #212 replaces the single active annual order with one *open* annual order per business
+(unpaid and not superseded); paid orders do not count, so a business can pay again and ad money adds up across
+captured orders. `superseded_at` marks an unpaid order replaced by a new amount; it feeds the generated `state`
+(`superseded` only while nothing is captured, so a late capture still reads `captured`). Rows are never deleted.
+Claims require matching owner/business, current expiry and
 exact quote-bound consent. Verification capture is recorded but grants no service
 or ad allocation. Verified partial verification refunds need no fictional allocation;
 dispute, pending-refund, missing-capture and provider-mismatch holds remain intact.
