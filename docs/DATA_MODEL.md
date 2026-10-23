@@ -90,6 +90,8 @@ allocations; test orders do not. Reservations pin the Meta campaign ID and
 connection generation, and financially attributed campaigns cannot rebind that
 provider ID while paused. Uncertain activation and cost evidence hold funds,
 except aging evidence within an open capped reservation's `bounded_media_paise`;
+stale non-final evidence holds only while the campaign has an open reservation.
+Meta-read evidence (#216) has a null `actor_id` and `input.source='meta'`;
 final reconciliation releases only unused allowance. Source inclusion alone
 does not prove a target migration was applied. See the
 [allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission

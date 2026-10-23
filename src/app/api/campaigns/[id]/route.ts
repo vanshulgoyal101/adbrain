@@ -17,7 +17,7 @@ import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts"
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload, intendedCampaignChildren } from "@/lib/campaign/activation";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
-import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
+import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -193,6 +193,10 @@ async function handlePATCH(
             throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
           }
           const capPaise = capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined;
+          // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
+          await meta.readLifetimeSpendPaise(campaign.meta_campaign_id!).then(mediaPaise => observeCustomerCosts(context, {
+            campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!, mediaPaise,
+          })).catch(() => undefined);
           const reservation = await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,

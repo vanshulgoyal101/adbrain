@@ -1,0 +1,48 @@
+[
+  {
+    "method": "GET",
+    "path": "120253646427440526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253646427440526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253646427440526/insights?fields=spend&date_preset=maximum",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120240969992630526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526/insights?fields=spend&date_preset=maximum",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "spend": "32.63",
+          "date_start": "2026-01-05",
+          "date_stop": "2026-10-23"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MAZDZD"
+        }
+      }
+    }
+  }
+]

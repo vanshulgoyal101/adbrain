@@ -63,3 +63,18 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
     ...(row ? {} : { noDelivery: true as const }),
   };
 }
+
+const lifetimeSpendSchema = z.object({
+  data: z.array(z.object({ spend: z.string().regex(/^\d{1,13}(?:\.\d{1,2})?$/) })).max(1),
+  paging: z.object({ next: z.string().optional() }).optional(),
+});
+
+/** Lifetime campaign spend in exact paise; Meta returns no row for a campaign that never delivered. */
+export function decodeLifetimeSpendPaise(payload: unknown): number {
+  const parsed = lifetimeSpendSchema.safeParse(payload);
+  if (!parsed.success || parsed.data.paging?.next) throw new Error("Campaign lifetime spend is incomplete or invalid.");
+  const spend = parsed.data.data[0]?.spend;
+  if (spend === undefined) return 0;
+  const [rupees, paise = ""] = spend.split(".");
+  return Number(rupees) * 100 + Number(paise.padEnd(2, "0"));
+}
