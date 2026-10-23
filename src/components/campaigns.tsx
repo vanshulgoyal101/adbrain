@@ -850,12 +850,14 @@ function BusinessCampaigns({
 
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO) {
     try {
-      const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
       const review = await deliveryResponse.json() as { delivery?: unknown; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
+      // #208: a capped run needs only cap + GST; one day opens the dialog, PATCH enforces the chosen days.
+      const capped = deliveryChildren(delivery).every(child => child.status === "PAUSED");
+      const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}${capped ? "&capDays=1" : ""}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
       const digest = await buildActivationDigest(campaign, connection, delivery);
       setReviewConnection(connection);
       setActivationDigest(digest);

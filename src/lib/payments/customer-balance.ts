@@ -11,7 +11,7 @@ type AccountingDatabase = Database & { public: { Functions: {
   customer_ad_balance: { Args: Scope; Returns: unknown };
   customer_ad_reserve: { Args: Scope & {
     p_campaign_id: string; p_ad_account_id: string; p_connection_generation: number;
-    p_daily_budget_paise: number; p_request_key: string; p_review_only: boolean;
+    p_daily_budget_paise: number; p_request_key: string; p_review_only: boolean; p_lifetime_cap_paise?: number;
   }; Returns: unknown };
   customer_ad_activation_result: { Args: Scope & { p_campaign_id: string; p_reservation_id: string; p_state: "active" | "paused" | "uncertain" }; Returns: undefined };
   customer_ad_reconcile_costs: { Args: {
@@ -60,8 +60,9 @@ export async function getCustomerBalance(actor: Actor): Promise<CustomerBalance>
   return balance;
 }
 
+/** `lifetimeCapPaise` is the Meta lifetime budget of a capped run; it replaces the 7-day reserve (#208). */
 export async function reserveCustomerCampaign(actor: Actor, input: {
-  campaignId: string; adAccountId: string; connectionGeneration: number; dailyBudgetRupees: number; requestKey: string;
+  campaignId: string; adAccountId: string; connectionGeneration: number; dailyBudgetRupees: number; requestKey: string; lifetimeCapPaise?: number;
 }, reviewOnly = false) {
   const { database, scope } = accounting(actor);
   const rupees = z.number().positive().multipleOf(0.01).parse(input.dailyBudgetRupees);
@@ -72,6 +73,7 @@ export async function reserveCustomerCampaign(actor: Actor, input: {
     p_daily_budget_paise: paise.positive().parse(Math.round(rupees * 100)),
     p_request_key: z.string().regex(/^[a-f0-9]{64}$/).parse(input.requestKey),
     p_review_only: reviewOnly,
+    ...(input.lifetimeCapPaise === undefined ? {} : { p_lifetime_cap_paise: paise.positive().parse(input.lifetimeCapPaise) }),
   }), z.object({ reservationId: z.uuid(), mediaLimitPaise: paise.positive(), balance: customerBalanceSchema }));
   if (result.balance.businessId !== actor.businessId || result.balance.held) throw new CustomerBalanceError();
   return result;

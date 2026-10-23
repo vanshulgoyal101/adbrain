@@ -88,7 +88,8 @@ the service role; service-only `customer_ad_*` RPCs verify owner/operator
 authority and share the payment transaction lock with refunds. Existing payment orders supply captured/refunded
 allocations; test orders do not. Reservations pin the Meta campaign ID and
 connection generation, and financially attributed campaigns cannot rebind that
-provider ID while paused. Uncertain activation and cost evidence hold funds;
+provider ID while paused. Uncertain activation and cost evidence hold funds,
+except aging evidence within an open capped reservation's `bounded_media_paise`;
 final reconciliation releases only unused allowance. Source inclusion alone
 does not prove a target migration was applied. See the
 [allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission

@@ -23,6 +23,7 @@ async function handleGET(request: Request) {
     if (limited) return limited;
     const campaignId = url.searchParams.get("campaignId");
     if (campaignId) {
+      const capDays = url.searchParams.has("capDays") ? z.coerce.number().int().min(1).max(7).parse(url.searchParams.get("capDays")) : undefined;
       const database = await createClient();
       const { data: campaign, error } = await database.from("campaigns").select("*")
         .eq("id", z.uuid().parse(campaignId)).eq("business_id", businessId).maybeSingle();
@@ -32,6 +33,7 @@ async function handleGET(request: Request) {
       const reviewed = await reserveCustomerCampaign(context, {
         campaignId, adAccountId: binding.metaAdAccountId!, connectionGeneration: binding.metaConnectionGeneration!,
         dailyBudgetRupees: campaign.daily_budget!, requestKey: "0".repeat(64),
+        lifetimeCapPaise: capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined,
       }, true);
       return Response.json({ balance: reviewed.balance }, { headers: { "Cache-Control": "no-store" } });
     }
