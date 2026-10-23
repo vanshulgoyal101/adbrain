@@ -24,4 +24,15 @@ describe("whatsappGreeting (#209)", () => {
       .toBe("Namaste! Mujhe Solaride ke baare mein jaankari chahiye.");
     expect(whatsappGreeting({ name: "Acme", offers: null }, []).autofill).toBe("Namaste! Mujhe Acme ke baare mein jaankari chahiye.");
   });
+
+  it("matches offers as whole words and handles an offer that ends in a colon (QA, PR #218)", () => {
+    const brand = { name: "Acme", offers: ["EMI", "Diwali offer:", "10% off"] };
+    // "EMI" is inside "Premium"; "Diwali offer:" has nothing after its colon.
+    expect(whatsappGreeting(brand, ["Premium panels with a Diwali offer."]).autofill)
+      .toBe("Namaste! Mujhe Acme ke Diwali offer ke baare mein jaankari chahiye.");
+    expect(whatsappGreeting(brand, ["Easy EMI and 10% off."]).autofill)
+      .toBe("Namaste! Mujhe Acme ke 10% off aur EMI ke baare mein jaankari chahiye.");
+    expect(whatsappGreeting({ name: "Acme", offers: [":"] }, ["Any copy: here"]).autofill)
+      .toBe("Namaste! Mujhe Acme ke baare mein jaankari chahiye.");
+  });
 });
