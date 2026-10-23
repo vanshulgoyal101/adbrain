@@ -703,7 +703,7 @@ function CreativeCard({
                 setLoadedUrl(creative.image_url);
               }
             }}
-            src={creative.image_url}
+            src={creativeThumbnailUrl(creative.image_url)}
             alt={creative.headline ?? "Ad creative"}
             className={cn(
               "h-full w-full object-contain transition-opacity",
@@ -712,7 +712,11 @@ function CreativeCard({
             loading="lazy"
             fetchPriority="high"
             onLoad={() => setLoadedUrl(creative.image_url)}
-            onError={() => setErroredUrl(creative.image_url)}
+            onError={(event) => {
+              // The 960 px thumbnail can be missing for older ads; fall back to the original once.
+              if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
+              else setErroredUrl(creative.image_url);
+            }}
           />
         )}
         {(!creative.image_url || !imgLoaded || imgError) && (
