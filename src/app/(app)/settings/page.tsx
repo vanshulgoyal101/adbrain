@@ -15,6 +15,10 @@ import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
 import { isRazorpayTestEnabled } from "@/lib/payments/razorpay-test";
 import { isProductionPaymentConfigured } from "@/lib/payments/production-config";
+import { getCustomerBalance } from "@/lib/payments/customer-balance";
+import { requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { readPreferenceState } from "@/lib/preferences/store";
+import { listOwnPrivacyRequests, privacyOperatorAllowed } from "@/lib/privacy-requests";
 
 export const metadata = { title: "Settings" };
 
@@ -87,10 +91,24 @@ export default async function SettingsPage({
       <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
         <SpendSettings businessId={business.id} />
       </Suspense>
-      <PreferenceSettings key={business.id} businessId={business.id} />
-      <PrivacyRequests />
+      <Suspense fallback={<SettingsLoading label="Preferences" />}>
+        <PreferenceAndPrivacySettings businessId={business.id} />
+      </Suspense>
     </div>
   );
+}
+
+// #238: read once in the server render; the panels refetch only after the owner acts.
+async function PreferenceAndPrivacySettings({ businessId }: { businessId: string }) {
+  const [preferences, requests, operator] = await Promise.all([
+    readPreferenceState(businessId).catch(() => null),
+    listOwnPrivacyRequests().catch(() => null),
+    privacyOperatorAllowed().catch(() => false),
+  ]);
+  return <>
+    <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} />
+    <PrivacyRequests initialRequests={requests} initialOperatorAvailable={operator} />
+  </>;
 }
 
 function SettingsLoading({ label }: { label: string }) {
@@ -108,9 +126,12 @@ async function ConnectionSettings({ businessId, searchParams }: {
   businessId: string;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [result, params] = await Promise.all([
+  const [result, params, initialBalance] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
+    isProductionPaymentConfigured()
+      ? requireOwnedBusiness(businessId).then(getCustomerBalance).catch(() => null)
+      : Promise.resolve(null),
   ]);
   return (
     <>
@@ -124,7 +145,7 @@ async function ConnectionSettings({ businessId, searchParams }: {
         </Alert>
       )}
       <ManagedBilling connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
-        liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} />
+        liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance} />
     </>
   );
 }
