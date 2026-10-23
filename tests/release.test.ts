@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { failingChecks, qaApproval, releaseMigrations, smokeCounts, supersededBy } from "../scripts/release.mjs";
+import { ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, smokeCounts, supersededBy } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -73,6 +73,50 @@ describe("release inputs", () => {
     expect(smokeCounts(log)).toEqual({ pass: 2, fail: 0 });
     expect(supersededBy("2026-10-23T13:02:08.45Z Superseded: production serves newer d34d32d; skipping smoke for 4202350")).toBe("d34d32d");
     expect(supersededBy(log)).toBeNull();
+  });
+});
+
+describe("CTO review (#259)", () => {
+  // First lines of the real CTO comments on PR #247, #219, #234 and #256.
+  const pr247 = [
+    comment("CTO review of 6ee4a62 (only #221's own changes, diffed against #245's 789f071): **approved**, pending QA's delta recheck. It matches the CEO's controls on #221.", "2026-10-23T16:27:54Z"),
+    comment("CTO review of 3bafc67: **approved.** The #221 changes match the patch I approved at 6ee4a62 exactly (`git patch-id` against main), and the migration is unchanged (sha256 8e4e57db).", "2026-10-23T16:38:10Z"),
+  ];
+  const head247 = "3bafc67cc3a7c5a30bab144c5bfc7056b4dc7362";
+  const isHead = (head: string) => (sha: string) => head.startsWith(sha);
+
+  it("approves PR #247 at 3bafc67 from the review that names it", () => {
+    const cto = ctoApproval(ctoReviews(pr247), isHead(head247));
+    expect(cto.approved).toBe(true);
+    expect(cto.latest?.sha).toBe("3bafc67");
+  });
+
+  it("accepts an earlier head's approval only when its patch against main is the same", () => {
+    const [only6ee] = pr247;
+    expect(ctoApproval(ctoReviews([only6ee]), isHead(head247)).approved).toBe(false);
+    expect(ctoApproval(ctoReviews([only6ee]), (sha: string) => isHead(head247)(sha) || sha === "6ee4a62").approved).toBe(true);
+  });
+
+  it("reads the head after an arrow and refuses conditional or non-approving reviews", () => {
+    const reviews = ctoReviews([
+      comment("CTO review of 16dcfca → c30aaba: **approved.** The only migration change is QA's P1 fix.", "2026-10-23T12:54:09Z"),
+      comment("CTO review of bc45602: **approved once the failure proof is posted.**", "2026-10-23T13:19:22Z"),
+      comment("CTO post-release review of c5d69ab (it shipped before my review): **sound, nothing to roll back.**", "2026-10-23T16:26:18Z"),
+      comment("CTO technical review of PR #219 at 16dcfca. **Verdict: correct and fails closed.**", "2026-10-23T12:23:08Z"),
+    ]);
+    expect(reviews.map((r: { sha: string; approved: boolean }) => [r.sha, r.approved])).toEqual([["c30aaba", true], ["bc45602", false], ["c5d69ab", false]]);
+    expect(ctoApproval(reviews, isHead(head)).approved).toBe(true);
+  });
+
+  it("lets a later review of the same patch withdraw an approval", () => {
+    const reviews = ctoReviews([...pr247, comment("CTO review of 3bafc67: **changes requested.** The settle window is off by one read.", "2026-10-23T17:00:00Z")]);
+    expect(ctoApproval(reviews, isHead(head247)).approved).toBe(false);
+  });
+
+  it("treats payments, spend, activation and budget code as money", () => {
+    expect(["src/lib/payments/customer-balance.ts", "src/app/api/payments/live/orders/route.ts", "src/app/api/cron/enforce-spend/route.ts",
+      "src/lib/campaign/spend-enforce.ts", "src/lib/campaign/activation.ts", "src/lib/campaign/budget.ts"].every((p) => moneyPath.test(p))).toBe(true);
+    expect(["src/lib/meta/client.ts", "src/lib/supabase/middleware.ts", "src/components/campaigns.tsx"].some((p) => moneyPath.test(p))).toBe(false);
   });
 });
 
