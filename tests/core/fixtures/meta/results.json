@@ -1,0 +1,218 @@
+[
+  {
+    "method": "GET",
+    "path": "120253678786150526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253678786150526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253678786150526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "917009764842"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253678789810526"
+        },
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "917009764842"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253678787370526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVGFiZAlJ0bHJhemxFa2ZAUZA18xNHV5UUI5el8zLVduX1Q0cVAzSmFoc2ZAwMXNyNUlETHpubnNfV1JjUkloaThPa0VNR3Y0WkN4dXpSS1lJSnZA4TmNKY3JB",
+          "after": "QVFIVHpja2VBT3J6dHdiQW5raUZA5aHRtanUwRDE2UDM4WG55REtFTWg2emlvdlRzRDlVbzg1Tm0yaFBCM3ZAKd1U4VjU0Y1pQMWVPZAjdxUGd2aHRnYk9nLTV3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253678786150526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253678786150526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253678786150526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253678786150526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "917009764842"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253678789810526"
+        },
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "917009764842"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253678787370526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVGFiZAlJ0bHJhemxFa2ZAUZA18xNHV5UUI5el8zLVduX1Q0cVAzSmFoc2ZAwMXNyNUlETHpubnNfV1JjUkloaThPa0VNR3Y0WkN4dXpSS1lJSnZA4TmNKY3JB",
+          "after": "QVFIVHpja2VBT3J6dHdiQW5raUZA5aHRtanUwRDE2UDM4WG55REtFTWg2emlvdlRzRDlVbzg1Tm0yaFBCM3ZAKd1U4VjU0Y1pQMWVPZAjdxUGd2aHRnYk9nLTV3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253678786150526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253678790440526",
+          "status": "ACTIVE",
+          "effective_status": "ACTIVE",
+          "configured_status": "ACTIVE"
+        },
+        {
+          "id": "120253678789370526",
+          "status": "PAUSED",
+          "effective_status": "PAUSED",
+          "configured_status": "PAUSED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVEdialF2TGhNSG9fZAC04ZAWVsd3l4ZAXVENXdyUXJ2QWxxZAG4xU29uS1piN2diTW5zVHZAUU2dGNVlPVkRWYUhYVmYwelBkaGhINzRkSVU4UmZAVbWkzTHRB",
+          "after": "QVFIVGwyM19fZAm5yTExTSnZARZAzJnczl2blFJUnNHZATNkeElSNEtBUnRpN05pa1JjZAmtqc3JyUVFLTHFaTUQzYW1jZAEIwSHRoZAkFWcjBtVncxNmZAUbjZAEZAmxR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253164673180526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253164673180526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253164673180526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253164674160526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVGFNOHM2VnBJTktuenR4TkVhbXhCczZAUZAE9CVXJrcjczTWdrOE9yU1AxQWwxRHRnWGVaOWhlMXRLeHloSE5ONWtzbkdCZAk1nYXhiQW93LWxKcG5SOWFn",
+          "after": "QVFIVGFNOHM2VnBJTktuenR4TkVhbXhCczZAUZAE9CVXJrcjczTWdrOE9yU1AxQWwxRHRnWGVaOWhlMXRLeHloSE5ONWtzbkdCZAk1nYXhiQW93LWxKcG5SOWFn"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253164673180526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253164673180526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253164673180526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253164673180526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253164674160526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVGFNOHM2VnBJTktuenR4TkVhbXhCczZAUZAE9CVXJrcjczTWdrOE9yU1AxQWwxRHRnWGVaOWhlMXRLeHloSE5ONWtzbkdCZAk1nYXhiQW93LWxKcG5SOWFn",
+          "after": "QVFIVGFNOHM2VnBJTktuenR4TkVhbXhCczZAUZAE9CVXJrcjczTWdrOE9yU1AxQWwxRHRnWGVaOWhlMXRLeHloSE5ONWtzbkdCZAk1nYXhiQW93LWxKcG5SOWFn"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253164673180526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253164674630526",
+          "status": "PAUSED",
+          "effective_status": "PAUSED",
+          "configured_status": "PAUSED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVEZARTWRTdEhNTzhMcjM0NHVVUVNCSW5XdENVNWFBaVcxcDZAvVE5MdlB2MW5FX0t3d2Jabm1BUUtlY2FzVzlyTFZAsaHB3V2F6NTRGQ0JRZA1JLcHJVUmh3",
+          "after": "QVFIVEZARTWRTdEhNTzhMcjM0NHVVUVNCSW5XdENVNWFBaVcxcDZAvVE5MdlB2MW5FX0t3d2Jabm1BUUtlY2FzVzlyTFZAsaHB3V2F6NTRGQ0JRZA1JLcHJVUmh3"
+        }
+      }
+    }
+  }
+]
