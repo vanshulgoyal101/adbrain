@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 import type { AdDesignSpec } from "./design";
 import { downloadImage } from "@/lib/imageGen";
 
@@ -10,14 +11,16 @@ import { downloadImage } from "@/lib/imageGen";
  * a contact/CTA bar laid on top the way a human designer would.
  */
 export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array> {
+  let logoRatio = 1;
   const [backgroundUrl, logoUrl] = await Promise.all(
     [spec.backgroundUrl, spec.logoUrl].map(async (url) => {
       if (!url) return null;
       const image = await downloadImage(url);
+      if (url === spec.logoUrl) logoRatio = await aspectRatio(image.bytes);
       return `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`;
     }),
   );
-  const res = new ImageResponse(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} />, {
+  const res = new ImageResponse(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} logoRatio={logoRatio} />, {
     width: spec.width,
     height: spec.height,
   });
@@ -25,7 +28,26 @@ export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array>
   return new Uint8Array(buffer);
 }
 
-function AdComposite({ spec }: { spec: AdDesignSpec }) {
+/** Width over height of an image, or 1 (square) when it can't be read. */
+async function aspectRatio(bytes: Uint8Array): Promise<number> {
+  try {
+    const { width, height } = await sharp(Buffer.from(bytes)).metadata();
+    return width && height ? width / height : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * The logo tile keeps a 64px height; a wide wordmark gets a wider tile (up to
+ * 220px) so it stays legible. Square and tall logos keep the 64px square.
+ */
+export function logoTileWidth(ratio: number, s: number): number {
+  const clamped = Number.isFinite(ratio) && ratio > 0 ? Math.min(220, Math.max(64, ratio * 64)) : 64;
+  return Math.round(clamped * s);
+}
+
+export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoRatio?: number }) {
   // Scale every dimension to the canvas so all formats stay balanced.
   const s = spec.width / 1080;
   const pad = Math.round(Math.min(64 * s, spec.height * 0.06));
@@ -110,10 +132,10 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
           <img
             src={spec.logoUrl}
             alt=""
-            width={Math.round(64 * s)}
+            width={logoTileWidth(logoRatio, s)}
             height={Math.round(64 * s)}
             style={{
-              width: Math.round(64 * s),
+              width: logoTileWidth(logoRatio, s),
               height: Math.round(64 * s),
               borderRadius: Math.round(14 * s),
               objectFit: "contain",
