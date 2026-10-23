@@ -8,6 +8,7 @@ import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign } from "./trusted-write";
 import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts } from "@/lib/payments/meta-cost-evidence";
+import { isOperatorFunded } from "@/lib/payments/operator-funding";
 import {
   getCampaigns,
   getSpendLimits,
@@ -29,10 +30,16 @@ export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ 
     } catch {
       return { paused: [], confirmed: false };
     }
-    const initialBalance = await getCustomerBalance(context).catch(() => null);
-    const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
-    const customerBalance = refresh.observed ? await getCustomerBalance(context).catch(() => null) : initialBalance;
-    const financialHold = !customerBalance || customerBalance.held;
+    const operatorFunded = await isOperatorFunded(businessId).catch(() => null);
+    if (operatorFunded === null) return { paused: [], confirmed: false };
+    let customerBalance = null;
+    if (!operatorFunded) {
+      const initialBalance = await getCustomerBalance(context).catch(() => null);
+      const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
+      customerBalance = refresh.observed ? await getCustomerBalance(context).catch(() => null) : initialBalance;
+    }
+    // #245: an operator-funded run is capped on Meta and has no customer allowance to hold.
+    const financialHold = !operatorFunded && (!customerBalance || customerBalance.held);
     if (!financialHold && (!limits.autoPause || limits.weeklyCapRupees === null)) return { paused: [], confirmed: true };
 
     const decision = financialHold

@@ -18,6 +18,9 @@ import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload, intendedCampaignChildren } from "@/lib/campaign/activation";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
+import { isOperatorFunded } from "@/lib/payments/operator-funding";
+
+const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -41,14 +44,18 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
       return apiError("Campaign children or account need reconciliation before activation review.", 409);
     }
     await recheckMetaConnection(context, binding.metaConnectionGeneration);
-    const delivery = await withMetaConnection(context, {
+    const operatorFunded = await isOperatorFunded(campaign.business_id);
+    const { delivery, funding } = await withMetaConnection(context, {
       purpose: "activate",
       binding: { adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId },
       expectedGeneration: binding.metaConnectionGeneration,
-    }, async meta => meta.readCampaignDelivery(campaign.meta_campaign_id!, {
-      dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children,
+    }, async meta => ({
+      delivery: await meta.readCampaignDelivery(campaign.meta_campaign_id!, {
+        dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children,
+      }),
+      funding: operatorFunded ? await meta.readAccountFunding() : null,
     }));
-    return NextResponse.json({ delivery }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ delivery, ...(funding ? { funding } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);
@@ -150,6 +157,14 @@ async function handlePATCH(
   if (action === "active" && !children) {
     return apiError("Campaign children need reconciliation before activation.", 409);
   }
+  let operatorFunded = false;
+  if (action === "active") {
+    try {
+      operatorFunded = await isOperatorFunded(campaign.business_id);
+    } catch {
+      return apiError("Campaign funding could not be verified. Try again before activating.", 503);
+    }
+  }
 
   let deliveryAfter: CampaignDeliverySnapshot | null = null;
   let cappedAfter: CappedActivation | null = null;
@@ -193,19 +208,34 @@ async function handlePATCH(
             throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
           }
           const capPaise = capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined;
-          // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
-          await meta.readLifetimeSpendPaise(campaign.meta_campaign_id!).then(mediaPaise => observeCustomerCosts(context, {
-            campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!, mediaPaise,
-          })).catch(() => undefined);
-          const reservation = await reserveCustomerCampaign(context, {
+          if (operatorFunded) {
+            // #245: the operator pays Meta directly; Meta's account spending limit must cover the cap.
+            if (!capDays || !capPaise) {
+              throw new CustomerBalanceError("This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads in Meta and choose how many days to run.");
+            }
+            const funding = await meta.readAccountFunding();
+            if (funding.spendCapPaise <= 0) throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
+            if (funding.roomPaise < capPaise) {
+              throw new CustomerBalanceError(`Meta has ${exactRupees.format(funding.roomPaise / 100)} left under the ad account's spending limit; this run needs ${exactRupees.format(capPaise / 100)}. Add funds on Meta or choose fewer days.`);
+            }
+          } else {
+            // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
+            await meta.readLifetimeSpendPaise(campaign.meta_campaign_id!).then(mediaPaise => observeCustomerCosts(context, {
+              campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!, mediaPaise,
+            })).catch(() => undefined);
+          }
+          const reservation = operatorFunded ? null : await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
             requestKey: parsed.data.confirmationDigest, lifetimeCapPaise: capPaise,
           });
+          const confirm = async (state: "active" | "paused" | "uncertain") => {
+            if (reservation) await confirmCustomerCampaign(context, id, reservation.reservationId, state);
+          };
           let liveTree = { adSetIds: children!.adSetIds, adIds: children!.adIds };
           try {
             if (capDays && capPaise) {
-              if (capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
+              if (reservation && capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
               const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
               const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
                 sourceAdSetId: children!.adSetIds[0], sourceAdIds: children!.adIds.filter(adId => !priorCappedAds.has(adId)), lifetimeBudgetPaise: capPaise,
@@ -229,15 +259,16 @@ async function handlePATCH(
                 throw error;
               }
             } else {
+              if (!reservation) throw new CustomerBalanceError();
               await meta.enforceCampaignSpendCap(campaign.meta_campaign_id!, reservation.mediaLimitPaise);
               await meta.updateCampaignStatus(campaign.meta_campaign_id!, "ACTIVE");
               deliveryAfter = await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
                 dailyBudgetRupees: campaign.daily_budget!, status: "active", ...children!,
               });
             }
-            await confirmCustomerCampaign(context, id, reservation.reservationId, "active");
+            await confirm("active");
           } catch (error) {
-            await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
+            await confirm("uncertain").catch(() => undefined);
             throw error;
           }
           // #208: never leave Meta running while AdBrain shows the campaign paused.
@@ -246,10 +277,10 @@ async function handlePATCH(
           if (activeError) {
             const paused = await meta.pauseCampaignTree(campaign.meta_campaign_id!, liveTree).catch(() => null);
             if (!paused?.objects.some(object => object.level === "campaign" && object.status === "PAUSED")) {
-              await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
+              await confirm("uncertain").catch(() => undefined);
               throw new CampaignDeliveryError("AdBrain could not record the activation and Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
             }
-            await confirmCustomerCampaign(context, id, reservation.reservationId, "paused").catch(() => undefined);
+            await confirm("paused").catch(() => undefined);
             throw new CampaignDeliveryError("AdBrain could not record the activation, so the campaign was paused again in Meta. Try again.");
           }
           return;
