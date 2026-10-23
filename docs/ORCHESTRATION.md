@@ -78,14 +78,12 @@ Routine steps never wait for the CEO or the CTO.
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, post in #74 and the CEO signs in.
-- **Paid budget.** Create runs: 10 approved on Oct 1 (runs 1-10) and 10 more
-  approved by the owner on Oct 22 (runs 11-20). Shares of run 10 plus the new 10:
-  Dev 3 5 (run 10 + 4), Dev 2 (#141), QA 2 (#158), DevOps 2 (after the parallel
-  flip). Run 19: QA (#169 desktop walk). Run 20: reserved for #157. The #98
-  model bake-off has its own $1 cap and does
-  not count as Create runs.
-  Log `Create run N/20` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
-  At the limit, stop and post; the CEO asks the owner for the next 10.
+- **Paid budget.** Create runs: **no count limit** (owner, Oct 23: "as many as
+  you need"; runs 1-20 used by then). Run Create whenever the work needs it, not
+  in loops. Log `Create run N` with the saved count in
+  [#98](https://github.com/vanshulgoyal101/adbrain/issues/98). A run costs about
+  ₹10-20 in AI; if one costs far more, stop and post. The #98 model bake-off has
+  its own $1 cap.
   No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 23, replaces
   the Oct 22 ₹600): the owner added ₹1,000 to Solaride 101, which is ₹847 for ads
   after GST, so the run is ₹280/day for 3 days (₹840). It is Solaride's first
