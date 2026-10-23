@@ -33,7 +33,13 @@ describe("QA approval", () => {
   it("accepts QA's other approval wordings and refuses their negations", () => {
     const verdict = (body: string) => qaApproval([comment(body, "2026-10-23T15:52:35Z")], head).approved;
     expect(verdict("**QA review of c30aaba (tenant boundary): fine to merge for #157, with one follow-up.**")).toBe(true);
-    expect(verdict("QA → DevOps: PR #248 ready to ship at c30aaba.")).toBe(true);
+    expect(verdict("QA → DevOps: PR #248 approved at c30aaba (details on the PR). Ready to ship.")).toBe(true);
+    expect(verdict("QA: PR #217 is re-approved at the rebased head c30aaba; nothing changed versus 3917f32.")).toBe(true);
+    expect(verdict("QA: ready at c30aaba (PR #256: money + migration, no auto-merge).")).toBe(false);
+    expect(verdict("QA: ready to ship at c30aaba once you approve.")).toBe(false);
+    expect(verdict("QA: c30aaba is approved if you agree with the hold logic.")).toBe(false);
+    expect(verdict("QA: re-review at c30aaba; the SQL you approved is unchanged.")).toBe(false);
+    expect(verdict("QA: live at d34d32d, ready for the re-measure. PR #248 (QA-approved c30aaba) was released.")).toBe(false);
     expect(verdict("QA: c30aaba is not fine to merge yet.")).toBe(false);
     expect(verdict("QA: please hold c30aaba; it conflicts with main.")).toBe(false);
   });
