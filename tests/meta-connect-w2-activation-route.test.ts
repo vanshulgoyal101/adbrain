@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   reserveCustomerCampaign: vi.fn(),
   confirmCustomerCampaign: vi.fn(),
   getCustomerBalance: vi.fn(),
+  readLifetimeSpendPaise: vi.fn(),
+  observeCustomerCosts: vi.fn(),
   dailyBudget: 500,
   storedAdSetIds: ["set-1"],
   storedAdIds: ["ad-1"],
@@ -89,6 +91,7 @@ vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
   reserveCustomerCampaign: mocks.reserveCustomerCampaign,
   confirmCustomerCampaign: mocks.confirmCustomerCampaign,
   getCustomerBalance: mocks.getCustomerBalance,
+  observeCustomerCosts: mocks.observeCustomerCosts,
 }));
 
 function patch(body: unknown): Request {
@@ -121,6 +124,8 @@ beforeEach(() => {
     ...reviewedDelivery, campaign: { ...reviewedDelivery.campaign, status: expected.status.toUpperCase() },
   }));
   mocks.saveCampaign.mockResolvedValue({ error: null });
+  mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
+  mocks.observeCustomerCosts.mockResolvedValue(undefined);
   mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
   mocks.deleteCampaign.mockResolvedValue({ error: null });
@@ -129,7 +134,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -242,6 +247,29 @@ describe("campaign activation generation fence", () => {
     expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active");
     expect(mocks.reserveCustomerCampaign.mock.calls[0][1].lifetimeCapPaise).toBeUndefined();
+  });
+
+  it("records Meta lifetime spend as cost evidence before reserving, without an operator (#216)", async () => {
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.readLifetimeSpendPaise).toHaveBeenCalledWith("meta-campaign-1");
+    expect(mocks.observeCustomerCosts).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, {
+      campaignId: "campaign-1", adAccountId: "act_123", connectionGeneration: 4, mediaPaise: 3263,
+    });
+    expect(mocks.observeCustomerCosts.mock.invocationCallOrder[0]).toBeLessThan(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]);
+    expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
+  });
+
+  it("leaves the reserve as the gate when the Meta spend read fails (#216)", async () => {
+    const { CustomerBalanceError } = await import("@/lib/payments/customer-balance");
+    mocks.readLifetimeSpendPaise.mockRejectedValueOnce(new Error("Meta unavailable"));
+    mocks.reserveCustomerCampaign.mockRejectedValueOnce(new CustomerBalanceError());
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.observeCustomerCosts).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("pauses the uncapped tree when saving active fails after Meta activation (#208)", async () => {

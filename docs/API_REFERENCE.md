@@ -237,7 +237,11 @@ Cost evidence uses integer paise, immutable UUIDs and cumulative lifetime
 media/tax figures; stale or conflicting figures hold funds. A capped run reserves
 its Meta lifetime cap plus GST instead of 7 × daily and is bounded by attributed
 media plus that cap; its aging non-final figures do not hold funds, but figures
-above the bound do (#208). Capturing payment
+above the bound do (#208). AdBrain itself records non-final evidence from Meta's
+lifetime campaign spend (`customer_ad_observe_costs`, service role only) during
+the activation review, activation, Refresh and the `enforce-spend` sweep, so no
+operator is needed to start or keep a funded run; final evidence stays
+operator-only (#216). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block

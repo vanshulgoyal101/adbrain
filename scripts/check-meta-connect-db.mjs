@@ -18,6 +18,7 @@ const configurablePaymentMigration = await readFile(join(root, "db/migrations/20
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
+const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -703,7 +704,7 @@ async function verifyCappedRunBound(db, database) {
   // Replaying older payment migrations restores a pre-priced funding check; reinstate the current one.
   await db.query("alter table private.production_payment_orders drop constraint if exists production_payment_funding_mode_check");
   await db.query(configurablePaymentMigration.match(/alter table private\.production_payment_orders add constraint production_payment_funding_mode_check[\s\S]*?\) is true\);/)[0]);
-  const fixture = async (dailyRupees, amountPaise = 1000000) => {
+  const fixture = async (dailyRupees, amountPaise = 1000000, { operator = true } = {}) => {
     const owner = randomUUID(), business = randomUUID(), order = randomUUID(), campaign = randomUUID();
     await db.query("insert into auth.users(id) values ($1)", [owner]);
     await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic capped run')", [business,owner]);
@@ -726,7 +727,15 @@ async function verifyCappedRunBound(db, database) {
       bound: async () => (await db.query("select bounded_media_paise from private.customer_ad_reservations where campaign_id=$1",[campaign])).rows[0].bounded_media_paise,
       hold: (held) => db.query("update private.customer_ad_costs set held=$2 where campaign_id=$1",[campaign,held]),
       pause: async (reservationId) => { await db.query("update public.campaigns set status='paused' where id=$1",[campaign]); await run.result(reservationId,'paused'); },
+      observe: (media, user = owner, adAccount = 'act_123', generation = 1) => service("select public.customer_ad_observe_costs($1,$2,$3,$4,$5,$6,$7) as result",
+        [business,user,account,campaign,adAccount,generation,media]),
+      final: (reservationId, media, tax) => service("select public.customer_ad_reconcile_costs($1,$2,$3,$4,'act_123',1,$5,$6,1800,$7,$8,true,$9)",
+        [business,owner,account,campaign,media,tax,new Date().toISOString(),randomUUID(),reservationId]),
+      cost: async () => (await db.query("select media_paise::int as media, tax_paise::int as tax, tax_rate_bps as rate, held, finalized from private.customer_ad_costs where campaign_id=$1",[campaign])).rows[0],
+      evidence: async () => (await db.query("select actor_id, input from private.customer_ad_cost_evidence where campaign_id=$1 and input->>'source'='meta' order by created_at desc limit 1",[campaign])).rows[0],
+      business, owner, campaign,
     };
+    if (!operator) { await db.query("delete from private.production_payment_operators where user_id=$1",[owner]); return run; }
     await run.costs(0,0);
     return run;
   };
@@ -816,6 +825,100 @@ async function verifyCappedRunBound(db, database) {
     await run.activate(next.reservationId);
     await run.age();
     assert.equal((await run.balance()).held,true);
+  });
+  await check(`${database}: Meta-read evidence lets a paying customer reserve and activate with no operator (#216)`, async () => {
+    const run = await fixture(280, 125000, { operator: false });
+    await assert.rejects(run.costs(0,0), {code:'42501'});
+    await assert.rejects(run.reserve(84000), {code:'23514'});
+    assert.deepEqual(await run.observe(0).then(result => [result.mediaPaise,result.taxPaise,result.taxRateBps]), [0,0,1800]);
+    const evidence = await run.evidence();
+    assert.equal(evidence.actor_id,null);
+    assert.equal(evidence.input.final,false);
+    const { reservationId: id } = await run.reserve(84000);
+    await run.activate(id);
+    assert.equal((await run.balance()).held,false);
+    await run.age();
+    assert.equal((await run.balance()).held,false);
+    await run.observe(3263);
+    assert.deepEqual(await run.cost(), { media:3263, tax:588, rate:1800, held:false, finalized:false });
+  });
+  await check(`${database}: Meta-read evidence never lowers figures, finalizes or clears a hold (#216)`, async () => {
+    const run = await fixture(280);
+    await run.costs(1000,200);
+    await run.observe(500);
+    assert.deepEqual(await run.cost(), { media:1000, tax:200, rate:1800, held:false, finalized:false });
+    await run.observe(3263);
+    assert.deepEqual(await run.cost(), { media:3263, tax:588, rate:1800, held:false, finalized:false });
+    await run.hold(true);
+    await run.observe(4000);
+    assert.deepEqual(await run.cost(), { media:4000, tax:720, rate:1800, held:true, finalized:false });
+    assert.equal((await run.balance()).held,true);
+  });
+  await check(`${database}: Meta-read evidence is bound to the owner, campaign, ad account, generation and a live order (#216)`, async () => {
+    const run = await fixture(280, 125000, { operator: false });
+    const stranger = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [stranger]);
+    await assert.rejects(run.observe(0, stranger), {code:'23514'});
+    await assert.rejects(run.observe(0, run.owner, 'act_999'), {code:'23514'});
+    await assert.rejects(run.observe(0, run.owner, 'act_123', 2), {code:'23514'});
+    await assert.rejects(run.observe(-1), {code:'23514'});
+    assert.equal(await run.cost(), undefined);
+    const owner = randomUUID(), business = randomUUID(), campaign = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [owner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic unpaid')", [business,owner]);
+    await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [business]);
+    await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',280,$3,'act_123','123',1)", [campaign,business,`meta_${campaign}`]);
+    await assert.rejects(service("select public.customer_ad_observe_costs($1,$2,$3,$4,'act_123',1,0)",[business,owner,account,campaign]), {code:'23514'});
+    for (const role of ['anon','authenticated']) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("select public.customer_ad_observe_costs($1,$2,$3,$4,'act_123',1,0)",[run.business,run.owner,account,run.campaign]),{code:'42501'});
+      } finally { await session.end(); }
+    }
+  });
+  await check(`${database}: final evidence stays operator-only after Meta-read evidence, and a closed or never-reserved run does not hold when it ages (#216)`, async () => {
+    const run = await fixture(280);
+    await run.observe(0);
+    await run.age();
+    assert.equal((await run.balance()).held,false);
+    await run.observe(0);
+    const { reservationId: id } = await run.reserve(84000);
+    await run.activate(id);
+    await run.observe(2000);
+    await run.pause(id);
+    await run.final(id, 2000, 360);
+    assert.deepEqual(await run.cost(), { media:2000, tax:360, rate:1800, held:false, finalized:true });
+    await run.observe(2000);
+    await run.age();
+    assert.equal((await run.cost()).finalized,true);
+    assert.equal((await run.balance()).held,false);
+  });
+  await check(`${database}: QA #219: a review read after final evidence leaves the closed run finalizable or finalized`, async () => {
+    const run = await fixture(280);
+    await run.observe(0);
+    const { reservationId: id } = await run.reserve(84000);
+    await run.activate(id);
+    await run.pause(id);
+    await run.final(id, 2000, 360);
+    await run.observe(2000);
+    const stillFinal = (await run.cost()).finalized;
+    const refinalized = stillFinal || await run.final(id, 2000, 360).then(() => true, () => false);
+    assert.ok(refinalized, "observe un-finalized a closed run and the operator cannot finalize it again, so customer_ad_refund_guard blocks every refund");
+  });
+  await check(`${database}: re-activating a finalized run reopens it as non-final (#216)`, async () => {
+    const run = await fixture(280);
+    const { reservationId: first } = await run.reserve(84000);
+    await run.activate(first);
+    await run.pause(first);
+    await run.final(first, 2000, 360);
+    await run.observe(2500);
+    assert.deepEqual(await run.cost(), { media:2500, tax:450, rate:1800, held:false, finalized:true });
+    const { reservationId: second } = await run.reserve(84000);
+    await run.activate(second);
+    assert.equal((await run.cost()).finalized,false);
+    assert.equal((await run.balance()).held,false);
   });
 }
 
@@ -1094,6 +1197,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
       if (!priced) await db.query(configurablePaymentMigration);
       await db.query(cappedBoundMigration);
       await db.query(cappedBoundMigration);
+      await db.query(metaCostMigration);
+      await db.query(metaCostMigration);
       await verifyCustomerAllowance(db,database);
       await verifyCappedRunBound(db,database);
       return;
@@ -2197,6 +2302,7 @@ try {
   assert.ok(schema.indexOf(webhookHealthMigration.trim()) < schema.indexOf(cappedBoundMigration.trim()), "Canonical schema must include the exact capped bound migration after webhook health");
   assert.ok(schema.includes(customAmountMigration.trim()), "Canonical schema must include the exact custom payment amount migration");
   assert.ok(schema.indexOf(webhookHealthMigration.trim()) < schema.indexOf(customAmountMigration.trim()), "Canonical schema must include the custom payment amount migration after webhook health");
+  assert.ok(schema.indexOf(customAmountMigration.trim()) < schema.indexOf(metaCostMigration.trim()), "Canonical schema must include the exact Meta cost observation migration after the custom payment amount");
   assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);
