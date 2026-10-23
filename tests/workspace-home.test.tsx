@@ -99,9 +99,14 @@ describe("Home workspace", () => {
     queries.getSpendEvaluation.mockReturnValue(new Promise(resolve => { resolveSpend = resolve; }));
     const { default: SettingsPage } = await import("@/app/(app)/settings/page");
     const page = await SettingsPage({ searchParams: Promise.resolve({}) });
-    const [, connectionBoundary, spendBoundary] = page.props.children;
+    const boundaries = page.props.children.filter((child: { type?: unknown }) => child?.type === Suspense);
+    const boundary = (name: string) => boundaries.find((child: { props: { children: { type: { name: string } } } }) => child.props.children.type.name === name);
+    const connectionBoundary = boundary("ConnectionSettings");
+    const spendBoundary = boundary("SpendSettings");
     expect(connectionBoundary.type).toBe(Suspense);
     expect(spendBoundary.type).toBe(Suspense);
+    // #235: the WhatsApp status streams in its own boundary.
+    expect(boundary("WhatsAppStatusSection")).toBeDefined();
     // #238: preferences and privacy requests load in their own server-rendered boundary.
     const privacyBoundary = page.props.children.at(-1);
     expect(privacyBoundary.type).toBe(Suspense);
@@ -128,7 +133,8 @@ describe("Home workspace", () => {
     queries.getSpendEvaluation.mockRejectedValue(new Error("Unavailable"));
     const { default: SettingsPage } = await import("@/app/(app)/settings/page");
     const page = await SettingsPage({ searchParams: Promise.resolve({}) });
-    const section = page.props.children[2].props.children;
+    const section = page.props.children.find((child: { type?: unknown; props?: { children?: { type?: { name?: string } } } }) =>
+      child?.type === Suspense && child.props?.children?.type?.name === "SpendSettings").props.children;
     render(await section.type(section.props));
     expect(screen.getByRole("alert")).toHaveTextContent("Your saved limits have not changed.");
     expect(screen.queryByText("Guardrails loaded")).not.toBeInTheDocument();

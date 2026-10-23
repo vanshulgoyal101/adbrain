@@ -233,6 +233,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   button can differ from the phone printed on the ad. It is accepted only if it is the
   Page's number or a number on a WhatsApp Business Account owned by the ad account's
   own Meta business; Meta accepts those for the Page's WhatsApp ad sets (#157).
+- Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842" or
+  "Not linked yet") with a short linking guide and a Check again button (#235).
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
 - The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,

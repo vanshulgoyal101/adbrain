@@ -1,6 +1,8 @@
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { MetaConnectionPanel } from "@/components/meta-connection";
+import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
+import { Suspense } from "react";
 import { Instructions } from "@/components/instructions";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -80,6 +82,13 @@ export default async function BrandPage() {
             connection={connection}
             oauthConfigured={metaOAuthConfigured()}
           />
+          {connection.ready && (
+            <div className="mt-4">
+              <Suspense fallback={<p role="status" className="text-sm text-slate-500">Checking WhatsApp chat ads</p>}>
+                <WhatsAppStatusSection businessId={business.id} />
+              </Suspense>
+            </div>
+          )}
         </div>
       )}
       <nav

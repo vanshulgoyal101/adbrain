@@ -10,6 +10,7 @@ import { ManagedBilling } from "@/components/managed-billing";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
+import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 import { getPrimaryBusiness, getSpendEvaluation } from "@/lib/supabase/queries";
@@ -87,6 +88,9 @@ export default async function SettingsPage({
       />
       <Suspense fallback={<SettingsLoading label="Meta connection" />}>
         <ConnectionSettings businessId={business.id} searchParams={searchParams} />
+      </Suspense>
+      <Suspense fallback={<SettingsLoading label="WhatsApp chat ads" />}>
+        <WhatsAppStatusSection businessId={business.id} />
       </Suspense>
       <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
         <SpendSettings businessId={business.id} />
