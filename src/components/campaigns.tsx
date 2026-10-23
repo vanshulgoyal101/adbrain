@@ -71,10 +71,12 @@ import {
   spendHealth,
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
-import { activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
-import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
+import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
+
+const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
 const STATUS_STYLES: Record<string, string> = {
   paused: "bg-amber-50 text-amber-700",
@@ -205,10 +207,15 @@ function BusinessCampaigns({
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
+  const [activationFunding, setActivationFunding] = useState<AccountFunding | null>(null);
   const [capDays, setCapDays] = useState(3);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
+  const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
+  // #245: an operator-funded business runs only capped, within Meta's account spending limit.
+  const activationFunded = !activationFunding
+    || (activationCapped && activationFunding.spendCapPaise > 0 && activationFunding.roomPaise >= activationCapPaise);
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
@@ -851,22 +858,27 @@ function BusinessCampaigns({
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
-      const review = await deliveryResponse.json() as { delivery?: unknown; error?: string };
+      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
+      const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
       // #208: a capped run needs only cap + GST; one day opens the dialog, PATCH enforces the chosen days.
       const capped = deliveryChildren(delivery).every(child => child.status === "PAUSED");
-      const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}${capped ? "&capDays=1" : ""}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
+      if (!funding) {
+        const response = await fetch(`/api/payments/customer-balance?businessId=${encodeURIComponent(campaign.business_id)}&campaignId=${encodeURIComponent(campaign.id)}${capped ? "&capDays=1" : ""}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Customer advertising funds must be reconciled before activation.");
+      }
       const digest = await buildActivationDigest(campaign, connection, delivery);
       setReviewConnection(connection);
       setActivationDigest(digest);
       setActivationDelivery(delivery);
+      setActivationFunding(funding);
       setActivationReview(campaign);
       setConnectOpen(false);
     } catch (reason) {
       setActivationDigest(null);
       setActivationDelivery(null);
+      setActivationFunding(null);
       setActivationReview(null);
       setError(reason instanceof Error ? reason.message : "Activation review is unavailable.");
     }
@@ -1007,18 +1019,25 @@ function BusinessCampaigns({
                   {[1, 2, 3, 4, 5, 6, 7].map(days => <option key={days} value={days}>{days} {days === 1 ? "day" : "days"}</option>)}
                 </select>
                 <p className="mt-1 font-medium">Total limit on Meta: {formatCurrency((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
+                {activationFunding && <p className="mt-1 font-medium">
+                  {activationFunding.spendCapPaise > 0
+                    ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
+                    : "Funded on Meta: set a spending limit on the Meta ad account first."}
+                </p>}
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
               </div>
-              : activationReady
-                ? <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>
-                : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
+              : activationFunding
+                ? <p className="mt-2">This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads listed above in Meta, then refresh this review.</p>
+                : activationReady
+                  ? <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>
+                  : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
             <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
             <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!)}>Refresh review</Button>
           </div>}
           <Button
             size="sm"
             className="ml-3"
-            disabled={!activationDigest || !activationReady
+            disabled={!activationDigest || !activationReady || !activationFunded
               || statusChangingId === activationReview.id}
             onClick={() => void setCampaignStatus(activationReview, "active", true)}
             data-product-event="campaign.activate"

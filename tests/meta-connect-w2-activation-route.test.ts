@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   getCustomerBalance: vi.fn(),
   readLifetimeSpendPaise: vi.fn(),
   observeCustomerCosts: vi.fn(),
+  isOperatorFunded: vi.fn(),
+  readAccountFunding: vi.fn(),
   dailyBudget: 500,
   storedAdSetIds: ["set-1"],
   storedAdIds: ["ad-1"],
@@ -93,6 +95,7 @@ vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
   getCustomerBalance: mocks.getCustomerBalance,
   observeCustomerCosts: mocks.observeCustomerCosts,
 }));
+vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {
@@ -126,6 +129,8 @@ beforeEach(() => {
   mocks.saveCampaign.mockResolvedValue({ error: null });
   mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
   mocks.observeCustomerCosts.mockResolvedValue(undefined);
+  mocks.isOperatorFunded.mockResolvedValue(false);
+  mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
   mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
   mocks.deleteCampaign.mockResolvedValue({ error: null });
@@ -134,7 +139,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readAccountFunding: mocks.readAccountFunding }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -627,5 +632,88 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     const { PATCH } = await import("@/app/api/campaigns/[id]/route");
     expect((await PATCH(patch({ status: "paused" }), { params: Promise.resolve({ id: "campaign-1" }) })).status).toBe(200);
     expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
+  });
+
+  describe("operator-funded business: Meta-side cap only, no AdBrain payment (#245)", () => {
+    const roomy = { spendCapPaise: 204237, amountSpentPaise: 4237, roomPaise: 200000, prepay: true };
+    const metaWrites = () => [mocks.createCappedAdSet, mocks.activateCappedTree, mocks.updateCampaignStatus, mocks.enforceCampaignSpendCap];
+
+    beforeEach(() => {
+      mocks.isOperatorFunded.mockResolvedValue(true);
+      mocks.readAccountFunding.mockResolvedValue(roomy);
+    });
+
+    it("activates the capped tree with no reservation or cost evidence when Meta's room covers the cap", async () => {
+      expect((await activate()).status).toBe(200);
+      expect(mocks.readAccountFunding.mock.invocationCallOrder[0]).toBeLessThan(mocks.createCappedAdSet.mock.invocationCallOrder[0]);
+      expect(mocks.createCappedAdSet).toHaveBeenCalledWith("meta-campaign-1", expect.objectContaining({ lifetimeBudgetPaise: 150_000 }));
+      expect(mocks.activateCappedTree).toHaveBeenCalledWith("meta-campaign-1", capped);
+      expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+      expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+      expect(mocks.readLifetimeSpendPaise).not.toHaveBeenCalled();
+      expect(mocks.observeCustomerCosts).not.toHaveBeenCalled();
+      expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active" }, "campaign-1");
+    });
+
+    it("refuses when Meta's room is below the cap, before any Meta write", async () => {
+      mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
+      const response = await activate();
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toMatch(/Meta has ₹847\.46 left .* this run needs ₹1,500\.00/);
+      for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
+      expect(mocks.saveCampaign).not.toHaveBeenCalled();
+    });
+
+    it("refuses when the ad account has no spending limit", async () => {
+      mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 0, amountSpentPaise: 4237, roomPaise: 0, prepay: false });
+      const response = await activate();
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toMatch(/Set a spending limit on the Meta ad account/);
+      for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
+    });
+
+    it("refuses an uncapped activation before reading funds or writing to Meta", async () => {
+      mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
+      const uncapped = createHash("sha256").update(activationConfirmationPayload(
+        { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+        { generation: 4, selected }, reviewedDelivery,
+      )).digest("hex");
+      const response = await activate({ confirmationDigest: uncapped });
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toMatch(/runs only with a total limit/);
+      expect(mocks.readAccountFunding).not.toHaveBeenCalled();
+      for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
+      expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    });
+
+    it("pauses Meta again when saving active fails, with no reservation to confirm", async () => {
+      mocks.saveCampaign.mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: new Error("write failed") });
+      const response = await activate();
+      expect(response.status).toBe(409);
+      expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
+      expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+    });
+
+    it("refuses activation when operator funding cannot be verified", async () => {
+      mocks.isOperatorFunded.mockRejectedValue(new Error("database unavailable"));
+      expect((await activate()).status).toBe(503);
+      expect(mocks.withMetaConnection).not.toHaveBeenCalled();
+    });
+
+    it("keeps a customer business gated by its reservation and never reads Meta funding", async () => {
+      mocks.isOperatorFunded.mockResolvedValue(false);
+      expect((await activate()).status).toBe(200);
+      expect(mocks.reserveCustomerCampaign).toHaveBeenCalled();
+      expect(mocks.readAccountFunding).not.toHaveBeenCalled();
+    });
+
+    it("shows the live Meta funding in the review only for an operator-funded business", async () => {
+      const { GET } = await import("@/app/api/campaigns/[id]/route");
+      const review = () => GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
+      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: roomy });
+      mocks.isOperatorFunded.mockResolvedValue(false);
+      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery });
+      expect(mocks.readAccountFunding).toHaveBeenCalledTimes(1);
+    });
   });
 });

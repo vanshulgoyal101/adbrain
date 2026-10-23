@@ -77,6 +77,7 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
+- **Operator funding** (`operator-funding`): the real Solaride ad account read (`spend_cap` 88983, `amount_spent` 4237 paise after the owner's ₹1,000 top-up) that gates an operator-funded capped activation (#245), recorded read-only by `scripts/record-meta-funding-fixtures.ts`.
 - **CSP** (`csp-render`): the production policy is pinned, and the Create review renders three ads whose images and requests the policy allows, without `eval`.
 
 Fixtures in `tests/core/fixtures` come from production recordings and `evals/creative`; each file or test notes its source and any synthetic part. When a gate change is intended, update the fixture or pinned policy in the same PR and say why.

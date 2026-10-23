@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   confirmCustomerCampaign: vi.fn(),
   readLifetimeSpendPaise: vi.fn(),
   observeCustomerCosts: vi.fn(),
+  isOperatorFunded: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -35,6 +36,7 @@ vi.mock("@/lib/payments/customer-balance", () => ({
   confirmCustomerCampaign: mocks.confirmCustomerCampaign,
   observeCustomerCosts: mocks.observeCustomerCosts,
 }));
+vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
   requireScheduledBusiness: mocks.requireScheduledBusiness,
@@ -86,6 +88,7 @@ beforeEach(() => {
   mocks.getCustomerBalance.mockResolvedValue({ held: false, reservations: [] });
   mocks.confirmCustomerCampaign.mockResolvedValue(undefined);
   mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
+  mocks.isOperatorFunded.mockResolvedValue(false);
   mocks.observeCustomerCosts.mockResolvedValue(undefined);
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
@@ -248,6 +251,38 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(
       { businessId: "business-1", userId: "system" }, "campaign-1", "reservation-1", "paused",
     );
+  });
+
+  it("does not pause an operator-funded run for the customer allowance (#245)", async () => {
+    configureAdmin([boundCampaign], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.isOperatorFunded.mockResolvedValue(true);
+    mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.getCustomerBalance).not.toHaveBeenCalled();
+    expect(mocks.readLifetimeSpendPaise).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect((await response.json()).swept).toEqual([]);
+  });
+
+  it("still applies the weekly cap to an operator-funded run (#245)", async () => {
+    mocks.isOperatorFunded.mockResolvedValue(true);
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.getCampaignInsights).toHaveBeenCalledWith("meta-campaign-1", { weekly: true });
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+    expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+  });
+
+  it("skips a business whose funding mode cannot be verified and reports it (#245)", async () => {
+    mocks.isOperatorFunded.mockRejectedValue(new Error("database unavailable"));
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ ok: false, unverified: ["business-1"] });
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("protects held customer funds without a saved spend-limits row", async () => {

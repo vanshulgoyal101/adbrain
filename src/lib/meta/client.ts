@@ -190,6 +190,7 @@ export type PausedCampaignTree = {
 };
 
 export type CappedAdSet = { adSetId: string; adIds: string[]; lifetimeBudgetPaise: number; endTime: string };
+export type AccountFunding = { spendCapPaise: number; amountSpentPaise: number; roomPaise: number; prepay: boolean };
 export type CappedActivation = {
   campaign: { id: string; status: "ACTIVE"; effectiveStatus: string | null };
   adSet: { id: string; status: "ACTIVE"; effectiveStatus: string | null; lifetimeBudgetPaise: number; budgetRemainingPaise: number; endTime: string };
@@ -1044,6 +1045,21 @@ export class MetaClient {
       throw new MetaError("Campaign does not match the connected ad account.");
     }
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
+  }
+
+  /** Live ad account funding (#245): Meta's account spending limit and amount spent, both media paise excluding GST. */
+  async readAccountFunding(): Promise<AccountFunding> {
+    const account = await this.graph<{ id?: string; currency?: string; spend_cap?: string; amount_spent?: string; is_prepay_account?: boolean }>(
+      `${encodeURIComponent(this.creds.adAccountId)}?fields=id,spend_cap,amount_spent,is_prepay_account,currency`,
+    );
+    const paise = /^\d{1,15}$/;
+    if (account.id !== this.creds.adAccountId || account.currency !== "INR"
+      || !paise.test(account.spend_cap ?? "0") || !paise.test(account.amount_spent ?? "")) {
+      throw new MetaError("Meta ad account funding could not be verified.");
+    }
+    const spendCapPaise = Number(account.spend_cap ?? 0);
+    const amountSpentPaise = Number(account.amount_spent);
+    return { spendCapPaise, amountSpentPaise, roomPaise: Math.max(0, spendCapPaise - amountSpentPaise), prepay: account.is_prepay_account === true };
   }
 
   async deleteObject(id: string): Promise<void> {

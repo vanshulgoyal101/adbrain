@@ -97,7 +97,14 @@ provider ID while paused. Uncertain activation and cost evidence hold funds,
 except aging evidence within an open capped reservation's `bounded_media_paise`;
 stale non-final evidence holds only while the campaign has an open reservation.
 Meta-read evidence (#216) has a null `actor_id` and `input.source='meta'`;
-final reconciliation releases only unused allowance. Source inclusion alone
+final reconciliation releases only unused allowance. The
+[operator-funded migration](../db/migrations/20261023_operator_funded_businesses.sql)
+(#245) adds `private.operator_funded_businesses` (one row per business the
+operator funds on Meta: `approved_by`, `approved_at`, `reason`) and the
+append-only `private.operator_funding_audit`. Both are RLS-protected and closed
+even to the service role; the service-only `operator_funded` and
+`operator_funding_set` RPCs read and change them (operator grant required). The
+campaign guard lets such a business save `active` without a reservation. Source inclusion alone
 does not prove a target migration was applied. See the
 [allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission
 and recovery limitations.
