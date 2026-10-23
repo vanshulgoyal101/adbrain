@@ -163,7 +163,7 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect((await GET(new Request(`${url}&verificationAmountPaise=1000`))).status).toBe(409);
     expect((await POST(request("orders", { ...body, verificationAmountPaise: 1000 }))).status).toBe(409);
     vi.stubEnv("PAYMENTS_LIVE_VERIFICATION_ENABLED", "false");
-    expect(await (await GET(new Request(url))).json()).toMatchObject({ quote: { totalPaise: 1_000_000 }, verificationAmountRange: null,
+    expect(await (await GET(new Request(url))).json()).toMatchObject({ quote: { totalPaise: 150_000 }, verificationAmountRange: null,
       orders: [{ amountPaise: 525, checkout: null }] });
     expect(mocks.createOrder).toHaveBeenCalledTimes(1);
   });
@@ -209,6 +209,17 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("production_payment_order_claim", expect.objectContaining({ p_quote: expect.objectContaining({ totalPaise: 125_000 }) }));
     expect(mocks.createOrder).toHaveBeenCalledWith(orderId, hash, saved.quote, expect.objectContaining({ annualAmountPaise: 125_000 }));
     expect(await created.json()).toMatchObject({ amountPaise: 125_000, checkout: { amount: 125_000 } });
+  });
+
+  it("pre-fills INR 1,500 when nothing is saved and no amount is configured (#225)", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
+    listed = [];
+    expect(await (await GET(new Request(url))).json()).toMatchObject({ quote: { totalPaise: 150_000, serviceAllocationPaise: 30_000, metaAllocationPaise: 120_000 },
+      annualAmountRange: { minPaise: 50_000, maxPaise: 1_000_000 } });
+    vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "1000000");
+    expect((await (await GET(new Request(url))).json()).quote.totalPaise).toBe(1_000_000);
   });
 
   it("rejects annual amounts outside the bounds and terms accepted for another amount", async () => {
@@ -268,7 +279,7 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(await (await verify(callback())).json()).toMatchObject({ amountPaise: 1_000, capturedPaise: 1_000, status: "captured", spendablePaise: 0 });
     vi.stubEnv("PAYMENTS_LIVE_VERIFICATION_ENABLED", "true");
     expect(await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json())
-      .toMatchObject({ quote: { totalPaise: 1_000_000 }, orders: [{ amountPaise: 1_000, receipt: { amountPaise: 1_000 } }] });
+      .toMatchObject({ quote: { totalPaise: 150_000 }, orders: [{ amountPaise: 1_000, receipt: { amountPaise: 1_000 } }] });
   });
 
   it.each(["meta_funding_latest_record", "production_payment_funding_valid"])("creates and replays operator checkout without Meta onboarding or available %s", async unavailable => {
