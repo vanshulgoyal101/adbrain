@@ -87,7 +87,7 @@ Changing Vercel Production environment values requires a new deployment.
 
 | Variable | Default / validation | Purpose |
 | --- | --- | --- |
-| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: `1000000`; integer 100-1000000 | Default annual total when a request names no amount. Customers normally choose their own amount, INR 500-10,000 (see below); 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
+| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: Billing pre-fills `150000` (INR 1,500); integer 100-1000000 | Default amount when a request names none and no unpaid order is open. Customers normally choose their own amount, INR 500-10,000 (see below); 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
 | `PAYMENTS_LIVE_VERIFICATION_ENABLED` | Unset/empty/`false`: off; exactly `true`: on | Separate one-time real payment verification, not the annual service |
 | `PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE` | Unset: `1000`; integer 100-1000000 | Default and maximum selectable verification total, INR 10 by default; zero service/ad allocation |
 | `PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID` | Required UUID when enabled | Exact privately verified pilot business |

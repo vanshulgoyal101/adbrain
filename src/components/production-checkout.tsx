@@ -205,7 +205,8 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
     <section aria-labelledby="production-checkout-title" className="min-w-0 space-y-4 border-t border-slate-200 pt-5">
       {policy && <Script id="razorpay-live-checkout" src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive"
         onReady={() => { setScriptReady(Boolean(window.Razorpay)); setScriptFailed(!window.Razorpay); }} onError={() => setScriptFailed(true)} />}
-      <h3 id="production-checkout-title" className="flex items-center gap-2 font-semibold text-slate-900"><CreditCard size={18} aria-hidden="true" />{verification ? "Payment verification" : "Annual service"}</h3>
+      <h3 id="production-checkout-title" className="flex items-center gap-2 font-semibold text-slate-900"><CreditCard size={18} aria-hidden="true" />{verification ? "Payment verification" : "Ad money"}</h3>
+      {!verification && <p className="text-sm text-slate-600">Pay any amount from ₹500. 80% goes to your ads (including Meta&apos;s GST) and 20% is AdBrain&apos;s service fee. Top up any time.</p>}
       {range && (verification || !order || order.status === "created") && <div className="flex flex-wrap items-end gap-3">
         <div className="w-40 max-w-full space-y-1">
           <Label htmlFor={amountId}>{verification ? "Verification amount (INR)" : "Amount to pay (INR)"}</Label>
@@ -274,7 +275,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
         <summary className="cursor-pointer font-medium">Previous payments</summary>
         <ul className="mt-3 space-y-4">
           {otherOrders.map(previous => <li key={previous.orderId} className="space-y-2">
-            <p>{previous.quote.version === "inr-payment-verification-v1" ? "Payment verification" : "Annual service"}: {money(previous.amountPaise)} - {statusLabels[previous.status]}</p>
+            <p>{previous.quote.version === "inr-payment-verification-v1" ? "Payment verification" : "Ad money"}: {money(previous.amountPaise)} - {statusLabels[previous.status]}</p>
             <p className="break-all text-xs">Reference: {previous.orderId}</p>
             {previous.capturedPaise > 0 && <p>Captured: {money(previous.capturedPaise)}. Verified refunds: {money(previous.refundedPaise)}.</p>}
             {previous.receipt?.paymentId && <p className="break-all text-xs">Payment ID: {previous.receipt.paymentId}</p>}

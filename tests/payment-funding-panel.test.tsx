@@ -304,6 +304,13 @@ describe("production checkout with synthetic responses", () => {
       fireEvent.load(screen.getByTestId("checkout-script"));
     }
 
+    it("says pay-as-you-go: Ad money title and the 80/20 line, no annual wording (#225)", async () => {
+      await mountAnnual();
+      expect(screen.getByRole("heading", { name: "Ad money" })).toBeInTheDocument();
+      expect(screen.getByText("Pay any amount from \u20b9500. 80% goes to your ads (including Meta's GST) and 20% is AdBrain's service fee. Top up any time.")).toBeInTheDocument();
+      expect(screen.queryByText(/Annual/)).not.toBeInTheDocument();
+    });
+
     it("takes an amount, shows the 80% ad money and 20% service split, and creates the order for that amount", async () => {
       await mountAnnual();
       const input = screen.getByRole("spinbutton", { name: "Amount to pay (INR)" });
@@ -350,7 +357,7 @@ describe("production checkout with synthetic responses", () => {
       render(<ProductionCheckout businessId={businessId} />);
       await screen.findByText("Ready for payment");
       fireEvent.click(screen.getByText("Previous payments"));
-      expect(screen.getByText(/Annual service: .*10,000\.00 - Replaced by a newer payment request/)).toBeVisible();
+      expect(screen.getByText(/Ad money: .*10,000\.00 - Replaced by a newer payment request/)).toBeVisible();
       expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
     });
 
@@ -377,7 +384,7 @@ describe("production checkout with synthetic responses", () => {
     fetchMock.mockResolvedValue(Response.json({ policy: livePolicy, quote: createAnnualPaymentQuote(), orders: [previous] }));
     render(<ProductionCheckout businessId={businessId} />);
     await screen.findByText("Ready for payment");
-    expect(screen.getByRole("heading", { name: "Annual service" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ad money" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
     fireEvent.click(screen.getByText("Previous payments"));
     expect(screen.getByText(/Captured: .*10\.00\. Verified refunds: .*2\.50\./)).toBeVisible();
