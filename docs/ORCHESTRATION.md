@@ -135,10 +135,10 @@ The CTO maintains the worker table below.
 | Worker | Work, in order |
 | --- | --- |
 | Everyone | **Never stop idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground and continue with what it prints. **Talk on the issue or PR;** hand off with the label plus one line (`QA: ready at <sha>`). No status or idle posts ([AGENTS.md](../AGENTS.md#worker-coordination)). Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. Pace automated browser traffic to production (#240) |
-| QA | **#157 is live** (since 15:38Z, ₹840 capped, ends Oct 26): watch at T+1 h and T+4 h, then twice daily, read-only. Stop if anything goes wrong. Re-measure #230 now that #236, #237 and #238 are live. Review #245 when Dev hands it over, then #247's delta |
-| Dev | **[#245](https://github.com/vanshulgoyal101/adbrain/issues/245)** (CTO brief on the issue): owner-funded businesses activate with a Meta-side cap and no AdBrain payment, and the live #157 run is adopted into AdBrain so its Pause, sync and results work. Then rebase PR #247 (#221) on top |
-| DevOps | Merge PR #249 (#235; QA and CTO approved; tenant change, no migration), then smoke. Release #245 after QA (migration first; try `scripts/release.mjs`). Then #247 |
-| Dev 3 | [#235](https://github.com/vanshulgoyal101/adbrain/issues/235) remaining slices: early WhatsApp link status in Brand and Settings first; the campaign picker after Dev's #245 frees `campaigns.tsx`. [#253](https://github.com/vanshulgoyal101/adbrain/issues/253) (managed-account number boundary) is `later` |
+| QA | **#157 is live and adopted into AdBrain** (campaign dcb769e5): watch twice daily, read-only, and once confirm that AdBrain's Pause would work (dry, no click). Recheck PR #247's delta (6ee4a62; CTO approved). Close #230 after the final re-measure (fixes 1–4 are live; 5 is parked as #239) |
+| Dev | PR #247 (#221): fix anything QA finds on the delta; it then ships through `scripts/release.mjs`. Stay on call for the live #157 run (sync, Pause, results in AdBrain) |
+| DevOps | Release PR #247 once QA approves 6ee4a62: `node scripts/release.mjs --pr 247` (migration 8e4e57db; CTO approved) |
+| Dev 3 | [#235](https://github.com/vanshulgoyal101/adbrain/issues/235) remaining slices. `campaigns.tsx` is free now that #245 has shipped, so: the WhatsApp button-number picker in the campaign form, and the early link status in Brand and Settings. [#253](https://github.com/vanshulgoyal101/adbrain/issues/253) is `later` (a gate before managed ad accounts) |
 | Dev 2 | [#229](https://github.com/vanshulgoyal101/adbrain/issues/229) (email the owner within 15 minutes of a new form enquiry) behind a flag; the provider waits for the CEO's decision #254. [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3 jumps the queue when the owner signs in |
 
 ### Earlier focus (October 21, before P0)
