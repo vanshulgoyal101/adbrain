@@ -112,9 +112,8 @@ year of continuous advertising. Daily spend may vary; a configured daily budget
 is not a hard cap or authorization to spend.
 
 INR 2,000 is not profit. Gateway costs, generation/regeneration, support time,
-infrastructure, refunds and reserves reduce it. The older pre-tax scenarios and
-unapproved package scope remain in the [historical economics](PAYMENTS-HISTORY-2026-09-26.md#annual-package-and-illustrative-economics).
-Do not copy their INR 11,800 illustration into the current INR 10,000 offer.
+infrastructure, refunds and reserves reduce it. Older pre-tax scenarios are in git history;
+do not reuse their INR 11,800 illustration.
 
 ## 2. How Money Actually Moves
 
@@ -157,12 +156,10 @@ blindly creating another account.
 | [Campaign creation](../src/lib/campaign/create-service.ts) | Reviewed paused creation and durable operation recovery | Not a general payment ledger or atomic activation reservation |
 
 The [production payment migration](../db/migrations/20260926_production_payment_orders.sql)
-is integrated in dev with the managed-billing and Meta-event schema. Its current
-hash and rollout dependencies are in the [payment release packet](qa/ops-environment-2026-09-26.md#separate-payment-integration-and-rollout-packet).
-It has not been applied to production. The optional [test-order migration](../db/migrations/20260926_razorpay_test_orders.sql)
+is applied in production (live orders are recorded). The optional [test-order migration](../db/migrations/20260926_razorpay_test_orders.sql)
 and [billing](../db/migrations/20260924_managed_billing.sql)/[event](../db/migrations/20260924_meta_billing_events.sql)
-migrations exist in source. Their production application is not established by
-the code-only release. Follow [Data Model](DATA_MODEL.md) and
+migrations exist in source; check the migration ledger before relying on them in a
+target. Follow [Data Model](DATA_MODEL.md) and
 [Releasing](RELEASING.md) for target-specific prerequisites and approval.
 
 Live order/capture/webhook/reconciliation/refund behavior and the three identified
@@ -274,17 +271,12 @@ adapter; ad spending still requires the customer-specific controls below.
 | Delivery and refunds | Verified customer allocations, atomic reservations, attributed costs, bounded consent, pause/reconciliation and refund holds work together |
 | Bounded live verification | Exact authorized transaction, settlement/refund and delivery evidence reconcile on the approved production candidate and schema |
 
-The [earlier M0-M7 design](PAYMENTS-HISTORY-2026-09-26.md#8-delivery-phases-and-acceptance-gates)
-preserves detailed proposed tables, routes and cases. Its old source baseline,
-onboarding gaps, automatic-funding requirement and worker sequence are not current
-dispatch or proof of deployed contracts. Reuse existing SDKs and helpers; do not
-build a generic wallet or funding-adapter platform for this narrowed scope.
+Reuse existing SDKs and helpers; do not build a generic wallet or funding-adapter
+platform for this narrowed scope.
 
 ## 9. Implementation Receipt
 
-The [full implementation history](PAYMENTS-HISTORY-2026-09-26.md#9-implementation-receipt)
-preserves local backend/UI tests, source-specific SDK transport details and setup
-receipts. [API Reference](API_REFERENCE.md), [Configuration](CONFIGURATION.md) and
+[API Reference](API_REFERENCE.md), [Configuration](CONFIGURATION.md) and
 [Testing](TESTING.md) own current commands/contracts; historical commands are not
 unconditional setup instructions.
 
@@ -294,23 +286,7 @@ and all Vercel environments are rejected. The test order amount is fixed at
 1,000,000 paise; records require `environment: "test"`. Captures retain
 `canActivateCampaign: false` and `spendablePaise: 0`.
 
-### September 26: Real Razorpay Test Transactions
-
-The [dated provider receipt](PAYMENTS-HISTORY-2026-09-26.md#september-26-real-razorpay-test-transactions)
-records two genuine Razorpay test captures and one deliberate test-bank failure,
-signed callback verification, durable local capture records and reload recovery.
-Incomplete attempts were preserved; they were not relabelled or replaced merely
-to clear uncertainty. The receipt's tests were not replayed for this rewrite.
-
-These checks did not prove live collection, public webhook delivery, refund
-issuance, actual bank settlement or automatic Meta funding. The later merchant
-status check above resolves account-readiness questions, not those transaction
-and application requirements. No new provider action was performed for this guide.
-
 ## 10. Primary References
 
-- [Current product contract](SPEC.md) and [roadmap](ROADMAP.md).
-- [Exact code-only production release](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
-- [Historical provider documentation and account investigations](PAYMENTS-HISTORY-2026-09-26.md#10-primary-references).
-- [Historical automatic funding boundaries](PAYMENTS-HISTORY-2026-09-26.md#automatic-funding-boundaries).
+- [Roadmap](ROADMAP.md).
 - [Release and environment authority](RELEASING.md).

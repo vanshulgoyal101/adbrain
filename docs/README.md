@@ -5,14 +5,10 @@ owner-scoped Meta campaign management. Campaign creation is paused by default;
 activation is a separate operation with financial consequences.
 
 This is the entry point for product, engineering and operations documentation.
-References explain the checked-out source; plans describe intended work; dated
-receipts establish what was tested or deployed. These are different claims.
-Never infer production availability from a feature branch or a passing local test.
-
-The documentation is being rebuilt against current source and release evidence
-starting September 26, 2026. The [current dispatch](ORCHESTRATION.md#current-dispatch)
-tracks section ownership and review. This index is not a blanket certification
-that every linked guide has already been refreshed.
+Every guide here describes current truth. Dated receipts, audits and handoffs are
+not kept as files: evidence goes in the issue or PR, and git history keeps
+everything that was removed (#260). Never infer production availability from a
+feature branch or a passing local test.
 
 ## Start Here
 
@@ -20,10 +16,10 @@ that every linked guide has already been refreshed.
 | --- | --- | --- |
 | Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](ROADMAP.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
-| Product or support | [Features and workflows](FEATURES.md) | [Demo runbook](DEMO-RUNBOOK.md) |
+| Product or support | [Features and workflows](FEATURES.md) | [Roadmap](ROADMAP.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
-| Debugging engineer | [Observability](OBSERVABILITY.md) | [Verification records](qa/) |
-| Product planner | [Product scope](SPEC.md) | [Roadmap](ROADMAP.md) and [payment plan](PAYMENTS-PLAN.md) |
+| Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](OPERATIONS.md) |
+| Product planner | [Roadmap](ROADMAP.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
 
@@ -42,44 +38,15 @@ that every linked guide has already been refreshed.
 | [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](DEPLOY.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
-| [Demo runbook](DEMO-RUNBOOK.md) | How do we demonstrate real value without unintended spending or false claims? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
 | [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
-| [Operating brief](OPERATING-BRIEF.md) | Which outcome, risk decisions and evidence should guide operation of the product? |
 | [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
 
 ## Plans and Records
 
-Keep current instructions in the reference library above. Use the following
-documents for intent, context or evidence, not as alternative setup guides.
-
-| Material | Purpose |
-| --- | --- |
-| [Product scope](SPEC.md) and [roadmap](ROADMAP.md) | Intended customer outcomes, priorities and explicitly unfinished work |
-| [Creative generation plan](CREATIVE-GENERATION-PLAN.md), [Meta connection plan](META-INSTANT-CONNECT-PLAN.md), [product design roadmap](PRODUCT-DESIGN-ROADMAP.md) | Design rationale and proposals; implementation claims require current source |
-| [Original operating assessment](OPERATING-BRIEF-HISTORY-2026-09-26.md) and [product audit](PRODUCT-AUDIT-2026-09.md) | Dated assessments; findings may be superseded by later fixes |
-| [Earlier roadmap and pilot](ROADMAP-HISTORY-2026-09-26.md) and [payment design/receipts](PAYMENTS-HISTORY-2026-09-26.md) | Preserved decisions, investigations and transaction evidence; use current guides for readiness and sequencing |
-| [QA receipts](qa/) and [release records](releases/) | Candidate-specific acceptance, provider checks and deployment evidence |
-| [Project history](how-we-got-here.md) and [orchestration history](ORCHESTRATION-HISTORY-2026-09-26.md) | Historical context, not current work assignments or operational authority |
-
-Preserve evidence at its existing path when other records link to it. Consolidate
-duplicate guidance into its owning reference; retain a short redirect when a
-published document moves. Historical receipts should not be rewritten to appear
-current.
-
-## Plans and Records
-
-Current instructions live in the reference library above. These documents give
-intent, assignments or dated evidence; they are not alternative setup guides.
-
-| Material | Use |
-| --- | --- |
-| [Worker dispatch](ORCHESTRATION.md) | Current work assignments and ownership |
-| [Operating brief](OPERATING-BRIEF.md) | Owner outcome, risk decisions and evidence needed to operate the product; not a deployment or spend approval |
-| [Payment plan](PAYMENTS-PLAN.md) | Payment decisions and implementation boundaries; rollout authority lives in the dispatch |
-| [Product audit](PRODUCT-AUDIT-2026-09.md) | Dated September 2026 assessment; later fixes may supersede findings |
-| [QA records](qa/) | Dated verification and handoff receipts for specific changes |
-| Historical snapshots (September 26, 2026): [operating brief](OPERATING-BRIEF-HISTORY-2026-09-26.md), [roadmap](ROADMAP-HISTORY-2026-09-26.md), [payments](PAYMENTS-HISTORY-2026-09-26.md), [orchestration](ORCHESTRATION-HISTORY-2026-09-26.md) | Historical context only; not current instructions, status or assignments |
+[Roadmap](ROADMAP.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
+decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
+Consolidate guidance into its owning reference instead of adding dated documents.
 
 ## Terminology
 
@@ -101,15 +68,7 @@ intent, assignments or dated evidence; they are not alternative setup guides.
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
 - [Release policy](RELEASING.md) governs publication and production changes.
-- [QA records](qa/) and [release receipts](releases/) are dated evidence, not
-  general-purpose installation instructions.
-- [Creative generation plan](CREATIVE-GENERATION-PLAN.md),
-  [Meta connection plan](META-INSTANT-CONNECT-PLAN.md), and
-  [product design roadmap](PRODUCT-DESIGN-ROADMAP.md) preserve design intent and
-  implementation history. Their proposals must not be confused with shipped
-  behavior.
-- [Brand identity](BRAND-IDENTITY.md) covers product presentation;
-  [project history](how-we-got-here.md) explains earlier decisions.
+- [Brand identity](BRAND-IDENTITY.md) covers product presentation.
 
 ## Safety Before Setup
 
