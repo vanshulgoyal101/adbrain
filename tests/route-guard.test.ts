@@ -10,10 +10,10 @@ import { AuthApiError } from "@supabase/supabase-js";
  * the page they wanted so login can return them there.
  */
 
-const getUser = vi.fn();
+const getClaims = vi.fn();
 
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({ auth: { getUser } }),
+  createServerClient: () => ({ auth: { getClaims } }),
 }));
 
 const request = (path: string, cookies: Record<string, string> = {}) => {
@@ -22,8 +22,8 @@ const request = (path: string, cookies: Record<string, string> = {}) => {
   return req;
 };
 
-const anon = () => getUser.mockResolvedValue({ data: { user: null } });
-const signedIn = () => getUser.mockResolvedValue({ data: { user: { id: "u1" } } });
+const anon = () => getClaims.mockResolvedValue({ data: null, error: null });
+const signedIn = () => getClaims.mockResolvedValue({ data: { claims: { sub: "u1" } }, error: null });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,7 +75,7 @@ describe("route guard: protected routes", () => {
   });
 
   it("passes an auth service failure to the protected layout for recovery", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: new AuthApiError("unavailable", 503, undefined) });
+    getClaims.mockResolvedValue({ data: null, error: new AuthApiError("unavailable", 503, undefined) });
     const { updateSession } = await import("@/lib/supabase/middleware");
     const res = await updateSession(request("/dashboard"));
     expect(res.status).toBe(200);
@@ -83,7 +83,7 @@ describe("route guard: protected routes", () => {
   });
 
   it("still redirects an expired session to sign in", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: new AuthApiError("expired", 401, undefined) });
+    getClaims.mockResolvedValue({ data: null, error: new AuthApiError("expired", 401, undefined) });
     const { updateSession } = await import("@/lib/supabase/middleware");
     expect((await updateSession(request("/dashboard"))).headers.get("location")).toContain("/login");
   });
@@ -168,6 +168,6 @@ describe("proxy config", () => {
     const { proxy } = await import("@/proxy");
     const res = await proxy(request("/dashboard"));
     expect(res.status).toBe(200);
-    expect(getUser).toHaveBeenCalled();
+    expect(getClaims).toHaveBeenCalled();
   });
 });
