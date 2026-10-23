@@ -579,6 +579,33 @@ describe("campaign sync feedback", () => {
       status: "active", connectionGeneration: 1, capDays: 2,
       confirmationDigest: createHash("sha256").update(activationConfirmationPayload(campaign, connection, delivery, 2)).digest("hex"),
     });
+    // #208: delivery review first, then the funds review at one capped day.
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    const reviewAt = urls.indexOf("/api/campaigns/campaign-1");
+    const fundsAt = urls.findIndex(url => url.startsWith("/api/payments/customer-balance"));
+    expect(reviewAt).toBeGreaterThanOrEqual(0);
+    expect(fundsAt).toBeGreaterThan(reviewAt);
+    expect(urls[fundsAt]).toContain("&capDays=1");
+  });
+
+  it("reviews funds without a cap when the reviewed children are already active (#208)", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
+      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery: {
+        campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+        adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+        ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+      } });
+      return Response.json({ campaigns: [], nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    await screen.findByRole("button", { name: "Request activation" });
+    const funds = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).find(url => url.startsWith("/api/payments/customer-balance"));
+    expect(funds).toBeDefined();
+    expect(funds).not.toContain("capDays");
   });
 
   it("labels the stored active state as a request, not confirmed delivery", () => {

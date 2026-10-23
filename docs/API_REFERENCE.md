@@ -212,7 +212,10 @@ refunds, moves real money or grants advertising credit.
 The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
 does not enable collection or authorize Meta spending. Test payments give no
 credit. Owners can review their balance with `GET /api/payments/customer-balance`
-using `businessId` and optional `campaignId`. Financial operators can submit
+using `businessId` and optional `campaignId`. With `campaignId`, optional
+`capDays` (integer 1–7) reviews a capped run at `daily × capDays` + GST instead
+of 7 × daily; the activation PATCH still enforces the days the owner approves.
+Financial operators can submit
 strict `costs` or `refund-allocation` actions with
 `POST /api/payments/customer-balance`; authority is rechecked in SQL. See the
 [shared contracts](../src/lib/payments/customer-balance-contracts.ts).
