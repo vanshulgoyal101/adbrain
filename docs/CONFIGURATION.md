@@ -281,7 +281,7 @@ exported in your shell are still inherited; this is not a network sandbox.
 
 | Mode | Behavior |
 | --- | --- |
-| `setup` | Applies `db/schema.sql` to the local database and creates a local Auth user, QA business and two draft creatives; writes, not a check |
+| `setup` | Applies the full schema (`db/schema.sql` plus newer migrations, via `scripts/build-schema.mjs`) to the local database and creates a local Auth user, QA business and two draft creatives; writes, not a check |
 | `dev` | `npm run dev` on port 3939 |
 | `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
 | `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |

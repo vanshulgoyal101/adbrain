@@ -1,15 +1,13 @@
-// Applies db/schema.sql to a Postgres database.
+// Applies the full schema (frozen db/schema.sql plus newer db/migrations) to a Postgres database.
 // Reads standard PG* env vars (PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE).
 // Usage:
 //   PGHOST=... PGUSER=postgres PGPASSWORD=... PGDATABASE=postgres \
 //     node scripts/apply-schema.mjs
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { buildSchema } from "./build-schema.mjs";
 import { databaseConfig } from "./database-migrations.mjs";
 
-const schemaPath = fileURLToPath(new URL("../db/schema.sql", import.meta.url));
-const sql = readFileSync(schemaPath, "utf8");
+const sql = buildSchema();
 
 const client = new Client(databaseConfig(process.env, { localOnly: true }));
 
