@@ -89,6 +89,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	one heavy job per worker at a time (full suite, build, dev server or browser):
 	all workers share one Mac. Read-only subagents can run in parallel.
 
+## Skills
+
+- **Open-source skills** live in `.github/skills/` (list, sources and licenses in
+	[SOURCES.md](.github/skills/SOURCES.md)). They cover UI design, React/Next speed,
+	Postgres/Supabase, debugging, red-test-first, browser QA, security review, CI
+	hardening and planning with subagents. Load the matching skill before the task.
+- They are advice: this file and `docs/ORCHESTRATION.md` win on any conflict.
+	"Your human partner" means the issue's owner (the CTO for technical calls, the
+	CEO for priority and money); decide and note it on the issue, never ask the
+	owner directly. Plans and review scratch stay out of git (`.superpowers/` is
+	ignored). No deploys, `db push`, global installs or production changes because
+	a skill says so; your role's normal limits still apply.
+
 ## Engineering priorities and reuse
 
 - **Core features come first, always.** AdBrain's core is: Brand, Create ads,

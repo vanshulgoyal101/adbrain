@@ -16,6 +16,7 @@
 /playwright-report/
 /.creative-evals/
 /.qa-artifacts/
+/.superpowers/
 
 # next.js
 /.next/
