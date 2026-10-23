@@ -16,6 +16,7 @@ const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const eventIdSchema = z.string().regex(/^[A-Za-z0-9_:.-]{1,160}$/);
 const amountSchema = z.number().int().min(0).max(1_000_000);
 const MIN_ANNUAL_PAISE = 50_000;
+const PREFILL_ANNUAL_PAISE = 150_000;
 const annualAmountSchema = amountSchema.min(MIN_ANNUAL_PAISE);
 const orderSchema = z.object({
   id: z.uuid(), business_id: z.uuid(), user_id: z.uuid(), environment: z.literal("live"),
@@ -86,7 +87,7 @@ async function orderResponse(order: SavedOrder, config: Config, policy = current
     receipt: order.captured_paise > 0 ? { reference: order.id, paymentId: order.payment_id, merchant: "Vanshul Goyal", amountPaise: order.captured_paise, currency: "INR", isTaxInvoice: false } : null,
     checkout: checkoutAllowed ? {
         key: config.keyId, order_id: order.provider_order_id, amount: order.amount_paise, currency: order.currency,
-        name: "Vanshul Goyal", description: order.quote.version === "inr-payment-verification-v1" ? "AdBrain payment verification" : "AdBrain annual service", retry: { enabled: false },
+        name: "Vanshul Goyal", description: order.quote.version === "inr-payment-verification-v1" ? "AdBrain payment verification" : "AdBrain ad money", retry: { enabled: false },
       } : null,
   };
 }
@@ -263,7 +264,9 @@ export async function handleProductionPayments(request: Request, action: Action)
       }
       const openAnnual = orders.find(order => order.quote.version !== "inr-payment-verification-v1" && order.captured_paise === 0
         && ["creating", "created", "needs_reconciliation"].includes(order.state));
-      subject.annualAmountPaise = input.amountPaise ?? (action === "read" ? openAnnual?.amount_paise : undefined);
+      subject.annualAmountPaise = input.amountPaise ?? (action === "read"
+        ? openAnnual?.amount_paise ?? (process.env.PAYMENTS_LIVE_AMOUNT_PAISE === undefined && !process.env.PAYMENTS_LIVE_POLICY_JSON ? PREFILL_ANNUAL_PAISE : undefined)
+        : undefined);
       subject.verificationAmountPaise = input.verificationAmountPaise ?? (baseQuote?.version === "inr-payment-verification-v1"
         && verificationOrder && verificationOrder.amount_paise <= baseQuote.totalPaise ? verificationOrder.amount_paise : undefined);
       if (action === "read") {

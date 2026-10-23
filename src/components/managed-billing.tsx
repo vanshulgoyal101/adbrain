@@ -37,7 +37,7 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId }: {
       </dl>
 
       <div className="border-y border-slate-200 py-4">
-        <h3 className="text-sm font-medium text-slate-700">Annual total: INR 10,000</h3>
+        <h3 className="text-sm font-medium text-slate-700">Pay any amount from ₹500</h3>
         <dl className="mt-3 grid grid-cols-2 gap-4">
           <div><dt className="text-sm text-slate-500">Service allocation</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{feePercent}%</dd></div>
           <div><dt className="text-sm text-slate-500">Advertising</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{100 - feePercent}%</dd></div>
