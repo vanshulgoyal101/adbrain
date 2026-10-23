@@ -37,13 +37,26 @@ const deadline = Date.now() + Number(values["max-min"]) * 60_000;
 const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
 
 function api(path) {
-  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+  // All chats share one gh login (5,000 requests/hour), so each poll makes at most 3 calls.
+  return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 }));
 }
 
 const owned = () => (label ? api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`) : []);
 const brief = text => text.replace(/\s+/g, " ").trim().slice(0, 200);
 
-const startOwned = new Set(owned().map(item => item.number));
+async function firstOwned() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return owned();
+    } catch (error) {
+      // A failed first read would make every owned item look newly labelled later.
+      if (attempt >= 5) throw error;
+      await new Promise(resolve => setTimeout(resolve, attempt * 5000));
+    }
+  }
+}
+
+const startOwned = new Set((await firstOwned()).map(item => item.number));
 
 function findWork() {
   const found = [];
@@ -52,14 +65,14 @@ function findWork() {
     if (!startOwned.has(item.number)) found.push(`#${item.number} is now labelled ${label}: ${item.title}`);
   }
   const mineNumbers = new Set(mine.map(item => item.number));
-  for (const item of api(`repos/${repo}/issues?state=all&sort=updated&since=${since}&per_page=100`)) {
-    for (const comment of api(`repos/${repo}/issues/${item.number}/comments?since=${since}&per_page=100`)) {
-      const body = comment.body ?? "";
-      if (writtenByMe.test(body)) continue;
-      if (mineNumbers.has(item.number) || addressedToMe.test(body)
-        || (role === "cto" && item.number === 74 && /\bidle\b/i.test(body))) {
-        found.push(`#${item.number} new comment: "${brief(body)}" ${comment.html_url}`);
-      }
+  // One repo-wide call (newest first) instead of one call per updated issue.
+  for (const comment of api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`)) {
+    const number = Number(comment.issue_url.split("/").pop());
+    const body = comment.body ?? "";
+    if (writtenByMe.test(body)) continue;
+    if (mineNumbers.has(number) || addressedToMe.test(body)
+      || (role === "cto" && number === 74 && /\bidle\b/i.test(body))) {
+      found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
   }
   if (role === "cto" || role === "devops") {
