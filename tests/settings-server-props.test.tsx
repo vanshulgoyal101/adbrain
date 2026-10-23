@@ -30,7 +30,7 @@ describe("Settings panels with server-loaded data (#238)", () => {
   });
 
   it("still load on the client when the server read was unavailable", async () => {
-    const fetchMock = vi.fn(async () => Response.json({}, { status: 503 }));
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({}, { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
     render(<>
       <CustomerBalance businessId={businessId} initialBalance={null} />
