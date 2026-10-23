@@ -415,7 +415,23 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     const story = JSON.parse(forms[2].get("object_story_spec")!);
     expect(story.link_data.link).toBe("https://wa.me/919876543210");
     expect(story.link_data.call_to_action.value).not.toHaveProperty("lead_gen_form_id");
+    expect(story.link_data).not.toHaveProperty("page_welcome_message");
     expect([forms[0], forms[1], forms[3]].every(form => form.get("status") === "PAUSED")).toBe(true);
+  });
+
+  it("sends the WhatsApp greeting as Meta's documented autofill page_welcome_message (#209)", async () => {
+    const client = new MetaClient(creds);
+    vi.spyOn(client, "getWhatsAppNumber").mockResolvedValue("+919876543210");
+    vi.spyOn(client, "uploadAdImage").mockResolvedValue("image-hash");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
+    const whatsappGreeting = { autofill: "Namaste! Mujhe jaankari chahiye.", greeting: "Namaste! Swagat hai." };
+    await client.createLeadCampaign({ name: "WhatsApp", dailyBudgetRupees: 200, destination: "whatsapp", whatsappNumber: "+919876543210", whatsappGreeting, link: "https://example.com", creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Contact us" }], location: { countries: ["IN"] }, ageMin: 25, ageMax: 60 });
+    const story = JSON.parse(new URLSearchParams(String(fetchMock.mock.calls[2][1]?.body)).get("object_story_spec")!);
+    // Shape from Meta's Click-to-WhatsApp guide, "Adding autofill message with a greeting message".
+    expect(JSON.parse(story.link_data.page_welcome_message)).toEqual({
+      type: "VISUAL_EDITOR", version: 2, landing_screen_type: "welcome_message", media_type: "text",
+      text_format: { customer_action_type: "autofill_message", message: { autofill_message: { content: whatsappGreeting.autofill }, text: whatsappGreeting.greeting } },
+    });
   });
 
   it.each([undefined, "+919876543211"])("blocks missing or changed WhatsApp recipient before mutation: %s", async (whatsappNumber) => {
