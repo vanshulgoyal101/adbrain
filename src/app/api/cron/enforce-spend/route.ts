@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
-import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
-import { refreshOpenRunCosts } from "@/lib/payments/meta-cost-evidence";
+import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } from "@/lib/payments/customer-balance";
+import { refreshOpenRunCosts, settlePausedRuns } from "@/lib/payments/meta-cost-evidence";
+import { cappedRunEnded } from "@/lib/campaign/activation";
 import {
   requireScheduledBusiness,
   withMetaConnection,
@@ -26,7 +27,10 @@ export const maxDuration = 60;
  * The per-campaign refresh route only enforces the weekly cap while a user is
  * looking at the app; Meta, however, spends around the clock. This cron sweeps
  * businesses with active campaigns and pauses them for customer holds or when
- * opted-in weekly spend has reached the cap or cannot be verified. It runs
+ * opted-in weekly spend has reached the cap or cannot be verified. It also
+ * pauses capped runs whose end time has passed, and settles paused runs that
+ * still hold a reserve: once Meta confirms the stop and the spend has settled,
+ * SQL records final evidence and releases the reserve (#221). It runs
  * under the service-role client (no user session).
  *
  * Vercel Cron calls this with `Authorization: Bearer $CRON_SECRET`.
@@ -72,8 +76,9 @@ async function handleGET(request: Request) {
     return NextResponse.json({ ok: false, error: "Active campaigns could not be loaded.", swept }, { status: 503 });
   }
   const limitsByBusiness = new Map(limitRows.map(row => [row.business_id, row]));
+  const settlingBusinesses = await listSettlingBusinesses().catch(() => { incomplete = true; return [] as string[]; });
 
-  for (const businessId of new Set(activeCampaigns.map(campaign => campaign.business_id))) {
+  for (const businessId of new Set([...activeCampaigns.map(campaign => campaign.business_id), ...settlingBusinesses])) {
     const row = limitsByBusiness.get(businessId);
     const limits: SpendLimits = row ? {
       weeklyCapRupees: row.weekly_cap_rupees,
@@ -89,7 +94,8 @@ async function handleGET(request: Request) {
         return after ? query.gt("id", after) : query;
       }, "Campaigns could not be loaded.", campaign => campaign.id);
     } catch { incomplete = true; unverified.push(businessId); continue; }
-    if (!campaigns.some(campaign => campaign.status === "active")) continue;
+    const hasActive = campaigns.some(campaign => campaign.status === "active");
+    if (!hasActive && !settlingBusinesses.includes(businessId)) continue;
 
     let context;
     try {
@@ -102,7 +108,10 @@ async function handleGET(request: Request) {
     const initialBalance = await getCustomerBalance(context).catch(() => null);
     const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
     if (initialBalance && !refresh.complete) incomplete = true;
-    const customerBalance = refresh.observed ? await getCustomerBalance(context).catch(() => null) : initialBalance;
+    const settle = await settlePausedRuns(context, campaigns, initialBalance);
+    if (!settle.complete) incomplete = true;
+    if (!hasActive) continue;
+    const customerBalance = refresh.observed || settle.read ? await getCustomerBalance(context).catch(() => null) : initialBalance;
     const financialHold = !customerBalance || customerBalance.held;
     const decision = financialHold
       ? { toPause: campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id), verified: Boolean(customerBalance) }
@@ -124,7 +133,10 @@ async function handleGET(request: Request) {
     if (!decision.verified) { incomplete = true; unverified.push(businessId); }
 
     const paused: string[] = [];
-    const toPause = decision.toPause;
+    // A capped run whose Meta end time has passed is paused here, then settles like any paused run (#221).
+    const ended = new Set(campaigns.filter(campaign => campaign.status === "active" && cappedRunEnded(campaign.raw)
+      && customerBalance?.reservations.some(item => item.campaignId === campaign.id && item.state !== "closed")).map(campaign => campaign.id));
+    const toPause = [...new Set([...decision.toPause, ...ended])];
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
       if (!campaign?.meta_campaign_id) { incomplete = true; continue; }
@@ -163,7 +175,7 @@ async function handleGET(request: Request) {
           p_entity_type: "campaign",
           p_entity_id: id,
           p_meta_object_id: campaign.meta_campaign_id,
-          p_reason: financialHold ? "Customer advertising funds or attributed costs require reconciliation (cron sweep)" : decision.verified ? `Weekly spend cap of ₹${limits.weeklyCapRupees} reached (cron sweep)` : "Weekly spend observation could not be verified (cron sweep)",
+          p_reason: financialHold ? "Customer advertising funds or attributed costs require reconciliation (cron sweep)" : decision.toPause.includes(id) ? decision.verified ? `Weekly spend cap of ₹${limits.weeklyCapRupees} reached (cron sweep)` : "Weekly spend observation could not be verified (cron sweep)" : "Capped run reached its end time (cron sweep)",
           p_details: {} as unknown as Json,
         });
         if (auditError) incomplete = true;

@@ -1,6 +1,6 @@
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
-import { observeCustomerCosts } from "./customer-balance";
+import { observeCustomerCosts, settleCustomerCosts } from "./customer-balance";
 import type { CustomerBalance } from "./customer-balance-contracts";
 
 type RunningCampaign = { id: string; status: string | null; meta_campaign_id: string | null };
@@ -37,4 +37,46 @@ export async function refreshOpenRunCosts(context: AuthorizedBusiness, campaigns
     }
   }
   return { observed, complete };
+}
+
+/**
+ * For every paused run still holding its reserve: confirms with Meta that the whole tree has
+ * stopped, then records its lifetime spend as a settle read. SQL finalizes and releases the
+ * reserve once the spend has settled (#221). `complete` is false when Meta has not confirmed the
+ * stop or any read or write failed; the run then keeps its reserve.
+ */
+export async function settlePausedRuns(context: AuthorizedBusiness, campaigns: RunningCampaign[], balance: CustomerBalance | null): Promise<{ read: number; finalized: number; complete: boolean }> {
+  if (!balance) return { read: 0, finalized: 0, complete: false };
+  let read = 0;
+  let finalized = 0;
+  let complete = true;
+  for (const reservation of balance.reservations) {
+    if (reservation.state !== "paused") continue;
+    const campaign = campaigns.find(item => item.id === reservation.campaignId);
+    if (campaign?.status === "active") continue;
+    const binding = readStoredCampaignBinding(campaign);
+    if (campaign?.status !== "paused" || !campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId || binding.metaConnectionGeneration === null) {
+      complete = false;
+      continue;
+    }
+    const { metaAdAccountId, metaPageId, metaConnectionGeneration } = binding;
+    try {
+      const outcome = await withMetaConnection(context, {
+        purpose: "read_insights",
+        binding: { adAccountId: metaAdAccountId, pageId: metaPageId },
+        expectedGeneration: metaConnectionGeneration,
+      }, async meta => {
+        if (!await meta.readCampaignStopped(campaign.meta_campaign_id!)) throw new Error("Meta has not confirmed the stop.");
+        return settleCustomerCosts(context, {
+          campaignId: campaign.id, adAccountId: metaAdAccountId, connectionGeneration: metaConnectionGeneration,
+          reservationId: reservation.reservationId, mediaPaise: await meta.readLifetimeSpendPaise(campaign.meta_campaign_id!),
+        });
+      });
+      read += 1;
+      if (outcome.finalized) finalized += 1;
+    } catch {
+      complete = false;
+    }
+  }
+  return { read, finalized, complete };
 }

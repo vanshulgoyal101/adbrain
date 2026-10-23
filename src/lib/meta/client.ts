@@ -1009,6 +1009,30 @@ export class MetaClient {
     return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
+  /**
+   * Read-only: true only when Meta reads the campaign back PAUSED and every ad set and ad as
+   * PAUSED, either set directly or inherited from a paused campaign or ad set (#221).
+   */
+  async readCampaignStopped(campaignId: string): Promise<boolean> {
+    type Node = { id: string; status?: string; effective_status?: string };
+    const node = encodeURIComponent(campaignId);
+    const [campaign, adSets, ads] = await Promise.all([
+      this.graph<Node & { account_id?: string }>(`${node}?fields=id,account_id,status,effective_status`),
+      this.graph<{ data?: Node[]; paging?: { next?: string } }>(`${node}/adsets?fields=id,status,effective_status&limit=100`),
+      this.graph<{ data?: Node[]; paging?: { next?: string } }>(`${node}/ads?fields=id,status,effective_status&limit=100`),
+    ]);
+    if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
+      throw new MetaError("Campaign does not match the connected ad account.");
+    }
+    if (!Array.isArray(adSets.data) || !Array.isArray(ads.data) || adSets.paging?.next || ads.paging?.next) {
+      throw new MetaError("Campaign delivery could not be read completely.");
+    }
+    const paused = (item: Node) => ["PAUSED", "ARCHIVED", "DELETED"].includes(item.status ?? "")
+      || ["CAMPAIGN_PAUSED", "ADSET_PAUSED"].includes(item.effective_status ?? "");
+    return campaign.status === "PAUSED" && campaign.effective_status === "PAUSED"
+      && adSets.data.every(paused) && ads.data.every(paused);
+  }
+
   async deleteObject(id: string): Promise<void> {
     await this.verifyCampaignBinding(id);
     await this.graph(encodeURIComponent(id), { method: "DELETE" });

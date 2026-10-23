@@ -37,6 +37,12 @@ export function storedCappedAdSetIds(raw: unknown): string[] {
   return [...new Set([...parsed.data.cappedAdSetIds ?? [], ...parsed.data.cap ? [parsed.data.cap.adSetId] : []])];
 }
 
+/** True once the latest capped run's Meta end time has passed (#221). */
+export function cappedRunEnded(raw: unknown, now = Date.now()): boolean {
+  const parsed = z.object({ cap: z.object({ endTime: z.iso.datetime({ offset: true }) }) }).safeParse(raw);
+  return parsed.success && Date.parse(parsed.data.cap.endTime) <= now;
+}
+
 export function intendedCampaignChildren(campaign: Pick<Campaign, "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw">) {
   const parsed = storedChildrenSchema.safeParse(campaign.raw);
   if (!parsed.success) return null;

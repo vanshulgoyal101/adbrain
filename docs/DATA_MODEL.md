@@ -95,6 +95,9 @@ provider ID while paused. Uncertain activation and cost evidence hold funds,
 except aging evidence within an open capped reservation's `bounded_media_paise`;
 stale non-final evidence holds only while the campaign has an open reservation.
 Meta-read evidence (#216) has a null `actor_id` and `input.source='meta'`;
+settle reads of a paused run (#221) add `input.settleRead=true`, the
+reservation UUID and `final`; two equal reads 30 minutes apart and 3 hours after
+the pause finalize the costs and close the reservation;
 final reconciliation releases only unused allowance. Source inclusion alone
 does not prove a target migration was applied. See the
 [allowance API](API_REFERENCE.md#customer-advertising-allowance) for admission
@@ -407,6 +410,7 @@ alone is not a safe deployment plan.
 | [20261021_creative_generation_settle_holds.sql](../db/migrations/20261021_creative_generation_settle_holds.sql) | Same-signature progress RPC; settled partial runs release unused holds (#138); apply before serving the updated route |
 | [20261022_payment_webhook_health.sql](../db/migrations/20261022_payment_webhook_health.sql) | Service-only `production_payment_webhook_health` counts (#178); apply before serving `/api/cron/payment-health` |
 | [20261022_meta_revoke_subject_scope.sql](../db/migrations/20261022_meta_revoke_subject_scope.sql) | Same-signature service-only `meta_revoke_subject`; deauthorize clears only connections using that Meta user's token (#181) |
+| [20261023_meta_cost_settle.sql](../db/migrations/20261023_meta_cost_settle.sql) | Service-only `customer_ad_settle_costs` and `customer_ad_settling_businesses`, evidence campaign index, balance no longer held by a settling run's stale evidence (#221); apply before serving the updated `enforce-spend` sweep |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and
