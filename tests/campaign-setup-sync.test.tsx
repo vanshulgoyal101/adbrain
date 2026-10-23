@@ -290,6 +290,14 @@ describe("campaign sync feedback", () => {
     expect(screen.getByText(/1 requested active/)).toBeInTheDocument();
   });
 
+  it("shows Needs attention with the reason for a live campaign the scheduled refresh flagged (#258)", () => {
+    const flag = { kind: "rejected", reason: "Meta rejected an ad: Ads about housing must run with a special ad category.", since: "2026-10-23T17:00:00.000Z", key: "aaaaaaaaaaaa" };
+    const campaign = { id: "campaign-1", name: "Saved campaign", status: "active", raw: { health: { checkedAt: flag.since, activeSince: flag.since, flags: [flag] } } } as unknown as Campaign;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByText(flag.reason)).toBeInTheDocument();
+  });
+
   it("requests a status selection immediately without the search typing delay", async () => {
     const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], results: {}, nextCursor: null })));

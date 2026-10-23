@@ -56,6 +56,25 @@ jobs:
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
             -b "$(printf 'Payment health: %s\n\nA captured payment has no capture webhook event after 30 minutes, or an event is unprocessed after an hour. Check the Razorpay webhook settings and reconcile the order (no charges).\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$(jq -c '{events7d, unprocessed, capturedWithoutEvent}' payments.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+      - name: Campaign results and health
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 75 -o results.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/refresh-results") || code=000
+          # Public repo: counts, problem kinds and opaque keys only, never business or campaign IDs.
+          echo "HTTP $code $(jq -c '{ok, refreshed, skipped, failed, hasMore, alerts: (.alerts // [] | length), error}' results.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          # One issue per new problem (rejected ad, no delivery, ended run), even if the refresh was partial.
+          for row in $(jq -r '.alerts[]? | "\(.kind):\(.key)"' results.json 2>/dev/null); do
+            kind=${row%%:*}; key=${row#*:}
+            [[ "$kind" =~ ^(rejected|not_delivering|ended)$ && "$key" =~ ^[a-f0-9]{12}$ ]] || continue
+            seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
+            [ "$seen" = 0 ] || continue
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:dev3 -t "Campaign needs attention: $kind ($key)" \
+              -b "$(printf 'A live campaign needs attention: %s. The campaign shows a Needs attention badge in AdBrain with the reason.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$kind" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done
+          [ "$code" = 200 ]
       - name: Alert on the second consecutive failure
         if: failure()
         env:
@@ -67,4 +86,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'Spend enforcement, lead sync or payment health failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'Spend enforcement, lead sync, payment health or results refresh failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"

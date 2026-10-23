@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Database } from "@/lib/types";
+import type { Database, Json } from "@/lib/types";
 
 type Actor = { businessId: string; userId: string };
 type Store = ReturnType<typeof createAdminClient>;
@@ -28,6 +28,17 @@ export async function saveCampaignResult(actor: Actor, values: ResultInsert, dat
     .eq("business_id", actor.businessId).eq("id", values.campaign_id).maybeSingle();
   if (error || !data) throw new Error("Result campaign ownership could not be verified.");
   return database.from("campaign_results").insert(values).select("*").single();
+}
+
+/** #258: merge `raw.health` into a still-active campaign, re-reading `raw` so stored children and caps are kept. */
+export async function saveCampaignHealth(actor: Actor, campaignId: string, health: Json, database: Store = createAdminClient()) {
+  await checkOwner(database, actor);
+  const { data, error } = await database.from("campaigns").select("raw")
+    .eq("business_id", actor.businessId).eq("id", campaignId).eq("status", "active").maybeSingle();
+  if (error || !data) return { error };
+  const raw = data.raw && typeof data.raw === "object" && !Array.isArray(data.raw) ? data.raw : {};
+  return database.from("campaigns").update({ raw: { ...raw, health } })
+    .eq("business_id", actor.businessId).eq("id", campaignId).eq("status", "active").select("id").maybeSingle();
 }
 
 export async function deleteVerifiedCampaign(actor: Actor, campaignId: string, database: Store = createAdminClient()) {
