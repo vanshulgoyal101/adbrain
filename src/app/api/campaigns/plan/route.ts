@@ -13,6 +13,7 @@ import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
+import { cachedLeadForms } from "@/lib/meta/lead-form-cache";
 import { preferenceContext } from "@/lib/preferences/store";
 import {
   getActiveInstructionsText,
@@ -102,7 +103,7 @@ async function handlePOST(req: Request) {
     return NextResponse.json({ error: friendlyMetaError(err, "Could not load lead forms.") }, { status: 502 });
   }
   try {
-    if (!audienceDraft && destination === "instant_form") leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.listLeadForms());
+    if (!audienceDraft && destination === "instant_form") leadForms = await withMetaConnection(actor, { purpose: "create_paused" }, (meta, connection) => cachedLeadForms(meta, connection));
   } catch {
     leadForms = [];
   }

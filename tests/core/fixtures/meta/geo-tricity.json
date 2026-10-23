@@ -1,0 +1,119 @@
+[
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Chandigarh&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "1726",
+          "name": "चण्डीगढ़",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1021145",
+          "name": "Chandigarh, India",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Chandigarh",
+          "region_id": 1726,
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1034549",
+          "name": "Mani Majra, Haryana, India",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Chandigarh",
+          "region_id": 1726,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MgZDZD"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Mohali&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "1035473",
+          "name": "Mohali, India",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Punjab region",
+          "region_id": 1742,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MAZDZD"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Panchkula&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "2676092",
+          "name": "Panchkula, India",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Haryana",
+          "region_id": 1730,
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1018548",
+          "name": "Barwala, Panchkula",
+          "type": "city",
+          "country_code": "IN",
+          "country_name": "भारत",
+          "region": "Haryana",
+          "region_id": 1730,
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MQZDZD"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&q=Zzqx+Nowhereville&location_types=%5B%22city%22%2C%22region%22%2C%22country%22%5D&limit=10",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  }
+]

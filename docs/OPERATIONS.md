@@ -210,6 +210,11 @@ where payload->>'execution' = 'worker'
 group by state;
 ```
 
+Run ad hoc read-only production queries with
+`node scripts/prod-sql.mjs "SELECT ..."`: one `SELECT`/`WITH` statement inside
+`BEGIN READ ONLY`, sent through the Supabase Management API with the operator's
+`SUPABASE_TOKEN` (read from the local `arcade/.env`, never printed).
+
 ## Spend Guardrails
 
 [The evaluator](../src/lib/campaign/spend.ts) uses these quantities:
@@ -267,7 +272,7 @@ This does not certify attribution equivalence with every Ads Manager report.
 [vercel.json](../vercel.json) schedules keepalive and enforce-spend at
 `0 6 * * *` (UTC), the most a Vercel Hobby cron can run. Every 15 minutes
 [`scheduled-jobs.yml`](../.github/workflows/scheduled-jobs.yml) also calls
-enforce-spend, `sync-leads` and `payment-health` (GitHub schedules are best-effort and can run
+enforce-spend, `sync-leads`, `payment-health` and `refresh-results` (GitHub schedules are best-effort and can run
 late). It needs repository secret `CRON_SECRET` equal to the production value,
 logs only counts, fails red on any non-200 and opens one
 `Scheduled jobs failed twice in a row` `core` bug on two consecutive failures.
@@ -282,6 +287,7 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend. `unverified` lists businesses whose spend could not be read (503), never ₹0 |
 | `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it |
 | `/api/cron/payment-health` | Read-only Razorpay webhook counts (#178): events in 7 days, events unprocessed after 1 hour, captured orders with no capture event after 30 minutes. `payments:"disabled"` when live payments are off. When `ok` is false the workflow opens one `Razorpay webhook missing for a captured payment` `core` bug (counts only) and stays green. Triage: in the Razorpay Live dashboard confirm the webhook URL `https://adbrain.vanshul.com/api/payments/live/webhook`, its secret matches `RAZORPAY_LIVE_WEBHOOK_SECRET` and capture/refund/dispute events are enabled, then resend the delivery; never re-charge |
+| `/api/cron/refresh-results` | Read-only on Meta (#258): at most once an hour per active bound campaign, reads insights and ad review, saves one `campaign_results` row and `raw.health` flags: `rejected` (an ad `DISAPPROVED` or `WITH_ISSUES`, with Meta's reason), `not_delivering` (0 impressions after 6 h active) and `ended` (capped end time passed). Never pauses. Campaigns and Home show **Needs attention** with the reason. For each problem first seen in the last 2 h the workflow opens one `Campaign needs attention: <kind> (<key>)` `core` bug for Dev 3, with no identifiers; find the campaign with `select id, business_id from campaigns where raw->'health'->'flags' @> '[{"key":"<key>"}]'`. 503 when any campaign could not be refreshed |
 
 Weekly protection requires a complete Monday-to-today INR spend observation;
 missing metrics are not zero spend. A row without `spend` stays unverified. Meta
@@ -321,7 +327,7 @@ require separate database, Storage, provider, and log-retention handling. See
 
 For each incident or deployment record: symptom, confirmed cause, affected scope,
 authorized actions, exact SHA/migration state, checks performed, residual risk,
-and follow-up owner. Keep records in [QA](qa/) or [release receipts](releases/).
+and follow-up owner. Keep records in the issue or PR.
 Avoid asserting live-provider success from mocks or assuming a merged migration
 has run remotely. Monitoring events currently have no built-in alerting service;
 operational alert ownership must be established separately.

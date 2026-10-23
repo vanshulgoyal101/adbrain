@@ -4,25 +4,28 @@ AdBrain combines a business profile, reviewed AI creative generation, and
 owner-scoped Meta campaign management. Campaign creation is paused by default;
 activation is a separate operation with financial consequences.
 
-This documentation describes the checked-out source as of 2026-09-18. Local
-implementation, automated tests, production deployment, and real-provider
-approval are separate kinds of evidence. Consult release receipts for deployment
-status, not an undated feature claim.
+This is the entry point for product, engineering and operations documentation.
+Every guide here describes current truth. Dated receipts, audits and handoffs are
+not kept as files: evidence goes in the issue or PR, and git history keeps
+everything that was removed (#260). Never infer production availability from a
+feature branch or a passing local test.
 
 ## Start Here
 
 | Reader | Read first | Then read |
 | --- | --- | --- |
+| Owner or coordinating worker | [Worker orchestration](ORCHESTRATION.md) | [Roadmap](ROADMAP.md) |
 | New developer | [Quick start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) |
-| Product or support | [Features and workflows](FEATURES.md) | [Demo runbook](DEMO-RUNBOOK.md) |
+| Product or support | [Features and workflows](FEATURES.md) | [Roadmap](ROADMAP.md) |
 | Operator | [Deployment configuration](DEPLOY.md) | [Release policy](RELEASING.md) |
-| Debugging engineer | [Observability](OBSERVABILITY.md) | [Verification records](qa/) |
-| Product planner | [Product vision](SPEC.md) | [Roadmap](ROADMAP.md) |
+| Debugging engineer | [Observability](OBSERVABILITY.md) | [Operations](OPERATIONS.md) |
+| Product planner | [Roadmap](ROADMAP.md) | [Payment plan](PAYMENTS-PLAN.md) |
 
 ## Reference Library
 
 | Guide | Questions it answers |
 | --- | --- |
+| [Worker orchestration](ORCHESTRATION.md) | Who owns each packet/file/resource, what blocks it, and what evidence permits integration? |
 | [Features and workflows](FEATURES.md) | What can owners do, and where are the limits? |
 | [API reference](API_REFERENCE.md) | Which routes/actions exist, which parameters are accepted, and what do failures mean? |
 | [Configuration](CONFIGURATION.md) | Which variables are required, what are their defaults, and which changes cost money or require a restart? |
@@ -35,22 +38,15 @@ status, not an undated feature claim.
 | [Observability](OBSERVABILITY.md) | What is logged, how is it correlated, and what must never be collected? |
 | [Deployment](DEPLOY.md) | How is a target environment configured and smoke-tested? |
 | [Release policy](RELEASING.md) | What approvals and checks govern remote changes? |
-| [Demo runbook](DEMO-RUNBOOK.md) | How do we demonstrate real value without unintended spending or false claims? |
 | [Meta approval readiness](META_APPROVAL_ACTION_PLAN.md) | What external review evidence must be prepared and verified? |
+| [Payment plan and readiness](PAYMENTS-PLAN.md) | What are the agreed economics, implemented payment boundaries and remaining live-rollout requirements? |
+| [Brand identity](BRAND-IDENTITY.md) | Which presentation and terminology conventions should the product follow? |
 
 ## Plans and Records
 
-Current instructions live in the reference library above. These documents give
-intent, assignments or dated evidence; they are not alternative setup guides.
-
-| Material | Use |
-| --- | --- |
-| [Worker dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) | Current work assignments and ownership; maintained on the `dev` branch only |
-| [Operating brief](OPERATING-BRIEF.md) | Owner outcome, risk decisions and evidence needed to operate the product; not a deployment or spend approval |
-| [Payment plan](PAYMENTS-PLAN.md) | Payment decisions and implementation boundaries; rollout authority lives in the dispatch |
-| [Product audit](PRODUCT-AUDIT-2026-09.md) | Dated September 2026 assessment; later fixes may supersede findings |
-| [QA records](qa/) | Dated verification and handoff receipts for specific changes |
-| Historical snapshots (September 26, 2026): [operating brief](OPERATING-BRIEF-HISTORY-2026-09-26.md), [roadmap](ROADMAP-HISTORY-2026-09-26.md), [payments](PAYMENTS-HISTORY-2026-09-26.md), [orchestration](ORCHESTRATION-HISTORY-2026-09-26.md) | Historical context only; not current instructions, status or assignments |
+[Roadmap](ROADMAP.md) and the [payment plan](PAYMENTS-PLAN.md) hold intent and
+decisions; the [worker dispatch](ORCHESTRATION.md) holds current assignments.
+Consolidate guidance into its owning reference instead of adding dated documents.
 
 ## Terminology
 
@@ -72,15 +68,7 @@ intent, assignments or dated evidence; they are not alternative setup guides.
 - Runtime schemas, route handlers, database constraints, and tests define the
   current contract. Documentation explains them; it does not override them.
 - [Release policy](RELEASING.md) governs publication and production changes.
-- [QA records](qa/) and [release receipts](releases/) are dated evidence, not
-  general-purpose installation instructions.
-- [Creative generation plan](CREATIVE-GENERATION-PLAN.md),
-  [Meta connection plan](META-INSTANT-CONNECT-PLAN.md), and
-  [product design roadmap](PRODUCT-DESIGN-ROADMAP.md) preserve design intent and
-  implementation history. Their proposals must not be confused with shipped
-  behavior.
-- [Brand identity](BRAND-IDENTITY.md) covers product presentation;
-  [project history](how-we-got-here.md) explains earlier decisions.
+- [Brand identity](BRAND-IDENTITY.md) covers product presentation.
 
 ## Safety Before Setup
 
@@ -94,13 +82,25 @@ responses in documentation or screenshots. Use synthetic examples.
 
 ## Maintaining These Docs
 
-Update the owning reference alongside any changed schema, route, environment
-field, workflow or migration. Keep runtime behavior here and dated test/deployment
-evidence in records. Preserve old receipts, but label superseded assumptions in
-design plans so they cannot be mistaken for current setup instructions.
+Use one canonical guide per subject. Link to shared definitions instead of
+copying setup commands, environment tables or release rules across documents.
 
-Validate examples against actual handler schemas, not unused exported types or
-comments. Check local links/anchors, API and configuration inventories, command
-coverage and migration coverage. Do not state live deployment, provider approval,
-or measured quality solely from source inspection. Documentation cannot cure a
-known implementation gap: describe the limitation and put the fix on the roadmap.
+1. Identify the reader and the task. Start with the supported workflow, then
+  explain prerequisites, limits, failure recovery and relevant source locations.
+2. Verify claims against deciding code: handler validation, authorization,
+  provider adapters, database constraints and focused tests. Types or comments
+  alone are not proof of runtime behavior.
+3. Mark branch-only, migration-dependent, test-only and planned capabilities
+  explicitly. Date external account evidence and link deployment receipts.
+4. Use synthetic examples. Identify commands that write data, contact providers,
+  spend money or require approval before presenting them as executable steps.
+5. Update the owning guide in the same change as a public route, schema,
+  configuration, dependency boundary or customer workflow change.
+6. Check relative links and anchors, command names, API/configuration inventories
+  and migration prerequisites. Review factual changes independently; a prose-only
+  change does not need a duplicate application build or provider test.
+
+Write concise, task-oriented prose with descriptive headings and examples that
+match current schemas. Explain important trade-offs and limitations without
+copying implementation line by line. A known implementation gap belongs in both
+the relevant workflow's limitations and the roadmap, not behind a success claim.

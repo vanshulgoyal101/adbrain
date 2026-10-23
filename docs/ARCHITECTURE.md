@@ -8,8 +8,8 @@ owns tables/migrations, and [Features](FEATURES.md) owns the customer workflow.
 ### Source and Release Scope
 
 Reviewed against development commit `672eb132ad57bb3ba31f118afaffddaa878b4923`
-on September 26, 2026. The [SDK/query release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release)
-records production commit `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
+on September 26, 2026. The SDK/query release (PR #36)
+recorded production commit `6291dc2d2691bfc8a235b2aa1b103f119b26b83e`.
 These are deliberately different baselines:
 
 | Layer | What this guide can establish |
@@ -275,4 +275,3 @@ uncommitted work in a shared checkout is ready to publish together.
 For verification, start with [connection access tests](../tests/meta-connection-access.test.ts),
 [Studio recovery tests](../tests/studio.test.tsx), and the owning module's existing
 suite; [Testing](TESTING.md) owns execution commands and environment isolation.
-The [worker receipts](qa/) distinguish author checks from independent acceptance.

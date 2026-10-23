@@ -290,6 +290,14 @@ describe("campaign sync feedback", () => {
     expect(screen.getByText(/1 requested active/)).toBeInTheDocument();
   });
 
+  it("shows Needs attention with the reason for a live campaign the scheduled refresh flagged (#258)", () => {
+    const flag = { kind: "rejected", reason: "Meta rejected an ad: Ads about housing must run with a special ad category.", since: "2026-10-23T17:00:00.000Z", key: "aaaaaaaaaaaa" };
+    const campaign = { id: "campaign-1", name: "Saved campaign", status: "active", raw: { health: { checkedAt: flag.since, activeSince: flag.since, flags: [flag] } } } as unknown as Campaign;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByText(flag.reason)).toBeInTheDocument();
+  });
+
   it("requests a status selection immediately without the search typing delay", async () => {
     const first = { id: "first", name: "First campaign", status: "paused" } as Campaign;
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], results: {}, nextCursor: null })));
@@ -403,7 +411,10 @@ describe("campaign sync feedback", () => {
     await waitFor(() => expect(screen.queryByText("Loading lead forms...")).not.toBeInTheDocument());
     await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 2 } as ConnectionDTO); });
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms")).toHaveLength(2));
+    const formUrls = () => vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter(url => url.startsWith("/api/campaigns/lead-forms"));
+    await waitFor(() => expect(formUrls()).toHaveLength(2));
+    // #271: a reconnect skips the server's lead-form cache.
+    expect(formUrls()).toEqual(["/api/campaigns/lead-forms", "/api/campaigns/lead-forms?fresh=1"]);
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
@@ -411,7 +422,8 @@ describe("campaign sync feedback", () => {
     view(false);
     await act(async () => { await mocks.dialog.current!.onBeforeStart!(); });
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/lead-forms")).toHaveLength(1));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("/api/campaigns/lead-forms"))).toHaveLength(1));
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/campaigns/lead-forms?fresh=1")).toBe(true);
     expect(screen.getByText(/Review your lead form before continuing/)).toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
@@ -466,10 +478,12 @@ describe("campaign sync feedback", () => {
 
   it("loads forms only when setup opens, retries failures, and cancels on close", async () => {
     const requests: AbortSignal[] = [];
+    const urls: string[] = [];
     const forms = vi.fn().mockResolvedValueOnce(Response.json({ error: "Unavailable" }, { status: 503 }))
       .mockResolvedValueOnce(Response.json({ forms: [{ id: "form-2", name: "New enquiry", status: "ACTIVE" }] }));
     vi.stubGlobal("fetch", vi.fn((url: string, options?: RequestInit) => {
-      if (url === "/api/campaigns/lead-forms") {
+      if (url.startsWith("/api/campaigns/lead-forms")) {
+        urls.push(url);
         requests.push(options!.signal as AbortSignal);
         return forms();
       }
@@ -485,6 +499,7 @@ describe("campaign sync feedback", () => {
     await screen.findByRole("option", { name: "New enquiry" });
     expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
     expect(forms).toHaveBeenCalledTimes(2);
+    expect(urls).toEqual(["/api/campaigns/lead-forms", "/api/campaigns/lead-forms?fresh=1"]);
     fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
     expect(requests.every(signal => signal.aborted)).toBe(true);
     expect(mocks.createCampaign).not.toHaveBeenCalled();

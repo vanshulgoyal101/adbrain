@@ -74,6 +74,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
+import { campaignAttention } from "@/lib/campaign/health";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
@@ -103,8 +104,8 @@ type PrepareReviewState =
   | { status: "ready"; draft: DraftDTO; connection: ConnectionDTO; review: ReviewDTO }
   | { status: "blocked"; draft: DraftDTO; connection: ConnectionDTO; message: string };
 
-async function fetchDraftForms(signal?: AbortSignal): Promise<LeadForm[]> {
-  const response = await fetch("/api/campaigns/lead-forms", { cache: "no-store", signal });
+async function fetchDraftForms(signal?: AbortSignal, fresh = false): Promise<LeadForm[]> {
+  const response = await fetch(`/api/campaigns/lead-forms${fresh ? "?fresh=1" : ""}`, { cache: "no-store", signal });
   const data = await response.json() as { forms?: LeadForm[]; error?: string };
   if (!response.ok || data.error || !Array.isArray(data.forms)) throw new Error(data.error ?? "Could not load Page forms. Your draft is saved.");
   return data.forms;
@@ -316,7 +317,8 @@ function BusinessCampaigns({
     formsFreshnessRef.current = null;
     const controller = new AbortController();
     startTransition(() => { setFormsLoading(true); setFormsError(null); });
-    void fetchDraftForms(controller.signal).then(forms => {
+    // #271: after a retry or reconnect, skip the server's ten-minute form cache.
+    void fetchDraftForms(controller.signal, formsRetry > 0).then(forms => {
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
@@ -1559,6 +1561,7 @@ function BusinessCampaigns({
             {visibleCampaigns.map((c) => {
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
+              const attention = campaignAttention(c);
               return (
                 <Card key={c.id} className="rounded-none border-x-0 border-t-0">
                   <CardContent className="flex flex-col gap-3 px-0 py-5">
@@ -1576,6 +1579,7 @@ function BusinessCampaigns({
                           {c.status === "active" ? "Requested active" : c.status}
                         </Badge>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
+                        {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
                       </div>
                       <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <span className="text-sm text-slate-500">
@@ -1645,6 +1649,7 @@ function BusinessCampaigns({
                         </Button>
                       </div>
                     </div>
+                    {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
 
                     {r && (
                       <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">

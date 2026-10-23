@@ -48,6 +48,37 @@ describe("<Nav>", () => {
     expect(navigation.queryByText("2")).toBeNull();
   });
 
+  it("polls the unseen count only while visible, at most every 2 minutes, plus once on focus (#270)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    let visibility: DocumentVisibilityState = "hidden";
+    const visibilitySpy = vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+    const fetcher = vi.fn(async () => Response.json({ count: 1 }));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Workspace</p></WorkspaceShell>);
+      await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60_000); });
+      expect(fetcher).not.toHaveBeenCalled();
+
+      visibility = "visible";
+      await act(async () => { fireEvent.focus(window); });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(119_000); });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60_000); });
+      expect(fetcher.mock.calls.length).toBeLessThanOrEqual(2 + 5);
+
+      visibility = "hidden";
+      const hiddenFrom = fetcher.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60_000); });
+      expect(fetcher).toHaveBeenCalledTimes(hiddenFrom);
+    } finally {
+      visibilitySpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("ignores an old business count that resolves after switching workspaces", async () => {
     const oldViewedAt = new Date(Date.now() - 60_000).toISOString();
     localStorage.setItem("lead-viewed:owner:business-a", oldViewedAt);

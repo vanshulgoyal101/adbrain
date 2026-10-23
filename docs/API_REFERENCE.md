@@ -108,7 +108,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
-| GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
+| GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page; cached 10 min per business, Page and connection generation, `?fresh=1` re-reads Meta (#271) |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | GET | `/api/leads` | Filters/cursor -> `{leads,total,nextCursor}` | Owned saved enquiries only; no provider sync |
 | PATCH | `/api/leads/[id]` | `workflow_status` and/or `follow_up_note` -> `{lead}` | Owned local follow-up only; no outreach or provider write |
@@ -148,6 +148,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
 | GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta) |
+| GET | `/api/cron/refresh-results` | Cron Bearer auth | Hourly per active campaign: Meta insights and ad review (read-only), one result row and `raw.health` flags; `{ok,refreshed,skipped,failed,hasMore,alerts:[{kind,key}]}`, never pauses (#258) |
 | GET | `/api/cron/payment-health` | Cron Bearer auth | Razorpay webhook counts for the live account (`events7d`, `unprocessed`, `capturedWithoutEvent`); `ok:false` when a capture lacks its webhook event; read-only |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
@@ -242,7 +243,11 @@ above the bound do (#208). AdBrain itself records non-final evidence from Meta's
 lifetime campaign spend (`customer_ad_observe_costs`, service role only) during
 the activation review, activation, Refresh and the `enforce-spend` sweep, so no
 operator is needed to start or keep a funded run; final evidence stays
-operator-only (#216). Capturing payment
+operator-only (#216). For paused runs the sweep confirms the whole Meta tree
+is stopped and records settle reads (`customer_ad_settle_costs`); two equal
+reads 30 minutes apart, at least 3 hours after the pause, finalize the run and
+close its reservation without an operator. Capped runs past their Meta end time
+are paused by the sweep first (#221). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block

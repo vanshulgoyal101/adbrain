@@ -663,14 +663,17 @@ export class MetaClient {
     const matched: MatchedGeo[] = [];
     const unresolved: string[] = [];
     const seen = new Set<string>();
-
-    for (const raw of names) {
+    // #271: independent searches run together; results are applied in the given order.
+    const searches = await Promise.all(names.map(async raw => {
       const name = (raw ?? "").trim();
-      if (!name) continue;
-      let results: GeoSearchResult[] = [];
-      try {
-        results = await this.searchGeoLocations(name);
-      } catch {
+      if (!name) return null;
+      return { name, results: await this.searchGeoLocations(name).catch(() => null) };
+    }));
+
+    for (const search of searches) {
+      if (!search) continue;
+      const { name, results } = search;
+      if (!results) {
         unresolved.push(name);
         continue;
       }
@@ -1082,6 +1085,30 @@ export class MetaClient {
     const spendCapPaise = Number(account.spend_cap ?? 0);
     const amountSpentPaise = Number(account.amount_spent);
     return { spendCapPaise, amountSpentPaise, roomPaise: Math.max(0, spendCapPaise - amountSpentPaise), prepay: account.is_prepay_account === true };
+  }
+
+  /**
+   * Read-only: true only when Meta reads the campaign back PAUSED and every ad set and ad as
+   * PAUSED, either set directly or inherited from a paused campaign or ad set (#221).
+   */
+  async readCampaignStopped(campaignId: string): Promise<boolean> {
+    type Node = { id: string; status?: string; effective_status?: string };
+    const node = encodeURIComponent(campaignId);
+    const [campaign, adSets, ads] = await Promise.all([
+      this.graph<Node & { account_id?: string }>(`${node}?fields=id,account_id,status,effective_status`),
+      this.graph<{ data?: Node[]; paging?: { next?: string } }>(`${node}/adsets?fields=id,status,effective_status&limit=100`),
+      this.graph<{ data?: Node[]; paging?: { next?: string } }>(`${node}/ads?fields=id,status,effective_status&limit=100`),
+    ]);
+    if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
+      throw new MetaError("Campaign does not match the connected ad account.");
+    }
+    if (!Array.isArray(adSets.data) || !Array.isArray(ads.data) || adSets.paging?.next || ads.paging?.next) {
+      throw new MetaError("Campaign delivery could not be read completely.");
+    }
+    const paused = (item: Node) => ["PAUSED", "ARCHIVED", "DELETED"].includes(item.status ?? "")
+      || ["CAMPAIGN_PAUSED", "ADSET_PAUSED"].includes(item.effective_status ?? "");
+    return campaign.status === "PAUSED" && campaign.effective_status === "PAUSED"
+      && adSets.data.every(paused) && ads.data.every(paused);
   }
 
   async deleteObject(id: string): Promise<void> {

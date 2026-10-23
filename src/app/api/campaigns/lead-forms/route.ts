@@ -8,12 +8,13 @@ import {
 } from "@/lib/meta/connection-access";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
+import { cachedLeadForms } from "@/lib/meta/lead-form-cache";
 
 export const runtime = "nodejs";
 
 export const GET = observeRoute("/api/campaigns/lead-forms", "GET", handleGET);
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -31,7 +32,7 @@ async function handleGET() {
     const forms = await withMetaConnection(
       context,
       { purpose: "create_paused" },
-      (meta) => meta.listLeadForms(),
+      (meta, connection) => cachedLeadForms(meta, connection, { fresh: new URL(request.url).searchParams.get("fresh") === "1" }),
     );
     return NextResponse.json({ forms });
   } catch (err) {
