@@ -20,6 +20,7 @@ const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022
 const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
 const customAmountMigration = await readFile(join(root, "db/migrations/20261023_custom_payment_amount.sql"), "utf8");
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
+const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -923,6 +924,71 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyOperatorFunded(db, database) {
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]?.result; }
+    finally { await session.end(); }
+  };
+  const business = async (name) => {
+    const owner = randomUUID(), id = randomUUID(), campaign = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [owner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,$3)", [id,owner,name]);
+    await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [id]);
+    await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',280,$3,'act_123','123',1)", [campaign,id,`meta_${campaign}`]);
+    return { id, owner, activate: () => db.query("update public.campaigns set status='active' where id=$1", [campaign]) };
+  };
+  const operator = randomUUID(), stranger = randomUUID(), expired = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2),($3)", [operator,stranger,expired]);
+  await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,false,now()+interval '1 hour'),($3,$4,false,now()-interval '1 minute')",
+    [operator,randomUUID(),expired,randomUUID()]);
+  const set = (businessId, enabled, actor = operator, reason = "Owner funds this business on Meta (#245)") =>
+    service("select public.operator_funding_set($1,$2,$3,$4) as result", [businessId,actor,enabled,reason]);
+  const funded = (businessId) => service("select public.operator_funded($1) as result", [businessId]);
+  await check(`${database}: an operator-funded business activates with no payment or reservation; a customer business still needs one (#245)`, async () => {
+    const owned = await business("Synthetic operator-funded");
+    const customer = await business("Synthetic customer");
+    assert.deepEqual(await set(owned.id, true), { businessId: owned.id, operatorFunded: true });
+    assert.equal(await funded(owned.id), true);
+    assert.equal(await funded(customer.id), false);
+    await owned.activate();
+    await assert.rejects(customer.activate(), {code:'23514'});
+  });
+  await check(`${database}: only a live payment operator sets operator funding, with a reason; roles and tables stay closed (#245)`, async () => {
+    const target = await business("Synthetic operator mark");
+    for (const actor of [stranger, expired, target.owner]) await assert.rejects(set(target.id, true, actor), {code:'42501'});
+    await assert.rejects(set(target.id, true, operator, "  "), {code:'23514'});
+    await assert.rejects(set(randomUUID(), true), {code:'23514'});
+    assert.equal(await funded(target.id), false);
+    await assert.rejects(target.activate(), {code:'23514'});
+    for (const role of ["anon","authenticated"]) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("select public.operator_funding_set($1,$2,true,'Self-service attempt')", [target.id,target.owner]), {code:'42501'});
+        await assert.rejects(session.query("select public.operator_funded($1)", [target.id]), {code:'42501'});
+      } finally { await session.end(); }
+    }
+    for (const table of ["operator_funded_businesses","operator_funding_audit"]) {
+      await assert.rejects(service(`select count(*) as result from private.${table}`), {code:'42501'});
+    }
+  });
+  await check(`${database}: setting and clearing operator funding is audited, and clearing restores the customer gate (#245)`, async () => {
+    const target = await business("Synthetic audited mark");
+    await set(target.id, true, operator, "Owner funds Solaride on Meta");
+    await set(target.id, false, operator, "Back to the customer allowance");
+    assert.equal(await funded(target.id), false);
+    await assert.rejects(target.activate(), {code:'23514'});
+    const audit = (await db.query("select actor_id, enabled, reason from private.operator_funding_audit where business_id=$1 order by created_at", [target.id])).rows;
+    assert.deepEqual(audit, [
+      { actor_id: operator, enabled: true, reason: "Owner funds Solaride on Meta" },
+      { actor_id: operator, enabled: false, reason: "Back to the customer allowance" },
+    ]);
+  });
+}
+
 async function verifyCreativeGenerationAdmission(db, database) {
   const owner = randomUUID();
   const otherOwner = randomUUID();
@@ -1200,8 +1266,11 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(cappedBoundMigration);
       await db.query(metaCostMigration);
       await db.query(metaCostMigration);
+      await db.query(operatorFundedMigration);
+      await db.query(operatorFundedMigration);
       await verifyCustomerAllowance(db,database);
       await verifyCappedRunBound(db,database);
+      await verifyOperatorFunded(db,database);
       return;
     }
     if (integrityMigration) {

@@ -243,6 +243,17 @@ remains unlimited; paused campaigns' unknown budgets do not affect the projectio
 Pause operations do not depend on spend reads succeeding. Dashboard estimates
 still use known values; they are not proof that activation evidence is complete.
 
+Operator-funded businesses (#245): DevOps marks or clears one with the owner's
+live payment-operator grant, giving a reason, in the production SQL editor:
+`select public.operator_funding_set('<business id>','<operator user id>',true,'<reason>');`
+(`false` clears it). The audit table records who, when and why. Such a business
+runs only capped runs inside its Meta ad account spending limit; the sweep keeps
+the weekly cap but skips the customer allowance hold. A capped run created outside
+AdBrain (the #157 run) is adopted after the mark with
+[`scripts/adopt-capped-run.ts`](../scripts/adopt-capped-run.ts): it reads the Meta
+tree back exactly, prints the campaign row (dry run), and `--apply` saves it through
+`saveCampaign` so Pause, sync and results manage the run.
+
 Insight ingestion validates the aggregate response before saving it: missing
 `data`, multiple rows, pagination, invalid numbers/dates, or duplicate selected
 outcome actions fail refresh instead of replacing stored evidence with zeroes.

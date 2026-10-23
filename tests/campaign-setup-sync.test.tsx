@@ -260,6 +260,29 @@ describe("campaign sync feedback", () => {
     expect(funds).not.toContain("capDays");
   });
 
+  it("shows Meta's room against the cap for an operator-funded business instead of the AdBrain balance (#245)", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    const delivery = {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+      adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    };
+    const funding = { spendCapPaise: 204237, amountSpentPaise: 4237, roomPaise: 200000, prepay: true };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery, funding });
+      return Response.json({ campaigns: [], nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    expect(await screen.findByText("Funded on Meta: ₹2,000.00 room for a ₹1,500.00 cap.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "5" } });
+    expect(screen.getByText("Funded on Meta: ₹2,000.00 room for a ₹2,500.00 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
+  });
+
   it("labels the stored active state as a request, not confirmed delivery", () => {
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "active" } as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
