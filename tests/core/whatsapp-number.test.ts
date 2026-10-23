@@ -6,10 +6,14 @@ import adSetCheck from "./fixtures/meta/whatsapp-adset-validate.json";
 // WhatsApp Business Accounts whose numbers Meta accepts for the Page's WhatsApp ad sets
 // (validate_only, whatsapp-adset-validate.json). Real read-only answers, digits replaced.
 import { MetaClient } from "@/lib/meta/client";
+import { readWhatsAppStatus } from "@/lib/meta/whatsapp-status";
+
+const access = vi.hoisted(() => ({ requireOwnedBusiness: vi.fn(), getConnectionStatus: vi.fn(), withMetaConnection: vi.fn() }));
+vi.mock("@/lib/meta/connection-access", () => access);
 
 const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
 
-function replay() {
+function replay(tape: { path: string; status: number; body: unknown }[] = recorded.tape) {
   const calls: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -18,7 +22,7 @@ function replay() {
     const path = decodeURIComponent(url.pathname.replace("/v21.0/", "") + url.search);
     calls.push(path);
     if (path === `${creds.pageId}?fields=access_token`) return Response.json({ access_token: "page-token" });
-    const exchange = recorded.tape.find((entry) => entry.path === path);
+    const exchange = tape.find((entry) => entry.path === path);
     if (!exchange) throw new Error(`Unrecorded Graph call: ${path}`);
     return Response.json(exchange.body, { status: exchange.status });
   });
@@ -59,5 +63,33 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     const calls = replay();
     expect(await new MetaClient(creds).getWhatsAppNumber()).toBeNull();
     expect(calls.some((path) => path.includes("owned_whatsapp_business_accounts"))).toBe(false);
+  });
+
+  it("lets only masked numbers leave the server (#235)", async () => {
+    replay();
+    access.requireOwnedBusiness.mockResolvedValue({});
+    access.getConnectionStatus.mockResolvedValue({ selected: {}, capabilities: { canCreatePaused: { state: "available" } } });
+    access.withMetaConnection.mockImplementation((_context, _options, run: (meta: MetaClient) => unknown) => run(new MetaClient(creds)));
+    const status = await readWhatsAppStatus("11111111-1111-4111-8111-111111111111");
+    expect(status).toEqual({ state: "ready", numbers: [
+      { masked: "+91 ••••• 4842", source: "business" },
+      { masked: "+91 ••••• 0874", source: "business" },
+    ] });
+    expect(JSON.stringify(status)).not.toContain("9999");
+  });
+
+  it("resolves a masked choice to the one number behind it, and refuses unknown or shared masks (#235)", async () => {
+    replay();
+    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842")).toBe("+919999994842");
+    vi.restoreAllMocks();
+    replay();
+    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 1234")).toBeNull();
+    vi.restoreAllMocks();
+    // Same reads, with the second account's number changed to share 4842's mask.
+    const tape: { path: string; status: number; body: unknown }[] = structuredClone(recorded.tape);
+    const wabas = tape.find((entry) => entry.path.includes("owned_whatsapp_business_accounts"))!.body as { data: { phone_numbers: { data: { display_phone_number: string }[] } }[] };
+    wabas.data[1].phone_numbers.data[0].display_phone_number = "+91 88888 84842";
+    replay(tape);
+    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842")).toBeNull();
   });
 });

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MessageCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { maskWhatsAppNumber, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
+import { parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 
 /** #235: shows early whether WhatsApp chat ads can run, with a linking guide while they can't. */
 export function WhatsAppStatusPanel({ businessId, initialStatus }: { businessId: string; initialStatus: WhatsAppStatus }) {
@@ -14,7 +14,7 @@ export function WhatsAppStatusPanel({ businessId, initialStatus }: { businessId:
     setChecking(true);
     try {
       const response = await fetch(`/api/meta/whatsapp?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store" });
-      setStatus(response.ok ? await response.json() as WhatsAppStatus : { state: "unavailable" });
+      setStatus(response.ok ? parseWhatsAppStatus(await response.json()) : { state: "unavailable" });
     } catch {
       setStatus({ state: "unavailable" });
     } finally {
@@ -35,8 +35,7 @@ export function WhatsAppStatusPanel({ businessId, initialStatus }: { businessId:
     </div>
     <p role="status" className="text-sm text-slate-700">
       {status.state === "ready"
-        ? `Ready: ${[status.page && `${maskWhatsAppNumber(status.page)} (linked to your Page)`,
-          ...status.business.map((number) => `${maskWhatsAppNumber(number)} (your WhatsApp Business account)`)].filter(Boolean).join(", ")}`
+        ? `Ready: ${status.numbers.map(({ masked, source }) => `${masked} (${source === "page" ? "linked to your Page" : "your WhatsApp Business account"})`).join(", ")}`
         : status.state === "not_linked" ? "Not linked yet. Ads can't open a WhatsApp chat until a number is linked."
           : "WhatsApp status is unavailable. Connect Meta and choose your ad account and Page first."}
     </p>

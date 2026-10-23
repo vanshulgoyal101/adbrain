@@ -61,7 +61,9 @@ import { campaignDestination } from "@/lib/campaign/outcomes";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
+import { parsePhone } from "@/lib/brand/countries";
 import type { LeadForm } from "@/lib/meta/client";
+import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 import {
@@ -112,6 +114,7 @@ type ComposerSetup = {
   selected: Set<string>;
   budget: number;
   destination: "instant_form" | "whatsapp";
+  whatsappNumber: string;
   leadFormId: string;
   name: string;
   targeting: TargetingValue;
@@ -169,6 +172,13 @@ function BusinessCampaigns({
   ));
   const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
+  const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
+  const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
+  // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
+  const destinationChosenRef = useRef(Boolean(initialSetup));
+  const indiaBased = parsePhone(business.phone).countryCode === "IN";
+  const whatsappOptions = whatsappStatus?.state === "ready" ? whatsappStatus.numbers : [];
+  const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const [availableForms, setAvailableForms] = useState(leadForms);
   const [formsLoading, setFormsLoading] = useState(false);
@@ -244,8 +254,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -279,6 +289,9 @@ function BusinessCampaigns({
     setBudget(input.dailyBudgetRupees);
     setLeadFormId(input.leadFormId ?? "");
     setDestination(input.destination ?? "instant_form");
+    // The form names numbers by their mask; a full number from an older draft shows as its mask.
+    setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
+    destinationChosenRef.current = true;
     setAbTest(input.abTest);
     setCreationMode("manual");
     setDraftGoal(input.goal);
@@ -315,6 +328,20 @@ function BusinessCampaigns({
     });
     return () => controller.abort();
   }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination]);
+
+  useEffect(() => {
+    if (!showComposer || !connectedForDraft) return;
+    const controller = new AbortController();
+    void fetch(`/api/meta/whatsapp?businessId=${encodeURIComponent(business.id)}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => parseWhatsAppStatus(response.ok ? await response.json() : null))
+      .catch((): WhatsAppStatus => ({ state: "unavailable" }))
+      .then((status) => {
+        if (controller.signal.aborted) return;
+        setWhatsAppStatus(status);
+        if (status.state === "ready" && indiaBased && !destinationChosenRef.current) setDestination("whatsapp");
+      });
+    return () => controller.abort();
+  }, [showComposer, connectedForDraft, business.id, indiaBased]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -448,7 +475,9 @@ function BusinessCampaigns({
     setIncludedNames("");
     setExcludedNames("");
     setLeadFormId("");
-    setDestination("instant_form");
+    setDestination(indiaBased && whatsappOptions.length ? "whatsapp" : "instant_form");
+    setWhatsAppNumber("");
+    destinationChosenRef.current = false;
     setShowComposer(true);
     if (creationMode === "guided") focusOnOpenRef.current = true;
     else nameInputRef.current?.focus();
@@ -578,6 +607,7 @@ function BusinessCampaigns({
       dailyBudgetRupees: Math.max(0, budget),
       leadFormId: destination === "whatsapp" ? null : leadFormId || null,
       destination,
+      ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
     };
@@ -1200,7 +1230,7 @@ function BusinessCampaigns({
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && creationMode === "guided" && <CampaignChat
@@ -1327,6 +1357,27 @@ function BusinessCampaigns({
                       ))}
                     </select>
                   </div>}
+                  {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
+                    {whatsappOptions.length ? <>
+                      <Label htmlFor="whatsapp-number">WhatsApp button number</Label>
+                      <select
+                        id="whatsapp-number"
+                        value={chosenWhatsAppNumber}
+                        onChange={(e) => setWhatsAppNumber(e.target.value)}
+                        className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                      >
+                        {whatsappOptions.map(({ masked, source }) => (
+                          <option key={masked} value={masked}>
+                            {masked} ({source === "page" ? "linked to your Page" : "your WhatsApp Business account"})
+                          </option>
+                        ))}
+                      </select>
+                    </> : <p role="status" className="text-sm text-slate-600">
+                      {whatsappStatus?.state === "not_linked"
+                        ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Brand Brain</Link> shows how to link one.</>
+                        : connectedForDraft && !whatsappStatus ? "Checking your WhatsApp numbers..." : "AdBrain checks your WhatsApp number when you prepare the review."}
+                    </p>}
+                  </div>}
                 </div>
 
                 <div className="-mt-2 flex flex-wrap items-center gap-2">
@@ -1411,6 +1462,7 @@ function BusinessCampaigns({
                     budget={totalDailyBudget}
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
+                    whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
                     audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>

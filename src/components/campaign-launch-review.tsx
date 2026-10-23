@@ -6,18 +6,22 @@ export function CampaignLaunchReview({
   budget,
   leadFormName,
   destination = "instant_form",
+  whatsappNumber,
   audience,
 }: {
   selectedCount: number;
   budget: number;
   leadFormName?: string;
   destination?: "instant_form" | "whatsapp";
+  /** The chosen WhatsApp button number, masked as the owner sees it. */
+  whatsappNumber?: string;
   audience: string;
 }) {
+  const destinationReady = destination === "whatsapp" ? !!whatsappNumber : !!leadFormName;
   const isReady =
     selectedCount > 0 &&
     budget > 0 &&
-    destination === "instant_form" && !!leadFormName &&
+    destinationReady &&
     audience.trim().length > 0 &&
     audience !== "Choose an area";
 
@@ -58,8 +62,10 @@ export function CampaignLaunchReview({
         </div>
         <div>
           <dt className="text-xs text-slate-500">Lead destination</dt>
-          <dd className={cn("mt-1 break-words font-medium", leadFormName ? "text-slate-900" : "text-amber-700")}>
-            {destination === "whatsapp" ? "WhatsApp chat (number verification pending)" : leadFormName ?? "Choose a lead form"}
+          <dd className={cn("mt-1 break-words font-medium", destinationReady ? "text-slate-900" : "text-amber-700")}>
+            {destination === "whatsapp"
+              ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
+              : leadFormName ?? "Choose a lead form"}
           </dd>
         </div>
         <div>

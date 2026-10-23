@@ -235,6 +235,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   own Meta business; Meta accepts those for the Page's WhatsApp ad sets (#157).
 - Brand and Settings show early whether WhatsApp chat ads can run ("Ready: +91 ••••• 4842" or
   "Not linked yet") with a short linking guide and a Check again button (#235).
+- In manual setup, the campaign form lists those numbers (masked; full numbers never
+  reach the browser before review) as **WhatsApp button number** and saves the chosen
+  mask in the draft; preflight resolves it to the full number. A new campaign for an
+  India-based business (Brand phone +91, or no country code) opens on WhatsApp chat once
+  a number is ready; an explicit destination choice or a restored draft keeps its
+  destination, and the lead form stays available. A guided draft uses the Page's own
+  number until it is prepared again from manual setup.
 - Review displays and hashes the verified number. Creation rechecks it before
   any mutation. WhatsApp never silently falls back to a form.
 - The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
