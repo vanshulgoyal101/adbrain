@@ -229,7 +229,10 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required
   checks are green on its head, the latest QA verdict naming that head approves it
-  and names each new migration's sha256, and the PR only adds migrations. The
+  and names each new migration's sha256, and the PR only adds migrations. A PR with
+  a migration or money code (payments, spend, activation or budget) also needs the
+  CTO (#259): the latest `CTO review of <sha>: **approved**` of that head, or of an
+  earlier head whose patch against main has the same `git patch-id`. The
   release then dry-runs each pending migration (rolled back), applies it with its
   ledger row through the Management API (same lock, timeouts and checksum guard as
   the runner), reloads the PostgREST schema, merges with `--match-head-commit <full
