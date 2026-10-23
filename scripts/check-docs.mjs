@@ -8,11 +8,6 @@ import { parse as parseHtml } from "node-html-parser";
 import ts from "typescript";
 
 const markdown = new MarkdownIt({ html: true });
-const historicalNames = new Set([
-  "PRODUCT-AUDIT-2026-09.md", "how-we-got-here.md", "ORCHESTRATION-HISTORY-2026-09-26.md",
-  "RELEASE-2026-09-06.md", "CREATIVE-GENERATION-PLAN.md", "META-INSTANT-CONNECT-PLAN.md",
-  "PRODUCT-DESIGN-ROADMAP.md",
-]);
 const methods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
 
 function walk(directory) {
@@ -25,7 +20,7 @@ function walk(directory) {
 
 function classification(file) {
   return file.startsWith("docs/qa/") || file.startsWith("docs/releases/") ||
-    file.startsWith("docs/meta-connect-workers/") || historicalNames.has(file.split("/").at(-1)) ||
+    file.startsWith("docs/meta-connect-workers/") ||
     /-HISTORY-\d{4}-\d{2}-\d{2}\.md$/.test(file)
     ? "historical" : "current";
 }

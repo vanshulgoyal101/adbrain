@@ -3,8 +3,7 @@
 This reference describes the existing product identity, not a redesign or proof
 of deployment. Use it when adding a screen, changing icons, or reviewing public
 metadata. Source baseline: `672eb13`. Product behavior belongs in
-[Features](FEATURES.md); historical design intent remains in the
-[product design roadmap](PRODUCT-DESIGN-ROADMAP.md).
+[Features](FEATURES.md).
 
 ## Name and Mark
 
@@ -80,12 +79,8 @@ server-compatible boundary and inspect the raster output when changing it.
 
 ## Product family
 
-[The parity script](../scripts/check-brand-parity.mjs) expects sibling Links and
-Portfolio checkouts at its configured relative paths. It compares the Brain
-geometry with AdBrain's assets; it is not an application runtime dependency.
-Do not alter those repositories or their own favicons as an incidental docs or
-AdBrain change. Without the expected sibling layout, use the repository-local
-[icon tests](../tests/icons.test.ts); do not claim cross-site parity.
+Check the mark with the repository-local [icon tests](../tests/icons.test.ts). Do not
+alter sibling sites or their favicons as an incidental AdBrain change.
 
 ## Release checks
 
@@ -93,9 +88,3 @@ For documentation-only changes, run `npm run docs:check`; do not regenerate
 assets or replay browser/provider suites. For an actual brand change, run the
 affected icon tests and required CI, then inspect favicon, social raster and
 desktop/mobile surfaces under the [Testing](TESTING.md) isolation rules.
-
-[The production brand checker](../scripts/check-brand-production.mjs) makes
-external HTTP/browser requests to the configured live sites and writes ignored
-captures. Use it only as an explicitly scoped hosted check, not an offline unit
-test. Record the deployed SHA and actual asset bytes; HTTP 200 or source CI alone
-does not establish the intended version is live. Follow [Release Policy](RELEASING.md).

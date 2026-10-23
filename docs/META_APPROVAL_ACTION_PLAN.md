@@ -34,12 +34,12 @@ for the implemented connection and publishing path.
 
 ### Existing Evidence Boundary
 
-The [September 7 connection verification](meta-connect-workers/VERIFICATION-2026-09-07.md)
-records local Auth/draft/database/browser work with mocked Meta consent and a
+The September 7 connection verification (git history)
+recorded local Auth/draft/database/browser work with mocked Meta consent and a
 real login attempt that did not complete a callback. Preserve that scope; it is
 not proof of non-app-role customer access. The
-[September 26 SDK/query release](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release)
-records a deployed software change and bounded application checks, not a fresh
+September 26 SDK/query release (PR #36)
+recorded a deployed software change and bounded application checks, not a fresh
 Meta review decision. #34/#35 are feature candidates and supply no new live
 consent or lead-download evidence. A newer provider decision needs its own dated,
 sanitized receipt before this guide can claim it.

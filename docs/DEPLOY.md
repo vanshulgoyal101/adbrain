@@ -5,11 +5,8 @@ promotion rules live in [Release Workflow](RELEASING.md); configuration defaults
 live in [Configuration](CONFIGURATION.md). AdBrain requires a dynamic Node/Next.js
 host and Supabase Auth/Postgres/Storage, not a static export.
 
-Source reference: dev `672eb13`. Last verified production: `6291dc2`, canonical
-`https://adbrain.vanshul.com`, Node 24.x, hnd1, from
-[PR #36's receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
-This is evidence for that release, not a live status monitor. DB-A-dependent
-callers, their migrations and local test checkout were excluded from production.
+Production is `main`, deployed by Vercel to `https://adbrain.vanshul.com` (Node 24.x,
+hnd1). Read the live SHA with `node scripts/production-guard.mjs live`.
 
 | Target | Safe starting point | Do not assume |
 | --- | --- | --- |
@@ -166,8 +163,7 @@ Before approved rollout: backup/restore readiness, production data preflight,
 dependency ordering, compatible web/worker revision and a rollback floor must be
 known. DB-A grant revocations and trusted-write callers require coordinated
 deployment/quiescence; do not apply one side while incompatible callers run.
-The [DB-A handoff](qa/db-a-dev-a-handoff-2026-09-26.md) carries this deferred
-rollout, and documentation work does not approve it.
+Documentation work does not approve this rollout.
 
 Sources: [full-schema tool](../scripts/apply-schema.mjs),
 [migration CLI](../scripts/migrate-db.mjs),
