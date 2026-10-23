@@ -218,7 +218,10 @@ strict `costs` or `refund-allocation` actions with
 [shared contracts](../src/lib/payments/customer-balance-contracts.ts).
 
 Cost evidence uses integer paise, immutable UUIDs and cumulative lifetime
-media/tax figures; stale or conflicting figures hold funds. Capturing payment
+media/tax figures; stale or conflicting figures hold funds. An active capped run
+records its bound (attributed media plus the Meta lifetime budget, only when it
+fits the reserved media limit); its aging non-final figures do not hold funds,
+but figures above the bound do (#208). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block

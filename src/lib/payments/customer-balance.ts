@@ -13,7 +13,9 @@ type AccountingDatabase = Database & { public: { Functions: {
     p_campaign_id: string; p_ad_account_id: string; p_connection_generation: number;
     p_daily_budget_paise: number; p_request_key: string; p_review_only: boolean;
   }; Returns: unknown };
-  customer_ad_activation_result: { Args: Scope & { p_campaign_id: string; p_reservation_id: string; p_state: "active" | "paused" | "uncertain" }; Returns: undefined };
+  customer_ad_activation_result: { Args: Scope & {
+    p_campaign_id: string; p_reservation_id: string; p_state: "active" | "paused" | "uncertain"; p_capped_media_paise?: number;
+  }; Returns: undefined };
   customer_ad_reconcile_costs: { Args: {
     p_business_id: string; p_actor_id: string; p_account_id: string; p_campaign_id: string; p_ad_account_id: string;
     p_connection_generation: number; p_media_paise: number; p_tax_paise: number; p_tax_rate_bps: number;
@@ -77,10 +79,12 @@ export async function reserveCustomerCampaign(actor: Actor, input: {
   return result;
 }
 
-export async function confirmCustomerCampaign(actor: Actor, campaignId: string, reservationId: string, state: "active" | "paused" | "uncertain") {
+/** `cappedMediaPaise` is the Meta lifetime budget of the activated capped ad set (#208). */
+export async function confirmCustomerCampaign(actor: Actor, campaignId: string, reservationId: string, state: "active" | "paused" | "uncertain", cappedMediaPaise?: number) {
   const { database, scope } = accounting(actor);
   await checked(database.rpc("customer_ad_activation_result", {
     ...scope, p_campaign_id: z.uuid().parse(campaignId), p_reservation_id: z.uuid().parse(reservationId), p_state: state,
+    ...(cappedMediaPaise === undefined ? {} : { p_capped_media_paise: paise.positive().parse(cappedMediaPaise) }),
   }), z.unknown());
 }
 

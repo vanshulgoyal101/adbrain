@@ -16,6 +16,7 @@ const creativeReconcileMigration = await readFile(join(root, "db/migrations/2026
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
+const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_customer_ad_capped_bound.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -571,6 +572,77 @@ async function verifyCustomerAllowance(db, database) {
   });
 }
 
+async function verifyCappedRunBound(db, database) {
+  const owner = randomUUID();
+  const business = randomUUID();
+  const order = randomUUID();
+  const campaign = randomUUID();
+  const account = "acc_capped";
+  const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+    serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+    metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic capped run')", [business, owner]);
+  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [business]);
+  await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id) values ($1,$2,$3,$4,$5,'rzp_live_fixture',$6,$7,$8,'order_capped')", [order,business,owner,randomUUID(),account,quote,{version:'operator-managed-v1',fundingMode:'operator_managed'},'a'.repeat(64)]);
+  await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',280,'meta_capped','act_123','123',1)", [campaign,business]);
+  await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')", [owner,randomUUID()]);
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]?.result; }
+    finally { await session.end(); }
+  };
+  const balance = () => service("select public.customer_ad_balance($1,$2,$3) as result",[business,owner,account]);
+  const costs = (media, tax) => service("select public.customer_ad_reconcile_costs($1,$2,$3,$4,'act_123',1,$5,$6,1800,$7,$8,false,null)",
+    [business,owner,account,campaign,media,tax,new Date().toISOString(),randomUUID()]);
+  const reserve = () => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,28000,$5) as result",[business,owner,account,campaign,'e'.repeat(64)]);
+  const result = (reservationId, state, cap = null) => service("select public.customer_ad_activation_result($1,$2,$3,$4,$5,$6,$7)",[business,owner,account,campaign,reservationId,state,cap]);
+  const age = () => db.query("update private.customer_ad_costs set observed_at=clock_timestamp()-interval '20 minutes' where campaign_id=$1",[campaign]);
+  const bound = async () => (await db.query("select bounded_media_paise from private.customer_ad_reservations where campaign_id=$1",[campaign])).rows[0].bounded_media_paise;
+  await service("select public.production_payment_observe($1,$2,'rzp_live_fixture','pay_capped',true,0,false,$3)",[order,account,'f'.repeat(64)]);
+  await costs(0,0);
+  const { reservationId } = await reserve();
+  await check(`${database}: funded capped run is not held when its cost evidence ages (#208)`, async () => {
+    await result(reservationId,'active',84000);
+    await db.query("update public.campaigns set status='active' where id=$1",[campaign]);
+    await age();
+    assert.equal(Number(await bound()),84000);
+    const current = await balance();
+    assert.equal(current.held,false);
+    assert.equal(current.reservedPaise,800000);
+    await costs(50000,9000);
+    await age();
+    assert.equal((await balance()).held,false);
+  });
+  await check(`${database}: uncapped or over-limit activation keeps the stale-evidence hold`, async () => {
+    await result(reservationId,'active');
+    assert.equal(await bound(),null);
+    assert.equal((await balance()).held,true);
+    await result(reservationId,'active',677966-50000+1);
+    assert.equal(await bound(),null);
+    assert.equal((await balance()).held,true);
+    await assert.rejects(result(reservationId,'paused',84000),{code:'23514'});
+    await result(reservationId,'active',34000);
+    assert.equal(Number(await bound()),84000);
+    assert.equal((await balance()).held,false);
+  });
+  await check(`${database}: a new reservation drops the previous bound`, async () => {
+    await db.query("update public.campaigns set status='paused' where id=$1",[campaign]);
+    await result(reservationId,'paused');
+    await costs(50000,9000);
+    const next = await reserve();
+    assert.notEqual(next.reservationId,reservationId);
+    assert.equal(await bound(),null);
+    await result(next.reservationId,'active',30000);
+    assert.equal(Number(await bound()),80000);
+  });
+  await check(`${database}: cost evidence above the capped bound holds the balance`, async () => {
+    await costs(80001,14401);
+    assert.equal((await balance()).held,true);
+  });
+}
+
 async function verifyCreativeGenerationAdmission(db, database) {
   const owner = randomUUID();
   const otherOwner = randomUUID();
@@ -833,9 +905,15 @@ async function verify(database, source, integrityMigration, customerOnly = false
     await db.query(operatorPaymentMigration);
     await db.query(operatorPaymentMigration);
     if (customerOnly) {
+      await db.query("drop function if exists public.customer_ad_activation_result(uuid,uuid,text,uuid,uuid,text,bigint)");
       await db.query(customerAllowanceMigration);
       await db.query(customerAllowanceMigration);
+      const priced = (await db.query("select exists(select 1 from information_schema.columns where table_schema='private' and table_name='production_payment_orders' and column_name='purpose') as installed")).rows[0].installed;
+      if (!priced) await db.query(configurablePaymentMigration);
+      await db.query(cappedBoundMigration);
+      await db.query(cappedBoundMigration);
       await verifyCustomerAllowance(db,database);
+      await verifyCappedRunBound(db,database);
       return;
     }
     if (integrityMigration) {
@@ -1934,6 +2012,7 @@ try {
   assert.ok(schema.indexOf(creativeReconcileMigration.trim()) < schema.indexOf(creativeSettleMigration.trim()), "Canonical schema must include the exact settle-holds migration after reconciliation");
   assert.ok(schema.includes(configurablePaymentMigration.trim()), "Canonical schema must include the exact configurable pricing migration");
   assert.ok(schema.indexOf(configurablePaymentMigration.trim()) < schema.indexOf(webhookHealthMigration.trim()), "Canonical schema must include the exact webhook health migration after configurable pricing");
+  assert.ok(schema.indexOf(webhookHealthMigration.trim()) < schema.indexOf(cappedBoundMigration.trim()), "Canonical schema must include the exact capped bound migration after webhook health");
   assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);
