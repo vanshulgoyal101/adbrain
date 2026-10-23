@@ -1,0 +1,74 @@
+{
+  "recordedAt": "2026-10-23T13:56:11.180Z",
+  "note": "Read-only Graph GETs, Oct 23 (#157). Real phone digits replaced: 91999999<last4>.",
+  "tape": [
+    {
+      "method": "GET",
+      "path": "885223068001054?fields=id,has_whatsapp_business_number,whatsapp_number",
+      "status": 200,
+      "body": {
+        "id": "885223068001054"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "act_2398686420592052?fields=id,business{id}",
+      "status": 200,
+      "body": {
+        "id": "act_2398686420592052",
+        "business": {
+          "id": "1158100643072508"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "1158100643072508/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "phone_numbers": {
+              "data": [
+                {
+                  "display_phone_number": "+91 99999 94842",
+                  "id": "1113229925200671"
+                }
+              ],
+              "paging": {
+                "cursors": {
+                  "before": "QVFIVGtkSDFKVS1heUlCUlhxUjFfVHIwWVZA2bmowSDdseldGZAm1TMEVIX0FSMnZAuZAzNwWEtHZAmxUdEhkZAFZAmcmpBc1gZD",
+                  "after": "QVFIVGtkSDFKVS1heUlCUlhxUjFfVHIwWVZA2bmowSDdseldGZAm1TMEVIX0FSMnZAuZAzNwWEtHZAmxUdEhkZAFZAmcmpBc1gZD"
+                }
+              }
+            },
+            "id": "2432489707209566"
+          },
+          {
+            "phone_numbers": {
+              "data": [
+                {
+                  "display_phone_number": "+91 99999 90874",
+                  "id": "878048368721389"
+                }
+              ],
+              "paging": {
+                "cursors": {
+                  "before": "QVFIVDc4MWpMdVlMZADlfLXpiUVNBeU1fSkI0cHlrdDJkX2FuZAjFROVpqd1JQakJ0UU9ZAZATVHRlFkTGFMYnJScktSSXkZD",
+                  "after": "QVFIVDc4MWpMdVlMZADlfLXpiUVNBeU1fSkI0cHlrdDJkX2FuZAjFROVpqd1JQakJ0UU9ZAZATVHRlFkTGFMYnJScktSSXkZD"
+                }
+              }
+            },
+            "id": "1994253934763683"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVENCbi03VFhMUXBsYTJnSDBadHF0SUY2XzRXc2ZAwWkxVTExrTkRPQVN3TXAtNGx2WTFTTGFiVjgwYlBnY1RxdVp5SkZAkMGFQdmdzV0tHTU1uU2hNSDdR",
+            "after": "QVFIVDRRYkhPM3REMkMtWTZAncTlKdXpBdkNQMVg5cHlvUWVOZAURraGxMT1h2U0syM3JSX181XzNCOW5zS2NiaG1WS3VzeThpMm03bGhWRDVjZAUZALZA0ZANM0lB"
+          }
+        }
+      }
+    }
+  ]
+}
