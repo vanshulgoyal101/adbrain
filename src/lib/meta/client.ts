@@ -277,6 +277,11 @@ export function destinationPlan(dest: AdDestination): DestinationPlan {
   }
 }
 
+function normalizeWhatsAppNumber(value: string): string | null {
+  const number = value.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
+  return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
+}
+
 /** Meta's click-to-WhatsApp `page_welcome_message`: a greeting plus a message pre-typed for the customer. */
 export function whatsappWelcomeMessage(texts: { autofill: string; greeting: string }): string {
   return JSON.stringify({
@@ -545,28 +550,38 @@ export class MetaClient {
    * (Meta accepts those for the Page even when the Page fields are empty, #157).
    */
   async getWhatsAppNumber(requested?: string | null): Promise<string | null> {
+    const pageNumber = await this.pageWhatsAppNumber();
+    const wanted = requested ? normalizeWhatsAppNumber(requested) : null;
+    if (!wanted || wanted === pageNumber) return pageNumber;
+    return (await this.businessWhatsAppNumbers()).includes(wanted) ? wanted : null;
+  }
+
+  /** WhatsApp numbers usable for this Page's ads: the Page's own, and those on the ad account business's WABAs (#235). */
+  async whatsappNumbers(): Promise<{ page: string | null; business: string[] }> {
+    const [page, business] = await Promise.all([this.pageWhatsAppNumber(), this.businessWhatsAppNumbers()]);
+    return { page, business: business.filter((number) => number !== page) };
+  }
+
+  private async pageWhatsAppNumber(): Promise<string | null> {
     const token = await this.getPageAccessToken();
     const page = await this.graph<{ id?: string; has_whatsapp_business_number?: boolean; whatsapp_number?: string }>(
       `${this.creds.pageId}?fields=id,has_whatsapp_business_number,whatsapp_number`,
       { token },
     );
-    const normalize = (value: string) => {
-      const number = value.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
-      return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
-    };
-    const pageNumber = page.id === this.creds.pageId && page.has_whatsapp_business_number === true && typeof page.whatsapp_number === "string"
-      ? normalize(page.whatsapp_number) : null;
-    const wanted = requested ? normalize(requested) : null;
-    if (!wanted || wanted === pageNumber) return pageNumber;
+    return page.id === this.creds.pageId && page.has_whatsapp_business_number === true && typeof page.whatsapp_number === "string"
+      ? normalizeWhatsAppNumber(page.whatsapp_number) : null;
+  }
+
+  private async businessWhatsAppNumbers(): Promise<string[]> {
     const account = await this.graph<{ id?: string; business?: { id?: string } }>(`${this.creds.adAccountId}?fields=id,business{id}`);
     const businessId = account.business?.id;
-    if (!businessId || !/^\d+$/.test(businessId)) return null;
+    if (!businessId || !/^\d+$/.test(businessId)) return [];
     const wabas = await this.graph<{ data?: { phone_numbers?: { data?: { display_phone_number?: string }[] } }[]; paging?: { next?: string } }>(
       `${businessId}/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100`,
     );
-    const owned = (wabas.data ?? []).flatMap((waba) => waba.phone_numbers?.data ?? [])
-      .map((phone) => normalize(phone.display_phone_number ?? ""));
-    return owned.includes(wanted) ? wanted : null;
+    return [...new Set((wabas.data ?? []).flatMap((waba) => waba.phone_numbers?.data ?? [])
+      .map((phone) => normalizeWhatsAppNumber(phone.display_phone_number ?? ""))
+      .filter((number): number is string => number !== null))];
   }
 
   /** Active instant lead forms on the page. */

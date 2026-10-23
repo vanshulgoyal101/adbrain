@@ -47,6 +47,11 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     }
   });
 
+  it("lists the numbers WhatsApp chat ads can use: none on the Page, both business WhatsApp numbers (#235)", async () => {
+    replay();
+    expect(await new MetaClient(creds).whatsappNumbers()).toEqual({ page: null, business: ["+919999994842", "+919999990874"] });
+  });
+
   it("refuses a number the business does not own, and keeps the Page-only rule when no number is requested", async () => {
     replay();
     expect(await new MetaClient(creds).getWhatsAppNumber("+919876543210")).toBeNull();

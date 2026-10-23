@@ -122,6 +122,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests); `?check=1` -> `{allowed:true}` without loading the queue | Verified privacy operator only; server-only queue read |
 | PATCH | `/api/privacy-requests/operator` | Same-origin `{id,expectedStatus,status}` -> `{request}` | Verified privacy operator only; status and handler audit, no export/deletion |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
+| GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", page, business} \| {state: "not_linked" \| "unavailable"}` | Owned business only; read-only Graph; 20 per 5 min (#235) |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
 | GET | `/api/meta/connections/attempts/[id]` | Path ID -> envelope attempt | Poll owned attempt |
