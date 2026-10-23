@@ -20,6 +20,15 @@ allowance. A pooled bank/Meta balance is not customer credit. Keep the agreed
 INR 10,000 annual total: INR 2,000 service and INR 8,000 Meta costs including tax;
 gateway fees remain an operator expense, not an extra customer charge.
 
+Owner decision (Oct 23, #212): customers are not asked for INR 10,000 at once.
+They choose an amount from INR 500 to INR 10,000, see the 80% ad money
+(including Meta GST) and 20% service split first, and can pay again at any time;
+ad money from every captured payment adds up. The same approved terms apply
+with the chosen amount filled in. An unpaid order of another amount is replaced
+(kept, marked superseded, no Pay button); a paid order is never touched, and a
+late payment on a replaced order is credited once. See
+[configuration](CONFIGURATION.md#customer-chosen-annual-amount).
+
 Use a versioned operator-managed policy in server/config/SQL, not fake funding
 evidence or rewritten old terms. New checkout must work without an automatic
 funding record or completed Meta onboarding. Merchant, tenant, amount, policy

@@ -40,6 +40,7 @@ let saved: Omit<typeof initialOrder, "terms" | "funding_evidence_id"> & {
   terms: z.infer<typeof productionPaymentPolicySchema>; funding_evidence_id: string | null;
 } = { ...initialOrder };
 let replay = false;
+let listed: unknown[] | null = null;
 let storageFailure: string | null = null;
 let fundingValid: unknown = true;
 let operatorAllowed = false;
@@ -73,7 +74,7 @@ beforeEach(() => {
     RAZORPAY_KEY_ID: "", RAZORPAY_KEY_SECRET: "", RAZORPAY_TEST_KEY_ID: "", RAZORPAY_TEST_KEY_SECRET: "", RAZORPAY_TEST_ACCOUNT_ID: "", RAZORPAY_TEST_WEBHOOK_SECRET: "", PAYMENTS_TEST_ENABLED: "false",
   })) vi.stubEnv(name, value);
   saved = { ...initialOrder, terms_hash: getProductionCollectionPolicy().hash };
-  replay = false; storageFailure = null; events.length = 0;
+  replay = false; storageFailure = null; events.length = 0; listed = null;
   fundingValid = true;
   operatorAllowed = false; refundReplay = false;
   refundOperation = { id: businessId, order_id: orderId, amount_paise: 10000, state: "creating", provider_refund_id: null };
@@ -98,7 +99,7 @@ beforeEach(() => {
     if (name === "production_payment_order_result") {
       saved = { ...saved, provider_order_id: args.p_provider_order_id as string | null, state: args.p_provider_order_id ? "created" : "needs_reconciliation" }; data = saved;
     }
-    if (name === "production_payment_orders_list") data = [saved];
+    if (name === "production_payment_orders_list") data = listed ?? [saved];
     if (name === "production_payment_order_get") data = args.p_user_id === userId && args.p_order_id === orderId ? saved : null;
     if (name === "production_payment_recovery") data = args.p_order_id === orderId ? { order: saved, refunds: operatorAllowed ? [refundOperation] : [], refundIds: [] } : null;
     if (name === "production_payment_order_review") { saved.review_required = true; saved.state = "review_required"; data = saved; }
@@ -188,6 +189,67 @@ describe("live checkout service with synthetic provider evidence", () => {
     mocks.fetchOrder.mockResolvedValue({ ...remoteOrder, amount: 50_000, amount_paid: 50_000 });
     expect(await (await verify(callback())).json()).toMatchObject({ status: "captured", amountPaise: 50_000, capturedPaise: 50_000,
       quote: { serviceAllocationPaise: 10_000, metaAllocationPaise: 40_000 } });
+  });
+
+  it("lets a customer choose an annual amount from INR 500 to INR 10,000 and splits it exactly", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
+    const quoted = await (await GET(new Request(`${url}&amountPaise=125000`))).json();
+    expect(quoted).toMatchObject({ annualAmountRange: { minPaise: 50_000, maxPaise: 1_000_000 },
+      quote: { totalPaise: 125_000, serviceAllocationPaise: 25_000, metaAllocationPaise: 100_000 } });
+    const odd = await (await GET(new Request(`${url}&amountPaise=50005`))).json();
+    expect(odd.quote).toMatchObject({ totalPaise: 50_005, serviceAllocationPaise: 10_001, metaAllocationPaise: 40_004 });
+    expect(odd.quote.serviceAllocationPaise + odd.quote.metaAllocationPaise).toBe(50_005);
+    const { hash, ...terms } = getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, annualAmountPaise: 125_000 });
+    expect(quoted.policy.hash).toBe(hash);
+    saved = { ...saved, terms, terms_hash: hash, funding_evidence_id: null, quote: quoteForPaymentPolicy(terms), amount_paise: 125_000 };
+    const created = await POST(request("orders", { ...createBody(), amountPaise: 125_000 }));
+    expect(created.status).toBe(201);
+    expect(mocks.rpc).toHaveBeenCalledWith("production_payment_order_claim", expect.objectContaining({ p_quote: expect.objectContaining({ totalPaise: 125_000 }) }));
+    expect(mocks.createOrder).toHaveBeenCalledWith(orderId, hash, saved.quote, expect.objectContaining({ annualAmountPaise: 125_000 }));
+    expect(await created.json()).toMatchObject({ amountPaise: 125_000, checkout: { amount: 125_000 } });
+  });
+
+  it("rejects annual amounts outside the bounds and terms accepted for another amount", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    const url = `${origin}/api/payments/live/orders?businessId=${businessId}`;
+    for (const amount of [0, 100, 49_999, 1_000_001, 1.5, "abc"]) {
+      expect((await GET(new Request(`${url}&amountPaise=${amount}`))).status).toBe(400);
+      expect((await POST(request("orders", { ...createBody(), amountPaise: amount }))).status).toBe(400);
+    }
+    for (const amount of [50_000, 1_000_000]) expect((await GET(new Request(`${url}&amountPaise=${amount}`))).status).toBe(200);
+    const { hash } = getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, annualAmountPaise: 125_000 });
+    expect((await POST(request("orders", { ...createBody(), termsHash: hash, amountPaise: 200_000 }))).status).toBe(409);
+    vi.stubEnv("PAYMENTS_LIVE_AMOUNT_PAISE", "10000");
+    expect((await POST(request("orders", { ...createBody(), termsHash: getProductionCollectionPolicy().hash }))).status).toBe(400);
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalledWith("production_payment_order_claim", expect.anything());
+  });
+
+  it("shows a replaced unpaid order without a Pay button and keeps every paid top-up", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse(PRICING_APPROVED_AT));
+    vi.stubEnv("PAYMENTS_LIVE_POLICY_JSON", "");
+    const annual = (amount: number, id: string, overrides: Record<string, unknown>) => {
+      const { hash, ...terms } = getProductionCollectionPolicy(process.env, Date.now(), { businessId, userId, annualAmountPaise: amount });
+      return { ...initialOrder, id, terms, terms_hash: hash, funding_evidence_id: null, quote: quoteForPaymentPolicy(terms), amount_paise: amount,
+        provider_order_id: `order_${amount}`, ...overrides };
+    };
+    const replaced = annual(1_000_000, "44444444-4444-4444-8444-444444444444", { state: "superseded" });
+    const first = annual(100_000, "55555555-5555-4555-8555-555555555555", { state: "captured", captured_paise: 100_000, payment_id: "pay_first" });
+    const second = annual(100_000, "66666666-6666-4666-8666-666666666666", { state: "captured", captured_paise: 100_000, payment_id: "pay_second" });
+    listed = [second, first, replaced];
+    const orders = (await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json()).orders;
+    expect(orders.map((order: { status: string }) => order.status)).toEqual(["captured", "captured", "superseded"]);
+    expect(orders[2]).toMatchObject({ amountPaise: 1_000_000, checkout: null });
+    expect(orders[0].capturedPaise + orders[1].capturedPaise).toBe(200_000);
+    const open = annual(125_000, orderId, { state: "created" });
+    listed = [open, replaced];
+    const reopened = await (await GET(new Request(`${origin}/api/payments/live/orders?businessId=${businessId}`))).json();
+    expect(reopened.quote.totalPaise).toBe(125_000);
+    expect(reopened.orders[0]).toMatchObject({ status: "created", checkout: { amount: 125_000 } });
+    expect(reopened.orders[1]).toMatchObject({ status: "superseded", checkout: null });
   });
 
   it("restores the normal quote after a verification capture while preserving its receipt", async () => {

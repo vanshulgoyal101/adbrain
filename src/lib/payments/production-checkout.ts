@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
-import { createAnnualPaymentQuote, productionPaymentQuoteSchema } from "./allocation";
+import { createAnnualPaymentQuote, DEFAULT_ANNUAL_PAYMENT_PAISE, productionPaymentQuoteSchema } from "./allocation";
 import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } from "./checkout-request";
 import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
   quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
@@ -15,11 +15,13 @@ const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const eventIdSchema = z.string().regex(/^[A-Za-z0-9_:.-]{1,160}$/);
 const amountSchema = z.number().int().min(0).max(1_000_000);
+const MIN_ANNUAL_PAISE = 50_000;
+const annualAmountSchema = amountSchema.min(MIN_ANNUAL_PAISE);
 const orderSchema = z.object({
   id: z.uuid(), business_id: z.uuid(), user_id: z.uuid(), environment: z.literal("live"),
   account_id: identifier("acc"), key_id: z.string().regex(/^rzp_live_[A-Za-z0-9]{1,100}$/),
   amount_paise: amountSchema.min(100), currency: z.literal("INR"), quote: productionPaymentQuoteSchema,
-  state: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded"]),
+  state: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded", "superseded"]),
   provider_order_id: identifier("order").nullable(), payment_id: identifier("pay").nullable(),
   captured_paise: amountSchema, refunded_paise: amountSchema, provider_refunded_paise: amountSchema,
   review_required: z.boolean(), refund_hold: z.boolean(), terms: productionPaymentPolicySchema, terms_hash: hashSchema,
@@ -69,7 +71,8 @@ function currentPolicy(subject?: PaymentSubject) {
 
 async function orderResponse(order: SavedOrder, config: Config, policy = currentPolicy({ businessId: order.business_id, userId: order.user_id,
   verificationCompleted: order.quote.version === "inr-payment-verification-v1" && order.captured_paise > 0,
-  verificationAmountPaise: order.quote.version === "inr-payment-verification-v1" ? order.amount_paise : undefined })) {
+  verificationAmountPaise: order.quote.version === "inr-payment-verification-v1" ? order.amount_paise : undefined,
+  annualAmountPaise: order.quote.version === "inr-payment-verification-v1" ? undefined : order.amount_paise })) {
   const checkoutAllowed = order.state === "created" && order.provider_order_id && order.account_id === config.accountId && order.key_id === config.keyId
     && policy?.hash === order.terms_hash && ("fundingMode" in order.terms || await stored(createAdminClient().rpc("production_payment_funding_valid", {
       p_business_id: order.business_id, p_funding_evidence_id: order.funding_evidence_id!,
@@ -237,10 +240,12 @@ export async function handleProductionPayments(request: Request, action: Action)
     if (action === "read" || action === "create") {
       const params = new URL(request.url).searchParams;
       const requestedAmount = params.get("verificationAmountPaise");
+      const annualAmount = params.get("amountPaise");
       const body = action === "read" ? { businessId: params.get("businessId"),
-        ...(requestedAmount !== null ? { verificationAmountPaise: parsed(z.string().regex(/^[1-9][0-9]*$/).transform(Number).pipe(amountSchema.min(100)), requestedAmount) } : {}) } : await paymentJsonBody(request);
-      const input = parsed(action === "read" ? z.strictObject({ businessId: z.uuid(), verificationAmountPaise: amountSchema.min(100).optional() }) : z.strictObject({
-        businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true), verificationAmountPaise: amountSchema.min(100).optional(),
+        ...(requestedAmount !== null ? { verificationAmountPaise: parsed(z.string().regex(/^[1-9][0-9]*$/).transform(Number).pipe(amountSchema.min(100)), requestedAmount) } : {}),
+        ...(annualAmount !== null ? { amountPaise: parsed(z.string().regex(/^[1-9][0-9]*$/).transform(Number).pipe(annualAmountSchema), annualAmount) } : {}) } : await paymentJsonBody(request);
+      const input = parsed(action === "read" ? z.strictObject({ businessId: z.uuid(), verificationAmountPaise: amountSchema.min(100).optional(), amountPaise: annualAmountSchema.optional() }) : z.strictObject({
+        businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true), verificationAmountPaise: amountSchema.min(100).optional(), amountPaise: annualAmountSchema.optional(),
       }), body);
       const context = await requireOwnedBusiness(input.businessId);
       if (context.userId !== user.id) throw new CheckoutRequestError(401, "Session changed.");
@@ -253,6 +258,12 @@ export async function handleProductionPayments(request: Request, action: Action)
       if (input.verificationAmountPaise !== undefined && verificationOrder && input.verificationAmountPaise !== verificationOrder.amount_paise) {
         throw new CheckoutRequestError(409, "The saved verification amount cannot be changed. Recover the existing payment.");
       }
+      if (input.amountPaise !== undefined && baseQuote?.version === "inr-payment-verification-v1") {
+        throw new CheckoutRequestError(400, "An amount can be chosen only for the annual service.");
+      }
+      const openAnnual = orders.find(order => order.quote.version !== "inr-payment-verification-v1" && order.captured_paise === 0
+        && ["creating", "created", "needs_reconciliation"].includes(order.state));
+      subject.annualAmountPaise = input.amountPaise ?? (action === "read" ? openAnnual?.amount_paise : undefined);
       subject.verificationAmountPaise = input.verificationAmountPaise ?? (baseQuote?.version === "inr-payment-verification-v1"
         && verificationOrder && verificationOrder.amount_paise <= baseQuote.totalPaise ? verificationOrder.amount_paise : undefined);
       if (action === "read") {
@@ -260,12 +271,18 @@ export async function handleProductionPayments(request: Request, action: Action)
         return paymentReply({ quote: policy ? quoteForPaymentPolicy(policy) : createAnnualPaymentQuote(), policy,
           verificationAmountRange: baseQuote?.version === "inr-payment-verification-v1" && !verificationOrder
             ? { minPaise: 100, maxPaise: baseQuote.totalPaise } : null,
-          orders: await Promise.all(orders.map(order => orderResponse(order, config, policy))) });
+          annualAmountRange: policy && "fundingMode" in policy && quoteForPaymentPolicy(policy).version !== "inr-payment-verification-v1"
+            ? { minPaise: MIN_ANNUAL_PAISE, maxPaise: DEFAULT_ANNUAL_PAYMENT_PAISE } : null,
+          orders: await Promise.all(orders.map(order => orderResponse(order, config, order.quote.version === "inr-payment-verification-v1" ? policy : undefined))) });
       }
       const create = parsed(z.strictObject({ businessId: z.uuid(), idempotencyKey: z.uuid(), termsHash: hashSchema, acceptTerms: z.literal(true),
-        verificationAmountPaise: amountSchema.min(100).optional() }), body);
+        verificationAmountPaise: amountSchema.min(100).optional(), amountPaise: annualAmountSchema.optional() }), body);
       const { hash, ...policy } = getProductionCollectionPolicy(process.env, Date.now(), subject);
       if (hash !== create.termsHash) throw new CheckoutRequestError(409, "Payment terms changed. Review the current terms before payment.");
+      const chosen = quoteForPaymentPolicy(policy);
+      if (chosen.version !== "inr-payment-verification-v1" && (chosen.totalPaise < MIN_ANNUAL_PAISE || chosen.totalPaise > DEFAULT_ANNUAL_PAYMENT_PAISE)) {
+        throw new CheckoutRequestError(400, "Choose an amount from INR 500 to INR 10,000.");
+      }
       const funding = "fundingMode" in policy ? null : await stored(database.rpc("meta_funding_latest_record", { p_business_id: input.businessId, p_environment: "live" }), z.object({ evidenceId: z.uuid() }));
       const claimed = await stored(database.rpc("production_payment_order_claim", { ...scope, p_business_id: input.businessId, p_user_id: user.id,
         p_request_key: create.idempotencyKey, p_order_id: randomUUID(), p_quote: quoteForPaymentPolicy(policy), p_terms: JSON.stringify(policy), p_terms_hash: hash, p_funding_evidence_id: funding?.evidenceId ?? null,
