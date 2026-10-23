@@ -102,7 +102,10 @@ describe("Home workspace", () => {
     const [, connectionBoundary, spendBoundary] = page.props.children;
     expect(connectionBoundary.type).toBe(Suspense);
     expect(spendBoundary.type).toBe(Suspense);
-    expect(page.props.children.at(-1).type.name).toBe("PrivacyRequests");
+    // #238: preferences and privacy requests load in their own server-rendered boundary.
+    const privacyBoundary = page.props.children.at(-1);
+    expect(privacyBoundary.type).toBe(Suspense);
+    expect(privacyBoundary.props.children.type.name).toBe("PreferenceAndPrivacySettings");
     const spendSection = spendBoundary.props.children;
     const spend = spendSection.type(spendSection.props);
     const connectionSection = connectionBoundary.props.children;
