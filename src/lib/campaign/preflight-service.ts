@@ -17,7 +17,7 @@ export type PreflightLoaders = {
   findDraft: (actor: PreflightActor, draftId: string) => Promise<DraftRecord | null>;
   findCreatives: (businessId: string, creativeIds: string[]) => Promise<PreflightCreative[]>;
   findForm: (businessId: string, formId: string) => Promise<PreflightForm | null>;
-  findWhatsAppNumber?: (actor: PreflightActor) => Promise<string | null>;
+  findWhatsAppNumber?: (actor: PreflightActor, requested?: string) => Promise<string | null>;
   findWebsite?: (actor: PreflightActor) => Promise<string | null>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
   resolveGeo: (actor: PreflightActor, draft: DraftRecord) => Promise<PreflightGeo>;
@@ -56,7 +56,7 @@ export async function prepareCampaignReview(
       ? loaders.findForm(input.actor.businessId, draft.input.leadFormId)
       : Promise.resolve(null),
     loaders.resolveGeo(input.actor, draft),
-    draft.input.destination === "whatsapp" ? loaders.findWhatsAppNumber?.(input.actor) ?? Promise.resolve(null) : Promise.resolve(null),
+    draft.input.destination === "whatsapp" ? loaders.findWhatsAppNumber?.(input.actor, draft.input.whatsappNumber) ?? Promise.resolve(null) : Promise.resolve(null),
     draft.input.destination !== "whatsapp" ? loaders.findWebsite?.(input.actor) : Promise.resolve(undefined),
   ]);
 
