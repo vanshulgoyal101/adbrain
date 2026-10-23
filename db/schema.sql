@@ -3373,11 +3373,11 @@ begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 
--- #208: a capped run's Meta lifetime budget bounds its spend. Activation records that bound
--- (media already attributed plus the lifetime budget) when it fits the reserved media limit.
--- While the reservation is active, stale non-final cost evidence for that campaign no longer
--- holds the balance, and headroom is checked against the bound instead of seven daily budgets.
--- Evidence above the bound, explicit cost holds and every other payment hold still apply.
+-- #208: a capped run's Meta lifetime budget bounds its spend. A capped reservation needs the cap
+-- plus GST instead of seven daily budgets, and stores attributed media plus the cap as its bound.
+-- While it is open, stale non-final cost evidence within the bound does not hold the balance and
+-- headroom is checked against the bound. Evidence above the bound, explicit cost holds and every
+-- payment hold still apply; uncapped reservations are unchanged.
 alter table private.customer_ad_reservations
   add column if not exists bounded_media_paise bigint check (bounded_media_paise between 1 and 9007199254740991);
 
@@ -3413,7 +3413,7 @@ begin
     coalesce(bool_or(cost.held or (not cost.finalized and cost.observed_at<clock_timestamp()-interval '15 minutes'
       and not exists(select 1 from private.customer_ad_reservations reservation
         where reservation.campaign_id=cost.campaign_id and reservation.account_id=p_account_id
-          and reservation.state='active' and reservation.bounded_media_paise>=cost.media_paise))),false)
+          and reservation.state<>'closed' and reservation.bounded_media_paise>=cost.media_paise))),false)
     into media,tax,cost_held from private.customer_ad_costs cost where cost.business_id=p_business_id and cost.account_id=p_account_id;
   select coalesce(sum(greatest(reservation.ceiling_paise-coalesce(cost.media_paise,0)-coalesce(cost.tax_paise,0),0)),0)
     into reserved from private.customer_ad_reservations reservation
@@ -3423,7 +3423,7 @@ begin
     or exists(select 1 from private.customer_ad_reservations reservation
       left join private.customer_ad_costs cost on cost.campaign_id=reservation.campaign_id
       where reservation.business_id=p_business_id and reservation.account_id=p_account_id and reservation.state<>'closed'
-        and (cost.campaign_id is null or case when reservation.state='active' and reservation.bounded_media_paise is not null
+        and (cost.campaign_id is null or case when reservation.bounded_media_paise is not null
           then cost.media_paise>reservation.bounded_media_paise
             or ceil((reservation.bounded_media_paise-cost.media_paise)::numeric*(10000+cost.tax_rate_bps)/10000)
               >reservation.ceiling_paise-cost.media_paise-cost.tax_paise
@@ -3444,8 +3444,10 @@ begin
 end;
 $$;
 
+drop function if exists public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean);
 create or replace function public.customer_ad_reserve(p_business_id uuid,p_user_id uuid,p_account_id text,
-  p_campaign_id uuid,p_ad_account_id text,p_connection_generation bigint,p_daily_budget_paise bigint,p_request_key text,p_review_only boolean default false)
+  p_campaign_id uuid,p_ad_account_id text,p_connection_generation bigint,p_daily_budget_paise bigint,p_request_key text,p_review_only boolean default false,
+  p_lifetime_cap_paise bigint default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   campaign public.campaigns;
@@ -3460,6 +3462,7 @@ begin
   if not found or not ((campaign.meta_campaign_id is not null and campaign.meta_campaign_id<>''
     and campaign.meta_ad_account_id=p_ad_account_id and campaign.meta_connection_generation=p_connection_generation
     and campaign.daily_budget*100=p_daily_budget_paise and p_daily_budget_paise>0 and p_request_key ~ '^[a-f0-9]{64}$'
+    and (p_lifetime_cap_paise is null or p_lifetime_cap_paise between 1 and 9007199254740991)
     and exists(select 1 from public.meta_connections where business_id=p_business_id and authorization_status='connected'
       and ad_account_id=p_ad_account_id and generation=p_connection_generation)) is true) then
     raise exception 'Campaign customer binding changed' using errcode='23514';
@@ -3476,52 +3479,62 @@ begin
   end if;
   available := (balance->>'remainingPaise')::bigint;
   if reservation.state='paused' then available:=available+greatest(reservation.ceiling_paise-cost.media_paise-cost.tax_paise,0); end if;
-  if available<ceil(p_daily_budget_paise::numeric*7*(10000+cost.tax_rate_bps)/10000) then
+  if available<ceil(coalesce(p_lifetime_cap_paise,p_daily_budget_paise*7)::numeric*(10000+cost.tax_rate_bps)/10000) then
     raise exception 'Insufficient customer advertising allowance' using errcode='23514';
   end if;
   if p_review_only then return jsonb_build_object('reservationId',p_campaign_id,'mediaLimitPaise',cost.media_paise+floor(available::numeric*10000/(10000+cost.tax_rate_bps)),'balance',balance); end if;
-  insert into private.customer_ad_reservations(campaign_id,business_id,account_id,ad_account_id,connection_generation,meta_campaign_id,request_key,ceiling_paise,daily_budget_paise,media_limit_paise,state)
+  insert into private.customer_ad_reservations(campaign_id,business_id,account_id,ad_account_id,connection_generation,meta_campaign_id,request_key,ceiling_paise,daily_budget_paise,media_limit_paise,state,bounded_media_paise)
     values(p_campaign_id,p_business_id,p_account_id,p_ad_account_id,p_connection_generation,campaign.meta_campaign_id,p_request_key,available+cost.media_paise+cost.tax_paise,p_daily_budget_paise,
-      cost.media_paise+floor(available::numeric*10000/(10000+cost.tax_rate_bps)),'uncertain')
+      cost.media_paise+floor(available::numeric*10000/(10000+cost.tax_rate_bps)),'uncertain',cost.media_paise+p_lifetime_cap_paise)
     on conflict(campaign_id) do update set id=gen_random_uuid(),request_key=excluded.request_key,ceiling_paise=excluded.ceiling_paise,
       daily_budget_paise=excluded.daily_budget_paise,media_limit_paise=excluded.media_limit_paise,state='uncertain',activation_in_flight=true,
-      bounded_media_paise=null,updated_at=clock_timestamp()
+      bounded_media_paise=excluded.bounded_media_paise,updated_at=clock_timestamp()
     returning * into reservation;
   update private.customer_ad_costs set finalized=false where campaign_id=p_campaign_id;
   return jsonb_build_object('reservationId',reservation.id,'mediaLimitPaise',reservation.media_limit_paise,'balance',public.customer_ad_balance(p_business_id,p_user_id,p_account_id));
 end;
 $$;
 
-drop function if exists public.customer_ad_activation_result(uuid,uuid,text,uuid,uuid,text);
-create or replace function public.customer_ad_activation_result(p_business_id uuid,p_user_id uuid,p_account_id text,
-  p_campaign_id uuid,p_reservation_id uuid,p_state text,p_capped_media_paise bigint default null)
-returns void language plpgsql security definer set search_path = '' as $$
-declare
-  attributed bigint;
+create or replace function private.customer_ad_campaign_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare reservation private.customer_ad_reservations; cost private.customer_ad_costs; balance jsonb; owner_id uuid;
 begin
-  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||p_account_id,0));
-  perform public.customer_ad_balance(p_business_id,p_user_id,p_account_id);
-  if p_state is null or p_state not in ('active','paused','uncertain') then raise exception 'Invalid provider state' using errcode='23514'; end if;
-  if p_capped_media_paise is not null and not (p_state='active' and p_capped_media_paise between 1 and 9007199254740991) then
-    raise exception 'Invalid provider cap' using errcode='23514';
+  if tg_op='UPDATE' and new.meta_campaign_id is distinct from old.meta_campaign_id
+    and (exists(select 1 from private.customer_ad_reservations where campaign_id=new.id)
+      or exists(select 1 from private.customer_ad_costs where campaign_id=new.id)) then
+    raise exception 'Financially attributed Meta campaign cannot be rebound' using errcode='23514';
   end if;
-  select cost.media_paise into attributed from private.customer_ad_costs cost
-    where cost.campaign_id=p_campaign_id and cost.business_id=p_business_id and cost.account_id=p_account_id and not cost.held;
-  update private.customer_ad_reservations set
-    state=case when p_state='paused' and activation_in_flight then 'uncertain' else p_state end,
-    activation_in_flight=case when p_state in ('active','uncertain') then false else activation_in_flight end,
-    bounded_media_paise=case when p_state='active' and attributed+p_capped_media_paise<=media_limit_paise
-      then attributed+p_capped_media_paise else null end,
-    updated_at=clock_timestamp()
-    where campaign_id=p_campaign_id and business_id=p_business_id and account_id=p_account_id and id=p_reservation_id and state<>'closed';
-  if not found then raise exception 'Reservation changed' using errcode='23514'; end if;
+  if new.status<>'active' then return new; end if;
+  if tg_op='UPDATE' and old.status='active' and new.daily_budget is not distinct from old.daily_budget
+    and new.business_id=old.business_id and new.meta_ad_account_id is not distinct from old.meta_ad_account_id
+    and new.meta_connection_generation is not distinct from old.meta_connection_generation
+    and new.meta_campaign_id is not distinct from old.meta_campaign_id then return new; end if;
+  select * into reservation from private.customer_ad_reservations where campaign_id=new.id;
+  if not found then raise exception 'Customer reservation required before activation or budget change' using errcode='23514'; end if;
+  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('production-payments:'||reservation.account_id,0)) then
+    raise exception 'Customer accounting is busy; retry after reconciliation' using errcode='55P03';
+  end if;
+  select * into reservation from private.customer_ad_reservations where campaign_id=new.id;
+  select * into cost from private.customer_ad_costs where campaign_id=new.id;
+  select business.owner_id into owner_id from public.businesses business where id=new.business_id;
+  balance:=public.customer_ad_balance(new.business_id,owner_id,reservation.account_id);
+  if not ((reservation.state in ('uncertain','active') and reservation.business_id=new.business_id and reservation.ad_account_id=new.meta_ad_account_id
+    and reservation.meta_campaign_id=new.meta_campaign_id
+    and reservation.connection_generation=new.meta_connection_generation and new.daily_budget*100<=reservation.daily_budget_paise
+    and not (balance->>'held')::boolean and cost.observed_at>=clock_timestamp()-interval '15 minutes'
+    and ceil(coalesce(reservation.bounded_media_paise-cost.media_paise,new.daily_budget::numeric*100*7)*(10000+cost.tax_rate_bps)/10000)
+      <=reservation.ceiling_paise-cost.media_paise-cost.tax_paise) is true) then
+    raise exception 'Customer advertising reservation is unavailable' using errcode='23514';
+  end if;
+  return new;
 end;
 $$;
+revoke all on function private.customer_ad_campaign_guard() from public,anon,authenticated,service_role;
 
-revoke all on function public.customer_ad_balance(uuid,uuid,text),public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean),
-  public.customer_ad_activation_result(uuid,uuid,text,uuid,uuid,text,bigint) from public,anon,authenticated;
-grant execute on function public.customer_ad_balance(uuid,uuid,text),public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean),
-  public.customer_ad_activation_result(uuid,uuid,text,uuid,uuid,text,bigint) to service_role;
+revoke all on function public.customer_ad_balance(uuid,uuid,text),
+  public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint) from public,anon,authenticated;
+grant execute on function public.customer_ad_balance(uuid,uuid,text),
+  public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint) to service_role;
 commit;
 
 begin;

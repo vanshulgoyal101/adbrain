@@ -240,7 +240,8 @@ describe("campaign activation generation fence", () => {
     expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
     expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
     expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
-    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active", undefined);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active");
+    expect(mocks.reserveCustomerCampaign.mock.calls[0][1].lifetimeCapPaise).toBeUndefined();
   });
 
   it("blocks direct activation when customer allowance is insufficient or held", async () => {
@@ -478,8 +479,9 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     expect(mocks.activateCappedTree).toHaveBeenCalledWith("meta-campaign-1", capped);
     expect(mocks.enforceCampaignSpendCap).not.toHaveBeenCalled();
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
-    // #208: the Meta lifetime budget is recorded so aging cost evidence does not hold the funded run.
-    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "active", 150000);
+    // #208: the reservation is bounded by the Meta lifetime budget, not 7 × daily.
+    expect(mocks.reserveCustomerCampaign).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ lifetimeCapPaise: 150000 }));
+    expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "active");
     expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active" }, "campaign-1");
   });
 

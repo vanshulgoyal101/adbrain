@@ -192,15 +192,14 @@ async function handlePATCH(
           if (parsed.data.confirmationDigest !== expectedDigest) {
             throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
           }
+          const capPaise = capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined;
           const reservation = await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
-            requestKey: parsed.data.confirmationDigest,
+            requestKey: parsed.data.confirmationDigest, lifetimeCapPaise: capPaise,
           });
-          let capPaise: number | undefined;
           try {
-            if (capDays) {
-              capPaise = Math.round(campaign.daily_budget! * 100) * capDays;
+            if (capDays && capPaise) {
               if (capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
               const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
               const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
@@ -230,7 +229,7 @@ async function handlePATCH(
                 dailyBudgetRupees: campaign.daily_budget!, status: "active", ...children!,
               });
             }
-            await confirmCustomerCampaign(context, id, reservation.reservationId, "active", capPaise);
+            await confirmCustomerCampaign(context, id, reservation.reservationId, "active");
           } catch (error) {
             await confirmCustomerCampaign(context, id, reservation.reservationId, "uncertain").catch(() => undefined);
             throw error;

@@ -16,7 +16,7 @@ const creativeReconcileMigration = await readFile(join(root, "db/migrations/2026
 const creativeSettleMigration = await readFile(join(root, "db/migrations/20261021_creative_generation_settle_holds.sql"), "utf8");
 const configurablePaymentMigration = await readFile(join(root, "db/migrations/20260927_configurable_payment_quotes.sql"), "utf8");
 const webhookHealthMigration = await readFile(join(root, "db/migrations/20261022_payment_webhook_health.sql"), "utf8");
-const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_customer_ad_capped_bound.sql"), "utf8");
+const cappedBoundMigration = await readFile(join(root, "db/migrations/20261023_capped_reservation_bound.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -573,73 +573,89 @@ async function verifyCustomerAllowance(db, database) {
 }
 
 async function verifyCappedRunBound(db, database) {
-  const owner = randomUUID();
-  const business = randomUUID();
-  const order = randomUUID();
-  const campaign = randomUUID();
-  const account = "acc_capped";
-  const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
-    serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
-    metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
-  await db.query("insert into auth.users(id) values ($1)", [owner]);
-  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic capped run')", [business, owner]);
-  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [business]);
-  await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id) values ($1,$2,$3,$4,$5,'rzp_live_fixture',$6,$7,$8,'order_capped')", [order,business,owner,randomUUID(),account,quote,{version:'operator-managed-v1',fundingMode:'operator_managed'},'a'.repeat(64)]);
-  await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',280,'meta_capped','act_123','123',1)", [campaign,business]);
-  await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')", [owner,randomUUID()]);
   const service = async (sql, values) => {
     const session = client(database);
     await session.connect();
     try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]?.result; }
     finally { await session.end(); }
   };
-  const balance = () => service("select public.customer_ad_balance($1,$2,$3) as result",[business,owner,account]);
-  const costs = (media, tax) => service("select public.customer_ad_reconcile_costs($1,$2,$3,$4,'act_123',1,$5,$6,1800,$7,$8,false,null)",
-    [business,owner,account,campaign,media,tax,new Date().toISOString(),randomUUID()]);
-  const reserve = () => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,28000,$5) as result",[business,owner,account,campaign,'e'.repeat(64)]);
-  const result = (reservationId, state, cap = null) => service("select public.customer_ad_activation_result($1,$2,$3,$4,$5,$6,$7)",[business,owner,account,campaign,reservationId,state,cap]);
-  const age = () => db.query("update private.customer_ad_costs set observed_at=clock_timestamp()-interval '20 minutes' where campaign_id=$1",[campaign]);
-  const bound = async () => (await db.query("select bounded_media_paise from private.customer_ad_reservations where campaign_id=$1",[campaign])).rows[0].bounded_media_paise;
-  await service("select public.production_payment_observe($1,$2,'rzp_live_fixture','pay_capped',true,0,false,$3)",[order,account,'f'.repeat(64)]);
-  await costs(0,0);
-  const { reservationId } = await reserve();
+  const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+    serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+    metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+  const account = "acc_capped";
+  const fixture = async (dailyRupees) => {
+    const owner = randomUUID(), business = randomUUID(), order = randomUUID(), campaign = randomUUID();
+    await db.query("insert into auth.users(id) values ($1)", [owner]);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic capped run')", [business,owner]);
+    await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_123','123')", [business]);
+    await db.query("insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id) values ($1,$2,$3,$4,$5,'rzp_live_fixture',$6,$7,$8,$9)",
+      [order,business,owner,randomUUID(),account,quote,{version:'operator-managed-v1',fundingMode:'operator_managed'},'a'.repeat(64),`order_${order.replaceAll("-","")}`]);
+    await db.query("insert into public.campaigns(id,business_id,status,daily_budget,meta_campaign_id,meta_ad_account_id,meta_page_id,meta_connection_generation) values ($1,$2,'paused',$3,$4,'act_123','123',1)", [campaign,business,dailyRupees,`meta_${campaign}`]);
+    await db.query("insert into private.production_payment_operators(user_id,approval_reference,can_refund,expires_at) values ($1,$2,true,now()+interval '1 hour')", [owner,randomUUID()]);
+    await service("select public.production_payment_observe($1,$2,'rzp_live_fixture',$3,true,0,false,$4)",[order,account,`pay_${order.replaceAll("-","")}`,'f'.repeat(64)]);
+    const run = {
+      balance: () => service("select public.customer_ad_balance($1,$2,$3) as result",[business,owner,account]),
+      costs: (media, tax) => service("select public.customer_ad_reconcile_costs($1,$2,$3,$4,'act_123',1,$5,$6,1800,$7,$8,false,null)",
+        [business,owner,account,campaign,media,tax,new Date().toISOString(),randomUUID()]),
+      reserve: (cap = null) => service("select public.customer_ad_reserve($1,$2,$3,$4,'act_123',1,$5,$6,false,$7) as result",[business,owner,account,campaign,dailyRupees*100,'e'.repeat(64),cap]),
+      result: (reservationId, state) => service("select public.customer_ad_activation_result($1,$2,$3,$4,$5,$6)",[business,owner,account,campaign,reservationId,state]),
+      activate: async (reservationId) => { await run.result(reservationId,'active'); await db.query("update public.campaigns set status='active' where id=$1",[campaign]); },
+      age: () => db.query("update private.customer_ad_costs set observed_at=clock_timestamp()-interval '20 minutes' where campaign_id=$1",[campaign]),
+      bound: async () => (await db.query("select bounded_media_paise from private.customer_ad_reservations where campaign_id=$1",[campaign])).rows[0].bounded_media_paise,
+      hold: (held) => db.query("update private.customer_ad_costs set held=$2 where campaign_id=$1",[campaign,held]),
+      pause: async (reservationId) => { await db.query("update public.campaigns set status='paused' where id=$1",[campaign]); await run.result(reservationId,'paused'); },
+    };
+    await run.costs(0,0);
+    return run;
+  };
+  // ₹1,000/day: 7 days + GST (826000) exceeds the ₹8,000 allocation; a 3-day cap + GST (354000) fits.
+  const capped = await fixture(1000);
+  let reservationId;
+  await check(`${database}: capped reserve needs the cap plus GST, not seven daily budgets (#208)`, async () => {
+    await assert.rejects(capped.reserve(), {code:'23514'});
+    await assert.rejects(capped.reserve(700000), {code:'23514'});
+    await assert.rejects(capped.reserve(0), {code:'23514'});
+    ({ reservationId } = await capped.reserve(300000));
+    assert.equal(Number(await capped.bound()),300000);
+  });
   await check(`${database}: funded capped run is not held when its cost evidence ages (#208)`, async () => {
-    await result(reservationId,'active',84000);
-    await db.query("update public.campaigns set status='active' where id=$1",[campaign]);
-    await age();
-    assert.equal(Number(await bound()),84000);
-    const current = await balance();
+    await capped.activate(reservationId);
+    await capped.age();
+    const current = await capped.balance();
     assert.equal(current.held,false);
     assert.equal(current.reservedPaise,800000);
-    await costs(50000,9000);
-    await age();
-    assert.equal((await balance()).held,false);
+    await capped.costs(100000,18000);
+    await capped.age();
+    assert.equal((await capped.balance()).held,false);
   });
-  await check(`${database}: uncapped or over-limit activation keeps the stale-evidence hold`, async () => {
-    await result(reservationId,'active');
-    assert.equal(await bound(),null);
-    assert.equal((await balance()).held,true);
-    await result(reservationId,'active',677966-50000+1);
-    assert.equal(await bound(),null);
-    assert.equal((await balance()).held,true);
-    await assert.rejects(result(reservationId,'paused',84000),{code:'23514'});
-    await result(reservationId,'active',34000);
-    assert.equal(Number(await bound()),84000);
-    assert.equal((await balance()).held,false);
+  await check(`${database}: the same run uncapped is held when its cost evidence ages`, async () => {
+    const uncapped = await fixture(280);
+    const { reservationId: id } = await uncapped.reserve();
+    assert.equal(await uncapped.bound(),null);
+    await uncapped.activate(id);
+    assert.equal((await uncapped.balance()).held,false);
+    await uncapped.age();
+    assert.equal((await uncapped.balance()).held,true);
   });
-  await check(`${database}: a new reservation drops the previous bound`, async () => {
-    await db.query("update public.campaigns set status='paused' where id=$1",[campaign]);
-    await result(reservationId,'paused');
-    await costs(50000,9000);
-    const next = await reserve();
+  await check(`${database}: explicit cost holds still hold a capped run`, async () => {
+    await capped.hold(true);
+    assert.equal((await capped.balance()).held,true);
+    await capped.hold(false);
+    assert.equal((await capped.balance()).held,false);
+  });
+  await check(`${database}: a new capped reservation rebases its bound on attributed media`, async () => {
+    await capped.pause(reservationId);
+    await capped.costs(100000,18000);
+    const next = await capped.reserve(200000);
     assert.notEqual(next.reservationId,reservationId);
-    assert.equal(await bound(),null);
-    await result(next.reservationId,'active',30000);
-    assert.equal(Number(await bound()),80000);
+    assert.equal(Number(await capped.bound()),300000);
+    await capped.activate(next.reservationId);
+    await capped.age();
+    assert.equal((await capped.balance()).held,false);
   });
   await check(`${database}: cost evidence above the capped bound holds the balance`, async () => {
-    await costs(80001,14401);
-    assert.equal((await balance()).held,true);
+    await capped.costs(300001,54001);
+    assert.equal((await capped.balance()).held,true);
   });
 }
 
@@ -905,7 +921,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
     await db.query(operatorPaymentMigration);
     await db.query(operatorPaymentMigration);
     if (customerOnly) {
-      await db.query("drop function if exists public.customer_ad_activation_result(uuid,uuid,text,uuid,uuid,text,bigint)");
+      await db.query("drop function if exists public.customer_ad_reserve(uuid,uuid,text,uuid,text,bigint,bigint,text,boolean,bigint)");
       await db.query(customerAllowanceMigration);
       await db.query(customerAllowanceMigration);
       const priced = (await db.query("select exists(select 1 from information_schema.columns where table_schema='private' and table_name='production_payment_orders' and column_name='purpose') as installed")).rows[0].installed;

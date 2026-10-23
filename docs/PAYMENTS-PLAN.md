@@ -193,6 +193,11 @@ guards to enable production or reinterpret existing test captures as real money.
 - Missing/stale spend and uncertain provider effects are liabilities, not zero.
   Use supported limits, delivery-lag allowance and reconciliation; delayed Insights
   and weekly commitments alone cannot guarantee a prepaid hard cap.
+- Allowance rule (#208): an uncapped campaign reserves 7 × daily budget + GST and
+  is held when its cost evidence is older than 15 minutes. A Meta-capped run
+  reserves its lifetime cap + GST instead and is bounded by attributed media plus
+  that cap, so aging evidence within the bound does not hold it. Evidence above
+  the bound, explicit cost holds and payment/refund holds still hold.
 - Direct Ads Manager changes can invalidate assumptions. Reconcile effective
   parent and child state, funding and budget drift; a failed pause is an incident.
 - Serialize refunds against new reservations. Freeze affected entitlement,
