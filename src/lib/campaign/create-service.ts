@@ -11,6 +11,7 @@ import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connecti
 import type { CampaignSupabase } from "./preflight-runtime";
 import type { Json } from "@/lib/types";
 import { saveCampaign } from "./trusted-write";
+import { whatsappGreeting } from "./whatsapp-greeting";
 
 export async function executeReviewedCampaign(input: {
   database: CampaignSupabase;
@@ -44,7 +45,7 @@ export async function executeReviewedCampaign(input: {
           expectedGeneration: review.connectionGeneration,
           signal,
         }, async meta => {
-          const { data: business, error: businessError } = await database.from("businesses").select("website, locations").eq("id", actor.businessId).maybeSingle();
+          const { data: business, error: businessError } = await database.from("businesses").select("name, website, locations, offers").eq("id", actor.businessId).maybeSingle();
           if (businessError || !business) throw new OperationPhaseError("Business could not be loaded before execution.", { transmitted: false });
           const location = review.resolvedLocation!;
           const excludedLocation = review.resolvedExcludedLocation;
@@ -64,6 +65,9 @@ export async function executeReviewedCampaign(input: {
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
             destination: draft.input.destination ?? "instant_form", whatsappNumber: review.whatsappNumber ?? undefined,
+            ...(draft.input.destination === "whatsapp" ? {
+              whatsappGreeting: whatsappGreeting(business, creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""])),
+            } : {}),
             link: business.website || "https://facebook.com",
             creatives: creativeInputs.map(creative => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,

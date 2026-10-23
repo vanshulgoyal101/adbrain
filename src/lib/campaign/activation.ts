@@ -25,6 +25,12 @@ export const campaignDeliverySnapshotSchema = z.object({
   })),
 });
 
+/** Live Meta ad account funding shown in the activation review of an operator-funded business (#245). */
+export const accountFundingSchema = z.object({
+  spendCapPaise: z.number().int().nonnegative(), amountSpentPaise: z.number().int().nonnegative(),
+  roomPaise: z.number().int().nonnegative(), prepay: z.boolean(),
+});
+
 const storedCapsSchema = z.object({
   cap: z.object({ adSetId: z.string().min(1) }).optional(),
   cappedAdSetIds: z.array(z.string().min(1)).optional(),

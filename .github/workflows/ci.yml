@@ -26,7 +26,40 @@ jobs:
           restore-keys: next-${{ hashFiles('package-lock.json') }}-
       - run: npm run build
 
-  test:
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --shard=${{ matrix.shard }}/3
+
+  metadb:
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
@@ -41,10 +74,19 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
       - run: META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db
+
+  # Required check name stays `test` (#226). `if: always()` matters: without it a
+  # failed or cancelled job skips `test`, and a skipped required check counts as passing.
+  test:
+    needs: [lint, unit, metadb]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for r in "${{ needs.lint.result }}" "${{ needs.unit.result }}" "${{ needs.metadb.result }}"; do
+            [ "$r" = success ] || { echo "a test job did not succeed: $r"; exit 1; }
+          done
 
   # Core loop regression gate (#110); required on main on its own (#111).
   core:

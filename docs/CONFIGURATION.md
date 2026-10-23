@@ -87,7 +87,7 @@ Changing Vercel Production environment values requires a new deployment.
 
 | Variable | Default / validation | Purpose |
 | --- | --- | --- |
-| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: `1000000`; integer 100-1000000 | Default annual total when a request names no amount. Customers normally choose their own amount, INR 500-10,000 (see below); 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
+| `PAYMENTS_LIVE_AMOUNT_PAISE` | Unset: Billing pre-fills `150000` (INR 1,500); integer 100-1000000 | Default amount when a request names none and no unpaid order is open. Customers normally choose their own amount, INR 500-10,000 (see below); 100 paise = INR 1. Service receives floor(total/5), advertising the remainder |
 | `PAYMENTS_LIVE_VERIFICATION_ENABLED` | Unset/empty/`false`: off; exactly `true`: on | Separate one-time real payment verification, not the annual service |
 | `PAYMENTS_LIVE_VERIFICATION_AMOUNT_PAISE` | Unset: `1000`; integer 100-1000000 | Default and maximum selectable verification total, INR 10 by default; zero service/ad allocation |
 | `PAYMENTS_LIVE_VERIFICATION_BUSINESS_ID` | Required UUID when enabled | Exact privately verified pilot business |
@@ -281,7 +281,7 @@ exported in your shell are still inherited; this is not a network sandbox.
 
 | Mode | Behavior |
 | --- | --- |
-| `setup` | Applies `db/schema.sql` to the local database and creates a local Auth user, QA business and two draft creatives; writes, not a check |
+| `setup` | Applies the full schema (`db/schema.sql` plus newer migrations, via `scripts/build-schema.mjs`) to the local database and creates a local Auth user, QA business and two draft creatives; writes, not a check |
 | `dev` | `npm run dev` on port 3939 |
 | `build`, `oauth-check`, `workspace`, `connect`, `e2e`, `recovery`, `draft-connect`, `draft-lifecycle`, `connection-recovery` | Runs the mapped build, check script or Playwright spec against the local project |
 | `oauth-dev` | Copies the real `META_APP_ID`/`META_APP_SECRET`/`META_LOGIN_CONFIG_ID` from `.env.local` and redacts them from output; real Meta consent work |

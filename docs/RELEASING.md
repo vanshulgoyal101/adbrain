@@ -218,6 +218,13 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
    state and apply only the individually reviewed incremental migration.
 - Review migrations against existing data, test fresh and upgrade paths, and
   define backup/restore, compatibility, and sequencing before applying remotely.
+- **Add a migration (#227):** add only `db/migrations/<yyyymmdd>_<name>.sql` plus
+  its own checks. Do not edit `db/schema.sql` (frozen base) or
+  `db/schema.base-migrations.txt`. `node scripts/build-schema.mjs` prints the full
+  fresh-install schema: the base plus every migration not in that list, in
+  filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
+  and the schema tests all use it, so two migration PRs never conflict. Name a
+  migration so it sorts after the ones it depends on.
 - The local campaign hardening changes require the reporting-identity migration
    before the new web code, and the worker migration before enabling worker mode.
    See [worker rollout](OPERATIONS.md#campaign-worker-rollout). Neither new migration

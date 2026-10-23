@@ -604,6 +604,14 @@ lifetime budget only on those ad sets; their daily budget must be 0 and they are
 out of the daily total and the bound `meta_adset_id`. A new run still needs every
 child PAUSED (Pause first), then copies only the original ads into a new capped ad
 set; earlier capped sets stay PAUSED.
+Operator-funded businesses (#245): the review GET adds
+`funding:{spendCapPaise,amountSpentPaise,roomPaise,prepay}` read live from
+`act_<id>?fields=id,spend_cap,amount_spent,is_prepay_account,currency`, and the
+client skips the customer-balance review. Activation requires `capDays` (409
+otherwise), INR, a spending limit above 0 and room (limit minus amount spent) of
+at least the cap, all before any Meta write (409). It then runs the capped flow
+above with no reservation, cost evidence or confirmation; the compensating pause
+still applies. 503 when the funding mode cannot be read.
 Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
 after Meta's 613 status rate limit), and reads all three levels back; `pause` is
 `{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only

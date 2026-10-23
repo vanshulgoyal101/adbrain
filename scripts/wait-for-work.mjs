@@ -31,7 +31,7 @@ const addressedToMe = new RegExp(
   "m",
 );
 const repo = values.repo;
-const label = ["cto", "ceo"].includes(role) ? null : `owner:${role}`;
+const label = role === "ceo" ? "decision" : `owner:${role}`;
 const since = values.since ? new Date(values.since).toISOString() : new Date().toISOString();
 const deadline = Date.now() + Number(values["max-min"]) * 60_000;
 const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
@@ -41,7 +41,7 @@ function api(path) {
   return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 }));
 }
 
-const owned = () => (label ? api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`) : []);
+const owned = () => api(`repos/${repo}/issues?state=open&labels=${encodeURIComponent(label)}&per_page=100`);
 const brief = text => text.replace(/\s+/g, " ").trim().slice(0, 200);
 
 async function firstOwned() {
@@ -70,8 +70,7 @@ function findWork() {
     const number = Number(comment.issue_url.split("/").pop());
     const body = comment.body ?? "";
     if (writtenByMe.test(body)) continue;
-    if (mineNumbers.has(number) || addressedToMe.test(body)
-      || (role === "cto" && number === 74 && /\bidle\b/i.test(body))) {
+    if (mineNumbers.has(number) || addressedToMe.test(body)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
   }

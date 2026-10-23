@@ -24,8 +24,10 @@ const getCustomerBalance = vi.fn();
 const confirmCustomerCampaign = vi.fn();
 const observeCustomerCosts = vi.fn();
 const readLifetimeSpendPaise = vi.fn();
+const isOperatorFunded = vi.fn();
 
 vi.mock("@/lib/payments/customer-balance", () => ({ getCustomerBalance, confirmCustomerCampaign, observeCustomerCosts }));
+vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded }));
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: (...args: unknown[]) => updateEq(...args) }));
@@ -60,6 +62,7 @@ const periodStart = monday.toISOString().slice(0, 10);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isOperatorFunded.mockResolvedValue(false);
   getCustomerBalance.mockResolvedValue({ held: false, reservations: [] });
   confirmCustomerCampaign.mockResolvedValue(undefined);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -308,6 +311,32 @@ describe("enforceAutoPause", () => {
       expect.any(Function),
     );
     expect(updateEq).toHaveBeenCalled();
+  });
+
+  it("Refresh does not pause an operator-funded run for the customer allowance (#245)", async () => {
+    setup({ autoPause: false, cap: null, spend: 100 });
+    isOperatorFunded.mockResolvedValue(true);
+    getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: true });
+    expect(getCustomerBalance).not.toHaveBeenCalled();
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("Refresh still pauses an operator-funded run at the weekly cap (#245)", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 7000 });
+    isOperatorFunded.mockResolvedValue(true);
+    const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPause("b1")).resolves.toEqual(["c1"]);
+    expect(confirmCustomerCampaign).not.toHaveBeenCalled();
+  });
+
+  it("Refresh reports an unconfirmed decision when the funding mode cannot be verified (#245)", async () => {
+    setup({ autoPause: true, cap: 7000, spend: 7000 });
+    isOperatorFunded.mockRejectedValue(new Error("database unavailable"));
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: false });
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("skips old campaigns without a verified binding", async () => {

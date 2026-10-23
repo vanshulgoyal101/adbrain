@@ -61,6 +61,14 @@ The default mode then runs **Prepare preflight** (#98, #109): it opens New campa
 
 `npm run smoke:core -- --campaign` requires the Solaride workspace, a Solaride lead form, approved creative, and a reviewed Solaride Meta account. It creates one uniquely named test campaign PAUSED, syncs, reconfirms PAUSED, and deletes only that campaign from Meta and AdBrain. A successful removal is labeled Archive in the smoke output; the product actually deletes it. On failure, reconcile by the printed campaign ID or unique test name before another run. The Resume check opens and closes the connection review only: it does not activate delivery or prove an actual status resume. The campaign mode has not been exercised against production as part of implementing this command.
 
+### Production Traffic From the Shared Mac
+
+All automated production browser runs from the shared Mac come from one IP address. On Oct 23 a QA measurement burst (about 100 page loads and 60 probes in 15 minutes) set off Vercel's system DDoS challenge on that address for 10 minutes ([#240](https://github.com/vanshulgoyal101/adbrain/issues/240)). During the challenge, headless Chromium gets `403` with `x-vercel-mitigated: challenge`, while curl and GitHub runners still pass. The team is on the Hobby plan, which offers no system bypass, so:
+
+- Run one production walk at a time, with a pause of a few seconds between page loads.
+- Run measurement series, and anything beyond a few dozen page loads, from GitHub Actions, not the Mac.
+- On a `403` with `x-vercel-mitigated: challenge`, stop all automated traffic for 15 minutes. Read `GET /v1/security/firewall/events` (Vercel REST API) before treating it as an app failure.
+
 ### Core Regression Gate
 
 `npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time:
@@ -69,6 +77,7 @@ The default mode then runs **Prepare preflight** (#98, #109): it opens New campa
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
+- **Operator funding** (`operator-funding`): the real Solaride ad account read (`spend_cap` 88983, `amount_spent` 4237 paise after the owner's ₹1,000 top-up) that gates an operator-funded capped activation (#245), recorded read-only by `scripts/record-meta-funding-fixtures.ts`.
 - **Campaign stop** (`campaign-stop`): the paused-run settle check (#221) that the whole Meta tree is stopped, from two real Solaride campaigns (a fully PAUSED tree, and ACTIVE children under a paused campaign), recorded read-only by `scripts/record-meta-stop-fixtures.ts`.
 - **CSP** (`csp-render`): the production policy is pinned, and the Create review renders three ads whose images and requests the policy allows, without `eval`.
 
@@ -105,19 +114,23 @@ instances, and HTTP 200 can represent partial work.
 ### CI Gates
 
 [CI](../.github/workflows/ci.yml) runs on push/PR to `dev`/`main` with placeholder
-Supabase configuration and Node 24:
+Supabase configuration and Node 24. Every job runs in parallel after its own `npm ci`:
 
-```sh
-npm ci
-npm run audit:dependencies
-npm run lint
-npm run typecheck
-npm run test:coverage
-META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db
-npm run build
-```
+| Job | Runs |
+|---|---|
+| `build` | `npm run build` |
+| `lint` | `npm run lint`, `npm run typecheck` |
+| `unit` (3 shards) | `npx vitest run --shard=N/3` |
+| `metadb` | `META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db` |
+| `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
+| `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |
+| `audit` | `npm run audit:dependencies` (reports, does not block) |
+| `secrets` | Gitleaks |
 
-Gitleaks is a separate required job. Do not disable checks to make a release green.
+Required checks are `build`, `test`, `core` and `secrets`. `test` runs with
+`if: always()` so a failed shard fails it instead of skipping it (a skipped required
+check counts as passing). Locally, `npm test` still runs the whole suite in one
+process. Do not disable checks to make a release green.
 The focused configurable-payment SQL slice is `npm run test:meta-db -- --pricing-only`.
 It uses disposable PostgreSQL for fresh/upgrade preservation, exact TypeScript/SQL
 quote and policy parity, owner/expiry scope, concurrent one-order claims, zero

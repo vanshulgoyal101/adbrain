@@ -223,6 +223,21 @@ describe("<Studio> generation", () => {
     expect(within(await screen.findByRole("dialog")).getByText("Discuss your rooftop plans.")).toBeInTheDocument();
   });
 
+  it("loads the 960 px thumbnail in the card, falls back to the original once, and keeps the original in the preview (#230)", async () => {
+    const original = "https://abc.supabase.co/storage/v1/object/public/creatives/b1/c1/originals-v1/ad.png";
+    const thumbnail = "https://abc.supabase.co/storage/v1/object/public/creatives/b1/c1/thumbnails-v1/ad.webp";
+    render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
+    const card = screen.getAllByRole("img", { name: "Cut your power bill" }).find(img => img.getAttribute("src") === thumbnail);
+    expect(card).toBeDefined();
+    fireEvent.error(card!);
+    expect(card!.getAttribute("src")).toBe(original);
+    expect(screen.queryByText("Image unavailable")).not.toBeInTheDocument();
+    fireEvent.error(card!);
+    expect(await screen.findByText("Image unavailable")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preview Cut your power bill" }));
+    expect(within(await screen.findByRole("dialog")).getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
+  });
+
   it("keeps successful creatives visible and reports a partial batch failure", async () => {
     global.fetch = vi.fn().mockResolvedValue(okJson({ creatives: [creative()], failures: [{ angle: "Trust", error: "Image unavailable" }] }));
     render(<Studio business={business} initialCreatives={[]} />);
@@ -340,14 +355,15 @@ describe("<Studio> approval", () => {
 });
 
 describe("<Studio> creative preview", () => {
-  it("uses the smaller versioned image only for review-board thumbnails", () => {
+  it("uses the smaller versioned image on the board and in the selected card; the enlarged preview keeps the original (#230)", () => {
     const original = "https://cdn.example/storage/v1/object/public/creatives/b1/group/originals-v1/ad.jpg";
     render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
 
     const boardImage = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
     expect(boardImage)
       .toHaveAttribute("src", "https://cdn.example/storage/v1/object/public/creatives/b1/group/thumbnails-v1/ad.webp");
-    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
+    expect(screen.getByRole("img", { name: "Cut your power bill" }))
+      .toHaveAttribute("src", "https://cdn.example/storage/v1/object/public/creatives/b1/group/thumbnails-v1/ad.webp");
     fireEvent.error(boardImage!);
     expect(boardImage).toHaveAttribute("src", original);
   });

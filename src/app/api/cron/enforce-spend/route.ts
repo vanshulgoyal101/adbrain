@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts, settlePausedRuns } from "@/lib/payments/meta-cost-evidence";
+import { isOperatorFunded } from "@/lib/payments/operator-funding";
 import { cappedRunEnded } from "@/lib/campaign/activation";
 import {
   requireScheduledBusiness,
@@ -105,14 +106,26 @@ async function handleGET(request: Request) {
       unverified.push(businessId);
       continue;
     }
-    const initialBalance = await getCustomerBalance(context).catch(() => null);
-    const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
-    if (initialBalance && !refresh.complete) incomplete = true;
-    const settle = await settlePausedRuns(context, campaigns, initialBalance);
-    if (!settle.complete) incomplete = true;
-    if (!hasActive) continue;
-    const customerBalance = refresh.observed || settle.read ? await getCustomerBalance(context).catch(() => null) : initialBalance;
-    const financialHold = !customerBalance || customerBalance.held;
+    let operatorFunded: boolean;
+    try {
+      operatorFunded = await isOperatorFunded(businessId);
+    } catch {
+      incomplete = true;
+      unverified.push(businessId);
+      continue;
+    }
+    let customerBalance = null;
+    if (!operatorFunded) {
+      const initialBalance = await getCustomerBalance(context).catch(() => null);
+      const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
+      if (initialBalance && !refresh.complete) incomplete = true;
+      const settle = await settlePausedRuns(context, campaigns, initialBalance);
+      if (!settle.complete) incomplete = true;
+      if (!hasActive) continue;
+      customerBalance = refresh.observed || settle.read ? await getCustomerBalance(context).catch(() => null) : initialBalance;
+    } else if (!hasActive) continue;
+    // #245: an operator-funded run is capped on Meta and has no customer allowance to hold.
+    const financialHold = !operatorFunded && (!customerBalance || customerBalance.held);
     const decision = financialHold
       ? { toPause: campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id), verified: Boolean(customerBalance) }
       : await weeklySpendDecision(campaigns, limits, async campaign => {

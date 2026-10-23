@@ -217,6 +217,16 @@ guards to enable production or reinterpret existing test captures as real money.
   down and an explicit hold is never cleared. Final evidence, refunds and
   allocations stay with the financial operator. Stale non-final evidence holds
   the balance only while the campaign has an open reservation.
+- Funding modes (#245): a business is customer-funded (the allowance rules above)
+  unless a payment operator marks it **operator-funded**, meaning the operator pays
+  Meta directly and no AdBrain payment is involved (Solaride). Only
+  `operator_funding_set` with a live operator grant sets or clears the mark, with a
+  reason; every change is audited, and customers cannot set it. Such a business
+  activates only capped (`capDays`), and only when Meta's ad account spending limit
+  minus amount spent (both media paise, excluding GST, read live) covers the cap.
+  It has no allowance, reservation, cost evidence or refund; the sweep and Refresh
+  skip the allowance hold, and the weekly cap still applies. Clearing the mark
+  restores the customer gate and the sweep pauses its active runs.
 - Paused-run settle (#221): a paused or finished funded run no longer blocks
   the next run until an operator acts. The `enforce-spend` sweep also visits
   businesses with a paused reservation. It first confirms on Meta that the
