@@ -108,7 +108,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
-| GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page |
+| GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page; cached 10 min per business, Page and connection generation, `?fresh=1` re-reads Meta (#271) |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | GET | `/api/leads` | Filters/cursor -> `{leads,total,nextCursor}` | Owned saved enquiries only; no provider sync |
 | PATCH | `/api/leads/[id]` | `workflow_status` and/or `follow_up_note` -> `{lead}` | Owned local follow-up only; no outreach or provider write |

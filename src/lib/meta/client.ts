@@ -641,14 +641,17 @@ export class MetaClient {
     const matched: MatchedGeo[] = [];
     const unresolved: string[] = [];
     const seen = new Set<string>();
-
-    for (const raw of names) {
+    // #271: independent searches run together; results are applied in the given order.
+    const searches = await Promise.all(names.map(async raw => {
       const name = (raw ?? "").trim();
-      if (!name) continue;
-      let results: GeoSearchResult[] = [];
-      try {
-        results = await this.searchGeoLocations(name);
-      } catch {
+      if (!name) return null;
+      return { name, results: await this.searchGeoLocations(name).catch(() => null) };
+    }));
+
+    for (const search of searches) {
+      if (!search) continue;
+      const { name, results } = search;
+      if (!results) {
         unresolved.push(name);
         continue;
       }

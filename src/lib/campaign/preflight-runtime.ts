@@ -94,15 +94,16 @@ export function buildCampaignPreflightLoaders(
         authorizedBusiness,
         { purpose: "create_paused" },
         async (meta) => {
-          const geo = await resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta));
           const names = draft.input.targeting.audience?.interestNames ?? [];
+          // #271: geo and interest searches are independent, so they run together.
+          const [geo, audience] = await Promise.all([
+            resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta)),
+            names.length ? meta.resolveAudienceInterests(names).catch(() => null) : null,
+          ]);
           if (!names.length) return geo;
-          try {
-            const audience = await meta.resolveAudienceInterests(names);
-            return { ...geo, audienceInterests: audience.interests, unresolvedInterests: audience.unresolved };
-          } catch {
-            return { ...geo, audienceInterests: [], unresolvedInterests: names };
-          }
+          return audience
+            ? { ...geo, audienceInterests: audience.interests, unresolvedInterests: audience.unresolved }
+            : { ...geo, audienceInterests: [], unresolvedInterests: names };
         },
       );
     },
