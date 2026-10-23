@@ -8,8 +8,8 @@ import { customerBalanceSchema, type CustomerBalance as Balance } from "@/lib/pa
 
 const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 
-export function CustomerBalance({ businessId }: { businessId: string }) {
-  const [storedBalance, setBalance] = useState<Balance | null>(null);
+export function CustomerBalance({ businessId, initialBalance = null }: { businessId: string; initialBalance?: Balance | null }) {
+  const [storedBalance, setBalance] = useState<Balance | null>(initialBalance?.businessId === businessId ? initialBalance : null);
   const balance = storedBalance?.businessId === businessId ? storedBalance : null;
   const [errorBusinessId, setError] = useState<string | null>(null);
   const error = errorBusinessId === businessId;
@@ -26,11 +26,13 @@ export function CustomerBalance({ businessId }: { businessId: string }) {
       if (!signal.aborted) { setBalance(null); setError(businessId); }
     }
   });
+  const serverLoaded = initialBalance?.businessId === businessId;
   useEffect(() => {
+    if (serverLoaded && refresh === 0) return;
     const controller = new AbortController();
     queueMicrotask(() => { if (!controller.signal.aborted) void load(controller.signal); });
     return () => controller.abort();
-  }, [businessId, refresh]);
+  }, [businessId, refresh, serverLoaded]);
   return <section aria-labelledby="customer-balance-title" className="min-w-0 space-y-3 border-t border-slate-200 pt-5">
     <div className="flex items-center justify-between gap-3">
       <h3 id="customer-balance-title" className="font-semibold text-slate-900">Advertising allowance</h3>

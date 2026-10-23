@@ -5,19 +5,22 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-type PrivacyRequest = { id: string; owner_id?: string; kind: "export" | "delete";
-  status: "received" | "in_review" | "completed" | "declined"; created_at: string; updated_at: string };
+import type { PrivacyRequest } from "@/lib/privacy-requests";
 
 const statusLabel = { received: "Received", in_review: "In review", completed: "Completed", declined: "Declined" };
 
-export function PrivacyRequests() {
-  const [requests, setRequests] = useState<PrivacyRequest[] | null>(null);
-  const [operatorAvailable, setOperatorAvailable] = useState(false);
+export function PrivacyRequests({ initialRequests = null, initialOperatorAvailable = false }: {
+  initialRequests?: PrivacyRequest[] | null; initialOperatorAvailable?: boolean;
+} = {}) {
+  const [requests, setRequests] = useState<PrivacyRequest[] | null>(initialRequests);
+  const [operatorAvailable, setOperatorAvailable] = useState(initialOperatorAvailable);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const serverLoaded = initialRequests !== null;
 
   useEffect(() => {
+    if (serverLoaded) return;
     let active = true;
     fetch("/api/privacy-requests", { cache: "no-store" }).then(async response => {
       const body = await response.json();
@@ -29,7 +32,7 @@ export function PrivacyRequests() {
       .then(response => { if (active) setOperatorAvailable(response.ok); })
       .catch(() => {});
     return () => { active = false; };
-  }, []);
+  }, [serverLoaded]);
 
   async function submit(kind: PrivacyRequest["kind"]) {
     if (kind === "delete" && !window.confirm("Submit an account deletion request for operator review? No data will be deleted immediately.")) return;

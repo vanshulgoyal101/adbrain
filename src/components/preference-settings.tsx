@@ -13,15 +13,17 @@ const labels: Record<PreferenceCategory, string> = {
   layout_density: "Layout density", creative_dislikes: "Creative dislikes", workflow: "Workflow",
 };
 
-export function PreferenceSettings({ businessId }: { businessId: string }) {
-  const [state, setState] = useState<PreferenceState | null>(null);
+export function PreferenceSettings({ businessId, initialState = null }: { businessId: string; initialState?: PreferenceState | null }) {
+  const [state, setState] = useState<PreferenceState | null>(initialState);
   const [category, setCategory] = useState<PreferenceCategory>("tone");
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const serverLoaded = initialState !== null;
 
   useEffect(() => {
+    if (serverLoaded) return;
     let active = true;
     fetch(`/api/preferences?businessId=${encodeURIComponent(businessId)}`, { cache: "no-store" })
       .then(async response => {
@@ -31,7 +33,7 @@ export function PreferenceSettings({ businessId }: { businessId: string }) {
       }).then(result => { if (active) setState(result); })
       .catch(cause => { if (active) setError((cause as Error).message); });
     return () => { active = false; };
-  }, [businessId]);
+  }, [businessId, serverLoaded]);
 
   async function change(operation: "enable" | "pause" | "save" | "forget" | "clear", target = category) {
     if (!state) return;
