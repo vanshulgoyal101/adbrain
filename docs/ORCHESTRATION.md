@@ -123,10 +123,11 @@ CEO priorities (Oct 24; owner: lean, high value only):
   #156 (Meta App Review) is the gate for every outside customer; it needs the
   owner's Facebook sign-in, then submit.
 - **P1-top, editing is the main power of the app (owner and a real user, Oct
-  24):** #282 (confirm and move Regenerate; ship first), #281 (the Regenerate
-  error is a fact-check rejection shown as a generic 502), #280 (edit at every
-  step: text, then the words on the image, then the background only, without
-  regenerating the whole ad).
+  24):** #284 (a real user got stuck in Create: a "type it below" chip was sent
+  as the answer and Try again repeats it; first), #282 (confirm and move
+  Regenerate), #281 (the Regenerate error is a fact-check rejection shown as a
+  generic 502), #280 (edit at every step: text, then the words on the image,
+  then the background only, without regenerating the whole ad).
 - **P1:** #258 (live results refresh themselves and flag rejected or stalled
   ads), #274 (a reliable scheduler for those jobs), #235 (WhatsApp-first), #260
   (lean pass).
