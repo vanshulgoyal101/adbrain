@@ -24,13 +24,16 @@ Routine steps never wait for the CEO or the CTO.
 
 1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
    `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`,
-   `owner:devops` (who acts next), `ready-to-ship` (committed, waiting for DevOps)
-   and `blocked` (needs something outside the team; the issue says what).
+   `owner:devops`, `owner:cto` (who acts next), `ready-to-ship` (committed,
+   waiting for DevOps), `blocked` (needs something outside the team; the issue says
+   what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
+   (needs the CEO). Talk on the issue or PR itself; see
+   [AGENTS.md](../AGENTS.md#worker-coordination) Communication.
 2. **Start or resume** by reading this section, then your queue:
    `gh issue list -R vanshulgoyal101/adbrain -l core -l owner:<you>`. Work the
    oldest. Empty queue: take an unowned `core` issue in your area and add your
-   label. Nothing left: post one line in #74, then run `wait-for-work`
-   ([AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
+   label. Nothing left: run `wait-for-work` (no idle post;
+   [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
    reports. Stop only when it times out. Do not invent work.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
    `origin/main`, keep the change small, push, and open a PR to `main` titled
@@ -61,7 +64,8 @@ Routine steps never wait for the CEO or the CTO.
 8. **The CTO** turns priorities into work: owns the worker table under "Now",
    assigns and briefs issues, keeps labels honest, closes or parks stale issues,
    watches CI and production health, reviews high-impact diffs and publishes
-   `Lesson:` lines. The CEO and CTO talk on #74. On a conflict, money and priority
+   `Lesson:` lines. The CEO and CTO talk on the issue at hand; the CTO raises CEO
+   calls as `decision` issues. On a conflict, money and priority
    follow the CEO; the technical approach follows the CTO.
 
 ### Standing rules
@@ -80,7 +84,8 @@ Routine steps never wait for the CEO or the CTO.
 - **Browser.** Signed in to the owner's demo account: Cedar Ridge Chiropractic,
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
-  the UI calls. If the session expires, post in #74 and the CEO signs in.
+  the UI calls. If the session expires, label the issue `waiting-owner` and the
+  CEO signs in.
 - **Paid budget.** Create runs: **no count limit** (owner, Oct 23: "as many as
   you need"; runs 1-20 used by then). Run Create whenever the work needs it, not
   in loops. Log `Create run N` with the saved count in

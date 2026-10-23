@@ -15,7 +15,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	CTO owns technical direction: who works on what, technical briefs, CI and
 	production health, high-impact reviews and lessons. Take work from either. On a
 	conflict, money and priority follow the CEO; the technical approach follows the
-	CTO. They talk on #74.
+	CTO.
+- **Communication** (Oct 23; #74 is closed). Work talk lives on its issue or PR.
+	Hand off with the label plus one line addressed to the next owner (`QA: ready at
+	<sha>`), five lines at most; long evidence goes in the PR. No status or idle
+	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
+	labelled `decision`. Need the CTO? Label `owner:cto`. Blocked on the owner? Label
+	`waiting-owner`; only the CEO asks the owner, in one batched list.
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
@@ -34,8 +40,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Hand off the commit, result and any real blocker in the existing issue/PR.
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
-- **Don't stop when idle or waiting** (owner, Oct 23). Post your one status line,
-	then run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
+- **Don't stop when idle or waiting** (owner, Oct 23). Run
+	`node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
 	from a worktree on current `origin/main`, in the foreground with no timeout. It
 	returns when something is labelled for you, someone comments on your issue, or
 	someone addresses you (`QA:`, `**Dev 3:**`, `→ CEO`). Do the work, then wait
