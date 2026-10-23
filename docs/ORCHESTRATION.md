@@ -116,20 +116,25 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities (Oct 23, evening; owner: lean, high value only):
+CEO priorities (Oct 24; owner: lean, high value only):
 - **P0:** the live Solaride WhatsApp run
   ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)): ₹840 capped,
   ends Oct 26 14:24Z. Monitor it and report spend, chats and cost per chat.
   #156 (Meta App Review) is the gate for every outside customer; it needs the
   owner's Facebook sign-in, then submit.
+- **P1-top, editing is the main power of the app (owner and a real user, Oct
+  24):** #282 (confirm and move Regenerate; ship first), #281 (the Regenerate
+  error is a fact-check rejection shown as a generic 502), #280 (edit at every
+  step: text, then the words on the image, then the background only, without
+  regenerating the whole ad).
 - **P1:** #258 (live results refresh themselves and flag rejected or stalled
-  ads), #221 / PR #247 (self-serve next run), #235 (WhatsApp-first), #260 (lean
-  pass: retire `dev`, living docs only, dead scripts and branches out).
+  ads), #274 (a reliable scheduler for those jobs), #235 (WhatsApp-first), #260
+  (lean pass).
 - **P1, a snappy and polished product (owner):** #67 (snappier app) with slices
   #230 (measure every main page, fix the top 5), #238 and #239; #51 (UI/UX
   polish) with #232. Each slice is a small PR with a before/after number.
-- **Later:** #229 (email alerts; WhatsApp-first instead), #253, #178. Closed:
-  #66 (superseded by #260) and #254.
+- **Later:** #229 (email alerts; built, flag off, no provider; WhatsApp-first),
+  #253, #178. Closed: #66 (superseded by #260) and #254.
 - **Filter for new issues:** it must help a customer make and run ads today,
   make the product faster or clearer, or remove a real failure. Otherwise file
   it as `later`, or don't file it.
