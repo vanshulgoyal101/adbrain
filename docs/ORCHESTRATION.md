@@ -78,9 +78,10 @@ Routine steps never wait for the coordinator.
   not count as Create runs.
   Log `Create run N/20` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
   At the limit, stop and post; the coordinator asks the owner for the next 10.
-  No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 22): ₹600
-  total for Solaride's first watched run, capped on Meta, run by Dev 3 with QA's
-  checklist on [#157](https://github.com/vanshulgoyal101/adbrain/issues/157).
+  No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 23, replaces
+  the Oct 22 ₹600): ₹1,000 total over 3 days for Solaride's first watched run,
+  capped on Meta, run by Dev 3 with QA's checklist on
+  [#157](https://github.com/vanshulgoyal101/adbrain/issues/157).
 - **Access.** Production DB: Supabase Management API with `SUPABASE_TOKEN` from
   `/Users/vanshulgoyal/Development/copilot/arcade/.env` (parse into memory, never
   print), project `kmzuxrvfrwwpwmoovwcp`, `BEGIN READ ONLY` for checks. Vercel:
@@ -92,23 +93,23 @@ Routine steps never wait for the coordinator.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### Now (October 22): finish the core, then prepare the first real lead
+### Now (October 23): the first watched run on Solaride
 
-Done October 21: Review to a live PAUSED campaign (#134, #109), quota holds no
-longer block Create (#138 fix live), draft normalization, parallel Create (opt-in;
-p50 60 s to 28 s with better quality scores), Prepare preflight in the smoke.
-Finish the open core items first, then the next milestone: **first real lead**
-(Meta App Review readiness, safe activation, a first-time user walkthrough). The
-real ad spend and the App Review submission wait for the owner. Parked issues
-(`later`) stay parked.
+Done October 22: offer in the first 125 characters (#194), the owner's own photo
+in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
+#185 and capped activation (PR193). Milestone: **first real lead**. The owner
+approved one watched ₹1,000 run on Solaride over 3 days
+([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)), then we report
+spend, leads and cost per lead. The App Review submission waits for the owner.
+Parked issues (`later`) stay parked.
 
 | Worker | Work, in order |
 | --- | --- |
-| DevOps | Done: #153, #138, #111, #165, #170, #181, #189. Now, in order: the fresh test account for [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) (blocking Dev since 06:14Z), merge PR193 (QA approved for the first watched run), then close [#190](https://github.com/vanshulgoyal101/adbrain/issues/190)/[#178](https://github.com/vanshulgoyal101/adbrain/issues/178) after the owner fixes the Razorpay webhook. Check whether the production Gemini key is free tier (about 20 calls a day) |
-| Dev 3 | Done: #98, #142, #182, PR164, PR193 (activation wiring). Now [#194](https://github.com/vanshulgoyal101/adbrain/issues/194): hook and offer in the first 125 characters, in short lines (QA's #188 found the offer after "See more" in most ads) |
-| Dev | Done: #141, #173, #174, #169 parts 1-3. Now [#195](https://github.com/vanshulgoyal101/adbrain/issues/195): ask for real photos and logo in setup and use one in at least one ad; the [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) timed walk once DevOps posts the test account |
-| Dev 2 | Done: #185, #181 fix. Now [#197](https://github.com/vanshulgoyal101/adbrain/issues/197): capped campaigns must resume and sync after their first capped run (needed before a second capped run). [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) reruns after the owner's Meta dashboard fix |
-| QA | Done: #158, #188, PR184 and PR193 reviews. Now the first watched-run checklist on [#157](https://github.com/vanshulgoyal101/adbrain/issues/157), then verify #197 and re-walk #169 |
+| Dev 3 | [#157](https://github.com/vanshulgoyal101/adbrain/issues/157): your last budgeted Create run on "solar energy" now, not after the money steps, so the owner can pick ads in parallel. Then Prepare ₹330/day for 3 days on the capped lifetime ad set. Activate only after QA's go, with QA watching |
+| DevOps | #157: a financial operator with refund rights and a short expiry, timed for the run. If the owner picks (a) on #157, set `PAYMENTS_LIVE_AMOUNT_PAISE=350000` for this test (before/after, then smoke). Close [#178](https://github.com/vanshulgoyal101/adbrain/issues/178)/[#190](https://github.com/vanshulgoyal101/adbrain/issues/190) once the owner's secret paste and payment record an event. Then the empty test account for [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) |
+| Dev | If the owner picks (b) on #157: capped runs reserve daily × days + GST instead of 7 × daily (`customer_ad_reserve`, migration; money change, so QA review, then DevOps release). Otherwise the #169 timed walk once DevOps posts the test account |
+| Dev 2 | Stand by during the watched run for capped sync and pause (#197). [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3 when the owner signs the no-role Facebook account in |
+| QA | #157: update the checklist for ₹990 over 3 days, give go/no-go, then watch the activation and the first hours. Then the #169 re-walk |
 
 ### Earlier focus (October 21, before P0)
 
