@@ -226,7 +226,9 @@ Content-Length is absent or false. HTTP media downloads use safe public URL/DNS
 and redirect handling; inline data URIs are base64 raster-only.
 
 The design spec contains brand lockup, headline/subhead, up to four benefits,
-contact line, CTA, colors, font, and angle-specific top/center/bottom placement.
+the Brand phone (drawn large and bold with a call icon), a small contact line
+(website and first service area), CTA, colors, font, and angle-specific
+top/center/bottom placement.
 The [renderer](../src/lib/creative/render.tsx) receives validated inline media.
 With overlay enabled, render/persistence failure fails the variant: **there is
 no implicit bare-photo success fallback**. `AD_DESIGN_OVERLAY=false` explicitly
