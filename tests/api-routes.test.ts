@@ -290,16 +290,18 @@ describe("GET /api/meta/geo-search", () => {
 });
 
 describe("GET /api/campaigns/lead-forms", () => {
+  const formsRequest = () => new Request("http://localhost/api/campaigns/lead-forms");
+
   it("rejects anonymous callers", async () => {
     anon();
     const { GET } = await import("@/app/api/campaigns/lead-forms/route");
-    expect((await GET()).status).toBe(401);
+    expect((await GET(formsRequest())).status).toBe(401);
   });
 
   it("degrades gracefully when Meta isn't connected", async () => {
     signedIn();
     const { GET } = await import("@/app/api/campaigns/lead-forms/route");
-    const res = await GET();
+    const res = await GET(formsRequest());
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toMatchObject({ forms: [] });
   });
@@ -310,7 +312,7 @@ describe("GET /api/campaigns/lead-forms", () => {
       execute({ listLeadForms: vi.fn().mockResolvedValue([{ id: "form-1", name: "Leads", status: "ACTIVE" }]) }),
     );
     const { GET } = await import("@/app/api/campaigns/lead-forms/route");
-    const res = await GET();
+    const res = await GET(formsRequest());
 
     expect(res.status).toBe(200);
     expect(withMetaConnection).toHaveBeenCalledWith(

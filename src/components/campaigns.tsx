@@ -102,8 +102,8 @@ type PrepareReviewState =
   | { status: "ready"; draft: DraftDTO; connection: ConnectionDTO; review: ReviewDTO }
   | { status: "blocked"; draft: DraftDTO; connection: ConnectionDTO; message: string };
 
-async function fetchDraftForms(signal?: AbortSignal): Promise<LeadForm[]> {
-  const response = await fetch("/api/campaigns/lead-forms", { cache: "no-store", signal });
+async function fetchDraftForms(signal?: AbortSignal, fresh = false): Promise<LeadForm[]> {
+  const response = await fetch(`/api/campaigns/lead-forms${fresh ? "?fresh=1" : ""}`, { cache: "no-store", signal });
   const data = await response.json() as { forms?: LeadForm[]; error?: string };
   if (!response.ok || data.error || !Array.isArray(data.forms)) throw new Error(data.error ?? "Could not load Page forms. Your draft is saved.");
   return data.forms;
@@ -304,7 +304,8 @@ function BusinessCampaigns({
     formsFreshnessRef.current = null;
     const controller = new AbortController();
     startTransition(() => { setFormsLoading(true); setFormsError(null); });
-    void fetchDraftForms(controller.signal).then(forms => {
+    // #271: after a retry or reconnect, skip the server's ten-minute form cache.
+    void fetchDraftForms(controller.signal, formsRetry > 0).then(forms => {
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
