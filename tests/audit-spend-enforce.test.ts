@@ -22,8 +22,10 @@ const getCampaignInsights = vi.fn();
 const getSpendLimits = vi.fn();
 const getCustomerBalance = vi.fn();
 const confirmCustomerCampaign = vi.fn();
+const observeCustomerCosts = vi.fn();
+const readLifetimeSpendPaise = vi.fn();
 
-vi.mock("@/lib/payments/customer-balance", () => ({ getCustomerBalance, confirmCustomerCampaign }));
+vi.mock("@/lib/payments/customer-balance", () => ({ getCustomerBalance, confirmCustomerCampaign, observeCustomerCosts }));
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: (...args: unknown[]) => updateEq(...args) }));
@@ -71,7 +73,7 @@ beforeEach(() => {
   metaClientForBusiness.mockResolvedValue({ updateCampaignStatus });
   requireOwnedBusiness.mockResolvedValue({ businessId: "b1", userId: "u1" });
   withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus, getCampaignInsights }, {
+    execute({ updateCampaignStatus, getCampaignInsights, readLifetimeSpendPaise }, {
       generation: 3,
       selected: {
         metaBusinessId: null,
@@ -192,6 +194,20 @@ describe("enforceAutoPause", () => {
     await expect(enforceAutoPause("b1")).resolves.toEqual(["c1"]);
     expect(confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "b1", userId: "u1" }, "c1", "r1", "paused");
     expect(getCampaignInsights).not.toHaveBeenCalled();
+  });
+
+  it("records an open run's Meta spend before reading the balance, so Refresh does not pause it for aged evidence (#216)", async () => {
+    setup({ autoPause: false, cap: null, spend: 100 });
+    readLifetimeSpendPaise.mockResolvedValue(3263);
+    observeCustomerCosts.mockResolvedValue(undefined);
+    const reservations = [{ campaignId: "c1", reservationId: "r1", state: "active" }];
+    getCustomerBalance.mockResolvedValueOnce({ held: true, reservations }).mockResolvedValueOnce({ held: false, reservations });
+    const { enforceAutoPause } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPause("b1")).resolves.toEqual([]);
+    expect(observeCustomerCosts).toHaveBeenCalledWith({ businessId: "b1", userId: "u1" }, {
+      campaignId: "c1", adAccountId: "act_1", connectionGeneration: 3, mediaPaise: 3263,
+    });
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("does not treat unavailable customer costs as zero spend", async () => {

@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
+import { refreshOpenRunCosts } from "@/lib/payments/meta-cost-evidence";
 import {
   requireScheduledBusiness,
   withMetaConnection,
@@ -98,7 +99,10 @@ async function handleGET(request: Request) {
       unverified.push(businessId);
       continue;
     }
-    const customerBalance = await getCustomerBalance(context).catch(() => null);
+    const initialBalance = await getCustomerBalance(context).catch(() => null);
+    const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
+    if (initialBalance && !refresh.complete) incomplete = true;
+    const customerBalance = refresh.observed ? await getCustomerBalance(context).catch(() => null) : initialBalance;
     const financialHold = !customerBalance || customerBalance.held;
     const decision = financialHold
       ? { toPause: campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id), verified: Boolean(customerBalance) }

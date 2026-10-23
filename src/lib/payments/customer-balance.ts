@@ -14,6 +14,9 @@ type AccountingDatabase = Database & { public: { Functions: {
     p_daily_budget_paise: number; p_request_key: string; p_review_only: boolean; p_lifetime_cap_paise?: number;
   }; Returns: unknown };
   customer_ad_activation_result: { Args: Scope & { p_campaign_id: string; p_reservation_id: string; p_state: "active" | "paused" | "uncertain" }; Returns: undefined };
+  customer_ad_observe_costs: { Args: Scope & {
+    p_campaign_id: string; p_ad_account_id: string; p_connection_generation: number; p_media_paise: number;
+  }; Returns: unknown };
   customer_ad_reconcile_costs: { Args: {
     p_business_id: string; p_actor_id: string; p_account_id: string; p_campaign_id: string; p_ad_account_id: string;
     p_connection_generation: number; p_media_paise: number; p_tax_paise: number; p_tax_rate_bps: number;
@@ -83,6 +86,19 @@ export async function confirmCustomerCampaign(actor: Actor, campaignId: string, 
   const { database, scope } = accounting(actor);
   await checked(database.rpc("customer_ad_activation_result", {
     ...scope, p_campaign_id: z.uuid().parse(campaignId), p_reservation_id: z.uuid().parse(reservationId), p_state: state,
+  }), z.unknown());
+}
+
+/** Non-final evidence from Meta's lifetime spend; SQL never lowers figures, clears holds or finalizes (#216). */
+export async function observeCustomerCosts(actor: Actor, input: {
+  campaignId: string; adAccountId: string; connectionGeneration: number; mediaPaise: number;
+}) {
+  const { database, scope } = accounting(actor);
+  await checked(database.rpc("customer_ad_observe_costs", {
+    ...scope, p_campaign_id: z.uuid().parse(input.campaignId),
+    p_ad_account_id: z.string().regex(/^act_[0-9]+$/).parse(input.adAccountId),
+    p_connection_generation: z.number().int().positive().parse(input.connectionGeneration),
+    p_media_paise: paise.parse(input.mediaPaise),
   }), z.unknown());
 }
 

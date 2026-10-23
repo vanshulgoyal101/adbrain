@@ -209,6 +209,14 @@ guards to enable production or reinterpret existing test captures as real money.
   the bound, explicit cost holds and payment/refund holds still hold. The
   campaign guard uses the same headroom; if AdBrain cannot save `active` after
   Meta activation, the route pauses the Meta tree and records the run paused.
+- Cost evidence control (#216): non-final evidence is Meta-read, not
+  operator-attested. AdBrain records the campaign's lifetime spend
+  (`insights?fields=spend&date_preset=maximum`) with tax at the stored GST rate
+  (1800 bps by default) at activation review, at activation, and in every
+  Refresh and `enforce-spend` sweep for active reserved runs. Figures never go
+  down and an explicit hold is never cleared. Final evidence, refunds and
+  allocations stay with the financial operator. Stale non-final evidence holds
+  the balance only while the campaign has an open reservation.
 - Direct Ads Manager changes can invalidate assumptions. Reconcile effective
   parent and child state, funding and budget drift; a failed pause is an incident.
 - Serialize refunds against new reservations. Freeze affected entitlement,

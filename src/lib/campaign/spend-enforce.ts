@@ -7,6 +7,7 @@ import {
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign } from "./trusted-write";
 import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
+import { refreshOpenRunCosts } from "@/lib/payments/meta-cost-evidence";
 import {
   getCampaigns,
   getSpendLimits,
@@ -28,7 +29,9 @@ export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ 
     } catch {
       return { paused: [], confirmed: false };
     }
-    const customerBalance = await getCustomerBalance(context).catch(() => null);
+    const initialBalance = await getCustomerBalance(context).catch(() => null);
+    const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
+    const customerBalance = refresh.observed ? await getCustomerBalance(context).catch(() => null) : initialBalance;
     const financialHold = !customerBalance || customerBalance.held;
     if (!financialHold && (!limits.autoPause || limits.weeklyCapRupees === null)) return { paused: [], confirmed: true };
 

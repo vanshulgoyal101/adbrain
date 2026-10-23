@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   getCampaignInsights: vi.fn(),
   getCustomerBalance: vi.fn(),
   confirmCustomerCampaign: vi.fn(),
+  readLifetimeSpendPaise: vi.fn(),
+  observeCustomerCosts: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -31,6 +33,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 vi.mock("@/lib/payments/customer-balance", () => ({
   getCustomerBalance: mocks.getCustomerBalance,
   confirmCustomerCampaign: mocks.confirmCustomerCampaign,
+  observeCustomerCosts: mocks.observeCustomerCosts,
 }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
@@ -82,6 +85,8 @@ beforeEach(() => {
   mocks.requireScheduledBusiness.mockResolvedValue({ businessId: "business-1", userId: "system" });
   mocks.getCustomerBalance.mockResolvedValue({ held: false, reservations: [] });
   mocks.confirmCustomerCampaign.mockResolvedValue(undefined);
+  mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
+  mocks.observeCustomerCosts.mockResolvedValue(undefined);
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
   }).formatToParts(new Date());
@@ -91,7 +96,7 @@ beforeEach(() => {
   start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
   mocks.getCampaignInsights.mockResolvedValue({ spend: 7000, periodStart: start.toISOString().slice(0, 10), periodEnd });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, getCampaignInsights: mocks.getCampaignInsights }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, getCampaignInsights: mocks.getCampaignInsights, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise }, {
       generation: 4,
       selected: {
         metaBusinessId: null,
@@ -172,6 +177,33 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
   });
 
+  it("refreshes an open run's Meta spend first, so aged evidence alone does not pause it (#216)", async () => {
+    configureAdmin([boundCampaign], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    const reservations = [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "active" }];
+    mocks.getCustomerBalance.mockResolvedValueOnce({ held: true, reservations }).mockResolvedValueOnce({ held: false, reservations });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.readLifetimeSpendPaise).toHaveBeenCalledWith("meta-campaign-1");
+    expect(mocks.observeCustomerCosts).toHaveBeenCalledWith({ businessId: "business-1", userId: "system" }, {
+      campaignId: "campaign-1", adAccountId: "act_123", connectionGeneration: 4, mediaPaise: 3263,
+    });
+    expect(mocks.withMetaConnection.mock.calls[0][1]).toMatchObject({ purpose: "read_insights", expectedGeneration: 4 });
+    expect(mocks.getCustomerBalance).toHaveBeenCalledTimes(2);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect((await response.json()).swept).toEqual([]);
+  });
+
+  it("still pauses a held run when the Meta spend read fails, and reports the sweep incomplete (#216)", async () => {
+    mocks.readLifetimeSpendPaise.mockRejectedValue(new Error("Meta unavailable"));
+    mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "active" }] });
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(503);
+    expect(mocks.observeCustomerCosts).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
+  });
+
   it("preserves a held customer's reservation without trusting spend insights", async () => {
     mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "active" }] });
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
@@ -210,7 +242,8 @@ describe("scheduled spend binding boundary", () => {
 
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
-    expect(mocks.getCustomerBalance).toHaveBeenCalledOnce();
+    // Read again after the open run's Meta spend is recorded (#216).
+    expect(mocks.getCustomerBalance).toHaveBeenCalledTimes(2);
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(
       { businessId: "business-1", userId: "system" }, "campaign-1", "reservation-1", "paused",

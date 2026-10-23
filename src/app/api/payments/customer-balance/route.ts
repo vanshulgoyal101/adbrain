@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
-import { getCustomerBalance, reconcileCustomerCosts, reconcileCustomerRefund, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
+import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection } from "@/lib/meta/connection-access";
+import { getCustomerBalance, observeCustomerCosts, reconcileCustomerCosts, reconcileCustomerRefund, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { customerCostEvidenceSchema, customerRefundAllocationSchema } from "@/lib/payments/customer-balance-contracts";
 import { getProductionPaymentConfig } from "@/lib/payments/production-config";
@@ -30,6 +30,15 @@ async function handleGET(request: Request) {
       if (error) throw new ConnectionAccessError("UNAVAILABLE", "Campaign unavailable.");
       if (!campaign) throw new ConnectionAccessError("NOT_FOUND", "Campaign not found.");
       const binding = readStoredCampaignBinding(campaign);
+      if (campaign.meta_campaign_id && binding.metaAdAccountId && binding.metaPageId && binding.metaConnectionGeneration !== null) {
+        const { metaAdAccountId, metaPageId, metaConnectionGeneration } = binding;
+        // #216: the review records Meta's lifetime spend so it opens without an operator.
+        await withMetaConnection(context, {
+          purpose: "read_insights", binding: { adAccountId: metaAdAccountId, pageId: metaPageId }, expectedGeneration: metaConnectionGeneration,
+        }, meta => meta.readLifetimeSpendPaise(campaign.meta_campaign_id!)).then(mediaPaise => observeCustomerCosts(context, {
+          campaignId, adAccountId: metaAdAccountId, connectionGeneration: metaConnectionGeneration, mediaPaise,
+        })).catch(() => undefined);
+      }
       const reviewed = await reserveCustomerCampaign(context, {
         campaignId, adAccountId: binding.metaAdAccountId!, connectionGeneration: binding.metaConnectionGeneration!,
         dailyBudgetRupees: campaign.daily_budget!, requestKey: "0".repeat(64),

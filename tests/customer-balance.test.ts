@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CustomerBalanceError, getCustomerBalance, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
+import { CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { ConnectionAccessError } from "@/lib/meta/connection-access";
 import { GET, POST } from "@/app/api/payments/customer-balance/route";
 import { customerRefundAllocationSchema } from "@/lib/payments/customer-balance-contracts";
@@ -8,12 +8,12 @@ const mocks = vi.hoisted(() => {
   const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
   query.select.mockReturnValue(query);
   query.eq.mockReturnValue(query);
-  return { rpc: vi.fn(), owned: vi.fn(), getUser: vi.fn(), limited: vi.fn(), query };
+  return { rpc: vi.fn(), owned: vi.fn(), getUser: vi.fn(), limited: vi.fn(), withMeta: vi.fn(), query };
 });
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc }) }));
 vi.mock("@/lib/payments/production-config", () => ({ getProductionPaymentConfig: () => ({ accountId: "acc_fixture", origin: "https://adbrain.example" }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, from: () => mocks.query }) }));
-vi.mock("@/lib/meta/connection-access", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/meta/connection-access")>(), requireOwnedBusiness: mocks.owned }));
+vi.mock("@/lib/meta/connection-access", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/meta/connection-access")>(), requireOwnedBusiness: mocks.owned, withMetaConnection: mocks.withMeta }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: mocks.limited }));
 
 const actor = { businessId: "22222222-2222-4222-8222-222222222222", userId: "33333333-3333-4333-8333-333333333333" };
@@ -78,6 +78,17 @@ describe("customer advertising accounting boundary", () => {
     await reserveCustomerCampaign(actor, admission, true);
     expect(mocks.rpc).toHaveBeenCalledWith("customer_ad_reserve", expect.objectContaining({ p_review_only: true }));
   });
+  it("observes only whole non-negative paise for the bound campaign (#216)", async () => {
+    returns({});
+    await observeCustomerCosts(actor, { campaignId, adAccountId: "act_123", connectionGeneration: 1, mediaPaise: 0 });
+    expect(mocks.rpc).toHaveBeenCalledWith("customer_ad_observe_costs", expect.objectContaining({ p_media_paise: 0, p_campaign_id: campaignId }));
+    mocks.rpc.mockClear();
+    for (const mediaPaise of [-1, 0.5, Number.NaN]) {
+      await expect(observeCustomerCosts(actor, { campaignId, adAccountId: "act_123", connectionGeneration: 1, mediaPaise })).rejects.toThrow();
+    }
+    await expect(observeCustomerCosts(actor, { campaignId, adAccountId: "123", connectionGeneration: 1, mediaPaise: 1 })).rejects.toThrow();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
 });
 
 describe("customer balance API", () => {
@@ -131,6 +142,31 @@ describe("customer balance API", () => {
     for (const capDays of ["0", "8", "1.5", "x"]) {
       expect((await GET(new Request(`${url}&campaignId=${campaignId}&capDays=${capDays}`))).status).toBe(400);
     }
+  });
+  it("records Meta lifetime spend before the review reserve, so the review opens without an operator (#216)", async () => {
+    mocks.query.maybeSingle.mockResolvedValueOnce({ data: { id: campaignId, daily_budget: 200, meta_campaign_id: "120240969992630526",
+      meta_ad_account_id: "act_123", meta_page_id: "page", meta_connection_generation: 1 }, error: null });
+    const readLifetimeSpendPaise = vi.fn().mockResolvedValue(3263);
+    mocks.withMeta.mockImplementation(async (_context, _options, execute) => execute({ readLifetimeSpendPaise }));
+    mocks.rpc.mockImplementation((name: string) => ({
+      abortSignal: async () => ({ data: name === "customer_ad_observe_costs" ? {} : { reservationId: campaignId, mediaLimitPaise: 677966, balance }, error: null }),
+    }));
+    expect((await GET(new Request(`${url}&campaignId=${campaignId}`))).status).toBe(200);
+    expect(mocks.withMeta.mock.calls[0][1]).toEqual({ purpose: "read_insights", binding: { adAccountId: "act_123", pageId: "page" }, expectedGeneration: 1 });
+    expect(readLifetimeSpendPaise).toHaveBeenCalledWith("120240969992630526");
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual(["customer_ad_observe_costs", "customer_ad_reserve"]);
+    expect(mocks.rpc).toHaveBeenNthCalledWith(1, "customer_ad_observe_costs", {
+      p_business_id: actor.businessId, p_user_id: actor.userId, p_account_id: "acc_fixture",
+      p_campaign_id: campaignId, p_ad_account_id: "act_123", p_connection_generation: 1, p_media_paise: 3263,
+    });
+  });
+  it("still runs the review reserve when the Meta spend read fails (#216)", async () => {
+    mocks.query.maybeSingle.mockResolvedValueOnce({ data: { id: campaignId, daily_budget: 200, meta_campaign_id: "120240969992630526",
+      meta_ad_account_id: "act_123", meta_page_id: "page", meta_connection_generation: 1 }, error: null });
+    mocks.withMeta.mockRejectedValueOnce(new Error("Meta unavailable"));
+    returns({ reservationId: campaignId, mediaLimitPaise: 677966, balance });
+    expect((await GET(new Request(`${url}&campaignId=${campaignId}`))).status).toBe(200);
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual(["customer_ad_reserve"]);
   });
   it("requires same-origin authenticated operator submissions", async () => {
     expect((await POST(post({ action: "costs", businessId: actor.businessId, evidence }, "https://foreign.example"))).status).toBe(403);

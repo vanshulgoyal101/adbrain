@@ -3,7 +3,7 @@ import { z } from "zod";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
-import { decodeCampaignInsights, type CampaignInsights } from "./insights";
+import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -997,6 +997,16 @@ export class MetaClient {
     const destination = await this.verifyCampaignBinding(campaignId);
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop${options?.weekly ? "&date_preset=this_week_mon_today" : ""}`);
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+  }
+
+  /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */
+  async readLifetimeSpendPaise(campaignId: string): Promise<number> {
+    const node = encodeURIComponent(campaignId);
+    const campaign = await this.graph<{ id?: string; account_id?: string }>(`${node}?fields=id,account_id`);
+    if (campaign.id !== campaignId || campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) {
+      throw new MetaError("Campaign does not match the connected ad account.");
+    }
+    return decodeLifetimeSpendPaise(await this.graph<unknown>(`${node}/insights?fields=spend&date_preset=maximum`));
   }
 
   async deleteObject(id: string): Promise<void> {
