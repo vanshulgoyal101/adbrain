@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     "node_modules/**",
     "db/**",
     "coverage/**",
+    ".github/skills/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
