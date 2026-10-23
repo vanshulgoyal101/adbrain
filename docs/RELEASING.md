@@ -263,6 +263,14 @@ anyone watching (owner-approved automatic rollback, #111):
   `Production is not main HEAD` issue if that commit is not live. A run whose
   commit is no longer main HEAD passes and leaves the check to the newer run.
 
+Every step is bounded below the 45-minute job limit, because a cancelled job
+opens no issue (#210). `playwright install --with-deps` gets 8 minutes; the
+Ubuntu apt mirror has stalled for 11-15 minutes. After that the guard installs
+Chromium without OS packages and still runs the smoke, but a failure then only
+opens the issue and does not roll back. If the browser install also fails, the
+issue says "smoke did not run". Each smoke attempt gets 10 minutes; a hang
+counts as a FAIL.
+
 It needs repository secrets `SMOKE_EMAIL`, `SMOKE_PASSWORD` and `VERCEL_TOKEN`.
 Without `VERCEL_TOKEN`, the rollback, the wait-for-commit step and the drift
 check are skipped. Steps run in `bash` with pipefail, so `| tee` cannot turn a
