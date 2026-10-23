@@ -122,6 +122,7 @@ export function AdAssistant({ business }: { business: Business }) {
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followConversationRef = useRef(true);
+  const resultCountRef = useRef(0);
   const inFlightRef = useRef(false);
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [live, setLive] = useState<LiveAd[] | null>(null);
@@ -174,8 +175,19 @@ export function AdAssistant({ business }: { business: Business }) {
 
   useLayoutEffect(() => {
     const node = scrollRef.current;
-    if (!node || !followConversationRef.current) return;
-    node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
+    const results = turns.filter((turn) => turn.role === "result").length;
+    const newResult = results > resultCountRef.current;
+    resultCountRef.current = results;
+    if (!node) return;
+    // On a phone the cards stack, so open new results at their heading, not at the last card.
+    if (newResult) {
+      const headings = node.querySelectorAll<HTMLElement>("[data-result-heading]");
+      headings[headings.length - 1]?.scrollIntoView?.({ block: "start", behavior: "instant" });
+      return;
+    }
+    if (!followConversationRef.current) return;
+    if (node.scrollHeight > node.clientHeight) node.scrollTo({ top: node.scrollHeight, behavior: "instant" });
+    else node.lastElementChild?.scrollIntoView?.({ block: "end", behavior: "instant" });
   }, [turns, loading, live]);
 
   const lastTurn = turns[turns.length - 1];
@@ -487,7 +499,7 @@ export function AdAssistant({ business }: { business: Business }) {
             const node = event.currentTarget;
             followConversationRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
           }}
-          className="scrollbar-stable flex max-h-[62vh] flex-col gap-3 overflow-y-scroll pr-1"
+          className="scrollbar-stable flex flex-col gap-3 pr-1 lg:max-h-[62vh] lg:overflow-y-scroll"
         >
           {turns.map((turn, i) => (
             <TurnView
@@ -605,7 +617,7 @@ function TurnView({
   if (turn.role === "result") {
     return (
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
+        <div data-result-heading className="flex scroll-mt-4 items-center gap-2 text-sm font-medium text-slate-800">
           <Sparkles className="h-4 w-4 text-blue-600" />
           {turn.creatives.length > 1 ? "Your ads are ready — pick your favourites:" : "Your ad is ready — pick your favourite:"}
         </div>
