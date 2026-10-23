@@ -1,6 +1,7 @@
 # AdBrain Worker Orchestration
 
-Updated October 1, 2026. Maintainer: coordinator.
+Updated October 23, 2026. Maintainers: the CEO (coordinator) and the CTO (worker
+table).
 Goal: our core features work first: Brand, Create, review, launch and manage a
 Meta campaign. Other work waits until that loop is healthy in production.
 Ship quickly, with checks proportional to risk.
@@ -19,7 +20,7 @@ the [Startup Fast Path](RELEASING.md#startup-fast-path).
 
 ### How work flows
 
-Routine steps never wait for the coordinator.
+Routine steps never wait for the CEO or the CTO.
 
 1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
    `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`,
@@ -51,8 +52,14 @@ Routine steps never wait for the coordinator.
 6. **A core failure found live** gets its own `core` `bug` issue with the exact
    step, error and owner label. Add `owner:qa` when a red test helps. One issue
    per problem; do not bury new failures in long comment threads.
-7. **The coordinator** sets priority, resolves conflicts, approves budgets, signs
-   the browser in, keeps labels honest and closes or parks stale issues.
+7. **The CEO** (coordinator chat) sets priority and the milestone, approves budgets
+   and money, handles the owner's steps (Meta, Razorpay, browser sign-in) and
+   maintains this file except the worker table.
+8. **The CTO** turns priorities into work: owns the worker table under "Now",
+   assigns and briefs issues, keeps labels honest, closes or parks stale issues,
+   watches CI and production health, reviews high-impact diffs and publishes
+   `Lesson:` lines. The CEO and CTO talk on #74. On a conflict, money and priority
+   follow the CEO; the technical approach follows the CTO.
 
 ### Standing rules
 
@@ -70,14 +77,14 @@ Routine steps never wait for the coordinator.
 - **Browser.** Signed in to the owner's demo account: Cedar Ridge Chiropractic,
   Meta connected to the Solaride ad account and Page. Each worker uses its own tab.
   Background tabs do not render; use a page-local frame flush or call the same API
-  the UI calls. If the session expires, post in #74 and the coordinator signs in.
+  the UI calls. If the session expires, post in #74 and the CEO signs in.
 - **Paid budget.** Create runs: 10 approved on Oct 1 (runs 1-10) and 10 more
   approved by the owner on Oct 22 (runs 11-20). Shares of run 10 plus the new 10:
   Dev 3 5 (run 10 + 4), Dev 2 (#141), QA 2 (#158), DevOps 2 (after the parallel
   flip). The #98 model bake-off has its own $1 cap and does
   not count as Create runs.
   Log `Create run N/20` with the saved count in [#98](https://github.com/vanshulgoyal101/adbrain/issues/98).
-  At the limit, stop and post; the coordinator asks the owner for the next 10.
+  At the limit, stop and post; the CEO asks the owner for the next 10.
   No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 23, replaces
   the Oct 22 ₹600): ₹1,000 total over 3 days for Solaride's first watched run,
   capped on Meta, run by Dev 3 with QA's checklist on
@@ -101,7 +108,7 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 approved one watched ₹1,000 run on Solaride over 3 days
 ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)), then we report
 spend, leads and cost per lead. The App Review submission waits for the owner.
-Parked issues (`later`) stay parked.
+Parked issues (`later`) stay parked. The CTO maintains the worker table below.
 
 | Worker | Work, in order |
 | --- | --- |

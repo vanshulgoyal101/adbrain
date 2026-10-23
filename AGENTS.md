@@ -10,6 +10,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Worker coordination
 
+- **Leadership.** The CEO (coordinator chat) owns priorities, money and budgets,
+	owner approvals and owner-assisted steps (Meta, Razorpay, browser sign-in). The
+	CTO owns technical direction: who works on what, technical briefs, CI and
+	production health, high-impact reviews and lessons. Take work from either. On a
+	conflict, money and priority follow the CEO; the technical approach follows the
+	CTO. They talk on #74.
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
@@ -19,22 +25,23 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	or config change) auto-merge on green CI and the author smoke-tests production.
 	DevOps owns migrations, money/tenant releases, config and rollback. Talk directly
 	to another owner when needed; do not route routine
-	decisions through the coordinator or ask the user to relay worker messages.
+	decisions through the CEO or CTO or ask the user to relay worker messages.
 - QA reviews high-risk changes and investigates concrete failures, not every
 	ordinary release. Authors own focused checks; the release owner owns deployment
-	and production smoke. No automatic coordinator or second-QA approval gate.
+	and production smoke. No automatic CEO, CTO or second-QA approval gate.
 - Do not interrupt another worker's terminal, server, database, VM or tests, switch
 	the shared branch, alter shared credentials or remove another worker's artifacts.
 - Hand off the commit, result and any real blocker in the existing issue/PR.
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
 - When you close an issue, add one `Lesson:` line if you learned something reusable
-	(what failed, the check that proved it, the fix). The coordinator publishes
+	(what failed, the check that proved it, the fix). The CTO publishes
 	these to the shared `skills` and `vbrain-private` repos.
 - Keep the owner's checkout (`adbrain/`) clean: it is what the owner sees in
 	Source Control. Workers edit, test, merge and release only in isolated worktrees
-	under `~/Development/copilot/adbrain-wt/`. The coordinator edits only docs there and commits and pushes them
-	to `dev` immediately. Never leave a merge, staged files or local edits behind.
+	under `~/Development/copilot/adbrain-wt/`. The CEO edits only docs there and pushes them
+	to `dev` immediately; the CTO edits docs in `adbrain-wt/cto`. Never leave a merge,
+	staged files or local edits behind.
 
 ## Execution speed
 
