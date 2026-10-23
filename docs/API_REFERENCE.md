@@ -242,7 +242,11 @@ above the bound do (#208). AdBrain itself records non-final evidence from Meta's
 lifetime campaign spend (`customer_ad_observe_costs`, service role only) during
 the activation review, activation, Refresh and the `enforce-spend` sweep, so no
 operator is needed to start or keep a funded run; final evidence stays
-operator-only (#216). Capturing payment
+operator-only (#216). For paused runs the sweep confirms the whole Meta tree
+is stopped and records settle reads (`customer_ad_settle_costs`); two equal
+reads 30 minutes apart, at least 3 hours after the pause, finalize the run and
+close its reservation without an operator. Capped runs past their Meta end time
+are paused by the sweep first (#221). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block

@@ -1,9 +1,6 @@
 # Developer Quick Start
 
 Install a development checkout without touching production or starting paid work.
-This guide describes dev source at `672eb13`; the production release at `6291dc2`
-excludes the DB-A changes and local test checkout. See the
-[release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release).
 
 **Do not follow environment-copy instructions in the shared working checkout.**
 Its existing `.env.local` targets production. Use a separate checkout and isolated

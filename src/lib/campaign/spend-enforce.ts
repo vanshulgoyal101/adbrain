@@ -30,8 +30,9 @@ export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ 
     } catch {
       return { paused: [], confirmed: false };
     }
-    const operatorFunded = await isOperatorFunded(businessId).catch(() => null);
-    if (operatorFunded === null) return { paused: [], confirmed: false };
+    // #245: an unreadable funding mode falls back to the customer rules (fail closed).
+    let fundingVerified = true;
+    const operatorFunded = await isOperatorFunded(businessId).catch(() => { fundingVerified = false; return false; });
     let customerBalance = null;
     if (!operatorFunded) {
       const initialBalance = await getCustomerBalance(context).catch(() => null);
@@ -40,7 +41,7 @@ export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ 
     }
     // #245: an operator-funded run is capped on Meta and has no customer allowance to hold.
     const financialHold = !operatorFunded && (!customerBalance || customerBalance.held);
-    if (!financialHold && (!limits.autoPause || limits.weeklyCapRupees === null)) return { paused: [], confirmed: true };
+    if (!financialHold && (!limits.autoPause || limits.weeklyCapRupees === null)) return { paused: [], confirmed: fundingVerified };
 
     const decision = financialHold
       ? { toPause: campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id), verified: Boolean(customerBalance) }
@@ -60,10 +61,10 @@ export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ 
         }));
       });
     const toPause = decision.toPause;
-    if (!toPause.length) return { paused: [], confirmed: decision.verified };
+    if (!toPause.length) return { paused: [], confirmed: decision.verified && fundingVerified };
 
     const paused: string[] = [];
-    let confirmed = decision.verified;
+    let confirmed = decision.verified && fundingVerified;
     for (const id of toPause) {
       const campaign = campaigns.find((c) => c.id === id);
       if (!campaign?.meta_campaign_id) { confirmed = false; continue; }

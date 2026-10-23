@@ -28,8 +28,8 @@ PR61, and focus/delivery-state corrections through PR62. #48 collection was enab
 on main a8ec89d with non-charge evidence linked above. Subsequent release work is
 tracked in the current dispatch; the snapshots below describe earlier baselines.
 
-The [SDK/query release receipt](qa/ops-environment-2026-09-26.md#o-11-sdk-and-query-release)
-records production `6291dc2d2691bfc8a235b2aa1b103f119b26b83e` through PR36,
+The SDK/query release (PR #36)
+recorded production `6291dc2d2691bfc8a235b2aa1b103f119b26b83e` through PR36,
 including AI SDK provider integration and TanStack Query campaign reads. Earlier
 releases delivered instruction-read failure handling and Studio browser recovery.
 
@@ -44,8 +44,7 @@ is closed; new work still follows [RELEASING](RELEASING.md).
 
 The intended journey is offer -> approved creative -> one customer payment ->
 funded, reviewed delivery -> useful enquiries -> follow-up and reconciled costs.
-The [product specification](SPEC.md) defines scope, while the
-[payment plan](PAYMENTS-PLAN.md) owns commercial decisions and money-flow gates.
+The [payment plan](PAYMENTS-PLAN.md) owns commercial decisions and money-flow gates.
 
 The owner agreed on September 27 that this is the next milestone after the
 current release and assigned reliability/UX work. Do not interrupt those packets
@@ -123,7 +122,7 @@ Prioritize these open risks within existing customer workflows:
 - Public-media lifecycle, deletion/support operations, alert ownership and
   recoverability demonstrated with safe, attributable evidence.
 
-Earlier failures are recorded in [QA](qa/), not asserted to have been reproduced
+Earlier failures are recorded in their issues, not asserted to have been reproduced
 on every later release. Close them with exact-candidate evidence, not a renamed
 helper, schema agreement or unrelated green suite.
 
@@ -154,11 +153,3 @@ DevOps remains the release/production executor, QA independently verifies change
 behavior, and developers address demonstrated workflow blockers. Non-blocking
 documentation or unrelated polish must not delay a complete customer outcome.
 Real financial execution waits for its concrete verified route and authority.
-
-## Historical Pilot and Backlog
-
-The [September 26 snapshot](ROADMAP-HISTORY-2026-09-26.md) preserves the earlier
-P1-P6 task queue, approved Solaride copy/form, paused Meta object evidence, billing
-investigations and older backlog. Those records retain their original dates and
-scope. Their waiting instructions and old account-readiness claims do not control
-current work.

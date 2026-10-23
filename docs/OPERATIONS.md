@@ -210,6 +210,11 @@ where payload->>'execution' = 'worker'
 group by state;
 ```
 
+Run ad hoc read-only production queries with
+`node scripts/prod-sql.mjs "SELECT ..."`: one `SELECT`/`WITH` statement inside
+`BEGIN READ ONLY`, sent through the Supabase Management API with the operator's
+`SUPABASE_TOKEN` (read from the local `arcade/.env`, never printed).
+
 ## Spend Guardrails
 
 [The evaluator](../src/lib/campaign/spend.ts) uses these quantities:
@@ -322,7 +327,7 @@ require separate database, Storage, provider, and log-retention handling. See
 
 For each incident or deployment record: symptom, confirmed cause, affected scope,
 authorized actions, exact SHA/migration state, checks performed, residual risk,
-and follow-up owner. Keep records in [QA](qa/) or [release receipts](releases/).
+and follow-up owner. Keep records in the issue or PR.
 Avoid asserting live-provider success from mocks or assuming a merged migration
 has run remotely. Monitoring events currently have no built-in alerting service;
 operational alert ownership must be established separately.

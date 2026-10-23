@@ -2,8 +2,8 @@
 
 Tests prove only the conditions they exercise. Keep local unit evidence, database
 transaction tests, browser fixtures, hosted CI, live provider checks, and production
-deployment receipts separate. Current run counts belong in dated [QA records](qa/),
-not setup promises. Start with [Quick Start](QUICK_START.md).
+deployment receipts separate. Current run counts belong in the PR
+or issue, not setup promises. Start with [Quick Start](QUICK_START.md).
 
 ## Isolation First
 
@@ -79,6 +79,8 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
 - **Operator funding** (`operator-funding`): the real Solaride ad account read (`spend_cap` 88983, `amount_spent` 4237 paise after the owner's ₹1,000 top-up) that gates an operator-funded capped activation (#245), recorded read-only by `scripts/record-meta-funding-fixtures.ts`.
 - **Results refresh** (`results-refresh`): the scheduled results job (#258) against real insights and ad review reads from the live #157 run and a paused Solaride campaign, recorded read-only by `scripts/record-meta-results-fixtures.ts`: one result row per campaign per hour, GETs only, the 6-hour no-impressions flag, and a rejected-ad flag from a synthetic DISAPPROVED edit of the recorded ads response.
+- **Campaign stop** (`campaign-stop`): the paused-run settle check (#221) that the whole Meta tree is stopped, from two real Solaride campaigns (a fully PAUSED tree, and ACTIVE children under a paused campaign), recorded read-only by `scripts/record-meta-stop-fixtures.ts`.
+- **WhatsApp** (`campaign-whatsapp`, `whatsapp-number`): Meta's real `validate_only` answers for the WhatsApp campaign, ad set and creative (#209), recorded with [`record-meta-whatsapp-adset.ts`](../scripts/record-meta-whatsapp-adset.ts), plus the Page and business WhatsApp number reads behind the button number (#235).
 - **CSP** (`csp-render`): the production policy is pinned, and the Create review renders three ads whose images and requests the policy allows, without `eval`.
 
 Fixtures in `tests/core/fixtures` come from production recordings and `evals/creative`; each file or test notes its source and any synthetic part. When a gate change is intended, update the fixture or pinned policy in the same PR and say why.

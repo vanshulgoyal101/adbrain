@@ -2,8 +2,7 @@
 
 This guide describes model calls, image processing, retries, and accounting.
 Parameters are in [Configuration](CONFIGURATION.md) and [API Reference](API_REFERENCE.md).
-Design history and experiments remain in [Creative Generation Plan](CREATIVE-GENERATION-PLAN.md)
-and [QA](qa/); they do not override current code.
+Design history lives in git history; it does not override current code.
 
 ## Task Boundaries
 

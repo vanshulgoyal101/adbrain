@@ -35,6 +35,26 @@ export function releaseMigrations(files) {
   return migrations.map((f) => f.filename).sort();
 }
 
+// Money code (dispatch item 5): these PRs, like migrations, need the CTO's review as well as QA's (#259).
+export const moneyPath = /^src\/(lib\/payments\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget))/;
+
+// "CTO review of <sha>" or "CTO post-release review of <sha>"; in "<old> → <new>" the last sha is the one reviewed.
+export function ctoReviews(comments) {
+  return comments.flatMap((c) => {
+    const line = c.body.split("\n")[0];
+    const sha = line.match(/^[*_\s]*CTO (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
+    if (!sha) return [];
+    const approved = /\*\*approved\.?\*\*/i.test(line) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(line);
+    return [{ ...c, sha: sha.toLowerCase(), approved }];
+  }).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+// The latest CTO review of the head, or of an earlier head with the same patch, decides.
+export function ctoApproval(reviews, samePatch) {
+  const latest = reviews.filter((review) => samePatch(review.sha)).at(-1);
+  return { approved: Boolean(latest?.approved), latest };
+}
+
 export function supersededBy(log) {
   return log.match(/Superseded: production serves newer ([0-9a-f]{7,40})/)?.[1] ?? null;
 }
@@ -139,6 +159,27 @@ async function main() {
   if (qa.approved) console.log(`    QA approved ${head.slice(0, 7)}: ${qa.latest.url}`);
   else if (dry) console.log(`    QA has not approved ${head.slice(0, 7)} yet (latest QA verdict: ${qa.latest?.url ?? "none"}); continuing because --dry-run.`);
   else stop(`No QA approval naming ${head.slice(0, 7)} (latest QA verdict: ${qa.latest?.url ?? "none"}). QA must approve this exact head.`);
+
+  if (names.length || files.some((f) => moneyPath.test(f.filename))) {
+    const patchIds = new Map();
+    const patchId = (sha) => {
+      if (!patchIds.has(sha)) {
+        try {
+          const diff = gh("api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/main...${sha}`);
+          patchIds.set(sha, execFileSync("git", ["patch-id", "--stable"], { input: `${diff}\n`, encoding: "utf8" }).split(" ")[0] || null);
+        } catch {
+          patchIds.set(sha, null);
+        }
+      }
+      return patchIds.get(sha);
+    };
+    const samePatch = (sha) => head.startsWith(sha) || (patchId(sha) !== null && patchId(sha) === patchId(head));
+    const cto = ctoApproval(ctoReviews(comments), samePatch);
+    const reviewed = cto.latest && !head.startsWith(cto.latest.sha) ? ` (reviewed ${cto.latest.sha}, same patch against main)` : "";
+    if (cto.approved) console.log(`    CTO approved ${head.slice(0, 7)}${reviewed}: ${cto.latest.url}`);
+    else if (dry) console.log(`    CTO has not approved ${head.slice(0, 7)} yet (latest CTO review: ${cto.latest?.url ?? "none"}); continuing because --dry-run.`);
+    else stop(`Money or migration PR without a CTO review approving ${head.slice(0, 7)} or a head with the same patch (latest: ${cto.latest?.url ?? "none"}). Dispatch item 5 needs QA plus the CTO.`);
+  }
 
   const migrations = [];
   for (const name of names) {

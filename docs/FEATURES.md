@@ -2,8 +2,7 @@
 
 Current source behavior, reviewed 2026-09-18. This guide replaces the older mixed
 inventory of shipped features and proposals. Deployment evidence lives in
-[release receipts](releases/) and [QA records](qa/); priorities belong in
-[Roadmap](ROADMAP.md). Start at [the documentation index](README.md).
+the PRs and issues; priorities belong in [Roadmap](ROADMAP.md). Start at [the documentation index](README.md).
 
 ## Source and Availability
 
@@ -24,8 +23,7 @@ configuration; check [Data Model](DATA_MODEL.md#migration-map) and
 
 No checkout path, test or live, makes money spendable or activates ads. Mocked
 consent, a green build or merchant approval do not prove live delivery, payment
-settlement or provider eligibility. Use [Demo Runbook](DEMO-RUNBOOK.md) to pick a
-safe demonstration mode.
+settlement or provider eligibility.
 
 ## Product Model
 

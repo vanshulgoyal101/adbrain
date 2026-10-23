@@ -1,13 +1,12 @@
 # Release Workflow
 
-This is AdBrain's deployment reference. It applies to this repository, not every
-repository in the surrounding workspace. Last verified: 2026-09-18. Recheck remote
-settings before a release; the historical receipts below are not current status.
+AdBrain's deployment reference: `main` is production and the only long-lived branch;
+Vercel deploys it automatically. Dated release receipts live in git history and the
+PRs, not here. Last verified: 2026-10-23.
 
 ## Startup Fast Path
 
-The current release process ([AGENTS.md](../AGENTS.md)). Where older sections
-below describe dev-first promotion or extra approvals, this path governs.
+The release process ([AGENTS.md](../AGENTS.md)).
 
 1. Branch from current `origin/main` in an isolated worktree under
    `adbrain-wt/`, build a small complete slice and open a PR to `main` with
@@ -29,86 +28,26 @@ below describe dev-first promotion or extra approvals, this path governs.
    secrets and rollback. Never force-push or run `npm run db:push` against
    production. Charges, refunds and ad spend need explicit financial authorization.
 
-## Current Release Boundary
-
-Before this candidate, production `main` served the enquiry workflow at `f639cc3`;
-payment collection remained disabled. The selective operator-managed checkout
-candidate carries accepted #48 payment source without #49's unfinished spend
-guard. Publish its code only through a protected main PR with required exact-head
-checks. On September 26 at 18:46 UTC, the verified AdBrain production target
-applied `20260924_managed_billing.sql`, `20260924_meta_billing_events.sql`,
-`20260926_production_payment_orders.sql` and
-`20260926_production_payment_policy_v2.sql` together, after scoped encrypted
-before-state capture. Independent readback matched all four pinned ledger hashes,
-showed zero orders, preserved 4 businesses and 2 Meta connections, and confirmed
-server-only payment claim access. This scoped metadata snapshot is not a full
-database backup. Do not replay the whole canonical schema or rewrite an applied
-migration checksum. Live credentials, merchant identity, webhook and tax status
-need independent verification; collection flags remain off until then.
-Neither code deployment nor capture activates Meta advertising. Real charges,
-refunds and ad spend need separate financial authorization.
-
-## Latest Application Release: 2026-09-18
-
-[PR #10](https://github.com/vanshulgoyal101/adbrain/pull/10) released the platform
-reliability fixes and privacy-safe product telemetry at merge
-`24377334270d5b53b3184ca3e193f4ffe38ccf34`. Dev CI `35314945214`, PR CI
-`35315177817`, and main CI `35315358874` passed. Local validation passed 1,227
-tests with one skipped, lint, types, dependency audit, fresh/upgrade PostgreSQL
-checks, and the production build. Vercel deployment
-`dpl_HY85RoBDfAS6tJURAxa4oXHtEejX` was Ready with the canonical production alias;
-GitHub deployment `6518963623` confirmed the exact merge SHA.
-
-Authenticated production checks verified invalid spend/interview/planner inputs,
-anonymous rejection, request IDs, and a real allowlisted telemetry event in the
-runtime log. Brand autofill edit preservation, zero-cap rejection, asset-copy
-failure feedback, and Create brief review passed at 1440/390px with fixture AI
-responses/images and business mutations blocked. No page errors or horizontal
-overflow were observed. This does not certify live media, paid AI quality,
-customer Meta consent, or live ad mutations. Browser sessions were closed.
-
-At that release, the product-events migration was published but not applied
-remotely, and database logging remained off. The later owner-authorized
-[database logging rollout](OBSERVABILITY.md#production-database-rollout-2026-09-18)
-applied the migration and configured the production flag; its release PR records
-deployment and persistence verification. No paid generation or ad state was
-changed. The application merge was fast-forwarded back to `dev`; the subsequent
-documentation-only synchronization is recorded in its PR.
-
-## Non-Negotiable Rules
-
-- `main` is live production at https://adbrain.vanshul.com. Do not develop there.
-- `dev` is integration. Put new work here in focused, dependency-ordered commits,
-  test it, then promote only the completed subset through a PR to `main`.
-- A green dev build does not make every commit independently releasable. Include
-  required backend, schema, configuration, and UI dependencies in the release.
-- Never merge all of `dev` to release one feature while other work is unfinished.
-- Never bypass protection, force-push, or use `vercel --prod` to skip review.
-- Preserve local work. Do not reset, stash, or discard unrelated changes to make
-  a release branch clean. Use an isolated worktree when appropriate.
-- Git publication, production deployment, migrations, credential changes, and
-  live provider mutations are separate actions requiring appropriate approval.
-
 ## Enforced Controls and Limits
 
 | Control | Verified setting |
 | --- | --- |
-| CI triggers | Pushes and PRs targeting `main` or `dev` |
-| CI jobs (current source) | `build` (`npm ci`, production build); separate `test` (lint, typecheck, unit tests, PostgreSQL checks), `core` (`test:core`, generation holds), non-blocking `audit` and `docs` jobs, all on Node 24 |
+| CI triggers | Pushes and PRs targeting `main` |
+| CI jobs (current source) | `build`; `lint` (lint + typecheck), `unit` (vitest in 3 shards) and `metadb` (real PostgreSQL), aggregated by the required `test` check; `core` (`test:core`, generation holds); non-blocking `audit` and `docs`; all on Node 24 |
 | Secret job | Gitleaks with repository configuration |
 | Main protection | PR required; required checks `build`, `test`, `core` and `secrets`; branches need not be up to date |
 | Administrators | Protection applies to admins too |
 | Approvals | Zero required approvals for the solo-owner workflow; CI is still required |
 | Force pushes / branch deletion | Disabled on `main` |
-| Vercel Git deployment (current source) | `**: false`, `main: true`, `dev: false`, pilot branch disabled |
+| Vercel Git deployment (current source) | `**: false`, `main: true` |
 
 These controls are split between [.github/workflows/ci.yml](../.github/workflows/ci.yml),
-[vercel.json](../vercel.json), and GitHub branch-protection settings. GitHub does
-not enforce that every release originated on `dev`; the promotion procedure does.
-Direct CLI deployments are not blocked by Git branch protection.
+[vercel.json](../vercel.json), and GitHub branch-protection settings. Direct CLI
+deployments are not blocked by Git branch protection; never use `vercel --prod` to
+skip review.
 
 **The corrected checked-in wildcard disables slash-containing Git branches.** Earlier
-single-star configurations did not, and historical receipts below describe that failure mode.
+single-star configurations did not.
 Before pushing a feature or release branch, inspect effective remote deployment
 rules and preview credentials rather than relying on an old receipt or local JSON
 alone. Do not assume a preview URL implies a preview database, harmless cron
@@ -120,81 +59,6 @@ contents and pull-request permissions; comments are disabled. Do not remove the
 token or grant write access to fix a read-only scan. The exact `operation-key-1`
 allowlist entry is a synthetic idempotency test value, not a credential. Do not
 exclude entire test directories or suppress uninvestigated findings.
-
-## Normal Development
-
-### Flare and Branch Synchronization: 2026-09-13
-
-The owner approved publishing the remaining Flare evaluation work and aligning
-all existing AdBrain branches and checkouts through the required PR checks.
-The pre-sync audit found local/remote `dev` and `main` at `1af9601`, with no
-unique commits on the historical pilot branch and no dirty release worktrees.
-There is no separate `staging` branch: `adbrain-staging-release` is a detached
-local checkout, not an independently isolated hosted staging environment.
-
-The source default, example configuration, and primary local model setting now
-use `openai/gpt-image-2.5-flare`, matching production's explicit override.
-Explicit `dev` and `release/meta-connect-pilot` deployment rules are disabled;
-only `main` is intended to deploy. Synchronizing Git does not authorize copying
-credentials, starting paid evaluations, applying migrations, or enabling previews.
-Private image artifacts and consumed evaluation guards remain Git-ignored.
-
-The existing Meta consent limitation remains externally unverified. Branch
-alignment does not establish successful customer OAuth or live campaign spending.
-Paid image evidence is recorded in [the production receipt](qa/flare-production-2026-09-12.md)
-and [the matched comparison](qa/flare-quality-2026-09-13.md).
-
-### Development Steps
-
-1. Confirm repository, branch, and local changes with `git status --short --branch`.
-2. Fetch remote state. Work on `dev`, or a feature branch based on current `dev`.
-   Do not switch away from a dirty tree without preserving and understanding it.
-3. Implement and run focused tests. Stage explicit paths and inspect the staged
-   diff, including new files. Never include environment files, local databases,
-   provider tokens, or generated test artifacts.
-4. Commit related changes separately. Push to `dev` and verify CI for the exact
-   pushed SHA. Feature branches should target `dev` by PR; check preview safety
-   before their first push.
-5. Record unresolved gates honestly. Keep unverified features development-only.
-
-## Production Promotion Checklist
-
-1. Identify the precise user-visible change and its dependency-complete commits.
-   Review the diff against the latest `origin/main`, not just against `dev`.
-2. When `dev` contains unfinished work, create a release branch from `origin/main`
-   and cherry-pick only the required commits in order. Do not resolve conflicts by
-   copying whole files from `dev` without reviewing the extra changes.
-3. Decide the preview deployment policy before pushing that branch. Verify schema
-   compatibility, required environment variables, and rollback before promotion.
-4. Test the assembled release, not only its source branch. Run lint, typecheck,
-   coverage, build, and relevant browser/database checks. Real-provider behavior
-   needs real-provider evidence; local mocks cannot satisfy that gate.
-5. Open a PR to `main` listing included changes, deferred work, tests, schema/env
-   prerequisites, deployment effects, and rollback. Inspect the complete PR diff.
-6. Require passing checks on the current PR head. If commits or the base change,
-   validate again. Merge without bypass, ideally guarded by the reviewed head SHA.
-7. Verify main CI and Vercel deployment success for the resulting merge SHA.
-   Check the canonical production URL and the actual affected user workflow.
-   A homepage HTTP 200 is not verification of an authenticated feature.
-8. [`sync-dev.yml`](../.github/workflows/sync-dev.yml) merges every push to `main`
-   into `dev`. If only Markdown files conflict, it takes main's version, except
-   `AGENTS.md` and `docs/ORCHESTRATION.md`, which keep dev's. Any other conflict
-   opens one `dev cannot merge main automatically` issue; merge by hand, push
-   `dev` and rerun it. Edit shared docs on `main` (through a PR), not on `dev`.
-   Record the PR, SHAs, CI/deployment links, smoke results, and remaining gaps.
-
-Useful read-only checks (run from this repository):
-
-```sh
-git status --short --branch
-git fetch origin
-git log --oneline origin/main..origin/dev
-git diff --stat origin/main...HEAD
-gh pr checks <pr-number> --repo vanshulgoyal101/adbrain
-gh run view <run-id> --repo vanshulgoyal101/adbrain
-gh api repos/vanshulgoyal101/adbrain/commits/<merge-sha>/status
-gh api repos/vanshulgoyal101/adbrain/branches/main/protection
-```
 
 ## Database and Credential Safety
 
@@ -229,7 +93,10 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required
   checks are green on its head, the latest QA verdict naming that head approves it
-  and names each new migration's sha256, and the PR only adds migrations. The
+  and names each new migration's sha256, and the PR only adds migrations. A PR with
+  a migration or money code (payments, spend, activation or budget) also needs the
+  CTO (#259): the latest `CTO review of <sha>: **approved**` of that head, or of an
+  earlier head whose patch against main has the same `git patch-id`. The
   release then dry-runs each pending migration (rolled back), applies it with its
   ledger row through the Management API (same lock, timeouts and checksum guard as
   the runner), reloads the PostgREST schema, merges with `--match-head-commit <full
@@ -245,7 +112,7 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
 - Credential backfills and encryption-key changes require explicit planning.
   Do not replace an encryption key without preserving access to existing tokens.
 - Local QA uses the existing `adbrain-qa` Colima profile and
-  [scripts/local-meta-qa.mjs](../scripts/local-meta-qa.mjs) on `dev`. Its launcher
+  [scripts/local-meta-qa.mjs](../scripts/local-meta-qa.mjs). Its launcher
   asserts loopback Supabase targets and isolates provider configuration. Plain
   `npm run dev` does not itself provide that isolation. Do not create paid staging
   resources or reuse production credentials to bypass the lack of free staging.
@@ -305,112 +172,3 @@ deployments until one is promoted manually. Fix forward or revert through a PR.
 When the fixed commit's deployment is READY, run
 `npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`,
 then rerun the workflow with `workflow_dispatch` and close the issue.
-
-## Publication Receipt: 2026-09-07
-
-Production `main` at `660b9ac` includes only release controls from
-[PR #1](https://github.com/vanshulgoyal101/adbrain/pull/1): CI configuration, this
-guide's initial version, and Vercel Git deployment controls. No pending Meta
-feature code, migrations, credential backfills, or live campaign mutations were
-released. Vercel deployment `6RKYtTkPZkd2uACigcgqNh5qL2Ca` succeeded; homepage
-and login returned HTTP 200 with AdBrain content. This was a configuration-only
-release, not an authenticated Meta journey verification.
-
-The existing local feature work was preserved on `dev` at `b1e5d3d`:
-
-| Commit | Contents |
-| --- | --- |
-| `397510e` | Secure connection, schema, persistence, and domain tests |
-| `8e7678f` | API integration and guarded campaign operations |
-| `a1c879c` | Connection UI and editable campaign-draft recovery |
-| `a01db63` | Local QA scripts, browser tests, configuration, and evidence |
-| `9575bf8` | Exact synthetic test-value exception for secret scanning |
-| `b1e5d3d` | Sync of the production merge into dev |
-
-Verification: 856 tests passed, one skipped; coverage 65.83% statements, 57.35%
-branches, 67.03% functions, 67.65% lines. Lint, types, production build (50 pages),
-and full new-history secret scanning passed. Hosted
-[dev CI](https://github.com/vanshulgoyal101/adbrain/actions/runs/34145434072) and
-[main CI](https://github.com/vanshulgoyal101/adbrain/actions/runs/34145412290)
-passed. These are dated receipts, not approval to release the Meta feature set.
-
-## Current Meta Connect Work
-
-### Staging promotion authorized: 2026-09-11
-
-The owner requested completion and promotion of the pending `dev` workflows, and
-explicitly approved the additive campaign migration and all-owner rollout. The
-[staging completion report](releases/2026-09-staging-completion.md) is the current
-scope, local evidence and cutover reference. It supersedes the pilot-only and
-development-only limits in the historical receipts below, not the required PR
-checks or the need to distinguish real Meta consent from mocks.
-
-Real consent remains externally unverified. Existing production campaigns must
-not be assigned guessed account/Page bindings or changed as a migration side effect.
-
-### Production connection pilot: 2026-09-08
-
-The owner authorized testing real Meta consent on the existing production HTTPS
-callback, with Solaride as the pilot. This supersedes the earlier requirement to
-complete real consent in a non-production environment. It is not a general rollout.
-
-- Entry: `/connect/meta`, authenticated and restricted by server-side
-   `META_CONNECT_ROLLOUT=pilot` and `META_CONNECT_PILOT_USER_ID`.
-- An absent production rollout value denies access. `disabled` is the kill switch;
-   `enabled` is reserved for a separately approved broad release.
-- Release only connection routes, encrypted storage, discovery/selection UI and
-   their dependencies. Keep existing campaign routes, settings and credentials.
-- Signed OAuth state distinguishes the new flow from legacy OAuth. Missing browser
-   binding on a new attempt never falls back to legacy token storage.
-- Apply only `20260907_meta_instant_connect.sql`, reviewed as additive. It now
-   preserves legacy credential privileges and owner policy. Do not apply the
-   campaign migration, fresh schema, credential backfill or credential revocation.
-- Production requires the existing app ID/secret plus `SUPABASE_SERVICE_ROLE_KEY`
-   and a newly generated base64 32-byte `META_TOKEN_ENCRYPTION_KEY`. Store secrets
-   directly in Vercel production env; never log them or rotate an existing key.
-- The `*` rule requests non-main deployment disablement, with `main` explicitly
-   enabled. The release branch nevertheless produced a preview; do not rely on
-   this rule as verified isolation. Inspect actual deployment targets and keep
-   production-only credentials out of preview. Required PR checks still apply.
-- Rollback to the prior main code leaves the additive tables unused and preserves
-   legacy credentials. Keep the encryption key while encrypted tokens exist.
-- Consent completion, real account/Page access and Meta review eligibility are
-   unverified until the owner completes the production journey. No ads should be
-   created or activated during this pilot.
-
-#### Infrastructure receipt
-
-Applied the connection-only migration transactionally to production project
-`kmzuxrvfrwwpwmoovwcp` (verified `adbrain`, `ACTIVE_HEALTHY`). SQL SHA-256:
-`4cdedd4fb2757e50a73b7e3bd4c6ebbd915b0b9036a1f3d0ad3354d7ef330e49`.
-Post-check: connection table exists; campaign draft/operation tables remain absent;
-legacy credentials remain empty with authenticated privileges preserved; browser
-roles cannot access the private schema. No backfill or provider mutation occurred.
-
-Installed the four missing production env entries on Vercel project
-`prj_LNNhyKmbQYXyBUNadG2hZJSLDjOw`: service-role key, encryption key, pilot rollout
-and Solaride owner ID. Existing app credentials and legacy system token were not
-changed. Vercel CLI refreshed its saved session; raw API calls had initially failed
-with HTTP 403 from an expired access token.
-
-Merged [PR #2](https://github.com/vanshulgoyal101/adbrain/pull/2) through required
-checks at main `147f887920ca20b2b7f7d130a2cd991d23449b38`. PR CI `34194820423`
-and main CI `34194979744` passed: 770 tests, one skipped; lint/types/build and
-coverage gates passed. Disposable PostgreSQL: 33 checks passed.
-
-Vercel production deployment `dpl_4C8pEXRH95Cu9PffAaJvS3hFBmau` is Ready and
-serves `https://adbrain.vanshul.com`. Authenticated production browser checks:
-Solaride `/connect/meta` HTTP 200, dialog reaches Connect Business at 1440/390px;
-no horizontal overflow or page errors; other owner page 404/API 403; anonymous
-API 401. All browser mutations blocked; no Meta consent or ad mutations performed.
-Main merged back into dev as `8ae957a`; unrelated local creative edits preserved.
-
-Observed release-branch preview `dpl_2LqVNRLUpsoNy7CTEh6WRpkERjVB` despite the
-disable rule. Its target was preview, not production. Preview suppression needs
-separate verification before relying on it for a future release branch.
-
-Campaign drafts and operation recovery remain development-only. Real consent,
-account/Page selection and customer permission eligibility are still unverified.
-
-See [the verification report](meta-connect-workers/VERIFICATION-2026-09-07.md)
-on `dev` for current evidence and limitations.
