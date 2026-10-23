@@ -12,7 +12,7 @@ import { managementMigrationSql, migrationChecksum } from "./database-migrations
 
 const repo = "vanshulgoyal101/adbrain";
 const projectId = "kmzuxrvfrwwpwmoovwcp";
-const negative = /\b(not approved|changes requested|request(ed)? changes|blocked|reject(ed)?)\b/i;
+const negative = /\b(not (approved|fine|ready)|changes requested|request(ed)? changes|blocked|reject(ed)?|hold|do not merge)\b/i;
 
 // The latest QA verdict comment that names the head decides; approvals for the head carry the reviewed hashes.
 export function qaApproval(comments, headSha) {
@@ -21,7 +21,7 @@ export function qaApproval(comments, headSha) {
     .filter((c) => /^[*_\s]*QA\b/.test(c.body) && c.body.toLowerCase().includes(head))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const firstLine = (c) => c.body.split("\n")[0];
-  const approves = (c) => /\b(approved|accepted)\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
+  const approves = (c) => /\b(approved|accepted|fine to (merge|ship)|ready to (merge|ship))\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
   const latest = verdicts.at(-1);
   if (!latest || !approves(latest)) return { approved: false, latest };
   return { approved: true, latest, text: verdicts.filter(approves).map((c) => c.body.toLowerCase()).join("\n") };
