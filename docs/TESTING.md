@@ -104,19 +104,23 @@ instances, and HTTP 200 can represent partial work.
 ### CI Gates
 
 [CI](../.github/workflows/ci.yml) runs on push/PR to `dev`/`main` with placeholder
-Supabase configuration and Node 24:
+Supabase configuration and Node 24. Every job runs in parallel after its own `npm ci`:
 
-```sh
-npm ci
-npm run audit:dependencies
-npm run lint
-npm run typecheck
-npm run test:coverage
-META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db
-npm run build
-```
+| Job | Runs |
+|---|---|
+| `build` | `npm run build` |
+| `lint` | `npm run lint`, `npm run typecheck` |
+| `unit` (3 shards) | `npx vitest run --shard=N/3` |
+| `metadb` | `META_TEST_PG_BIN="$(pg_config --bindir)" npm run test:meta-db` |
+| `test` | aggregator: fails unless `lint`, every `unit` shard and `metadb` succeeded |
+| `core` | `npm run test:core`, then `test:meta-db -- --generation-only` |
+| `audit` | `npm run audit:dependencies` (reports, does not block) |
+| `secrets` | Gitleaks |
 
-Gitleaks is a separate required job. Do not disable checks to make a release green.
+Required checks are `build`, `test`, `core` and `secrets`. `test` runs with
+`if: always()` so a failed shard fails it instead of skipping it (a skipped required
+check counts as passing). Locally, `npm test` still runs the whole suite in one
+process. Do not disable checks to make a release green.
 The focused configurable-payment SQL slice is `npm run test:meta-db -- --pricing-only`.
 It uses disposable PostgreSQL for fresh/upgrade preservation, exact TypeScript/SQL
 quote and policy parity, owner/expiry scope, concurrent one-order claims, zero
