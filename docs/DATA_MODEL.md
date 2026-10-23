@@ -1,6 +1,8 @@
 # Data Model and Migrations
 
-The executable reference is [db/schema.sql](../db/schema.sql); incremental changes
+The executable reference is [db/schema.sql](../db/schema.sql), a frozen base, plus
+every newer file in [db/migrations](../db/migrations/); `node scripts/build-schema.mjs`
+prints the full fresh-install schema (see [releasing](RELEASING.md)). Incremental changes
 live in [db/migrations](../db/migrations/). [TypeScript rows](../src/lib/types.ts)
 are hand-authored, not generated proof of schema parity. Check SQL constraints,
 route schemas, and deployed migration state separately.

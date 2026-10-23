@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { applyMigration } from "./database-migrations.mjs";
+import { appendedMigrations, buildSchema, readBaseSchema } from "./build-schema.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const operatorPaymentMigration = await readFile(join(root, "db/migrations/20260926_production_payment_policy_v2.sql"), "utf8");
@@ -2267,7 +2268,7 @@ try {
   if (process.argv.includes("--rollback-only")) {
     await verifyRollback();
   } else {
-  const schema = await readFile(join(root, "db/schema.sql"), "utf8");
+  const schema = buildSchema(root);
   const baseline = execFileSync("git", ["show", "d8d789071c74a7a93b1f270a0c4f119aff79aa34:db/schema.sql"], { cwd: root, encoding: "utf8" });
   const metaMigration = await readFile(join(root, "db/migrations/20260907_meta_instant_connect.sql"), "utf8");
   const campaignMigration = await readFile(join(root, "db/migrations/20260907_campaign_connect.sql"), "utf8");
@@ -2303,7 +2304,13 @@ try {
   assert.ok(schema.includes(customAmountMigration.trim()), "Canonical schema must include the exact custom payment amount migration");
   assert.ok(schema.indexOf(webhookHealthMigration.trim()) < schema.indexOf(customAmountMigration.trim()), "Canonical schema must include the custom payment amount migration after webhook health");
   assert.ok(schema.indexOf(customAmountMigration.trim()) < schema.indexOf(metaCostMigration.trim()), "Canonical schema must include the exact Meta cost observation migration after the custom payment amount");
-  assert.ok(schema.trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Canonical schema must end with the exact product rollup and privacy migrations");
+  assert.ok(readBaseSchema(root).trimEnd().endsWith(`${productRollupMigration.trimEnd()}\n\n${privacyMigration.trimEnd()}`), "Frozen base schema must end with the exact product rollup and privacy migrations");
+  let previousPosition = readBaseSchema(root).length;
+  for (const name of appendedMigrations(root)) {
+    const position = schema.indexOf((await readFile(join(root, "db/migrations", name), "utf8")).trim(), previousPosition);
+    assert.ok(position >= previousPosition, `Generated schema must append ${name} after the base in filename order`);
+    previousPosition = position;
+  }
   if (process.argv.includes("--analytics-only")) {
     await verify("analytics_fresh",schema);
     await verify("analytics_upgrade",`${baseline}\n${metaMigration}\n${productEventsMigration}`);

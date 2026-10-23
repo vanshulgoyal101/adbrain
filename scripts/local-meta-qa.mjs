@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
+import { buildSchema } from "./build-schema.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const dockerEnv = { ...process.env, DOCKER_HOST: `unix://${process.env.HOME}/.colima/adbrain-qa/docker.sock` };
@@ -60,7 +61,7 @@ if (mode === "setup") {
   const database = new pg.Client({ connectionString: local.DB_URL });
   await database.connect();
   try {
-    await database.query(readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8"));
+    await database.query(buildSchema());
     const admin = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false } });
     const { data: users, error: listError } = await admin.auth.admin.listUsers();
     if (listError) throw new Error("Local Auth user lookup failed.");

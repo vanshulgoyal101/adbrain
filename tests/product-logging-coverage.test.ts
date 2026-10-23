@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
+import { buildSchema } from "../scripts/build-schema.mjs";
 import { productActions } from "@/lib/observability/client-events";
 
 describe("product logging integration coverage", () => {
@@ -45,7 +46,7 @@ describe("product logging integration coverage", () => {
 
   it("keeps the fresh schema and telemetry migration identical", () => {
     const migration = readFileSync(join(process.cwd(), "db/migrations/20260918_product_events.sql"), "utf8");
-    const schema = readFileSync(join(process.cwd(), "db/schema.sql"), "utf8");
+    const schema = buildSchema();
     expect(schema).toContain(migration);
   });
 });
