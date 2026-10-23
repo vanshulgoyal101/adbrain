@@ -125,10 +125,14 @@ CEO priorities (Oct 23, evening; owner: lean, high value only):
 - **P1:** #258 (live results refresh themselves and flag rejected or stalled
   ads), #221 / PR #247 (self-serve next run), #235 (WhatsApp-first), #260 (lean
   pass: retire `dev`, living docs only, dead scripts and branches out).
-- **Later:** #229 (email alerts; WhatsApp-first instead), #230, #238 and #239
-  (speed), #232, #253, #178. Closed as not actionable: #51, #66, #67 and #254.
-- **Filter for new issues:** it must help a customer make and run ads today, or
-  remove a real failure. Otherwise file it as `later`, or don't file it.
+- **P1, a snappy and polished product (owner):** #67 (snappier app) with slices
+  #230 (measure every main page, fix the top 5), #238 and #239; #51 (UI/UX
+  polish) with #232. Each slice is a small PR with a before/after number.
+- **Later:** #229 (email alerts; WhatsApp-first instead), #253, #178. Closed:
+  #66 (superseded by #260) and #254.
+- **Filter for new issues:** it must help a customer make and run ads today,
+  make the product faster or clearer, or remove a real failure. Otherwise file
+  it as `later`, or don't file it.
 
 The CTO maintains the worker table below.
 
