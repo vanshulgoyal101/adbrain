@@ -17,6 +17,10 @@ type AccountingDatabase = Database & { public: { Functions: {
   customer_ad_observe_costs: { Args: Scope & {
     p_campaign_id: string; p_ad_account_id: string; p_connection_generation: number; p_media_paise: number;
   }; Returns: unknown };
+  customer_ad_settle_costs: { Args: Scope & {
+    p_campaign_id: string; p_ad_account_id: string; p_connection_generation: number; p_reservation_id: string; p_media_paise: number;
+  }; Returns: unknown };
+  customer_ad_settling_businesses: { Args: Record<string, never>; Returns: unknown };
   customer_ad_reconcile_costs: { Args: {
     p_business_id: string; p_actor_id: string; p_account_id: string; p_campaign_id: string; p_ad_account_id: string;
     p_connection_generation: number; p_media_paise: number; p_tax_paise: number; p_tax_rate_bps: number;
@@ -100,6 +104,30 @@ export async function observeCustomerCosts(actor: Actor, input: {
     p_connection_generation: z.number().int().positive().parse(input.connectionGeneration),
     p_media_paise: paise.parse(input.mediaPaise),
   }), z.unknown());
+}
+
+/**
+ * Records a Meta lifetime-spend read for a paused run whose stop Meta has confirmed. SQL finalizes
+ * and closes the reservation only after two equal reads 30+ minutes apart, 3+ hours after the
+ * pause, with no explicit hold (#221).
+ */
+export async function settleCustomerCosts(actor: Actor, input: {
+  campaignId: string; adAccountId: string; connectionGeneration: number; reservationId: string; mediaPaise: number;
+}): Promise<{ finalized: boolean }> {
+  const { database, scope } = accounting(actor);
+  return checked(database.rpc("customer_ad_settle_costs", {
+    ...scope, p_campaign_id: z.uuid().parse(input.campaignId),
+    p_ad_account_id: z.string().regex(/^act_[0-9]+$/).parse(input.adAccountId),
+    p_connection_generation: z.number().int().positive().parse(input.connectionGeneration),
+    p_reservation_id: z.uuid().parse(input.reservationId),
+    p_media_paise: paise.parse(input.mediaPaise),
+  }), z.object({ finalized: z.boolean() }));
+}
+
+/** Businesses with a paused run that still holds its reserve (#221). */
+export async function listSettlingBusinesses(): Promise<string[]> {
+  const database = createAdminClient() as SupabaseClient<AccountingDatabase>;
+  return checked(database.rpc("customer_ad_settling_businesses", {}), z.array(z.uuid()));
 }
 
 export async function reconcileCustomerCosts(actor: Actor, input: z.infer<typeof customerCostEvidenceSchema>) {

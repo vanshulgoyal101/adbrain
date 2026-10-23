@@ -227,6 +227,18 @@ guards to enable production or reinterpret existing test captures as real money.
   It has no allowance, reservation, cost evidence or refund; the sweep and Refresh
   skip the allowance hold, and the weekly cap still applies. Clearing the mark
   restores the customer gate and the sweep pauses its active runs.
+- Paused-run settle (#221): a paused or finished funded run no longer blocks
+  the next run until an operator acts. The `enforce-spend` sweep also visits
+  businesses with a paused reservation. It first confirms on Meta that the
+  campaign and every ad set and ad are stopped (own status PAUSED/ARCHIVED/
+  DELETED, or effective CAMPAIGN_PAUSED/ADSET_PAUSED), then records a settle
+  read of lifetime spend (`customer_ad_settle_costs`). The run is finalized and
+  its reservation closed once two equal reads are at least 30 minutes apart and
+  at least 3 hours after the pause; final media is never lower than earlier
+  evidence. Until then only that run's own reserve stays held (stale evidence
+  of a settling run does not hold the whole balance). Capped runs whose Meta end
+  time has passed are paused by the sweep and then settle the same way. The
+  system never issues refunds or clears explicit holds.
 - Direct Ads Manager changes can invalidate assumptions. Reconcile effective
   parent and child state, funding and budget drift; a failed pause is an incident.
 - Serialize refunds against new reservations. Freeze affected entitlement,

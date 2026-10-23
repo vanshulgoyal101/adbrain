@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   readLifetimeSpendPaise: vi.fn(),
   observeCustomerCosts: vi.fn(),
   isOperatorFunded: vi.fn(),
+  readCampaignStopped: vi.fn(),
+  settleCustomerCosts: vi.fn(),
+  listSettlingBusinesses: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -35,6 +38,8 @@ vi.mock("@/lib/payments/customer-balance", () => ({
   getCustomerBalance: mocks.getCustomerBalance,
   confirmCustomerCampaign: mocks.confirmCustomerCampaign,
   observeCustomerCosts: mocks.observeCustomerCosts,
+  settleCustomerCosts: mocks.settleCustomerCosts,
+  listSettlingBusinesses: mocks.listSettlingBusinesses,
 }));
 vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
 vi.mock("@/lib/meta/connection-access", () => ({
@@ -90,6 +95,9 @@ beforeEach(() => {
   mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
   mocks.isOperatorFunded.mockResolvedValue(false);
   mocks.observeCustomerCosts.mockResolvedValue(undefined);
+  mocks.readCampaignStopped.mockResolvedValue(true);
+  mocks.settleCustomerCosts.mockResolvedValue({ finalized: false });
+  mocks.listSettlingBusinesses.mockResolvedValue([]);
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
   }).formatToParts(new Date());
@@ -99,7 +107,7 @@ beforeEach(() => {
   start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
   mocks.getCampaignInsights.mockResolvedValue({ spend: 7000, periodStart: start.toISOString().slice(0, 10), periodEnd });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, getCampaignInsights: mocks.getCampaignInsights, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, getCampaignInsights: mocks.getCampaignInsights, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readCampaignStopped: mocks.readCampaignStopped }, {
       generation: 4,
       selected: {
         metaBusinessId: null,
@@ -276,13 +284,14 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
   });
 
-  it("skips a business whose funding mode cannot be verified and reports it (#245)", async () => {
+  it("falls back to the customer rules when the funding mode cannot be read, and reports the sweep incomplete (#245)", async () => {
     mocks.isOperatorFunded.mockRejectedValue(new Error("database unavailable"));
+    mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ ok: false, unverified: ["business-1"] });
-    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.getCustomerBalance).toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
   });
 
   it("protects held customer funds without a saved spend-limits row", async () => {
@@ -361,5 +370,72 @@ describe("scheduled spend binding boundary", () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ ok: false, swept: [] });
     expect(mocks.updateCampaignStatus).toHaveBeenCalledOnce();
+  });
+
+  describe("paused runs settle without an operator (#221)", () => {
+    const pausedCampaign = { ...boundCampaign, status: "paused" };
+    const pausedReservation = [{ campaignId: "campaign-1", reservationId: "reservation-1", state: "paused" }];
+    const sweep = async () => {
+      const { GET } = await import("@/app/api/cron/enforce-spend/route");
+      return GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    };
+    beforeEach(() => {
+      configureAdmin([pausedCampaign]);
+      mocks.listSettlingBusinesses.mockResolvedValue(["business-1"]);
+      mocks.getCustomerBalance.mockResolvedValue({ held: false, reservations: pausedReservation });
+    });
+
+    it("reads a business with no active campaign, confirms the stop, then records a settle read", async () => {
+      mocks.settleCustomerCosts.mockResolvedValue({ finalized: true });
+      const response = await sweep();
+      expect(response.status).toBe(200);
+      expect(mocks.readCampaignStopped).toHaveBeenCalledWith("meta-campaign-1");
+      expect(mocks.settleCustomerCosts).toHaveBeenCalledWith({ businessId: "business-1", userId: "system" }, {
+        campaignId: "campaign-1", adAccountId: "act_123", connectionGeneration: 4, reservationId: "reservation-1", mediaPaise: 3263,
+      });
+      expect(mocks.withMetaConnection.mock.calls[0][1]).toMatchObject({ purpose: "read_insights", expectedGeneration: 4 });
+      expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+      expect(mocks.getCampaignInsights).not.toHaveBeenCalled();
+    });
+
+    it("keeps the reserve and reports incomplete while Meta has not confirmed the stop", async () => {
+      mocks.readCampaignStopped.mockResolvedValue(false);
+      const response = await sweep();
+      expect(response.status).toBe(503);
+      expect(mocks.readLifetimeSpendPaise).not.toHaveBeenCalled();
+      expect(mocks.settleCustomerCosts).not.toHaveBeenCalled();
+    });
+
+    it("keeps the reserve and reports incomplete when the Meta spend read fails", async () => {
+      mocks.readLifetimeSpendPaise.mockRejectedValue(new Error("Meta unavailable"));
+      const response = await sweep();
+      expect(response.status).toBe(503);
+      expect(mocks.settleCustomerCosts).not.toHaveBeenCalled();
+    });
+
+    it("reports incomplete when the settling list cannot be read", async () => {
+      mocks.listSettlingBusinesses.mockRejectedValue(new Error("database down"));
+      const response = await sweep();
+      expect(response.status).toBe(503);
+      expect(mocks.settleCustomerCosts).not.toHaveBeenCalled();
+    });
+
+    it("pauses an active capped run whose end time has passed, and leaves a running one alone", async () => {
+      const capped = (id: string, endTime: string) => ({ ...boundCampaign, id, meta_campaign_id: `meta-${id}`, raw: { cap: { adSetId: `set-${id}`, endTime } } });
+      configureAdmin([capped("ended", "2026-01-01T00:00:00.000Z"), capped("running", "2999-01-01T00:00:00.000Z")],
+        [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+      mocks.listSettlingBusinesses.mockResolvedValue([]);
+      mocks.getCustomerBalance.mockResolvedValue({ held: false, reservations: [
+        { campaignId: "ended", reservationId: "reservation-ended", state: "active" },
+        { campaignId: "running", reservationId: "reservation-running", state: "active" },
+      ] });
+      const response = await sweep();
+      expect(response.status).toBe(200);
+      expect(mocks.updateCampaignStatus).toHaveBeenCalledExactlyOnceWith("meta-ended", "PAUSED");
+      expect(mocks.confirmCustomerCampaign).toHaveBeenCalledExactlyOnceWith(
+        { businessId: "business-1", userId: "system" }, "ended", "reservation-ended", "paused",
+      );
+      expect(await response.json()).toMatchObject({ ok: true, swept: [{ businessId: "business-1", paused: ["ended"] }] });
+    });
   });
 });

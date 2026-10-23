@@ -1,0 +1,150 @@
+[
+  {
+    "method": "GET",
+    "path": "120253256980050526?fields=id%2Caccount_id%2Cstatus%2Ceffective_status",
+    "status": 200,
+    "body": {
+      "id": "120253256980050526",
+      "account_id": "2398686420592052",
+      "status": "PAUSED",
+      "effective_status": "PAUSED"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526/ads?fields=id%2Cstatus%2Ceffective_status&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253256980040526",
+          "status": "PAUSED",
+          "effective_status": "DISAPPROVED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHBpRVRDUy1UWDdKb0EteWV0MlZAYa052TmowemV6NFY4cjBQblczQnQtWlNvNWlzUTZA0SXNILWtCRDJBTzFUdjlSbDJ4QlBENTdWNG94emtmU2QxZAVlR",
+          "after": "QVFIVHBpRVRDUy1UWDdKb0EteWV0MlZAYa052TmowemV6NFY4cjBQblczQnQtWlNvNWlzUTZA0SXNILWtCRDJBTzFUdjlSbDJ4QlBENTdWNG94emtmU2QxZAVlR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526/adsets?fields=id%2Cstatus%2Ceffective_status&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253256980060526",
+          "status": "PAUSED",
+          "effective_status": "PAUSED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFFjNHpZAOHpsVWFtZAV9uWVBocWgxQnYwSTVIQXdPb0RmRmEyOTEwSGIwQ0hhMnE2bURodVRndHFQbTBwREo2ZAU9CaWt0bW9hX05yYmdScFM1RTRGUHV3",
+          "after": "QVFIVFFjNHpZAOHpsVWFtZAV9uWVBocWgxQnYwSTVIQXdPb0RmRmEyOTEwSGIwQ0hhMnE2bURodVRndHFQbTBwREo2ZAU9CaWt0bW9hX05yYmdScFM1RTRGUHV3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253256980050526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526/insights?fields=spend&date_preset=maximum",
+    "status": 200,
+    "body": {
+      "data": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526?fields=id%2Caccount_id%2Cstatus%2Ceffective_status",
+    "status": 200,
+    "body": {
+      "id": "120240969992630526",
+      "account_id": "2398686420592052",
+      "status": "PAUSED",
+      "effective_status": "PAUSED"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526/adsets?fields=id%2Cstatus%2Ceffective_status&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120240969992670526",
+          "status": "ACTIVE",
+          "effective_status": "CAMPAIGN_PAUSED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFJsMHVWRlA3dlZAUQTNvMExHcGZAXVDZAtZAmVpdmlnYkZAvMWtrd3dhM0xwbHJ5Rk1oQUF2cUhNNGRhRm1BTDhQVVlFQ1Q2RFF3SG45ZAFZAWRGduZAXU4VktR",
+          "after": "QVFIVFJsMHVWRlA3dlZAUQTNvMExHcGZAXVDZAtZAmVpdmlnYkZAvMWtrd3dhM0xwbHJ5Rk1oQUF2cUhNNGRhRm1BTDhQVVlFQ1Q2RFF3SG45ZAFZAWRGduZAXU4VktR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526/ads?fields=id%2Cstatus%2Ceffective_status&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120240969992650526",
+          "status": "ACTIVE",
+          "effective_status": "CAMPAIGN_PAUSED"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFhyQW44bEphLTRTYmFkaWotc2lGOTZAUdkNWMEZA0ZAnF4ZADJscEpPaW03OVludFFmQjFZAMjlYT3VzdVdjLXlydVBSczE1T01hLTY2c3c3YXZAXZAExPSWJn",
+          "after": "QVFIVFhyQW44bEphLTRTYmFkaWotc2lGOTZAUdkNWMEZA0ZAnF4ZADJscEpPaW03OVludFFmQjFZAMjlYT3VzdVdjLXlydVBSczE1T01hLTY2c3c3YXZAXZAExPSWJn"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120240969992630526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120240969992630526/insights?fields=spend&date_preset=maximum",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "spend": "32.63",
+          "date_start": "2026-01-05",
+          "date_stop": "2026-10-23"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MAZDZD"
+        }
+      }
+    }
+  }
+]

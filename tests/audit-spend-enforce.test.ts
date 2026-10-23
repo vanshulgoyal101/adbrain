@@ -331,12 +331,13 @@ describe("enforceAutoPause", () => {
     expect(confirmCustomerCampaign).not.toHaveBeenCalled();
   });
 
-  it("Refresh reports an unconfirmed decision when the funding mode cannot be verified (#245)", async () => {
-    setup({ autoPause: true, cap: 7000, spend: 7000 });
+  it("Refresh falls back to the customer rules and reports unconfirmed when the funding mode cannot be read (#245)", async () => {
+    setup({ autoPause: false, cap: null, spend: 100 });
     isOperatorFunded.mockRejectedValue(new Error("database unavailable"));
+    getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
     const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
-    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: false });
-    expect(updateCampaignStatus).not.toHaveBeenCalled();
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: ["c1"], confirmed: false });
+    expect(updateCampaignStatus).toHaveBeenCalledWith("meta-1", "PAUSED");
   });
 
   it("skips old campaigns without a verified binding", async () => {
