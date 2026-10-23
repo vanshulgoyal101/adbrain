@@ -140,6 +140,7 @@ describe("buildAdDesign", () => {
     expect(spec.headline).toBe("Power your home with the sun");
     expect(spec.subhead).toBe("Clean energy & lifetime savings.");
     expect(spec.benefits.length).toBeGreaterThan(0);
+    expect(spec.phone).toBeNull();
     expect(spec.contactLine).toBe("solaride.in · Mohali");
     expect(spec.ctaLabel).toBe("Get Quote");
     expect(spec.primaryColor).toBe("#0b7a3b");
@@ -170,6 +171,12 @@ describe("buildAdDesign", () => {
     expect(spec.backgroundUrl).toBeNull();
     expect(spec.benefits).toEqual([]);
     expect(spec.contactLine).toBeNull();
+  });
+
+  it("gives the phone its own field and keeps it out of the small contact line", () => {
+    const spec = buildAdDesign({ brand: { ...brand, phone: " +91 7380280874 " }, copy });
+    expect(spec.phone).toBe("+91 7380280874");
+    expect(spec.contactLine).toBe("solaride.in · Mohali");
   });
 
   it("honours a requested format", () => {

@@ -34,6 +34,7 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
   const benefitSize = Math.round(30 * s);
   const brandSize = Math.round(Math.min(38, Math.max(20, 1500 / Math.max(spec.brandName.length, 1))) * s);
   const ctaSize = Math.round(30 * s);
+  const phoneSize = Math.round(Math.min(spec.format === "landscape" ? 40 : 52, 760 / Math.max(spec.phone?.length ?? 1, 1)) * s);
   const contentTop =
     spec.layout === "top"
       ? pad + Math.round(96 * s)
@@ -249,8 +250,42 @@ function AdComposite({ spec }: { spec: AdDesignSpec }) {
             gap: Math.round(20 * s),
           }}
         >
-          <div style={{ fontSize: Math.min(ctaSize, Math.max(18 * s, 850 * s / Math.max(spec.contactLine?.length ?? 1, 1))), color: "#cbd5e1", display: "flex", flex: 1, wordBreak: "break-word" }}>
-            {spec.contactLine ?? ""}
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: Math.round(8 * s) }}>
+            {spec.phone ? (
+              <div style={{ display: "flex", alignItems: "center", gap: Math.round(14 * s), fontSize: phoneSize, fontWeight: 800, color: "#ffffff", lineHeight: 1 }}>
+                <div
+                  style={{
+                    width: Math.round(phoneSize * 1.1),
+                    height: Math.round(phoneSize * 1.1),
+                    borderRadius: 999,
+                    background: spec.primaryColor,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg
+                    width={Math.round(phoneSize * 0.6)}
+                    height={Math.round(phoneSize * 0.6)}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={spec.ctaTextColor}
+                    strokeWidth={2.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                </div>
+                {spec.phone}
+              </div>
+            ) : null}
+            {spec.contactLine ? (
+              <div style={{ fontSize: Math.min(ctaSize, Math.max(18 * s, 850 * s / Math.max(spec.contactLine.length, 1))), color: "#cbd5e1", display: "flex", wordBreak: "break-word" }}>
+                {spec.contactLine}
+              </div>
+            ) : null}
           </div>
           <div
             style={{

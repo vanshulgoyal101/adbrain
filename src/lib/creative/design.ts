@@ -25,6 +25,8 @@ export interface AdDesignSpec {
   subhead: string | null;
   /** Short benefit chips shown with a check icon (0–4). */
   benefits: string[];
+  /** Shown big and bold: the number is what local customers look for. */
+  phone: string | null;
   contactLine: string | null;
   ctaLabel: string;
   /** Validated brand colour used for accents, chips and the CTA button. */
@@ -208,7 +210,8 @@ export function buildAdDesign(params: {
     headline,
     subhead: params.concept ? params.concept.supportingText : deriveSubhead(copy.primary_text),
     benefits: params.concept ? [] : pickBenefits(brand),
-    contactLine: deriveContactLine(brand),
+    phone: brand.phone?.trim() || null,
+    contactLine: deriveContactLine({ ...brand, phone: null }),
     ctaLabel: (copy.cta ?? "").trim() || "Learn More",
     primaryColor,
     ctaTextColor: readableTextOn(primaryColor),
