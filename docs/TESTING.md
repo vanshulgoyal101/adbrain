@@ -61,6 +61,14 @@ The default mode then runs **Prepare preflight** (#98, #109): it opens New campa
 
 `npm run smoke:core -- --campaign` requires the Solaride workspace, a Solaride lead form, approved creative, and a reviewed Solaride Meta account. It creates one uniquely named test campaign PAUSED, syncs, reconfirms PAUSED, and deletes only that campaign from Meta and AdBrain. A successful removal is labeled Archive in the smoke output; the product actually deletes it. On failure, reconcile by the printed campaign ID or unique test name before another run. The Resume check opens and closes the connection review only: it does not activate delivery or prove an actual status resume. The campaign mode has not been exercised against production as part of implementing this command.
 
+### Production Traffic From the Shared Mac
+
+All automated production browser runs from the shared Mac come from one IP address. On Oct 23 a QA measurement burst (about 100 page loads and 60 probes in 15 minutes) set off Vercel's system DDoS challenge on that address for 10 minutes ([#240](https://github.com/vanshulgoyal101/adbrain/issues/240)). During the challenge, headless Chromium gets `403` with `x-vercel-mitigated: challenge`, while curl and GitHub runners still pass. The team is on the Hobby plan, which offers no system bypass, so:
+
+- Run one production walk at a time, with a pause of a few seconds between page loads.
+- Run measurement series, and anything beyond a few dozen page loads, from GitHub Actions, not the Mac.
+- On a `403` with `x-vercel-mitigated: challenge`, stop all automated traffic for 15 minutes. Read `GET /v1/security/firewall/events` (Vercel REST API) before treating it as an app failure.
+
 ### Core Regression Gate
 
 `npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time:
