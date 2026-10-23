@@ -54,9 +54,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	under `~/Development/copilot/adbrain-wt/`. `main` is the only long-lived branch: the
 	CEO and CTO ship docs edits there as small docs PRs with auto-merge. Never leave a
 	merge, staged files or local edits behind.
-- **Delete as you go** (owner, Oct 23: lean systems). When work is done, its branch,
-	worktree, one-off scripts and temporary files go with it. Don't commit dated reports
-	or handoffs; put evidence in the issue or PR. Git history keeps everything.
+- **Delete as you go** (owner, Oct 23: lean systems). When work is done, delete its
+	branch, worktree, one-off scripts and temporary files. Don't commit dated
+	reports, audits or handoffs; evidence goes in the issue or PR. Docs hold current
+	truth only, and git keeps the history.
 
 ## Execution speed
 

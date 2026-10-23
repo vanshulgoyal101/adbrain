@@ -116,27 +116,27 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities (Oct 23):
-- **P0, first real lead:** Solaride's WhatsApp run
-  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)), ₹280/day for
-  3 days. WhatsApp only, no lead form (owner). Waiting on: the owner links the
-  WhatsApp number and pays ₹1,300, #209/PR #218, #216/PR #219. Then QA's go and
-  Resume. We report spend, conversations and cost per conversation.
-- **P1, real customers (work on these while WhatsApp is blocked):** #156 (App
-  Review, the biggest blocker for outside customers; needs the owner's Facebook
-  sign-in), #235 (WhatsApp-first: show the link early, guide it, default to
-  WhatsApp), #221 (self-serve next run), #225 (billing says pay-as-you-go),
-  #226 (CI wall time halved).
-- **Close:** #169 after QA's 390 px recheck; #178 after the payment.
-- **Parked:** #51, #66 and #67 stay `later` until the first run is live.
+CEO priorities (Oct 23, evening; owner: lean, high value only):
+- **P0:** the live Solaride WhatsApp run
+  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)): ₹840 capped,
+  ends Oct 26 14:24Z. Monitor it and report spend, chats and cost per chat.
+  #156 (Meta App Review) is the gate for every outside customer; it needs the
+  owner's Facebook sign-in, then submit.
+- **P1:** #258 (live results refresh themselves and flag rejected or stalled
+  ads), #221 / PR #247 (self-serve next run), #235 (WhatsApp-first), #260 (lean
+  pass: retire `dev`, living docs only, dead scripts and branches out).
+- **Later:** #229 (email alerts; WhatsApp-first instead), #230, #238 and #239
+  (speed), #232, #253, #178. Closed as not actionable: #51, #66, #67 and #254.
+- **Filter for new issues:** it must help a customer make and run ads today, or
+  remove a real failure. Otherwise file it as `later`, or don't file it.
 
 The CTO maintains the worker table below.
 
 | Worker | Work, in order |
 | --- | --- |
 | Everyone | **Never stop idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground and continue with what it prints. **Talk on the issue or PR;** hand off with the label plus one line (`QA: ready at <sha>`). No status or idle posts ([AGENTS.md](../AGENTS.md#worker-coordination)). Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. Pace automated browser traffic to production (#240) |
-| QA | **Your verdict on PR #247 at 3bafc67** (the same #221 patch as 6ee4a62; CTO re-approved), then DevOps releases. **#157 is live in AdBrain** (dcb769e5, ends Oct 26 14:24Z): watch twice daily, read-only, and confirm it stays ACTIVE after Dev 3's one Refresh. Close [#230](https://github.com/vanshulgoyal101/adbrain/issues/230) after the final re-measure |
+| QA | **P0 #157** (dcb769e5, ends Oct 26 14:24Z): watch twice daily, read-only, and post spend, WhatsApp chats and cost per chat on #157. Review PR #261 (#235 slice 2). #221 is live (f3773a4); confirm one settle sweep ran clean |
 | Dev | **[#258](https://github.com/vanshulgoyal101/adbrain/issues/258):** live campaigns refresh their results and flag rejected or stalled ads by themselves (hourly cron, read-only Meta, one alert issue per problem; `test:core` replays recorded responses from the live #157 tree). Low risk, auto-merge |
-| DevOps | Release PR #247 once QA approves 3bafc67: `node scripts/release.mjs --pr 247` (migration 8e4e57db; CTO approved). Then [#259](https://github.com/vanshulgoyal101/adbrain/issues/259): `release.mjs` also requires the CTO's review |
-| Dev 3 | #157: press **Refresh results** once on dcb769e5 (safe; see #157). Close [#209](https://github.com/vanshulgoyal101/adbrain/issues/209) if its done-when is met. Then [#235](https://github.com/vanshulgoyal101/adbrain/issues/235)'s remaining slices (WhatsApp button-number picker in the campaign form, early link status in Brand and Settings), then the rest of [#238](https://github.com/vanshulgoyal101/adbrain/issues/238). [#253](https://github.com/vanshulgoyal101/adbrain/issues/253) stays `later` |
-| Dev 2 | [#229](https://github.com/vanshulgoyal101/adbrain/issues/229) (email the owner within 15 minutes of a new form enquiry) behind a flag; the provider waits for the CEO's decision #254. [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3 jumps the queue when the owner signs in |
+| DevOps | [#260](https://github.com/vanshulgoyal101/adbrain/issues/260) step 1: once the CTO's port of the CEO's last `dev` commit (a7735de) is on `main`, check `git diff a7735de origin/dev` is empty, switch the owner's checkout to `main`, then delete `dev`. Then step 5: post the worktree count after each owner cleans up |
+| Dev 3 | [#235](https://github.com/vanshulgoyal101/adbrain/issues/235): PR #261 is with QA; next the campaign-form slice (WhatsApp button-number picker). Close [#209](https://github.com/vanshulgoyal101/adbrain/issues/209) if its done-when is met. Remove your finished worktrees (#260) |
+| Dev 2 | Standby: [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3 as soon as the owner signs the test Facebook account in (P0 gate for outside customers). Meanwhile remove your finished worktrees (#260) |
