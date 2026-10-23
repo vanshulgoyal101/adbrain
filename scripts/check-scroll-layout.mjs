@@ -134,6 +134,33 @@ for (const [engineName, engine] of [["chromium", chromium], ["webkit", webkit]])
       }
       await respond(1);
       await expect.poll(bottomGap).toBeLessThanOrEqual(1);
+      // #169: below Tailwind's lg breakpoint the history flows with the page instead of a nested scroll box.
+      if (width < 1024) {
+        assert.equal(await history.evaluate(node => node.scrollHeight > node.clientHeight), false, "Phone history must not be a nested scroll box");
+        await page.getByRole("button", { name: "Continue 1", exact: true }).click();
+        await respond(2);
+        await expect(page.getByRole("button", { name: "Continue 2", exact: true })).toBeInViewport();
+        await page.screenshot({ path: `${output}/${engineName}-${width}-conversation.png`, fullPage: true });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+        // #169: finished results open at their heading, and all three cards are reachable by page scroll.
+        const creatives = [1, 2, 3].map(n => ({ id: `creative-${n}`, headline: `Ad ${n}`, primary_text: "Book a free site survey. ".repeat(6), status: "draft" }));
+        await page.evaluate(turns => sessionStorage.setItem("adbrain:assistant:scroll-fixture", JSON.stringify({
+          goal: "Introduce our team", started: true, answers: [], phase: "done", turns,
+        })), [{ role: "user", text: "Introduce our team" }, { role: "question", question: { id: "setting", field: "visual", question: `Question: ${"Describe the service setting. ".repeat(60)}`, options: ["Continue"] } }, { role: "result", creatives }]);
+        await page.reload();
+        await page.addStyleTag({ content: css.css });
+        await page.addScriptTag({ content: bundle.outputFiles[0].text });
+        await expect(page.getByText("Your ads are ready — pick your favourites:")).toBeInViewport();
+        for (const button of await page.getByRole("button", { name: /use this ad/i }).all()) {
+          await button.scrollIntoViewIfNeeded();
+          await expect(button).toBeInViewport();
+        }
+        await page.screenshot({ path: `${output}/${engineName}-${width}-results.png` });
+        assert.deepEqual(errors, []);
+        console.log(`${engineName} ${width}px: textarea geometry, page-flow history and newest turn in view passed`);
+        await page.close();
+        continue;
+      }
       await page.getByRole("button", { name: "Continue 1", exact: true }).click();
       await expect.poll(() => Boolean(pending)).toBe(true);
       await history.evaluate(node => { node.scrollTop = 0; });

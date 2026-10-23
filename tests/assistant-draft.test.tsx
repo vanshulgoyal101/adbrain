@@ -39,6 +39,23 @@ describe("<AdAssistant> draft persistence", () => {
     expect(blockedEval).not.toHaveBeenCalled();
   });
 
+  it("opens new results at their heading so a phone shows all three ads, not only the last card (#169)", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    const creatives = [1, 2, 3].map((n) => ({ id: `creative-${n}`, headline: `Ad ${n}`, primary_text: "Explore your options.", status: "draft" }));
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, answers: [], phase: "done", turns: [{ role: "user", text: "Invite enquiries" }, { role: "result", creatives }],
+    }));
+    render(<AdAssistant business={business} />);
+    const heading = await screen.findByText("Your ads are ready — pick your favourites:");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "instant" });
+    expect(scrollIntoView.mock.contexts.at(-1)).toBe(heading.closest("[data-result-heading]"));
+    // The history box scrolls only on large screens; on a phone the stacked cards flow with the page.
+    expect(screen.getByRole("region", { name: "Conversation history" })).toHaveClass("lg:max-h-[62vh]");
+    expect(screen.getAllByRole("button", { name: /use this ad/i })).toHaveLength(3);
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  });
+
   it("sends the original goal and typed answers, not model suggestions or the prepared brief, as evidence", async () => {
     sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
       goal: "Describe our rooftop work", started: true, turns: [], phase: "review",
@@ -246,7 +263,8 @@ describe("<AdAssistant> draft persistence", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).answers[0]).toMatchObject({ field: "visual", questionId: "scene", options: ["Team at work", "Service space"] });
     const brief = await screen.findByRole("textbox", { name: "Creative brief" });
     const history = screen.getByRole("region", { name: "Conversation history" });
-    expect(history).toHaveClass("scrollbar-stable", "overflow-y-scroll");
+    expect(history).toHaveClass("scrollbar-stable", "lg:overflow-y-scroll", "lg:max-h-[62vh]");
+    expect(history).not.toHaveClass("overflow-y-scroll");
     expect(history).toHaveAttribute("tabindex", "0");
     await user.clear(brief);
     await user.type(brief, "Show only the service space, no people.");
