@@ -152,6 +152,19 @@ same identity; do not change a key or clear local recovery data to force progres
 
 ### Configurable Live Payments
 
+**Customer-chosen annual amount (#212).** GET `/api/payments/live/orders` accepts
+`amountPaise` (integer, 50000-1000000) for a read-only annual quote and returns
+`annualAmountRange: {minPaise:50000,maxPaise:1000000}` (null for verification or
+legacy terms). Without it, the quote follows the business's open unpaid annual
+order, else the configured default. POST accepts `amountPaise` with the returned
+`termsHash`; anything outside the range is 400, and terms accepted for another
+amount are 409. The quote splits floor(total/5) to service and the rest to ad
+money. A new amount replaces the business's unpaid annual order, which stays in
+the list with `status: "superseded"` and `checkout: null`; paid, held or
+event-pending orders are never replaced (the request fails until reconciled).
+Paid orders accumulate; each is its own order with its own capture. A replaced
+order paid later is captured and credited once.
+
 The effective quote is returned by the order-list route; each saved order retains
 its own `quote` and accepted policy. `amountPaise` and provider checkout `amount`
 equal the saved `quote.totalPaise`, even after configuration changes. Normal
@@ -166,8 +179,8 @@ For an eligible pilot without a saved verification order, GET returns
 `verificationAmountRange: {minPaise:100,maxPaise:<configured ceiling>}`; otherwise
 it is null. GET accepts optional `verificationAmountPaise` for a read-only quote
 within that range. POST accepts the same integer alongside the returned
-`termsHash` and explicit acceptance. Neither permits a client-selected annual
-price. Owner, expiry, ceiling and consent changes fail closed; a saved
+`termsHash` and explicit acceptance. Owner, expiry, ceiling and consent changes
+fail closed; a saved
 verification order cannot be repriced. Without an amount parameter, reads recover
 the saved eligible verification quote rather than replacing it with the default.
 

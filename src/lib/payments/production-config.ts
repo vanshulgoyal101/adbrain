@@ -77,7 +77,7 @@ export const PRICING_APPROVAL_REFERENCE = "https://github.com/vanshulgoyal101/ad
 export const PRICING_APPROVED_AT = "2026-09-27T17:36:03Z";
 const verificationSchema = z.strictObject({ businessId: z.uuid(), userId: z.uuid(), expiresAt: z.iso.datetime() });
 type VerificationScope = z.infer<typeof verificationSchema>;
-export type PaymentSubject = { businessId: string; userId: string; verificationCompleted?: boolean; verificationAmountPaise?: number };
+export type PaymentSubject = { businessId: string; userId: string; verificationCompleted?: boolean; verificationAmountPaise?: number; annualAmountPaise?: number };
 const rupees = (paise: number) => `INR ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(paise / 100)}`;
 
 function pricedPolicy(quote: ProductionPaymentQuote, verification?: VerificationScope) {
@@ -141,7 +141,8 @@ export const productionPaymentPolicySchema = z.union([z.strictObject({
 export function getProductionCollectionPolicy(environment: Environment = process.env, now = Date.now(), subject?: PaymentSubject) {
   getProductionPaymentConfig(environment);
   try {
-    const totalPaise = configuredAmount(environment, "PAYMENTS_LIVE_AMOUNT_PAISE", DEFAULT_ANNUAL_PAYMENT_PAISE);
+    const totalPaise = subject?.annualAmountPaise === undefined ? configuredAmount(environment, "PAYMENTS_LIVE_AMOUNT_PAISE", DEFAULT_ANNUAL_PAYMENT_PAISE)
+      : z.number().int().min(100).max(DEFAULT_ANNUAL_PAYMENT_PAISE).parse(subject.annualAmountPaise);
     let configured: unknown = totalPaise === DEFAULT_ANNUAL_PAYMENT_PAISE ? OPERATOR_MANAGED_POLICY : pricedPolicy(createAnnualPaymentQuote(totalPaise));
     const verificationEnabled = environment.PAYMENTS_LIVE_VERIFICATION_ENABLED;
     if (verificationEnabled !== undefined && !["", "false", "true"].includes(verificationEnabled)) throw new Error();

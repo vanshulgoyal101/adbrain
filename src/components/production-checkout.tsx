@@ -15,7 +15,7 @@ const policySchema = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/), servic
 const orderSchema = z.object({
   orderId: z.uuid(), environment: z.literal("live"), amountPaise: z.number().int().min(100).max(1_000_000), currency: z.literal("INR"),
   quote: productionPaymentQuoteSchema.default(createAnnualPaymentQuote()),
-  status: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded"]),
+  status: z.enum(["creating", "created", "captured", "needs_reconciliation", "review_required", "refund_pending", "partially_refunded", "refunded", "superseded"]),
   capturedPaise: z.number().int().min(0).max(1_000_000), refundedPaise: z.number().int().min(0).max(1_000_000),
   refundReconciliationPending: z.boolean(), spendablePaise: z.literal(0), canActivateCampaign: z.literal(false),
   receipt: z.object({ reference: z.uuid(), paymentId: identifier("pay").nullable(), merchant: z.literal("Vanshul Goyal"),
@@ -24,16 +24,18 @@ const orderSchema = z.object({
     currency: z.literal("INR"), name: z.literal("Vanshul Goyal"), description: z.string() }).nullable(),
 }).refine(order => order.amountPaise === order.quote.totalPaise && (!order.checkout || order.checkout.amount === order.amountPaise)
   && order.capturedPaise <= order.amountPaise && order.refundedPaise <= order.amountPaise);
-const amountRangeSchema = z.object({ minPaise: z.literal(100), maxPaise: z.number().int().min(100).max(1_000_000) });
+const amountRangeSchema = z.object({ minPaise: z.number().int().min(100), maxPaise: z.number().int().min(100).max(1_000_000) });
 const enteredAmountSchema = z.string().regex(/^\d+(\.\d{1,2})?$/).transform(value => Math.round(Number(value) * 100)).pipe(z.number().int().min(100).max(1_000_000));
 const listSchema = z.object({ quote: productionPaymentQuoteSchema.default(createAnnualPaymentQuote()),
   verificationAmountRange: amountRangeSchema.nullable().default(null),
+  annualAmountRange: amountRangeSchema.nullable().default(null),
   policy: policySchema.nullable(), orders: z.array(orderSchema).max(20) }).refine(result => !result.verificationAmountRange
     || (result.quote.version === "inr-payment-verification-v1" && result.quote.totalPaise <= result.verificationAmountRange.maxPaise));
 type Order = z.infer<typeof orderSchema>;
 const statusLabels: Record<Order["status"], string> = {
   creating: "Payment preparation pending", created: "Awaiting payment", captured: "Payment confirmed", needs_reconciliation: "Confirmation pending",
   review_required: "Review required", refund_pending: "Refund pending", partially_refunded: "Partially refunded", refunded: "Refunded",
+  superseded: "Replaced by a newer payment request",
 };
 const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 
@@ -42,6 +44,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
   const [otherOrders, setOtherOrders] = useState<Order[]>([]);
   const [quote, setQuote] = useState<ProductionPaymentQuote | null>(null);
   const [amountRange, setAmountRange] = useState<z.infer<typeof amountRangeSchema> | null>(null);
+  const [annualRange, setAnnualRange] = useState<z.infer<typeof amountRangeSchema> | null>(null);
   const [amountDraft, setAmountDraft] = useState("");
   const [amountLocked, setAmountLocked] = useState(false);
   const amountId = useId();
@@ -59,9 +62,11 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
   const busy = useRef(false);
   const controller = useRef<AbortController | null>(null);
   const checkout = useRef<InstanceType<NonNullable<Window["Razorpay"]>> | null>(null);
-  const storageKey = `adbrain:live-checkout:${businessId}:${quote?.version ?? "pending"}`;
+  const storageKey = `adbrain:live-checkout:${businessId}:${quote?.version ?? "pending"}:${quote?.totalPaise ?? 0}`;
   const enteredAmount = enteredAmountSchema.safeParse(amountDraft);
-  const amountChanged = Boolean(amountRange && (!enteredAmount.success || enteredAmount.data !== quote?.totalPaise));
+  const verification = (order?.quote ?? quote)?.version === "inr-payment-verification-v1";
+  const range = verification ? amountRange : annualRange;
+  const amountChanged = Boolean(range && (!enteredAmount.success || enteredAmount.data !== quote?.totalPaise));
 
   async function api(path: string, signal: AbortSignal, body?: unknown): Promise<unknown> {
     const response = await fetch(`/api/payments/live/${path}`, { method: body ? "POST" : "GET", cache: "no-store", credentials: "same-origin",
@@ -90,13 +95,20 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
     }
   }
 
-  async function load(signal: AbortSignal, verificationAmountPaise?: number) {
-    const result = listSchema.parse(await api(`orders?businessId=${encodeURIComponent(businessId)}${verificationAmountPaise === undefined ? "" : `&verificationAmountPaise=${verificationAmountPaise}`}`, signal));
+  async function load(signal: AbortSignal, requested?: { verification?: number; annual?: number }) {
+    const query = requested?.verification !== undefined ? `&verificationAmountPaise=${requested.verification}`
+      : requested?.annual !== undefined ? `&amountPaise=${requested.annual}` : "";
+    const result = listSchema.parse(await api(`orders?businessId=${encodeURIComponent(businessId)}${query}`, signal));
     if (result.policy?.hash !== policy?.hash) setAcceptedTermsHash(null);
-    const verification = result.quote.version === "inr-payment-verification-v1";
-    const selected = result.orders.find(item => (item.quote.version === "inr-payment-verification-v1") === verification) ?? null;
+    const isVerification = result.quote.version === "inr-payment-verification-v1";
+    const unpaid = (item: Order) => item.capturedPaise === 0 && ["creating", "created", "needs_reconciliation"].includes(item.status);
+    const annualOrders = result.orders.filter(item => item.quote.version !== "inr-payment-verification-v1");
+    const selected = (isVerification ? result.orders.find(item => item.quote.version === "inr-payment-verification-v1")
+      : annualOrders.find(item => unpaid(item) && item.amountPaise === result.quote.totalPaise)
+        ?? (requested?.annual === undefined ? annualOrders.find(item => item.status !== "superseded" && !unpaid(item)) : undefined)) ?? null;
     setQuote(result.quote); setPolicy(result.policy); setOrder(selected);
-    setAmountRange(result.verificationAmountRange); setAmountDraft(String(result.quote.totalPaise / 100)); setAmountLocked(Boolean(selected));
+    setAmountRange(result.verificationAmountRange); setAnnualRange(result.annualAmountRange);
+    setAmountDraft(String(result.quote.totalPaise / 100)); setAmountLocked(isVerification && Boolean(selected));
     setOtherOrders(result.orders.filter(item => item.orderId !== selected?.orderId)); setLoaded(true);
   }
   const restore = useEffectEvent(() => perform(load));
@@ -126,11 +138,18 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
       let ready = order;
       if (!ready) {
         const raw = sessionStorage.getItem(storageKey);
-        const idempotencyKey = raw ? z.uuid().parse(raw) : crypto.randomUUID();
+        let idempotencyKey = raw ? z.uuid().parse(raw) : crypto.randomUUID();
+        setAmountLocked(verification);
+        const create = () => api("orders", signal, { businessId, idempotencyKey, termsHash: policy.hash, acceptTerms: true,
+          ...(verification ? { verificationAmountPaise: quote!.totalPaise } : annualRange ? { amountPaise: quote!.totalPaise } : {}) });
         sessionStorage.setItem(storageKey, idempotencyKey);
-        setAmountLocked(true);
-        ready = orderSchema.parse(await api("orders", signal, { businessId, idempotencyKey, termsHash: policy.hash, acceptTerms: true,
-          ...(quote?.version === "inr-payment-verification-v1" ? { verificationAmountPaise: quote.totalPaise } : {}) }));
+        ready = orderSchema.parse(await create());
+        if (ready.status === "superseded") {
+          idempotencyKey = crypto.randomUUID();
+          sessionStorage.setItem(storageKey, idempotencyKey);
+          ready = orderSchema.parse(await create());
+        }
+        sessionStorage.removeItem(storageKey);
         setOrder(ready);
       } else {
         const refreshed = listSchema.parse(await api(`orders?businessId=${encodeURIComponent(businessId)}`, signal));
@@ -180,28 +199,34 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
 
   const canPay = loaded && policy && (!order || (order.status === "created" && order.checkout));
   const displayedQuote = order?.quote ?? quote;
-  const verification = displayedQuote?.version === "inr-payment-verification-v1";
+  const replacing = !verification && !order ? otherOrders.find(item => item.quote.version !== "inr-payment-verification-v1"
+    && item.status === "created" && item.capturedPaise === 0 && item.amountPaise !== quote?.totalPaise) : undefined;
   return (
     <section aria-labelledby="production-checkout-title" className="min-w-0 space-y-4 border-t border-slate-200 pt-5">
       {policy && <Script id="razorpay-live-checkout" src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive"
         onReady={() => { setScriptReady(Boolean(window.Razorpay)); setScriptFailed(!window.Razorpay); }} onError={() => setScriptFailed(true)} />}
       <h3 id="production-checkout-title" className="flex items-center gap-2 font-semibold text-slate-900"><CreditCard size={18} aria-hidden="true" />{verification ? "Payment verification" : "Annual service"}</h3>
-      {verification && amountRange && <div className="flex flex-wrap items-end gap-3">
+      {range && (verification || !order || order.status === "created") && <div className="flex flex-wrap items-end gap-3">
         <div className="w-40 max-w-full space-y-1">
-          <Label htmlFor={amountId}>Verification amount (INR)</Label>
-          <Input id={amountId} type="number" inputMode="decimal" min={amountRange.minPaise / 100} max={amountRange.maxPaise / 100} step="0.01"
-            value={amountDraft} disabled={working || checkoutOpen || amountLocked || Boolean(order)}
+          <Label htmlFor={amountId}>{verification ? "Verification amount (INR)" : "Amount to pay (INR)"}</Label>
+          <Input id={amountId} type="number" inputMode="decimal" min={range.minPaise / 100} max={range.maxPaise / 100} step="0.01"
+            value={amountDraft} disabled={working || checkoutOpen || (verification && (amountLocked || Boolean(order)))}
             onChange={event => { setAmountDraft(event.target.value); setAcceptedTermsHash(null); setNotice(null); }} />
         </div>
-        <Button type="button" data-product-event="payment.quote" variant="outline" disabled={!amountChanged || working || checkoutOpen || amountLocked || Boolean(order)} onClick={() => void perform(async signal => {
-          if (!enteredAmount.success || enteredAmount.data > amountRange.maxPaise) {
-            throw new Error(`Enter an amount from INR ${amountRange.minPaise / 100} to INR ${amountRange.maxPaise / 100}, with at most two decimal places.`);
+        <Button type="button" data-product-event="payment.quote" variant="outline" disabled={!amountChanged || working || checkoutOpen || (verification && (amountLocked || Boolean(order)))} onClick={() => void perform(async signal => {
+          if (!enteredAmount.success || enteredAmount.data < range.minPaise || enteredAmount.data > range.maxPaise) {
+            throw new Error(`Enter an amount from INR ${range.minPaise / 100} to INR ${range.maxPaise / 100}, with at most two decimal places.`);
           }
-          await load(signal, enteredAmount.data);
+          await load(signal, verification ? { verification: enteredAmount.data } : { annual: enteredAmount.data });
           setNotice("Amount updated.");
         })}><RefreshCw size={16} aria-hidden="true" />Update amount</Button>
       </div>}
-      {displayedQuote && <dl className="grid gap-4 text-sm sm:grid-cols-3">
+      {displayedQuote && !verification && range && <dl className="grid gap-4 text-sm sm:grid-cols-3">
+        <div><dt className="text-slate-500">Total</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
+        <div><dt className="text-slate-500">Ad money, including Meta GST (80%)</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
+        <div><dt className="text-slate-500">AdBrain service (20%)</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.serviceAllocationPaise)}</dd></div>
+      </dl>}
+      {displayedQuote && (verification || !range) && <dl className="grid gap-4 text-sm sm:grid-cols-3">
         <div><dt className="text-slate-500">Total</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{money(displayedQuote.totalPaise)}</dd></div>
         <div><dt className="text-slate-500">Service allocation</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.serviceAllocationPaise)}</dd></div>
         <div><dt className="text-slate-500">Meta costs, including applicable tax</dt><dd className="mt-1 font-semibold tabular-nums">{money(displayedQuote.metaAllocationPaise)}</dd></div>
@@ -211,6 +236,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
       <p role="status" aria-live="polite" className="min-h-6 text-sm font-medium text-slate-800">{working ? "Checking payment" : checkoutOpen ? "Checkout open"
         : order ? statusLabels[order.status] : loaded ? policy ? "Ready for payment" : "Collection is not enabled" : "Loading payment"}</p>
       {order && <p className="break-all text-xs text-slate-500">Payment reference: {order.orderId}</p>}
+      {replacing && <p className="text-sm text-slate-600">Paying this amount replaces your unpaid request for {money(replacing.amountPaise)}. A payment already made is never changed.</p>}
       {notice && <Alert>{notice}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
       {scriptFailed && <Alert variant="error">Checkout could not load. The saved payment is unchanged.</Alert>}
@@ -231,6 +257,9 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
           <CreditCard size={16} aria-hidden="true" />{order ? "Continue saved checkout" : `Pay INR ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format((displayedQuote?.totalPaise ?? 0) / 100)}`}</Button>}
         <Button variant="outline" onClick={() => void checkStatus()} disabled={working || checkoutOpen} className="h-auto min-h-11 whitespace-normal">
           <RefreshCw size={16} aria-hidden="true" />Check payment status</Button>
+        {order && !verification && ["captured", "partially_refunded", "refunded"].includes(order.status) && <Button data-product-event="payment.checkout" disabled={working || checkoutOpen} className="h-auto min-h-11 whitespace-normal"
+          onClick={() => { setOtherOrders(current => [order, ...current]); setOrder(null); setAcceptedTermsHash(null); setNotice(null); }}>
+          <CreditCard size={16} aria-hidden="true" />Add more ad money</Button>}
       </div>
       {order?.receipt && <details className="border-t border-slate-200 pt-3 text-sm">
         <summary className="cursor-pointer font-medium"><ReceiptText size={16} className="mr-2 inline" aria-hidden="true" />Payment receipt</summary>
@@ -248,6 +277,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
             <p>{previous.quote.version === "inr-payment-verification-v1" ? "Payment verification" : "Annual service"}: {money(previous.amountPaise)} - {statusLabels[previous.status]}</p>
             <p className="break-all text-xs">Reference: {previous.orderId}</p>
             {previous.capturedPaise > 0 && <p>Captured: {money(previous.capturedPaise)}. Verified refunds: {money(previous.refundedPaise)}.</p>}
+            {previous.receipt?.paymentId && <p className="break-all text-xs">Payment ID: {previous.receipt.paymentId}</p>}
             {previous.refundReconciliationPending && <Alert>Refund evidence is awaiting reconciliation. Funds remain held.</Alert>}
             <Button variant="outline" disabled={working || checkoutOpen} onClick={() => void perform(async signal => {
               const checked = orderSchema.parse(await api("reconcile", signal, { orderId: previous.orderId }));
