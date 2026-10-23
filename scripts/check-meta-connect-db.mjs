@@ -892,6 +892,31 @@ async function verifyCappedRunBound(db, database) {
     assert.deepEqual(await run.cost(), { media:2000, tax:360, rate:1800, held:false, finalized:true });
     await run.observe(2000);
     await run.age();
+    assert.equal((await run.cost()).finalized,true);
+    assert.equal((await run.balance()).held,false);
+  });
+  await check(`${database}: QA #219: a review read after final evidence leaves the closed run finalizable or finalized`, async () => {
+    const run = await fixture(280);
+    await run.observe(0);
+    const { reservationId: id } = await run.reserve(84000);
+    await run.activate(id);
+    await run.pause(id);
+    await run.final(id, 2000, 360);
+    await run.observe(2000);
+    const stillFinal = (await run.cost()).finalized;
+    const refinalized = stillFinal || await run.final(id, 2000, 360).then(() => true, () => false);
+    assert.ok(refinalized, "observe un-finalized a closed run and the operator cannot finalize it again, so customer_ad_refund_guard blocks every refund");
+  });
+  await check(`${database}: re-activating a finalized run reopens it as non-final (#216)`, async () => {
+    const run = await fixture(280);
+    const { reservationId: first } = await run.reserve(84000);
+    await run.activate(first);
+    await run.pause(first);
+    await run.final(first, 2000, 360);
+    await run.observe(2500);
+    assert.deepEqual(await run.cost(), { media:2500, tax:450, rate:1800, held:false, finalized:true });
+    const { reservationId: second } = await run.reserve(84000);
+    await run.activate(second);
     assert.equal((await run.cost()).finalized,false);
     assert.equal((await run.balance()).held,false);
   });

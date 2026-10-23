@@ -3695,7 +3695,7 @@ begin
   insert into private.customer_ad_costs(campaign_id,business_id,account_id,ad_account_id,connection_generation,media_paise,tax_paise,tax_rate_bps,observed_at,finalized)
     values(p_campaign_id,p_business_id,p_account_id,p_ad_account_id,p_connection_generation,media,tax,rate,observed,false)
     on conflict(campaign_id) do update set media_paise=excluded.media_paise,tax_paise=excluded.tax_paise,
-      observed_at=greatest(private.customer_ad_costs.observed_at,excluded.observed_at),finalized=false;
+      observed_at=greatest(private.customer_ad_costs.observed_at,excluded.observed_at);
   return jsonb_build_object('mediaPaise',media,'taxPaise',tax,'taxRateBps',rate,'observedAt',observed);
 end;
 $$;
