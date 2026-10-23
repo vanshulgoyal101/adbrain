@@ -150,7 +150,19 @@ for (const [engineName, engine] of [["chromium", chromium], ["webkit", webkit]])
         await page.reload();
         await page.addStyleTag({ content: css.css });
         await page.addScriptTag({ content: bundle.outputFiles[0].text });
+        // #232: the phone top bar is sticky (about 60 px); the heading must open below it, not under it.
+        await page.evaluate(() => {
+          const bar = document.createElement("header");
+          bar.style.cssText = "position:sticky;top:0;z-index:10;height:60px;background:#fff";
+          document.body.prepend(bar);
+          document.querySelectorAll("[data-result-heading]").forEach(node => node.scrollIntoView({ block: "start", behavior: "instant" }));
+        });
         await expect(page.getByText("Your ads are ready — pick your favourites:")).toBeInViewport();
+        assert.equal(await page.locator("[data-result-heading]").last().evaluate(node => {
+          const box = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          return Boolean(hit && node.contains(hit));
+        }), true, "Result heading must not sit under the sticky top bar");
         for (const button of await page.getByRole("button", { name: /use this ad/i }).all()) {
           await button.scrollIntoViewIfNeeded();
           await expect(button).toBeInViewport();

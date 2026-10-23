@@ -617,7 +617,7 @@ function TurnView({
   if (turn.role === "result") {
     return (
       <div className="flex flex-col gap-2">
-        <div data-result-heading className="flex scroll-mt-4 items-center gap-2 text-sm font-medium text-slate-800">
+        <div data-result-heading className="flex scroll-mt-20 items-center gap-2 text-sm font-medium text-slate-800 lg:scroll-mt-4">
           <Sparkles className="h-4 w-4 text-blue-600" />
           {turn.creatives.length > 1 ? "Your ads are ready — pick your favourites:" : "Your ad is ready — pick your favourite:"}
         </div>
