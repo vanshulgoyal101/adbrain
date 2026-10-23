@@ -3,9 +3,7 @@
   "git": {
     "deploymentEnabled": {
       "**": false,
-      "main": true,
-      "dev": false,
-      "release/meta-connect-pilot": false
+      "main": true
     }
   },
   "crons": [

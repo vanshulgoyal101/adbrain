@@ -74,7 +74,7 @@ intent, assignments or dated evidence; they are not alternative setup guides.
 
 | Material | Use |
 | --- | --- |
-| [Worker dispatch](https://github.com/vanshulgoyal101/adbrain/blob/dev/docs/ORCHESTRATION.md) | Current work assignments and ownership; maintained on the `dev` branch only |
+| [Worker dispatch](ORCHESTRATION.md) | Current work assignments and ownership |
 | [Operating brief](OPERATING-BRIEF.md) | Owner outcome, risk decisions and evidence needed to operate the product; not a deployment or spend approval |
 | [Payment plan](PAYMENTS-PLAN.md) | Payment decisions and implementation boundaries; rollout authority lives in the dispatch |
 | [Product audit](PRODUCT-AUDIT-2026-09.md) | Dated September 2026 assessment; later fixes may supersede findings |

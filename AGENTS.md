@@ -51,9 +51,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	these to the shared `skills` and `vbrain-private` repos.
 - Keep the owner's checkout (`adbrain/`) clean: it is what the owner sees in
 	Source Control. Workers edit, test, merge and release only in isolated worktrees
-	under `~/Development/copilot/adbrain-wt/`. The CEO edits only docs there and pushes them
-	to `dev` immediately; the CTO edits docs in `adbrain-wt/cto`. Never leave a merge,
-	staged files or local edits behind.
+	under `~/Development/copilot/adbrain-wt/`. `main` is the only long-lived branch: the
+	CEO and CTO ship docs edits there as small docs PRs with auto-merge. Never leave a
+	merge, staged files or local edits behind.
+- **Delete as you go** (owner, Oct 23: lean systems). When work is done, its branch,
+	worktree, one-off scripts and temporary files go with it. Don't commit dated reports
+	or handoffs; put evidence in the issue or PR. Git history keeps everything.
 
 ## Execution speed
 
