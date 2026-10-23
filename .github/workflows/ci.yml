@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
-    branches: [main, dev]
+    branches: [main]
 
 jobs:
   # All jobs run in parallel; build, test, core and secrets are required.
@@ -121,7 +121,6 @@ jobs:
       - run: npm ci
       - run: npm run audit:dependencies
 
-  # The docs checker lives on dev; one ci.yml for both branches keeps the main-to-dev sync conflict-free.
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -130,9 +129,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Check docs (dev only)
+      - name: Check docs
         run: |
-          [ -f scripts/check-docs.mjs ] || { echo "No docs checker on this branch"; exit 0; }
           npm ci
           node --test scripts/check-docs.test.mjs
           npm run docs:check
