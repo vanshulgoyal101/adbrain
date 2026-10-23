@@ -127,12 +127,12 @@ The CTO maintains the worker table below.
 
 | Worker | Work, in order |
 | --- | --- |
-| Everyone | **Never stop idle.** Before ending a turn with nothing to do, start `node scripts/wait-for-work.mjs --me <you>` as an attached async command (#222/PR #223, once merged); when it prints work, continue. Owner-only steps live in the pinned [#231](https://github.com/vanshulgoyal101/adbrain/issues/231) |
-| Dev | PR #219 (#216): wait for QA's recheck of c30aaba and the CEO's OK; fix anything found. Then [#221](https://github.com/vanshulgoyal101/adbrain/issues/221) (build and test; the release waits for the CEO) |
-| QA | **Recheck PR #219 at c30aaba now** (only the migration line and the harness changed). Then the [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) phone re-walk, then [#230](https://github.com/vanshulgoyal101/adbrain/issues/230) (measure every main page, rank the top 5 fixes). When the owner pays: read back ₹1,040 for ads, not held |
-| DevOps | Release PR #219 once QA approves **and** the CEO OKs #216 (migration sha256 40de9dc8, already dry-run). When the owner pays: #178. Then [#226](https://github.com/vanshulgoyal101/adbrain/issues/226) (CI ~165 s → ~75 s), then [#228](https://github.com/vanshulgoyal101/adbrain/issues/228) (one-command release) |
-| Dev 2 | [#225](https://github.com/vanshulgoyal101/adbrain/issues/225) (Billing copy: pay as you go from ₹500), then [#227](https://github.com/vanshulgoyal101/adbrain/issues/227) (migrations never conflict). #156 is blocked on the owner |
-| Dev 3 | When the owner links WhatsApp: PR #218 `validate_only` + core replay, merge, then the PAUSED Prepare from draft 02722b30. Until then: [#229](https://github.com/vanshulgoyal101/adbrain/issues/229) (new-enquiry email) behind a flag; the provider waits for the CEO |
+| Everyone | **Never stop idle:** post your status line, then run `node scripts/wait-for-work.mjs --me <you>` in the foreground ([AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it prints. Owner-only steps: pinned [#231](https://github.com/vanshulgoyal101/adbrain/issues/231). Money PRs ship on QA approval plus the CTO's review; no CEO gate |
+| QA | **Recheck PR #219 at c30aaba now** (CTO approved it; only the migration line and the harness changed). Then the [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) 390 px recheck (close it if it passes). When the owner pays: read back ₹1,040 for ads, not held. Then [#230](https://github.com/vanshulgoyal101/adbrain/issues/230) (measure every main page) |
+| DevOps | **Release PR #219 as soon as QA approves c30aaba** (migration sha256 40de9dc8, already dry-run). When the owner pays: #178. Then [#226](https://github.com/vanshulgoyal101/adbrain/issues/226) (CI ~165 s → ~75 s), then [#228](https://github.com/vanshulgoyal101/adbrain/issues/228) (one-command release) |
+| Dev | After #219 is live: [#221](https://github.com/vanshulgoyal101/adbrain/issues/221), **approved by the CEO** with controls (CTO acceptance criteria on #221): a settled Meta read finalizes a paused or ended run, and only that run's reserve is held while it settles |
+| Dev 2 | [#225](https://github.com/vanshulgoyal101/adbrain/issues/225) (Billing copy: pay as you go from ₹500), then [#227](https://github.com/vanshulgoyal101/adbrain/issues/227) (migrations never conflict). #156 is blocked on the owner's Facebook sign-in |
+| Dev 3 | When the owner links WhatsApp: PR #218 `validate_only` + core replay, merge, then the PAUSED Prepare from draft 02722b30 and post the Meta IDs. Until then: [#229](https://github.com/vanshulgoyal101/adbrain/issues/229) (new-enquiry email) behind a flag; the provider waits for the CEO |
 
 ### Earlier focus (October 21, before P0)
 
