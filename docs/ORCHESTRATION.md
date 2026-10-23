@@ -112,11 +112,11 @@ Parked issues (`later`) stay parked. The CTO maintains the worker table below.
 
 | Worker | Work, in order |
 | --- | --- |
-| QA | **Review PR #219 (#216) at 16dcfca** (money + migration; CTO review on the PR found nothing blocking). Then the phone re-walk (#169) after Dev 3's PR #220 is live. On #157: the payment fix (#212) is live, so steps 5 and 9 can be read back once the owner pays and Dev 3 prepares |
-| DevOps | When the owner pays about ₹1,250: confirm the capture is recorded once and a duplicate ignored, then close [#178](https://github.com/vanshulgoyal101/adbrain/issues/178). Release PR #219 after QA approves **and** the CEO confirms the control change on #74 (migration sha256 ef629813 first). Re-grant the operator if activation slips past Oct 24 18:00Z. Replace the stale secret in `adbrain/.env` |
-| Dev | Fix anything QA finds on PR #219. Then [#221](https://github.com/vanshulgoyal101/adbrain/issues/221): a paused or finished funded run must not block the customer's next run. Build and test it now; release waits for the CEO's control decision |
-| Dev 3 | PR #220 (#169 phone results) auto-merges on green; smoke it on a phone viewport. Then #209/PR #218 `validate_only` and the core replay once the owner links WhatsApp, then the PAUSED Prepare from draft 02722b30 (₹280 × 3, tricity) and post the Meta IDs |
-| Dev 2 | Idle until the owner links WhatsApp (then #209 step 2 read-backs with Dev 3) or signs in for [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3 |
+| Dev | **PR #219: fix QA's P1 now.** `customer_ad_observe_costs` must not change `finalized` in its `on conflict` update (QA's red check and the one-line fix are on the PR; the CTO agrees). Push, keep QA's check, then `ready-to-ship` + `owner:qa`. Then [#221](https://github.com/vanshulgoyal101/adbrain/issues/221): build and test it; the release waits for the CEO |
+| QA | When the owner pays (about ₹1,300): read back the allowance (₹1,040 for ads, not held). Recheck PR #219's migration and harness after Dev's fix. Re-walk the phone for [#169](https://github.com/vanshulgoyal101/adbrain/issues/169) now on 7caa7ea (Create runs are unlimited) and close it if it passes |
+| DevOps | When the owner pays: confirm one capture and one webhook event, a duplicate ignored, then close [#178](https://github.com/vanshulgoyal101/adbrain/issues/178). PR #219: dry-run again after Dev's fix (the migration hash changes); release after QA **and** the CEO's OK on #74. Replace the stale secret in `adbrain/.env` |
+| Dev 3 | Waiting for the owner to link WhatsApp; then `validate_only`, core replay, merge PR #218, PAUSED Prepare from draft 02722b30. While you wait, optionally fold QA's two greeting edge cases into #218 (word-boundary matching, an offer ending in `:`) with tests |
+| Dev 2 | Idle until the owner links WhatsApp (#209 read-backs) or signs in for [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) step 3 |
 
 ### Earlier focus (October 21, before P0)
 
