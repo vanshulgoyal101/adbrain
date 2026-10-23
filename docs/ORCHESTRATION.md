@@ -29,8 +29,9 @@ Routine steps never wait for the CEO or the CTO.
 2. **Start or resume** by reading this section, then your queue:
    `gh issue list -R vanshulgoyal101/adbrain -l core -l owner:<you>`. Work the
    oldest. Empty queue: take an unowned `core` issue in your area and add your
-   label. Nothing left: post one line in #74 that you are idle and stop. Do not
-   invent work.
+   label. Nothing left: post one line in #74, then run `wait-for-work`
+   ([AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
+   reports. Stop only when it times out. Do not invent work.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
    `origin/main`, keep the change small, push, and open a PR to `main` titled
    with the issue number. Comment on the issue in five lines or fewer: what
@@ -48,7 +49,9 @@ Routine steps never wait for the CEO or the CTO.
 5. **DevOps ships the rest**: anything with a migration, money, tenant/auth or
    config change. Label it `ready-to-ship` and `owner:devops`. DevOps applies
    migrations first, merges, smokes and closes. Money and tenant changes get
-   `owner:qa` first. DevOps also owns rollback when a production smoke fails.
+   `owner:qa` first. QA's approval plus the CTO's review is enough to release; the
+   CEO decides only prices, fees, refund rules, spend limits and who may approve
+   money. DevOps also owns rollback when a production smoke fails.
 6. **A core failure found live** gets its own `core` `bug` issue with the exact
    step, error and owner label. Add `owner:qa` when a red test helps. One issue
    per problem; do not bury new failures in long comment threads.
@@ -104,11 +107,23 @@ Routine steps never wait for the CEO or the CTO.
 
 Done October 22: offer in the first 125 characters (#194), the owner's own photo
 in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
-#185 and capped activation (PR193). Milestone: **first real lead**. The owner
-approved one watched ₹1,000 run on Solaride over 3 days
-([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)), then we report
-spend, leads and cost per lead. The App Review submission waits for the owner.
-Parked issues (`later`) stay parked. The CTO maintains the worker table below.
+#185 and capped activation (PR193). Done October 23: capped runs reserve cap +
+GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
+layout (#220).
+
+CEO priorities (Oct 23):
+- **P0, first real lead:** Solaride's WhatsApp run
+  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)), ₹280/day for
+  3 days. WhatsApp only, no lead form (owner). Waiting on: the owner links the
+  WhatsApp number and pays ₹1,300, #209/PR #218, #216/PR #219. Then QA's go and
+  Resume. We report spend, conversations and cost per conversation.
+- **P1, real customers:** #221 (self-serve next run), #156 (App Review, needs the
+  owner's Facebook sign-in), #225 (billing says pay-as-you-go), #222
+  (wait-for-work).
+- **Close:** #169 after QA's 390 px recheck; #178 after the payment.
+- **Parked:** #51, #66 and #67 stay `later` until the first run is live.
+
+The CTO maintains the worker table below.
 
 | Worker | Work, in order |
 | --- | --- |
