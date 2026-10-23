@@ -24,7 +24,8 @@ jobs:
       && github.event.deployment.environment == 'Production')
       || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Last resort only: a cancelled job opens no issue, so every step below has a smaller bound (#210).
+    timeout-minutes: 45
     concurrency: production-smoke
     # Explicit bash adds pipefail, so `| tee` cannot hide a failed smoke or rollback (#153).
     defaults:
@@ -42,7 +43,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The Azure apt mirror has stalled at ~20 kB/s for 11-15 min (#210); the browser CDN is fast.
+      - name: Install Chromium (apt bounded, then browser only)
+        id: install
+        timeout-minutes: 14
+        run: |
+          timeout -k 30s 8m npx playwright install --with-deps chromium && exit 0
+          echo "::warning::playwright install --with-deps did not finish in 8 min; installing Chromium without OS packages"
+          echo "deps=missing" >> "$GITHUB_OUTPUT"
+          timeout -k 30s 4m npx playwright install chromium
       - name: Wait until production serves this commit
         id: wait
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
@@ -55,12 +64,17 @@ jobs:
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
           FORCE_FAIL: ${{ (inputs.force_fail || inputs.drill) && 'true' || '' }}
         run: |
-          smoke() { if [ -n "$FORCE_FAIL" ]; then echo "FAIL forced by dispatch"; return 1; fi; node scripts/smoke-core.mjs; }
+          smoke() {
+            if [ -n "$FORCE_FAIL" ]; then echo "FAIL forced by dispatch"; return 1; fi
+            rc=0; timeout -k 30s 10m node scripts/smoke-core.mjs || rc=$?
+            if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then echo "FAIL smoke did not finish in 10 min"; fi
+            return "$rc"
+          }
           smoke | tee smoke.txt && exit 0
           sleep 60
           smoke | tee smoke.txt
       - name: Roll production back
-        if: failure() && steps.smoke.outcome == 'failure' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
+        if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt
       - name: Open core bug
         if: failure() && !inputs.force_fail
@@ -70,7 +84,7 @@ jobs:
         run: |
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           smoke=$(grep -E '^(PASS|FAIL)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
-          rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, wait failed, or no VERCEL_TOKEN)")
+          rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, install or wait failed, Chromium OS packages missing, or no VERCEL_TOKEN)")
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops \
             -t "${PREFIX}Production smoke failed on ${SHA::7} ($GITHUB_EVENT_NAME)" \
             -b "$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/RELEASING.md#production-guard\n' "$run" "$smoke" "$rollback")"
