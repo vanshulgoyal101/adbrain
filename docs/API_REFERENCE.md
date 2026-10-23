@@ -212,13 +212,19 @@ refunds, moves real money or grants advertising credit.
 The additive [customer allowance migration](../db/migrations/20260926_customer_ad_allowance.sql)
 does not enable collection or authorize Meta spending. Test payments give no
 credit. Owners can review their balance with `GET /api/payments/customer-balance`
-using `businessId` and optional `campaignId`. Financial operators can submit
+using `businessId` and optional `campaignId`. With `campaignId`, optional
+`capDays` (integer 1–7) reviews a capped run at `daily × capDays` + GST instead
+of 7 × daily; the activation PATCH still enforces the days the owner approves.
+Financial operators can submit
 strict `costs` or `refund-allocation` actions with
 `POST /api/payments/customer-balance`; authority is rechecked in SQL. See the
 [shared contracts](../src/lib/payments/customer-balance-contracts.ts).
 
 Cost evidence uses integer paise, immutable UUIDs and cumulative lifetime
-media/tax figures; stale or conflicting figures hold funds. Capturing payment
+media/tax figures; stale or conflicting figures hold funds. A capped run reserves
+its Meta lifetime cap plus GST instead of 7 × daily and is bounded by attributed
+media plus that cap; its aging non-final figures do not hold funds, but figures
+above the bound do (#208). Capturing payment
 does not earn service fees or activate ads. Review precedes an atomic reservation
 for one campaign. Before ACTIVE, the Meta cap must be written and read back
 within the reserved media allowance; unsupported or rejected caps block

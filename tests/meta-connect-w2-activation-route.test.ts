@@ -241,6 +241,16 @@ describe("campaign activation generation fence", () => {
     expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
     expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active");
+    expect(mocks.reserveCustomerCampaign.mock.calls[0][1].lifetimeCapPaise).toBeUndefined();
+  });
+
+  it("pauses the uncapped tree when saving active fails after Meta activation (#208)", async () => {
+    mocks.saveCampaign.mockResolvedValueOnce({ error: new Error("guard rejected") });
+    const { PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const response = await PATCH(patch({ status: "active", confirmationDigest: confirmationDigest(), connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(409);
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1"], adIds: ["ad-1"] });
+    expect(mocks.confirmCustomerCampaign).toHaveBeenLastCalledWith(expect.anything(), "campaign-1", "reservation-1", "paused");
   });
 
   it("blocks direct activation when customer allowance is insufficient or held", async () => {
@@ -478,6 +488,8 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     expect(mocks.activateCappedTree).toHaveBeenCalledWith("meta-campaign-1", capped);
     expect(mocks.enforceCampaignSpendCap).not.toHaveBeenCalled();
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    // #208: the reservation is bounded by the Meta lifetime budget, not 7 × daily.
+    expect(mocks.reserveCustomerCampaign).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ lifetimeCapPaise: 150000 }));
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "active");
     expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active" }, "campaign-1");
   });
@@ -524,6 +536,26 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
     expect(mocks.saveCampaign).not.toHaveBeenCalledWith(expect.anything(), { status: "active" }, "campaign-1");
+  });
+
+  it("pauses Meta and records paused when saving active fails after activation (#208)", async () => {
+    mocks.saveCampaign.mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: new Error("guard rejected") });
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/paused again in Meta/);
+    expect(mocks.pauseCampaignTree).toHaveBeenCalledWith("meta-campaign-1", { adSetIds: ["set-1", "capped-set"], adIds: ["ad-1", "capped-ad"] });
+    expect(mocks.activateCappedTree.mock.invocationCallOrder[0]).toBeLessThan(mocks.pauseCampaignTree.mock.invocationCallOrder[0]);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenLastCalledWith(expect.anything(), "campaign-1", "reservation-1", "paused");
+    expect(mocks.saveCampaign).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the reservation uncertain when the compensating pause is not confirmed (#208)", async () => {
+    mocks.saveCampaign.mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: new Error("guard rejected") });
+    mocks.pauseCampaignTree.mockRejectedValueOnce(new Error("Meta down"));
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/Pause the campaign in Ads Manager now/);
+    expect(mocks.confirmCustomerCampaign).toHaveBeenLastCalledWith(expect.anything(), "campaign-1", "reservation-1", "uncertain");
   });
 
   it("after one capped run, reviews the stored capped set and copies only the original ads into the next capped run (#197)", async () => {

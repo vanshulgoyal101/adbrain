@@ -113,6 +113,24 @@ describe("customer balance API", () => {
     expect((await GET(new Request(`${url}&campaignId=${campaignId}`))).status).toBe(200);
     expect(mocks.query.eq).toHaveBeenCalledWith("business_id", actor.businessId);
     expect(mocks.rpc).toHaveBeenCalledWith("customer_ad_reserve", expect.objectContaining({ p_review_only: true, p_daily_budget_paise: 20000 }));
+    expect(mocks.rpc.mock.calls[0][1]).not.toHaveProperty("p_lifetime_cap_paise");
+  });
+  it("reviews a capped run at its cap so ₹1,000 can open a ₹280 review that 7 × daily would refuse (#208)", async () => {
+    mocks.query.maybeSingle.mockResolvedValue({ data: { id: campaignId, daily_budget: 280,
+      meta_ad_account_id: "act_123", meta_page_id: "page", meta_connection_generation: 1 }, error: null });
+    const funded = { ...balance, advertisingAllocationPaise: 100_000, remainingPaise: 100_000 };
+    // Mirrors SQL admission: ceil(cap or 7 × daily, × 1.18) must fit the ₹1,000 for ads.
+    mocks.rpc.mockImplementation((_name: string, args: { p_daily_budget_paise: number; p_lifetime_cap_paise?: number }) => ({
+      abortSignal: async () => Math.ceil((args.p_lifetime_cap_paise ?? args.p_daily_budget_paise * 7) * 1.18) <= 100_000
+        ? { data: { reservationId: campaignId, mediaLimitPaise: 84_745, balance: funded }, error: null }
+        : { data: null, error: new Error("Insufficient customer advertising allowance") },
+    }));
+    expect((await GET(new Request(`${url}&campaignId=${campaignId}`))).status).toBe(409);
+    expect((await GET(new Request(`${url}&campaignId=${campaignId}&capDays=1`))).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenLastCalledWith("customer_ad_reserve", expect.objectContaining({ p_review_only: true, p_lifetime_cap_paise: 28_000 }));
+    for (const capDays of ["0", "8", "1.5", "x"]) {
+      expect((await GET(new Request(`${url}&campaignId=${campaignId}&capDays=${capDays}`))).status).toBe(400);
+    }
   });
   it("requires same-origin authenticated operator submissions", async () => {
     expect((await POST(post({ action: "costs", businessId: actor.businessId, evidence }, "https://foreign.example"))).status).toBe(403);
