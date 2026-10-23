@@ -92,7 +92,7 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
         {!pathname.startsWith("/create") && <Link className={styles.create} href="/create"><Plus size={16} aria-hidden="true" /><span>New creative</span></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
-      <footer className={styles.footer}><span>AdBrain workspace</span><nav aria-label="Legal">{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav></footer>
+      <footer className={styles.footer}><span>AdBrain workspace</span><nav aria-label="Legal">{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{link.label}</Link>)}</nav></footer>
     </div>
     <dialog ref={drawer} className={styles.drawer} aria-label="Workspace menu" onClick={event => {
       if (event.target === event.currentTarget || (event.target instanceof Element && event.target.closest("a"))) drawer.current?.close();
