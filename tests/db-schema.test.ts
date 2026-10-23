@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { applyMigration, databaseConfig, migrationChecksum } from "../scripts/database-migrations.mjs";
+import { buildSchema } from "../scripts/build-schema.mjs";
 
 describe("database migration safety", () => {
   const remote = { PGHOST: "db.example.invalid", PGUSER: "postgres.project", PGDATABASE: "postgres" };
@@ -46,10 +47,7 @@ describe("database migration safety", () => {
  * non-solar signup; RLS accidentally missing on a new table).
  */
 
-const SQL = readFileSync(
-  join(process.cwd(), "db", "schema.sql"),
-  "utf8",
-).toLowerCase();
+const SQL = buildSchema().toLowerCase();
 
 /** Tables that hold user data and must be ownership-scoped. */
 const OWNED_TABLES = [
