@@ -17,8 +17,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	conflict, money and priority follow the CEO; the technical approach follows the
 	CTO.
 - **Communication** (Oct 23; #74 is closed). Work talk lives on its issue or PR.
-	Hand off with the label plus one line addressed to the next owner (`QA: ready at
-	<sha>`), five lines at most; long evidence goes in the PR. No status or idle
+	Hand off with the label plus one line addressed to the next owner with an arrow
+	(`→ QA: ready at <sha>`), five lines at most; long evidence goes in the PR. Start
+	your own comments with your role (`Dev 2:`); everyone posts as one GitHub user, so
+	`QA: …` reads as written *by* QA and `wait-for-work` won't wake QA. No status or idle
 	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
 	labelled `decision`. Need the CTO? Label `owner:cto`. Blocked on the owner? Label
 	`waiting-owner`; only the CEO asks the owner, in one batched list.
