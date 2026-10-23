@@ -29,6 +29,14 @@ describe("QA approval", () => {
     ], head).approved).toBe(false);
     expect(qaApproval([comment("QA: please approve c30aaba soon", "2026-10-23T12:56:00Z")], head).approved).toBe(false);
   });
+
+  it("accepts QA's other approval wordings and refuses their negations", () => {
+    const verdict = (body: string) => qaApproval([comment(body, "2026-10-23T15:52:35Z")], head).approved;
+    expect(verdict("**QA review of c30aaba (tenant boundary): fine to merge for #157, with one follow-up.**")).toBe(true);
+    expect(verdict("QA → DevOps: PR #248 ready to ship at c30aaba.")).toBe(true);
+    expect(verdict("QA: c30aaba is not fine to merge yet.")).toBe(false);
+    expect(verdict("QA: please hold c30aaba; it conflicts with main.")).toBe(false);
+  });
 });
 
 describe("release inputs", () => {
