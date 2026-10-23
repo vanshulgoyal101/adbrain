@@ -116,19 +116,19 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities (Oct 23):
-- **P0, first real lead:** Solaride's WhatsApp run
-  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)), ₹280/day for
-  3 days. WhatsApp only, no lead form (owner). Waiting on: the owner links the
-  WhatsApp number and pays ₹1,300, #209/PR #218, #216/PR #219. Then QA's go and
-  Resume. We report spend, conversations and cost per conversation.
-- **P1, real customers (work on these while WhatsApp is blocked):** #156 (App
-  Review, the biggest blocker for outside customers; needs the owner's Facebook
-  sign-in), #235 (WhatsApp-first: show the link early, guide it, default to
-  WhatsApp), #221 (self-serve next run), #225 (billing says pay-as-you-go),
-  #226 (CI wall time halved).
-- **Close:** #169 after QA's 390 px recheck; #178 after the payment.
-- **Parked:** #51, #66 and #67 stay `later` until the first run is live.
+CEO priorities (Oct 23, evening; owner: lean, high value only):
+- **P0:** the live Solaride WhatsApp run
+  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)): ₹840 capped,
+  ends Oct 26 14:24Z. Monitor it and report spend, chats and cost per chat.
+  #156 (Meta App Review) is the gate for every outside customer; it needs the
+  owner's Facebook sign-in, then submit.
+- **P1:** #258 (live results refresh themselves and flag rejected or stalled
+  ads), #221 / PR #247 (self-serve next run), #235 (WhatsApp-first), #260 (lean
+  pass: retire `dev`, living docs only, dead scripts and branches out).
+- **Later:** #229 (email alerts; WhatsApp-first instead), #230, #238 and #239
+  (speed), #232, #253, #178. Closed as not actionable: #51, #66, #67 and #254.
+- **Filter for new issues:** it must help a customer make and run ads today, or
+  remove a real failure. Otherwise file it as `later`, or don't file it.
 
 The CTO maintains the worker table below.
 

@@ -54,6 +54,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	under `~/Development/copilot/adbrain-wt/`. The CEO edits only docs there and pushes them
 	to `dev` immediately; the CTO edits docs in `adbrain-wt/cto`. Never leave a merge,
 	staged files or local edits behind.
+- **Delete as you go** (owner, Oct 23: lean systems). When work is done, delete its
+	branch, worktree, one-off scripts and temporary files. Don't commit dated
+	reports, audits or handoffs; evidence goes in the issue or PR. Docs hold current
+	truth only, and git keeps the history.
 
 ## Execution speed
 
