@@ -330,3 +330,26 @@ and follow-up owner. Keep records in the issue or PR.
 Avoid asserting live-provider success from mocks or assuming a merged migration
 has run remotely. Monitoring events currently have no built-in alerting service;
 operational alert ownership must be established separately.
+## Enquiry Emails (#229)
+
+An email to the business owner for every new instant-form enquiry, sent by the scheduled
+`sync-leads` job (about every 15 minutes). The queue row is created by a database trigger on
+the first insert of a lead, unique per lead, so a re-synced lead never emails again.
+Enquiries older than 24 hours are skipped, so the first sync never emails old leads.
+
+Sending is off until all of these are true, so merging the code changes nothing:
+
+1. The CEO approves the provider and its cost (Resend is the first adapter; swap
+   `src/lib/email/provider.ts` for another).
+2. The owner verifies the sending domain (DNS) and creates the API key; DevOps stores it.
+3. DevOps applies `20261024_lead_email_notifications.sql` (then `notify pgrst, 'reload schema'`)
+   and sets `RESEND_API_KEY`, `LEAD_EMAIL_FROM`, `EMAIL_LINK_SECRET` (new, 16+ random characters,
+   not `CRON_SECRET`) and an `https` `NEXT_PUBLIC_SITE_URL`, then `LEAD_EMAIL_ENABLED=true`.
+
+Turn it off by unsetting `LEAD_EMAIL_ENABLED` (queued rows wait; rows older than 24 hours
+are skipped when it is turned back on). Owners switch it off in Settings, and every email has
+an unsubscribe link (RFC 8058 one-click). The cron response carries `emails` counts only;
+enquiry names, numbers, addresses and answers are never logged or stored in the queue.
+A failed send retries up to three attempts; a send whose result was lost is reclaimed after
+10 minutes and the provider's idempotency key (the lead id) prevents a duplicate.
+Production proof: a test lead on the Solaride lead form emails the owner within one sync.

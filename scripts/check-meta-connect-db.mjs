@@ -1341,6 +1341,130 @@ async function verifyCreativeGenerationAdmission(db, database) {
   });
 }
 
+async function verifyLeadEmailQueue(db, database) {
+  if (!(await db.query("select to_regclass('private.lead_notifications') is not null as installed")).rows[0].installed) {
+    const migration = await readFile(join(root, "db/migrations/20261024_lead_email_notifications.sql"), "utf8");
+    await check(`${database}: enquiry email migration applies once and skips replay (#229)`, async () => {
+      assert.equal(await applyMigration(db, "20261024_lead_email_notifications.sql", migration), "applied");
+      assert.equal(await applyMigration(db, "20261024_lead_email_notifications.sql", migration), "already_applied");
+    });
+  }
+  const owner = randomUUID();
+  const intruder = randomUUID();
+  const business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, intruder]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic enquiries')", [business, owner]);
+  const as = async (role, sql, values, subject) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query(`set role ${role}`);
+      if (subject) await session.query("select set_config('request.jwt.claim.sub',$1,false)", [subject]);
+      return (await session.query(sql, values)).rows[0]?.result;
+    } finally { await session.end(); }
+  };
+  const service = (sql, values) => as("service_role", sql, values);
+  const claim = (limit = 10) => service("select public.lead_notifications_claim($1) as result", [limit]);
+  const settle = (leadId, outcome, error = null) => service("select public.lead_notification_result($1,$2,$3) as result", [leadId, outcome, error]);
+  const lead = async (metaId, createdTime = new Date().toISOString(), businessId = business) => (await db.query(
+    "insert into public.leads(business_id,meta_lead_id,full_name,phone,created_time) values ($1,$2,'Asha','+919876543210',$3) on conflict (business_id,meta_lead_id) do nothing returning id",
+    [businessId, metaId, createdTime])).rows[0]?.id;
+  const note = async id => (await db.query("select state,attempts::int as attempts,skip_reason,error_code from private.lead_notifications where lead_id=$1", [id])).rows[0];
+  for (;;) if (!(await claim(50)).length) break; // earlier checks insert leads that are also queued
+
+  await check(`${database}: a new enquiry queues one email and a re-synced one queues nothing (#229)`, async () => {
+    const id = await lead('email-new-1');
+    assert.ok(id);
+    assert.equal(await lead('email-new-1'), undefined, 'a re-synced lead is not inserted again');
+    assert.equal((await db.query("select count(*)::int as count from private.lead_notifications where lead_id=$1", [id])).rows[0].count, 1);
+    assert.deepEqual(await note(id), { state: 'queued', attempts: 0, skip_reason: null, error_code: null });
+    const claimed = await claim();
+    const mine = claimed.filter(item => item.leadId === id);
+    assert.equal(mine.length, 1);
+    assert.deepEqual([mine[0].ownerId, mine[0].fullName, mine[0].phone, mine[0].attempt], [owner, 'Asha', '+919876543210', 1]);
+    assert.equal((await claim()).filter(item => item.leadId === id).length, 0, 'a claimed enquiry is not claimed twice');
+    await settle(id, 'sent');
+    assert.equal((await note(id)).state, 'sent');
+    await settle(id, 'retry');
+    assert.equal((await note(id)).state, 'sent', 'only a sending notification can change state');
+    assert.equal((await claim()).filter(item => item.leadId === id).length, 0);
+  });
+  await check(`${database}: old enquiries are never emailed (#229)`, async () => {
+    const id = await lead('email-old-1', new Date(Date.now() - 25 * 3_600_000).toISOString());
+    assert.deepEqual([(await note(id)).state, (await note(id)).skip_reason], ['skipped', 'stale']);
+    assert.equal((await claim()).filter(item => item.leadId === id).length, 0);
+    const queued = await lead('email-aging-1');
+    await db.query("update public.leads set created_time=clock_timestamp()-interval '25 hours' where id=$1", [queued]);
+    assert.equal((await claim()).filter(item => item.leadId === queued).length, 0);
+    assert.deepEqual([(await note(queued)).state, (await note(queued)).skip_reason], ['skipped', 'stale']);
+  });
+  await check(`${database}: failures retry up to three attempts, then stop; a stuck send is reclaimed (#229)`, async () => {
+    const id = await lead('email-retry-1');
+    for (const attempt of [1, 2]) {
+      assert.equal((await claim()).find(item => item.leadId === id)?.attempt, attempt);
+      await settle(id, 'retry', 'http_503');
+      assert.equal((await note(id)).state, 'queued');
+    }
+    assert.equal((await claim()).find(item => item.leadId === id)?.attempt, 3);
+    await settle(id, 'retry', 'http_503');
+    assert.deepEqual(await note(id), { state: 'failed', attempts: 3, skip_reason: null, error_code: 'http_503' });
+    assert.equal((await claim()).filter(item => item.leadId === id).length, 0);
+    const stuck = await lead('email-stuck-1');
+    assert.equal((await claim()).find(item => item.leadId === stuck)?.attempt, 1);
+    assert.equal((await claim()).filter(item => item.leadId === stuck).length, 0, 'not reclaimed while recent');
+    await db.query("update private.lead_notifications set claimed_at=clock_timestamp()-interval '11 minutes' where lead_id=$1", [stuck]);
+    assert.equal((await claim()).find(item => item.leadId === stuck)?.attempt, 2);
+    await settle(stuck, 'failed', 'http_422');
+    assert.deepEqual([(await note(stuck)).state, (await note(stuck)).error_code], ['failed', 'http_422']);
+  });
+  await check(`${database}: simultaneous claims never share an enquiry (#229)`, async () => {
+    const ids = [];
+    for (let index = 0; index < 6; index++) ids.push(await lead(`email-race-${index}`));
+    const batches = await Promise.all([claim(3), claim(3), claim(3)]);
+    const seen = batches.flat().map(item => item.leadId).filter(id => ids.includes(id));
+    assert.equal(seen.length, 6);
+    assert.equal(new Set(seen).size, 6);
+    await assert.rejects(claim(0), { code: '22023' });
+    await assert.rejects(claim(51), { code: '22023' });
+  });
+  await check(`${database}: an owner can switch emails off and an unsubscribe link does the same, per business (#229)`, async () => {
+    const setting = (subject, value) => as("authenticated", value === undefined
+      ? "select public.lead_email_setting_get($1) as result" : "select public.lead_email_setting_set($1,$2) as result",
+    value === undefined ? [business] : [business, value], subject);
+    assert.equal(await setting(owner), true, 'on by default');
+    await assert.rejects(setting(intruder), { code: '42501' });
+    await assert.rejects(setting(intruder, false), { code: '42501' });
+    assert.equal(await setting(owner, false), false);
+    const quiet = await lead('email-optout-1');
+    assert.equal((await claim()).filter(item => item.leadId === quiet).length, 0);
+    assert.deepEqual([(await note(quiet)).state, (await note(quiet)).skip_reason], ['skipped', 'opted_out']);
+    assert.equal(await setting(owner, true), true);
+    assert.equal((await claim()).filter(item => item.leadId === quiet).length, 0, 'a skipped enquiry is not revived');
+    const loud = await lead('email-optin-1');
+    assert.equal((await claim()).filter(item => item.leadId === loud).length, 1);
+    await service("select public.lead_email_unsubscribe($1) as result", [business]);
+    assert.equal(await setting(owner), false);
+    await service("select public.lead_email_unsubscribe($1) as result", [randomUUID()]);
+  });
+  await check(`${database}: queue functions are closed to browser roles (#229)`, async () => {
+    for (const role of ['anon', 'authenticated']) {
+      await assert.rejects(as(role, "select public.lead_notifications_claim(5) as result", [], owner), { code: '42501' });
+      await assert.rejects(as(role, "select public.lead_notification_result($1,'sent',null) as result", [randomUUID()], owner), { code: '42501' });
+      await assert.rejects(as(role, "select public.lead_email_unsubscribe($1) as result", [business], owner), { code: '42501' });
+      await assert.rejects(as(role, "select * from private.lead_notifications", [], owner), { code: '42501' });
+    }
+    await assert.rejects(as('anon', "select public.lead_email_setting_get($1) as result", [business]), { code: '42501' });
+  });
+  await check(`${database}: deleting a business removes its queue rows (#229)`, async () => {
+    const doomed = randomUUID();
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Synthetic doomed')", [doomed, owner]);
+    const id = await lead('email-doomed-1', new Date().toISOString(), doomed);
+    assert.ok(await note(id));
+    await db.query("delete from public.businesses where id=$1", [doomed]);
+    assert.equal(await note(id), undefined);
+  });
+}
+
 async function verify(database, source, integrityMigration, customerOnly = false) {
   const admin = client();
   await admin.connect();
@@ -1803,6 +1927,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await db.query("update public.meta_connections set generation=1, ad_account_id=null, page_id=null where business_id=$1", [businessId]);
       }
     });
+  await verifyLeadEmailQueue(db, database);
   if (process.argv.includes("--leads-only")) return;
 
     await check(`${database}: production payment claims and financial effects survive competing clients and restart recovery`, async () => {

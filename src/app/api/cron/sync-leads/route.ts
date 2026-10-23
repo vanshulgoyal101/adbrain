@@ -2,6 +2,8 @@ import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
+import { leadEmailConfig, sendLeadNotifications } from "@/lib/leads/notify";
+import { createResendProvider } from "@/lib/email/provider";
 import { friendlyMetaError } from "@/lib/meta/client";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -75,10 +77,23 @@ async function handleGET(request: Request) {
     }
   }
 
+  // #229: email the owner about new enquiries. Off unless the flag and every setting are present;
+  // a failure here never turns the lead sync red, and the response carries counts only.
+  const emailConfig = leadEmailConfig();
+  const emails = emailConfig ? await sendLeadNotifications({
+    config: emailConfig,
+    provider: createResendProvider({ apiKey: emailConfig.apiKey, from: emailConfig.from }),
+    store: {
+      rpc: (name, args) => (admin as unknown as { rpc(name: string, args?: Record<string, unknown>): PromiseLike<{ data: unknown; error: { code?: string } | null }> }).rpc(name, args),
+      ownerEmail: async ownerId => (await admin.auth.admin.getUserById(ownerId)).data.user?.email ?? null,
+    },
+  }).catch(() => ({ claimed: 0, sent: 0, retried: 0, failed: 0, error: "claim_failed" as const })) : { enabled: false };
+
   const ok = businesses.every(business => !business.error);
   return NextResponse.json({
     ok,
     at: new Date().toISOString(),
+    emails,
     imported: businesses.reduce((total, business) => total + business.imported, 0),
     businesses,
   }, { status: ok ? 200 : 503 });

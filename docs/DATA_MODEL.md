@@ -198,6 +198,7 @@ columns to restore an obsolete UI.
 | Table | Important fields and guarantees |
 | --- | --- |
 | `public.leads` | Business, nullable campaign, unique `(business_id,meta_lead_id)`, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time; `workflow_status` `new`/`contacted`/`qualified`/`booked`/`closed` (default `new`) and `follow_up_note` (default empty, <=2000 characters) |
+| `private.lead_notifications`, `private.lead_email_settings` | #229. One notification row per lead (primary key = lead), created by a trigger on the first insert of a lead, so a re-synced lead never queues again; states `queued`/`sending`/`sent`/`failed`/`skipped` (skipped: older than 24 hours, or opted out). Settings hold the per-business on/off (default on). Service-role RPCs claim and settle rows; owners read and set the switch through `lead_email_setting_get/set`. No enquiry data is copied into these tables |
 | `public.lead_sync_runs` | Business/owner, connection generation, ad account and Page, state `partial`/`complete`, version, progress JSON (form cursor, seen forms, pending forms); RLS with browser roles revoked, service-role only |
 | `public.spend_limits` | One per business; nullable integer weekly cap, alert percentage 1-100 default 80, auto-pause default false, updated time |
 | `public.audit_log` | Business/actor, action, entity type/ID, Meta object ID, reason, detail JSON, timestamp |

@@ -146,7 +146,9 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
-| GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta) |
+| GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta). With `LEAD_EMAIL_ENABLED` (#229) it then emails queued new enquiries to each owner and returns `emails` counts only (`claimed`, `sent`, `retried`, `failed`, or `enabled:false`); an email failure never turns the sync red |
+| GET/POST | `/api/lead-email` | Session, owner | `?businessId` reads, POST `{businessId, enabled}` sets the enquiry-email switch (default on); returns `{enabled, available}` where `available` is false until sending is configured |
+| GET/POST | `/api/email/unsubscribe?token=` | Signed link, no session | GET shows a confirm button (mail scanners cannot unsubscribe anyone); POST, also RFC 8058 one-click, switches the business's enquiry emails off |
 | GET | `/api/cron/payment-health` | Cron Bearer auth | Razorpay webhook counts for the live account (`events7d`, `unprocessed`, `capturedWithoutEvent`); `ok:false` when a capture lacks its webhook event; read-only |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 

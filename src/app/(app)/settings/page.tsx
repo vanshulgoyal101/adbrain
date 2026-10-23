@@ -9,6 +9,7 @@ import { MetaConnectionPanel } from "@/components/meta-connection";
 import { ManagedBilling } from "@/components/managed-billing";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
+import { LeadEmailSetting } from "@/components/lead-email-setting";
 import { PrivacyRequests } from "@/components/privacy-requests";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
@@ -91,6 +92,7 @@ export default async function SettingsPage({
       <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
         <SpendSettings businessId={business.id} />
       </Suspense>
+      <LeadEmailSetting key={business.id} businessId={business.id} />
       <Suspense fallback={<SettingsLoading label="Preferences" />}>
         <PreferenceAndPrivacySettings businessId={business.id} />
       </Suspense>

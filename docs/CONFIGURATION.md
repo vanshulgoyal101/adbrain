@@ -224,6 +224,10 @@ decrypt old tokens; rotation requires a reviewed migration. See
 | Variable | Default / bounds | Meaning |
 | --- | --- | --- |
 | `CRON_SECRET` | Empty disables cron routes with 404 | Scheduled request Bearer secret |
+| `LEAD_EMAIL_ENABLED` | Unset/anything but `true`: off | Master flag for enquiry emails (#229). Sending also needs the three settings below and an `https` `NEXT_PUBLIC_SITE_URL`; otherwise nothing is sent |
+| `RESEND_API_KEY` | Secret; empty disables sending | Resend API key (provider pending the CEO decision; swap the adapter in `src/lib/email/provider.ts`) |
+| `LEAD_EMAIL_FROM` | Sender on a verified domain, e.g. `AdBrain <alerts@vanshul.com>` | From address |
+| `EMAIL_LINK_SECRET` | Secret, 16+ characters, not `CRON_SECRET` | Signs unsubscribe links; also keeps links working if sending is switched off |
 | `CAMPAIGN_EXECUTION_MODE` | Unset/`inline` for compatibility; `worker` opts in | Web enqueue vs synchronous creation; unknown nonempty values block creation |
 | `CAMPAIGN_WORKER_TARGET` | Required by standalone worker | Exact Supabase URL origin, explicitly confirms worker target |
 | `TRAFFIC_GENERATOR_ALLOWED_EMAILS` | Empty list | Production: disabled; nonproduction: any signed-in user when empty |

@@ -627,6 +627,11 @@ export interface Database {
         Args: LeadSyncScopeArgs;
         Returns: LeadSyncRow[];
       };
+      lead_notifications_claim: { Args: { p_limit: number }; Returns: Json };
+      lead_notification_result: { Args: { p_lead_id: string; p_outcome: string; p_error: string | null }; Returns: undefined };
+      lead_email_setting_get: { Args: { p_business_id: string }; Returns: boolean };
+      lead_email_setting_set: { Args: { p_business_id: string; p_enabled: boolean }; Returns: boolean };
+      lead_email_unsubscribe: { Args: { p_business_id: string }; Returns: undefined };
       lead_sync_checkpoint: {
         Args: LeadSyncScopeArgs & { p_sync_id: string; p_version: number; p_rows: Json; p_progress: Json };
         Returns: Json;
