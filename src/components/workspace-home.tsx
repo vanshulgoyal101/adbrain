@@ -14,6 +14,7 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatDateShort } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CreativePreview } from "@/lib/types";
+import { campaignAttention } from "@/lib/campaign/health";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -214,6 +215,11 @@ export function WorkspaceHome({
                       <p className="mt-1 text-xs text-slate-500">
                         {formatDateShort(campaign.created_at)}
                       </p>
+                      {campaignAttention(campaign) ? (
+                        <p className="mt-1 text-xs font-medium text-red-800">
+                          Needs attention: {campaignAttention(campaign)}
+                        </p>
+                      ) : null}
                     </div>
                     <span
                       className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${campaign.status === "active" ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-700"}`}
