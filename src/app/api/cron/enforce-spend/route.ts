@@ -106,14 +106,11 @@ async function handleGET(request: Request) {
       unverified.push(businessId);
       continue;
     }
-    let operatorFunded: boolean;
-    try {
-      operatorFunded = await isOperatorFunded(businessId);
-    } catch {
+    // #245: an unreadable funding mode falls back to the customer rules (fail closed).
+    const operatorFunded = await isOperatorFunded(businessId).catch(() => {
       incomplete = true;
-      unverified.push(businessId);
-      continue;
-    }
+      return false;
+    });
     let customerBalance = null;
     if (!operatorFunded) {
       const initialBalance = await getCustomerBalance(context).catch(() => null);

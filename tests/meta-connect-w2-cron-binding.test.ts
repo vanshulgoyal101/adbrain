@@ -284,13 +284,14 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
   });
 
-  it("skips a business whose funding mode cannot be verified and reports it (#245)", async () => {
+  it("falls back to the customer rules when the funding mode cannot be read, and reports the sweep incomplete (#245)", async () => {
     mocks.isOperatorFunded.mockRejectedValue(new Error("database unavailable"));
+    mocks.getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ ok: false, unverified: ["business-1"] });
-    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+    expect(mocks.getCustomerBalance).toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "PAUSED");
   });
 
   it("protects held customer funds without a saved spend-limits row", async () => {
