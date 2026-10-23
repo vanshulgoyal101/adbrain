@@ -4,13 +4,16 @@ import { DEFAULT_PAYMENT_ALLOCATION_POLICY } from "@/lib/payments/allocation";
 import { TestCheckout } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
 import { CustomerBalance } from "@/components/customer-balance";
+import type { CustomerBalance as Balance } from "@/lib/payments/customer-balance-contracts";
 
 type BillingConnection = Pick<MetaConnection, "adAccountId" | "ready" | "pending" | "expired">;
 
-export function ManagedBilling({ connection, testBusinessId, liveBusinessId }: { connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string }) {
+export function ManagedBilling({ connection, testBusinessId, liveBusinessId, initialBalance = null }: {
+  connection: BillingConnection | null; testBusinessId?: string; liveBusinessId?: string; initialBalance?: Balance | null;
+}) {
   if (liveBusinessId) return <>
     <ProductionCheckout key={liveBusinessId} businessId={liveBusinessId} />
-    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} />
+    <CustomerBalance key={`allowance-${liveBusinessId}`} businessId={liveBusinessId} initialBalance={initialBalance} />
   </>;
   const feePercent = DEFAULT_PAYMENT_ALLOCATION_POLICY.platformFeeBps / 100;
   const connectionStatus = !connection ? "Temporarily unavailable"

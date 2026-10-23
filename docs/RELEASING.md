@@ -225,6 +225,19 @@ gh api repos/vanshulgoyal101/adbrain/branches/main/protection
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
   and the schema tests all use it, so two migration PRs never conflict. Name a
   migration so it sorts after the ones it depends on.
+- **Release a money or migration PR (#228, DevOps):**
+  `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
+  Preflight is read-only: the PR targets `main` without conflicts, the required
+  checks are green on its head, the latest QA verdict naming that head approves it
+  and names each new migration's sha256, and the PR only adds migrations. The
+  release then dry-runs each pending migration (rolled back), applies it with its
+  ledger row through the Management API (same lock, timeouts and checksum guard as
+  the runner), reloads the PostgREST schema, merges with `--match-head-commit <full
+  sha>` and waits for the production guard, following a newer production commit
+  when it contains the merge. It prints a receipt for the issue. `--dry-run` stops
+  before the apply and the merge. On any failure it stops and prints the recovery
+  step; after a failed apply it reads the ledger and active sessions first and
+  never resends the SQL. Rerunning skips migrations already in the ledger.
 - The local campaign hardening changes require the reporting-identity migration
    before the new web code, and the worker migration before enabling worker mode.
    See [worker rollout](OPERATIONS.md#campaign-worker-rollout). Neither new migration

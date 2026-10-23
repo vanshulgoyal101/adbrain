@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { DEV_AUTH_COOKIE, isDevAuthEnabled } from "@/lib/dev-auth";
-import { isSignedOutAuthError } from "@/lib/supabase/auth-error";
+import { isSignedOutClaimsError } from "@/lib/supabase/auth-error";
 
 // Every route under src/app/(app). Keep in sync with that folder — the layout
 // also redirects, but guarding at the edge avoids a wasted render and keeps the
@@ -45,12 +45,13 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Do not run code between createServerClient and getUser() — it must be the
+  // Do not run code between createServerClient and getClaims() — it must be the
   // first await so the session refresh cookies are attached to the response.
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the JWT locally against the cached JWKS (no Auth round
+  // trip) and only calls the network to refresh an expired session. Pages, server
+  // actions and API routes still call getUser() for their own identity checks.
+  const { data, error } = await supabase.auth.getClaims();
+  const signedIn = Boolean(data?.claims?.sub);
 
   const path = request.nextUrl.pathname;
   const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
@@ -59,7 +60,7 @@ export async function updateSession(request: NextRequest) {
     isDevAuthEnabled() &&
     request.cookies.get(DEV_AUTH_COOKIE)?.value === "1";
 
-  if (!user && !devAuthed && isProtected && (!error || isSignedOutAuthError(error))) {
+  if (!signedIn && !devAuthed && isProtected && (!error || isSignedOutClaimsError(error))) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("redirect", path);

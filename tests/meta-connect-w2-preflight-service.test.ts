@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { prepareCampaignReview, type PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { DraftRecord } from "@/lib/campaign/draft-store";
 
@@ -65,6 +65,16 @@ describe("campaign preflight orchestration", () => {
       findWhatsAppNumber: async () => "+919876543210",
     }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
     expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: true, planHash: "a".repeat(64), destination: "whatsapp", whatsappNumber: "+919876543210" } });
+  });
+
+  it("verifies the draft's own WhatsApp button number when one is chosen (#157)", async () => {
+    const find = vi.fn(async (_actor: unknown, requested?: string) => requested ?? null);
+    const result = await prepareCampaignReview(loaders({
+      findDraft: async () => ({ ...draft, input: { ...draft.input, destination: "whatsapp", whatsappNumber: "+919999994842" } }),
+      findWhatsAppNumber: find,
+    }), { actor, draftId: draft.id, requestedDraftVersion: 2, now: "2026-09-07T10:00:00.000Z" });
+    expect(find).toHaveBeenCalledWith(actor, "+919999994842");
+    expect(result).toMatchObject({ kind: "review", review: { canCreatePaused: true, whatsappNumber: "+919999994842" } });
   });
 
   it("loads exact owned inputs and returns a reviewed plan", async () => {

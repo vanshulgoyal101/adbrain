@@ -539,15 +539,34 @@ export class MetaClient {
     return this.pageAccessToken;
   }
 
-  async getWhatsAppNumber(): Promise<string | null> {
+  /**
+   * The verified WhatsApp number for click-to-WhatsApp ads: the Page's linked number, or a
+   * requested number on a WhatsApp Business Account owned by the ad account's own business
+   * (Meta accepts those for the Page even when the Page fields are empty, #157).
+   */
+  async getWhatsAppNumber(requested?: string | null): Promise<string | null> {
     const token = await this.getPageAccessToken();
     const page = await this.graph<{ id?: string; has_whatsapp_business_number?: boolean; whatsapp_number?: string }>(
       `${this.creds.pageId}?fields=id,has_whatsapp_business_number,whatsapp_number`,
       { token },
     );
-    if (page.id !== this.creds.pageId || page.has_whatsapp_business_number !== true || typeof page.whatsapp_number !== "string") return null;
-    const number = page.whatsapp_number.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
-    return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
+    const normalize = (value: string) => {
+      const number = value.replace(/[\s().-]/g, "").replace(/^\+?/, "+");
+      return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
+    };
+    const pageNumber = page.id === this.creds.pageId && page.has_whatsapp_business_number === true && typeof page.whatsapp_number === "string"
+      ? normalize(page.whatsapp_number) : null;
+    const wanted = requested ? normalize(requested) : null;
+    if (!wanted || wanted === pageNumber) return pageNumber;
+    const account = await this.graph<{ id?: string; business?: { id?: string } }>(`${this.creds.adAccountId}?fields=id,business{id}`);
+    const businessId = account.business?.id;
+    if (!businessId || !/^\d+$/.test(businessId)) return null;
+    const wabas = await this.graph<{ data?: { phone_numbers?: { data?: { display_phone_number?: string }[] } }[]; paging?: { next?: string } }>(
+      `${businessId}/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100`,
+    );
+    const owned = (wabas.data ?? []).flatMap((waba) => waba.phone_numbers?.data ?? [])
+      .map((phone) => normalize(phone.display_phone_number ?? ""));
+    return owned.includes(wanted) ? wanted : null;
   }
 
   /** Active instant lead forms on the page. */
@@ -771,7 +790,7 @@ export class MetaClient {
     if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
     if (requested === "whatsapp") {
       if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
-      if (await this.getWhatsAppNumber() !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
+      if (await this.getWhatsAppNumber(params.whatsappNumber) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
     }
 
     // Call ads need a phone number — fetch the page's if none was passed.

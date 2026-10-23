@@ -60,6 +60,8 @@ export const draftInputSchema = z
     dailyBudgetRupees: moneyRupees,
     leadFormId: metaId.nullable(),
     destination: z.enum(["instant_form", "whatsapp"]).optional(),
+    /** WhatsApp button number when it differs from the Page's; verified against Meta at review. */
+    whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
   })

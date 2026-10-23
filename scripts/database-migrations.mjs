@@ -52,3 +52,25 @@ export async function applyMigration(client, name, sql) {
     throw error;
   }
 }
+
+// One-request form of applyMigration for the Supabase Management API, where each
+// request is its own session. `commit: false` always ends in rollback (a dry run).
+export function managementMigrationSql(name, sql, { commit }) {
+  if (!/^\d[\w-]*\.sql$/.test(name)) throw new Error("Choose a migration filename from db/migrations.");
+  const body = sql.replace(/^\s*begin\s*;[ \t]*$/im, "").replace(/^\s*commit\s*;[ \t]*(?![\s\S]*^\s*commit\s*;)/im, "");
+  const outsideBodies = body.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, "");
+  if (/^\s*((begin|commit|rollback|end|abort)(\s+(work|transaction))?\s*;|start\s+transaction\b|savepoint\s+\w+\s*;|release\s+(savepoint\s+)?\w+\s*;|rollback\s+(work\s+|transaction\s+)?to\b)/im.test(outsideBodies)) {
+    throw new Error(`${name} controls its own transaction mid-file; apply it by hand.`);
+  }
+  return [
+    "begin;",
+    "set local lock_timeout = '5s';",
+    "set local statement_timeout = '60s';",
+    "select pg_advisory_xact_lock(hashtextextended('adbrain:migrations', 0));",
+    `do $release$ begin if exists (select 1 from private.schema_migrations where name = '${name}') then raise exception 'already applied: ${name}'; end if; end $release$;`,
+    body.trim(),
+    `insert into private.schema_migrations (name, checksum) values ('${name}', '${migrationChecksum(sql)}');`,
+    `select name, checksum from private.schema_migrations where name = '${name}';`,
+    commit ? "commit;" : "rollback;",
+  ].join("\n");
+}
