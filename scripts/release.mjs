@@ -163,7 +163,8 @@ async function main() {
     if ((await ledger([m.name])).length) stop(`Ledger has ${m.name} after a dry run. Investigate before anything else.`);
   }
   if (dry) {
-    step(`Dry run complete. A real run applies ${pending.map((m) => m.name).join(", ") || "no migration"}, reloads the schema, merges with --match-head-commit ${head} and waits for the guard.`);
+    const apply = pending.length ? `applies ${pending.map((m) => m.name).join(", ")}, reloads the schema,` : "applies no migration,";
+    step(`Dry run complete. A real run ${apply} merges with --match-head-commit ${head} and waits for the guard.`);
     return;
   }
 
