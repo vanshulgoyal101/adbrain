@@ -117,9 +117,11 @@ CEO priorities (Oct 23):
   3 days. WhatsApp only, no lead form (owner). Waiting on: the owner links the
   WhatsApp number and pays ₹1,300, #209/PR #218, #216/PR #219. Then QA's go and
   Resume. We report spend, conversations and cost per conversation.
-- **P1, real customers:** #221 (self-serve next run), #156 (App Review, needs the
-  owner's Facebook sign-in), #225 (billing says pay-as-you-go), #222
-  (wait-for-work).
+- **P1, real customers (work on these while WhatsApp is blocked):** #156 (App
+  Review, the biggest blocker for outside customers; needs the owner's Facebook
+  sign-in), #235 (WhatsApp-first: show the link early, guide it, default to
+  WhatsApp), #221 (self-serve next run), #225 (billing says pay-as-you-go),
+  #226 (CI wall time halved).
 - **Close:** #169 after QA's 390 px recheck; #178 after the payment.
 - **Parked:** #51, #66 and #67 stay `later` until the first run is live.
 
