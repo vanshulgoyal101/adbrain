@@ -4,6 +4,7 @@ import { createOpenRouterProvider } from "./providers/openrouter";
 import { ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
+import { freeProvidersOnly } from "@/lib/llm/spend-policy";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
@@ -22,7 +23,7 @@ function getProvider(name = getEnv().IMAGE_PROVIDER): ImageProvider {
 
 function getFallbackProvider(): ImageProvider | null {
   const env = getEnv();
-  return !env.IMAGE_PROVIDER_FALLBACK || env.IMAGE_PROVIDER_FALLBACK === "none"
+  return freeProvidersOnly() || !env.IMAGE_PROVIDER_FALLBACK || env.IMAGE_PROVIDER_FALLBACK === "none"
     ? null : getProvider(env.IMAGE_PROVIDER_FALLBACK);
 }
 
@@ -43,7 +44,10 @@ export async function generateImage(
 ): Promise<GeneratedImage> {
   const startedAt = Date.now();
   req.signal?.throwIfAborted();
-  const provider = getProvider();
+  // Internal accounts make free Pollinations images, which take no reference images (#449).
+  const free = freeProvidersOnly();
+  if (free) req = { ...req, referenceImages: undefined };
+  const provider = getProvider(free ? "pollinations" : undefined);
   try {
     const generated = {
       ...(await executeImage(provider, req)),

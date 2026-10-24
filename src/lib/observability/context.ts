@@ -10,14 +10,14 @@ export interface EventContext {
 }
 
 export const eventContext = new AsyncLocalStorage<EventContext>();
-type VerifiedActor = { id: string; email?: string | null };
+type VerifiedActor = { id: string; email?: string | null; email_confirmed_at?: string | null };
 const verifiedActors = new WeakMap<EventContext, VerifiedActor>();
 
 export function observeVerifiedUser(user: VerifiedActor | null): void {
   observeIdentity(user?.id ?? null);
   const context = eventContext.getStore();
   if (!context) return;
-  if (user) verifiedActors.set(context, { id: user.id, email: user.email });
+  if (user) verifiedActors.set(context, { id: user.id, email: user.email, email_confirmed_at: user.email_confirmed_at });
   else verifiedActors.delete(context);
 }
 

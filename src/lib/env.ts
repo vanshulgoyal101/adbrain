@@ -45,6 +45,8 @@ const schema = z.object({
     .default("groq,google,cerebras"),
   // Unset: Create follows LLM_PROVIDER_ORDER (3/3 in Oct 21 run 4); Groq-first lost a draft in run 6.
   CREATIVE_PROVIDER_ORDER: z.string().optional(),
+  /** Text providers for internal accounts when a route's order has only paid ones (#449). */
+  INTERNAL_PROVIDER_ORDER: z.string().optional().default("google,groq"),
   GEMINI_MODEL: z.string().optional().default("gemini-3.6-flash"),
   // Groq retires models with little notice (llama-3.3-70b-versatile now 404s),
   // so the model is configurable rather than hardcoded.

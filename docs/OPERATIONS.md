@@ -238,7 +238,8 @@ The CEO and CTO rerun it weekly.
 **Customer-only numbers (#379).** Every reported number excludes internal accounts by
 default. They are defined once in
 [internal-accounts.json](../src/lib/internal-accounts.json), which the app also uses to lift
-the monthly AI limit for them (#398): team domains
+the monthly AI limit for them (#398) and to keep them off the paid OpenRouter key (#449: free
+text providers, Pollinations images): team domains
 (`@adbrain.vanshul.com`, `@adbrain.local`), owner user ids, and the smoke/demo emails
 from the owner's local `.env.smoke`. **To mark a new internal account,** add its domain
 or its auth user id to that file in a PR; never an email, because the repo is public.
