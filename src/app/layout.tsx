@@ -57,6 +57,8 @@ export const metadata: Metadata = {
 
 export const viewport = {
   themeColor: "#2563eb",
+  // The UI is light-only; this stops phone browsers from force-darkening it unevenly.
+  colorScheme: "only light",
 };
 
 export default function RootLayout({
