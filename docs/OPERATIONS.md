@@ -278,7 +278,11 @@ to the production `CRON_SECRET`); without that Vault secret every job is a no-op
 `adbrain-cron-history-cleanup` keeps 7 days of `cron.job_run_details`. Inspect with
 `select jobname, schedule, active from cron.job` and
 `select j.jobname, d.status, d.start_time from cron.job_run_details d join cron.job j using (jobid) order by d.start_time desc limit 20`;
-HTTP results stay in `net._http_response` for 6 hours. Pause one job with
+HTTP results stay in `net._http_response` for 6 hours.
+**Never add `net` to the API's exposed schemas or extra search path:** pg_net grants
+its tables and `http_get` to `PUBLIC`, and `net.http_request_queue` holds the
+bearer header until the worker sends it (`select count(*) from net.http_request_queue`
+is 0 between runs). Pause one job with
 `select cron.alter_job((select jobid from cron.job where jobname = 'adbrain-sync-leads'), active := false)`
 (`active := true` resumes). Load or rotate the Vault secret only as DevOps, from
 memory and never printed: `vault.create_secret(<value>, 'adbrain_cron_secret')` once, then
