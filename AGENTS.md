@@ -42,12 +42,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Hand off the commit, result and any real blocker in the existing issue/PR.
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
-- **Don't stop when idle or waiting** (owner, Oct 23). Run
-	`node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
-	from a worktree on current `origin/main`, in the foreground with no timeout. It
-	returns when something is labelled for you, someone comments on your issue, or
-	someone addresses you (`QA:`, `**Dev 3:**`, `→ CEO`). Do the work, then wait
-	again. This is the one allowed waiting command. Stop only after it times out (2 h).
+- **When idle, wait briefly, then stop** (owner, Oct 24: no stale background
+	processes). Run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
+	from a worktree on current `origin/main`, **in the foreground only**. It returns
+	when something is labelled for you, someone comments on your issue, or someone
+	addresses you (`→ QA:`, `→ CEO`). Do the work, then wait again. After 30 minutes
+	with nothing new it exits: stop there. Never end a turn with anything running in
+	the background (waiters, dev servers, watchers, test databases), and close
+	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable
 	(what failed, the check that proved it, the fix). The CTO publishes
 	these to the shared `skills` and `vbrain-private` repos.
