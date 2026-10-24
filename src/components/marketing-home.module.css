@@ -78,8 +78,9 @@
 .steps p { font-size: 14px; line-height: 1.7; color: var(--subtle); }
 .safety { background: #eff3f1; padding: 48px max(48px, calc((100% - 1248px) / 2)); display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
 .safety .eyebrow { margin-top: 20px; }
-.safety > div > p:last-child { font-size: 14px; line-height: 1.7; color: var(--subtle); margin-top: 20px; max-width: 360px; }
+.safety h2 + p, .safety > div > p:last-child { font-size: 14px; line-height: 1.7; color: var(--subtle); margin-top: 20px; max-width: 360px; }
 .safety ul { list-style: none; padding: 0; margin: 0; }
+.support { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 16px; font-size: 14px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .safety li { display: flex; gap: 18px; border-bottom: 1px solid #cdd7d1; padding: 22px 0; }
 .safety li svg { flex-shrink: 0; width: 20px; color: #3e684e; }
 .safety h3 { font-size: 15px; margin-bottom: 8px; }
