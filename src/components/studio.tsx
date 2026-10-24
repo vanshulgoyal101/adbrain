@@ -762,13 +762,6 @@ function CreativeCard({
             <Spinner className="h-6 w-6 text-blue-600" />
           </div>
         )}
-        <div className="absolute left-2 top-2 flex gap-1.5">
-          {creative.angle && (
-            <Badge className="bg-black/60 text-white backdrop-blur">
-              {creative.angle}
-            </Badge>
-          )}
-        </div>
       </div>
       <CardContent className="flex flex-1 flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
