@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import type { SpendEvaluation, SpendLimits } from "@/lib/campaign/spend";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoney } from "@/lib/format";
 
 export function SpendGuardrails({
   limits,
@@ -164,14 +164,14 @@ function SpendMeter({ evaluation }: { evaluation: SpendEvaluation }) {
       <div className="flex items-center justify-between text-sm">
         <span className="text-slate-600">This week</span>
         <span className="font-medium text-slate-900">
-          {formatCurrency(evaluation.usedRupees)} / {formatCurrency(evaluation.capRupees ?? 0)}
+          {formatMoney(evaluation.usedRupees)} / {formatMoney(evaluation.capRupees ?? 0)}
         </span>
       </div>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
         <div className={`h-full ${tone}`} style={{ width: `${width}%` }} />
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        {evaluation.pct}% used · {formatCurrency(evaluation.headroomRupees)} left
+        {evaluation.pct}% used · {formatMoney(evaluation.headroomRupees)} left
       </p>
     </div>
   );

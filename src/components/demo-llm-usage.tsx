@@ -1,5 +1,6 @@
 import { Coins } from "lucide-react";
 import type { LLMUsageSummary } from "@/lib/llm/persist";
+import { formatNumber } from "@/lib/format";
 
 export function DemoLlmUsage({ usage }: { usage: LLMUsageSummary }) {
   return (
@@ -18,7 +19,7 @@ export function DemoLlmUsage({ usage }: { usage: LLMUsageSummary }) {
         estimated
       </span>
       <span>{usage.calls} calls</span>
-      <span>{usage.totalTokens.toLocaleString()} tokens</span>
+      <span>{formatNumber(usage.totalTokens)} tokens</span>
       {usage.provider && (
         <span className="ml-auto text-slate-400">
           {usage.provider} / {usage.model}

@@ -35,7 +35,7 @@ describe("summarizeInsights", () => {
   it.each(["unknown", "mixed", "call"] as const)("does not compare %s results as leads", async destination => {
     const { summarizeInsights } = await loadSummary();
     expect(await summarizeInsights("Other", { ...base, destination, spend: 300, leads: 4 }))
-      .toBe("INR 300 spent. Comparable outcome metrics are unavailable for this campaign destination.");
+      .toBe("₹300 spent. Comparable outcome metrics are unavailable for this campaign destination.");
   });
 
   it("short-circuits with a no-delivery message when nothing spent or shown", async () => {
@@ -53,7 +53,7 @@ describe("summarizeInsights", () => {
       spend: 1200,
       cpl: 150,
     });
-    expect(out).toBe("8 leads, ₹1200 spent, ₹150 per lead.");
+    expect(out).toBe("8 leads, ₹1,200 spent, ₹150 per lead.");
   });
 
   it("omits cost-per-lead from the fallback when it's unknown", async () => {

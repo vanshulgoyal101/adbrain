@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoney } from "@/lib/format";
 
 /** A dashboard banner shown only when spend is approaching or over the cap. */
 export function SpendStatusBanner({
@@ -27,15 +27,15 @@ export function SpendStatusBanner({
       <div className="min-w-0">
         <p className="font-semibold">
           {over
-            ? `You've hit your weekly ad-spend cap of ${formatCurrency(evaluation.capRupees ?? 0)}.`
+            ? `You've hit your weekly ad-spend cap of ${formatMoney(evaluation.capRupees ?? 0)}.`
             : `You're at ${evaluation.pct}% of your weekly ad-spend cap.`}
         </p>
         <p className="mt-0.5">
-          {formatCurrency(evaluation.usedRupees)} of{" "}
-          {formatCurrency(evaluation.capRupees ?? 0)} committed this week
+          {formatMoney(evaluation.usedRupees)} of{" "}
+          {formatMoney(evaluation.capRupees ?? 0)} committed this week
           {over
             ? ". Pause a campaign or raise the cap to keep spending."
-            : `, ${formatCurrency(evaluation.headroomRupees)} left.`}{" "}
+            : `, ${formatMoney(evaluation.headroomRupees)} left.`}{" "}
           <Link href="/settings" className="font-medium underline">
             Manage guardrails
           </Link>

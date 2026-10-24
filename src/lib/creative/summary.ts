@@ -1,5 +1,6 @@
 import { complete } from "@/lib/llm";
 import type { CampaignInsights } from "@/lib/meta/client";
+import { formatMoney } from "@/lib/format";
 
 /** Turn campaign metrics into one or two plain, friendly sentences. */
 export async function summarizeInsights(
@@ -8,13 +9,13 @@ export async function summarizeInsights(
 ): Promise<string> {
   const destination = insights.destination ?? (insights.conversations !== undefined ? "whatsapp" : "instant_form");
   if (destination === "whatsapp" && insights.conversations == null) {
-    return `WhatsApp conversation metrics are unavailable. INR ${insights.spend.toFixed(0)} spent. Refresh results before comparing outcomes.`;
+    return `WhatsApp conversation metrics are unavailable. ${formatMoney(insights.spend)} spent. Refresh results before comparing outcomes.`;
   }
   if (destination === "whatsapp") {
-    return `${insights.conversations} WhatsApp conversations started, INR ${insights.spend.toFixed(0)} spent.${insights.costPerConversation != null ? ` INR ${insights.costPerConversation.toFixed(0)} per conversation.` : ""} Conversations are not verified leads or sales.`;
+    return `${insights.conversations} WhatsApp conversations started, ${formatMoney(insights.spend)} spent.${insights.costPerConversation != null ? ` ${formatMoney(insights.costPerConversation)} per conversation.` : ""} Conversations are not verified leads or sales.`;
   }
   if (destination !== "instant_form") {
-    return `INR ${insights.spend.toFixed(0)} spent. Comparable outcome metrics are unavailable for this campaign destination.`;
+    return `${formatMoney(insights.spend)} spent. Comparable outcome metrics are unavailable for this campaign destination.`;
   }
   if (insights.impressions === 0 && insights.spend === 0) {
     return "No delivery yet — this campaign hasn't spent or shown to anyone. It may be paused or still in review.";
@@ -53,9 +54,9 @@ export async function summarizeInsights(
   } catch {
     const parts = [
       `${insights.leads} leads`,
-      `₹${insights.spend.toFixed(0)} spent`,
+      `${formatMoney(insights.spend)} spent`,
     ];
-    if (insights.cpl != null) parts.push(`₹${insights.cpl.toFixed(0)} per lead`);
+    if (insights.cpl != null) parts.push(`${formatMoney(insights.cpl)} per lead`);
     return `${parts.join(", ")}.`;
   }
 }

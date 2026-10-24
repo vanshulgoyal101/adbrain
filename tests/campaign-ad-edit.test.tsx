@@ -134,7 +134,7 @@ describe("campaign results: Share on WhatsApp (#372)", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[live]} initialResults={{ [live.id]: result }} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
     const link = await screen.findByRole("link", { name: "Share results on WhatsApp" });
     const text = decodeURIComponent(link.getAttribute("href")!.replace("https://wa.me/?text=", ""));
-    expect(text).toBe("Solaride Tricity\nSpent ₹412 (₹280 a day)\n6 WhatsApp chats\n₹69 per chat\nNext: running fine, nothing to do.");
+    expect(text).toBe("Solaride Tricity\nSpent ₹412 (₹280 a day)\n6 WhatsApp chats\n₹68.70 per chat\nNext: running fine, nothing to do.");
     expect(link).toHaveAttribute("target", "_blank");
   });
 });
