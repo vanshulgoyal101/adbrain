@@ -137,7 +137,7 @@ describe("CTO review (#259)", () => {
 
   it("treats payments, spend, activation and budget code as money", () => {
     expect(["src/lib/payments/customer-balance.ts", "src/app/api/payments/live/orders/route.ts", "src/app/api/cron/enforce-spend/route.ts",
-      "src/lib/campaign/spend-enforce.ts", "src/lib/campaign/activation.ts", "src/lib/campaign/budget.ts"].every((p) => moneyPath.test(p))).toBe(true);
+      "src/lib/campaign/spend-enforce.ts", "src/lib/campaign/activation.ts", "src/lib/campaign/budget.ts", "src/lib/managed/spend-cap.ts"].every((p) => moneyPath.test(p))).toBe(true);
     expect(["src/lib/meta/client.ts", "src/lib/supabase/middleware.ts", "src/components/campaigns.tsx"].some((p) => moneyPath.test(p))).toBe(false);
   });
 });
