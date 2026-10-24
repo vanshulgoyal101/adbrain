@@ -253,6 +253,14 @@ describe("<Studio> generation", () => {
     expect(within(await screen.findByRole("dialog")).getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
   });
 
+  it("shows the angle chip under the picture, never over the logo (#367)", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    const chip = screen.getByText("savings");
+    expect(chip.closest(".aspect-square")).toBeNull();
+    const picture = screen.getAllByRole("img", { name: "Cut your power bill" })[0].closest(".aspect-square")!;
+    expect(picture.querySelector(".absolute.top-2, .absolute.left-2, .absolute.right-2")).toBeNull();
+  });
+
   it("keeps successful creatives visible and reports a partial batch failure", async () => {
     global.fetch = vi.fn().mockResolvedValue(okJson({ creatives: [creative()], failures: [{ angle: "Trust", error: "Image unavailable" }] }));
     render(<Studio business={business} initialCreatives={[]} />);
@@ -373,6 +381,7 @@ describe("<Studio> creative preview", () => {
   it("uses the smaller versioned image on the board and in the selected card; the enlarged preview keeps the original (#230)", () => {
     const original = "https://cdn.example/storage/v1/object/public/creatives/b1/group/originals-v1/ad.jpg";
     render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
+    fireEvent.load(screen.getByRole("img", { name: "Cut your power bill" }));
 
     const boardImage = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
     expect(boardImage)
@@ -383,13 +392,39 @@ describe("<Studio> creative preview", () => {
     expect(boardImage).toHaveAttribute("src", original);
   });
 
-  it("prioritizes the selected image without eagerly fetching board thumbnails", () => {
+  it("fetches the selected image first and board thumbnails lazily at low priority (#360)", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
 
     expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("fetchpriority", "high");
-    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("loading", "lazy");
-    expect(screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img"))
-      .toHaveAttribute("loading", "lazy");
+    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("loading", "eager");
+    const tile = () => screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    expect(tile()).toBeNull();
+    fireEvent.load(screen.getByRole("img", { name: "Cut your power bill" }));
+    const thumbnail = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    expect(thumbnail).toHaveAttribute("loading", "lazy");
+    expect(thumbnail).toHaveAttribute("fetchpriority", "low");
+  });
+
+  it("never hides the selected picture while it loads, so it paints before the page's JS runs (#360)", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    const hero = screen.getByRole("img", { name: "Cut your power bill" });
+    expect(hero.className).not.toMatch(/opacity-0/);
+    expect(document.querySelector(".animate-pulse")).not.toBeNull();
+    fireEvent.load(hero);
+    expect(document.querySelector(".animate-pulse")).toBeNull();
+  });
+
+  it("shows board tiles after 2.5 s even if the selected image never loads (#360)", () => {
+    vi.useFakeTimers();
+    try {
+      render(<Studio business={business} initialCreatives={[creative()]} />);
+      const tile = () => screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+      expect(tile()).toBeNull();
+      act(() => { vi.advanceTimersByTime(2_500); });
+      expect(tile()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows placement context and closes with Escape", () => {

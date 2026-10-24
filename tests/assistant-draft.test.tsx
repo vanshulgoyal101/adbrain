@@ -39,6 +39,17 @@ describe("<AdAssistant> draft persistence", () => {
     expect(blockedEval).not.toHaveBeenCalled();
   });
 
+  it("shows the angle and Selected chips under each picture, never over the logo (#367)", async () => {
+    sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+      goal: "Invite enquiries", started: true, answers: [], phase: "done",
+      turns: [{ role: "result", creatives: [{ id: "creative-1", headline: "Find a new approach", primary_text: "Explore.", status: "approved", angle: "Clear value", image_url: "https://img.example/a.png" }] }],
+    }));
+    render(<AdAssistant business={business} />);
+    const chip = await screen.findByText("Clear value");
+    expect(chip.closest(".aspect-square")).toBeNull();
+    for (const selected of screen.getAllByText("Selected")) expect(selected.closest(".aspect-square")).toBeNull();
+  });
+
   it("opens new results at their heading so a phone shows all three ads, not only the last card (#169)", async () => {
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });

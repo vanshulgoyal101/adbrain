@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STEPS, TEST_DOMAINS, funnelSql, render, summarize } from "../scripts/funnel.mjs";
+import { STEPS, funnelSql, render, summarize } from "../scripts/funnel.mjs";
 
 const row = (user: string, reached: string[], extra: Record<string, unknown> = {}) => ({
   user, signed_up_at: "2026-10-22 10:01:00+00", last_seen: "2026-10-22 16:57:00+00",
@@ -8,22 +8,15 @@ const row = (user: string, reached: string[], extra: Record<string, unknown> = {
 });
 
 describe("activation funnel (#338)", () => {
-  it("builds one read-only-safe query for the window, excluding the smoke account by email", () => {
-    const sql = funnelSql(14, ["Smoke@Example.com", "o'brien@example.com"]);
+  it("builds one read-only-safe query for the window, without internal accounts by default", () => {
+    const sql = funnelSql(14, ["Smoke@Example.com"]);
     expect(sql).toContain("make_interval(days => 14)");
-    expect(sql).toContain("array['smoke@example.com','o''brien@example.com']::text[]");
+    expect(sql).toContain("and not (split_part(lower(coalesce(users.email, '')), '@', 2) = any(");
+    expect(sql).toContain("'smoke@example.com'");
     expect(sql).toContain("'/api/meta/oauth/start'");
     expect(sql).toContain("'meta.access_request'");
     expect(sql).not.toMatch(/;\s*\S/);
-    expect(funnelSql(7, [])).toContain("array[]::text[]");
-  });
-
-  it("leaves out internal test accounts by default and includes them on request", () => {
-    const sql = funnelSql(14, []);
-    for (const domain of TEST_DOMAINS) expect(sql).toContain(`'${domain}'`);
-    expect(sql).toContain("split_part(lower(coalesce(email, '')), '@', 2) <> all(");
-    expect(funnelSql(14, [], { includeTest: true })).not.toContain("split_part(");
-    expect(funnelSql(14, ["smoke@example.com"], { includeTest: true })).not.toContain("smoke@example.com");
+    expect(funnelSql(14, ["smoke@example.com"], { includeInternal: true })).not.toContain("split_part(");
   });
 
   it("rejects a window that isn't a whole number of days", () => {

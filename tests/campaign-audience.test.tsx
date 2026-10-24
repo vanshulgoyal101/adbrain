@@ -288,6 +288,21 @@ describe("campaign audience workflow", () => {
     expect(close.querySelector(".lucide-plus")).toBeNull();
   });
 
+  it("checks the Meta connection while the audience is still being planned (#366)", async () => {
+    let finishPlan!: () => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { finishPlan = () => resolve(Response.json({ ready: true, targeting: recommended })); }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await waitFor(() => expect(mocks.status).toHaveBeenCalledOnce());
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+    finishPlan();
+    await screen.findByText("Campaign review");
+    expect(mocks.status).toHaveBeenCalledOnce();
+    expect(mocks.preflight).toHaveBeenCalledOnce();
+    expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+
   it("generates detailed targeting even when location and age are manual", async () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
@@ -482,7 +497,11 @@ describe("campaign audience workflow", () => {
     expect(screen.getByRole("button", { name: "Prepare campaign review" })).toBeEnabled();
     expect(screen.queryByText("Campaign review")).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
-    if (method === "saveDraft") expect(mocks.status).not.toHaveBeenCalled();
+    if (method === "saveDraft") {
+      // #366: the connection check started with Prepare; stopping aborts it too, and nothing runs after.
+      expect((mocks.status.mock.calls[0].at(-1) as AbortSignal).aborted).toBe(true);
+      expect(mocks.preflight).not.toHaveBeenCalled();
+    }
   });
 
   it("times out a stalled preparation and preserves editable inputs", async () => {

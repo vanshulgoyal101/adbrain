@@ -1,3 +1,4 @@
+import { clientCreative } from "@/lib/creative/client-receipt";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
@@ -11,7 +12,7 @@ import {
 import {
   getApprovedCreatives,
   getCampaignPage,
-  getLatestResults,
+  getLatestResultsWithEnquiries,
   getPrimaryBusiness,
 } from "@/lib/supabase/queries";
 
@@ -48,10 +49,10 @@ export default async function CampaignsPage({
 
   const campaignData = getCampaignPage(business.id).then(async (page) => ({
     ...page,
-    results: await getLatestResults(page.campaigns.map((campaign) => campaign.id)),
+    results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
   const [approved, page, connection] = await Promise.all([
-    getApprovedCreatives(business.id),
+    getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
     campaignData,
     getMetaConnection(business.id),
   ]);

@@ -108,13 +108,16 @@ export function logoTileWidth(ratio: number, s: number): number {
 
 export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesignSpec; logoRatio?: number; shaped?: ShapedWords }) {
   const { s, pad, headlineSize, subheadSize, benefitSize, brandSize, ctaSize, contactSize, phoneSize } = adMetrics(spec);
+  // Stories and Reels cover the top (profile bar) and bottom (reply box, CTA) with their own UI.
+  const safeTop = spec.format === "story" ? Math.round(spec.height * 0.13) : 0;
+  const safeBottom = spec.format === "story" ? Math.round(spec.height * 0.18) : 0;
   const contentTop =
     spec.layout === "top"
-      ? pad + Math.round(96 * s)
+      ? safeTop + pad + Math.round(96 * s)
       : spec.layout === "center"
         ? Math.round(spec.height * 0.28)
         : undefined;
-  const contentBottom = spec.layout === "bottom" ? pad : undefined;
+  const contentBottom = spec.layout === "bottom" ? safeBottom + pad : undefined;
   const scrim =
     spec.layout === "top"
       ? "linear-gradient(180deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.52) 34%, rgba(0,0,0,0.08) 72%, rgba(0,0,0,0.24) 100%)"
@@ -171,7 +174,7 @@ export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesi
       <div
         style={{
           position: "absolute",
-          top: pad,
+          top: safeTop + pad,
           left: pad,
           display: "flex",
           alignItems: "center",

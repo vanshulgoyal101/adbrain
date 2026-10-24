@@ -1,4 +1,5 @@
 "use client";
+import { takePendingIdea } from "@/lib/ideas/pending";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
@@ -149,7 +150,10 @@ export function AdAssistant({ business }: { business: Business }) {
   if (mounted && !restored) {
     setRestored(true);
     const saved = readDraft(business.id);
-    if (saved) {
+    // "Make one like this" from /ideas starts a fresh goal instead of the last session (#289).
+    const idea = takePendingIdea();
+    if (idea) setGoal(idea);
+    else if (saved) {
       setGoal(saved.goal);
       setStarted(saved.started);
       setTurns(saved.turns);
@@ -874,17 +878,18 @@ function ResultCard({
         ) : (
           <div className="h-full w-full animate-pulse bg-slate-200" />
         )}
-        {creative.angle && (
-          <Badge className="absolute left-2 top-2 bg-black/60 text-white backdrop-blur">
-            {creative.angle}
-          </Badge>
-        )}
-        {approved && (
-          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Selected
-          </span>
-        )}
       </div>
+      {/* #367: chips sit under the picture; its top edge is the brand's logo and name. */}
+      {(creative.angle || approved) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
+          {creative.angle ? <Badge className="bg-slate-100 text-slate-700">{creative.angle}</Badge> : <span />}
+          {approved && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Selected
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         {editing ? (
           <CreativeEditor

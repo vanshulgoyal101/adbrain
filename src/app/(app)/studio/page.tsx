@@ -8,6 +8,7 @@ import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { getUser } from "@/lib/supabase/queries";
 import { businessLLMUsageSummary } from "@/lib/llm/persist";
 import { getEnv } from "@/lib/env";
+import { clientCreative } from "@/lib/creative/client-receipt";
 
 export const metadata = { title: "Creative Studio" };
 
@@ -72,7 +73,7 @@ export default async function StudioPage({
         <Studio
           key={`${business.id}:${filter}:${params.creative ?? ""}`}
           business={business}
-          initialCreatives={creatives}
+          initialCreatives={creatives.map(clientCreative)}
           initialFilter={filter}
           initialCreativeId={params.creative ?? null}
         />

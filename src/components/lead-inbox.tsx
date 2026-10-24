@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Inbox, Loader2, MessageCircle, RefreshCw, Search, X, Save, Pencil, ChevronDown } from "lucide-react";
+import { Check, Copy, Inbox, Loader2, MessageCircle, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,6 +48,9 @@ export function LeadInbox({
   const [contactFilter, setContactFilter] = useState("all");
   const [sort, setSort] = useState("newest");
   const [status, setStatus] = useState("all");
+  // On a phone the three selects sit behind one Filter button (#376).
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilters = [contactFilter !== "all", status !== "all", sort !== "newest"].filter(Boolean).length;
   const [selected, setSelected] = useState<Lead | null>(null);
   const [draftStatus, setDraftStatus] = useState<WorkflowStatus>("new");
   const [draftNote, setDraftNote] = useState("");
@@ -153,7 +156,7 @@ export function LeadInbox({
           phone: l.phone,
           email: l.email,
           city: l.city,
-          formName: l.form_name,
+          formName: l.form_name ?? (l.source === "whatsapp_manual" ? "WhatsApp chat" : null),
           createdTime: l.created_time,
         })),
         { businessName },
@@ -294,6 +297,10 @@ export function LeadInbox({
             <input ref={searchField} type="search" aria-label="Search enquiries" placeholder="Search name, contact, city, or form" value={query} onChange={event => setQuery(event.target.value)} />
             {query && <button type="button" title="Clear search" aria-label="Clear search" onClick={() => setQuery("")}><X size={16} aria-hidden="true" /></button>}
           </div>
+          <button type="button" className={styles.filterToggle} aria-label={activeFilters ? `Filter, ${activeFilters} set` : "Filter"} aria-expanded={filtersOpen} aria-controls="enquiry-filters" onClick={() => setFiltersOpen(open => !open)}>
+            <SlidersHorizontal size={16} aria-hidden="true" />Filter{activeFilters > 0 && <span className={styles.filterCount}>{activeFilters}</span>}
+          </button>
+          <div id="enquiry-filters" className={styles.filters} data-open={filtersOpen || undefined}>
           <select aria-label="Contact availability" value={contactFilter} onChange={event => setContactFilter(event.target.value)}>
             <option value="all">All contacts</option><option value="ready">Has contact details</option><option value="missing">Missing contact details</option>
           </select>
@@ -304,6 +311,7 @@ export function LeadInbox({
           <select aria-label="Sort enquiries" value={sort} onChange={event => setSort(event.target.value)}>
             <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option>
           </select>
+          </div>
         </div>
         <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : `${leads.length} of ${page.total} enquiries`}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
       </div>
@@ -365,13 +373,13 @@ export function LeadInbox({
                         {l.email}
                       </a>
                     )}
-                    {!l.phone && !l.email && "—"}
+                    {!l.phone && !l.email && <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">City</span>{l.city ?? "—"}</td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Form</span>{l.form_name ?? "—"}</td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">City</span>{l.city ?? <span className={styles.blank}>—</span>}</td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Form</span>{leadSource(l)}</td>
                   <td role="cell" className="text-slate-500">
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
-                    {whenLabel(l.created_time) || "—"}
+                    {whenLabel(l.created_time) || <span className={styles.blank}>—</span>}
                   </td>
                   <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${l.full_name ?? "enquiry"}`} aria-label={`Follow up ${l.full_name ?? "enquiry"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
                 </tr>
@@ -406,4 +414,10 @@ export function LeadInbox({
       )}
     </div>
   );
+}
+
+/** Where an enquiry came from: its Meta form, or a WhatsApp chat the owner logged (#335). */
+function leadSource(lead: Lead): string {
+  if (lead.form_name) return lead.form_name;
+  return lead.source === "whatsapp_manual" ? "WhatsApp chat (added by you)" : "—";
 }

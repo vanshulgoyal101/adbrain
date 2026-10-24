@@ -89,6 +89,11 @@ exclude entire test directories or suppress uninvestigated findings.
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
   and the schema tests all use it, so two migration PRs never conflict. Name a
   migration so it sorts after the ones it depends on.
+- **Supabase advisors (#359):** run `node scripts/advisors.mjs` before and after
+  every migration release. It reads the production security and performance
+  advisors (read-only) and exits 1 on any WARN or ERROR outside its reviewed
+  `ACCEPTED` list. A new finding blocks the release until it is fixed or accepted
+  in that list with a reason, through a PR.
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required

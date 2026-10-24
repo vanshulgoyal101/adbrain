@@ -42,6 +42,9 @@ describe("QA approval", () => {
     expect(verdict("QA: live at d34d32d, ready for the re-measure. PR #248 (QA-approved c30aaba) was released.")).toBe(false);
     expect(verdict("QA: c30aaba is not fine to merge yet.")).toBe(false);
     expect(verdict("QA: please hold c30aaba; it conflicts with main.")).toBe(false);
+    expect(verdict("QA verdict at c30aaba: **approved.** The tenant-boundary findings from my earlier review still hold.")).toBe(true);
+    expect(verdict("QA: c30aaba approved but on hold until #370 lands.")).toBe(false);
+    expect(verdict("QA: c30aaba approved; hold off the release until Monday.")).toBe(false);
   });
 });
 

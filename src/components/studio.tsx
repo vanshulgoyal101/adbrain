@@ -99,6 +99,12 @@ export function Studio({
     variants.sort((first, second) => first.id < second.id ? -1 : first.id > second.id ? 1 : 0);
     variants.forEach((item, index) => variantLabels.set(item.id, `Variant ${index + 1} of ${variants.length}`));
   }
+  // #360: on a phone the selected ad's picture is the largest paint; board tiles wait for it.
+  const [boardImages, setBoardImages] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setBoardImages(true), 2_500);
+    return () => clearTimeout(timer);
+  }, []);
   const selectedCreative =
     visibleItems.find((item) => item.id === selectedId) ??
     visibleItems[0] ??
@@ -537,11 +543,12 @@ export function Studio({
                       )}
                     >
                       <div className="flex aspect-square items-center justify-center bg-slate-100">
-                        {creative.image_url ? (
+                        {creative.image_url && boardImages ? (
                           <img
                             src={creativeThumbnailUrl(creative.image_url)}
                             alt=""
                             loading="lazy"
+                            fetchPriority="low"
                             className="h-full w-full object-contain"
                             onError={(event) => {
                               if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
@@ -573,6 +580,7 @@ export function Studio({
             <CreativeCard
               key={selectedCreative.id}
               business={business}
+              onImageSettled={() => setBoardImages(true)}
               creative={selectedCreative}
               onChange={(updated) =>
                 setItems((previous) =>
@@ -621,12 +629,14 @@ export function Studio({
 
 function CreativeCard({
   business,
+  onImageSettled,
   creative,
   onChange,
   onDelete,
   onPreview,
 }: {
   business: Business;
+  onImageSettled?: () => void;
   creative: Creative;
   onChange: (c: Creative) => void;
   onDelete: (id: string) => void;
@@ -704,6 +714,10 @@ function CreativeCard({
   return (
     <Card className="flex flex-col overflow-hidden rounded-md">
       <div className="relative aspect-square max-h-[480px] bg-slate-100">
+        {/* Behind the picture, not over it: a hidden image doesn't count as painted until JS runs (#360). */}
+        {creative.image_url && !imgLoaded && !imgError && (
+          <div className="absolute inset-0 animate-pulse bg-slate-200" />
+        )}
         {creative.image_url && !imgError && (
           <img
             key={creative.image_url}
@@ -712,34 +726,35 @@ function CreativeCard({
               // detect that in the commit phase so we skip the placeholder flash.
               if (node?.complete && node.naturalWidth > 0) {
                 setLoadedUrl(creative.image_url);
+                onImageSettled?.();
               }
             }}
             src={creativeThumbnailUrl(creative.image_url)}
             alt={creative.headline ?? "Ad creative"}
-            className={cn(
-              "h-full w-full object-contain transition-opacity",
-              imgLoaded ? "opacity-100" : "opacity-0",
-            )}
-            loading="lazy"
+            className="relative h-full w-full object-contain"
+            // The selected ad is the page's largest paint on a phone (#360): fetch it while the HTML parses.
+            loading="eager"
             fetchPriority="high"
-            onLoad={() => setLoadedUrl(creative.image_url)}
+            onLoad={() => {
+              setLoadedUrl(creative.image_url);
+              onImageSettled?.();
+            }}
             onError={(event) => {
               // The 960 px thumbnail can be missing for older ads; fall back to the original once.
               if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
-              else setErroredUrl(creative.image_url);
+              else {
+                setErroredUrl(creative.image_url);
+                onImageSettled?.();
+              }
             }}
           />
         )}
-        {(!creative.image_url || !imgLoaded || imgError) && (
+        {(!creative.image_url || imgError) && (
           <div className="absolute inset-0 flex items-center justify-center">
-            {imgError || !creative.image_url ? (
-              <span className="flex items-center gap-2 text-sm text-slate-500">
-                <ImageIcon className="h-5 w-5" />
-                Image unavailable
-              </span>
-            ) : (
-              <div className="h-full w-full animate-pulse bg-slate-200" />
-            )}
+            <span className="flex items-center gap-2 text-sm text-slate-500">
+              <ImageIcon className="h-5 w-5" />
+              Image unavailable
+            </span>
           </div>
         )}
         {regenerating && (
@@ -747,13 +762,6 @@ function CreativeCard({
             <Spinner className="h-6 w-6 text-blue-600" />
           </div>
         )}
-        <div className="absolute left-2 top-2 flex gap-1.5">
-          {creative.angle && (
-            <Badge className="bg-black/60 text-white backdrop-blur">
-              {creative.angle}
-            </Badge>
-          )}
-        </div>
       </div>
       <CardContent className="flex flex-1 flex-col gap-2">
         <div className="flex items-center justify-between gap-2">

@@ -120,7 +120,11 @@ try {
   const passwordField = page.getByLabel("Password", { exact: true });
   await emailField.waitFor();
   // #289: a new browser opens on "Create your free account"; an existing user taps "Sign in" for the password form.
-  if (!(await passwordField.isVisible())) await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // A click before hydration does nothing, so retry until the password field shows.
+  for (let attempt = 0; attempt < 5 && !(await passwordField.isVisible()); attempt++) {
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await passwordField.waitFor({ state: "visible", timeout: 3_000 }).catch(() => {});
+  }
   await emailField.fill(email);
   await passwordField.fill(password);
   const loginResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/auth/v1/token" && response.request().method() === "POST");
@@ -231,15 +235,24 @@ try {
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
       await page.getByRole("button", { name: "Start creating" }).click();
-      const brief = page.getByRole("textbox", { name: "Creative brief", exact: true });
-      for (let attempt = 0; attempt < 8 && !await brief.isVisible(); attempt++) {
-        const decision = page.getByRole("region", { name: "Conversation history" }).locator("button:not([disabled])").first();
-        await decision.waitFor({ state: "visible", timeout: 60_000 });
+      // Answer the assistant's questions until the brief is ready; it can also skip straight to it.
+      const generate = page.getByRole("button", { name: "Generate 3 ads", exact: true });
+      // Answer buttons only: not the conversation's own navigation (#284).
+      const decision = page.getByRole("region", { name: "Conversation history" }).locator("button:not([disabled])")
+        .filter({ hasNotText: /^\s*(Revise goal|Change my answer|Start over)\s*$/i }).first();
+      // A failed assistant turn shows "Try again", as a user would press it (#410).
+      const retry = page.getByRole("button", { name: "Try again", exact: true });
+      let retries = 0;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await generate.or(decision).or(retry).first().waitFor({ state: "visible", timeout: 60_000 });
+        if (await generate.isVisible()) break;
+        if (await retry.isVisible()) { retries++; await retry.click(); continue; }
         await decision.click();
       }
-      await brief.waitFor({ state: "visible" });
+      if (retries) console.log(`NOTE Create assistant failed ${retries}×; pressed Try again each time (#410)`);
+      await generate.waitFor({ state: "visible" });
       const result = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/creatives/generate" && response.request().method() === "POST", { timeout: 300_000 });
-      await page.getByRole("button", { name: "Generate 3 ads" }).click();
+      await generate.click();
       const response = await result;
       const data = await response.json();
       savedCount = Array.isArray(data.creatives) ? data.creatives.length : null;

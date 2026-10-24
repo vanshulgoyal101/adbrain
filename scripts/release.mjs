@@ -13,7 +13,7 @@ import { managementMigrationSql, migrationChecksum } from "./database-migrations
 const repo = "vanshulgoyal101/adbrain";
 const projectId = "kmzuxrvfrwwpwmoovwcp";
 // Everyone posts as one GitHub user and "QA: ..." also opens handoffs to QA, so only explicit, unconditional verdict words count.
-const negative = /\b(not (approved|fine|ready)|changes requested|request(ed)? changes|blocked|reject(ed)?|hold|do not merge|please|once you|when you|if you|you (approved|accepted))\b/i;
+const negative = /\b(not (approved|fine|ready)|changes requested|request(ed)? changes|blocked|reject(ed)?|on hold|hold (off|on|it|this|that|the (release|merge))|do not merge|please|once you|when you|if you|you (approved|accepted))\b/i;
 
 // The latest QA verdict comment that names the head decides; approvals for the head carry the reviewed hashes.
 export function qaApproval(comments, headSha) {

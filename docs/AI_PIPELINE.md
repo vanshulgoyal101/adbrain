@@ -120,7 +120,8 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
     and image prompts. Current brief/instructions and Brand facts take priority.
 2. Choose up to six configured marketing angles; default batch count is three.
 3. For each angle, request a structured concept with caching disabled. First
-   attempt temperature is 0.8; one repair attempt uses 0.4. Max output and
+   attempt temperature is 0.8; one repair attempt uses 0.4 and is told each
+   failed check, with the actual length when text is too long (#281). Max output and
    reasoning effort are configured. Failed validation stops the variant.
    Before validation, cosmetic slips are normalized once:
    - Over-long link description, `visual.medium`, `visual.direction` and rationale are clipped at a word.
@@ -229,9 +230,8 @@ Interview output validates its language choice against the supported list.
 Create offers `en`, `hinglish`, `hi` and `pa` (#290). The interview detects whether
 the owner writes Devanagari Hindi, Gurmukhi Punjabi or Roman-script Hindi, tells the
 model to ask in it (`OWNER WRITES IN`), and suggests that ad language when the model
-leaves `language` out. Words drawn on the image (`headline`, `supportingText`) stay
-in Latin script (`on-image-script`) until the compositor shapes Indic text (#300);
-Hindi or Punjabi goes in `primary_text` and `description`. The claim check reads
+leaves `language` out. Hindi or Punjabi copy can go on the image too (`headline`,
+`supportingText`); the compositor shapes it (#300). The claim check reads
 "फ्री"/"मुफ़्त"/"ਮੁਫ਼ਤ" as free, "गारंटी" as guarantee and "रुपये"/"rupaye" as rupees, and a
 quote with "नहीं" or "बिना" doesn't back a claim.
 Font coverage and language quality still need visual/human review.
@@ -254,8 +254,7 @@ OFL), so headlines are really bold; the brand's sans/serif/mono choice falls
 back to Inter. Words in Devanagari or Gurmukhi (brand, headline, subhead,
 benefits, contact line) are shaped by [sharp/Pango](../src/lib/creative/shaped-text.ts)
 with Noto Sans Devanagari/Gurmukhi (OFL) and drawn as an image in their place,
-because Satori misplaces vowel signs. The concept check's `on-image-script` rule
-still keeps generated headlines Latin until a production Hindi render is checked (#300).
+because Satori misplaces vowel signs.
 With overlay enabled, render/persistence failure fails the variant: **there is
 no implicit bare-photo success fallback**. `AD_DESIGN_OVERLAY=false` explicitly
 chooses the source photo. Source uploads can remain if later steps fail.
@@ -337,6 +336,19 @@ Timeout/AbortError and an aborted caller do not start another image provider.
 Successful fallback records `fallbackFrom`, but does not prove equivalent quality.
 Avoid casually fetching legacy generation URLs: some image URLs generate work on
 request rather than reading a stored artifact.
+
+## Reliability Budget
+
+Owned by the CTO (#378). Measured from `product_events` (`ai.completion`, `creative.batch`) over the last 3 days, real traffic and QA alike (models don't know who calls them):
+
+| Measure | Budget |
+| --- | --- |
+| Failed AI calls, per model | ≤ 3% (a retried call still counts as failed) |
+| Failures a customer sees (a step errors after its retries) | 0 in 3 days |
+| Create batches that save all requested ads | ≥ 95% |
+| One concept or image call, p90 | ≤ 20 s; a whole Create run ≤ 60 s p90 |
+
+Every failed call logs its `errorCode`; validation failures also log the failed rule ids, so the top cause is one query away. Over budget: fix the biggest cause first (routing, timeout, retry or validator), with a core test from a recorded response, then re-read 48 h later.
 
 ## Usage and Cost
 

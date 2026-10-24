@@ -200,7 +200,7 @@ columns to restore an obsolete UI.
 
 | Table | Important fields and guarantees |
 | --- | --- |
-| `public.leads` | Business, nullable campaign, unique `(business_id,meta_lead_id)`, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time; `workflow_status` `new`/`contacted`/`qualified`/`booked`/`closed` (default `new`) and `follow_up_note` (default empty, <=2000 characters) |
+| `public.leads` | Business, nullable campaign, `source` `meta_form` (default) or `whatsapp_manual` ([#335 migration](../db/migrations/20261024_manual_whatsapp_enquiries.sql)); `meta_lead_id` is null exactly for `whatsapp_manual` rows the owner logs from WhatsApp chats; unique `(business_id,meta_lead_id)` for Meta leads, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time; `workflow_status` `new`/`contacted`/`qualified`/`booked`/`closed` (default `new`) and `follow_up_note` (default empty, <=2000 characters) |
 | `public.lead_sync_runs` | Business/owner, connection generation, ad account and Page, state `partial`/`complete`, version, progress JSON (form cursor, seen forms, pending forms); RLS with browser roles revoked, service-role only |
 | `public.spend_limits` | One per business; nullable integer weekly cap, alert percentage 1-100 default 80, auto-pause default false, updated time |
 | `public.audit_log` | Business/actor, action, entity type/ID, Meta object ID, reason, detail JSON, timestamp |
@@ -424,6 +424,7 @@ alone is not a safe deployment plan.
 | [20261022_meta_revoke_subject_scope.sql](../db/migrations/20261022_meta_revoke_subject_scope.sql) | Same-signature service-only `meta_revoke_subject`; deauthorize clears only connections using that Meta user's token (#181) |
 | [20261023_meta_cost_settle.sql](../db/migrations/20261023_meta_cost_settle.sql) | Service-only `customer_ad_settle_costs` and `customer_ad_settling_businesses`, evidence campaign index, balance no longer held by a settling run's stale evidence (#221); apply before serving the updated `enforce-spend` sweep |
 | [20261024_scheduler_pg_cron.sql](../db/migrations/20261024_scheduler_pg_cron.sql) | `pg_cron` + `pg_net` jobs calling the cron routes on time (#274): enforce-spend, sync-leads and refresh-results every 15 min (refresh-results reads each campaign at most hourly); owner-only `private.call_cron_route` reads `adbrain_cron_secret` from Vault and is a no-op without it; skipped where `pg_cron`/`pg_net` are not preloaded |
+| [20261024_security_advisors.sql](../db/migrations/20261024_security_advisors.sql) | Advisor hardening (#359): `owns_business` becomes SECURITY INVOKER (same answer), `handle_new_user` trigger not executable by API roles, fixed `set_updated_at` search path, 8 RLS policies use `(select auth.uid())` (same predicates), indexes on lead/operation/connection tenant foreign keys |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and

@@ -16,6 +16,7 @@ const queries = vi.hoisted(() => ({
   getCampaignPage: vi.fn(),
   getApprovedCreatives: vi.fn(),
   getLatestResults: vi.fn(),
+  getLatestResultsWithEnquiries: vi.fn(),
   getSpendEvaluation: vi.fn(),
   getMetaConnection: vi.fn(),
   getUser: vi.fn(),
@@ -143,14 +144,14 @@ describe("Home workspace", () => {
   it("starts campaign results before unrelated creatives and connection reads finish", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getCampaignPage.mockResolvedValue({ campaigns: [{ id: "campaign-1" }], nextCursor: null });
-    queries.getLatestResults.mockResolvedValue({});
+    queries.getLatestResultsWithEnquiries.mockResolvedValue({});
     let resolveApproved!: (value: Creative[]) => void;
     let resolveConnection!: (value: { ready: boolean }) => void;
     queries.getApprovedCreatives.mockReturnValue(new Promise<Creative[]>((resolve) => { resolveApproved = resolve; }));
     queries.getMetaConnection.mockReturnValue(new Promise<{ ready: boolean }>((resolve) => { resolveConnection = resolve; }));
     const { default: CampaignsPage } = await import("@/app/(app)/campaigns/page");
     const page = CampaignsPage({ searchParams: Promise.resolve({}) });
-    await vi.waitFor(() => expect(queries.getLatestResults).toHaveBeenCalledWith(["campaign-1"]));
+    await vi.waitFor(() => expect(queries.getLatestResultsWithEnquiries).toHaveBeenCalledWith(["campaign-1"]));
     resolveApproved([]);
     resolveConnection({ ready: false });
     render(await page);

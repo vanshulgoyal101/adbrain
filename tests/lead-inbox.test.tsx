@@ -144,6 +144,11 @@ describe("<LeadInbox> table", () => {
     expect(screen.getByRole("link", { name: "asha@example.com" })).toHaveAttribute("href", "mailto:asha@example.com");
   });
 
+  it("labels an enquiry the owner added from WhatsApp chats (#335)", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ source: "whatsapp_manual", meta_lead_id: null, form_id: null, form_name: null })]} metaReady />);
+    expect(screen.getByText("WhatsApp chat (added by you)")).toBeInTheDocument();
+  });
+
   it("makes an email-only enquiry actionable", () => {
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead({ phone: null })]} metaReady />);
     expect(screen.getByText("Loaded with contact").nextSibling).toHaveTextContent("1");
@@ -591,5 +596,29 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry list" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Retry list" })).toBeNull());
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("<LeadInbox> on a phone (#376)", () => {
+  it("puts the three selects behind one Filter button that shows how many are set", async () => {
+    const user = userEvent.setup();
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
+    const toggle = screen.getByRole("button", { name: "Filter" });
+    const filters = document.getElementById("enquiry-filters")!;
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(filters).not.toHaveAttribute("data-open");
+    expect(filters).toContainElement(screen.getByLabelText("Sort enquiries"));
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(filters).toHaveAttribute("data-open");
+    await user.selectOptions(screen.getByLabelText("Sort enquiries"), "oldest");
+    expect(screen.getByRole("button", { name: "Filter, 1 set" })).toBeInTheDocument();
+  });
+
+  it("marks empty fields so the phone layout can hide them instead of showing a lone dash", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: null, email: null, city: null })]} metaReady />);
+    const row = screen.getAllByRole("row").at(-1)!;
+    const blanks = row.querySelectorAll("td > span:not([aria-hidden])");
+    expect([...blanks].map((el) => el.textContent)).toEqual(["—", "—"]);
   });
 });

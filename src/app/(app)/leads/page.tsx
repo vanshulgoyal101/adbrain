@@ -45,9 +45,10 @@ export default async function LeadsPage() {
       <PageHeader
         eyebrow="Customer conversations"
         title="Enquiries"
+        titleInTopBarOnPhone
         description="People who responded to your campaigns. Find their details and make the next conversation count."
       />
-      <div className="mt-6">
+      <div className="mt-6 max-sm:mt-4">
         <LeadInbox
           key={`${business.owner_id}:${business.id}`}
           businessName={business.name}

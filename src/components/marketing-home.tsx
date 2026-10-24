@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Brain, Check, CirclePause, MapPin, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowRight, Brain, Check, CirclePause, IndianRupee, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
 import { MARKETING_FAQS } from "@/lib/seo/jsonLd";
+import { IDEAS } from "@/lib/ideas";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import styles from "./marketing-home.module.css";
+
+// Digits only, for wa.me; unset renders no support link (#289: the owner supplies the number).
+const SUPPORT_WHATSAPP = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP ?? "").replace(/\D/g, "");
 
 // Below the first screen: kept out of the initial bundle, with its box reserved so nothing shifts.
 const AdbrainCycle = dynamic(() => import("@/components/adbrain-cycle").then((m) => m.AdbrainCycle), {
@@ -15,63 +18,8 @@ const AdbrainCycle = dynamic(() => import("@/components/adbrain-cycle").then((m)
   loading: () => <div className={styles.cyclePlaceholder} aria-hidden="true" />,
 });
 
-const EXAMPLES = [
-  {
-    industry: "Food & drink",
-    brand: "Sunday Coffee",
-    location: "Bengaluru, India",
-    business: "Neighbourhood coffee shop",
-    audience: "Neighbours looking for their next coffee spot",
-    voice: "Warm, unhurried, inviting",
-    offer: "Coffee and a place to pause",
-    goal: "Give people nearby a reason to stop in this weekend.",
-    headline: "Make room for a slower morning.",
-    copy: "Your weekend doesn't need another plan. Just a good coffee and a seat at Sunday Coffee in Bengaluru. Drop by, settle in, and make a little time for yourself.",
-    cta: "Plan your visit",
-    image: "/campaign-coffee.jpg",
-    alt: "Coffee served at a cafe, an illustrative ad photograph",
-    photoUrl: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085",
-    tone: "coffee",
-  },
-  {
-    industry: "Fitness",
-    brand: "Form Studio",
-    location: "Pune, India",
-    business: "Small-group fitness classes",
-    audience: "People looking for a welcoming first class",
-    voice: "Encouraging, approachable, no pressure",
-    offer: "A conversation about the right class for you",
-    goal: "Help first-time visitors feel comfortable asking about a class.",
-    headline: "Your first class starts with a hello.",
-    copy: "Find your starting point at Form Studio in Pune. Tell us what you're looking for, ask your questions, and explore our small-group classes before you decide.",
-    cta: "Ask about a class",
-    image: "/campaign-fitness.jpg",
-    alt: "Equipment in a fitness studio, an illustrative ad photograph",
-    photoUrl: "https://images.unsplash.com/photo-1571902943202-507ec2618e8f",
-    tone: "fitness",
-  },
-  {
-    industry: "Home services",
-    brand: "Studio Habitat",
-    location: "Hyderabad, India",
-    business: "Residential interior design",
-    audience: "Homeowners planning a room refresh",
-    voice: "Thoughtful, practical, personal",
-    offer: "An interior design consultation",
-    goal: "Start conversations with homeowners thinking about a change.",
-    headline: "A space that feels more like you.",
-    copy: "A new chapter for your living room? Talk through your ideas with Studio Habitat in Hyderabad. Start with the way you live, the space you have, and what you'd like to change.",
-    cta: "Book a consultation",
-    image: "/campaign-interiors.jpg",
-    alt: "A furnished living room, an illustrative ad photograph",
-    photoUrl: "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0",
-    tone: "interiors",
-  },
-];
 
 export function MarketingHome() {
-  const [selected, setSelected] = useState(0);
-  const example = EXAMPLES[selected];
 
   return (
     <div className={styles.page}>
@@ -79,7 +27,7 @@ export function MarketingHome() {
       <header className={styles.header}>
         <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={26} /> AdBrain</Link>
         <nav aria-label="Main navigation">
-          <a href="#example" className={styles.exampleLink}>Campaign ideas</a>
+          <Link href="/ideas" className={styles.exampleLink}>Campaign ideas</Link>
           <a href="#workflow" className={styles.exampleLink}>From idea to enquiry</a>
           <Link href="/login" className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
         </nav>
@@ -111,41 +59,20 @@ export function MarketingHome() {
 
         <section id="example" className={styles.example} aria-labelledby="example-title">
           <div className={styles.sectionHeading}>
-            <div><p className={styles.eyebrow}>01 / DIFFERENT BUSINESSES. REAL-WORLD GOALS.</p><h2 id="example-title">What would you like your next customer to do?</h2></div>
-            <p>Fictional brands, sample copy, stock photography.<br />Not a customer campaign or a live AI generation.</p>
+            <div><h2 id="example-title">Ads AdBrain made for businesses like yours</h2></div>
+            <Link href="/ideas" className={styles.textLink}>See all ideas <ArrowRight size={18} aria-hidden="true" /></Link>
           </div>
-          <fieldset className={styles.industries}>
-            <legend>Campaign inspiration</legend>
-            {EXAMPLES.map((item, index) => (
-              <label key={item.industry} className={selected === index ? styles.selectedIndustry : undefined}>
-                <input type="radio" name="campaign-industry" value={index} checked={selected === index} onChange={() => setSelected(index)} />
-                {item.industry}
-              </label>
+          <ul className={styles.ideaGrid}>
+            {IDEAS.slice(0, 4).map((idea) => (
+              <li key={idea.slug}>
+                <Link href={`/ideas/${idea.slug}`}>
+                  <Image src={idea.ads[0].image} alt={`An AdBrain ad for a ${idea.title.toLowerCase()}: ${idea.ads[0].headline}`} width={720} height={900} sizes="(max-width: 760px) 50vw, 300px" />
+                  <span>{idea.industry}</span>
+                </Link>
+              </li>
             ))}
-          </fieldset>
-          <div className={styles.exampleGrid}>
-            <div className={styles.brief}>
-              <p className={styles.label}>BRAND BRAIN / EXAMPLE</p>
-              <h3>{example.brand}</h3>
-              <p className={styles.location}><MapPin size={15} aria-hidden="true" /> {example.location}</p>
-              <dl className={styles.brandDetails}>
-                <div><dt>Business</dt><dd>{example.business}</dd></div>
-                <div><dt>Audience</dt><dd>{example.audience}</dd></div>
-                <div><dt>Voice</dt><dd>{example.voice}</dd></div>
-                <div><dt>Offer</dt><dd>{example.offer}</dd></div>
-              </dl>
-              <div className={styles.goal}><span className={styles.label}>THE CUSTOMER GOAL</span><p>&quot;{example.goal}&quot;</p></div>
-            </div>
-            <article className={styles.ad} aria-label="Sample ad" data-tone={example.tone}>
-              <div className={styles.adTop}><strong>{example.brand}</strong><span>Sample creative</span></div>
-              <div className={styles.poster}>
-                <div className={styles.posterCopy}><span>{example.brand}</span><h3>{example.headline}</h3><p>{example.business} / {example.location}</p></div>
-                <Image src={example.image} alt={example.alt} width={1200} height={800} sizes="(max-width: 760px) 100vw, 650px" className={styles.adPhoto} />
-              </div>
-              <div className={styles.adCopy} aria-live="polite" aria-atomic="true"><p>{example.copy}</p><div><span>Suggested call to action</span><strong>{example.cta} <ArrowRight aria-hidden="true" size={16} /></strong></div></div>
-            </article>
-          </div>
-          <div className={styles.exampleFoot}><span>Illustration only. Your creative depends on your brand, brief, and review.</span><a href={example.photoUrl} target="_blank" rel="noopener noreferrer">Photo source / Unsplash</a></div>
+          </ul>
+          <p className={styles.exampleFoot}>Made by AdBrain for example businesses, not customers.</p>
         </section>
 
         <section id="workflow" className={styles.workflow} aria-labelledby="workflow-title">
@@ -159,11 +86,17 @@ export function MarketingHome() {
         </section>
 
         <section className={styles.safety} aria-labelledby="safety-title">
-          <div><ShieldCheck size={30} aria-hidden="true" /><p className={styles.eyebrow}>03 / YOU MAKE THE CALL</p><h2 id="safety-title">Your reputation.<br />Your decisions.</h2><p>AI helps with the work. You decide what represents your business, who you want to reach, and when to spend.</p></div>
+          <div>
+            <ShieldCheck size={30} aria-hidden="true" />
+            <h2 id="safety-title">You approve every rupee.</h2>
+            <p>AI does the work. You decide what goes out under your name, who sees it and what you spend.</p>
+            {SUPPORT_WHATSAPP && <a className={styles.support} href={`https://wa.me/${SUPPORT_WHATSAPP}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={18} aria-hidden="true" /> Questions? WhatsApp us</a>}
+          </div>
           <ul>
-            <li><Check aria-hidden="true" /><div><h3>Approve the creative</h3><p>Check the image, claims, and copy before using an ad.</p></div></li>
-            <li><MapPin aria-hidden="true" /><div><h3>Review the audience and budget</h3><p>Choose the locations, daily budget, and lead form before creating a campaign.</p></div></li>
-            <li><CirclePause aria-hidden="true" /><div><h3>Created paused</h3><p>New campaigns start paused. Activation is a separate decision; Meta eligibility and review still apply.</p></div></li>
+            <li><Check aria-hidden="true" /><div><h3>Approve every ad</h3><p>Check the picture, the words and every claim before an ad is used.</p></div></li>
+            <li><CirclePause aria-hidden="true" /><div><h3>Your limit, your pause button</h3><p>Campaigns start paused with the daily limit you set. Pause any time; Meta&apos;s own review still applies.</p></div></li>
+            <li><IndianRupee aria-hidden="true" /><div><h3>Pay as you go, in rupees</h3><p>Making ads is free. To run them, top up any amount from ₹500; 80% goes to your ads (including Meta&apos;s GST) and 20% to AdBrain.</p></div></li>
+            <li><MapPin aria-hidden="true" /><div><h3>Your own Page, your customers</h3><p>Ads run from your Facebook Page and Instagram, and customers message your WhatsApp directly.</p></div></li>
           </ul>
         </section>
 

@@ -10,6 +10,7 @@ import {
   FileText,
   Link2,
   Loader2,
+  MessageCircle,
   Pause,
   Pencil,
   Play,
@@ -39,6 +40,7 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
@@ -77,6 +79,7 @@ import {
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
 import { campaignAttention } from "@/lib/campaign/health";
+import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
@@ -690,13 +693,16 @@ function BusinessCampaigns({
       return;
     }
     const signal = beginPreparation();
+    const client = createMetaConnectClient();
+    // #366: the connection check doesn't depend on the plan or the draft, so it runs alongside them.
+    const connectionCheck = reviewAfterSave ? client.status(business.id, signal) : null;
+    connectionCheck?.catch(() => {});
     try {
       if (reviewAfterSave && (input.targeting.age?.mode === "ai" || !input.targeting.audience)) {
         input = await recommendAudience(input, signal);
       }
       signal.throwIfAborted();
       setPreparationStage(signal, "Saving draft...");
-      const client = createMetaConnectClient();
       const previous = preparedDraftRef.current;
       const draft = previous && !recoveryRef.current?.request
         ? await client.updateDraft(previous.draftId, previous.version, input, signal)
@@ -707,9 +713,9 @@ function BusinessCampaigns({
       operationRef.current = null;
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
-      if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
+      if (!reviewAfterSave || !connectionCheck) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
       setPreparationStage(signal, "Checking Meta connection...");
-      const connection = await client.status(business.id, signal);
+      const connection = await connectionCheck;
       signal.throwIfAborted();
       setConnectedForDraft(connection.authorization === "connected" && Boolean(connection.selected));
       if (connection.authorization !== "connected" || !connection.selected) {
@@ -1721,6 +1727,21 @@ function BusinessCampaigns({
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatCurrency(r.cpl) : "—"}
                         />
                       </div>
+                    )}
+                    {r && (
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(campaignWhatsAppSummary(c, r))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-product-event="campaign.share_results"
+                        className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-800 hover:bg-green-100"
+                      >
+                        <MessageCircle className="h-4 w-4" /> Share results on WhatsApp
+                      </a>
+                    )}
+                    {r && outcome === "whatsapp" && (
+                      <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
+                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
