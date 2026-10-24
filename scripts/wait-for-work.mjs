@@ -6,14 +6,17 @@
 // Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 90] [--since <ISO time>]
 // Exit 0 = work found (printed), 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
+// Restart-proof (#384): on start it prints your role card, everything labelled for you with its latest
+// comment, and worktrees for your issues with uncommitted or unpushed work.
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
 // whose title names your issue (#309 "#274 …"); and, at start and before giving up, any item you own
 // where someone else spoke last and didn't address another role (so handoffs made while you were busy
-// are never lost). For the CTO it also reports any worker with fewer than 2 actionable items.
+// are never lost). For the CTO it also reports any worker with fewer than 2 actionable items and,
+// at the end of each wait, workers gone quiet for 90 min and PRs untouched for 60 min.
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -61,14 +64,65 @@ export const WORKERS = ["dev", "dev2", "dev3", "qa", "devops"];
 export const MIN_QUEUE = 2;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
-export function lowQueues(issues) {
+export function queueCounts(issues) {
   const counts = Object.fromEntries(WORKERS.map((r) => [r, 0]));
   for (const issue of issues) {
     const labels = (issue.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
     if (labels.some((l) => PARKED.has(l) || l === "decision")) continue;
     for (const r of WORKERS) if (labels.includes(`owner:${r}`)) counts[r]++;
   }
+  return counts;
+}
+
+export function lowQueues(issues) {
+  const counts = queueCounts(issues);
   return WORKERS.filter((r) => counts[r] < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
+}
+
+export const QUIET_MIN = 90;
+export const STALE_PR_MIN = 60;
+
+/**
+ * CTO on-track check: workers with queued work who haven't signed a comment in QUIET_MIN
+ * minutes, and open PRs untouched for STALE_PR_MIN minutes. `comments` are recent repo
+ * comments (any order); `now` is epoch ms.
+ */
+export function offTrack({ issues, comments, prs, now }) {
+  const counts = queueCounts(issues);
+  const lastSeen = {};
+  for (const c of comments) {
+    for (const r of WORKERS) {
+      if (matchers(r).writtenByMe(c.body ?? "")) {
+        const t = Date.parse(c.created_at);
+        if (!(lastSeen[r] >= t)) lastSeen[r] = t;
+      }
+    }
+  }
+  const quiet = WORKERS.filter((r) => counts[r] > 0 && !(now - (lastSeen[r] ?? 0) < QUIET_MIN * 60_000))
+    .map((r) => ({ role: r, minutes: lastSeen[r] ? Math.floor((now - lastSeen[r]) / 60_000) : null }));
+  const stale = prs.filter((pr) => !pr.draft && now - Date.parse(pr.updated_at) >= STALE_PR_MIN * 60_000)
+    .map((pr) => ({ number: pr.number, title: pr.title, minutes: Math.floor((now - Date.parse(pr.updated_at)) / 60_000) }));
+  return { quiet, stale };
+}
+
+/** One line from docs/ORCHESTRATION.md → Role cards ("Same as Dev" resolves to Dev's column). */
+export function roleCard(markdown, role) {
+  const rows = {};
+  for (const line of markdown.split("\n")) {
+    const m = /^\|\s*\*\*([^*]+)\*\*\s*\|([^|]*)\|([^|]*)\|/.exec(line);
+    if (m) rows[m[1].trim()] = { owns: m[2].trim(), handsOff: m[3].trim() };
+  }
+  const row = rows[NAMES[role]];
+  if (!row) return null;
+  const same = /^Same as (.+)$/.exec(row.handsOff);
+  const handsOff = same && rows[same[1].trim()] ? rows[same[1].trim()].handsOff : row.handsOff;
+  return `${NAMES[role]} owns: ${row.owns}. Hand off: ${handsOff}`;
+}
+
+/** Worktrees for your issues with work not yet safe in GitHub. `trees`: [{ path, branch, dirty, ahead }]. */
+export function unsavedWork(trees, ownedNumbers) {
+  return trees.filter((t) => (t.dirty > 0 || t.ahead > 0)
+    && [...`${t.path} ${t.branch ?? ""}`.matchAll(/(?:^|[^\d])(\d{2,5})(?=[^\d]|$)/g)].some((m) => ownedNumbers.has(Number(m[1]))));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) await main();
@@ -202,8 +256,49 @@ function backlog() {
   }
   return found;
 }
-const report = (found) => { console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`); process.exit(0); };
+// #384: restart-proof start. GitHub and git are the memory: role card, in-flight work, unsaved local work.
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
+const report = (found) => {
+  if (card) console.log(`Role: ${card}`);
+  console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
+  process.exit(0);
+};
+const git = (cwd, args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+function localTrees() {
+  const trees = [];
+  let current = null;
+  for (const line of git(repoRoot, ["worktree", "list", "--porcelain"]).split("\n")) {
+    if (line.startsWith("worktree ")) trees.push(current = { path: line.slice(9), branch: null });
+    else if (line.startsWith("branch ") && current) current.branch = line.slice(7).replace("refs/heads/", "");
+  }
+  return trees.filter((t) => t.path.includes("/adbrain-wt/") && existsSync(t.path)).map((t) => {
+    let dirty = 0; let ahead = 0;
+    try { dirty = git(t.path, ["status", "--porcelain"]).split("\n").filter(Boolean).length; } catch { /* unreadable */ }
+    try { ahead = Number(git(t.path, ["rev-list", "--count", t.branch ? "@{upstream}..HEAD" : "origin/main..HEAD"])) || 0; } catch {
+      try { ahead = Number(git(t.path, ["rev-list", "--count", "origin/main..HEAD"])) || 0; } catch { /* no main */ }
+    }
+    return { ...t, dirty, ahead };
+  });
+}
+function startupSummary() {
+  if (card) console.log(`Role: ${card}`);
+  const items = owned();
+  console.log(items.length ? `In flight for ${name} (${items.length}):` : `Nothing labelled ${label}; take the next item in your worker-table row.`);
+  for (const item of items) {
+    const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
+    const last = comments.at(-1)?.body;
+    console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
+  }
+  const unsaved = unsavedWork(localTrees(), new Set(items.map((item) => item.number)));
+  for (const t of unsaved) console.log(`Unsaved local work: ${t.path} (${t.branch ?? "detached"}): ${t.dirty} uncommitted, ${t.ahead} unpushed`);
+}
 
+try {
+  startupSummary();
+} catch (error) {
+  console.error(`Start-up summary failed, continuing: ${error.message.split("\n")[0]}`);
+}
 try {
   const waiting = backlog();
   if (role === "cto") {
@@ -232,6 +327,18 @@ try {
   const waiting = backlog();
   if (waiting.length) report(waiting);
 } catch { /* fall through to the timeout */ }
+// CTO: a regular on-track review at the end of every wait (once per cycle, so it never spins).
+if (role === "cto") {
+  try {
+    const recent = api(`repos/${repo}/issues/comments?since=${new Date(Date.now() - 3 * 3_600_000).toISOString()}&sort=created&direction=desc&per_page=100`);
+    const { quiet, stale } = offTrack({ issues: openIssues(), comments: recent, prs: api(`repos/${repo}/pulls?state=open&per_page=100`), now: Date.now() });
+    const lines = [
+      ...quiet.map(({ role: r, minutes }) => `Off track? ${NAMES[r]} has queued work but no signed comment in ${minutes ?? "180+"} min: check their issue/PR and nudge or unblock`),
+      ...stale.map(({ number, title, minutes }) => `Stale PR #${number} (${minutes} min untouched): ${title}`),
+    ];
+    if (lines.length) report(lines);
+  } catch { /* fall through */ }
+}
 console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area.`);
 process.exit(3);
 }

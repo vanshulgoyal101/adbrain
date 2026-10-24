@@ -87,7 +87,9 @@ Routine steps never wait for the CEO or the CTO.
    `Lesson:` lines. **Queues never run dry:** every worker keeps at least 2
    actionable items (not `waiting-owner`, `blocked` or `decision`), each traceable
    to a line in the CEO priorities below; `wait-for-work --me cto` reports any
-   worker that drops below 2, and the CTO refills that row the same hour.
+   worker that drops below 2, and the CTO refills that row the same hour. At the
+   end of every wait it also reports workers with queued work but no signed comment
+   in 90 minutes and PRs untouched for 60 minutes; the CTO checks and unblocks them.
    Whenever the CEO changes the priorities, the CTO re-slots every row and posts
    the queue map on the CEO's `decision` issue for confirmation. The CEO and CTO talk on the issue at hand; the CTO raises CEO
    calls as `decision` issues. On a conflict, money and priority

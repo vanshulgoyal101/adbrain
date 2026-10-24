@@ -1,5 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { linkedIssues, lowQueues, matchers, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+
+describe("restart-proof start (#384)", () => {
+  const md = [
+    "| Role | Owns | Hands off |",
+    "| --- | --- | --- |",
+    "| **Dev** | Create and its tests | Migrations, config |",
+    "| **Dev 2** | Editing ads | Same as Dev |",
+  ].join("\n");
+
+  it("reads the role card from the docs and resolves 'Same as'", () => {
+    expect(roleCard(md, "dev")).toBe("Dev owns: Create and its tests. Hand off: Migrations, config");
+    expect(roleCard(md, "dev2")).toBe("Dev 2 owns: Editing ads. Hand off: Migrations, config");
+    expect(roleCard(md, "qa")).toBeNull();
+  });
+
+  it("lists only your worktrees that hold uncommitted or unpushed work", () => {
+    const trees = [
+      { path: "/x/adbrain-wt/281", branch: "fix/281-claim", dirty: 2, ahead: 0 },
+      { path: "/x/adbrain-wt/dev2-282", branch: "fix/282-confirm", dirty: 0, ahead: 1 },
+      { path: "/x/adbrain-wt/371", branch: "dev/371-results", dirty: 0, ahead: 0 },
+    ];
+    expect(unsavedWork(trees, new Set([281, 371]))).toEqual([trees[0]]);
+  });
+});
+
+describe("CTO on-track check", () => {
+  const now = Date.parse("2026-10-24T12:00:00Z");
+  const at = (min: number) => new Date(now - min * 60_000).toISOString();
+  const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
+
+  it("flags workers with queued work and no recent signed comment, and stale PRs", () => {
+    const result = offTrack({
+      now,
+      issues: [issue("owner:dev"), issue("owner:dev2"), issue("owner:qa")],
+      comments: [
+        { body: "Dev: PR #365 is ready", created_at: at(20) },
+        { body: "CTO: → Dev 2: yours", created_at: at(5) },
+        { body: "Dev 2: built in #357", created_at: at(120) },
+        { body: "QA verdict at f16e852: approved", created_at: at(30) },
+      ],
+      prs: [
+        { number: 357, title: "#334 Advantage+", updated_at: at(75), draft: false },
+        { number: 365, title: "#335 enquiries", updated_at: at(10), draft: false },
+      ],
+    });
+    expect(result.quiet).toEqual([{ role: "dev2", minutes: 120 }]);
+    expect(result.stale).toEqual([{ number: 357, title: "#334 Advantage+", minutes: 75 }]);
+  });
+});
 
 describe("CTO queue watch", () => {
   const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
