@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
 import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { ShareCreativeButton } from "@/components/share-creative-button";
 import { z } from "zod";
 
 z.config({ jitless: true });
@@ -800,6 +801,7 @@ function CreativeCard({
         )}
         {editNotes && <CopyEditNotice notes={editNotes} />}
         <GenerationDetails value={creative.generation} />
+        {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button
             size="sm"
