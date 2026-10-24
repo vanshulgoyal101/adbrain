@@ -19,6 +19,7 @@ const approved = {
   primary_text: "Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\nMessage Solaride on WhatsApp to book your free site survey.",
 };
 const solaride = { name: "Solaride", offers: ["Free site survey", "PM Surya Ghar subsidy help", "Diwali offer: 10% off rooftop solar installation"] };
+const areas = ["Chandigarh", "Panchkula", "Mohali"];
 
 async function sentForms(destination: "whatsapp" | "instant_form") {
   const client = new MetaClient(creds);
@@ -28,7 +29,7 @@ async function sentForms(destination: "whatsapp" | "instant_form") {
   await client.createLeadCampaign({
     name: "AdBrain #209 validate", dailyBudgetRupees: 280, destination, link: "https://solaride.in",
     ...(destination === "whatsapp"
-      ? { whatsappNumber: "+919999990874", whatsappGreeting: whatsappGreeting(solaride, [approved.headline, approved.primary_text]) }
+      ? { whatsappNumber: "+919999990874", whatsappGreeting: whatsappGreeting(solaride, [approved.headline, approved.primary_text], areas) }
       : { leadFormId: "form-1" }),
     creatives: [{ imageUrl: "https://example.com/ad.png", headline: approved.headline, message: approved.primary_text }],
     location: { cities: [{ key: "1021145" }] }, ageMin: 25, ageMax: 55,
@@ -39,7 +40,7 @@ async function sentForms(destination: "whatsapp" | "instant_form") {
 afterEach(() => vi.restoreAllMocks());
 
 describe("core: WhatsApp Prepare payload against Meta's recorded validate_only answers (#209)", () => {
-  it("sends the WhatsApp campaign and the Hinglish greeting in the exact shapes Meta accepted", async () => {
+  it("sends the WhatsApp campaign and the one-tap ask in the exact shapes Meta accepted", async () => {
     expect(exchange("campaign")).toMatchObject({ status: 200, body: { success: true } });
     expect(exchange("ad-wa-me")).toMatchObject({ status: 200, body: { success: true } });
     const forms = await sentForms("whatsapp");
@@ -53,7 +54,24 @@ describe("core: WhatsApp Prepare payload against Meta's recorded validate_only a
     expect(sent.call_to_action.type).toBe(accepted.call_to_action.type);
     expect(sent.call_to_action.value.app_destination).toBe(accepted.call_to_action.value.app_destination);
     expect(sent.message).toBe(accepted.message);
-    expect(whatsappGreeting(solaride, [approved.headline, approved.primary_text])).toEqual(recorded.greeting);
+    expect(whatsappGreeting(solaride, [approved.headline, approved.primary_text], areas)).toEqual(recorded.greeting);
+  });
+
+  // #493: 7 opened WhatsApp from #157 and 1 sent. The ask is now one short sentence in the ad's language.
+  it("Meta accepted the English, one-city, Hindi and Punjabi asks, and today's code writes exactly those", () => {
+    expect(recorded.greeting.autofill).toBe("Hi, I'm interested in the free site survey.");
+    const copy = [approved.headline, approved.primary_text];
+    const today = {
+      "one-city": whatsappGreeting(solaride, copy, ["Mohali"]),
+      hindi: whatsappGreeting(solaride, ["छत पर सोलर, Free site survey के साथ"], ["Mohali"]),
+      punjabi: whatsappGreeting(solaride, ["ਛੱਤ 'ਤੇ ਸੋਲਰ, Free site survey ਨਾਲ"], ["Mohali"]),
+    };
+    expect(today).toEqual(recorded.variants);
+    for (const label of Object.keys(today) as (keyof typeof today)[]) {
+      expect(exchange(`ad-wa-me-${label}`), label).toMatchObject({ status: 200, body: { success: true } });
+      const welcome = JSON.parse(linkData(`ad-wa-me-${label}`).page_welcome_message);
+      expect(welcome.text_format.message.autofill_message.content).toBe(today[label].autofill);
+    }
   });
 
   it("keeps instant-form creatives free of the WhatsApp greeting", async () => {
