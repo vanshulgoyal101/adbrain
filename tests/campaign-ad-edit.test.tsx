@@ -83,6 +83,20 @@ describe("campaign ad picker: Edit (#280)", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("previews the unsaved headline on the tile while typing, and Cancel restores it (#387)", async () => {
+    view();
+    await statusRead();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: `Edit ${creative.headline}` }));
+    const panel = screen.getByRole("region", { name: "Edit ad" });
+    fireEvent.change(within(panel).getByLabelText("Headline"), { target: { value: "Roof ready in a week?" } });
+    expect(screen.getByRole("button", { name: "Roof ready in a week?" })).toBeInTheDocument();
+    expect(within(panel).getByText("Preview · unsaved changes")).toBeInTheDocument();
+    expect(actions.updateCreativeCopy).not.toHaveBeenCalled();
+    fireEvent.click(within(panel).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: creative.headline! })).toBeInTheDocument();
+  });
+
   it("redraws the words on the picture and shows the live-on-Meta note", async () => {
     view();
     await statusRead();

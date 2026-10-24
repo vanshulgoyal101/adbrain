@@ -1,6 +1,5 @@
 "use client";
 import { takePendingIdea } from "@/lib/ideas/pending";
-import { savedCreativeDescription } from "@/lib/creative/concept";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
 import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
@@ -19,7 +18,7 @@ import {
 } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { AdLanguagePicker } from "@/components/ad-language-picker";
-import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { ShareCreativeButton } from "@/components/share-creative-button";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
@@ -848,6 +847,11 @@ function ResultCard({
   // Live cards aren't in turns yet, so their saved words are kept here too.
   const [savedCopy, setSavedCopy] = useState<Pick<Creative, "headline" | "primary_text" | "cta" | "generation" | "image_url"> | null>(null);
   const creative = savedCopy ? { ...given, ...savedCopy } : given;
+  // The owner's unsaved words, shown in the card as they type (#387).
+  const [draft, setDraft] = useState<AdText | null>(null);
+  const saved = savedAdText(creative);
+  const shown = editing && draft ? draft : saved;
+  const unsaved = editing && draft !== null && !sameAdText(draft, saved);
   // Live cards are not in turns yet, so they keep their own state.
   const [localApproved, setLocalApproved] = useState(creative.status === "approved");
   const approved = onStatus ? creative.status === "approved" : localApproved;
@@ -907,35 +911,39 @@ function ResultCard({
         </div>
       )}
       <div className="flex flex-1 flex-col gap-1.5 p-3">
-        {editing ? (
-          <CreativeEditor
-            creative={creative}
-            brand={brand}
-            onCancel={() => setEditing(false)}
-            onSaved={(next, notes) => {
-              const { headline, primary_text, cta, generation, image_url } = next;
-              setSavedCopy({ headline, primary_text, cta, generation, image_url });
-              onEdited?.(next);
-              setEditNotes(notes);
-              setEditing(false);
-            }}
-          />
-        ) : (
-        <>
-        <h3 className="text-sm font-semibold text-slate-900">{creative.headline}</h3>
+        {unsaved && <UnsavedPreviewBadge />}
+        <h3 className="text-sm font-semibold text-slate-900">{shown.headline}</h3>
         <p className="line-clamp-4 whitespace-pre-line text-xs text-slate-600">
-          {creative.primary_text}
+          {shown.primary_text}
         </p>
-        {savedCreativeDescription(creative.generation) && (
+        {shown.description && (
           <p className="break-words text-xs text-slate-600">
-            <span className="font-medium">Description: </span>{savedCreativeDescription(creative.generation)}
+            <span className="font-medium">Description: </span>{shown.description}
           </p>
         )}
-        {creative.cta && (
+        {shown.cta && (
           <span className="mt-1 inline-flex w-fit rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-white">
-            {creative.cta}
+            {shown.cta}
           </span>
         )}
+        {editing ? (
+          <div className="mt-2 border-t border-slate-100 pt-3">
+            <CreativeEditor
+              creative={creative}
+              brand={brand}
+              onDraft={setDraft}
+              onCancel={() => setEditing(false)}
+              onSaved={(next, notes) => {
+                const { headline, primary_text, cta, generation, image_url } = next;
+                setSavedCopy({ headline, primary_text, cta, generation, image_url });
+                onEdited?.(next);
+                setEditNotes(notes);
+                setEditing(false);
+              }}
+            />
+          </div>
+        ) : (
+        <>
         {editNotes && <CopyEditNotice notes={editNotes} />}
         <div className="mt-auto flex items-center gap-2 pt-2">
           <Button
