@@ -34,6 +34,8 @@ export const productEventSchema = z.object({
     usageKind: z.enum(["text", "image"]).optional(),
     attempt: z.number().int().min(1).max(100).optional(),
     cacheHit: z.boolean().optional(),
+    /** #366: which campaign kind a Prepare was for, so WhatsApp timings can be read separately. */
+    destination: z.enum(["instant_form", "whatsapp"]).optional(),
     /** #378: names of the validation rules a rejected AI reply broke; never the reply's text. */
     validationRules: z.array(z.string().regex(/^[a-zA-Z0-9_.:*/[\]-]{1,80}$/)).max(12).optional(),
     action: z.enum(productActions).optional(),

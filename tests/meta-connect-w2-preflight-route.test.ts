@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getConnectionStatus: vi.fn(),
   withMetaConnection: vi.fn(),
   metaClientForBusiness: vi.fn(),
+  record: vi.fn(),
   draft: null as Record<string, unknown> | null,
 }));
 
@@ -35,6 +36,10 @@ const draftRow = {
   updated_at: "2026-09-07T10:00:00.000Z",
 };
 
+vi.mock("@/lib/observability/logger", async (original) => ({
+  ...await original<typeof import("@/lib/observability/logger")>(),
+  recordProductEvent: mocks.record,
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },
@@ -120,6 +125,11 @@ describe("POST /api/campaigns/preflight", () => {
     expect(body.ok).toBe(true);
     expect(body.data).toMatchObject({ draftId, draftVersion: 1, connectionGeneration: 4 });
     expect(mocks.metaClientForBusiness).not.toHaveBeenCalled();
+    // #366: the review event says which kind of campaign it was and how long Prepare's check took.
+    expect(body.data.destination).toBe("instant_form");
+    expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({
+      name: "campaign.review", durationMs: expect.any(Number), attributes: expect.objectContaining({ destination: "instant_form" }),
+    }));
   });
 
   it("rejects a stale draft version before provider-dependent loaders", async () => {
