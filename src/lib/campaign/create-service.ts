@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { renderStoryAd } from "@/lib/creative/story";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
 import { buildCreativeReviewPayload } from "./preflight";
@@ -61,6 +62,10 @@ export async function executeReviewedCampaign(input: {
             description: savedCreativeDescription(creative.generation),
           }))))).digest("hex");
           if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
+          // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
+          const storyImages = draft.input.destination === "whatsapp"
+            ? await Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => null)))
+            : creativeInputs.map(() => null);
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
@@ -69,7 +74,7 @@ export async function executeReviewedCampaign(input: {
               whatsappGreeting: whatsappGreeting(business, creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""])),
             } : {}),
             link: business.website || "https://facebook.com",
-            creatives: creativeInputs.map(creative => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta })),
+            creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,
             gender: targeting.gender ?? "all", interests: review.audienceInterests,
             variants: draft.input.abTest ? splitAgeRange(targeting.age?.min ?? 25, targeting.age?.max ?? 60).map(band => ({

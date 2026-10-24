@@ -74,6 +74,8 @@ export interface CreativeInput {
   message: string;
   description?: string | null;
   cta?: string | null;
+  /** The same ad at 9:16 for Stories and Reels (#333); without it every placement gets the 4:5 image. */
+  storyImage?: Uint8Array | null;
 }
 
 /** A resolved Meta geo-targeting spec (subset of the targeting `geo_locations`). */
@@ -313,6 +315,47 @@ export function destinationCTA(
   return {
     type: "LEARN_MORE",
     value: { lead_gen_form_id: opts.leadFormId },
+  };
+}
+
+/**
+ * A creative with a 4:5 feed image and a 9:16 image that Meta uses for Stories and Reels (#333).
+ * Placement asset customisation needs asset_feed_spec; object_story_spec then carries only the Page.
+ */
+export function placementCreativeSpec(p: {
+  pageId: string;
+  feedHash: string;
+  storyHash: string;
+  headline: string;
+  message: string;
+  description?: string;
+  link: string;
+  destination: AdDestination;
+  whatsappNumber?: string;
+  whatsappGreeting?: { autofill: string; greeting: string };
+  leadFormId?: string;
+}) {
+  const cta = destinationCTA(p.destination, { leadFormId: p.leadFormId, phone: p.whatsappNumber });
+  return {
+    object_story_spec: { page_id: p.pageId },
+    asset_feed_spec: {
+      images: [
+        { hash: p.feedHash, adlabels: [{ name: "adbrain_feed" }] },
+        { hash: p.storyHash, adlabels: [{ name: "adbrain_story" }] },
+      ],
+      bodies: [{ text: p.message }],
+      titles: [{ text: p.headline }],
+      ...(p.description?.trim() ? { descriptions: [{ text: p.description.trim() }] } : {}),
+      link_urls: [{ website_url: p.link }],
+      call_to_action_types: [cta.type],
+      ...(p.destination === "whatsapp" && p.whatsappGreeting ? { additional_data: { page_welcome_message: whatsappWelcomeMessage(p.whatsappGreeting) } } : {}),
+      ad_formats: ["SINGLE_IMAGE"],
+      optimization_type: "PLACEMENT",
+      asset_customization_rules: [
+        { customization_spec: { publisher_platforms: ["facebook", "instagram"], facebook_positions: ["story", "facebook_reels"], instagram_positions: ["story", "reels"] }, image_label: { name: "adbrain_story" }, priority: 1 },
+        { customization_spec: { publisher_platforms: ["facebook", "instagram", "audience_network", "messenger"] }, image_label: { name: "adbrain_feed" }, priority: 2 },
+      ],
+    },
   };
 }
 
@@ -746,7 +789,11 @@ export class MetaClient {
     if (!imgRes.ok) {
       throw new MetaError(`Could not fetch creative image (${imgRes.status}).`);
     }
-    const b64 = Buffer.from(await readBoundedResponse(imgRes)).toString("base64");
+    return this.uploadAdImageBytes(await readBoundedResponse(imgRes));
+  }
+
+  async uploadAdImageBytes(bytes: Uint8Array): Promise<string> {
+    const b64 = Buffer.from(bytes).toString("base64");
     const data = await this.graph<{ images: Record<string, { hash: string }> }>(
       `${this.creds.adAccountId}/adimages`,
       { method: "POST", form: { bytes: b64 } },
@@ -859,7 +906,7 @@ export class MetaClient {
     await params.onCheckpoint?.({ phase: "campaign", externalId: campaign.id });
 
     // Upload each creative image once and reuse the hash across all ad sets.
-    const prepared: { input: CreativeInput; imageHash: string }[] = [];
+    const prepared: { input: CreativeInput; imageHash: string; storyHash: string | null }[] = [];
     for (let creativeIndex = 0; creativeIndex < params.creatives.length; creativeIndex++) {
       const c = params.creatives[creativeIndex];
       const imageHash = await this.uploadAdImage(c.imageUrl);
@@ -868,9 +915,15 @@ export class MetaClient {
         externalId: imageHash,
         creativeIndex,
       });
+      // Placement images are proven for WhatsApp ads only (tests/core/fixtures/meta/story-validate.json).
+      let storyHash: string | null = null;
+      if (c.storyImage && params.destination === "whatsapp") {
+        storyHash = await this.uploadAdImageBytes(c.storyImage).catch(() => null);
+      }
       prepared.push({
         input: c,
         imageHash,
+        storyHash,
       });
     }
 
@@ -953,12 +1006,23 @@ export class MetaClient {
       await params.onCheckpoint?.({ phase: "adset", externalId: adSet.id, variantIndex: i });
 
       for (let creativeIndex = 0; creativeIndex < prepared.length; creativeIndex++) {
-        const { input: c, imageHash } = prepared[creativeIndex];
+        const { input: c, imageHash, storyHash } = prepared[creativeIndex];
+        const placement = storyHash && destination === "whatsapp"
+          ? placementCreativeSpec({
+            pageId: this.creds.pageId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
+            description: c.description ?? undefined, link: `https://wa.me/${params.whatsappNumber!.slice(1)}`,
+            destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting,
+          })
+          : null;
         const creative = await this.graph<{ id: string }>(
           `${acct}/adcreatives`,
           {
             method: "POST",
-            form: {
+            form: placement ? {
+              name: c.headline.slice(0, 90) || "AdBrain creative",
+              object_story_spec: JSON.stringify(placement.object_story_spec),
+              asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
+            } : {
               name: c.headline.slice(0, 90) || "AdBrain creative",
               object_story_spec: JSON.stringify({
                 page_id: this.creds.pageId,

@@ -254,6 +254,12 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - Each WhatsApp creative carries a Hinglish `page_welcome_message` built from Brand
   facts: a greeting from the business and a message pre-typed for the customer
   that names up to two Brand offers the approved ads mention (#209).
+- Stories and Reels get a 9:16 version of each WhatsApp ad (#333): Prepare lays out
+  the saved design and photo at 1080×1920 (no AI call; text kept out of the
+  Stories safe zones) and sends both images through `asset_feed_spec` placement
+  rules, with the greeting in `additional_data`. Ads made before the design was
+  saved, a failed render or upload, and lead-form ads keep the single 4:5 image.
+  Meta's `validate_only` answers are recorded by `scripts/record-meta-story-fixtures.ts`.
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
   pause, and activation safeguards. Refresh detects all-WhatsApp ad sets and
   stores `onsite_conversion.messaging_conversation_started_7d` separately from

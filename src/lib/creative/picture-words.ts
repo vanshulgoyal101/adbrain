@@ -40,6 +40,12 @@ type CreativeRow = Pick<
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The overlay spec saved in a creative's generation receipt, or null for older ads. */
+export function storedPictureDesign(value: unknown): AdDesignSpec | null {
+  const stored = storedDesignSchema.safeParse(value);
+  return stored.success ? { ...stored.data, backgroundUrl: null } : null;
+}
+
 /** The overlay spec saved with the ad, or one rebuilt from the Brand for ads made before it was saved. */
 export function pictureDesign(creative: CreativeRow, brand: BrandContext): AdDesignSpec {
   const generation = isRecord(creative.generation) ? creative.generation : {};
