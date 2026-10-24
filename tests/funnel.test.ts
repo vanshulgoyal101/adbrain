@@ -13,6 +13,7 @@ describe("activation funnel (#338)", () => {
     expect(sql).toContain("make_interval(days => 14)");
     expect(sql).toContain("array['smoke@example.com','o''brien@example.com']::text[]");
     expect(sql).toContain("'/api/meta/oauth/start'");
+    expect(sql).toContain("'meta.access_request'");
     expect(sql).not.toMatch(/;\s*\S/);
     expect(funnelSql(7, [])).toContain("array[]::text[]");
   });
@@ -32,7 +33,7 @@ describe("activation funnel (#338)", () => {
     ]);
     expect(summary.totals).toEqual([
       ["Signed up", 3], ["Brand saved", 3], ["First ad generated", 2], ["Ad approved", 2], ["Campaigns opened", 2],
-      ["Connect Meta clicked", 1], ["Meta connected", 1], ["Top-up paid", 0], ["Campaign created", 1], ["First lead/chat", 0],
+      ["Asked to connect Meta", 1], ["Meta connected", 1], ["Top-up paid", 0], ["Campaign created", 1], ["First lead/chat", 0],
     ]);
   });
 
