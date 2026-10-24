@@ -1143,6 +1143,9 @@ async function verifyManagedAccounts(db, database) {
       await session.query("rollback to savepoint s");
       await assert.rejects(session.query("update public.managed_meta_accounts set last_error='token=EAAB secret value' where business_id=$1", [business]), { code: "23514" });
       await session.query("rollback to savepoint s");
+      await assert.rejects(session.query(`update public.managed_meta_accounts set step_keys='{"child_business":"EAAB token with spaces"}' where business_id=$1`, [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await session.query(`update public.managed_meta_accounts set step_keys='{"child_business":"b1-child-2026-10-25"}' where business_id=$1`, [business]);
       await assert.rejects(session.query("update public.managed_meta_account_events set outcome='failed' where business_id=$1", [business]), { code: "42501" });
       await session.query("rollback to savepoint s");
       await assert.rejects(session.query("delete from public.managed_meta_account_events where business_id=$1", [business]), { code: "42501" });
@@ -1152,7 +1155,8 @@ async function verifyManagedAccounts(db, database) {
       await assert.rejects(session.query("update public.managed_meta_accounts set state='ready' where business_id=$1", [business]), { code: "23514" });
     });
     // A business can't be deleted while its managed account exists (its ad account could still spend).
-    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), { code: "23503" });
+    // restrict_violation (23001) or foreign_key_violation (23503), depending on the Postgres build.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), (error) => ["23001", "23503"].includes(error.code));
   });
 }
 

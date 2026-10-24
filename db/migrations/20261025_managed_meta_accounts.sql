@@ -19,7 +19,10 @@ create table if not exists public.managed_meta_accounts (
   phone_number_id text check (phone_number_id ~ '^[0-9]{1,24}$'),
   funding_state text not null default 'none' check (funding_state in ('none', 'card_attached', 'invoiced', 'failed')),
   -- One idempotency key per provisioning step, e.g. {"child_business": "..."}; never reused across tenants.
-  step_keys jsonb not null default '{}'::jsonb check (jsonb_typeof(step_keys) = 'object' and octet_length(step_keys::text) <= 2048),
+  step_keys jsonb not null default '{}'::jsonb check (
+    jsonb_typeof(step_keys) = 'object' and octet_length(step_keys::text) <= 2048
+    -- Every value is a key, never a token or free text.
+    and not jsonb_path_exists(step_keys, '$.* ? (@.type() != "string" || !(@ like_regex "^[A-Za-z0-9_.:-]{8,200}$"))')),
   last_error text check (last_error ~ '^[A-Za-z0-9_.:-]{1,80}$'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -30,6 +33,12 @@ create table if not exists public.managed_meta_accounts (
   check (state <> 'whatsapp_linked' or (waba_id is not null and phone_number_id is not null))
 );
 
+-- One active tenant per Page and per WhatsApp number (#253's boundary): B can never be linked to A's.
+create unique index if not exists managed_meta_accounts_page_active_idx
+  on public.managed_meta_accounts(page_id) where page_id is not null and state <> 'offboarded';
+create unique index if not exists managed_meta_accounts_phone_active_idx
+  on public.managed_meta_accounts(phone_number_id) where phone_number_id is not null and state <> 'offboarded';
+
 create or replace function public.managed_meta_account_guard()
 returns trigger
 language plpgsql
@@ -38,6 +47,15 @@ as $$
 declare
   allowed text[];
 begin
+  if tg_op = 'INSERT' then
+    -- Every account starts at the beginning; Meta objects are only ever added by later steps.
+    if new.state <> 'requested' or new.child_business_id is not null or new.ad_account_id is not null then
+      raise exception 'managed account must start as requested' using errcode = '23514';
+    end if;
+    new.created_at := now();
+    new.updated_at := now();
+    return new;
+  end if;
   if old.child_business_id is not null and new.child_business_id is distinct from old.child_business_id then
     raise exception 'managed account child business is fixed once set' using errcode = '23514';
   end if;
@@ -55,7 +73,8 @@ begin
       when 'ready' then array['whatsapp_linked', 'failed', 'offboarding']
       -- A failed step resumes where the stored IDs allow (the row checks above enforce that).
       when 'failed' then array['requested', 'page_linked', 'child_created', 'ad_account_created', 'funded', 'whatsapp_linked', 'ready', 'offboarding']
-      when 'offboarding' then array['offboarded', 'failed']
+      -- Leaving is one way: offboarding retries stay in offboarding (failures go to last_error).
+      when 'offboarding' then array['offboarded']
       else array[]::text[]
     end;
     if not new.state = any(allowed) then
@@ -70,7 +89,7 @@ revoke all on function public.managed_meta_account_guard() from public, anon, au
 
 drop trigger if exists managed_meta_accounts_guard on public.managed_meta_accounts;
 create trigger managed_meta_accounts_guard
-  before update on public.managed_meta_accounts
+  before insert or update on public.managed_meta_accounts
   for each row execute function public.managed_meta_account_guard();
 
 alter table public.managed_meta_accounts enable row level security;
