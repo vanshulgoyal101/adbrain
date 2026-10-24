@@ -20,7 +20,7 @@ export default function PrivacyPolicyPage() {
       <JsonLd
         data={contentPageGraph({ path: "/privacy", name: TITLE, description: DESCRIPTION })}
       />
-      <LegalPage title={TITLE} updated="30 September 2026">
+      <LegalPage title={TITLE} updated="24 October 2026">
         <p>
           AdBrain (&ldquo;AdBrain&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) helps businesses create ad
           creatives and run lead-generation campaigns on Meta (Facebook and
@@ -85,12 +85,20 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Supabase</strong> — database, authentication, and file
-            storage.
+            storage, including Meta access tokens, campaigns and leads.
           </li>
           <li>
-            <strong>AI providers</strong> — brand details and briefs are sent to
-            large-language-model and image-generation providers to produce
-            creatives. If you enable remembered preferences, selected relevant
+            <strong>Vercel</strong> — application hosting.
+          </li>
+          <li>
+            <strong>Razorpay</strong> — payment processing when you add funds.
+          </li>
+          <li>
+            <strong>AI providers</strong> (Google, OpenRouter and Groq) — brand
+            details and briefs are sent to large-language-model and
+            image-generation providers to produce creatives. Campaign results are
+            sent only as aggregate numbers, with lead form names; the personal
+            details in your leads are never sent to AI providers. If you enable remembered preferences, selected relevant
             notes may also be sent as advisory context for that request. We do
             not sell your data, and we do not use it to train third-party models
             beyond generating your requested output.
