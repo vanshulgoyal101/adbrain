@@ -1,4 +1,4 @@
-.cycle { --ink: #18211f; --subtle: #52605b; --line: #d9dfdc; --lime: #dcf77a; --moss: #216849; --stop: 3.2s; color: var(--ink); font-family: "Trebuchet MS", sans-serif; }
+.cycle { --ink: var(--foreground); --subtle: var(--muted); --line: var(--border); --lime: var(--lime-wash); --moss: var(--primary); --stop: 3.2s; color: var(--ink); }
 .cycle p, .cycle dl, .cycle dd { margin: 0; }
 .cycle button:focus-visible { outline: 3px solid var(--moss); outline-offset: 3px; }
 
@@ -15,7 +15,7 @@
 .pause { position: relative; z-index: 4; display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: none; color: var(--ink); cursor: pointer; }
 
 .stop { position: absolute; inset: 72px 18px 18px; display: flex; flex-direction: column; justify-content: center; gap: 18px; padding-bottom: 32px; }
-.stopTitle { font-family: Georgia, serif; font-size: 23px; line-height: 1.2; }
+.stopTitle { font-family: var(--font-sans); font-weight: 650; letter-spacing: -0.01em; font-size: 20px;line-height: 1.2; }
 .screen { display: flex; align-items: flex-start; }
 .prev, .next { position: absolute; top: 72px; bottom: 0; z-index: 2; border: 0; padding: 0; background: transparent; cursor: pointer; }
 .prev { left: 0; width: 32%; }
@@ -47,7 +47,7 @@
 .live { width: 100%; padding: 20px 16px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
 .activePill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 14px; background: #e3f3e8; color: #17603a; font-weight: 700; font-size: 13px; }
 .activePill span { width: 8px; height: 8px; border-radius: 50%; background: #1f9d55; animation: pulse 1.2s ease-in-out infinite; }
-.liveBudget { font-family: Georgia, serif; font-size: 34px; margin-top: 14px !important; }
+.liveBudget { font-family: var(--font-sans); font-weight: 650; letter-spacing: -0.01em; font-size: 34px;margin-top: 14px !important; }
 .liveNote { font-size: 13px; line-height: 1.5; color: var(--subtle); margin-top: 6px !important; }
 
 .chat { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: #e9e2d6; }
@@ -60,7 +60,7 @@
 .results { width: 100%; padding: 16px; border-radius: 12px; background: #fff; border: 1px solid var(--line); }
 .results dl > div { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .results dt { font-size: 13px; color: var(--subtle); }
-.results dd { font-family: Georgia, serif; font-size: 24px; }
+.results dd { font-family: var(--font-sans); font-weight: 650; letter-spacing: -0.01em; font-size: 24px;}
 .smarter { display: flex; align-items: center; gap: 8px; margin-top: 14px !important; padding: 10px 12px; border-radius: 8px; background: var(--lime); font-size: 13px; font-weight: 700; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -70,7 +70,7 @@
 /* Full-screen phone intro (#376): the step fills the space under its title instead of floating in it. */
 .fill .stories { max-width: none; height: 100%; aspect-ratio: auto; border: 0; border-radius: 16px; background: #fff; }
 .fill .stop { inset: 64px 16px 16px; justify-content: flex-start; padding-bottom: 0; gap: 16px; }
-.fill .stopTitle { font-size: 26px; }
+.fill .stopTitle { font-size: 22px; }
 .fill .screen { flex: 1; min-height: 0; align-items: stretch; }
 .fill .screen > * { width: 100%; }
 .fill .brandCard, .fill .live, .fill .results, .fill .chat { display: flex; flex-direction: column; padding: 20px; }
