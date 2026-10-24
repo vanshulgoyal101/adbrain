@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Blocks until there is new work for one role, so an idle worker chat keeps going instead of stopping.
-// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 120] [--poll-sec 90] [--since <ISO time>]
+// Blocks until there is new work for one role, so an idle worker chat picks up quick handoffs.
+// Run it in the foreground only; it gives up after --max-min (default 30), and nothing is left running.
+// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 90] [--since <ISO time>]
 // Exit 0 = work found (printed), 3 = nothing new before --max-min.
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
@@ -10,7 +11,7 @@ const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", qa: "QA", devops: "Dev
 const { values } = parseArgs({
   options: {
     me: { type: "string" },
-    "max-min": { type: "string", default: "120" },
+    "max-min": { type: "string", default: "30" },
     "poll-sec": { type: "string", default: "90" },
     since: { type: "string" },
     repo: { type: "string", default: process.env.GH_REPO || "vanshulgoyal101/adbrain" },
