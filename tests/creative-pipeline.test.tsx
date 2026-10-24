@@ -347,6 +347,17 @@ describe("generateVariants", () => {
     expect(JSON.stringify(generationReceipt(regenerated))).not.toContain("tone: warm");
   });
 
+  it("stamps each saved ad with the request that paid for it and its angle id, for its receipt (#451)", async () => {
+    const { generateVariants } = await import("@/lib/creative/generate");
+    generateImage.mockImplementationOnce(async ({ prompt }) => ({ url: "https://img.example/a.jpg", prompt }));
+    const [variant] = await generateVariants({ brand, brief: "Use clear copy", count: 1 });
+    const { generationReceipt } = await import("@/lib/creative/receipt");
+    expect(generationReceipt(variant, "English", [], [], undefined, "generate-request-1")).toMatchObject({
+      requestId: "generate-request-1", angleId: variant.angleId,
+    });
+    expect(generationReceipt(variant)).not.toHaveProperty("requestId");
+  });
+
   it("omits the provider image prompt when the concept echoes an advisory style", async () => {
     const advisoryPhrase = "verdant-ochre palette";
     const advisoryPreferences = `PAST DECLARED PREFERENCES: visual_style: ${advisoryPhrase}`;

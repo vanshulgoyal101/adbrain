@@ -25,6 +25,15 @@ describe("scanAdCopy", () => {
     expect(scanAdCopy("HUGE MEGA SAVINGS today").some((x) => x.rule === "all-caps")).toBe(true);
   });
 
+  it("does not count short acronyms or capitals the business writes itself as shouting (#418)", () => {
+    const allCaps = (text: string, allowedCaps?: string[]) => scanAdCopy(text, { allowedCaps }).some((x) => x.rule === "all-caps");
+    expect(allCaps("SOLARIDE ke IIT/PEC engineers se free site survey", ["SOLARIDE"])).toBe(false);
+    expect(allCaps("नॉन-DCR पैनल अब SOLARIDE से", ["SOLARIDE"])).toBe(false);
+    expect(allCaps("SOLARIDE ke IIT/PEC engineers")).toBe(false);
+    expect(allCaps("HUGE MEGA SAVINGS from SOLARIDE", ["SOLARIDE"])).toBe(true);
+    expect(allCaps("SOLARIDE ROOFTOP DEALS", ["SOLARIDE"])).toBe(true);
+  });
+
   it("enforces word cap", () => {
     const long = Array(70).fill("solar").join(" ");
     expect(scanAdCopy(long, { maxWords: 60 }).some((x) => x.rule === "too-long")).toBe(true);

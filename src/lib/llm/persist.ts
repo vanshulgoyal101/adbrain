@@ -15,6 +15,8 @@ export interface LLMUsageEvent {
   usage: TokenUsage;
   requestId: string;
   generationId?: string;
+  /** The saved ad a later change (regenerate, background) spent on (#451). */
+  creativeId?: string;
   usageKind?: "text" | "image";
   promptVersion?: string;
   inputChars?: number;
@@ -47,6 +49,8 @@ const RATES_USD_PER_MILLION: Record<string, { input: number; output: number }> =
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
   "gemini-3.6-flash": { input: 0.75, output: 3.75 },
+  // OpenRouter list price (openrouter.ai/api/v1/models, Oct 24): Create's concept model (#451).
+  "anthropic/claude-haiku-5.5": { input: 0.1, output: 0.5 },
 };
 
 function estimatedCost(model: string, usage: TokenUsage): number {
@@ -170,6 +174,7 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
         metadata: {
           ...event.metadata,
           ...(event.generationId ? { generationId: event.generationId } : {}),
+          ...(event.creativeId ? { creativeId: event.creativeId } : {}),
           ...(event.providerRequestId ? { providerRequestId: event.providerRequestId } : {}),
           ...(event.failure ? { failure: event.failure } : {}),
           providerFinalStatus: event.providerFinalStatus ?? "unknown",

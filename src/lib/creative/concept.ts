@@ -6,8 +6,8 @@ import {
   type BrandContext,
 } from "@/lib/templates/ads";
 import { formatDimensions, type AdFormat } from "@/lib/creative/design";
-import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
-import { spelledCurrency } from "./currency";
+import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
+import { spelledAmountIndex, spelledCurrency } from "./currency";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -345,6 +345,7 @@ export function validateConcept(
   };
   const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
+  const allowedCaps = capitalWords(sources.join(" "));
   const issues = scanAdCopy(
     [concept.headline, concept.primary_text, concept.supportingText]
       .filter(Boolean)
@@ -352,6 +353,7 @@ export function validateConcept(
     {
       maxWords: 85,
       bannedClaims: bannedClaimsForVertical(input.brand.vertical),
+      allowedCaps,
     },
   ).map((finding) => `${finding.rule}: ${finding.detail}`);
   for (const previous of input.recentCopy ?? []) {
@@ -364,6 +366,7 @@ export function validateConcept(
   }
   issues.push(...scanAdCopy(concept.description, {
     bannedClaims: bannedClaimsForVertical(input.brand.vertical),
+    allowedCaps,
   }).map((finding) => `${finding.rule}: ${finding.detail}`));
   issues.push(...quoteIssues);
   const firstLine = concept.primary_text.split("\n", 1)[0].trim();
@@ -408,8 +411,11 @@ export function validateConcept(
       );
     }
   }
-  const offer = new RegExp(commercialTerms.source, "iu").exec(concept.primary_text.normalize("NFC"));
-  if (offer && offer.index >= FOLD_CHARACTERS) {
+  const primaryText = concept.primary_text.normalize("NFC");
+  const offer = new RegExp(commercialTerms.source, "iu").exec(primaryText);
+  // "10,000 rupaye per kW" leading the first line is the same amount as "₹10,000/kW" (#418).
+  const spelled = spelledAmountIndex(primaryText);
+  if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
   }
   return issues.length

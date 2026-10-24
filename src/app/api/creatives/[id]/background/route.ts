@@ -109,7 +109,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
   const group = creative.variant_group ?? id;
-  const usageContext = { businessId: business.id, userId: user.id, route: "creatives.background", requestId: attemptId };
+  const usageContext = { businessId: business.id, userId: user.id, route: "creatives.background", requestId: attemptId, creativeId: id };
   let paidAttemptStarted = false;
   let unresolved = false;
   let response: NextResponse;

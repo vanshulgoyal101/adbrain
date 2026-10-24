@@ -162,6 +162,28 @@ and browser collection on unless disabled or denied by DNT/GPC. Turning off
 `PRODUCT_LOGGING_ENABLED` also drops browser events at `/api/events`. Disabling
 the sink does not remove existing rows or runtime log copies.
 
+## Reading It (#451)
+
+`npm run stats [-- --days 7] [-- --include-internal]` prints, from production (read-only,
+real customers only by default): AI calls, tokens and estimated USD by model; Create runs
+(cost, tokens, AI calls, retries and AI seconds per run, cost per saved ad); AI cost per
+business per day; failures by step (AI calls with their provider reason, 5xx routes, failed
+workflows); p50/p90 of the busiest routes; and the sign-up funnel. Receipts (#451 L1): the
+last 20 ads, each with its AI calls, failures, retries, tokens, USD, AI seconds and models (its
+own angle in the Create run that made it, from `creatives.generation.requestId`/`angleId`, plus
+every later regenerate or background change, from `llm_usage_events.metadata.creativeId`; ads
+made before Oct 24 show none), and the last 5 Create runs with failed ads included and wall
+seconds from the first call's start to the last call's end. Page-load timing in a
+real browser: `node scripts/perf-pages.mjs [--runs 5] [--pages /dashboard,/campaigns,/brand]`
+(TTFB, DOMContentLoaded and load p50/p90; read-only, signed in as the smoke account).
+
+| Table | Kept |
+| --- | --- |
+| `product_events` (raw) | 90 days, then rolled up |
+| `product_event_daily` (rollups) | 730 days |
+| `llm_usage_events` (every AI call: model, tokens, cost) | kept: the per-ad and per-run cost receipt (hundreds of rows a week) |
+| `campaign_results`, `leads`, payments | kept: business records |
+
 ## Retention and Health
 
 The existing authenticated daily keepalive invokes `prune_product_events` when
@@ -318,6 +340,22 @@ select attributes->>'model' as model, rule, count(*) as failures
 from public.product_events, jsonb_array_elements_text(attributes->'validationRules') as rule
 where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - interval '1 day'
 group by 1, 2 order by failures desc;
+```
+
+Create's assistant also logs each provider attempt the router gave up on as
+`ai.completion` failed with `errorCode` `LLM_HTTP_429`, `LLM_TIMEOUT` and so on,
+even when a fallback then answers. When none answers, a `creative.interview`
+workflow event records `ASSISTANT_EXHAUSTED_<reason>` and the owner gets a 503
+"busy" (#410); a refused key or request records `ASSISTANT_HTTP_401`/`_403`/`_400`
+and stays a 500 (#449). Refusals per provider and hour:
+
+```sql
+select date_trunc('hour', created_at) as hour, attributes->>'provider' as provider,
+       attributes->>'errorCode' as reason, count(*) as refused
+from public.product_events
+where name = 'ai.completion' and outcome = 'failed' and attributes->>'errorCode' like 'LLM_%'
+  and created_at >= now() - interval '1 day'
+group by 1, 2, 3 order by 1 desc, refused desc;
 ```
 
 ## Verification

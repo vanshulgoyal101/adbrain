@@ -79,6 +79,12 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Create when the AI is busy** (`create-busy`, #410): through the production order
+  (Groq, Gemini, then the paid OpenRouter fallback), every provider rate-limited returns a 503
+  "busy, try again" instead of a 500, and each refused attempt is logged as `ai.completion`
+  failed with `LLM_HTTP_429`; when OpenRouter answers with the recorded Solaride reply, the
+  refused free-tier attempts are still logged. OpenRouter's recorded `Key limit exceeded` 403
+  (#449) stays a 500 with `ASSISTANT_HTTP_403`, so a dead key alerts instead of showing "busy".
 - **Regenerate** (`create-regenerate`, #281): six real Claude Haiku replies for the Solaride ad that
   failed in production, recorded through the route's own input by
   `scripts/record-regenerate-fixtures.ts` (text only). A cited "₹10,000" backed by "10,000 rupees"
@@ -94,6 +100,8 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
   in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad
   language; the Hindi factory ad saves 3/3 with Hindi post text and Latin words on the image.
+  The Hinglish factory ad saves 3/3 on the first try (#418): the Brand's own "SOLARIDE", "IIT/PEC"
+  and a first line leading with "10,000 rupaye per kW" no longer fail `all-caps` or `offer-below-fold`.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.

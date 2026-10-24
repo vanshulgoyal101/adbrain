@@ -1,4 +1,4 @@
-import { observeRoute, currentRequestId } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { apiError, serverError } from "@/lib/api";
 import {
@@ -8,6 +8,7 @@ import {
   INTERVIEW_PROMPT_VERSION,
 } from "@/lib/creative/interview";
 import { NoLLMKeysError } from "@/lib/llm";
+import { AllLLMProvidersFailedError, LLMError } from "@/lib/llm/types";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -46,6 +47,7 @@ async function handlePOST(req: Request) {
     .maybeSingle();
   if (!business) return apiError("Business not found", 404);
 
+  const refused: string[] = [];
   try {
     const limit = configuredMonthlyTokenLimit(user);
     if (limit > 0) {
@@ -74,6 +76,19 @@ async function handlePOST(req: Request) {
           metadata: { answerCount: answers.length, repaired: attempt > 1, ...(valid ? {} : { validationRules: rules }) },
         }]);
       },
+      onProviderFailures: async (failures, attempt) => {
+        refused.push(...failures.map((failure) => failure.failure ?? "UNKNOWN"));
+        await persistLLMUsage(failures.map((failure) => ({
+          businessId, userId: user.id, requestId, route: "creatives.assistant",
+          provider: failure.provider, model: failure.model,
+          usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          promptVersion: INTERVIEW_PROMPT_VERSION, latencyMs: failure.latencyMs,
+          attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
+          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`,
+          providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
+          metadata: { answerCount: answers.length, repaired: attempt > 1 },
+        })));
+      },
     });
     return NextResponse.json({ ...result, promptVersion: INTERVIEW_PROMPT_VERSION }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
@@ -84,6 +99,38 @@ async function handlePOST(req: Request) {
         { status: 400 },
       );
     }
+    const failure = providerFailure(err, refused);
+    if (failure) {
+      recordProductEvent({ kind: "workflow", name: "creative.interview", outcome: "failed", businessId,
+        attributes: { errorCode: `ASSISTANT_${failure.code}` } });
+    }
+    if (failure?.busy) {
+      return NextResponse.json(
+        { error: "AdBrain is busy right now. Tap Try again in a few seconds.", code: "AI_BUSY" },
+        { status: 503, headers: { "Retry-After": "10", "Cache-Control": "no-store" } },
+      );
+    }
     return serverError("creatives.assistant", err, "The assistant had trouble — try again.");
   }
+}
+
+const TRANSIENT = /^(?:HTTP_429|HTTP_5\d\d|TIMEOUT|DEADLINE|TRANSPORT)$/;
+const BUSY_EXHAUSTED = new Set(["RATE_LIMIT", "PROVIDER_SERVER", "TIMEOUT", "TRANSPORT", "COOLDOWN", "MIXED"]);
+
+/**
+ * Why no AI provider answered (#410). Load (rate limits, outages, timeouts) is `busy`: worth a retry.
+ * A refused key or request (401, 403, 400) is ours to fix, so it stays a 500 that alerts (#449).
+ * Null for errors that aren't provider failures at all.
+ */
+function providerFailure(err: unknown, refused: string[]): { code: string; busy: boolean } | null {
+  const permanent = refused.find((code) => code !== "ABORTED" && !TRANSIENT.test(code));
+  if (err instanceof AllLLMProvidersFailedError) {
+    return permanent ? { code: permanent, busy: false } : { code: `EXHAUSTED_${err.reason}`, busy: BUSY_EXHAUSTED.has(err.reason) };
+  }
+  if (err instanceof LLMError) {
+    const code = err.code ?? "UNKNOWN";
+    return { code: permanent ?? code, busy: !permanent && TRANSIENT.test(code) };
+  }
+  if (err instanceof DOMException && err.name === "TimeoutError") return { code: permanent ?? "TIMEOUT", busy: !permanent };
+  return null;
 }

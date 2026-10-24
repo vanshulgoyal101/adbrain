@@ -147,7 +147,10 @@ Creative receipt JSON records generation settings and provenance; it is not a
 provider credential store. Ads made since #280 also keep the overlay `design`
 spec (without `backgroundUrl`) and the stored background `photoUrl`, so the words
 on the picture can be re-rendered without the AI; `generation.concept.description`
-holds the owner-editable link description. `variant_group` is indexed, not unique: a generation
+holds the owner-editable link description. Ads made since #451 also store `requestId`
+(the Create run that first made the ad, kept through regenerations) and `angleId`, which link the
+ad to its `llm_usage_events` rows; later changes' rows carry `metadata.creativeId`.
+`variant_group` is indexed, not unique: a generation
 UUID groups rows but does not prevent duplicate paid POSTs.
 
 Campaign uniqueness is `(business_id, meta_campaign_id)` for non-null Meta IDs.

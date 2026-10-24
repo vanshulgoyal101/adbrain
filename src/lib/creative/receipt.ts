@@ -20,18 +20,28 @@ export function savedGenerationSettings(value: unknown) {
     .parse(value);
 }
 
+/** The Create run (generate request) that first made a saved ad, if its receipt recorded one (#451). */
+export function createRunRequestId(generation: unknown): string | undefined {
+  const value = generation && typeof generation === "object" ? (generation as { requestId?: unknown }).requestId : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
 export function generationReceipt(
   variant: GeneratedVariant,
   language?: string,
   referenceImages: string[] = [],
   sourceFacts: string[] = [],
   photoUrl?: string,
+  /** The request whose AI calls made this version of the ad: its receipt (#451). */
+  requestId?: string,
 ): Json {
   // Kept so the words on the picture can be re-rendered without the AI (#280).
   const design = { ...variant.design, backgroundUrl: undefined };
   return JSON.parse(
     JSON.stringify({
       version: CONCEPT_VERSION,
+      requestId,
+      angleId: variant.angleId,
       concept: variant.concept,
       imagePrompt: variant.imagePrompt,
       format: variant.design.format,
@@ -57,7 +67,7 @@ export function generationReceipt(
 
 export function variantUsageEvents(
   variant: GeneratedVariant,
-  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId" | "creativeId">,
 ): LLMUsageEvent[] {
   return [
     ...variant.llmUsage.map(({ validation, ...entry }, index) => ({
@@ -77,7 +87,7 @@ export function variantUsageEvents(
 /** Usage rows for an ad's image: every attempt, or the one completed image; none for the owner's own photo. */
 export function imageUsageEvents(
   variant: Pick<GeneratedVariant, "angleId" | "imageUsage" | "imageAttempts" | "ownerPhotoUrl">,
-  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId" | "creativeId">,
 ): LLMUsageEvent[] {
   return variant.ownerPhotoUrl ? [] : variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
     entry, context, index + 1, variant.angleId,
@@ -106,7 +116,7 @@ export function imageUsageEvents(
 
 function imageAttemptUsage(
   entry: ImageAttempt,
-  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId" | "creativeId">,
   attempt: number,
   angle?: string,
   completedImage?: GeneratedVariant["imageUsage"],
@@ -127,7 +137,7 @@ function imageAttemptUsage(
 
 export function failedVariantUsage(
   error: unknown,
-  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId" | "creativeId">,
 ): LLMUsageEvent[] {
   if (
     !(error instanceof CreativeValidationError) &&
