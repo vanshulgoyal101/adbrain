@@ -144,6 +144,11 @@ describe("<LeadInbox> table", () => {
     expect(screen.getByRole("link", { name: "asha@example.com" })).toHaveAttribute("href", "mailto:asha@example.com");
   });
 
+  it("labels an enquiry the owner added from WhatsApp chats (#335)", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ source: "whatsapp_manual", meta_lead_id: null, form_id: null, form_name: null })]} metaReady />);
+    expect(screen.getByText("WhatsApp chat (added by you)")).toBeInTheDocument();
+  });
+
   it("makes an email-only enquiry actionable", () => {
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead({ phone: null })]} metaReady />);
     expect(screen.getByText("Loaded with contact").nextSibling).toHaveTextContent("1");

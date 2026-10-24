@@ -113,6 +113,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page; cached 10 min per business, Page and connection generation, `?fresh=1` re-reads Meta (#271) |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | GET | `/api/leads` | Filters/cursor -> `{leads,total,nextCursor}` | Owned saved enquiries only; no provider sync |
+| POST | `/api/campaigns/[id]/enquiries` | Optional `name` (<=200), `phone` (<=40), `note` (<=2000) -> 201 `{enquiries}` | Logs one real enquiry from an owned WhatsApp campaign's chats into Enquiries (`source` `whatsapp_manual`); 400 for other destinations, 404 when not owned, 30 per 5 min (#335) |
 | PATCH | `/api/leads/[id]` | `workflow_status` and/or `follow_up_note` -> `{lead}` | Owned local follow-up only; no outreach or provider write |
 | POST | `/api/leads/sync` | Empty body or `{syncId}` -> `{leads,imported,failedForms,sync}`; failed Meta reads return 502 with saved rows and a resumable `sync.id` | Bounded provider pages + atomic per-business deduplicated inserts/checkpoints; incomplete runs are not up to date |
 | GET | `/api/leads/unseen` | `since` (ISO viewed time) -> `{count}` | Authenticated owner business only; exact count of locally imported leads after `since`, private no-store; no provider sync |
