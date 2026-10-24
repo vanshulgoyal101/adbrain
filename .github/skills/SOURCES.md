@@ -23,6 +23,9 @@ its folder again from a newer commit and change the pin.
 | writing-plans | Split work into small tasks | obra/superpowers | MIT |
 | subagent-driven-development | Build a plan with subagents and reviews | obra/superpowers | MIT |
 | dispatching-parallel-agents | Run independent tasks in parallel | obra/superpowers | MIT |
+| vercel-deploy-pipeline | Promote, roll back and canary on Vercel (DevOps; our release rules win) | SkillMedev/skills | MIT |
+| sev-triage | Severity call before root cause when production breaks | SkillMedev/skills | MIT |
+| postmortem-writer | Blameless postmortem with a log timeline and owned actions | SkillMedev/skills | MIT |
 
 License texts are in [LICENSES](LICENSES/). vercel-labs/agent-skills states MIT
 in its README and ships no license file.
@@ -39,6 +42,7 @@ in its README and ships no license file.
 - obra/superpowers `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`
 - trailofbits/skills `196a9073ab10d35bacf111f945e02c00b2c6883a`
 - github/awesome-copilot `d85f762d6e521abf5fe16703946e9b38adc42da7`
+- SkillMedev/skills `97a13607d669157a4a16d5ba79b77f208319f7b9` (small repo, content read by the CTO before adoption, #408)
 
 ## Our own skills (vanshulgoyal101/skills)
 
