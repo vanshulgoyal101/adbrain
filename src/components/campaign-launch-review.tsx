@@ -75,6 +75,9 @@ export function CampaignLaunchReview({
           <dd className="mt-1 break-words font-medium text-slate-900">
             {audience}
           </dd>
+          <dd className="mt-1 text-xs text-slate-500">
+            Meta may reach people beyond your age range and interests; never outside your area.
+          </dd>
         </div>
       </dl>
     </section>

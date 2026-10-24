@@ -477,8 +477,9 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     const calls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/adsets"));
     expect(calls).toHaveLength(2);
     const payloads = calls.map(([, init]) => JSON.parse(new URLSearchParams(String(init?.body)).get("targeting")!));
-    expect(payloads.map((payload) => [payload.age_min, payload.age_max])).toEqual([[25, 39], [40, 65]]);
-    for (const payload of payloads) expect(payload).toMatchObject({ flexible_spec: [{ interests }], excluded_geo_locations: { cities: [{ key: "city-2", radius: 20 }] }, targeting_automation: { advantage_audience: 0 } });
+    // #334: Advantage+ audience; each band becomes an age suggestion, the hard limits stay 25–65.
+    expect(payloads.map((payload) => [payload.age_min, payload.age_max, payload.age_range])).toEqual([[25, 65, [25, 39]], [25, 65, [40, 65]]]);
+    for (const payload of payloads) expect(payload).toMatchObject({ flexible_spec: [{ interests }], excluded_geo_locations: { cities: [{ key: "city-2", radius: 20 }] }, targeting_automation: { advantage_audience: 1 } });
   });
   it("does not add a radius to city-only locations in any ad set", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
@@ -543,9 +544,9 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     const payload = new URLSearchParams(String(adsetCall?.[1]?.body));
     expect(JSON.parse(payload.get("targeting")!)).toEqual({
       geo_locations: { cities: [{ key: "city-1", radius: 25, distance_unit: "kilometer" }], location_types: ["home", "recent"] },
-      age_min: 28, age_max: 58,
+      age_min: 25, age_max: 65, age_range: [28, 58],
       flexible_spec: [{ interests: [{ id: "12345", name: "Solar energy" }] }],
-      targeting_automation: { advantage_audience: 0 },
+      targeting_automation: { advantage_audience: 1 },
     });
     expect(checkpoints).toEqual([
       "campaign:campaign-1",

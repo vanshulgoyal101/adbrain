@@ -285,6 +285,12 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 
 ### Targeting and Budget
 
+- New ad sets use Meta's Advantage+ audience (#334). The area and its exclusions
+  are hard limits. Meta caps a hard minimum age at 25 and fixes the maximum at 65,
+  so the owner's age range is sent as an `age_range` suggestion; gender and
+  interests are suggestions too. The review says: "Meta may reach people beyond your
+  age range and interests; never outside your area." Campaigns already launched
+  keep their original targeting.
 - Every campaign must have detailed interest targeting before creation. AI plans
   require one to five relevant commercial interests grounded in the business and
   offer. Preparing a draft with missing/empty interests requests AI recommendations
