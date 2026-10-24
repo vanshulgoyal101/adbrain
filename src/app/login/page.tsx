@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Brain, MessageCircle, ShieldCheck, Timer } from "lucide-react";
 import { LoginExperience } from "@/components/login-experience";
 import { LEGAL_LINKS } from "@/lib/legal-links";
+import { safeAuthRedirect } from "@/lib/auth-redirect";
 import styles from "./login.module.css";
 
 export const metadata = {
@@ -20,7 +21,10 @@ const PROMISES = [
   { icon: MessageCircle, title: "Enquiries come to your WhatsApp", body: "Customers tap the ad and message you directly." },
 ];
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ redirect?: string | string[] }> }) {
+  const redirect = (await searchParams)?.redirect;
+  // Only a real in-app destination counts; the default /dashboard fallback does not.
+  const deepLink = typeof redirect === "string" && safeAuthRedirect(redirect) === redirect;
   return (
     <div className={styles.page}>
       <a href="#sign-in" className={styles.skipLink}>Skip to sign in</a>
@@ -31,7 +35,7 @@ export default function LoginPage() {
       <main className={styles.main}>
         <section id="sign-in" tabIndex={-1} aria-labelledby="sign-in-title" className={styles.formColumn}>
           <div className={styles.formInner}>
-            <LoginExperience />
+            <LoginExperience deepLink={deepLink} />
           </div>
         </section>
         <aside className={styles.proof} aria-label="What you get">
