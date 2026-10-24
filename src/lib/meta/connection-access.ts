@@ -15,7 +15,7 @@ import { verifyMetaCapabilities } from "./capability-verification";
 import { canUseMetaConnect } from "./pilot-access";
 import { observeIdentity } from "@/lib/observability/context";
 import { recordProductEvent } from "@/lib/observability/logger";
-import { getManagedAccount, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
+import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -177,7 +177,9 @@ async function withConnectionCredentials<Result>(
     throw new ConnectionAccessError("FORBIDDEN", "Meta publishing is not enabled for this account.");
   }
   const { connection, managed } = await loadConnection(context);
-  if (managed && !isManagedReady(managed)) {
+  // A managed account can always be read and stopped once its ad account exists; new work needs it ready.
+  const startsDelivery = options.purpose === "create_paused" || options.purpose === "activate";
+  if (managed && (startsDelivery ? !isManagedReady(managed) : !hasManagedAssets(managed))) {
     throw new ConnectionAccessError("UNAVAILABLE", "Your AdBrain-managed Meta account is still being set up.");
   }
   if (connection.authorization !== "connected" || !connection.selected) {

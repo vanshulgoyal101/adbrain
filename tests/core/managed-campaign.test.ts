@@ -34,7 +34,7 @@ const BUSINESS = "6f0c2a10-5a43-4c55-9b1f-3f7a3f0c8c1f";
 const PARENT_TOKEN = "parent-system-user-token";
 const LEDGER = {
   business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: "act_2398686420592052",
-  page_id: "885223068001054", funding_state: "funded", generation: 1,
+  page_id: "885223068001054", funding_state: "card_attached", generation: 1,
 };
 const campaignId = "120253646427440526";
 type Exchange = { method: string; path: string; status: number; body: unknown };

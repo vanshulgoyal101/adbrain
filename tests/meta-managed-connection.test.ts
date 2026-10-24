@@ -11,9 +11,11 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: mocks.adminFrom, rpc: mocks.adminRpc }) }));
 
+// Columns and values of #533's managed_meta_accounts (#519); `generation` is optional there.
 const ready = {
   business_id: "business-1", state: "ready", child_business_id: "2000000000000001", ad_account_id: "act_3000000000000001",
-  page_id: "4000000000000001", funding_state: "funded", generation: 3,
+  page_id: "4000000000000001", funding_state: "card_attached", generation: 3, waba_id: null, phone_number_id: null,
+  step_keys: {}, last_error: null, created_at: "2026-10-25T00:00:00Z", updated_at: "2026-10-25T00:00:00Z",
 };
 let managedRows: Record<string, unknown>[] = [];
 let oauthRow: Record<string, unknown> | null = null;
@@ -64,16 +66,48 @@ describe("Meta credentials for a managed business (#525)", () => {
   });
 
   it("never falls back to an OAuth connection while the managed account is being set up", async () => {
-    managedRows = [{ ...ready, state: "ad_account_created", funding_state: "unfunded" }];
+    managedRows = [{ ...ready, state: "child_created", ad_account_id: null, funding_state: "none" }];
     oauthRow = { business_id: "business-1", authorization_status: "connected" };
     await expect(run({ purpose: "create_paused" })).rejects.toThrow(/being set up/);
     expect(tables()).not.toContain("meta_connections");
   });
 
-  it("creates paused campaigns but activates only once the child account is funded", async () => {
-    managedRows = [{ ...ready, funding_state: "unfunded" }];
+  it("creates and activates only on a ready, funded child account", async () => {
+    managedRows = [{ ...ready, state: "funded" }];
+    await expect(run({ purpose: "create_paused" })).rejects.toThrow(/being set up/);
+    managedRows = [{ ...ready, funding_state: "failed" }];
     await expect(run({ purpose: "create_paused" })).resolves.toBeTruthy();
     await expect(run({ purpose: "activate" })).rejects.toThrow(/funded/);
+    managedRows = [{ ...ready, funding_state: "invoiced" }];
+    await expect(run({ purpose: "activate" })).resolves.toBeTruthy();
+  });
+
+  it.each(["failed", "offboarding", "whatsapp_linked", "funded"])("can still stop and read a %s account that has an ad account, but not create on it (QA)", async (state) => {
+    managedRows = [{ ...ready, state }];
+    const binding = { adAccountId: ready.ad_account_id, pageId: ready.page_id };
+    await expect(run({ purpose: "pause", expectedGeneration: 3, binding })).resolves.toMatchObject({
+      creds: { adAccountId: ready.ad_account_id, accessToken: "parent-system-token" } });
+    await expect(run({ purpose: "read_insights" })).resolves.toBeTruthy();
+    await expect(run({ purpose: "create_paused" })).rejects.toThrow(/being set up|not available/);
+  });
+
+  it("works with #533's ledger, which has no generation column, using generation 1", async () => {
+    const { generation: _generation, ...withoutGeneration } = ready;
+    void _generation;
+    managedRows = [withoutGeneration];
+    const { connection } = await run({ purpose: "create_paused" });
+    expect(connection.generation).toBe(1);
+  });
+
+  it("shows a ledger read failure as not ready instead of breaking the page, and keeps Meta calls closed", async () => {
+    mocks.adminFrom.mockImplementation((table: string) => {
+      if (table !== "managed_meta_accounts") throw new Error(`unexpected table ${table}`);
+      const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: null, error: { message: "relation does not exist" } }) };
+      return query;
+    });
+    const { getMetaConnection } = await import("@/lib/meta/credentials");
+    await expect(getMetaConnection("business-1")).resolves.toMatchObject({ ready: false });
+    await expect(run({ purpose: "read_insights" })).rejects.toThrow(/unavailable/i);
   });
 
   it("keeps the review and campaign binding checks: a changed generation or account is a conflict", async () => {
@@ -103,7 +137,7 @@ describe("Meta credentials for a managed business (#525)", () => {
   it("resolves the same credentials for geo search and other direct callers", async () => {
     const { resolveMetaCredentials } = await import("@/lib/meta/credentials");
     await expect(resolveMetaCredentials("business-1")).resolves.toEqual({ adAccountId: ready.ad_account_id, pageId: ready.page_id, accessToken: "parent-system-token" });
-    managedRows = [{ ...ready, state: "page_linked" }];
+    managedRows = [{ ...ready, state: "page_linked", child_business_id: null, ad_account_id: null }];
     await expect(resolveMetaCredentials("business-1")).resolves.toBeNull();
     expect(mocks.adminRpc).not.toHaveBeenCalled();
   });

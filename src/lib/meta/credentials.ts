@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MetaClient, type MetaCredentials } from "./client";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
-import { getManagedAccount, isManagedReady, managedCredentials } from "./managed-account";
+import { getManagedAccount, isManagedReady, managedCredentials, type ManagedAccount } from "./managed-account";
 
 /** Non-sensitive view of a business's Meta connection, safe to send to the UI. */
 export interface MetaConnection {
@@ -109,7 +109,13 @@ export async function metaClientForBusiness(
 export async function getMetaConnection(
   businessId: string,
 ): Promise<MetaConnection> {
-  const managed = await getManagedAccount(businessId);
+  // The page still renders when the ledger can't be read; Meta calls stay closed elsewhere.
+  let managed: ManagedAccount | null;
+  try {
+    managed = await getManagedAccount(businessId);
+  } catch {
+    return { source: "managed", pending: false, ready: false, adAccountId: null, pageId: null, tokenExpiresAt: null, expired: false, scopes: [] };
+  }
   if (managed) {
     const ready = isManagedReady(managed);
     return { source: "managed", pending: !ready, ready: ready && managedCredentials(managed) !== null,
