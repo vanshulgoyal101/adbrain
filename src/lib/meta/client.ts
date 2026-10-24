@@ -661,12 +661,14 @@ export class MetaClient {
    * name the number by its mask ("+91 ••••• 4842", #235); it must match exactly one of those.
    */
   async getWhatsAppNumber(requested?: string | null): Promise<string | null> {
-    const pageNumber = await this.pageWhatsAppNumber();
     if (requested && maskedWhatsAppNumberPattern.test(requested)) {
-      const matches = [...new Set([...(pageNumber ? [pageNumber] : []), ...await this.businessWhatsAppNumbers()])]
+      // #366: the Page and the business lookups are independent; together they save ~1 s of Prepare.
+      const [pageNumber, businessNumbers] = await Promise.all([this.pageWhatsAppNumber(), this.businessWhatsAppNumbers()]);
+      const matches = [...new Set([...(pageNumber ? [pageNumber] : []), ...businessNumbers])]
         .filter((number) => maskWhatsAppNumber(number) === requested);
       return matches.length === 1 ? matches[0] : null;
     }
+    const pageNumber = await this.pageWhatsAppNumber();
     const wanted = requested ? normalizeWhatsAppNumber(requested) : null;
     if (!wanted || wanted === pageNumber) return pageNumber;
     return (await this.businessWhatsAppNumbers()).includes(wanted) ? wanted : null;

@@ -92,4 +92,22 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     replay(tape);
     expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842")).toBeNull();
   });
+
+  it("starts the Page and business lookups together for a masked choice (#366)", async () => {
+    const started: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    replay();
+    const replayed = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      started.push(new URL(String(input)).pathname);
+      await gate;
+      return replayed(input, init);
+    });
+    const result = new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842");
+    await vi.waitFor(() => expect(started).toEqual(expect.arrayContaining([`/v21.0/${creds.pageId}`, `/v21.0/${creds.adAccountId}`])));
+    release();
+    expect(await result).toBe("+919999994842");
+  });
 });
+
