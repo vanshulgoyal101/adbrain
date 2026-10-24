@@ -52,7 +52,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	lists any item you own where someone else spoke last (said while you were busy),
 	then returns when something is labelled for you, someone comments on your issue
 	or a PR whose title names it, or someone addresses you (`→ QA:`, `→ CEO`). Do the
-	work, then wait again. Before waiting, finish your worker-table row in order. After 30 minutes
+	work, then wait again. Before waiting, finish your worker-table row in order.
+	**Restart-proof:** end each work step with the issue's latest comment saying what's
+	done and what's next, and push the branch. If it isn't in GitHub or git, it doesn't
+	survive a chat restart. Restart a chat with one line: `You are <Role> on AdBrain. Run
+	node scripts/wait-for-work.mjs --me <role> and continue.` It prints your role card, your
+	in-flight work and any unsaved worktree. After 30 minutes
 	with nothing new it exits: stop there. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
