@@ -72,6 +72,16 @@ describe("<AdAssistant> live Create progress", () => {
     Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
   });
 
+  // jsdom has no layout: the phone rule is the sticky offset below the 60–65 px workspace header (#344).
+  it("keeps 'Creating 3 ads · elapsed' below the sticky top bar while generating (#344)", async () => {
+    streamedCreate();
+    await startGenerating();
+    const section = await screen.findByRole("region", { name: "Ads being created" });
+    const line = within(section).getByText("Creating 3 ads").closest(".sticky");
+    expect(line).toHaveClass("top-[68px]", "lg:top-0");
+    expect(line).not.toHaveClass("top-0");
+  });
+
   it("shows each ad's stage as the stream arrives and ends on the final result", async () => {
     const { send, close } = streamedCreate();
     await startGenerating();
