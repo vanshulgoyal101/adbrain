@@ -81,8 +81,9 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Regenerate** (`create-regenerate`, #281): six real Claude Haiku replies for the Solaride ad that
   failed in production, recorded through the route's own input by
   `scripts/record-regenerate-fixtures.ts` (text only). A cited "₹10,000" backed by "10,000 rupees"
-  saves on the first call; a real fact-check rejection returns a plain 422 naming the claim, leaves
-  the ad untouched and releases the claim so the owner can try again.
+  saves on the first call. A retry that states the Brand's "10%" and "free site survey" without
+  citing them saves, because each is in exactly one Brand fact. A made-up offer ("15%") returns a
+  plain 422 naming it, leaves the ad untouched and releases the claim so the owner can try again.
 - **Create in Hindi** (`create-hindi`, #290): real Solaride replies recorded by
   `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
   in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad

@@ -114,26 +114,27 @@ describe("core: the assistant asks in the owner's language (#290)", () => {
   });
 });
 
-describe("core: Create makes Hindi and Hinglish ads (#290)", () => {
-  it("saves the Solaride factory ad in Hindi 3/3, with Hindi post text and Latin words on the image", async () => {
+describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
+  it("saves the Solaride factory ad in Hindi 3/3, in Devanagari on the image and in the post text", async () => {
     const { saved, failed } = await create("hi", "factory");
     expect(failed).toEqual([]);
     expect(saved).toHaveLength(3);
     for (const ad of saved) {
       expect(ad.primaryText).toMatch(DEVANAGARI);
-      expect(`${ad.headline} ${ad.concept.supportingText ?? ""}`).not.toMatch(DEVANAGARI);
+      // #300 shapes Devanagari on the image, so the headline no longer has to be Latin.
+      expect(ad.headline).toMatch(DEVANAGARI);
     }
   });
 
-  it("saves the rest, rejecting only uncited claims in a concept's rationale", async () => {
+  it("saves the rest 3/3, retrying only concepts the checks rejected", async () => {
+    const checks = new Set(["too-long", "unsupported-commercial-claim", "offer-below-fold", "all-caps"]);
     for (const [language, goal] of [["hi", "vague"], ["hinglish", "vague"], ["hinglish", "factory"]] as const) {
       const { saved, failed } = await create(language, goal);
-      expect(saved, `${language} ${goal}`).toHaveLength(2);
-      expect(failed, `${language} ${goal}`).toEqual([["unsupported-commercial-claim"]]);
+      expect(saved, `${language} ${goal}`).toHaveLength(3);
+      for (const rules of failed) for (const rule of rules) expect(checks, `${language} ${goal}`).toContain(rule);
       for (const ad of saved) {
-        if (language === "hi") expect(ad.primaryText).toMatch(DEVANAGARI);
-        else expect(`${ad.headline} ${ad.primaryText}`).not.toMatch(DEVANAGARI);
-        expect(`${ad.headline} ${ad.concept.supportingText ?? ""}`).not.toMatch(DEVANAGARI);
+        if (language === "hi") expect(`${ad.headline} ${ad.primaryText}`).toMatch(DEVANAGARI);
+        else expect(`${ad.headline} ${ad.primaryText} ${ad.concept.supportingText ?? ""}`).not.toMatch(DEVANAGARI);
       }
     }
   });

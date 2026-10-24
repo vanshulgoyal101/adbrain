@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MarketingHome } from "@/components/marketing-home";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import PrivacyPolicyPage from "@/app/privacy/page";
@@ -13,7 +13,10 @@ describe("public product example", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ads that bring customers to your WhatsApp.");
     expect(screen.getByText(/Not a customer campaign or a live AI generation/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /illustrative ad photograph/ })).toHaveAttribute("src");
-    expect(screen.getByRole("heading", { name: "Created paused" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "You approve every rupee." })).toBeInTheDocument();
+    expect(screen.getByText(/Making ads is free\. To run them, top up any amount from ₹500; 80% goes to your ads \(including Meta's GST\) and 20% to AdBrain\./)).toBeInTheDocument();
+    expect(screen.queryByText(/partner/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /WhatsApp us/ })).toBeNull();
   });
 
   it("switches the business, audience, image, copy, and call to action together", async () => {
@@ -57,6 +60,17 @@ describe("public product example", () => {
     expect(container.querySelector("#example")).toBeInTheDocument();
     expect(container.querySelector("a button")).toBeNull();
     for (const link of LEGAL_LINKS) expect(screen.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
+  });
+});
+
+describe("WhatsApp support link", () => {
+  it("links the configured support number and hides it while unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPPORT_WHATSAPP", "+91 98765 43210");
+    vi.resetModules();
+    const { MarketingHome: Home } = await import("@/components/marketing-home");
+    render(<Home />);
+    expect(screen.getByRole("link", { name: "Questions? WhatsApp us" })).toHaveAttribute("href", "https://wa.me/919876543210");
+    vi.unstubAllEnvs();
   });
 });
 

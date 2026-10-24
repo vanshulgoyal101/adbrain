@@ -64,7 +64,12 @@ Routine steps never wait for the CEO or the CTO.
 8. **The CTO** turns priorities into work: owns the worker table under "Now",
    assigns and briefs issues, keeps labels honest, closes or parks stale issues,
    watches CI and production health, reviews high-impact diffs and publishes
-   `Lesson:` lines. The CEO and CTO talk on the issue at hand; the CTO raises CEO
+   `Lesson:` lines. **Queues never run dry:** every worker keeps at least 2
+   actionable items (not `waiting-owner`, `blocked` or `decision`), each traceable
+   to a line in the CEO priorities below; `wait-for-work --me cto` reports any
+   worker that drops below 2, and the CTO refills that row the same hour.
+   Whenever the CEO changes the priorities, the CTO re-slots every row and posts
+   the queue map on the CEO's `decision` issue for confirmation. The CEO and CTO talk on the issue at hand; the CTO raises CEO
    calls as `decision` issues. On a conflict, money and priority
    follow the CEO; the technical approach follows the CTO.
 
@@ -116,36 +121,30 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities (Oct 24, 08:30Z; owner: lean, high value only):
-- **P0:** the live Solaride WhatsApp run
-  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)): ₹840 capped,
-  ends Oct 26 14:24Z. **First real lead** (owner confirmed the first chat was a
-  real customer). Delivery is a trickle (about ₹1/hour); the owner's Ads Manager
-  Delivery column is the next step. Monitor and report spend, chats and cost per chat.
-  #156 (Meta App Review) is the gate for every outside customer; it needs the
-  owner's Facebook sign-in, then submit.
-- **P0, first customers (#339, Oct 24):** 3 real businesses signed up, made ads
-  and stopped at Campaigns, because Meta blocks anyone without an app role until #156
-  passes. The owner WhatsApps all 3 today; whoever says yes gets Tester access and
-  launches on their own ad account (PAUSED first, Solaride caps). Before approval, new
-  owners see "launching opens soon" plus download/share (#336, #337). Measure the
-  funnel (#338).
-- **P1-top, three tracks in parallel:**
-  - **Edit and image text, Dev 2:** #280 (edit at every step: text is live; next
-    the words on the image, then the background only) and #300 (real bold fonts,
-    then Hindi/Punjabi shaping). Done Oct 24: #284, #282, #281, #290.
-  - **Launch on a phone, Dev:** #305 (campaign setup: 9 large ad tiles before
-    name and budget; ship the tile fix first), after #271 if it is mid-flight.
-  - **First impression, Dev 3:** #289 (sign-up page and homepage hero are live;
-    next a homepage video, an ideas gallery per industry and honest trust signals).
-- **P1:** #274 (a reliable scheduler; PR #309 with the CTO), #235 (WhatsApp-first;
-  slice 3 live in #278), #334 (Advantage+ audience off starves delivery), #333
-  (9:16 assets for Stories/Reels), #335 (cost per real WhatsApp enquiry).
-- **P1, a snappy and polished product (owner):** #67 (snappier app) with slices
-  #270, #238 and #239; #51 (UI/UX polish). Each slice is a small PR with a
-  before/after number.
-- **Later:** #229 (email alerts; PR #268 closed, branch kept; WhatsApp-first),
-  #253, #178, #296.
+CEO priorities and targets (Oct 24, 10:30Z; owner: lean, high value only). Every
+open issue has a target; a miss gets one line on its issue with the new date.
+
+- **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
+  (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
+  Facebook account, Submit). Meta then takes days to weeks. There are no outside
+  sign-ups yet (#339 closed: they were QA test accounts).
+- **Live run #157 (Dev 3, QA reads): ends Oct 26 14:24Z.** First real lead in;
+  delivery picking up (₹7.78, 27 impressions at 10:09Z). No edits. Final report
+  Oct 26, then plan the next Solaride run with #333 and #334 in it.
+- **Today, Oct 24:** #334 Advantage+ audience (Dev 2, PR #357 → QA review → merge);
+  #281 auto-cite + Regenerate (Dev, QA red tests); #344 phone Create header (QA
+  verify, close); #289 slice 4 trust + pricing (Dev 3); #270 after-number at 18:40Z
+  (DevOps, then close).
+- **Oct 25:** #335 log real WhatsApp enquiries (Dev; migration → QA → DevOps);
+  #300 bold + Indic text on images (Dev 3); #360 phone speed slice of #67 (Dev 2);
+  #280 remaining edit slices (Dev 2, QA walk); #274 scheduler 24 h check, then
+  close (DevOps); #359 database hardening (DevOps).
+- **Oct 26:** #333 9:16 version of each ad for Stories/Reels (Dev 3, after #300);
+  #157 final report.
+- **Umbrellas, close when their slices are done:** #67 (snappier app), #51 (UI/UX
+  polish; QA's walk feeds it).
+- **Later (no date):** #178 (Razorpay webhook proof), #229 (email alerts), #253
+  (managed-account WhatsApp numbers), #296 (AI-answer visibility).
 - **Filter for new issues:** it must help a customer make and run ads today,
   make the product faster or clearer, or remove a real failure. Otherwise file
   it as `later`, or don't file it.
@@ -154,9 +153,9 @@ The CTO maintains the worker table below.
 
 | Worker | Work, in order |
 | --- | --- |
-| Everyone | **When idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground only (it gives up after 30 min; then stop) and continue with what it prints. Never leave anything running in the background. **Talk on the issue or PR;** hand off with the owner label plus one arrow line (`→ QA: ready at <sha>`), and sign your own comments with your role ([AGENTS.md](../AGENTS.md#worker-coordination)). No status or idle posts. Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. **Queue empty?** Take the next item in your row, then QA's #51 findings, then any unowned `core` issue in your area (add your label); only then `wait-for-work` |
-| QA | 1. [#280](https://github.com/vanshulgoyal101/adbrain/issues/280) walk incl. 'use my photo'; close if clean. 2. Verdict on PR #309 at d44e9c4. 3. **P0 #157** twice daily. 4. Review [#335](https://github.com/vanshulgoyal101/adbrain/issues/335)'s migration when labelled |
-| Dev | 1. [#281](https://github.com/vanshulgoyal101/adbrain/issues/281) (auto-cite a Brand offer the copy states; CTO decision). 2. [#335](https://github.com/vanshulgoyal101/adbrain/issues/335) (log real WhatsApp enquiries, cost per real enquiry; migration → QA → DevOps). You own `ad-assistant.tsx` and `interview.ts` |
-| DevOps | 1. Clear the Solaride Regenerate claim on [#281](https://github.com/vanshulgoyal101/adbrain/issues/281). 2. Release PR #309 ([#274](https://github.com/vanshulgoyal101/adbrain/issues/274)) after QA's verdict, then the 6 h watch. 3. [#270](https://github.com/vanshulgoyal101/adbrain/issues/270) after-numbers. 4. #335's migration when ready |
+| Everyone | **When idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground only (it first lists items you own where someone else spoke last; it gives up after 30 min; then stop) and continue with what it prints. **Every finished step names who acts next** (`→ DevOps: release`) and moves the `owner:` label; release-PR verdicts end with `→ DevOps`. Never leave anything running in the background. **Talk on the issue or PR;** hand off with the owner label plus one arrow line (`→ QA: ready at <sha>`), and sign your own comments with your role ([AGENTS.md](../AGENTS.md#worker-coordination)). No status or idle posts. Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. **Queue empty?** Take the next item in your row, then QA's #51 findings, then any unowned `core` issue in your area (add your label); only then `wait-for-work` |
+| QA | 1. [#281](https://github.com/vanshulgoyal101/adbrain/issues/281) red tests for the auto-cite decision (test files only, in parallel with Dev). 2. [#344](https://github.com/vanshulgoyal101/adbrain/issues/344) verify live at 390 px, then close. 3. **P0 #157** reads (next 12:00Z). 4. Independent review of Dev 2's [#334](https://github.com/vanshulgoyal101/adbrain/issues/334) PR and #335's migration when they open. #337 needs the owner's phone (CEO) |
+| Dev | 1. [#281](https://github.com/vanshulgoyal101/adbrain/issues/281) (auto-cite a Brand offer; QA writes the red tests). 2. [#366](https://github.com/vanshulgoyal101/adbrain/issues/366) (Prepare 7 s → under 4 s: remove the client waterfall). 3. [#367](https://github.com/vanshulgoyal101/adbrain/issues/367) (angle chip covers the logo). #335 is with QA (PR #365). You own `ad-assistant.tsx` and `interview.ts` |
+| DevOps | 1. Release PR #309 ([#274](https://github.com/vanshulgoyal101/adbrain/issues/274)) and the 6 h watch. 2. [#359](https://github.com/vanshulgoyal101/adbrain/issues/359) (Supabase advisors: SECURITY DEFINER grants, slow RLS policies, tenant-key indexes; migration via QA). 3. [#270](https://github.com/vanshulgoyal101/adbrain/issues/270) after-numbers at ~18:40Z. 4. #335's migration when ready |
 | Dev 3 | 1. `/login`: a `redirect` to an app route opens sign-in mode, no intro (CTO note on #289). 2. [#300](https://github.com/vanshulgoyal101/adbrain/issues/300) (bold fonts, then Hindi/Punjabi). 3. [#333](https://github.com/vanshulgoyal101/adbrain/issues/333) (9:16 for Stories/Reels; same `render.tsx`). 4. [#289](https://github.com/vanshulgoyal101/adbrain/issues/289) slices 3–4 |
-| Dev 2 | 1. **[#156](https://github.com/vanshulgoyal101/adbrain/issues/156) now** (owner is signed in): advanced-access check, no-role test user, submit packet. 2. [#334](https://github.com/vanshulgoyal101/adbrain/issues/334) (Advantage+ audience on for new campaigns; recorded `validate_only`; not on the live #157 run). Post on #300 before touching `render.tsx` |
+| Dev 2 | 1. Merge PR #357 ([#334](https://github.com/vanshulgoyal101/adbrain/issues/334), CTO approved) after QA's verdict, then a Prepare smoke. 2. [#360](https://github.com/vanshulgoyal101/adbrain/issues/360) (#67: measure Create, Review and Campaigns on a phone, fix the slowest). 3. [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) jumps the queue whenever the owner is at the Meta dashboard |

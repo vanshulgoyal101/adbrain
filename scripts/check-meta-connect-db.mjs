@@ -23,6 +23,7 @@ const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
 const manualEnquiryMigration = await readFile(join(root, "db/migrations/20261024_manual_whatsapp_enquiries.sql"), "utf8");
+const schedulerMigration = await readFile(join(root, "db/migrations/20261024_scheduler_pg_cron.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -1079,6 +1080,41 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyScheduler(db, database) {
+  const call = async (path) => (await db.query("select private.call_cron_route($1) as id", [path])).rows[0].id;
+  await check(`${database}: without pg_cron no job is scheduled, and the helper is a no-op without Vault (#274)`, async () => {
+    assert.equal((await db.query("select to_regnamespace('cron') as cron")).rows[0].cron, null);
+    assert.equal(await call("/api/cron/enforce-spend"), null);
+  });
+  await check(`${database}: the scheduler helper calls only cron routes, with the Vault secret (#274)`, async () => {
+    await db.query("begin");
+    try {
+      await db.query(`create schema vault; create table vault.decrypted_secrets(name text, decrypted_secret text);
+        create schema net; create table net.calls(url text, headers jsonb, timeout int);
+        create function net.http_get(url text, params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
+          returns bigint language sql as 'insert into net.calls values (url, headers, timeout_milliseconds) returning 7::bigint'`);
+      assert.equal(await call("/api/cron/enforce-spend"), null);
+      await db.query("insert into vault.decrypted_secrets values ('adbrain_cron_secret', 'fixture-cron-value')");
+      assert.equal(await call("/api/cron/sync-leads"), "7");
+      for (const path of ["/api/leads", "/api/cron/../leads", "https://example.invalid/api/cron/x"]) assert.equal(await call(path), null);
+      assert.deepEqual((await db.query("select url, headers, timeout from net.calls")).rows,
+        [{ url: "https://adbrain.vanshul.com/api/cron/sync-leads", headers: { Authorization: "Bearer fixture-cron-value" }, timeout: 70000 }]);
+    } finally {
+      await db.query("rollback");
+    }
+  });
+  await check(`${database}: browser and service roles cannot call the scheduler helper (#274)`, async () => {
+    for (const role of ["anon", "authenticated", "service_role"]) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        await assert.rejects(session.query("select private.call_cron_route('/api/cron/enforce-spend')"), { code: "42501" });
+      } finally { await session.end(); }
+    }
+  });
+}
+
 async function verifyOperatorFunded(db, database) {
   const service = async (sql, values) => {
     const session = client(database);
@@ -1428,6 +1464,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await verifyCustomerAllowance(db,database);
       await verifyCappedRunBound(db,database);
       await verifyOperatorFunded(db,database);
+      await db.query(schedulerMigration);
+      await db.query(schedulerMigration);
+      await verifyScheduler(db,database);
       return;
     }
     if (integrityMigration) {
