@@ -310,6 +310,16 @@ Costs are estimates, not invoices. Missing provider usage or failed logging can
 under-count costs. Use generation approval/rejection, partial batches and repeat
 usage as hypotheses to investigate, not proof that an audience or creative works.
 
+A rejected reply's `ai.completion` event carries `validationRules`, the names of
+the checks it broke (up to 12, never the reply's text; #378). The top rules per model:
+
+```sql
+select attributes->>'model' as model, rule, count(*) as failures
+from public.product_events, jsonb_array_elements_text(attributes->'validationRules') as rule
+where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - interval '1 day'
+group by 1, 2 order by failures desc;
+```
+
 ## Verification
 
 Regression tests cover metadata allowlisting, tenant-context isolation, verified

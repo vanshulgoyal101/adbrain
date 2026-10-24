@@ -118,6 +118,14 @@ export function configuredMonthlyTokenLimit(user?: AccountIdentity): number {
   return isInternalUser(user) ? 0 : getEnv().LLM_MONTHLY_TOKEN_LIMIT;
 }
 
+/** The rule names a rejected reply broke (#378), bounded to what the product event accepts. */
+function validationRules(metadata: LLMUsageEvent["metadata"]): { validationRules?: string[] } {
+  const rules = metadata?.validationRules;
+  if (!Array.isArray(rules)) return {};
+  const names = rules.filter((rule): rule is string => typeof rule === "string" && /^[a-zA-Z0-9_.:*/[\]-]{1,80}$/.test(rule)).slice(0, 12);
+  return names.length ? { validationRules: names } : {};
+}
+
 /** Best-effort persistence; callers admitting paid work can retain a hold on failure. */
 export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean> {
   if (!events.length) return true;
@@ -129,7 +137,8 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
       outputTokens: event.usage.completionTokens, totalTokens: event.usage.totalTokens,
       estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
       usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false,
-      ...(event.failure ? { errorCode: `LLM_${event.failure}` } : event.errorCode ? { errorCode: event.errorCode } : {}) },
+      ...(event.failure ? { errorCode: `LLM_${event.failure}` } : event.errorCode ? { errorCode: event.errorCode } : {}),
+      ...validationRules(event.metadata) },
   });
   try {
     const supabase = createAdminClient();
