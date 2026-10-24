@@ -35,8 +35,8 @@ function fillLogin() {
 }
 
 describe("login completion and recovery", () => {
-  it("keeps home and legal navigation available around sign in", () => {
-    render(<LoginPage />);
+  it("keeps home and legal navigation available around sign in", async () => {
+    render(await LoginPage({}));
     expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AdBrain home" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
@@ -120,7 +120,7 @@ describe("login completion and recovery", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Check your email");
   });
 
-  it("toggles password visibility without submitting or changing it", () => {
+  it("toggles password visibility without submitting or changing it", async () => {
     fillLogin();
     fireEvent.click(screen.getByRole("button", { name: "Show password" }));
     expect(screen.getByLabelText("Password")).toHaveAttribute("type", "text");
@@ -142,7 +142,7 @@ describe("new and returning visitors", () => {
     expect(mocks.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it("reveals and focuses the password field for a new visitor who has one", () => {
+  it("reveals and focuses the password field for a new visitor who has one", async () => {
     render(<LoginForm newVisitor />);
     fireEvent.click(screen.getByRole("button", { name: "I have a password" }));
     expect(screen.getByLabelText("Password")).toHaveFocus();
@@ -164,7 +164,7 @@ describe("new and returning visitors", () => {
     fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
     await screen.findByText("Check your email");
     expect(localStorage.getItem("adbrain:returning-visitor")).toBe("1");
-    render(<LoginPage />);
+    render(await LoginPage({}));
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create a free account" }));
@@ -174,7 +174,7 @@ describe("new and returning visitors", () => {
   });
 
   it("keeps a new visitor on the create-account view after their link is sent", async () => {
-    render(<LoginPage />);
+    render(await LoginPage({}));
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.test" } });
     fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
     expect(await screen.findByText(/finish creating your account/)).toBeInTheDocument();
@@ -182,29 +182,29 @@ describe("new and returning visitors", () => {
     expect(localStorage.getItem("adbrain:returning-visitor")).toBe("1");
   });
 
-  it("makes the page behind the phone intro inert until it closes", () => {
+  it("makes the page behind the phone intro inert until it closes", async () => {
     phoneViewport = true;
-    const { container } = render(<LoginPage />);
+    const { container } = render(await LoginPage({}));
     expect(container.inert).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
     expect(container.inert).toBe(false);
   });
 
-  it("shows the phone intro once, and Skip returns to the form", () => {
+  it("shows the phone intro once, and Skip returns to the form", async () => {
     phoneViewport = true;
-    const first = render(<LoginPage />);
+    const first = render(await LoginPage({}));
     expect(screen.getByRole("dialog", { name: "From your business to WhatsApp chats" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Skip/ })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByLabelText("Email")).toHaveFocus();
     first.unmount();
-    render(<LoginPage />);
+    render(await LoginPage({}));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("never covers the form for a returning visitor or on a laptop", () => {
-    render(<LoginPage />);
+  it("never covers the form for a returning visitor or on a laptop", async () => {
+    render(await LoginPage({}));
     expect(screen.queryByRole("dialog")).toBeNull();
     phoneViewport = true;
     localStorage.setItem("adbrain:returning-visitor", "1");
@@ -212,5 +212,16 @@ describe("new and returning visitors", () => {
     act(() => { window.dispatchEvent(new StorageEvent("storage")); });
     expect(screen.queryByRole("dialog")).toBeNull();
   });
-});
 
+  it("opens in sign-in mode without the intro when sent from an app page", async () => {
+    phoneViewport = true;
+    render(await LoginPage({ searchParams: Promise.resolve({ redirect: "/campaigns" }) }));
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("treats an unsafe or missing redirect as a new visitor", async () => {
+    render(await LoginPage({ searchParams: Promise.resolve({ redirect: "//evil.example" }) }));
+    expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
+  });
+});

@@ -44,13 +44,14 @@ function subscribePhone(listener: () => void) {
   return () => query.removeEventListener("change", listener);
 }
 
-export function LoginExperience() {
+/** `deepLink`: sent here from an app page (e.g. ?redirect=/campaigns), so it is a returning user. */
+export function LoginExperience({ deepLink = false }: { deepLink?: boolean }) {
   const returning = useReturningVisitor();
   const introSeen = useLoginIntroSeen();
   const [choice, setChoice] = useState<"new" | "returning" | null>(null);
   const [introClosed, setIntroClosed] = useState(false);
   const phone = useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
-  const mode = choice ?? (returning ? "returning" : "new");
+  const mode = choice ?? (returning || deepLink ? "returning" : "new");
   const isNew = mode === "new";
 
   const closeIntro = () => {
