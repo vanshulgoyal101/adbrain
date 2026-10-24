@@ -5,6 +5,7 @@ import {
   type Blocker,
   type SelectedAssets,
 } from "@/lib/meta/connect-contracts";
+import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
 
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime({ offset: true });
@@ -60,8 +61,8 @@ export const draftInputSchema = z
     dailyBudgetRupees: moneyRupees,
     leadFormId: metaId.nullable(),
     destination: z.enum(["instant_form", "whatsapp"]).optional(),
-    /** WhatsApp button number when it differs from the Page's; verified against Meta at review. */
-    whatsappNumber: z.string().regex(/^\+[1-9]\d{6,14}$/).optional(),
+    /** WhatsApp button number when it differs from the Page's, in full or masked as AdBrain shows it ("+91 ••••• 4842"); verified against Meta at review. */
+    whatsappNumber: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]).optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
   })

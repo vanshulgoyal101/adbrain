@@ -4,6 +4,7 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
+import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -547,10 +548,16 @@ export class MetaClient {
   /**
    * The verified WhatsApp number for click-to-WhatsApp ads: the Page's linked number, or a
    * requested number on a WhatsApp Business Account owned by the ad account's own business
-   * (Meta accepts those for the Page even when the Page fields are empty, #157).
+   * (Meta accepts those for the Page even when the Page fields are empty, #157). A request may
+   * name the number by its mask ("+91 ••••• 4842", #235); it must match exactly one of those.
    */
   async getWhatsAppNumber(requested?: string | null): Promise<string | null> {
     const pageNumber = await this.pageWhatsAppNumber();
+    if (requested && maskedWhatsAppNumberPattern.test(requested)) {
+      const matches = [...new Set([...(pageNumber ? [pageNumber] : []), ...await this.businessWhatsAppNumbers()])]
+        .filter((number) => maskWhatsAppNumber(number) === requested);
+      return matches.length === 1 ? matches[0] : null;
+    }
     const wanted = requested ? normalizeWhatsAppNumber(requested) : null;
     if (!wanted || wanted === pageNumber) return pageNumber;
     return (await this.businessWhatsAppNumbers()).includes(wanted) ? wanted : null;

@@ -58,4 +58,18 @@ describe("<CampaignLaunchReview>", () => {
     expect(screen.queryByText(/ready to create paused campaign/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Meta eligibility and audience checks still apply/i)).toBeInTheDocument();
   });
+
+  it("shows the masked WhatsApp button number as the destination", () => {
+    render(
+      <CampaignLaunchReview
+        selectedCount={1}
+        budget={280}
+        destination="whatsapp"
+        whatsappNumber="+91 ••••• 4842"
+        audience="Chandigarh"
+      />,
+    );
+    expect(screen.getByText("WhatsApp chat +91 ••••• 4842")).toBeInTheDocument();
+    expect(screen.getByText(/ready for campaign review/i)).toBeInTheDocument();
+  });
 });

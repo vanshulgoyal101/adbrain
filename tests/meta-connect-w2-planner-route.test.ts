@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   createLeadCampaign: vi.fn(),
   tokenLimit: vi.fn(), usage: vi.fn(), persist: vi.fn(),
   friendlyMetaError: vi.fn(),
+  inserted: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -27,7 +28,7 @@ vi.mock("@/lib/supabase/server", () => ({
           }),
         }),
       }),
-      insert: () => ({
+      insert: (row: unknown) => (mocks.inserted(row), {
         select: () => ({
           single: async () => ({
             data: {
@@ -376,5 +377,22 @@ describe("guided planner route", () => {
       },
     });
     expect(mocks.createLeadCampaign).not.toHaveBeenCalled();
+  });
+
+  it("saves the chosen WhatsApp number on a guided WhatsApp draft so preflight checks it", async () => {
+    const proposed = await mocks.runPlanner();
+    mocks.runPlanner.mockResolvedValueOnce({ ...proposed, plan: { ...proposed.plan, destination: "whatsapp", lead_form_id: null } });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    const response = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get chats", destination: "whatsapp", whatsappNumber: "+91 ••••• 4842" }) }));
+    expect(response.status).toBe(200);
+    expect(mocks.inserted).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842" }) }));
+  });
+
+  it("ignores a WhatsApp number on an instant-form plan and rejects a full number", async () => {
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get leads", destination: "instant_form", whatsappNumber: "+91 ••••• 4842" }) }));
+    expect(mocks.inserted).toHaveBeenCalledWith(expect.objectContaining({ input: expect.not.objectContaining({ whatsappNumber: expect.anything() }) }));
+    const full = await POST(new Request("http://localhost/api/campaigns/plan", { method: "POST", body: JSON.stringify({ goal: "Get chats", destination: "whatsapp", whatsappNumber: "+919876544842" }) }));
+    expect(full.status).toBe(400);
   });
 });

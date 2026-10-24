@@ -123,7 +123,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/privacy-requests/operator` | No body -> `{requests}` (oldest 100 open requests); `?check=1` -> `{allowed:true}` without loading the queue | Verified privacy operator only; server-only queue read |
 | PATCH | `/api/privacy-requests/operator` | Same-origin `{id,expectedStatus,status}` -> `{request}` | Verified privacy operator only; status and handler audit, no export/deletion |
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
-| GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", page, business} \| {state: "not_linked" \| "unavailable"}` | Owned business only; read-only Graph; 20 per 5 min (#235) |
+| GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", numbers: [{masked, source: "page" \| "business"}]} \| {state: "not_linked" \| "unavailable"}` | Owned business only; read-only Graph; numbers leave the server masked ("+91 ••••• 4842"); 20 per 5 min (#235) |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
 | GET | `/api/meta/connections/attempts/[id]` | Path ID -> envelope attempt | Poll owned attempt |
@@ -447,6 +447,7 @@ count; filename is `adbrain-ad-pack.zip`. No raw HTML is accepted as an image.
 | `dailyBudgetRupees` | Finite integer 0-10000000; preflight requires positive |
 | `leadFormId` | Null or trimmed string 1-128; instant-form preflight requires an active bound form and an own business website (not Facebook/Instagram), which Meta requires for lead ads |
 | `destination` | Optional `instant_form` or `whatsapp`; absent means instant form |
+| `whatsappNumber` | Optional WhatsApp button number: E.164 or the masked form from `/api/meta/whatsapp` ("+91 ••••• 4842"). Preflight resolves it to the Page's number or one on the ad account business's WhatsApp Business Accounts; a mask must match exactly one |
 | `targeting` | Strict object below; `{}` can be saved but is not launch-ready |
 | `abTest` | Required boolean; true produces two age-band ad sets |
 

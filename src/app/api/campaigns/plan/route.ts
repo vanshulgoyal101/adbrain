@@ -13,6 +13,7 @@ import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { listEditableDrafts } from "@/lib/campaign/draft-repository";
+import { maskedWhatsAppNumberPattern } from "@/lib/meta/whatsapp-status-shared";
 import { cachedLeadForms } from "@/lib/meta/lead-form-cache";
 import { preferenceContext } from "@/lib/preferences/store";
 import {
@@ -53,6 +54,7 @@ async function handlePOST(req: Request) {
     goal: z.string().trim().min(1).max(2_000),
     audienceDraft: draftInputSchema.optional(),
     destination: z.enum(["instant_form", "whatsapp"]).optional(),
+    whatsappNumber: z.string().regex(maskedWhatsAppNumberPattern).optional(),
     answers: z.union([z.string().max(12_000), z.array(plannerAnswerSchema).max(30)]).optional(),
   }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "A valid goal and answers are required." }, { status: 400 });
@@ -265,7 +267,9 @@ async function handlePOST(req: Request) {
   }
 
   const now = new Date().toISOString();
-  const plan = prepareDraftCreate({ actor, draftInput: draftResult.draft, now, ttlMs: DRAFT_TTL_MS });
+  // Preflight resolves this mask against the business's own numbers, as for a manual draft.
+  const draftInput = destination === "whatsapp" && parsed.data.whatsappNumber ? { ...draftResult.draft, whatsappNumber: parsed.data.whatsappNumber } : draftResult.draft;
+  const plan = prepareDraftCreate({ actor, draftInput, now, ttlMs: DRAFT_TTL_MS });
   if ("ok" in plan) {
     return NextResponse.json({ error: plan.message }, { status: plan.code === "FORBIDDEN" ? 403 : 400 });
   }
