@@ -7,8 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { safeAuthRedirect } from "@/lib/auth-redirect";
+import { rememberReturningVisitor } from "@/lib/login-visitor";
 
-export function LoginForm() {
+const primaryClass = "bg-[#dcf77a] font-bold text-[#18211f] shadow-none hover:bg-[#c9ed53] focus-visible:outline-[#216849]";
+
+/** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
+export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const redirect = safeAuthRedirect(searchParams.get("redirect"));
@@ -17,6 +21,8 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [usePassword, setUsePassword] = useState(false);
+  const passwordMode = !newVisitor || usePassword;
   const emailRef = useRef<HTMLInputElement>(null);
   const restoreEmailFocus = useRef(false);
   const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
@@ -31,6 +37,11 @@ export function LoginForm() {
       restoreEmailFocus.current = false;
     }
   }, [status]);
+
+  function remember() {
+    onSucceeded?.();
+    rememberReturningVisitor();
+  }
 
   function callbackUrl() {
     return `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`;
@@ -49,6 +60,7 @@ export function LoginForm() {
         options: { emailRedirectTo: callbackUrl() },
       });
       if (error) throw new Error(error.message);
+      remember();
       setStatus("sent");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not send a sign-in link. Please try again.");
@@ -69,6 +81,7 @@ export function LoginForm() {
         options: { redirectTo: callbackUrl() },
       });
       if (error) throw new Error(error.message);
+      remember();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in with Google. Please try again.");
     } finally {
@@ -85,6 +98,7 @@ export function LoginForm() {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw new Error(error.message);
+      remember();
       router.replace(redirect);
       router.refresh();
     } catch (error) {
@@ -97,11 +111,11 @@ export function LoginForm() {
   if (status === "sent") {
     return (
       <div className="flex flex-col gap-6">
-        <div role="status" className="border-l-2 border-blue-600 pl-4">
-          <MailCheck size={24} aria-hidden="true" className="mb-3 text-blue-600" />
+        <div role="status" className="border-l-2 border-[#216849] pl-4">
+          <MailCheck size={24} aria-hidden="true" className="mb-3 text-[#216849]" />
           <h2 className="text-lg font-semibold text-slate-900">Check your email</h2>
           <p className="mt-2 break-words text-sm leading-6 text-slate-600">
-            We sent a sign-in link to <span className="font-medium text-slate-900">{email}</span>.
+            We sent a sign-in link to <span className="font-medium text-slate-900">{email}</span>. Open it on this device to {newVisitor ? "finish creating your account" : "sign in"}.
           </p>
         </div>
         <Button type="button" variant="outline" className="h-11" onClick={() => {
@@ -146,7 +160,7 @@ export function LoginForm() {
         <div className="h-px flex-1 bg-border" />
       </div>
 
-      <form onSubmit={signInWithPassword} className="flex flex-col gap-5">
+      <form onSubmit={passwordMode ? signInWithPassword : (e) => { e.preventDefault(); void sendMagicLink(); }} className="flex flex-col gap-5">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input
@@ -165,7 +179,7 @@ export function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        {passwordMode && <div className="flex flex-col gap-1.5">
           <Label htmlFor="password">Password</Label>
           <div className="relative">
             <Input
@@ -174,6 +188,7 @@ export function LoginForm() {
               type={showPassword ? "text" : "password"}
               required
               autoComplete="current-password"
+              autoFocus={usePassword}
               disabled={pending !== null}
               className="h-11 pr-12"
               value={password}
@@ -183,9 +198,10 @@ export function LoginForm() {
               {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
             </button>
           </div>
-        </div>
+        </div>}
         {error && <p role="alert" className="break-words border-l-2 border-red-500 pl-3 text-sm leading-6 text-red-700">{error}</p>}
-        <Button type="submit" className="h-11" disabled={pending !== null || !email || !password}>
+        {passwordMode ? <>
+        <Button type="submit" className={`h-11 ${primaryClass}`} disabled={pending !== null || !email || !password}>
           {pending === "password" && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
           {pending === "password" ? "Signing in..." : "Sign in with password"}
           {pending !== "password" && <ArrowRight size={16} aria-hidden="true" />}
@@ -194,6 +210,16 @@ export function LoginForm() {
           {pending === "magic" ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Mail size={16} aria-hidden="true" />}
           {status === "sending" ? "Sending…" : "Send magic link"}
         </Button>
+        </> : <>
+        <Button type="submit" className={`h-11 ${primaryClass}`} disabled={pending !== null}>
+          {pending === "magic" ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <Mail size={16} aria-hidden="true" />}
+          {status === "sending" ? "Sending…" : "Email me a sign-in link"}
+        </Button>
+        <p className="-mt-2 text-sm leading-6 text-slate-600">No password needed. The link creates your account.</p>
+        <Button type="button" variant="ghost" className="h-11" disabled={pending !== null} onClick={() => setUsePassword(true)}>
+          I have a password
+        </Button>
+        </>}
       </form>
     </div>
   );
