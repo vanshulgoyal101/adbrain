@@ -59,13 +59,14 @@ Routine steps never wait for the CEO or the CTO.
    [AGENTS.md](../AGENTS.md#worker-coordination)) and continue with what it
    reports. Stop only when it times out. Do not invent work.
 3. **Finish an issue** with a PR, not a loose commit. Branch from current
-   `origin/main`, keep the change small, push, and open a PR to `main` titled
+   `origin/next`, keep the change small, push, and open a PR to `next` titled
    with the issue number. Comment on the issue in five lines or fewer: what
    changed, proof, risk, PR link, next step.
 4. **Low-risk PRs ship themselves.** No migration, money, tenant/auth or config
    change: run `gh pr merge <n> --auto --squash`. GitHub merges when CI passes
-   (about 3 minutes) and Vercel deploys. Branches no longer need to be up to date
-   with `main` to merge. After deploy, smoke the changed flow in production,
+   (about 3 minutes) into `next`, and the deploy train ships `next` to production
+   at most every 30 minutes (#461). Branches don't need to be up to date to merge.
+   After the train deploys it, smoke the changed flow in production,
    close the issue with the PR link (plus one `Lesson:` line if you learned
    something reusable) and start your next issue.
    **Ship the same day.** Open the PR as soon as one small slice works; do not

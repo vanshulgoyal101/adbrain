@@ -162,9 +162,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Branches and deployments
 
-- Branch from current `origin/main`, open a PR to `main`, enable auto-merge.
-	`main` is production; Vercel deploys it automatically. Branches do not need to
-	be up to date with `main`; required checks are build, test, core and secrets.
+- **Deploy train (#461; Vercel Hobby allows 100 deploys a day).** Branch from current
+	`origin/next` (`bash scripts/wt.sh <issue>` does it), open a PR to **`next`**, enable
+	auto-merge. A PR opened against `main` is retargeted to `next` automatically.
+	`main` is production; the deploy train promotes a green `next` to `main` at most
+	every 30 minutes, so your change is live within about 30 minutes of merging. Smoke it
+	then. Hotfixes and migration/money releases go to `main` (DevOps or CTO; label
+	`hotfix`). Required checks are build, test, core and secrets.
 - Migrations, production settings and rollbacks go through DevOps. Never
 	force-push or run `npm run db:push` against production.
 - Update the matching doc in the same PR when you change a route, schema or

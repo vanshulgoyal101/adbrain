@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# New worktree for an issue (#390): branch work/issue-<n> from origin/main under
+# New worktree for an issue (#390): branch work/issue-<n> from origin/next (#461) under
 # ~/Development/copilot/adbrain-wt/<n>, node_modules cloned from a per-lockfile cache
 # (APFS copy-on-write, seconds), else npm ci. Prints the path.
 set -euo pipefail
@@ -10,7 +10,7 @@ if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^[0-9]+$ ]]; then
 fi
 
 issue="$1"
-base="${2:-origin/main}"
+base="${2:-origin/next}"
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="$HOME/Development/copilot/adbrain-wt/$issue"
 branch="work/issue-$issue"
