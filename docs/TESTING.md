@@ -78,6 +78,11 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Create when the AI is busy** (`create-busy`, #410): through the production order
+  (Groq, Gemini, then the paid OpenRouter fallback), every provider rate-limited returns a 503
+  "busy, try again" instead of a 500, and each refused attempt is logged as `ai.completion`
+  failed with `LLM_HTTP_429`; when OpenRouter answers with the recorded Solaride reply, the
+  refused free-tier attempts are still logged.
 - **Regenerate** (`create-regenerate`, #281): six real Claude Haiku replies for the Solaride ad that
   failed in production, recorded through the route's own input by
   `scripts/record-regenerate-fixtures.ts` (text only). A cited "₹10,000" backed by "10,000 rupees"

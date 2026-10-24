@@ -1,5 +1,5 @@
 import { complete, parseJSON, type ChatMessage, type CompletionResult } from "@/lib/llm";
-import { LLMError } from "@/lib/llm/types";
+import { LLMError, type ProviderAttempt } from "@/lib/llm/types";
 import { z } from "zod";
 import { AD_LANGUAGES } from "@/lib/languages";
 import { formatPromptContext } from "@/lib/preferences/context";
@@ -334,13 +334,23 @@ If you have enough to write a great ad, return:
 
 export async function runInterview(
   input: InterviewInput,
-  options: { signal?: AbortSignal; onAttempt?: (completion: CompletionResult, attempt: number, valid: boolean, rules?: string[]) => Promise<void> } = {},
+  options: {
+    signal?: AbortSignal;
+    onAttempt?: (completion: CompletionResult, attempt: number, valid: boolean, rules?: string[]) => Promise<void>;
+    /** Provider attempts the router gave up on (rate limit, timeout…), reported whether or not a fallback answered (#410). */
+    onProviderFailures?: (failures: ProviderAttempt[], attempt: number) => Promise<void>;
+  } = {},
 ): Promise<InterviewResult> {
   const messages = buildInterviewMessages(input);
   const timeout = AbortSignal.timeout(45_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   for (let attempt = 0; attempt < 2; attempt++) {
     signal.throwIfAborted();
+    let sawProviderAttempt = false;
+    const failures: ProviderAttempt[] = [];
+    const reportFailures = async () => {
+      if (failures.length) await options.onProviderFailures?.(failures, attempt + 1);
+    };
     const completion = await complete(messages, {
       routing: "budget",
       task: "creative brief interview",
@@ -351,12 +361,18 @@ export async function runInterview(
       maxTokens: 2400,
       cache: false,
       signal,
+      onAttempt: (entry) => {
+        sawProviderAttempt = true;
+        if (entry.status === "error") failures.push(entry);
+      },
     }).catch(async (error: unknown) => {
-      if (error instanceof LLMError && error.model && error.usage) {
+      if (!sawProviderAttempt && error instanceof LLMError && error.model && error.usage) {
         await options.onAttempt?.({ text: "", provider: error.provider, model: error.model, usage: error.usage }, attempt + 1, false);
       }
+      await reportFailures();
       throw error;
     });
+    await reportFailures();
     let value: unknown;
     try {
       value = parseJSON<unknown>(completion.text);

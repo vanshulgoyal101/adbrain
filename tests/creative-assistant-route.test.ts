@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/creatives/assistant/route";
 import { complete } from "@/lib/llm";
+import { AllLLMProvidersFailedError, LLMError } from "@/lib/llm/types";
 
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), business: vi.fn(), rate: vi.fn(), usage: vi.fn(), persist: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
@@ -57,6 +58,24 @@ describe("creative assistant boundary", () => {
     expect(await response.json()).not.toHaveProperty("brief");
     expect(complete).toHaveBeenCalledTimes(2);
     expect(mocks.persist).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["the 45 s interview deadline", new DOMException("The operation was aborted due to timeout", "TimeoutError")],
+    ["a single provider timeout", new LLMError("groq: request deadline exceeded", { provider: "groq", retryable: false, code: "TIMEOUT" })],
+    ["every provider refusing", new AllLLMProvidersFailedError("MIXED", 3)],
+  ])("tells the owner AdBrain is busy, not a bare 500, after %s (#410)", async (_case, error) => {
+    vi.mocked(complete).mockRejectedValue(error);
+    const response = await POST(request({ businessId: "biz", goal: "ad" }));
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("10");
+    expect(await response.json()).toEqual({ error: "AdBrain is busy right now. Tap Try again in a few seconds.", code: "AI_BUSY" });
+  });
+
+  it("keeps a 500 for unexpected errors so real bugs stay visible", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(complete).mockRejectedValue(new TypeError("boom"));
+    expect((await POST(request({ businessId: "biz", goal: "ad" }))).status).toBe(500);
   });
 
   it.each([[null, 503], [1000, 429]])("blocks interviews when usage is %s", async (used, status) => {

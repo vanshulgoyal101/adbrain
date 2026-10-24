@@ -1,4 +1,4 @@
-import { observeRoute, currentRequestId } from "@/lib/observability/logger";
+import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { apiError, serverError } from "@/lib/api";
 import {
@@ -8,6 +8,7 @@ import {
   INTERVIEW_PROMPT_VERSION,
 } from "@/lib/creative/interview";
 import { NoLLMKeysError } from "@/lib/llm";
+import { AllLLMProvidersFailedError, LLMError } from "@/lib/llm/types";
 import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from "@/lib/llm/persist";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -74,6 +75,18 @@ async function handlePOST(req: Request) {
           metadata: { answerCount: answers.length, repaired: attempt > 1, ...(valid ? {} : { validationRules: rules }) },
         }]);
       },
+      onProviderFailures: async (failures, attempt) => {
+        await persistLLMUsage(failures.map((failure) => ({
+          businessId, userId: user.id, requestId, route: "creatives.assistant",
+          provider: failure.provider, model: failure.model,
+          usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          promptVersion: INTERVIEW_PROMPT_VERSION, latencyMs: failure.latencyMs,
+          attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
+          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`,
+          providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
+          metadata: { answerCount: answers.length, repaired: attempt > 1 },
+        })));
+      },
     });
     return NextResponse.json({ ...result, promptVersion: INTERVIEW_PROMPT_VERSION }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
@@ -84,6 +97,23 @@ async function handlePOST(req: Request) {
         { status: 400 },
       );
     }
+    const busy = busyReason(err);
+    if (busy) {
+      recordProductEvent({ kind: "workflow", name: "creative.interview", outcome: "failed", businessId,
+        attributes: { errorCode: `ASSISTANT_${busy}` } });
+      return NextResponse.json(
+        { error: "AdBrain is busy right now. Tap Try again in a few seconds.", code: "AI_BUSY" },
+        { status: 503, headers: { "Retry-After": "10", "Cache-Control": "no-store" } },
+      );
+    }
     return serverError("creatives.assistant", err, "The assistant had trouble — try again.");
   }
+}
+
+/** Why the AI could not answer in time (#410); null for errors that are bugs, not load. */
+function busyReason(err: unknown): string | null {
+  if (err instanceof AllLLMProvidersFailedError) return `EXHAUSTED_${err.reason}`;
+  if (err instanceof LLMError) return err.code ?? "PROVIDER";
+  if (err instanceof DOMException && err.name === "TimeoutError") return "TIMEOUT";
+  return null;
 }

@@ -320,6 +320,21 @@ where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - in
 group by 1, 2 order by failures desc;
 ```
 
+Create's assistant also logs each provider attempt the router gave up on as
+`ai.completion` failed with `errorCode` `LLM_HTTP_429`, `LLM_TIMEOUT` and so on,
+even when a fallback then answers. When none answers, a `creative.interview`
+workflow event records `ASSISTANT_EXHAUSTED_<reason>` and the owner gets a 503
+"busy" (#410). Refusals per provider and hour:
+
+```sql
+select date_trunc('hour', created_at) as hour, attributes->>'provider' as provider,
+       attributes->>'errorCode' as reason, count(*) as refused
+from public.product_events
+where name = 'ai.completion' and outcome = 'failed' and attributes->>'errorCode' like 'LLM_%'
+  and created_at >= now() - interval '1 day'
+group by 1, 2, 3 order by 1 desc, refused desc;
+```
+
 ## Verification
 
 Regression tests cover metadata allowlisting, tenant-context isolation, verified
