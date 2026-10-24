@@ -503,7 +503,7 @@ describe("<Studio> edit text (#280)", () => {
     const user = userEvent.setup();
     h.updateCreativeCopy.mockResolvedValue({ ok: true, warnings: [], creative: edited });
     render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
-    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
     const form = screen.getByRole("form", { name: "Edit ad text" });
     expect(within(form).getByLabelText("Headline")).toHaveValue("Cut your power bill");
     expect(within(form).getByLabelText("Main text")).toHaveValue("Two short lines.");
@@ -537,7 +537,7 @@ describe("<Studio> edit text (#280)", () => {
       creative: { ...edited, headline: "20% off solar" },
     });
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/"20%" isn't in your Brand/)).toBeInTheDocument();
     expect(screen.getByText("This ad is live on Meta; your edit applies to new campaigns.")).toBeInTheDocument();
@@ -548,7 +548,7 @@ describe("<Studio> edit text (#280)", () => {
     h.updateCreativeCopy.mockResolvedValue({ ok: true, warnings: ["\"free\" isn't in your Brand."], creative: edited });
     global.fetch = vi.fn().mockResolvedValue(okJson({ creative: creative({ headline: "Fresh AI line" }) })) as unknown as typeof fetch;
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/"free" isn't in your Brand/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Regenerate whole ad" }));
@@ -560,17 +560,75 @@ describe("<Studio> edit text (#280)", () => {
   it("Cancel keeps the ad and saves nothing; a server refusal keeps the form open", async () => {
     const user = userEvent.setup();
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.type(screen.getByLabelText("Headline"), " now");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(h.updateCreativeCopy).not.toHaveBeenCalled();
     expect(screen.getAllByText("Cut your power bill").length).toBeGreaterThan(0);
 
     h.updateCreativeCopy.mockResolvedValue({ ok: false, error: "Headline must be 40 characters or fewer." });
-    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Headline must be 40 characters or fewer.")).toBeInTheDocument();
     expect(screen.getByRole("form", { name: "Edit ad text" })).toBeInTheDocument();
+  });
+});
+
+describe("<Studio> edit words on the picture (#280)", () => {
+  it("redraws the picture with new words, no AI, and keeps the ad approved", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockResolvedValue(okJson({
+      creative: creative({ status: "approved", image_url: "https://img.example/redrawn.png" }),
+    })) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Words on picture" }));
+    const form = screen.getByRole("form", { name: "Edit words on the picture" });
+    expect(within(form).getByLabelText("Headline on picture")).toHaveValue("Cut your power bill");
+    expect(within(form).getByLabelText("Button on picture")).toHaveValue("Get Quote");
+    await user.clear(within(form).getByLabelText("Headline on picture"));
+    await user.type(within(form).getByLabelText("Headline on picture"), "Diwali: free site visit");
+    await user.type(within(form).getByLabelText("Phone"), "+91 98290 12345");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/picture", expect.objectContaining({ method: "POST" })));
+    const [, init] = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([url]) => url === "/api/creatives/c1/picture")!;
+    expect(JSON.parse(String(init.body))).toEqual({ headline: "Diwali: free site visit", subhead: "Two short lines.", phone: "+91 98290 12345", ctaLabel: "Get Quote" });
+    expect(global.fetch).not.toHaveBeenCalledWith("/api/creatives/c1/regenerate", expect.anything());
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Edit words on the picture" })).not.toBeInTheDocument());
+    expect(document.querySelector('img[src*="redrawn"]')).not.toBeNull();
+    expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+    expect(screen.getByText("Saved.")).toBeInTheDocument();
+  });
+
+  it("locks the tabs while the picture is being redrawn", async () => {
+    const user = userEvent.setup();
+    let finish: (value: unknown) => void = () => {};
+    global.fetch = vi.fn().mockReturnValue(new Promise((resolve) => { finish = resolve; })) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Words on picture" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("button", { name: "Redrawing…" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Ad text" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await act(async () => finish(okJson({ creative: creative({ image_url: "https://img.example/redrawn.png" }) })));
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "Ad text" })).not.toBeInTheDocument());
+  });
+
+  it("keeps the form open and explains when the background can't be found", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: "We couldn't find this ad's original background, so its words can't be redrawn. Regenerate the whole ad instead.", code: "no_background" }),
+    }) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Words on picture" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/couldn't find this ad's original background/)).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Edit words on the picture" })).toBeInTheDocument();
+    expect(document.querySelector('img[src*="img.example/a"]')).not.toBeNull();
   });
 });
 

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { AdLanguagePicker } from "@/components/ad-language-picker";
-import { CopyEditNotice, CreativeCopyEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -226,10 +226,20 @@ export function AdAssistant({ business }: { business: Business }) {
       : turn));
   }
 
+  // Edits made on a card while the rest of the batch is still generating (#280).
+  const liveEditsRef = useRef(new Map<string, Creative>());
+  const withLiveEdits = (creatives: Creative[]) =>
+    creatives.map((c) => {
+      const edited = liveEditsRef.current.get(c.id);
+      if (!edited) return c;
+      const { headline, primary_text, cta, generation, image_url } = edited;
+      return { ...c, headline, primary_text, cta, generation, image_url };
+    });
+
   function setResultCopy(edited: Creative) {
-    const { headline, primary_text, cta, generation } = edited;
+    const { headline, primary_text, cta, generation, image_url } = edited;
     setTurns((t) => t.map((turn) => turn.role === "result"
-      ? { ...turn, creatives: turn.creatives.map((c) => (c.id === edited.id ? { ...c, headline, primary_text, cta, generation } : c)) }
+      ? { ...turn, creatives: turn.creatives.map((c) => (c.id === edited.id ? { ...c, headline, primary_text, cta, generation, image_url } : c)) }
       : turn));
   }
 
@@ -346,7 +356,7 @@ export function AdAssistant({ business }: { business: Business }) {
         setPhase("chat");
         return;
       }
-      setTurns((t) => [...t, { role: "result", creatives: orderBySlots(slots, data.creatives!) }]);
+      setTurns((t) => [...t, { role: "result", creatives: withLiveEdits(orderBySlots(slots, data.creatives!)) }]);
       setPhase("done");
     } catch {
       const recovered = await recoverPersistedGeneration(newGenerationId);
@@ -378,7 +388,7 @@ export function AdAssistant({ business }: { business: Business }) {
             creatives?: Creative[];
           };
           if (data.creatives?.length) {
-            setTurns((t) => [...t, { role: "result", creatives: data.creatives! }]);
+            setTurns((t) => [...t, { role: "result", creatives: withLiveEdits(data.creatives!) }]);
             setPhase("done");
             if (data.status === "partial") {
               setError("Some ads finished while the request was reconnecting. Review the saved work in Creative Studio; no duplicate generation was started.");
@@ -567,11 +577,12 @@ export function AdAssistant({ business }: { business: Business }) {
               onAnswer={answer}
               onStatus={setResultStatus}
               onEdited={setResultCopy}
+              brand={business}
             />
           ))}
 
           {phase === "generating" && live ? (
-            <CreateProgress ads={live} renderReady={(creative) => <ResultCard creative={creative} />} />
+            <CreateProgress ads={live} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
           ) : (loading || phase === "generating") && (
             <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}
@@ -659,6 +670,7 @@ function TurnView({
   onAnswer,
   onStatus,
   onEdited,
+  brand,
 }: {
   turn: Turn;
   active: boolean;
@@ -668,6 +680,7 @@ function TurnView({
   onAnswer: (q: Question, text: string, displayText?: string) => void;
   onStatus: (id: string, status: "draft" | "approved") => void;
   onEdited: (creative: Creative) => void;
+  brand: Business;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   if (turn.role === "user") {
@@ -700,13 +713,13 @@ function TurnView({
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {turn.creatives.map((c) => (
-            <ResultCard key={c.id} creative={c} onStatus={(status) => onStatus(c.id, status)} onEdited={onEdited} />
+            <ResultCard key={c.id} creative={c} brand={brand} onStatus={(status) => onStatus(c.id, status)} onEdited={onEdited} />
           ))}
         </div>
         <p className="text-xs text-slate-500">
           Tap <span className="font-medium">Use this ad</span> on the ones you like — that
-          approves them for launch. Use <span className="font-medium">Edit text</span> to change the
-          words; regenerate or delete in Review.
+          approves them for launch. Use <span className="font-medium">Edit</span> to change the
+          text or the words on the picture; regenerate or delete in Review.
         </p>
       </div>
     );
@@ -799,10 +812,12 @@ function TurnView({
 
 function ResultCard({
   creative: given,
+  brand,
   onStatus,
   onEdited,
 }: {
   creative: Creative;
+  brand: Business;
   onStatus?: (status: "draft" | "approved") => void;
   onEdited?: (creative: Creative) => void;
 }) {
@@ -810,7 +825,7 @@ function ResultCard({
   const [editing, setEditing] = useState(false);
   const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
   // Live cards aren't in turns yet, so their saved words are kept here too.
-  const [savedCopy, setSavedCopy] = useState<Pick<Creative, "headline" | "primary_text" | "cta" | "generation"> | null>(null);
+  const [savedCopy, setSavedCopy] = useState<Pick<Creative, "headline" | "primary_text" | "cta" | "generation" | "image_url"> | null>(null);
   const creative = savedCopy ? { ...given, ...savedCopy } : given;
   // Live cards are not in turns yet, so they keep their own state.
   const [localApproved, setLocalApproved] = useState(creative.status === "approved");
@@ -871,12 +886,13 @@ function ResultCard({
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         {editing ? (
-          <CreativeCopyEditor
+          <CreativeEditor
             creative={creative}
+            brand={brand}
             onCancel={() => setEditing(false)}
             onSaved={(next, notes) => {
-              const { headline, primary_text, cta, generation } = next;
-              setSavedCopy({ headline, primary_text, cta, generation });
+              const { headline, primary_text, cta, generation, image_url } = next;
+              setSavedCopy({ headline, primary_text, cta, generation, image_url });
               onEdited?.(next);
               setEditNotes(notes);
               setEditing(false);
@@ -923,7 +939,7 @@ function ResultCard({
             }}
             disabled={pending}
           >
-            <Pencil className="h-3.5 w-3.5" /> Edit text
+            <Pencil className="h-3.5 w-3.5" /> Edit
           </Button>
         </div>
         {saveError && <p className="text-xs text-red-600">{saveError}</p>}

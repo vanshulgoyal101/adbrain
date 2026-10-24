@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/actions";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { editableCopySchema, savedCreativeDescription, type EditableCopy } from "@/lib/creative/concept";
-import { META_CTAS } from "@/lib/templates/ads";
+import { pictureDesign, pictureWordsOf, pictureWordsSchema, type PictureWords } from "@/lib/creative/picture-words";
+import { META_CTAS, type BrandContext } from "@/lib/templates/ads";
 import type { Creative } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const LIMITS = {
   headline: editableCopySchema.shape.headline.maxLength ?? 40,
@@ -23,10 +25,12 @@ export function CreativeCopyEditor({
   creative,
   onSaved,
   onCancel,
+  onBusy,
 }: {
   creative: Creative;
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [copy, setCopy] = useState<EditableCopy>(() => ({
     headline: creative.headline ?? "",
@@ -38,6 +42,7 @@ export function CreativeCopyEditor({
   }));
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
+  useEffect(() => onBusy?.(saving), [saving, onBusy]);
   const field = (key: keyof EditableCopy) => `copy-${creative.id}-${key}`;
   const set = <K extends keyof EditableCopy>(key: K, value: EditableCopy[K]) =>
     setCopy((current) => ({ ...current, [key]: value }));
@@ -163,6 +168,158 @@ export function CopyEditNotice({ notes }: { notes: CopyEditNotes }) {
         <p className="flex items-start gap-1.5 text-xs text-slate-600">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {notes.liveNotice}
         </p>
+      )}
+    </div>
+  );
+}
+
+const PICTURE_LIMITS = {
+  headline: pictureWordsSchema.shape.headline.maxLength ?? 40,
+  subhead: pictureWordsSchema.shape.subhead.maxLength ?? 64,
+  phone: pictureWordsSchema.shape.phone.maxLength ?? 20,
+};
+
+/** Redraws the words printed on the picture over the same background (#280). No AI. */
+export function PictureWordsEditor({
+  creative,
+  brand,
+  onSaved,
+  onCancel,
+  onBusy,
+}: {
+  creative: Creative;
+  brand: BrandContext;
+  onSaved: (creative: Creative, notes: CopyEditNotes) => void;
+  onCancel: () => void;
+  onBusy?: (busy: boolean) => void;
+}) {
+  const [words, setWords] = useState<PictureWords>(() => pictureWordsOf(pictureDesign(creative, brand)));
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => onBusy?.(saving), [saving, onBusy]);
+  const field = (key: keyof PictureWords) => `picture-${creative.id}-${key}`;
+  const set = <K extends keyof PictureWords>(key: K, value: PictureWords[K]) =>
+    setWords((current) => ({ ...current, [key]: value }));
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/creatives/${creative.id}/picture`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(words),
+      });
+      const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
+      if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
+      else setError(data.error ?? "Couldn't redraw the picture. Try again.");
+    } catch {
+      setError("Couldn't redraw the picture. Check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const counter = (key: keyof typeof PICTURE_LIMITS) => (
+    <span className="text-xs tabular-nums text-slate-400">
+      {words[key].length}/{PICTURE_LIMITS[key]}
+    </span>
+  );
+
+  return (
+    <form aria-label="Edit words on the picture" onSubmit={save} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={field("headline")}>Headline on picture</Label>
+          {counter("headline")}
+        </div>
+        <Input id={field("headline")} value={words.headline} maxLength={PICTURE_LIMITS.headline} onChange={(e) => set("headline", e.target.value)} autoFocus />
+      </div>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={field("subhead")}>Offer line</Label>
+          {counter("subhead")}
+        </div>
+        <Input id={field("subhead")} value={words.subhead} maxLength={PICTURE_LIMITS.subhead} placeholder="Optional, e.g. Free site visit this week" onChange={(e) => set("subhead", e.target.value)} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={field("phone")}>Phone</Label>
+        <Input id={field("phone")} type="tel" inputMode="tel" value={words.phone} maxLength={PICTURE_LIMITS.phone} placeholder="Optional" onChange={(e) => set("phone", e.target.value)} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={field("ctaLabel")}>Button on picture</Label>
+        <Select id={field("ctaLabel")} value={words.ctaLabel} onChange={(e) => set("ctaLabel", e.target.value as PictureWords["ctaLabel"])}>
+          {META_CTAS.map((cta) => (
+            <option key={cta} value={cta}>
+              {cta}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {error && (
+        <p className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">
+        Redraws only the words on the picture, on the same background. No AI and no cost.
+      </p>
+      <div className="flex gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={saving} className="h-11 flex-1">
+          Cancel
+        </Button>
+        <Button type="submit" size="sm" variant="primary" disabled={saving} className="h-11 flex-1">
+          {saving ? "Redrawing…" : "Save"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** One Edit entry point with a tab per part of the ad. */
+export function CreativeEditor({
+  creative,
+  brand,
+  onSaved,
+  onCancel,
+}: {
+  creative: Creative;
+  brand: BrandContext;
+  onSaved: (creative: Creative, notes: CopyEditNotes) => void;
+  onCancel: () => void;
+}) {
+  const [tab, setTab] = useState<"text" | "picture">("text");
+  // Switching tabs mid-save would unmount the editor whose request is still running.
+  const [busy, setBusy] = useState(false);
+  const tabs = [
+    ["text", "Ad text"],
+    ["picture", "Words on picture"],
+  ] as const;
+  return (
+    <div className="flex flex-col gap-3">
+      <div role="tablist" aria-label="What to edit" className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+        {tabs.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            disabled={busy}
+            onClick={() => setTab(id)}
+            className={cn(
+              "h-9 rounded-md text-sm font-medium transition-colors disabled:opacity-60",
+              tab === id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "text" ? (
+        <CreativeCopyEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
+      ) : (
+        <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
       )}
     </div>
   );
