@@ -104,9 +104,10 @@ Routine steps never wait for the CEO or the CTO.
 
 ### Standing rules
 
-- **Worktrees.** Use `/Users/vanshulgoyal/Development/copilot/adbrain-wt/<issue>`,
-  not `/tmp`, which is wiped on restart. Install dependencies once per worktree
-  so typecheck and tests run for real. Push your branch at each coherent step.
+- **Worktrees.** Start one with `bash scripts/wt.sh <issue>`: a `work/issue-<n>`
+  branch from `origin/main` at `/Users/vanshulgoyal/Development/copilot/adbrain-wt/<issue>`,
+  with `node_modules` cloned from a shared lockfile cache in seconds (a full `npm ci`
+  only when the lockfile changed). Not `/tmp`, which is wiped on restart. Push your branch at each coherent step.
   Never edit the owner's checkout (`adbrain/`).
 - **Checks.** Run the tests for what you changed plus typecheck; CI runs the rest.
   Do not rerun full suites or re-review unchanged code.
