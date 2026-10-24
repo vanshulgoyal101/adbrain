@@ -79,7 +79,7 @@ describe("/api/meta/managed/page (#523)", () => {
     const linked = await POST(post({ attemptId, pageId: "111" }));
     expect((await linked.json()).data).toEqual({ ok: true, state: "page_linked", pageId: "111" });
     expect(state.inserts).toEqual([
-      { table: "managed_meta_accounts", values: { business_id: "b1", page_id: "111", state: "page_linked" } },
+      { table: "managed_meta_accounts", values: { business_id: "b1", page_id: "111", state: "requested" } },
       { table: "managed_meta_account_events", values: expect.objectContaining({ business_id: "b1", step: "page", outcome: "succeeded", meta_object_id: "111" }) },
     ]);
   });
