@@ -25,7 +25,7 @@ label it for the owner instead of doing it.
 
 | Role | Owns | Hands off |
 | --- | --- | --- |
-| **CEO** | Priorities and target dates, money and budgets, decisions (`decision`), the owner's steps (Meta, Razorpay, sign-ins), this dispatch. Turns owner requests into issues | Building anything: implementation goes to the CTO or a worker |
+| **CEO** | Priorities and target dates, money and budgets, decisions (`decision`), the owner's steps (Meta, Razorpay, sign-ins), this dispatch. Turns owner requests into issues. Checks weekly that skills are used | Building anything: implementation goes to the CTO or a worker |
 | **CTO** | Technical direction and designs, assigning and briefing issues, the worker table, labels, CI and production health, high-impact reviews, publishing `Lesson:` lines | Feature building (assign it); priority and money (CEO) |
 | **Dev** | Create: the assistant, interview, generation and its tests (`ad-assistant.tsx`, `interview.ts`), plus issues assigned to you | Migrations, config, money releases (DevOps); priority (CEO) |
 | **Dev 2** | Editing ads and image rendering, Meta App Review (#156), plus issues assigned to you | Same as Dev |
@@ -35,6 +35,11 @@ label it for the owner instead of doing it.
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
 auto-merge); hand off with the label and one `→ Role:` line.
+**Skills first (owner, Oct 24: the highest-value habit).** Before any task, load
+the matching skill from `.github/skills/` (task → skill map: #408). No good match?
+Find a maintained, licence-checked open-source skill, add it with a SOURCES.md line
+in a small auto-merge PR (pre-approved), then use it. Reusable lessons go to the CTO,
+who publishes them to the skills repo.
 
 ### How work flows
 
@@ -149,6 +154,8 @@ CEO priorities and targets (Oct 24, 10:50Z; owner: lean, high value only). Every
 open issue has a target; a miss gets one line on its issue with the new date. The
 CTO's queue map (#364) orders each worker's row to match.
 
+- **Top today: #408, skills used on every task** (CTO; owner: the single most
+  high-value thing). See Role cards → Skills first.
 - **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
   (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
   Facebook account, Submit). Meta then takes days to weeks. No outside sign-ups yet.
