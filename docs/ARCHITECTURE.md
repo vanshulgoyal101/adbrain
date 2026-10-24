@@ -81,6 +81,13 @@ current patterns with older framework recipes without checking them.
   generation/binding, then rereads the token binding before decrypting credentials.
   Pause/delete require the campaign's original binding and generation; they do not
   need an activation capability, but still need management permission.
+  A **managed** business (2-Tier child under AdBrain's parent business, #518) has a
+  `managed_meta_accounts` row instead (#519). With `MANAGED_ACCOUNTS_ENABLED`, its calls use
+  that row's child ad account and Page with the parent system user's token
+  (`META_PARENT_SYSTEM_TOKEN`), through the same generation, binding and capability checks;
+  it never falls back to an OAuth connection, and activation needs `funding_state = funded`.
+  Businesses without a managed row stay on their OAuth connection
+  ([managed-account.ts](../src/lib/meta/managed-account.ts), #525).
 5. Admin clients bypass RLS. Each trusted-write/RPC boundary must therefore enforce
   its own actor, tenant and concurrency conditions. Development DB-A callers depend
   on their corresponding migration grants/functions being installed.
