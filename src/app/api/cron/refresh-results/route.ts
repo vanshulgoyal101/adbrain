@@ -14,8 +14,9 @@ export const maxDuration = 60;
 
 const RESULT_INTERVAL_MS = 3_600_000;
 const START_BUDGET_MS = 40_000;
-// Problems first seen this recently are reported, so a missed workflow run still alerts.
-const ALERT_WINDOW_MS = 2 * 3_600_000;
+// Problems first seen this recently are reported. pg_cron refreshes hourly (#274) but the issue-opening
+// GitHub run can come hours later; it dedupes by key, so a wide window repeats nothing.
+const ALERT_WINDOW_MS = 24 * 3_600_000;
 
 /**
  * Scheduled results refresh (#258): at most hourly per active campaign, read Meta

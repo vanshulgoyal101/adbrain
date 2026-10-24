@@ -243,8 +243,10 @@ boundary. A streamed loading shell is not successful hydration or working filter
 
 ## 6. Scheduled Jobs and Rollback
 
-Both cron endpoints run daily at 06:00 UTC in source configuration. Enforcement
-uses stored spend and can pause ads; keepalive can prune old product events.
+Supabase `pg_cron` calls enforce-spend and lead sync every 15 minutes and the
+results refresh hourly; Vercel also runs keepalive and enforce-spend daily at
+06:00 UTC. Enforcement uses stored spend and can pause ads; keepalive can prune
+old product events.
 See [Operations](OPERATIONS.md#scheduled-jobs) for authentication, timing limits,
 partial results, and monitoring. A cron declaration does not prove a job ran.
 
