@@ -1,4 +1,5 @@
 "use client";
+import { AD_FLOW, Stepper } from "@/components/ui/stepper";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 
 import Link from "next/link";
@@ -287,56 +288,17 @@ export function Studio({
 
   return (
     <div className="flex flex-col gap-4">
-      <ol
-        aria-label="Creative workflow"
-        className="grid grid-cols-4 overflow-hidden border-y border-slate-200 bg-white"
-      >
-        {[
-          ["01", "Brief", "Set the campaign goal"],
-          ["02", "Generate", "Create on-brand variants"],
-          ["03", "Review", `${reviewCount} awaiting approval`],
-          ["04", "Launch", `${approvedCount} ready for a campaign`],
-        ].map(([number, label, detail], index) => (
-          <li
-            key={label}
-            aria-current={workflowStep === index + 1 ? "step" : undefined}
-            className={cn(
-              "flex min-w-0 items-center gap-2 border-r border-slate-200 px-2 py-2.5 last:border-r-0 sm:px-4",
-              workflowStep === index + 1
-                ? "bg-slate-950 text-white"
-                : "text-slate-600",
-            )}
-          >
-            <span
-              className={cn(
-                "hidden text-[10px] font-semibold tracking-normal sm:inline",
-                workflowStep === index + 1
-                  ? "text-amber-300"
-                  : "text-slate-400",
-              )}
-            >
-              {number}
-            </span>
-            <p className="truncate text-xs font-semibold sm:text-sm">{label}</p>
-            <p
-              className={cn(
-                "sr-only",
-                workflowStep === index + 1
-                  ? "text-slate-300"
-                  : "text-slate-500",
-              )}
-            >
-              {detail}
-            </p>
-          </li>
-        ))}
-      </ol>
+      <Stepper
+        current={AD_FLOW[workflowStep - 1]}
+        details={{ Review: `${reviewCount} awaiting approval`, Launch: `${approvedCount} ready for a campaign` }}
+        className="border-y border-slate-200 bg-white px-2 py-1.5"
+      />
       <details
         open={items.length === 0 || Boolean(pendingGeneration)}
         className="border-b border-slate-200 pb-3"
       >
         <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-900">
-          New creative brief
+          Make more ads
         </summary>
         <div className="pt-4">
           <form onSubmit={generate} className="flex flex-col gap-4">
@@ -409,7 +371,7 @@ export function Studio({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
-          Creatives{" "}
+          Ads{" "}
           <span className="font-normal text-slate-400">({items.length})</span>
         </h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -445,7 +407,7 @@ export function Studio({
       {items.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-4">
           <fieldset className="flex flex-wrap gap-1">
-            <legend className="sr-only">Creative status</legend>
+            <legend className="sr-only">Ad status</legend>
             {(
               [
                 ["all", `All (${items.length})`],
@@ -474,7 +436,7 @@ export function Studio({
             ))}
           </fieldset>
           <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-600">
-            Search creatives
+            Search ads
             <input
               type="search"
               value={search}
@@ -515,7 +477,7 @@ export function Studio({
         </Card>
       ) : selectedCreative ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
-          <section aria-label="Creative board" className="min-w-0">
+          <section aria-label="Ads" className="min-w-0">
             <ul
               className="scrollbar-stable flex gap-3 overflow-x-auto p-1 lg:grid lg:max-h-[75vh] lg:grid-cols-2 lg:overflow-y-scroll"
             >
@@ -526,7 +488,7 @@ export function Studio({
                   <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
                     <button
                       type="button"
-                      aria-label={`Inspect ${creative.headline || "untitled creative"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
+                      aria-label={`Inspect ${creative.headline || "untitled ad"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
                       aria-pressed={creative.id === selectedCreative.id}
                       onClick={() => setSelectedId(creative.id)}
                       data-product-event="creative.inspect"
@@ -555,7 +517,7 @@ export function Studio({
                       </div>
                       <div className="p-3">
                         <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
-                          {creative.headline || "Untitled creative"}
+                          {creative.headline || "Untitled ad"}
                         </p>
                         <p className="mt-2 text-xs text-slate-600">
                           {statusLabel}
@@ -569,7 +531,7 @@ export function Studio({
             </ul>
           </section>
           <section
-            aria-label="Creative inspector"
+            aria-label="Ad details"
             className="min-w-0 lg:sticky lg:top-4"
           >
             <CreativeCard
@@ -698,7 +660,7 @@ function CreativeCard({
   }
 
   function remove() {
-    if (!window.confirm("Delete this creative? This can't be undone.")) return;
+    if (!window.confirm("Delete this ad? This can't be undone.")) return;
     setRegenError(null);
     startTransition(async () => {
       try {
@@ -832,7 +794,7 @@ function CreativeCard({
             onClick={onPreview}
             data-product-event="creative.inspect"
             aria-label={`Preview ${creative.headline ?? "creative"}`}
-            title="Enlarge creative"
+            title="Enlarge ad"
             className="h-11 w-11 shrink-0 p-0"
           >
             <Eye className="h-4 w-4" />
@@ -874,8 +836,8 @@ function CreativeCard({
             variant="ghost"
             onClick={remove}
             disabled={pending || regenerating}
-            aria-label="Delete creative"
-            title="Delete creative"
+            aria-label="Delete ad"
+            title="Delete ad"
             className="h-11 w-11 shrink-0 p-0"
           >
             <Trash2 className="h-4 w-4 text-slate-400" />

@@ -46,7 +46,7 @@ describe("Review to campaign (#134)", () => {
     expect(url.pathname).toBe("/campaigns");
     expect(url.searchParams.get("new")).toBe("1");
     expect(url.searchParams.get("creatives")!.split(",")).toEqual([approvedA.id, approvedB.id]);
-    expect(within(screen.getByRole("list", { name: "Creative workflow" })).getByText("Launch")).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Steps to an ad" })).getByText("Launch")).toBeTruthy();
   });
 
   it("disables Create campaign until an ad is approved", () => {

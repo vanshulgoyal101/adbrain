@@ -305,7 +305,7 @@ describe("<Studio> generation", () => {
       ) as unknown as typeof fetch;
 
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    fireEvent.click(screen.getByText("New creative brief"));
+    fireEvent.click(screen.getByText("Make more ads"));
     fireEvent.change(screen.getByLabelText(/what are we advertising/i), {
       target: { value: "x" },
     });
@@ -450,7 +450,7 @@ describe("<Studio> creative preview", () => {
 describe("<Studio> deletion", () => {
   it("confirms before deleting and then removes the card", async () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    fireEvent.click(screen.getByRole("button", { name: /delete creative/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete ad/i }));
 
     expect(window.confirm).toHaveBeenCalled();
     await waitFor(() => expect(h.deleteCreative).toHaveBeenCalledWith("c1"));
@@ -462,7 +462,7 @@ describe("<Studio> deletion", () => {
   it("keeps the creative when the owner cancels", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    fireEvent.click(screen.getByRole("button", { name: /delete creative/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete ad/i }));
     expect(h.deleteCreative).not.toHaveBeenCalled();
     expect(
       screen.getByRole("heading", { name: "Cut your power bill" }),
@@ -925,7 +925,7 @@ describe("<Studio> review board", () => {
       creative({ id: "c1", headline: "Same offer", primary_text: "First concept copy." }),
     ];
     const { rerender } = render(<Studio key="first" business={business} initialCreatives={variants} />);
-    const board = within(screen.getByRole("region", { name: "Creative board" }));
+    const board = within(screen.getByRole("region", { name: "Ads" }));
     const first = board.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 1 of 2" });
     const second = board.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" });
     expect(board.getByText("Variant 1 of 2")).toBeVisible();
@@ -933,9 +933,9 @@ describe("<Studio> review board", () => {
     second.focus();
     await user.keyboard("{Enter}");
     expect(second).toHaveAttribute("aria-pressed", "true");
-    expect(within(screen.getByRole("region", { name: "Creative inspector" })).getByText("Second concept copy.")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("Second concept copy.")).toBeInTheDocument();
 
-    const search = screen.getByRole("searchbox", { name: "Search creatives" });
+    const search = screen.getByRole("searchbox", { name: "Search ads" });
     await user.type(search, "First concept copy.");
     expect(first).toHaveAttribute("aria-pressed", "true");
     expect(board.queryByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" })).not.toBeInTheDocument();
@@ -943,12 +943,12 @@ describe("<Studio> review board", () => {
     expect(second).toHaveAttribute("aria-pressed", "true");
 
     rerender(<Studio key="reordered" business={business} initialCreatives={[...variants].reverse()} />);
-    const reorderedBoard = within(screen.getByRole("region", { name: "Creative board" }));
+    const reorderedBoard = within(screen.getByRole("region", { name: "Ads" }));
     const reorderedSecond = reorderedBoard.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" });
     reorderedSecond.focus();
     await user.keyboard("{Enter}");
     expect(reorderedSecond).toHaveAttribute("aria-pressed", "true");
-    expect(within(screen.getByRole("region", { name: "Creative inspector" })).getByText("Second concept copy.")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("Second concept copy.")).toBeInTheDocument();
   });
 
   it("opens a requested creative in the inspector", () => {
@@ -964,7 +964,7 @@ describe("<Studio> review board", () => {
     );
     expect(
       within(
-        screen.getByRole("region", { name: "Creative inspector" }),
+        screen.getByRole("region", { name: "Ad details" }),
       ).getByRole("heading", { name: "Second concept" }),
     ).toBeInTheDocument();
     expect(
@@ -992,7 +992,7 @@ describe("<Studio> review board", () => {
       screen.queryByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
     ).not.toBeInTheDocument();
     await user.type(
-      screen.getByRole("searchbox", { name: "Search creatives" }),
+      screen.getByRole("searchbox", { name: "Search ads" }),
       "no match",
     );
     expect(screen.getByText("No matching creatives")).toBeInTheDocument();
@@ -1052,7 +1052,7 @@ describe("<Studio> review board", () => {
   it("keeps a creative after a thrown delete error", async () => {
     h.deleteCreative.mockRejectedValueOnce(new Error("offline"));
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete creative" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete ad" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Couldn't delete the creative",
     );
@@ -1083,9 +1083,8 @@ describe("<Studio> review board", () => {
         initialCreatives={[creative({ image_url: null })]}
       />,
     );
-    expect(
-      screen.getByText("Review", { selector: "p" }).closest("li"),
-    ).toHaveAttribute("aria-current", "step");
+    const steps = within(screen.getByRole("list", { name: "Steps to an ad" }));
+    expect(steps.getByText("Review").closest("li")).toHaveAttribute("aria-current", "step");
     expect(screen.getByText("Image unavailable")).toBeInTheDocument();
   });
 });

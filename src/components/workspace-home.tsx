@@ -310,7 +310,7 @@ export function WorkspaceHome({
                     )}
                   </div>
                   <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-900 group-hover:text-blue-700">
-                    {creative.headline || "Untitled creative"}
+                    {creative.headline || "Untitled ad"}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {creative.status === "approved"
