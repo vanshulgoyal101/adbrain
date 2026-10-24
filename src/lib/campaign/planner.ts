@@ -85,7 +85,7 @@ const questionSchema = z.object({
 }).strict().refine((question) => question.type === "text" || question.allowText || (question.options?.length ?? 0) >= 2, "Question must accept an answer.")
   .refine((question) => new Set(question.options?.map((option) => option.toLowerCase())).size === (question.options?.length ?? 0), "Question options must be distinct.");
 
-const plannerResultSchema = z.discriminatedUnion("ready", [
+export const plannerResultSchema = z.discriminatedUnion("ready", [
   z.object({ ready: z.literal(true), plan: plannerPlanSchema }).strict(),
   z.object({ ready: z.literal(false), questions: z.array(questionSchema).min(1).max(3) }).strict(),
 ]);
@@ -243,6 +243,8 @@ export async function runPlanner(
     // The standard reasoning model needs 30-90s per plan, beyond the 45s planner limit.
     const completion = await complete(messages, {
       routing: "budget", task: "campaign planner", attemptTimeoutMs: 20_000,
+      // #366: Groq answers in ~1 s; when it's rate-limited, Gemini without thinking gets 5 s, then Haiku.
+      thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, extraProviders: ["openrouter"],
       json: true, responseSchema: plannerResultSchema, cache: false, signal,
       promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000,
     }).catch(async (error: unknown) => {
