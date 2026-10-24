@@ -80,9 +80,6 @@ const schema = z.object({
   META_APP_ID: z.string().optional().default(""),
   META_APP_SECRET: z.string().optional().default(""),
   META_LOGIN_CONFIG_ID: z.string().optional().default(""),
-  META_SYSTEM_USER_TOKEN: z.string().optional().default(""),
-  META_AD_ACCOUNT_ID: z.string().optional().default(""),
-  META_PAGE_ID: z.string().optional().default(""),
   // Base64-encoded 32-byte key for server-only Meta token encryption.
   META_TOKEN_ENCRYPTION_KEY: z.string().optional().default(""),
   // 2-Tier managed accounts (#518, #520): Solaride is the parent business; its system user's

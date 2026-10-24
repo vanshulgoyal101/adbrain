@@ -7,7 +7,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { metaClientFromEnv } from "@/lib/meta/client";
+import { metaClientFromEnv } from "./lib/meta-env";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 
