@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, Brain, Check, CirclePause, MapPin, ShieldCheck } from "lucide-react";
 import { MARKETING_FAQS } from "@/lib/seo/jsonLd";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import styles from "./marketing-home.module.css";
+
+// Below the first screen: kept out of the initial bundle, with its box reserved so nothing shifts.
+const AdbrainCycle = dynamic(() => import("@/components/adbrain-cycle").then((m) => m.AdbrainCycle), {
+  ssr: false,
+  loading: () => <div className={styles.cyclePlaceholder} aria-hidden="true" />,
+});
 
 const EXAMPLES = [
   {
@@ -84,17 +91,22 @@ export function MarketingHome() {
             <Image src="/campaign-preview.webp" alt="Illustrative campaign creative for a coffee shop, fitness studio, and interior designer" fill sizes="100vw" loading="eager" fetchPriority="high" className={styles.heroPhoto} />
           </picture>
           <div className={styles.heroContent}>
-            <p className={styles.eyebrow}>MARKETING FOR THE BUSINESS YOU&apos;RE BUILDING</p>
-            <h1 id="hero-title">AdBrain</h1>
-            <p className={styles.heroStatement}>Reach the right customers.</p>
-            <p className={styles.heroDescription}>Bring your business, your offer, and your ambition. Create on-brand marketing, build Facebook and Instagram campaigns, and turn enquiries into conversations.</p>
+            <h1 id="hero-title" className={styles.heroStatement}>Ads that bring customers to your WhatsApp.</h1>
+            <p className={styles.hinglish} lang="hi-Latn">Ad banao, customers paao, seedha WhatsApp par.</p>
+            <p className={styles.heroDescription}>Tell AdBrain about your business. It makes 3 Facebook and Instagram ads in about a minute, runs the one you approve within your daily limit, and shows what each chat cost.</p>
             <div className={styles.actions}>
-              <Link href="/login" className={styles.primary}>Create your first campaign <ArrowRight aria-hidden="true" size={18} /></Link>
-              <a href="#example" className={styles.heroSecondary}>Explore campaign ideas <ArrowDown aria-hidden="true" size={17} /></a>
+              <Link href="/login" className={styles.primary}>Make my first ad free <ArrowRight aria-hidden="true" size={18} /></Link>
+              <a href="#cycle" className={styles.heroSecondary}>See how it works <ArrowDown aria-hidden="true" size={17} /></a>
             </div>
-            <p className={styles.heroNote}>Your brand. Your budget. Your approval before launch.</p>
+            <p className={styles.heroNote}>Making ads is free. You pay only when you choose to run one.</p>
           </div>
           <p className={styles.heroCaption}>CAMPAIGN IDEAS / ILLUSTRATIVE EXAMPLES</p>
+        </section>
+
+        <section id="cycle" className={styles.cycle} aria-labelledby="cycle-title">
+          <h2 id="cycle-title">From your business to WhatsApp chats</h2>
+          <p>One loop: you tell us about your business, approve an ad, and see what every chat cost. The next ads learn from it.</p>
+          <AdbrainCycle showSteps className={styles.cycleWidget} />
         </section>
 
         <section id="example" className={styles.example} aria-labelledby="example-title">

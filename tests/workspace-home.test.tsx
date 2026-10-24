@@ -223,7 +223,7 @@ describe("Home workspace", () => {
     );
     queries.getAuditLog.mockResolvedValue([]);
     queries.getCampaigns.mockResolvedValue([]);
-    queries.getSpendEvaluation.mockResolvedValue(null);
+    queries.getSpendEvaluation.mockResolvedValue({ limits: {}, evaluation: { status: "healthy" } });
     queries.getMetaConnection.mockResolvedValue({ ready: false });
     const { default: DashboardPage } =
       await import("@/app/(app)/dashboard/page");

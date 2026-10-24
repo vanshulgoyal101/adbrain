@@ -9,6 +9,7 @@ import {
   Megaphone,
   Eye,
   ImageIcon,
+  Pencil,
   RefreshCw,
   RotateCcw,
   Sparkles,
@@ -29,6 +30,7 @@ import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
+import { CopyEditNotice, CreativeCopyEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { z } from "zod";
 
 z.config({ jitless: true });
@@ -359,7 +361,7 @@ export function Studio({
                   id="count"
                   value={count}
                   onChange={(e) => setCount(Number(e.target.value))}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
@@ -374,7 +376,7 @@ export function Studio({
                   id="language"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {AD_LANGUAGES.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -385,7 +387,7 @@ export function Studio({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="format">Placement</Label>
-                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500">
+                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
                   <option value="portrait">Feed 4:5</option>
                   <option value="square">Square 1:1</option>
                   <option value="story">Story 9:16</option>
@@ -629,6 +631,8 @@ function CreativeCard({
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
   const [regenError, setRegenError] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [erroredUrl, setErroredUrl] = useState<string | null>(null);
@@ -638,6 +642,7 @@ function CreativeCard({
 
   async function regenerate() {
     setConfirmingRegen(false);
+    setEditNotes(null);
     setRegenerating(true);
     setRegenError(null);
     try {
@@ -763,6 +768,18 @@ function CreativeCard({
             </span>
           )}
         </div>
+        {editing ? (
+          <CreativeCopyEditor
+            creative={creative}
+            onCancel={() => setEditing(false)}
+            onSaved={(next, notes) => {
+              onChange(next);
+              setEditNotes(notes);
+              setEditing(false);
+            }}
+          />
+        ) : (
+        <>
         <h3 className="font-semibold text-slate-900">{creative.headline}</h3>
         <p className="whitespace-pre-line text-sm text-slate-600">
           {creative.primary_text}
@@ -777,6 +794,7 @@ function CreativeCard({
             {creative.cta}
           </span>
         )}
+        {editNotes && <CopyEditNotice notes={editNotes} />}
         <GenerationDetails value={creative.generation} />
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button
@@ -789,6 +807,20 @@ function CreativeCard({
             className="h-11 w-11 shrink-0 p-0"
           >
             <Eye className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditNotes(null);
+              setConfirmingRegen(false);
+              setEditing(true);
+            }}
+            data-product-event="creative.edit"
+            disabled={pending || regenerating}
+            className="h-11 shrink-0"
+          >
+            <Pencil className="h-4 w-4" /> Edit text
           </Button>
           <Button
             size="sm"
@@ -874,6 +906,8 @@ function CreativeCard({
             </Button>
           )}
         </div>
+        </>
+        )}
         {regenError && (
           <p className="text-xs text-red-600" role="alert">
             {regenError}

@@ -221,6 +221,66 @@ function verbatimQuote(quote: string, sources: string[]): string | null {
   return null;
 }
 
+// Hindi and Punjabi "free" and "guarantee" are the same claims as the English words (#290).
+const FREE_WORD = /(?<![\p{L}\p{M}])(?:फ\u093C?्री|मुफ\u093C?्त|ਮੁਫ\u0A3C?ਤ|ਫ੍ਰੀ)(?![\p{L}\p{M}])|\bmuft\b/iu;
+const GUARANTEE_WORD = /(?<![\p{L}\p{M}])(?:गारंटी|ਗਾਰੰਟੀ)(?![\p{L}\p{M}])/u;
+/** A fact that negates ("no", "not", "नहीं", "बिना") doesn't back a claim. */
+const NEGATION = /\b(?:no|not|never|without|avoid)\b|(?<![\p{L}\p{M}])(?:नहीं|बिना|ਨਹੀਂ|ਬਿਨਾਂ)(?![\p{L}\p{M}])/iu;
+
+// "text-free" is the visual the prompt asks for, not a free offer. Match on NFC text.
+const COMMERCIAL_TERMS = new RegExp(
+  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`,
+  "giu",
+);
+
+// An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
+function citesTerm(quote: string, term: string): boolean {
+  if (/^free$/i.test(term) || FREE_WORD.test(term)) return quote.toLowerCase().includes("free") || FREE_WORD.test(quote);
+  if (GUARANTEE_WORD.test(term)) return quote.toLowerCase().includes("guarantee") || GUARANTEE_WORD.test(quote);
+  if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
+  const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
+}
+
+export const editableCopySchema = z.object({
+  headline: creativeConceptSchema.shape.headline,
+  primary_text: creativeConceptSchema.shape.primary_text,
+  // Optional when editing: older ads have none, and Meta doesn't require one.
+  description: z.string().trim().max(creativeConceptSchema.shape.description.maxLength ?? 100),
+  cta: creativeConceptSchema.shape.cta,
+});
+
+export type EditableCopy = z.infer<typeof editableCopySchema>;
+
+/**
+ * Fact check for copy the owner typed himself (#280). Same claim rules as
+ * validateConcept, but it only warns: the owner's wording is his call.
+ */
+export function copyClaimWarnings(
+  copy: Pick<EditableCopy, "headline" | "primary_text" | "description">,
+  facts: (string | null | undefined)[],
+  vertical?: string | null,
+): string[] {
+  const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "").map((fact) => fact.normalize("NFC"));
+  const text = [copy.headline, copy.primary_text, copy.description].join(" ").normalize("NFC");
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+  for (const term of text.match(COMMERCIAL_TERMS) ?? []) {
+    const key = term.toLowerCase().replace(/\s+/g, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!sources.some((fact) => citesTerm(fact, term) && !NEGATION.test(fact))) {
+      warnings.push(`"${term.trim()}" isn't in your Brand. Check it's true, or add it to your Brand's offers.`);
+    }
+  }
+  for (const finding of scanAdCopy(text, { bannedClaims: bannedClaimsForVertical(vertical) })) {
+    if (finding.rule === "banned-claim") {
+      warnings.push(`"${finding.detail}" is a health claim Meta often rejects. Consider rewording it.`);
+    }
+  }
+  return warnings;
+}
+
 export function validateConcept(
   value: unknown,
   input: ConceptInput,
@@ -284,23 +344,9 @@ export function validateConcept(
   if (firstLine.length > FOLD_CHARACTERS) {
     issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
   }
-  // "text-free" is the visual the prompt asks for, not a free offer.
-  // Hindi and Punjabi "free" and "guarantee" are the same claims as the English words (#290).
-  const freeWord = /(?<![\p{L}\p{M}])(?:फ\u093C?्री|मुफ\u093C?्त|ਮੁਫ\u0A3C?ਤ|ਫ੍ਰੀ)(?![\p{L}\p{M}])|\bmuft\b/iu;
-  const guaranteeWord = /(?<![\p{L}\p{M}])(?:गारंटी|ਗਾਰੰਟੀ)(?![\p{L}\p{M}])/u;
-  const negation = /\b(?:no|not|never|without|avoid)\b|(?<![\p{L}\p{M}])(?:नहीं|बिना|ਨਹੀਂ|ਬਿਨਾਂ)(?![\p{L}\p{M}])/iu;
-  const commercialTerms = new RegExp(
-    `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${freeWord.source}|${guaranteeWord.source}`,
-    "giu",
-  );
-  // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
-  const cites = (quote: string, term: string) => {
-    if (/^free$/i.test(term) || freeWord.test(term)) return quote.toLowerCase().includes("free") || freeWord.test(quote);
-    if (guaranteeWord.test(term)) return quote.toLowerCase().includes("guarantee") || guaranteeWord.test(quote);
-    if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && guaranteeWord.test(quote));
-    const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
-  };
+  const commercialTerms = COMMERCIAL_TERMS;
+  const cites = citesTerm;
+  const negation = NEGATION;
   const visualClaims = concept.visual.direction
     .split(/(?:[.!?;](?=\s|$)\s*|\s+\bbut\b\s+)/i)
     .filter((clause) => !/^(?:avoid|do not|don't|omit|exclude|never (?:show|include|add|render|depict|use))\b/i.test(clause.trim()))
