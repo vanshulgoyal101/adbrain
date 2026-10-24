@@ -30,6 +30,7 @@ import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/intervie
 import { isWriteYourOwnOption } from "@/lib/creative/interview-options";
 import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
 import { CREATE_LANGUAGES, defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
+import type { OpeningLine } from "@/lib/campaign/result-evidence";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -117,7 +118,7 @@ function clearDraft(businessId: string): void {
   }
 }
 
-export function AdAssistant({ business }: { business: Business }) {
+export function AdAssistant({ business, opening = null }: { business: Business; opening?: OpeningLine | null }) {
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -497,6 +498,21 @@ export function AdAssistant({ business }: { business: Business }) {
                 What would you like to achieve?
               </h2>
             </div>
+            {opening && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+                <p className="text-sm text-slate-800">{opening.text}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {opening.moreLikeThis && (
+                    <Button size="sm" variant="outline" onClick={() => { setGoal(opening.moreLikeThis!.goal); setReferenceBrief(opening.moreLikeThis!.referenceBrief); }}>
+                      More like this
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => { setGoal(opening.newAngle.goal); setReferenceBrief(undefined); }}>
+                    New angle
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="min-w-0">
               <label htmlFor="assistant-goal" className="text-sm font-medium text-slate-800">
                 Campaign goal

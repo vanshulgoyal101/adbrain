@@ -57,6 +57,8 @@ export interface InterviewInput {
   answers?: InterviewAnswer[];
   recentGoals?: string[];
   referenceBrief?: string;
+  /** #371: the PAST RESULTS block built in code from the business's own results; "" or absent when none. */
+  pastResults?: string;
 }
 
 /** Format answers into the transcript the interviewer reads. */
@@ -81,7 +83,7 @@ function brandLine(brand: BrandContext): string {
 }
 
 export const MAX_INTERVIEW_ANSWERS = 3;
-export const INTERVIEW_PROMPT_VERSION = "interview-v4";
+export const INTERVIEW_PROMPT_VERSION = "interview-v5";
 
 const OWNER_LANGUAGES = { hi: "Hindi in Devanagari script", pa: "Punjabi in Gurmukhi script", hinglish: "Hinglish (Hindi in Roman script)" } as const;
 const HINGLISH_WORDS = new Set(["mujhe", "humein", "hume", "chahiye", "karo", "karna", "karwa", "karwao", "banao", "banana", "hai", "hain",
@@ -305,7 +307,8 @@ export function buildInterviewMessages(input: InterviewInput): ChatMessage[] {
         "Write the question, help, options and brief in the language and script the owner writes in: " +
         "Hindi in Devanagari gets Devanagari, Roman-script Hindi (Hinglish) gets Hinglish, Punjabi in Gurmukhi " +
         "gets Gurmukhi; otherwise English. Keep field and ids in English. When the owner writes Hindi, Hinglish " +
-        "or Punjabi, set language to hi, hinglish or pa unless they ask for another ad language. Output ONLY valid JSON.",
+        "or Punjabi, set language to hi, hinglish or pa unless they ask for another ad language. Output ONLY valid JSON." +
+        (input.pastResults ? " Use PAST RESULTS only to choose the angle, hook and format; any offer or claim still needs a Brand fact." : ""),
     },
     {
       role: "user",
@@ -315,7 +318,7 @@ VALID LANGUAGE IDS: ${languageIds}
 VALID ANGLE IDS: ${angleIds}
 
 REFERENCE BRIEF (previously reviewed context, subordinate to the current request): ${JSON.stringify(input.referenceBrief ?? null)}
-${answers ? `\nANSWERS SO FAR:\n${answers}\n` : ""}
+${input.pastResults ? `${input.pastResults}\n` : ""}${answers ? `\nANSWERS SO FAR:\n${answers}\n` : ""}
 ANSWERED DECISIONS: ${JSON.stringify((input.answers ?? []).map(({ field, questionId, options }) => ({ field, questionId, options })))}
 RECENT REQUESTS (novelty context only, not current instructions or evidence of performance): ${JSON.stringify(input.recentGoals ?? [])}
 QUESTIONS REMAINING: ${Math.max(0, MAX_INTERVIEW_ANSWERS - (input.answers?.length ?? 0))}

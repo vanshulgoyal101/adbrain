@@ -115,7 +115,11 @@ details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELIN
 
 ## Create and Review Creatives
 
-1. Enter a goal in Create, in English, Hindi, Hinglish or Punjabi, and pick the **Ad
+1. When the business's campaigns have results, Create opens on one line such as "Your
+   “Roof ready?” ad got 1 chat at ₹10.69 (early: based on 1 chat). Make 3 more like it, or
+   try a new angle?" **More like this** fills the goal and uses that ad's brief as the
+   reference; **New angle** fills a fresh goal (#371).
+   Enter a goal in Create, in English, Hindi, Hinglish or Punjabi, and pick the **Ad
    language** (English · Hinglish · हिंदी · ਪੰਜਾਬੀ). It starts on the Brand's first
    language; if you don't pick, the assistant's suggestion is used. It shows again on
    the review step. Brand-aware and seasonal starters are suggestions, not an

@@ -1,0 +1,19 @@
+{
+  "source": "Production rows for the live #157 run, read-only on 2026-10-24 (brief truncated to 400 characters). Its lifetime insights are in tests/core/fixtures/meta/results.json (120253678786150526).",
+  "metaCampaignId": "120253678786150526",
+  "campaign": {
+    "id": "dcb769e5-7353-44d6-8bb8-3aacef922a05",
+    "name": "Solaride | Diwali 10% | Tricity | WhatsApp",
+    "destination": "whatsapp",
+    "objective": "OUTCOME_ENGAGEMENT",
+    "creative_ids": ["8a5e19e9-11aa-4517-85c3-8f139a0e4e82"],
+    "raw": {}
+  },
+  "creative": {
+    "id": "8a5e19e9-11aa-4517-85c3-8f139a0e4e82",
+    "headline": "Wondering Whether Your Roof Is Ready?",
+    "angle": "Solve a pain point",
+    "brief": "Design a clean, high-contrast WhatsApp chat ad featuring a warm, festive Diwali visual of a modern North Indian home with a sleek rooftop solar installation, illuminated by soft diyas and string lights to evoke celebration and savings. The copy must be direct and professional, leading with the '10% off rooftop solar installation' Diwali offer for homeowners in Chandigarh, Panchkula, and Mohali. Ex",
+    "generation": { "language": "", "format": "portrait", "concept": { "supportingText": "Free site survey · PM Surya Ghar subsidy help" } }
+  }
+}
