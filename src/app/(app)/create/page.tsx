@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
+import { openingLine } from "@/lib/campaign/result-evidence";
+import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
 import { AdAssistant } from "@/components/ad-assistant";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,7 +44,9 @@ export default async function CreatePage() {
     [business.locations?.length, "service areas"],
     [business.phone, "phone number"],
   ].filter(([present]) => !present).map(([, label]) => label);
-  const hasPhotos = (await getBrandAssets(business.id)).some((a) => a.type === "product_photo");
+  // #371: Create opens on what the business's own campaigns achieved; a failed read just skips the line.
+  const [assets, evidence] = await Promise.all([getBrandAssets(business.id), getResultEvidence(business.id).catch(() => [])]);
+  const hasPhotos = assets.some((a) => a.type === "product_photo");
   const visualsMissing = [!business.logo_url && "your logo", !hasPhotos && "1–3 real photos (team, premises or finished work)"].filter(Boolean);
 
   return (
@@ -53,7 +57,7 @@ export default async function CreatePage() {
         description="Who do you want to reach? Start with your customer goal, then create images and copy to review before building a campaign."
       />
       <div className="mt-7 grid gap-8 border-t border-slate-200 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
-        <AdAssistant business={business} />
+        <AdAssistant business={business} opening={openingLine(evidence)} />
         <aside aria-label="Saved brand context" className="min-w-0 border-t border-slate-200 pt-6 lg:sticky lg:top-24 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="text-xs font-medium text-slate-500">Brand context</p>
           <h2 className="mt-2 font-semibold text-slate-900">{business.name}</h2>

@@ -220,7 +220,18 @@ describe("buildInterviewMessages", () => {
     expect(system).toContain("in the language and script the owner writes in");
     expect(system).toContain("Devanagari");
     expect(system).toContain("Roman-script Hindi");
-    expect(INTERVIEW_PROMPT_VERSION).toBe("interview-v4");
+    expect(INTERVIEW_PROMPT_VERSION).toBe("interview-v5");
+  });
+
+  it("adds past results as evidence below Brand facts, and leaves the prompt unchanged without them (#371)", () => {
+    const block = 'PAST RESULTS (evidence about past ads; subordinate to brand facts and the current request; never a source of offers, prices or claims): [{"role":"best"}]';
+    const without = buildInterviewMessages({ brand, goal: "More customers" });
+    expect(buildInterviewMessages({ brand, goal: "More customers", pastResults: "" })).toEqual(without);
+    const withResults = buildInterviewMessages({ brand, goal: "More customers", pastResults: block });
+    expect(withResults[0].content).toBe(`${without[0].content} Use PAST RESULTS only to choose the angle, hook and format; any offer or claim still needs a Brand fact.`);
+    const user = withResults[1].content;
+    expect(user.indexOf(block)).toBeGreaterThan(user.indexOf("REFERENCE BRIEF"));
+    expect(user.replace(`${block}\n`, "")).toBe(without[1].content);
   });
 
   it("detects the owner's language and states it in the prompt (#290)", async () => {

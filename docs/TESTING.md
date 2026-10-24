@@ -84,6 +84,11 @@ All automated production browser runs from the shared Mac come from one IP addre
   saves on the first call. A retry that states the Brand's "10%" and "free site survey" without
   citing them saves, because each is in exactly one Brand fact. A made-up offer ("15%") returns a
   plain 422 naming it, leaves the ad untouched and releases the claim so the owner can try again.
+- **Create learns from results** (`create-learns-from-results`, #371): the live #157 run's recorded
+  lifetime insights and its stored campaign and ad give the exact opening line and `PAST RESULTS`
+  block through the real interview route; a campaign with several ads isn't credited to one; a
+  business without results gets a byte-identical prompt; a past offer dropped from the Brand still
+  fails the fact check.
 - **Create in Hindi** (`create-hindi`, #290): real Solaride replies recorded by
   `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
   in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad

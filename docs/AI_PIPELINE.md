@@ -36,6 +36,14 @@ Options that mean "I'll type my own" (custom, other, type below) are dropped and
 text box is kept. An answer that adds no fact (such a chip, skip, not sure) does not
 count as a repeat, so the question can be asked again. A currency amount such as
 "₹10,000" is supported by "10,000 rupees" or "Rs 10000" in a source (#284).
+Past results (#371): when the business has a campaign with stored results from the last
+60 days and spend above zero, the interview gets a `PAST RESULTS` block after the
+reference brief (the cheapest campaign per result and the weakest, built in
+`src/lib/campaign/result-evidence.ts`) and one system rule: use them only for angle, hook
+and format; offers and claims still need a Brand fact. An ad is credited only when its
+campaign ran one ad. The wording is fixed in code: under 5 results "early: based on N
+chats", 5–19 "so far", 20+ plain, none "₹X spent, no chats yet". Without results the
+prompt is unchanged. The concept fact check never sees past results.
 Failed attempts log rule names only (`metadata.validationRules`, for example
 `unsupported-commercial-claim`, `repeated-question`, `schema:<path>`).
 

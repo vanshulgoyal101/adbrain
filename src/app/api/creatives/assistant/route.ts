@@ -12,6 +12,8 @@ import { configuredMonthlyTokenLimit, monthlyTokenUsage, persistLLMUsage } from 
 import { rateLimitResponse } from "@/lib/security/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveInstructionsText } from "@/lib/supabase/queries";
+import { pastResultsBlock } from "@/lib/campaign/result-evidence";
+import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -51,10 +53,14 @@ async function handlePOST(req: Request) {
       if (used === null) return apiError("AI usage limits could not be verified. No interview was started.", 503);
       if (used >= limit) return apiError("This business has reached its monthly AI generation limit.", 429);
     }
-    const instructions = await getActiveInstructionsText(businessId);
-    const preferences = await preferenceContext(businessId, "creative", `${goal}\n${answers.map(answer => answer.answer).join("\n")}`);
+    const [instructions, preferences, evidence] = await Promise.all([
+      getActiveInstructionsText(businessId),
+      preferenceContext(businessId, "creative", `${goal}\n${answers.map(answer => answer.answer).join("\n")}`),
+      // #371: past results are optional evidence; a failed read leaves the interview as it was.
+      getResultEvidence(businessId).catch(() => []),
+    ]);
     const requestId = currentRequestId();
-    const result = await runInterview({ brand: business, instructions, preferences, goal, answers, recentGoals, referenceBrief }, {
+    const result = await runInterview({ brand: business, instructions, preferences, goal, answers, recentGoals, referenceBrief, pastResults: pastResultsBlock(evidence) }, {
       signal: req.signal,
       onAttempt: async (completion, attempt, valid, rules = []) => {
         if (!completion.usage) return;
