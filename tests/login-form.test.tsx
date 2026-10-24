@@ -6,12 +6,16 @@ import LoginPage from "@/app/login/page";
 
 const mocks = vi.hoisted(() => ({
   redirect: "/studio?view=drafts",
-  replace: vi.fn(), refresh: vi.fn(),
+  replace: vi.fn(), refresh: vi.fn(), open: vi.fn(),
   signInWithOtp: vi.fn(), signInWithOAuth: vi.fn(), signInWithPassword: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams({ redirect: mocks.redirect }),
   useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
+}));
+vi.mock("@/lib/auth-redirect", async original => ({
+  ...await original<typeof import("@/lib/auth-redirect")>(),
+  openAfterSignIn: mocks.open,
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: mocks }) }));
 
@@ -46,7 +50,7 @@ describe("sign-in outcomes reach the server without the email (#451 L4)", () => 
     fireEvent.click(screen.getByRole("button", { name: "Sign in with password" }));
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "Sign in with password" }));
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.open).toHaveBeenCalled());
     expect(beacons()).toEqual([{ method: "password", outcome: "failed", code: "invalid_credentials" }, { method: "password", outcome: "success" }]);
     expect(JSON.stringify(vi.mocked(fetch).mock.calls)).not.toContain("owner@example.test");
   });
@@ -80,14 +84,15 @@ describe("login completion and recovery", () => {
     mocks.redirect = redirect;
     fillLogin();
     fireEvent.click(screen.getByRole("button", { name: "Sign in with password" }));
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(mocks.open).toHaveBeenCalledWith("/dashboard"));
   });
 
-  it("retains a local password destination and refreshes authenticated data", async () => {
+  it("opens a local password destination with a full page load (#458)", async () => {
     fillLogin();
     fireEvent.click(screen.getByRole("button", { name: "Sign in with password" }));
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/studio?view=drafts"));
-    expect(mocks.refresh).toHaveBeenCalledOnce();
+    await waitFor(() => expect(mocks.open).toHaveBeenCalledWith("/studio?view=drafts"));
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Signing in..." })).toBeDisabled();
   });
 
   it.each([
@@ -100,7 +105,7 @@ describe("login completion and recovery", () => {
     fireEvent.click(screen.getByRole("button", { name: label }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Network unavailable");
     expect(screen.getByRole("button", { name: label })).toBeEnabled();
-    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(mocks.open).not.toHaveBeenCalled();
     mocks[method].mockResolvedValue({ error: null });
     fireEvent.click(screen.getByRole("button", { name: label }));
     await waitFor(() => expect(mocks[method]).toHaveBeenCalledTimes(2));
@@ -115,7 +120,7 @@ describe("login completion and recovery", () => {
     expect(screen.getByRole("button", { name: "Send magic link" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Continue with Google" })).toBeDisabled();
     finish({ error: null });
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.open).toHaveBeenCalledOnce());
   });
 
   it("sanitizes the email callback destination and displays confirmation", async () => {
