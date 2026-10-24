@@ -88,7 +88,7 @@ describe("generateVariants", () => {
 
   it("keeps image failure evidence even when no creative is saved", async () => {
     generateImage.mockImplementationOnce(async ({ onAttempt }) => {
-      onAttempt({ provider: "openrouter-image", model: "image-a", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown" });
+      onAttempt({ provider: "openrouter-image", model: "image-a", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown", errorCode: "IMAGE_HTTP_402" });
       throw new Error("Image unavailable");
     });
     const { generateVariants } = await import("@/lib/creative/generate");
@@ -96,7 +96,8 @@ describe("generateVariants", () => {
     const onFailure = vi.fn();
     await generateVariants({ brand, brief: "x", count: 1, onFailure });
     const events = failedVariantUsage(onFailure.mock.calls[0][1], { businessId: "business", userId: "user", route: "creatives.generate", requestId: "request" });
-    expect(events).toMatchObject([{ usageKind: "image", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown" }]);
+    // #451: the failure reason reaches the usage row and its ai.completion event.
+    expect(events).toMatchObject([{ usageKind: "image", status: "error", providerRequestId: "image-failed-123", providerFinalStatus: "unknown", errorCode: "IMAGE_HTTP_402" }]);
   });
 
   it.each([false, true])("retains truncated usage once in failure receipts (prior repair: %s)", async (priorRepair) => {

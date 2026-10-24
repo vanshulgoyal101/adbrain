@@ -671,12 +671,61 @@ describe("background audience plan (#366)", () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     await planned();
-    fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Rooftop solar for homes" } });
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes" } });
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
     await screen.findByText("Campaign review");
     expect(planCalls()).toBe(2);
     const prepared = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")[1][1] as RequestInit;
     expect(JSON.parse(String(prepared.body)).goal).toBe("Rooftop solar for homes");
+  }, 10_000);
+
+  it("reuses the plan when only the campaign name and budget were typed afterwards, as the smoke does (#504)", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    await planned();
+    fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Smoke campaign" } });
+    fireEvent.change(document.querySelector("#budget")!, { target: { value: "350" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(planCalls()).toBe(1);
+  }, 10_000);
+
+  it("quietly stops a stale background plan when Prepare plans for a changed goal (#504)", async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      if (url !== "/api/campaigns/plan") return Promise.resolve(Response.json({ forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] }));
+      signals.push(init!.signal!);
+      // The background plan never answers; Prepare's own plan does.
+      return signals.length === 1 ? new Promise<Response>(() => {}) : Promise.resolve(Response.json({ ready: true, targeting: recommended }));
+    }));
+    const consoleError = vi.spyOn(console, "error");
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    await planned();
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(signals[0].aborted).toBe(true);
+    expect(planCalls()).toBe(2);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("stops an in-flight background plan quietly when the page closes (#504)", async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      if (url !== "/api/campaigns/plan") return Promise.resolve(Response.json({ forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] }));
+      signals.push(init!.signal!);
+      return new Promise<Response>((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+    }));
+    const consoleError = vi.spyOn(console, "error");
+    const { unmount } = view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    await planned();
+    unmount();
+    expect(signals[0].aborted).toBe(true);
+    await act(async () => {});
+    expect(consoleError).not.toHaveBeenCalled();
   }, 10_000);
 
   it("plans again at Prepare when the background plan failed", async () => {

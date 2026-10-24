@@ -79,6 +79,12 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Internal accounts make free images** (`internal-free-providers`, #449, #466): an internal
+  account's concept (the recorded Cedar Ridge reply) comes from Haiku like a customer's, and its
+  image from Pollinations without references. Three images run one at a time, waiting out
+  Pollinations' recorded 402 Retry-After; a Pollinations that stays busy fails after about 90 s,
+  and one that is down fails at once, never reaching the paid image model. The reviewer, the owner
+  and customers keep the paid images.
 - **Create when the AI is busy** (`create-busy`, #410): through the production order
   (Groq, Gemini, then the paid OpenRouter fallback), every provider rate-limited returns a 503
   "busy, try again" instead of a 500, and each refused attempt is logged as `ai.completion`
@@ -277,7 +283,11 @@ fewer full batches or saved ads, more invented claims or garbled text, judge sco
 0.25, more than ₹25 per run, or Create p90 over 60 s and slower than before. About $0.05 per case;
 `--cap-usd` (default 5) stops the run, and it refuses to start unless the shared OpenRouter key keeps
 $2 for production after the cap (#449). `--repeat N` runs each case N times; bake-offs set
-`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`.
+`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`. `--profile free` runs what internal
+accounts get (Gemini then Groq, Pollinations images, judged by the same Gemini model on Google) at
+$0 with OpenRouter switched off; it can't write the baseline. Free tiers are small (Gemini 20
+requests per day per model, Groq 6,000 tokens a minute, Pollinations ~1 image per 20–40 s), so a
+free run measures availability as much as quality (#418).
 
 Baseline (2026-10-24, `8e21d29`, anthropic/claude-haiku-5.5 + openai/gpt-image-2.5-flare):
 full batches 71%, 17/21 ads, first try 71%, judge copy

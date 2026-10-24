@@ -488,7 +488,6 @@ export function Studio({
                   <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
                     <button
                       type="button"
-                      aria-label={`Inspect ${creative.headline || "untitled ad"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
                       aria-pressed={creative.id === selectedCreative.id}
                       onClick={() => setSelectedId(creative.id)}
                       data-product-event="creative.inspect"

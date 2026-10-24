@@ -3,7 +3,8 @@ import { createPollinationsProvider } from "./providers/pollinations";
 import { createOpenRouterProvider } from "./providers/openrouter";
 import { ImageProviderError, type GeneratedImage, type ImageProvider, type ImageRequest } from "./types";
 import { MAX_IMAGE_BYTES, readBoundedResponse, validateRaster } from "./raster";
-import { fetchPublicUrl } from "@/lib/security/ssrf";
+import { fetchPublicUrl, SafeFetchError } from "@/lib/security/ssrf";
+import { freeImagesOnly } from "@/lib/llm/spend-policy";
 
 export type { GeneratedImage, ImageRequest } from "./types";
 
@@ -22,7 +23,7 @@ function getProvider(name = getEnv().IMAGE_PROVIDER): ImageProvider {
 
 function getFallbackProvider(): ImageProvider | null {
   const env = getEnv();
-  return !env.IMAGE_PROVIDER_FALLBACK || env.IMAGE_PROVIDER_FALLBACK === "none"
+  return freeImagesOnly() || !env.IMAGE_PROVIDER_FALLBACK || env.IMAGE_PROVIDER_FALLBACK === "none"
     ? null : getProvider(env.IMAGE_PROVIDER_FALLBACK);
 }
 
@@ -37,16 +38,70 @@ async function executeImage(provider: ImageProvider, req: ImageRequest): Promise
   return { ...generated, url: `data:image/png;base64,${Buffer.from(raster.bytes).toString("base64")}`, width: raster.width, height: raster.height };
 }
 
+// Pollinations answers 402/429/503 with Retry-After past about one image per 20–40 s per address
+// (measured Oct 24), so free images run one at a time per server instance and wait it out (#466).
+const FREE_IMAGE_WAIT_CAP_MS = 90_000;
+const FREE_IMAGE_DEFAULT_WAIT_MS = 10_000;
+let freeImageQueue: Promise<unknown> = Promise.resolve();
+
+export class FreeImageBusyError extends Error {
+  constructor() {
+    super("Free test images are busy right now. Try again in a minute.");
+    this.name = "FreeImageBusyError";
+  }
+}
+
+function queuedFreeImage(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
+  const run = freeImageQueue.then(() => freeImageWithRetry(provider, req));
+  freeImageQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): Promise<GeneratedImage> {
+  const started = Date.now();
+  for (;;) {
+    req.signal?.throwIfAborted();
+    try {
+      return await executeImage(provider, req);
+    } catch (error) {
+      const busy = error instanceof SafeFetchError && error.code === "status" && [402, 429, 503].includes(error.status ?? 0);
+      if (!busy) throw error;
+      const wait = Math.max(1_000, error.retryAfterMs ?? FREE_IMAGE_DEFAULT_WAIT_MS);
+      if (Date.now() - started + wait > FREE_IMAGE_WAIT_CAP_MS) throw new FreeImageBusyError();
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => { clearTimeout(timer); reject(req.signal?.reason); };
+        const timer = setTimeout(() => { req.signal?.removeEventListener("abort", onAbort); resolve(); }, wait);
+        req.signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+  }
+}
+
+/** A short, fixed reason for a failed image attempt, for usage rows and events (#451). */
+export function imageFailureCode(error: unknown): string {
+  if (error instanceof FreeImageBusyError) return "IMAGE_FREE_BUSY";
+  if (error instanceof SafeFetchError) return error.code === "status" ? `IMAGE_HTTP_${error.status ?? "unknown"}` : `IMAGE_FETCH_${error.code.toUpperCase()}`;
+  if (error instanceof ImageProviderError) return "IMAGE_PROVIDER";
+  if (error instanceof Error && error.name === "TimeoutError") return "IMAGE_TIMEOUT";
+  if (error instanceof Error && error.name === "AbortError") return "IMAGE_ABORTED";
+  // validateRaster and readBoundedResponse: the body was not a usable picture.
+  if (error instanceof Error && /image|png|jpeg|webp|raster|dimension/i.test(error.message)) return "IMAGE_INVALID";
+  return "IMAGE_OTHER";
+}
+
 /** Generate a single image with the configured provider. */
 export async function generateImage(
   req: ImageRequest,
 ): Promise<GeneratedImage> {
   const startedAt = Date.now();
   req.signal?.throwIfAborted();
-  const provider = getProvider();
+  // Internal accounts make free Pollinations images, which take no reference images (#449, #466).
+  const free = freeImagesOnly();
+  if (free) req = { ...req, referenceImages: undefined };
+  const provider = getProvider(free ? "pollinations" : undefined);
   try {
     const generated = {
-      ...(await executeImage(provider, req)),
+      ...(await (free ? queuedFreeImage(provider, req) : executeImage(provider, req))),
       latencyMs: Date.now() - startedAt,
     };
     req.onAttempt?.({ provider: provider.name, model: generated.model ?? provider.name,
@@ -54,7 +109,7 @@ export async function generateImage(
       estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
     return generated;
   } catch (error) {
-    req.onAttempt?.({ provider: provider.name, model: provider.name, status: "error",
+    req.onAttempt?.({ provider: provider.name, model: provider.name, status: "error", errorCode: imageFailureCode(error),
       providerRequestId: error instanceof ImageProviderError ? error.providerRequestId : undefined,
       providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
     req.signal?.throwIfAborted();
@@ -62,7 +117,7 @@ export async function generateImage(
     const fallback = getFallbackProvider();
     if (!fallback || fallback.name === provider.name) throw error;
     const generated = await executeImage(fallback, req).catch((fallbackError: unknown) => {
-      req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error",
+      req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
         providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
         providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });
       throw fallbackError;
