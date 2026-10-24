@@ -140,6 +140,10 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   and secrets green on `next`'s exact commit (CI runs on pushes to `next`). Then it opens
   and merges a `next → main` PR with a merge commit. That's at most 48 deploys a day;
   each train gets the production guard's smoke.
+- **Deploy budget: ≤ 80 production deploys per rolling 24 h; the train enforces it.** It counts
+  Vercel's GitHub deployments (environment `Production`) and waits at 80, keeping 20 of
+  Hobby's 100 for hotfixes and migrations (which count too). The log prints
+  `deploys in last 24h: N/100`. Direct merges to `main` only with `hotfix` or a migration.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
   with a PR to it; production keeps the last train.
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`

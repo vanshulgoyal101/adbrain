@@ -30,6 +30,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GAP_MINUTES: "30"
+      # Hobby allows 100 production deploys per rolling 24 h; keep 20 for hotfixes and migrations.
+      DEPLOY_BUDGET: "80"
     steps:
       - name: Promote next to main
         run: |
@@ -42,6 +44,15 @@ jobs:
           if [ -n "$last" ]; then
             wait=$(jq -rn --arg t "$last" --argjson gap "$GAP_MINUTES" '($gap * 60) - (now - ($t | fromdateiso8601)) | floor')
             if [ "$wait" -gt 0 ]; then echo "Last train left at $last; waiting ${wait}s."; sleep "$wait"; fi
+          fi
+          # Every production deploy (train, hotfix, migration) shows up as a GitHub deployment from Vercel.
+          since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          used=$(gh api "repos/$repo/deployments?environment=Production&per_page=100" --paginate --jq ".[] | select(.created_at >= \"$since\") | .id" | wc -l)
+          echo "deploys in last 24h: $used/100 (train budget $DEPLOY_BUDGET)"
+          if [ "$used" -ge "$DEPLOY_BUDGET" ]; then
+            echo "Deploy budget: $used production deploys in the last 24 h (train stops at $DEPLOY_BUDGET of Hobby's 100)." > "$RUNNER_TEMP/reason"
+            echo "::warning::$(cat "$RUNNER_TEMP/reason") Retrying on the next push or schedule."
+            exit 1
           fi
           sha=$(gh api "repos/$repo/commits/next" --jq .sha)
           echo "Promoting next at ${sha::7} ($ahead commits)."
@@ -69,6 +80,7 @@ jobs:
         run: |
           title="Deploy train stuck"
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
-          body="$(printf 'next could not be promoted to main (red or slow checks on next, or a merge error).\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/RELEASING.md#deploy-train\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          reason=$(cat "$RUNNER_TEMP/reason" 2>/dev/null || echo "Red or slow checks on next, or a merge error.")
+          body="$(printf 'next could not be promoted to main. %s\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/RELEASING.md#deploy-train\n' "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
           else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi
