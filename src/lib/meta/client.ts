@@ -354,12 +354,27 @@ export function metaErrorCode(error: unknown): string {
   return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
 }
 
+const STORY_PLACEMENTS = {
+  publisher_platforms: ["facebook", "instagram", "messenger"],
+  facebook_positions: ["story", "facebook_reels"],
+  instagram_positions: ["story", "reels", "profile_reels"],
+  messenger_positions: ["story"],
+};
+const FEED_PLACEMENTS = {
+  publisher_platforms: ["facebook", "instagram", "messenger", "audience_network"],
+  facebook_positions: ["feed", "right_hand_column", "marketplace", "video_feeds", "search", "instream_video", "facebook_reels_overlay", "profile_feed", "notification", "biz_disco_feed"],
+  instagram_positions: ["stream", "explore", "explore_home", "profile_feed", "ig_search"],
+  messenger_positions: ["messenger_home", "sponsored_messages"],
+  audience_network_positions: ["classic", "instream_video", "rewarded_video"],
+};
+
 /**
  * A creative with a 4:5 feed image and a 9:16 image that Meta uses for Stories and Reels (#333).
  * Placement asset customisation needs asset_feed_spec; object_story_spec then carries only the Page.
  */
 export function placementCreativeSpec(p: {
   pageId: string;
+  instagramUserId: string;
   feedHash: string;
   storyHash: string;
   headline: string;
@@ -373,7 +388,7 @@ export function placementCreativeSpec(p: {
 }) {
   const cta = destinationCTA(p.destination, { leadFormId: p.leadFormId, phone: p.whatsappNumber });
   return {
-    object_story_spec: { page_id: p.pageId },
+    object_story_spec: { page_id: p.pageId, instagram_user_id: p.instagramUserId },
     asset_feed_spec: {
       images: [
         { hash: p.feedHash, adlabels: [{ name: "adbrain_feed" }] },
@@ -387,9 +402,10 @@ export function placementCreativeSpec(p: {
       ...(p.destination === "whatsapp" && p.whatsappGreeting ? { additional_data: { page_welcome_message: whatsappWelcomeMessage(p.whatsappGreeting) } } : {}),
       ad_formats: ["SINGLE_IMAGE"],
       optimization_type: "PLACEMENT",
+      // Every placement must match exactly one rule, by explicit position, or Meta can't show it there.
       asset_customization_rules: [
-        { customization_spec: { publisher_platforms: ["facebook", "instagram"], facebook_positions: ["story", "facebook_reels"], instagram_positions: ["story", "reels"] }, image_label: { name: "adbrain_story" }, priority: 1 },
-        { customization_spec: { publisher_platforms: ["facebook", "instagram", "audience_network", "messenger"] }, image_label: { name: "adbrain_feed" }, priority: 2 },
+        { customization_spec: STORY_PLACEMENTS, image_label: { name: "adbrain_story" }, priority: 1 },
+        { customization_spec: FEED_PLACEMENTS, image_label: { name: "adbrain_feed" }, priority: 2 },
       ],
     },
   };
@@ -622,6 +638,19 @@ export class MetaClient {
       });
     }
     return this.pageAccessToken;
+  }
+
+  /**
+   * The Instagram account that speaks for the Page: its linked business account, else the
+   * Page-backed one. Placement creatives must name it, or Meta refuses the ad (#333).
+   */
+  async getPageInstagramId(): Promise<string | null> {
+    const token = await this.getPageAccessToken();
+    const page = await this.graph<{ instagram_business_account?: { id?: string }; page_backed_instagram_accounts?: { data?: { id?: string }[] } }>(
+      `${this.creds.pageId}?fields=instagram_business_account,page_backed_instagram_accounts`,
+      { token },
+    );
+    return page.instagram_business_account?.id ?? page.page_backed_instagram_accounts?.data?.[0]?.id ?? null;
   }
 
   /**
@@ -884,7 +913,7 @@ export class MetaClient {
     variants?: AdSetVariant[];
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
     /** A 9:16 couldn't be used and the ad fell back to the single 4:5 image (#333). */
-    onStoryFallback?: (stage: "upload" | "creative", errorCode: string) => void;
+    onStoryFallback?: (stage: "instagram" | "upload" | "creative" | "ad", errorCode: string) => void;
   }): Promise<CreateCampaignResult> {
     const locations = params.variants?.length
       ? params.variants.map((variant) => variant.location ?? params.location)
@@ -945,6 +974,15 @@ export class MetaClient {
 
     // Upload each creative image once and reuse the hash across all ad sets.
     const prepared: { input: CreativeInput; imageHash: string; storyHash: string | null }[] = [];
+    // Placement creatives must name the Page's Instagram account; without one, skip the 9:16 (#333).
+    let instagramUserId: string | null = null;
+    if (params.destination === "whatsapp" && params.creatives.some((creative) => creative.storyImage)) {
+      instagramUserId = await this.getPageInstagramId().catch((error: unknown) => {
+        params.onStoryFallback?.("instagram", metaErrorCode(error));
+        return null;
+      });
+      if (!instagramUserId) params.onStoryFallback?.("instagram", "none");
+    }
     for (let creativeIndex = 0; creativeIndex < params.creatives.length; creativeIndex++) {
       const c = params.creatives[creativeIndex];
       const imageHash = await this.uploadAdImage(c.imageUrl);
@@ -953,9 +991,9 @@ export class MetaClient {
         externalId: imageHash,
         creativeIndex,
       });
-      // Placement images are proven for WhatsApp ads only (tests/core/fixtures/meta/story-validate.json).
+      // Placement images are proven for WhatsApp ads that name the Page's Instagram (story-validate.json).
       let storyHash: string | null = null;
-      if (c.storyImage && params.destination === "whatsapp") {
+      if (c.storyImage && instagramUserId) {
         storyHash = await this.uploadAdImageBytes(c.storyImage).catch((error: unknown) => {
           params.onStoryFallback?.("upload", metaErrorCode(error));
           return null;
@@ -1037,9 +1075,9 @@ export class MetaClient {
 
       for (let creativeIndex = 0; creativeIndex < prepared.length; creativeIndex++) {
         const { input: c, imageHash, storyHash } = prepared[creativeIndex];
-        const placement = storyHash && destination === "whatsapp"
+        const placement = storyHash && instagramUserId && destination === "whatsapp"
           ? placementCreativeSpec({
-            pageId: this.creds.pageId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
+            pageId: this.creds.pageId, instagramUserId, feedHash: imageHash, storyHash, headline: c.headline, message: c.message,
             description: c.description ?? undefined, link: `https://wa.me/${params.whatsappNumber!.slice(1)}`,
             destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting,
           })
@@ -1084,15 +1122,24 @@ export class MetaClient {
           creativeIndex,
         });
 
-        const ad = await this.graph<{ id: string }>(`${acct}/ads`, {
+        const postAd = (creativeId: string) => this.graph<{ id: string }>(`${acct}/ads`, {
           method: "POST",
           form: {
             name: c.headline.slice(0, 90) || "AdBrain ad",
             adset_id: adSet.id,
             status: "PAUSED",
-            creative: JSON.stringify({ creative_id: creative.id }),
+            creative: JSON.stringify({ creative_id: creativeId }),
           },
         });
+        // If Meta still refuses the ad on a placement creative, make it with the single image instead.
+        const ad = placement
+          ? await postAd(creative.id).catch(async (error: unknown) => {
+            params.onStoryFallback?.("ad", metaErrorCode(error));
+            const single = await postCreative(singleImageForm);
+            await params.onCheckpoint?.({ phase: "creative", externalId: single.id, variantIndex: i, creativeIndex });
+            return postAd(single.id);
+          })
+          : await postAd(creative.id);
         adIds.push(ad.id);
         await params.onCheckpoint?.({
           phase: "ad",

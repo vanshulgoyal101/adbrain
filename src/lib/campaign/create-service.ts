@@ -68,13 +68,11 @@ export async function executeReviewedCampaign(input: {
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
           // Capped well inside the 60 s create lease; a slow photo or logo host just means no 9:16.
           const noStories = creativeInputs.map(() => null);
-          const storyFallback = (stage: "render" | "upload" | "creative", errorCode: string) => recordProductEvent({
+          const storyFallback = (stage: "render" | "instagram" | "upload" | "creative" | "ad", errorCode: string) => recordProductEvent({
             kind: "workflow", name: "campaign.story_fallback", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: `${stage}:${errorCode}` },
           });
           let storyTimer: ReturnType<typeof setTimeout> | undefined;
-          // Off until #333 waits for a new placement creative: Meta refused the ad right after it (subcode 1772103).
-          const storiesEnabled = false;
-          const storyImages = storiesEnabled && draft.input.destination === "whatsapp"
+          const storyImages = draft.input.destination === "whatsapp"
             ? await Promise.race([
               Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => {
                 storyFallback("render", "error");
