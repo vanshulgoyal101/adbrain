@@ -91,7 +91,7 @@ export function buildWorkQueue({
       action: "Start creating",
       tone: "work",
     });
-  if (!metaReady && (unusedApproved || campaigns.length))
+  if (!metaReady && campaigns.length)
     queue.push({
       id: "connection",
       title: "Check your Meta connection",
@@ -101,7 +101,16 @@ export function buildWorkQueue({
       action: "Open settings",
       tone: "attention",
     });
-  if (unusedApproved)
+  if (!metaReady && !campaigns.length && unusedApproved)
+    queue.push({
+      id: "approved",
+      title: "Your ads are ready",
+      detail: "Share them on WhatsApp or download them now. Launching on Facebook and Instagram opens soon.",
+      href: "/campaigns",
+      action: "Share your ads",
+      tone: "work",
+    });
+  else if (unusedApproved)
     queue.push({
       id: "approved",
       title: `${unusedApproved} approved ${unusedApproved === 1 ? "ad is" : "ads are"} available`,

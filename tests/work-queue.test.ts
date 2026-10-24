@@ -47,15 +47,16 @@ describe("workspace work queue", () => {
     expect(queue.some((item) => item.id === "connection")).toBe(false);
   });
 
-  it("offers export while Meta is unavailable, not a blocked launch", () => {
+  it("sends a new owner with approved ads to share them, not to a Meta settings dead end (#336)", () => {
     const queue = buildWorkQueue({
       ...base,
       creatives: [{ id: "approved", status: "approved" }],
     });
-    expect(queue.map((item) => item.id)).toEqual(["connection", "approved"]);
-    expect(queue[1]).toMatchObject({
-      href: "/studio?status=approved",
-      action: "Export ads",
+    expect(queue.map((item) => item.id)).toEqual(["approved"]);
+    expect(queue[0]).toMatchObject({
+      title: "Your ads are ready",
+      href: "/campaigns",
+      action: "Share your ads",
     });
   });
 
@@ -82,5 +83,15 @@ describe("workspace work queue", () => {
       action: "Review campaigns",
     });
     expect(queue[0].detail).toContain("1 paused, 0 draft");
+  });
+
+  it("still points an owner with campaigns at the Meta connection when it drops", () => {
+    const queue = buildWorkQueue({
+      ...base,
+      creatives: [{ id: "fresh", status: "approved" }],
+      campaigns: [{ status: "paused", creative_ids: ["used"] }],
+    });
+    expect(queue.map((item) => item.id)).toEqual(["connection", "approved", "campaigns"]);
+    expect(queue[1]).toMatchObject({ href: "/studio?status=approved", action: "Export ads" });
   });
 });

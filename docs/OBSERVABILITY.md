@@ -70,7 +70,8 @@ The stream includes:
 - Deployment environment and Vercel commit SHA when available.
 - Allowlisted `ui.action` intent for generation, inspection, approval/unapproval,
   regeneration/export, campaign create/review/activate/pause/sync, Brand save,
-  upload/delete, follow-up save, payment quote/checkout and Meta connect controls.
+  upload/delete, follow-up save, payment quote/checkout, Meta connect controls and
+  `meta.access_request` (a new owner asking for Facebook access before App Review).
 - `page.engagement` foreground-visible time, flushed on hide, navigation or exit,
   excluding background time. Each segment is 1 second to 1 hour; it measures visible
   time, not attention, billable usage or proof of activity. Coarse viewport categories
