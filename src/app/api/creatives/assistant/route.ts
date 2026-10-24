@@ -56,7 +56,7 @@ async function handlePOST(req: Request) {
     const requestId = currentRequestId();
     const result = await runInterview({ brand: business, instructions, preferences, goal, answers, recentGoals, referenceBrief }, {
       signal: req.signal,
-      onAttempt: async (completion, attempt, valid) => {
+      onAttempt: async (completion, attempt, valid, rules = []) => {
         if (!completion.usage) return;
         await persistLLMUsage([{
           businessId, userId: user.id, requestId, route: "creatives.assistant",
@@ -65,7 +65,7 @@ async function handlePOST(req: Request) {
           outputChars: completion.outputChars, latencyMs: completion.latencyMs,
           attempt, maxTokens: 2400, temperature: attempt === 1 ? 0.5 : 0.2,
           status: valid ? "success" : "error", errorCode: valid ? undefined : "INTERVIEW_VALIDATION",
-          metadata: { answerCount: answers.length, repaired: attempt > 1 },
+          metadata: { answerCount: answers.length, repaired: attempt > 1, ...(valid ? {} : { validationRules: rules }) },
         }]);
       },
     });

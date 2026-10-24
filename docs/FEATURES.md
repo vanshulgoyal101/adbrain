@@ -119,6 +119,8 @@ details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELIN
    not an automatic campaign scheduler.
 2. The interviewer can ask up to three new decisions, or finish immediately when
    saved facts suffice. Questions offer contextual choices or text input.
+   If a step fails, **Change my answer** brings the last question back with a typed
+   answer prefilled; **Start over** is always available in the chat.
 3. Review and edit the complete brief. Changing it changes the generation input.
 4. Explicitly generate. Studio accepts 1-6 variants; Create's standard batch is
    three. Portrait is the API default; square, story, and landscape also exist.

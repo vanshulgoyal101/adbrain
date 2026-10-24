@@ -93,7 +93,7 @@ describe("bounded interview harness", () => {
     const onAttempt = vi.fn();
     vi.mocked(complete).mockResolvedValueOnce({ text: "{broken", provider: "test", model: "test" }).mockResolvedValueOnce(reply({ ready: true, brief: "Show the installation." }));
     await expect(runInterview({ brand, goal: "ad" }, { onAttempt })).resolves.toMatchObject({ ready: true });
-    expect(onAttempt.mock.calls.map((call) => call.slice(1))).toEqual([[1, false], [2, true]]);
+    expect(onAttempt.mock.calls.map((call) => call.slice(1))).toEqual([[1, false, ["schema:root"]], [2, true, []]]);
   });
 
   it("rejects an invented offer and accepts a supplied offer", async () => {
