@@ -246,6 +246,22 @@ describe("campaign audience workflow", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  // jsdom has no layout, so the phone rules are the max-sm classes the tiles carry.
+  it("keeps nine ads to two compact rows on a phone, with a Show all button (#305)", () => {
+    const ads = Array.from({ length: 9 }, (_, index) => ({ ...creative, id: `22222222-2222-4222-8222-22222222220${index}`, headline: `Ad ${index + 1}` }));
+    render(<Campaigns business={business} approved={ads} newCampaign={{ creativeIds: [ads[8].id] }} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={false} adAccountId="" />);
+    const tile = (name: string) => screen.getByRole("button", { name }).parentElement!;
+    expect(tile("Ad 1").parentElement).toHaveClass("grid-cols-3");
+    expect(screen.getByText("Ad 1", { selector: "p" })).toHaveClass("max-sm:hidden");
+    expect(["Ad 1", "Ad 6"].map((name) => tile(name).className)).not.toContain("max-sm:hidden");
+    expect(tile("Ad 7")).toHaveClass("max-sm:hidden");
+    expect(tile("Ad 9")).not.toHaveClass("max-sm:hidden");
+    expect(screen.getByRole("button", { name: "Ad 9" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Show all 9 ads" }));
+    expect(tile("Ad 7")).not.toHaveClass("max-sm:hidden");
+    expect(screen.queryByRole("button", { name: "Show all 9 ads" })).not.toBeInTheDocument();
+  });
+
   it("generates detailed targeting even when location and age are manual", async () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
