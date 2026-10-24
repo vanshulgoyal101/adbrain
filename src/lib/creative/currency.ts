@@ -11,3 +11,14 @@ export function spelledCurrency(term: string, source: string): boolean {
   return new RegExp(`(?<![\\p{L}\\p{M}])(?:${words})\\s*${amount}(?![\\d.])|(?<![\\d.])${amount}\\s*(?:${words})(?![\\p{L}\\p{M}])`, "iu")
     .test(source.replace(/(\d),(?=\d)/g, "$1"));
 }
+
+const SPELLED_WORDS = Object.values(CURRENCY_WORDS).join("|");
+const SPELLED_AMOUNT = new RegExp(
+  `(?<![\\p{L}\\p{M}])(?:${SPELLED_WORDS})\\s*\\d[\\d,]*(?:\\.\\d+)?|(?<![\\d.])\\d[\\d,]*(?:\\.\\d+)?\\s*(?:${SPELLED_WORDS})(?![\\p{L}\\p{M}])`,
+  "iu",
+);
+
+/** Where text first states an amount in words ("10,000 rupaye", "Rs 499", "50 dollars"); -1 when it doesn't. */
+export function spelledAmountIndex(text: string): number {
+  return SPELLED_AMOUNT.exec(text)?.index ?? -1;
+}
