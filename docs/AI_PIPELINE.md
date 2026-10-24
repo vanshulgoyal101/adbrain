@@ -337,6 +337,19 @@ Successful fallback records `fallbackFrom`, but does not prove equivalent qualit
 Avoid casually fetching legacy generation URLs: some image URLs generate work on
 request rather than reading a stored artifact.
 
+## Reliability Budget
+
+Owned by the CTO (#378). Measured from `product_events` (`ai.completion`, `creative.batch`) over the last 3 days, real traffic and QA alike (models don't know who calls them):
+
+| Measure | Budget |
+| --- | --- |
+| Failed AI calls, per model | ≤ 3% (a retried call still counts as failed) |
+| Failures a customer sees (a step errors after its retries) | 0 in 3 days |
+| Create batches that save all requested ads | ≥ 95% |
+| One concept or image call, p90 | ≤ 20 s; a whole Create run ≤ 60 s p90 |
+
+Every failed call logs its `errorCode`; validation failures also log the failed rule ids, so the top cause is one query away. Over budget: fix the biggest cause first (routing, timeout, retry or validator), with a core test from a recorded response, then re-read 48 h later.
+
 ## Usage and Cost
 
 [Usage persistence](../src/lib/llm/persist.ts) writes through the server admin
