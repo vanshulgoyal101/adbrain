@@ -21,17 +21,45 @@ const LIMITS = {
 
 export type CopyEditNotes = Pick<CopyEditResult, "warnings" | "liveNotice">;
 
+/** The text an ad shows: saved, or the owner's unsaved draft while editing (#387). */
+export type AdText = { headline: string; primary_text: string; description: string; cta: string };
+
+export function savedAdText(creative: Creative): AdText {
+  return {
+    headline: creative.headline ?? "",
+    primary_text: creative.primary_text ?? "",
+    description: savedCreativeDescription(creative.generation) ?? "",
+    cta: creative.cta ?? "",
+  };
+}
+
+export function sameAdText(a: AdText, b: AdText): boolean {
+  return a.headline === b.headline && a.primary_text === b.primary_text && a.description === b.description && a.cta === b.cta;
+}
+
+/** Marks a live preview that isn't saved yet, so nobody mistakes it for the saved ad. */
+export function UnsavedPreviewBadge() {
+  return (
+    <span role="status" className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+      Preview · unsaved changes
+    </span>
+  );
+}
+
 /** Inline editor for an ad's words (#280). Saving never calls the AI. */
 export function CreativeCopyEditor({
   creative,
   onSaved,
   onCancel,
   onBusy,
+  onDraft,
 }: {
   creative: Creative;
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
   onBusy?: (busy: boolean) => void;
+  /** Called with every edit so the card can preview it live; null when the editor closes. */
+  onDraft?: (copy: AdText | null) => void;
 }) {
   const [copy, setCopy] = useState<EditableCopy>(() => ({
     headline: creative.headline ?? "",
@@ -44,6 +72,8 @@ export function CreativeCopyEditor({
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   useEffect(() => onBusy?.(saving), [saving, onBusy]);
+  useEffect(() => onDraft?.(copy), [copy, onDraft]);
+  useEffect(() => () => onDraft?.(null), [onDraft]);
   const field = (key: keyof EditableCopy) => `copy-${creative.id}-${key}`;
   const set = <K extends keyof EditableCopy>(key: K, value: EditableCopy[K]) =>
     setCopy((current) => ({ ...current, [key]: value }));
@@ -411,11 +441,13 @@ export function CreativeEditor({
   brand,
   onSaved,
   onCancel,
+  onDraft,
 }: {
   creative: Creative;
   brand: BrandContext;
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
+  onDraft?: (copy: AdText | null) => void;
 }) {
   const [tab, setTab] = useState<"text" | "picture" | "background">("text");
   // Switching tabs mid-save would unmount the editor whose request is still running.
@@ -446,7 +478,7 @@ export function CreativeEditor({
         ))}
       </div>
       {tab === "text" ? (
-        <CreativeCopyEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
+        <CreativeCopyEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onDraft={onDraft} />
       ) : tab === "picture" ? (
         <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
       ) : (

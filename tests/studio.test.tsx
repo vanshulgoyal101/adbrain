@@ -622,6 +622,40 @@ describe("<Studio> edit text (#280)", () => {
   });
 });
 
+describe("<Studio> live text preview while editing (#387)", () => {
+  it("shows each keystroke in the card at once, marks it unsaved, and Cancel puts the saved ad back", async () => {
+    const user = userEvent.setup();
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByText("Preview · unsaved changes")).toBeNull();
+    await user.clear(screen.getByLabelText("Headline"));
+    await user.type(screen.getByLabelText("Headline"), "Solar in 7 days");
+    await user.selectOptions(screen.getByLabelText("Button"), "Call Now");
+    expect(screen.getByRole("heading", { name: "Solar in 7 days" })).toBeInTheDocument();
+    expect(screen.getAllByText("Call Now").some((el) => el.tagName === "SPAN")).toBe(true);
+    expect(screen.getByText("Preview · unsaved changes")).toBeInTheDocument();
+    expect(h.updateCreativeCopy).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("heading", { name: "Solar in 7 days" })).toBeNull();
+    expect(screen.getAllByText("Cut your power bill").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Preview · unsaved changes")).toBeNull();
+  });
+
+  it("keeps the edited words after Save and drops the unsaved marker", async () => {
+    const user = userEvent.setup();
+    h.updateCreativeCopy.mockResolvedValue({ ok: true, warnings: [], creative: { headline: "Solar in 7 days", primary_text: "Two short lines.", cta: "Get Quote", generation: null } });
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.clear(screen.getByLabelText("Headline"));
+    await user.type(screen.getByLabelText("Headline"), "Solar in 7 days");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Edit ad text" })).toBeNull());
+    expect(screen.getAllByText("Solar in 7 days").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Preview · unsaved changes")).toBeNull();
+  });
+});
+
 describe("<Studio> edit words on the picture (#280)", () => {
   it("redraws the picture with new words, no AI, and keeps the ad approved", async () => {
     const user = userEvent.setup();

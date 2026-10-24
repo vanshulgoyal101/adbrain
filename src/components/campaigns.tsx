@@ -41,7 +41,7 @@ import {
 import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
-import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
   createMetaConnectClient,
@@ -239,9 +239,13 @@ function BusinessCampaigns({
   const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
-  const pickerAds = approved.map((c) => editedAds[c.id] ?? c);
   const [showAllAds, setShowAllAds] = useState(false);
-  const editingAd = pickerAds.find((c) => c.id === editingAdId) ?? null;
+  const [adDraft, setAdDraft] = useState<AdText | null>(null);
+  const savedPickerAds = approved.map((c) => editedAds[c.id] ?? c);
+  const editingAd = savedPickerAds.find((c) => c.id === editingAdId) ?? null;
+  const adDraftUnsaved = editingAd !== null && adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd));
+  // While editing, the tile previews the unsaved headline (#387).
+  const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
     const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
@@ -1363,11 +1367,13 @@ function BusinessCampaigns({
                   )}
                   {editingAd && (
                     <section aria-label="Edit ad" className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-                      <p className="mb-3 truncate text-sm font-medium text-slate-800">Editing: {editingAd.headline}</p>
+                      <p className="mb-1 truncate text-sm font-medium text-slate-800">Editing: {adDraft?.headline ?? editingAd.headline}</p>
+                      {adDraftUnsaved && <div className="mb-2"><UnsavedPreviewBadge /></div>}
                       <CreativeEditor
                         key={editingAd.id}
                         creative={editingAd}
                         brand={business}
+                        onDraft={setAdDraft}
                         onCancel={() => setEditingAdId(null)}
                         onSaved={(next, notes) => {
                           setEditedAds((current) => ({ ...current, [next.id]: next }));
