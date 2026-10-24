@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# New worktree for an issue (#390): branch work/issue-<n> from origin/main under
+# ~/Development/copilot/adbrain-wt/<n>, node_modules cloned from a per-lockfile cache
+# (APFS copy-on-write, seconds), else npm ci. Prints the path.
 set -euo pipefail
 
 if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^[0-9]+$ ]]; then
@@ -33,10 +36,10 @@ cache="$cache_root/$lock_hash"
 if [[ -f "$cache/.package-lock.json" ]]; then
   if ! cp -cR "$cache" "$target/node_modules"; then
     rm -rf "$target/node_modules"
-    (cd "$target" && npm ci)
+    (cd "$target" && npm ci --prefer-offline --no-audit --no-fund)
   fi
 else
-  (cd "$target" && npm ci)
+  (cd "$target" && npm ci --prefer-offline --no-audit --no-fund)
   mkdir -p "$cache_root"
   seed="$cache_root/.seed-$lock_hash-$$"
   if cp -cR "$target/node_modules" "$seed"; then
@@ -45,5 +48,9 @@ else
     rm -rf "$seed"
   fi
 fi
+
+# Keep only lockfile caches used in the last 14 days.
+find "$cache_root" -mindepth 1 -maxdepth 1 -type d ! -name '.seed-*' -mtime +14 -exec rm -rf {} + 2>/dev/null || true
+touch "$cache" 2>/dev/null || true
 
 echo "$target"
