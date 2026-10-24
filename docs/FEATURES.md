@@ -38,7 +38,7 @@ ID are different identifiers. Never infer one from another.
 | `/dashboard` | Next action, onboarding progress, activity, results | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run |
-| `/studio` | Generate, inspect, approve, regenerate, delete, export; "Create campaign (N)" links approved ads to Campaigns | Approval does not publish an ad |
+| `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected | Live Meta writes require verified binding and capability |
 | `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |

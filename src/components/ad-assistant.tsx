@@ -19,6 +19,7 @@ import {
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { AdLanguagePicker } from "@/components/ad-language-picker";
 import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { ShareCreativeButton } from "@/components/share-creative-button";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -942,6 +943,7 @@ function ResultCard({
             <Pencil className="h-3.5 w-3.5" /> Edit
           </Button>
         </div>
+        {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" />}
         {saveError && <p className="text-xs text-red-600">{saveError}</p>}
         </>
         )}
