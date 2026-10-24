@@ -1,0 +1,72 @@
+// @vitest-environment jsdom
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
+import { Campaigns } from "@/components/campaigns";
+import type { Business, Campaign, CampaignResult } from "@/lib/types";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
+const CAMPAIGN = "30000000-0000-4000-8000-000000000001";
+
+function Harness({ initial = 1 }: { initial?: number }) {
+  const [count, setCount] = useState(initial);
+  return <WhatsAppEnquiries campaignId={CAMPAIGN} spend={140} enquiries={count} onLogged={setCount} />;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("<WhatsAppEnquiries> (#335)", () => {
+  it("logs a real enquiry with optional details and shows cost per real enquiry", async () => {
+    const fetch = vi.fn(async () => Response.json({ enquiries: 2 }, { status: 201 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<Harness />);
+    const panel = screen.getByRole("region", { name: "Real enquiries" });
+    expect(within(panel).getByText("₹140")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add enquiry" }));
+    fireEvent.change(screen.getByLabelText("Name (optional)"), { target: { value: "Ravi Kumar" } });
+    fireEvent.change(screen.getByLabelText("Phone (optional)"), { target: { value: "+91 98140 12345" } });
+    fireEvent.change(screen.getByLabelText("Note (optional)"), { target: { value: "Wants 50 kW" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save enquiry" }));
+    await waitFor(() => expect(within(panel).getByText("₹70")).toBeInTheDocument());
+    expect(fetch).toHaveBeenCalledWith(`/api/campaigns/${CAMPAIGN}/enquiries`, expect.objectContaining({
+      method: "POST", body: JSON.stringify({ name: "Ravi Kumar", phone: "+91 98140 12345", note: "Wants 50 kW" }),
+    }));
+    expect(within(panel).getByText("2")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Saved to Enquiries.");
+    expect(screen.queryByLabelText("Name (optional)")).not.toBeInTheDocument();
+  });
+
+  it("shows no cost before the first real enquiry and keeps the form open on a failed save", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "The enquiry could not be saved. Try again." }, { status: 503 })));
+    render(<Harness initial={0} />);
+    const panel = screen.getByRole("region", { name: "Real enquiries" });
+    expect(within(panel).getByText("—")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add enquiry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save enquiry" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The enquiry could not be saved. Try again.");
+    expect(screen.getByLabelText("Name (optional)")).toBeInTheDocument();
+    expect(within(panel).getByText("0")).toBeInTheDocument();
+  });
+});
+
+describe("<Campaigns> real enquiries on results (#335)", () => {
+  const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-1", name: "Solaride", locations: ["Mohali"] } as Business;
+  const campaign = (id: string, destination: string) => ({ id, business_id: business.id, name: `${destination} run`, status: "active", objective: "engagement", destination, daily_budget: 280, created_at: "2026-10-23T00:00:00Z", meta_campaign_id: `meta-${id}`, creative_ids: [], raw: {} }) as unknown as Campaign;
+  const result = (id: string, extra: Partial<CampaignResult>) => ({ id: `r-${id}`, campaign_id: id, spend: 140, impressions: 300, clicks: 4, leads: 0, cpl: null, fetched_at: "2026-10-24T08:00:00Z", ...extra }) as CampaignResult;
+
+  it("shows real enquiries only on WhatsApp results", () => {
+    localStorage.setItem(`campaign-sync:${business.owner_id}:${business.id}:act_1`, String(Date.now()));
+    const whatsapp = campaign("40000000-0000-4000-8000-000000000001", "whatsapp");
+    const form = campaign("40000000-0000-4000-8000-000000000002", "instant_form");
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[whatsapp, form]}
+      initialResults={{ [whatsapp.id]: result(whatsapp.id, { conversations: 2, cost_per_conversation: 70, real_enquiries: 1, destination: "whatsapp" }), [form.id]: result(form.id, { leads: 3, cpl: 46.67 }) }}
+      leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    const panels = screen.getAllByRole("region", { name: "Real enquiries" });
+    expect(panels).toHaveLength(1);
+    expect(within(panels[0]).getByText("₹140")).toBeInTheDocument();
+  });
+});

@@ -263,6 +263,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   and summaries distinguish conversations from verified leads/sales. This does
   not import chat messages, phone contacts, transcripts, or WhatsApp inbox leads.
   Leads-tab sync remains instant-form only.
+- Not every chat is a customer (#335). A WhatsApp campaign's results have **Add
+  enquiry** (name, phone and note optional): each saves to Enquiries as "WhatsApp
+  chat (added by you)" with the campaign, and the card shows real enquiries and
+  cost per real enquiry (spend ÷ real enquiries) beside cost per conversation.
 - Apply `db/migrations/20260918_whatsapp_results.sql` before deploying the new
   reporting code, with separate migration authorization. Existing results stay
   unchanged (new columns are null); refresh results to populate conversations.

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { attachRealEnquiries } from "@/lib/campaign/real-enquiries";
 import { cache } from "react";
 import { z } from "zod";
 import {
@@ -211,6 +212,20 @@ export async function getLatestResults(
     }
   }
   return map;
+}
+
+/**
+ * Latest results plus each WhatsApp campaign's real enquiries the owner logged (#335). A failed
+ * count read leaves the results as they are, so Campaigns still loads.
+ */
+export async function getLatestResultsWithEnquiries(campaignIds: string[]): Promise<Record<string, CampaignResult>> {
+  const results = await getLatestResults(campaignIds);
+  const ids = Object.keys(results);
+  if (!ids.length) return results;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("leads").select("campaign_id")
+    .in("campaign_id", ids).eq("source", "whatsapp_manual").limit(10_000);
+  return error || !data ? results : attachRealEnquiries(results, data);
 }
 
 /** A business's spend guardrail settings (defaults when none saved). */

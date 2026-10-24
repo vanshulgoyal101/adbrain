@@ -39,6 +39,7 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
@@ -1721,6 +1722,10 @@ function BusinessCampaigns({
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatCurrency(r.cpl) : "—"}
                         />
                       </div>
+                    )}
+                    {r && outcome === "whatsapp" && (
+                      <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
+                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">

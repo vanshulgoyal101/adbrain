@@ -22,6 +22,7 @@ const customAmountMigration = await readFile(join(root, "db/migrations/20261023_
 const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_observation.sql"), "utf8");
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
+const manualEnquiryMigration = await readFile(join(root, "db/migrations/20261024_manual_whatsapp_enquiries.sql"), "utf8");
 const schedulerMigration = await readFile(join(root, "db/migrations/20261024_scheduler_pg_cron.sql"), "utf8");
 const advisorsMigration = await readFile(join(root, "db/migrations/20261024_security_advisors.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1609,6 +1610,40 @@ async function verify(database, source, integrityMigration, customerOnly = false
         }
       });
     }
+
+    await check(`${database}: DB-335 owners log WhatsApp enquiries without a Meta lead ID, only for their own business`, async () => {
+      const installed = (await db.query("select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='leads' and column_name='source'")).rows[0].n === 1;
+      if (!installed) {
+        // Upgrade path: existing Meta form leads stay valid and become source 'meta_form'.
+        assert.ok(!database.includes("fresh"), "A fresh schema must include the manual enquiry migration");
+        await db.query("insert into public.leads(business_id,meta_lead_id) values ($1,'before-335')", [businessId]);
+        assert.equal(await applyMigration(db, "20261024_manual_whatsapp_enquiries.sql", manualEnquiryMigration), "applied");
+        assert.deepEqual((await db.query("select source from public.leads where meta_lead_id='before-335'")).rows, [{ source: "meta_form" }]);
+        await db.query("delete from public.leads where meta_lead_id='before-335'");
+      }
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin");
+        await session.query("set local role authenticated");
+        await session.query("select set_config('request.jwt.claim.sub',$1,true)", [ownerId]);
+        const manual = "insert into public.leads(business_id,campaign_id,source,full_name,created_time) values ($1,$2,'whatsapp_manual',$3,now()) returning meta_lead_id";
+        assert.deepEqual((await session.query(manual, [businessId, campaignId, "First chat"])).rows, [{ meta_lead_id: null }]);
+        assert.equal((await session.query(manual, [businessId, campaignId, "Second chat"])).rowCount, 1);
+        assert.equal((await session.query("select count(*)::int as n from public.leads where campaign_id=$1 and source='whatsapp_manual'", [campaignId])).rows[0].n, 2);
+        await session.query("savepoint other");
+        await assert.rejects(session.query(manual, [otherBusinessId, otherCampaignId, "Not yours"]), { code: "42501" });
+        await session.query("rollback to savepoint other");
+        await assert.rejects(session.query("insert into public.leads(business_id,source,meta_lead_id) values ($1,'whatsapp_manual','forged')", [businessId]), { code: "23514" });
+        await session.query("rollback to savepoint other");
+        await assert.rejects(session.query("insert into public.leads(business_id) values ($1)", [businessId]), { code: "23514" });
+        await session.query("rollback to savepoint other");
+        await assert.rejects(session.query("insert into public.leads(business_id,source) values ($1,'sms')", [businessId]), { code: "23514" });
+      } finally {
+        await session.query("rollback");
+        await session.end();
+      }
+    });
 
     await check(`${database}: DB-A independent numeric bounds and relationship delete semantics`, async () => {
       for (const values of ["impressions=-1", "clicks=-1", "leads=9007199254740992", "conversations=9007199254740992",

@@ -153,7 +153,7 @@ export function LeadInbox({
           phone: l.phone,
           email: l.email,
           city: l.city,
-          formName: l.form_name,
+          formName: l.form_name ?? (l.source === "whatsapp_manual" ? "WhatsApp chat" : null),
           createdTime: l.created_time,
         })),
         { businessName },
@@ -368,7 +368,7 @@ export function LeadInbox({
                     {!l.phone && !l.email && "—"}
                   </td>
                   <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">City</span>{l.city ?? "—"}</td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Form</span>{l.form_name ?? "—"}</td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Form</span>{leadSource(l)}</td>
                   <td role="cell" className="text-slate-500">
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
                     {whenLabel(l.created_time) || "—"}
@@ -406,4 +406,10 @@ export function LeadInbox({
       )}
     </div>
   );
+}
+
+/** Where an enquiry came from: its Meta form, or a WhatsApp chat the owner logged (#335). */
+function leadSource(lead: Lead): string {
+  if (lead.form_name) return lead.form_name;
+  return lead.source === "whatsapp_manual" ? "WhatsApp chat (added by you)" : "—";
 }

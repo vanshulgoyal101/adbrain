@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getCampaignPage, getLatestResults } from "@/lib/supabase/queries";
+import { getCampaignPage, getLatestResultsWithEnquiries } from "@/lib/supabase/queries";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { observeRoute } from "@/lib/observability/logger";
 
@@ -19,7 +19,7 @@ export const GET = observeRoute("/api/campaigns/list", "GET", async (request: Re
   try {
     const actor = await requireOwnedBusiness(parsed.data.businessId);
     const page = await getCampaignPage(actor.businessId, parsed.data);
-    const results = await getLatestResults(page.campaigns.map(campaign => campaign.id));
+    const results = await getLatestResultsWithEnquiries(page.campaigns.map(campaign => campaign.id));
     return NextResponse.json({ ...page, results });
   } catch (error) {
     const status = error instanceof z.ZodError || error instanceof SyntaxError ? 400

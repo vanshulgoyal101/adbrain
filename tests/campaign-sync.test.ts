@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireOwnedBusiness: vi.fn(), getConnectionStatus: vi.fn(), withMetaConnection: vi.fn(),
   listCampaignsPage: vi.fn(), readBoundCampaign: vi.fn(), insert: vi.fn(), update: vi.fn(),
   existing: null as Record<string, unknown> | null,
-  getCampaignPage: vi.fn(), getLatestResults: vi.fn(),
+  getCampaignPage: vi.fn(), getLatestResultsWithEnquiries: vi.fn(),
 }));
 const connection = { generation: 4, authorization: "connected", selected: { adAccountId: "act_123", pageId: "page_1", currency: "INR" } };
 
@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
     return query;
   },
 }) }));
-vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "business" }), getCampaignPage: mocks.getCampaignPage, getLatestResults: mocks.getLatestResults }));
+vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "business" }), getCampaignPage: mocks.getCampaignPage, getLatestResultsWithEnquiries: mocks.getLatestResultsWithEnquiries }));
 vi.mock("@/lib/meta/connection-access", () => ({
   requireOwnedBusiness: mocks.requireOwnedBusiness, getConnectionStatus: mocks.getConnectionStatus, withMetaConnection: mocks.withMetaConnection,
   ConnectionAccessError: class extends Error { constructor(public code: string, message: string) { super(message); } },
@@ -34,7 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.existing = null;
   mocks.getCampaignPage.mockResolvedValue({ campaigns: [], nextCursor: null });
-  mocks.getLatestResults.mockResolvedValue({});
+  mocks.getLatestResultsWithEnquiries.mockResolvedValue({});
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business", userId: "owner" });
   mocks.getConnectionStatus.mockResolvedValue(connection);
   mocks.withMetaConnection.mockImplementation(async (_context, _purpose, execute) => execute({ listCampaignsPage: mocks.listCampaignsPage, readBoundCampaign: mocks.readBoundCampaign }, connection));
@@ -50,7 +50,7 @@ describe("verified campaign sync", () => {
     const response = await GET(new Request("http://localhost/api/campaigns/list?businessId=11111111-1111-4111-8111-111111111111&status=paused&query=solar"));
     expect(response.status).toBe(200);
     expect(mocks.getCampaignPage).toHaveBeenCalledWith("business", expect.objectContaining({ status: "paused", query: "solar" }));
-    expect(mocks.getLatestResults).toHaveBeenCalledWith(["campaign"]);
+    expect(mocks.getLatestResultsWithEnquiries).toHaveBeenCalledWith(["campaign"]);
     expect(await response.json()).toMatchObject({ nextCursor: "display-next", results: {} });
   });
 

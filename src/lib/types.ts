@@ -549,7 +549,9 @@ export interface Database {
           id: string;
           business_id: string;
           campaign_id: string | null;
-          meta_lead_id: string;
+          /** Null exactly for enquiries the owner logged from WhatsApp chats (#335). */
+          meta_lead_id: string | null;
+          source: "meta_form" | "whatsapp_manual";
           form_id: string | null;
           form_name: string | null;
           full_name: string | null;
@@ -566,7 +568,8 @@ export interface Database {
           id?: string;
           business_id: string;
           campaign_id?: string | null;
-          meta_lead_id: string;
+          meta_lead_id?: string | null;
+          source?: "meta_form" | "whatsapp_manual";
           form_id?: string | null;
           form_name?: string | null;
           full_name?: string | null;
@@ -1048,7 +1051,10 @@ export type Creative = Database["public"]["Tables"]["creatives"]["Row"];
 export type CreativePreview = Pick<Creative, "id" | "headline" | "image_url" | "status" | "angle">;
 export type Campaign = Database["public"]["Tables"]["campaigns"]["Row"];
 export type CampaignResult =
-  Database["public"]["Tables"]["campaign_results"]["Row"];
+  Database["public"]["Tables"]["campaign_results"]["Row"] & {
+    /** Real enquiries the owner logged from this WhatsApp campaign's chats (#335); not a stored column. */
+    real_enquiries?: number;
+  };
 export type AdInstruction =
   Database["public"]["Tables"]["ad_instructions"]["Row"];
 export type AuditLog = Database["public"]["Tables"]["audit_log"]["Row"];
