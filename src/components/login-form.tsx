@@ -11,7 +11,7 @@ import { rememberReturningVisitor } from "@/lib/login-visitor";
 import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
 import { authCode } from "@/lib/observability/auth-events";
 
-const primaryClass = "bg-[#dcf77a] font-bold text-[#18211f] shadow-none hover:bg-[#c9ed53] focus-visible:outline-[#216849]";
+const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs hover:bg-primary-hover";
 
 /** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
 export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
@@ -124,8 +124,8 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
   if (status === "sent") {
     return (
       <div className="flex flex-col gap-6">
-        <div role="status" className="border-l-2 border-[#216849] pl-4">
-          <MailCheck size={24} aria-hidden="true" className="mb-3 text-[#216849]" />
+        <div role="status" className="border-l-2 border-primary pl-4">
+          <MailCheck size={24} aria-hidden="true" className="mb-3 text-primary" />
           <h2 className="text-lg font-semibold text-slate-900">Check your email</h2>
           <p className="mt-2 break-words text-sm leading-6 text-slate-600">
             We sent a sign-in link to <span className="font-medium text-slate-900">{email}</span>. Open it on this device to {newVisitor ? "finish creating your account" : "sign in"}.

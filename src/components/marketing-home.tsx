@@ -48,7 +48,7 @@ export function MarketingHome() {
             </div>
             <p className={styles.heroNote}>Making ads is free. You pay only when you choose to run one.</p>
           </div>
-          <p className={styles.heroCaption}>CAMPAIGN IDEAS / ILLUSTRATIVE EXAMPLES</p>
+          <p className={styles.heroCaption}>Illustrative examples</p>
         </section>
 
         <section id="cycle" className={styles.cycle} aria-labelledby="cycle-title">
