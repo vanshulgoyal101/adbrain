@@ -11,6 +11,7 @@ const ACTION_LABELS: Record<string, string> = {
   "creative.unapprove": "Creative moved back to drafts",
   "creative.delete": "Creative deleted",
   "creative.regenerate": "Creative regenerated",
+  "creative.edit": "Ad text edited",
   "creatives.export": "Ad pack exported",
   "campaign.create": "Campaign created",
   "campaign.create.traffic_probe": "Test campaign created",
