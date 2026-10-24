@@ -15,12 +15,14 @@ import type { Business, Creative } from "@/lib/types";
 const h = vi.hoisted(() => ({
   setCreativeStatus: vi.fn(),
   deleteCreative: vi.fn(),
+  updateCreativeCopy: vi.fn(),
   downloadBlob: vi.fn(),
 }));
 
 vi.mock("@/app/(app)/studio/actions", () => ({
   setCreativeStatus: h.setCreativeStatus,
   deleteCreative: h.deleteCreative,
+  updateCreativeCopy: h.updateCreativeCopy,
 }));
 vi.mock("@/lib/download", () => ({ downloadBlob: h.downloadBlob }));
 
@@ -491,6 +493,84 @@ describe("<Studio> regenerate", () => {
       within(screen.getByRole("alertdialog")).getByRole("button", { name: "Regenerate" }),
     );
     expect(await screen.findByText("Rate limited.")).toBeInTheDocument();
+  });
+});
+
+describe("<Studio> edit text (#280)", () => {
+  const edited = { headline: "Solar that pays for itself", primary_text: "Two short lines.", cta: "Book Now", generation: { concept: { description: "Rooftop solar for Jaipur homes" } } };
+
+  it("edits the words in place without the AI and keeps an approved ad approved", async () => {
+    const user = userEvent.setup();
+    h.updateCreativeCopy.mockResolvedValue({ ok: true, warnings: [], creative: edited });
+    render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    const form = screen.getByRole("form", { name: "Edit ad text" });
+    expect(within(form).getByLabelText("Headline")).toHaveValue("Cut your power bill");
+    expect(within(form).getByLabelText("Main text")).toHaveValue("Two short lines.");
+    expect(within(form).getByLabelText("Button")).toHaveValue("Get Quote");
+    await user.clear(within(form).getByLabelText("Headline"));
+    await user.type(within(form).getByLabelText("Headline"), "Solar that pays for itself");
+    await user.type(within(form).getByLabelText("Description"), "Rooftop solar for Jaipur homes");
+    await user.selectOptions(within(form).getByLabelText("Button"), "Book Now");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+
+    expect(h.updateCreativeCopy).toHaveBeenCalledWith("c1", {
+      headline: "Solar that pays for itself",
+      primary_text: "Two short lines.",
+      description: "Rooftop solar for Jaipur homes",
+      cta: "Book Now",
+    });
+    expect(global.fetch).not.toHaveBeenCalledWith("/api/creatives/c1/regenerate", expect.anything());
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Edit ad text" })).not.toBeInTheDocument());
+    expect(screen.getAllByText("Solar that pays for itself").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rooftop solar for Jaipur homes").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+    expect(screen.getByText("Saved.")).toBeInTheDocument();
+  });
+
+  it("shows fact-check warnings and the live-on-Meta note after saving", async () => {
+    const user = userEvent.setup();
+    h.updateCreativeCopy.mockResolvedValue({
+      ok: true,
+      warnings: ["\"20%\" isn't in your Brand. Check it's true, or add it to your Brand's offers."],
+      liveNotice: "This ad is live on Meta; your edit applies to new campaigns.",
+      creative: { ...edited, headline: "20% off solar" },
+    });
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/"20%" isn't in your Brand/)).toBeInTheDocument();
+    expect(screen.getByText("This ad is live on Meta; your edit applies to new campaigns.")).toBeInTheDocument();
+  });
+
+  it("drops the save notes once the whole ad is regenerated", async () => {
+    const user = userEvent.setup();
+    h.updateCreativeCopy.mockResolvedValue({ ok: true, warnings: ["\"free\" isn't in your Brand."], creative: edited });
+    global.fetch = vi.fn().mockResolvedValue(okJson({ creative: creative({ headline: "Fresh AI line" }) })) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/"free" isn't in your Brand/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Regenerate whole ad" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Regenerate" }));
+    expect((await screen.findAllByText("Fresh AI line")).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/"free" isn't in your Brand/)).not.toBeInTheDocument();
+  });
+
+  it("Cancel keeps the ad and saves nothing; a server refusal keeps the form open", async () => {
+    const user = userEvent.setup();
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.type(screen.getByLabelText("Headline"), " now");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(h.updateCreativeCopy).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Cut your power bill").length).toBeGreaterThan(0);
+
+    h.updateCreativeCopy.mockResolvedValue({ ok: false, error: "Headline must be 40 characters or fewer." });
+    await user.click(screen.getByRole("button", { name: "Edit text" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Headline must be 40 characters or fewer.")).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Edit ad text" })).toBeInTheDocument();
   });
 });
 

@@ -820,6 +820,7 @@ These are React/Next server actions, not stable manually callable REST endpoints
 | `saveInstruction` | Optional `id`; `businessId,title,content,isActive`; nonempty trimmed title; update scoped to business |
 | `deleteInstruction` | `id,businessId`; affected-row confirmation required |
 | `setCreativeStatus` | `id`, `draft` or `approved`; affected-row confirmation required |
+| `updateCreativeCopy` | `id`, `{headline,primary_text,description,cta}` with Create's limits (description may be empty); no AI call, status unchanged; description saved in `generation.concept.description`; returns `warnings` (claims the Brand doesn't back, never blocking), the saved fields and `liveNotice` when the ad is in a launched campaign |
 | `deleteCreative` | `id`; local record deletion, not remote-ad deletion |
 
 Actions return `{ok:boolean,error?:string}` and revalidate relevant pages.

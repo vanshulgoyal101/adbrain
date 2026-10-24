@@ -217,6 +217,56 @@ function verbatimQuote(quote: string, sources: string[]): string | null {
   return null;
 }
 
+// "text-free" is the visual the prompt asks for, not a free offer.
+const COMMERCIAL_TERMS =
+  /(?<!\btext-)\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
+
+// An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
+function citesTerm(quote: string, term: string): boolean {
+  if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase());
+  const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote);
+}
+
+export const editableCopySchema = z.object({
+  headline: creativeConceptSchema.shape.headline,
+  primary_text: creativeConceptSchema.shape.primary_text,
+  // Optional when editing: older ads have none, and Meta doesn't require one.
+  description: z.string().trim().max(creativeConceptSchema.shape.description.maxLength ?? 100),
+  cta: creativeConceptSchema.shape.cta,
+});
+
+export type EditableCopy = z.infer<typeof editableCopySchema>;
+
+/**
+ * Fact check for copy the owner typed himself (#280). Same claim rules as
+ * validateConcept, but it only warns: the owner's wording is his call.
+ */
+export function copyClaimWarnings(
+  copy: Pick<EditableCopy, "headline" | "primary_text" | "description">,
+  facts: (string | null | undefined)[],
+  vertical?: string | null,
+): string[] {
+  const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "");
+  const text = [copy.headline, copy.primary_text, copy.description].join(" ");
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+  for (const term of text.match(COMMERCIAL_TERMS) ?? []) {
+    const key = term.toLowerCase().replace(/\s+/g, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!sources.some((fact) => citesTerm(fact, term) && !/\b(no|not|never|without|avoid)\b/i.test(fact))) {
+      warnings.push(`"${term.trim()}" isn't in your Brand. Check it's true, or add it to your Brand's offers.`);
+    }
+  }
+  for (const finding of scanAdCopy(text, { bannedClaims: bannedClaimsForVertical(vertical) })) {
+    if (finding.rule === "banned-claim") {
+      warnings.push(`"${finding.detail}" is a health claim Meta often rejects. Consider rewording it.`);
+    }
+  }
+  return warnings;
+}
+
 export function validateConcept(
   value: unknown,
   input: ConceptInput,
@@ -280,15 +330,8 @@ export function validateConcept(
   if (firstLine.length > FOLD_CHARACTERS) {
     issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
   }
-  // "text-free" is the visual the prompt asks for, not a free offer.
-  const commercialTerms =
-    /(?<!\btext-)\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
-  // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
-  const cites = (quote: string, term: string) => {
-    if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase());
-    const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote);
-  };
+  const commercialTerms = COMMERCIAL_TERMS;
+  const cites = citesTerm;
   const visualClaims = concept.visual.direction
     .split(/(?:[.!?;](?=\s|$)\s*|\s+\bbut\b\s+)/i)
     .filter((clause) => !/^(?:avoid|do not|don't|omit|exclude|never (?:show|include|add|render|depict|use))\b/i.test(clause.trim()))
