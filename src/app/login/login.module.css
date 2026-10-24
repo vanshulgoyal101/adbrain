@@ -1,4 +1,4 @@
-.page { --ink: #18211f; --subtle: #52605b; --line: #d9dfdc; --lime: #dcf77a; --moss: #216849; --mist: #f5f7f6; display: flex; flex: 1; flex-direction: column; min-height: 100dvh; background: #fff; color: var(--ink); font-family: "Trebuchet MS", sans-serif; }
+.page { --ink: var(--foreground); --subtle: var(--muted); --line: var(--border); --lime: var(--lime-wash); --moss: var(--primary); --mist: var(--background); display: flex; flex: 1; flex-direction: column; min-height: 100dvh; background: #fff; color: var(--ink); }
 .page a:focus-visible, .formColumn:focus-visible { outline: 3px solid var(--moss); outline-offset: 4px; }
 .skipLink { position: absolute; top: -100px; left: 16px; z-index: 20; padding: 12px; background: #fff; }
 .skipLink:focus { top: 8px; }
@@ -21,7 +21,7 @@
 .cta { padding: 6px 12px; border-radius: 4px; background: #e4e6e5; font-weight: 700; color: var(--ink); }
 .post figcaption { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 12px; line-height: 1.5; color: var(--subtle); }
 .promises { width: 300px; margin: 0; padding: 0; list-style: none; }
-.promises li { display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid #cdd7d1; }
+.promises li { display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--border); }
 .promises li:first-child { padding-top: 0; }
 .promises li:last-child { border-bottom: 0; }
 .promises svg { flex-shrink: 0; margin-top: 2px; color: var(--moss); }

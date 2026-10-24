@@ -140,12 +140,15 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   and secrets green on `next`'s exact commit (CI runs on pushes to `next`). Then it opens
   and merges a `next → main` PR with a merge commit. That's at most 48 deploys a day;
   each train gets the production guard's smoke.
-- **Deploy budget: ≤ 80 production deploys per rolling 24 h; the train enforces it.** It counts
-  Vercel's GitHub deployments (environment `Production`) and waits at 80, keeping 20 of
-  Hobby's 100 for hotfixes and migrations (which count too). The log prints
-  `deploys in last 24h: N/100` and holds quietly (a warning, no issue) while over budget.
+- **Vercel's limit (measured Oct 24, #461):** Hobby's '100 deployments per day'
+  refusal (402 `api-deployments-free-per-day`) hit an **API/CLI redeploy**, while
+  git-triggered deploys of `main` kept succeeding past 100 in 24 h (12:13, 12:29, 12:48 and
+  13:49Z). So the train batches anyway (≤48 deploys a day), logs GitHub's 24 h deploy
+  count as advisory only, and **holds only on Vercel's own answer**: if the newest
+  production deploy failed within the last hour, it alerts once and retries after the hour.
+  Avoid `vercel redeploy`/`deploy` from the CLI on a busy day; push or promote instead.
   Direct merges to `main` only with `hotfix` or a migration; after one, merge `main` into
-  `next` by PR, because the train refuses while `main` has commits `next` lacks.
+  `next` by PR, because the train refuses while `main` has changes `next` lacks (train merge commits don't count).
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
   with a PR to it; production keeps the last train.
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`

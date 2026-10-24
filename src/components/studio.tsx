@@ -1,4 +1,5 @@
 "use client";
+import { AD_FLOW, Stepper } from "@/components/ui/stepper";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 
 import Link from "next/link";
@@ -14,11 +15,11 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
-  X,
 } from "lucide-react";
 import { deleteCreative, setCreativeStatus } from "@/app/(app)/studio/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -135,15 +136,6 @@ export function Studio({
     generationMounted.current = true;
     return () => { generationMounted.current = false; };
   }, [generationKey]);
-
-  useEffect(() => {
-    if (!previewCreative) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setPreviewId(null);
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [previewCreative]);
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
@@ -296,56 +288,17 @@ export function Studio({
 
   return (
     <div className="flex flex-col gap-4">
-      <ol
-        aria-label="Creative workflow"
-        className="grid grid-cols-4 overflow-hidden border-y border-slate-200 bg-white"
-      >
-        {[
-          ["01", "Brief", "Set the campaign goal"],
-          ["02", "Generate", "Create on-brand variants"],
-          ["03", "Review", `${reviewCount} awaiting approval`],
-          ["04", "Launch", `${approvedCount} ready for a campaign`],
-        ].map(([number, label, detail], index) => (
-          <li
-            key={label}
-            aria-current={workflowStep === index + 1 ? "step" : undefined}
-            className={cn(
-              "flex min-w-0 items-center gap-2 border-r border-slate-200 px-2 py-2.5 last:border-r-0 sm:px-4",
-              workflowStep === index + 1
-                ? "bg-slate-950 text-white"
-                : "text-slate-600",
-            )}
-          >
-            <span
-              className={cn(
-                "hidden text-[10px] font-semibold tracking-normal sm:inline",
-                workflowStep === index + 1
-                  ? "text-amber-300"
-                  : "text-slate-400",
-              )}
-            >
-              {number}
-            </span>
-            <p className="truncate text-xs font-semibold sm:text-sm">{label}</p>
-            <p
-              className={cn(
-                "sr-only",
-                workflowStep === index + 1
-                  ? "text-slate-300"
-                  : "text-slate-500",
-              )}
-            >
-              {detail}
-            </p>
-          </li>
-        ))}
-      </ol>
+      <Stepper
+        current={AD_FLOW[workflowStep - 1]}
+        details={{ Review: `${reviewCount} awaiting approval`, Launch: `${approvedCount} ready for a campaign` }}
+        className="border-y border-slate-200 bg-white px-2 py-1.5"
+      />
       <details
         open={items.length === 0 || Boolean(pendingGeneration)}
         className="border-b border-slate-200 pb-3"
       >
         <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-900">
-          New creative brief
+          Make more ads
         </summary>
         <div className="pt-4">
           <form onSubmit={generate} className="flex flex-col gap-4">
@@ -418,7 +371,7 @@ export function Studio({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
-          Creatives{" "}
+          Ads{" "}
           <span className="font-normal text-slate-400">({items.length})</span>
         </h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -454,7 +407,7 @@ export function Studio({
       {items.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-4">
           <fieldset className="flex flex-wrap gap-1">
-            <legend className="sr-only">Creative status</legend>
+            <legend className="sr-only">Ad status</legend>
             {(
               [
                 ["all", `All (${items.length})`],
@@ -483,7 +436,7 @@ export function Studio({
             ))}
           </fieldset>
           <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-600">
-            Search creatives
+            Search ads
             <input
               type="search"
               value={search}
@@ -524,7 +477,7 @@ export function Studio({
         </Card>
       ) : selectedCreative ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
-          <section aria-label="Creative board" className="min-w-0">
+          <section aria-label="Ads" className="min-w-0">
             <ul
               className="scrollbar-stable flex gap-3 overflow-x-auto p-1 lg:grid lg:max-h-[75vh] lg:grid-cols-2 lg:overflow-y-scroll"
             >
@@ -535,7 +488,7 @@ export function Studio({
                   <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
                     <button
                       type="button"
-                      aria-label={`Inspect ${creative.headline || "untitled creative"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
+                      aria-label={`Inspect ${creative.headline || "untitled ad"}, ${statusLabel}${variantLabel ? `, ${variantLabel}` : ""}`}
                       aria-pressed={creative.id === selectedCreative.id}
                       onClick={() => setSelectedId(creative.id)}
                       data-product-event="creative.inspect"
@@ -564,7 +517,7 @@ export function Studio({
                       </div>
                       <div className="p-3">
                         <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
-                          {creative.headline || "Untitled creative"}
+                          {creative.headline || "Untitled ad"}
                         </p>
                         <p className="mt-2 text-xs text-slate-600">
                           {statusLabel}
@@ -578,7 +531,7 @@ export function Studio({
             </ul>
           </section>
           <section
-            aria-label="Creative inspector"
+            aria-label="Ad details"
             className="min-w-0 lg:sticky lg:top-4"
           >
             <CreativeCard
@@ -707,7 +660,7 @@ function CreativeCard({
   }
 
   function remove() {
-    if (!window.confirm("Delete this creative? This can't be undone.")) return;
+    if (!window.confirm("Delete this ad? This can't be undone.")) return;
     setRegenError(null);
     startTransition(async () => {
       try {
@@ -841,7 +794,7 @@ function CreativeCard({
             onClick={onPreview}
             data-product-event="creative.inspect"
             aria-label={`Preview ${creative.headline ?? "creative"}`}
-            title="Enlarge creative"
+            title="Enlarge ad"
             className="h-11 w-11 shrink-0 p-0"
           >
             <Eye className="h-4 w-4" />
@@ -883,8 +836,8 @@ function CreativeCard({
             variant="ghost"
             onClick={remove}
             disabled={pending || regenerating}
-            aria-label="Delete creative"
-            title="Delete creative"
+            aria-label="Delete ad"
+            title="Delete ad"
             className="h-11 w-11 shrink-0 p-0"
           >
             <Trash2 className="h-4 w-4 text-slate-400" />
@@ -965,69 +918,20 @@ function CreativePreview({
   creative: Creative;
   onClose: () => void;
 }) {
-  const panelRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const previousFocus = document.activeElement;
-    const panel = panelRef.current;
-    panel?.querySelector<HTMLButtonElement>("button")?.focus();
-    function containFocus(event: KeyboardEvent) {
-      if (event.key !== "Tab" || !panel) return;
-      const controls = Array.from(
-        panel.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]',
-        ),
-      );
-      const first = controls[0];
-      const last = controls[controls.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    }
-    panel?.addEventListener("keydown", containFocus);
-    return () => {
-      panel?.removeEventListener("keydown", containFocus);
-      if (previousFocus instanceof HTMLElement) previousFocus.focus();
-    };
-  }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-6"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="creative-preview-title"
-        className="scrollbar-stable max-h-[92vh] w-full max-w-5xl overflow-y-scroll rounded-t-xl bg-white shadow-2xl sm:rounded-xl"
-      >
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="scrollbar-stable max-w-5xl overflow-y-scroll">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+            <DialogDescription className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
               Meta feed preview
-            </p>
-            <h2
-              id="creative-preview-title"
-              className="mt-0.5 text-lg font-semibold text-slate-950"
-            >
+            </DialogDescription>
+            <DialogTitle className="mt-0.5 text-lg font-semibold text-slate-950">
               Review before approval
-            </h2>
+            </DialogTitle>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            aria-label="Close preview"
-          >
-            <X className="h-5 w-5" />
-          </Button>
+          <DialogClose aria-label="Close preview" />
         </header>
 
         <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
@@ -1099,7 +1003,7 @@ function CreativePreview({
             </div>
           </div>
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -45,7 +45,6 @@ export default async function AssetsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Workspace library"
         title="Assets"
         description={
           <p>
