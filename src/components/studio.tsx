@@ -14,11 +14,11 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
-  X,
 } from "lucide-react";
 import { deleteCreative, setCreativeStatus } from "@/app/(app)/studio/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Badge, Card, CardContent } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -135,15 +135,6 @@ export function Studio({
     generationMounted.current = true;
     return () => { generationMounted.current = false; };
   }, [generationKey]);
-
-  useEffect(() => {
-    if (!previewCreative) return;
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setPreviewId(null);
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [previewCreative]);
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
@@ -965,69 +956,20 @@ function CreativePreview({
   creative: Creative;
   onClose: () => void;
 }) {
-  const panelRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const previousFocus = document.activeElement;
-    const panel = panelRef.current;
-    panel?.querySelector<HTMLButtonElement>("button")?.focus();
-    function containFocus(event: KeyboardEvent) {
-      if (event.key !== "Tab" || !panel) return;
-      const controls = Array.from(
-        panel.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]',
-        ),
-      );
-      const first = controls[0];
-      const last = controls[controls.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    }
-    panel?.addEventListener("keydown", containFocus);
-    return () => {
-      panel?.removeEventListener("keydown", containFocus);
-      if (previousFocus instanceof HTMLElement) previousFocus.focus();
-    };
-  }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-6"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="creative-preview-title"
-        className="scrollbar-stable max-h-[92vh] w-full max-w-5xl overflow-y-scroll rounded-t-xl bg-white shadow-2xl sm:rounded-xl"
-      >
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="scrollbar-stable max-w-5xl overflow-y-scroll">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+            <DialogDescription className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
               Meta feed preview
-            </p>
-            <h2
-              id="creative-preview-title"
-              className="mt-0.5 text-lg font-semibold text-slate-950"
-            >
+            </DialogDescription>
+            <DialogTitle className="mt-0.5 text-lg font-semibold text-slate-950">
               Review before approval
-            </h2>
+            </DialogTitle>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            aria-label="Close preview"
-          >
-            <X className="h-5 w-5" />
-          </Button>
+          <DialogClose aria-label="Close preview" />
         </header>
 
         <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
@@ -1099,7 +1041,7 @@ function CreativePreview({
             </div>
           </div>
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

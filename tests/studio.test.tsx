@@ -441,7 +441,8 @@ describe("<Studio> creative preview", () => {
     expect(screen.getByText("Solaride")).toBeInTheDocument();
     expect(screen.getByText("Facebook and Instagram feed")).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    // A key press goes to the focused element (inside the dialog), not to window.
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
