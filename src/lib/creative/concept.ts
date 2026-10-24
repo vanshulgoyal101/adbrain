@@ -93,10 +93,7 @@ Return only JSON, with this shape. Character limits include spaces and are hard 
 "sourceQuotes":["1-8 verbatim quotes from supplied facts supporting the message, each up to 500 characters"]}
 The headline, primary_text and supportingText together should stay under 85 words. Avoid
 unsubstantiated health promises and personal-attribute assumptions. Customer stylistic preferences
-matter, but never override factual constraints. Use the requested language for all customer copy.
-The headline and supportingText are drawn on the image, which renders Latin script only for now. When the
-requested language uses another script (Hindi in Devanagari, Punjabi in Gurmukhi), write those two in English
-or Roman-script Hinglish/Punjabi, and write primary_text and description in the requested language and script.`,
+matter, but never override factual constraints. Use the requested language for all customer copy.`,
     },
     {
       role: "user",
@@ -125,7 +122,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-    "hook-length", "offer-below-fold", "on-image-script",
+    "hook-length", "offer-below-fold",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -377,12 +374,6 @@ export function validateConcept(
   const offer = new RegExp(commercialTerms.source, "iu").exec(concept.primary_text.normalize("NFC"));
   if (offer && offer.index >= FOLD_CHARACTERS) {
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
-  }
-  // Until #300 ships Indic shaping, the image misspells Devanagari and shows Gurmukhi as boxes.
-  for (const [field, text] of [["headline", concept.headline], ["supportingText", concept.supportingText ?? ""]] as const) {
-    if (/[\p{Script=Devanagari}\p{Script=Gurmukhi}]/u.test(text)) {
-      issues.push(`on-image-script: ${field} is drawn on the image, which renders Latin script only; write it in English or Roman-script Hinglish/Punjabi and keep Hindi or Punjabi script for primary_text and description`);
-    }
   }
   return issues.length
     ? { success: false, issues }

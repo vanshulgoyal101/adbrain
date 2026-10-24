@@ -249,8 +249,8 @@ describe("creative concept contract", () => {
     ).toBe(false);
   });
 
-  // Until #300 ships Indic shaping, the image misspells Devanagari ("बजिली बलि") and boxes Gurmukhi.
-  it("keeps words drawn on the image in Latin script and lets Hindi post text through (#290)", async () => {
+  // #300 shapes Devanagari and Gurmukhi on the image, so on-image words may use the ad's script.
+  it("lets Hindi and Punjabi through on the image and in the post text (#290, #300)", async () => {
     const { conceptValidationRules } = await import("@/lib/creative/concept");
     const hindi = { ...input, language: "Hindi in Devanagari script" };
     const rules = (value: unknown) => {
@@ -260,9 +260,9 @@ describe("creative concept contract", () => {
     const post = { ...concept, primary_text: "हमारी लोकल टीम के साथ रूफ़टॉप सोलर के बारे में जानें।", description: "अपनी छत के बारे में हमारी टीम से बात करें।" };
     expect(rules(post)).toEqual([]);
     expect(rules({ ...post, headline: "Apni chhat ko kaam pe lagao" })).toEqual([]);
-    expect(rules({ ...post, headline: "अपनी छत को काम पर लगाएँ" })).toEqual(["on-image-script"]);
-    expect(rules({ ...post, supportingText: "ਲੋਕਲ ਟੀਮ" })).toEqual(["on-image-script"]);
-    expect(buildConceptMessages(hindi)[0].content).toContain("headline and supportingText are drawn on the image");
+    expect(rules({ ...post, headline: "अपनी छत को काम पर लगाएँ" })).toEqual([]);
+    expect(rules({ ...post, supportingText: "ਲੋਕਲ ਟੀਮ" })).toEqual([]);
+    expect(buildConceptMessages(hindi)[0].content).not.toContain("Latin script only");
   });
 
   // Recorded Solaride replies (tests/core/fixtures/create/solaride-hindi.json).
