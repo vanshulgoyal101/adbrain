@@ -50,7 +50,7 @@ export function CampaignLaunchReview({
       </div>
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <dt className="text-xs text-slate-500">Creative</dt>
+          <dt className="text-xs text-slate-500">Ad</dt>
           <dd className={cn("mt-1 font-medium", selectedCount ? "text-slate-900" : "text-amber-700")}>
             {selectedCount ? `${selectedCount} selected` : "Select an ad"}
           </dd>

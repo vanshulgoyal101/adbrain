@@ -11,7 +11,7 @@ import { formatDate } from "@/lib/format";
 
 const labels: Record<PreferenceCategory, string> = {
   copy_length: "Copy length", tone: "Tone", language: "Language", visual_style: "Visual style",
-  layout_density: "Layout density", creative_dislikes: "Creative dislikes", workflow: "Workflow",
+  layout_density: "Layout density", creative_dislikes: "Avoid in ads", workflow: "Workflow",
 };
 
 export function PreferenceSettings({ businessId, initialState = null }: { businessId: string; initialState?: PreferenceState | null }) {

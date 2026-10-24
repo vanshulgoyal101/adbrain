@@ -63,7 +63,6 @@ export default async function CampaignsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Launch"
         title="Campaigns"
         description="Turn approved ads into Meta lead campaigns with the audience, budget, and destination reviewed before anything can spend."
       />
