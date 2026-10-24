@@ -10,6 +10,7 @@ import {
   FileText,
   Link2,
   Loader2,
+  MessageCircle,
   Pause,
   Pencil,
   Play,
@@ -78,6 +79,7 @@ import {
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
 import { campaignAttention } from "@/lib/campaign/health";
+import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
@@ -1725,6 +1727,17 @@ function BusinessCampaigns({
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatCurrency(r.cpl) : "—"}
                         />
                       </div>
+                    )}
+                    {r && (
+                      <a
+                        href={`https://wa.me/?text=${encodeURIComponent(campaignWhatsAppSummary(c, r))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-product-event="campaign.share_results"
+                        className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-800 hover:bg-green-100"
+                      >
+                        <MessageCircle className="h-4 w-4" /> Share results on WhatsApp
+                      </a>
                     )}
                     {r && outcome === "whatsapp" && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}

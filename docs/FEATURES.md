@@ -370,6 +370,11 @@ record and investigate; do not treat an HTTP failure as proof of no remote effec
 
 ## Sync, Results, and Leads
 
+Each campaign with stored results has **Share results on WhatsApp** (#372): a
+`wa.me` link with a plain summary built from the stored results and the campaign
+(spend against the capped run's limit or the daily budget, chats or enquiries plus
+any logged real enquiries, cost per result, one next step). No Meta call or provider.
+
 Campaign sync verifies remote account/Page association, budgets, and supported
 statuses before importing. It handles one provider page per request; the UI asks
 for continuation and accumulates skipped counts. Unsupported/deleted/archived
