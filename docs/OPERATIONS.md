@@ -290,15 +290,37 @@ This does not certify attribution equivalence with every Ads Manager report.
 
 ### Scheduled Jobs
 
-[vercel.json](../vercel.json) schedules keepalive and enforce-spend at
-`0 6 * * *` (UTC), the most a Vercel Hobby cron can run. Every 15 minutes
-[`scheduled-jobs.yml`](../.github/workflows/scheduled-jobs.yml) also calls
-enforce-spend, `sync-leads`, `payment-health` and `refresh-results` (GitHub schedules are best-effort and can run
-late). It needs repository secret `CRON_SECRET` equal to the production value,
-logs only counts, fails red on any non-200 and opens one
-`Scheduled jobs failed twice in a row` `core` bug on two consecutive failures.
-Pause it with `gh workflow disable scheduled-jobs.yml`; resume with
-`gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
+**Supabase `pg_cron` runs the jobs on time** (#274,
+[migration](../db/migrations/20261024_scheduler_pg_cron.sql)): `adbrain-enforce-spend`
+every 15 minutes, `adbrain-sync-leads` at :05/:20/:35/:50 and `adbrain-refresh-results`
+at :10/:25/:40/:55 (UTC; the route refreshes each campaign at most hourly, so every 60–75 minutes). Each job runs `private.call_cron_route(path)`, which sends the
+GET through `pg_net` with the secret from Supabase Vault (`adbrain_cron_secret`, equal
+to the production `CRON_SECRET`); without that Vault secret every job is a no-op.
+`adbrain-cron-history-cleanup` keeps 7 days of `cron.job_run_details`. Inspect with
+`select jobname, schedule, active from cron.job` and
+`select j.jobname, d.status, d.start_time from cron.job_run_details d join cron.job j using (jobid) order by d.start_time desc limit 20`;
+HTTP results stay in `net._http_response` for 6 hours.
+**Never add `net` to the API's exposed schemas or extra search path:** pg_net grants
+its tables and `http_get` to `PUBLIC`, and `net.http_request_queue` holds the
+bearer header until the worker sends it (`select count(*) from net.http_request_queue`
+is 0 between runs). Pause one job with
+`select cron.alter_job((select jobid from cron.job where jobname = 'adbrain-sync-leads'), active := false)`
+(`active := true` resumes). Load or rotate the Vault secret only as DevOps, from
+memory and never printed: `vault.create_secret(<value>, 'adbrain_cron_secret')` once, then
+`vault.update_secret(<id>, <value>)`; rotating `CRON_SECRET` means updating Vercel, the
+repository secret and Vault together.
+
+[`scheduled-jobs.yml`](../.github/workflows/scheduled-jobs.yml) is the backup and the
+only thing that opens issues. GitHub's 15-minute schedule actually runs every few hours.
+It first calls `scheduler-health` and opens one `Scheduled job overdue: <job>` `core`
+bug for DevOps per job with no successful run in twice its interval. It then calls
+enforce-spend, `sync-leads`, `payment-health` and `refresh-results` itself. It needs
+repository secret `CRON_SECRET` equal to the production value, logs only counts, fails
+red on any non-200 and opens one `Scheduled jobs failed twice in a row` `core` bug on
+two consecutive failures. Pause it with `gh workflow disable scheduled-jobs.yml`; resume
+with `gh workflow enable scheduled-jobs.yml`; run once with `gh workflow run scheduled-jobs.yml`.
+[vercel.json](../vercel.json) also runs keepalive and enforce-spend daily at
+`0 6 * * *` (UTC), the most a Vercel Hobby cron can run.
 All cron routes require `Authorization: Bearer <CRON_SECRET>`, return 404 if unset and 401
 for a mismatch. Do not log the header or paste it into support evidence.
 
@@ -308,7 +330,8 @@ for a mismatch. Do not log the header or paste it into support evidence.
 | `/api/cron/enforce-spend` | Paginates active campaigns to find businesses (including those without saved weekly limits), checks customer balances, and reads current-week Meta insights for opted-in weekly caps; attempts to pause bound active campaigns for held funds, reached caps, or unverifiable weekly spend. `unverified` lists businesses whose spend could not be read (503), never ₹0 |
 | `/api/cron/sync-leads` | For each business with a connected Meta Page, resumes or starts the same lead sync as **Sync** (at most 24 Graph reads per business, 20 s each, 45 s per run; leads deduplicated by Meta lead id). Returns `imported` and per-business `sync.hasMore`; any Meta or save failure returns 503 with saved progress, and the next run resumes it |
 | `/api/cron/payment-health` | Read-only Razorpay webhook counts (#178): events in 7 days, events unprocessed after 1 hour, captured orders with no capture event after 30 minutes. `payments:"disabled"` when live payments are off. When `ok` is false the workflow opens one `Razorpay webhook missing for a captured payment` `core` bug (counts only) and stays green. Triage: in the Razorpay Live dashboard confirm the webhook URL `https://adbrain.vanshul.com/api/payments/live/webhook`, its secret matches `RAZORPAY_LIVE_WEBHOOK_SECRET` and capture/refund/dispute events are enabled, then resend the delivery; never re-charge |
-| `/api/cron/refresh-results` | Read-only on Meta (#258): at most once an hour per active bound campaign, reads insights and ad review, saves one `campaign_results` row and `raw.health` flags: `rejected` (an ad `DISAPPROVED` or `WITH_ISSUES`, with Meta's reason), `not_delivering` (0 impressions after 6 h active) and `ended` (capped end time passed). Never pauses. Campaigns and Home show **Needs attention** with the reason. For each problem first seen in the last 2 h the workflow opens one `Campaign needs attention: <kind> (<key>)` `core` bug for Dev 3, with no identifiers; find the campaign with `select id, business_id from campaigns where raw->'health'->'flags' @> '[{"key":"<key>"}]'`. 503 when any campaign could not be refreshed |
+| `/api/cron/refresh-results` | Read-only on Meta (#258): at most once an hour per active bound campaign, reads insights and ad review, saves one `campaign_results` row and `raw.health` flags: `rejected` (an ad `DISAPPROVED` or `WITH_ISSUES`, with Meta's reason), `not_delivering` (0 impressions after 6 h active) and `ended` (capped end time passed). Never pauses. Campaigns and Home show **Needs attention** with the reason. For each problem first seen in the last 24 h the workflow opens one (once per key, so a late GitHub run still alerts) `Campaign needs attention: <kind> (<key>)` `core` bug for Dev 3, with no identifiers; find the campaign with `select id, business_id from campaigns where raw->'health'->'flags' @> '[{"key":"<key>"}]'`. 503 when any campaign could not be refreshed |
+| `/api/cron/scheduler-health` | Read-only watchdog (#274): for each pg_cron job, minutes since its last run and last successful run (any scheduler), from logged `http.request` events; `overdue` after twice its interval without a success. Triage an overdue job: `cron.job` active, recent `cron.job_run_details`, `net._http_response` status (401 means the Vault secret differs from `CRON_SECRET`), then the route itself |
 
 Weekly protection requires a complete Monday-to-today INR spend observation;
 missing metrics are not zero spend. A row without `spend` stays unverified. Meta
