@@ -185,9 +185,9 @@ saved rows rather than clearing the inbox after a partial or uncertain result.
 [Scheduled lead sync](../src/app/api/cron/sync-leads/route.ts) runs the same import
 for every business with a connected account and Page, without a `syncId`. It
 requires the `CRON_SECRET` bearer, allows 20 seconds per business within a
-45-second run, and returns per-business outcomes (503 if any failed). The
-[scheduled jobs workflow](../.github/workflows/scheduled-jobs.yml) calls it four
-times an hour.
+45-second run, and returns per-business outcomes (503 if any failed). Supabase
+`pg_cron` calls it every 15 minutes (#274); the
+[scheduled jobs workflow](../.github/workflows/scheduled-jobs.yml) is the backup.
 
 The saved inbox (`GET /api/leads`) pages up to 100 enquiries with search, status,
 contact and sort filters. `PATCH /api/leads/[id]` saves `workflow_status` (`new`,

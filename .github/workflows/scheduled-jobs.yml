@@ -1,6 +1,7 @@
 name: Scheduled jobs
 on:
-  # Off-peak minutes: GitHub delays or drops schedules at :00/:15/:30/:45 under load.
+  # Backup scheduler and the only place that opens alert issues. Supabase pg_cron runs the jobs on
+  # time (#274); GitHub delays or drops these schedules (often hours apart), so never rely on them.
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
@@ -25,8 +26,27 @@ jobs:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       BASE: https://adbrain.vanshul.com
     steps:
+      - name: Scheduler health
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          # First, so this run's own calls below don't hide a stopped pg_cron.
+          code=$(curl -sS --max-time 30 -o scheduler.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/scheduler-health") || code=000
+          echo "HTTP $code $(jq -c '{ok, jobs: [.jobs[]? | {job, lastRunMinutesAgo, lastSuccessMinutesAgo, overdue}], error}' scheduler.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          [ "$code" = 200 ]
+          # One open issue per overdue job (no successful run in twice its interval); the job stays green.
+          for job in $(jq -r '.jobs[]? | select(.overdue) | .job' scheduler.json); do
+            [[ "$job" =~ ^[a-z-]+$ ]] || continue
+            title="Scheduled job overdue: $job"
+            open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+            [ "$open" = 0 ] || continue
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+              -b "$(printf 'No successful %s run in twice its interval: %s\n\nCheck pg_cron and the Vault secret first, then the route: docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$job" "$(jq -c --arg job "$job" '.jobs[] | select(.job == $job)' scheduler.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done
       - name: Spend enforcement
         id: spend
+        if: always()
         run: |
           [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
           code=$(curl -sS --max-time 75 -o spend.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/enforce-spend") || code=000
@@ -86,4 +106,4 @@ jobs:
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
           [ "$open" = 0 ] || exit 0
           gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
-            -b "$(printf 'Spend enforcement, lead sync, payment health or results refresh failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            -b "$(printf 'Scheduler health, spend enforcement, lead sync, payment health or results refresh failed on two consecutive runs.\n\nRun: %s/%s/actions/runs/%s\nRunbook: docs/OPERATIONS.md#scheduled-jobs\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"

@@ -229,6 +229,15 @@ describe("creative concept contract", () => {
     }
   });
 
+  it("cites an uncited Brand offer verbatim, by its sentence when the fact is too long to quote whole (#281)", () => {
+    const long = `${"We install rooftop solar for homes and small businesses across the region. ".repeat(7)}This month we take 20% off every inverter upgrade. Call us to book.`;
+    expect(long.length).toBeGreaterThan(500);
+    const result = validateConcept({ ...concept, primary_text: "Upgrade your inverter with 20% off this month." }, { ...input, brand: { ...input.brand, description: long } });
+    expect(result.success && result.concept.sourceQuotes).toEqual([...concept.sourceQuotes, "This month we take 20% off every inverter upgrade."]);
+    expect(validateConcept({ ...concept, primary_text: "Book a free inverter check." }, { ...input, brand: { ...input.brand, offers: ["Free site survey"] } }))
+      .toMatchObject({ success: false, issues: [expect.stringContaining("unsupported-commercial-claim: free;")] });
+  });
+
   it("does not read a text-free visual as a free offer, but still requires a fact for free claims", () => {
     expect(validateConcept({ ...concept, rationale: "A calm, text-free photograph keeps the copy area clear." }, input))
       .toMatchObject({ success: true });

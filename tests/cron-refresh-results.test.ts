@@ -105,6 +105,20 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.objectContaining({ flags: [rejected] }));
     expect(body.alerts).toEqual([{ kind: "rejected", key: "aaaaaaaaaaaa" }]);
   });
+
+  it("still reports a problem first seen hours ago by an earlier run, but not one older than a day (#274)", async () => {
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+    const recent = { kind: "not_delivering", reason: "No impressions yet.", since: hoursAgo(5), key: "bbbbbbbbbbbb" };
+    const old = { kind: "rejected", reason: "Meta rejected an ad.", since: hoursAgo(25), key: "cccccccccccc" };
+    mocks.latest = { fetched_at: hoursAgo(0.5) };
+    mocks.campaigns = [
+      bound("c1", "m1", { health: { checkedAt: hoursAgo(0.5), activeSince: hoursAgo(12), flags: [recent] } }),
+      bound("c2", "m2", { health: { checkedAt: hoursAgo(0.5), activeSince: hoursAgo(48), flags: [old] } }),
+    ];
+    const { body } = await call();
+    expect(body).toMatchObject({ refreshed: 0, skipped: 2 });
+    expect(body.alerts).toEqual([{ kind: "not_delivering", key: "bbbbbbbbbbbb" }]);
+  });
 });
 
 describe("campaignAttention", () => {

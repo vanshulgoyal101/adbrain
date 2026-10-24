@@ -239,6 +239,31 @@ function citesTerm(quote: string, term: string): boolean {
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
 }
 
+/** A verbatim quote of `fact` for `term`: the whole fact when it fits a quote, else its sentence that cites it. */
+function citationFor(fact: string, term: string): string | null {
+  if (fact.length <= 500) return fact;
+  return fact.split(/(?<=[.!?।])\s+|\n+/u).map((sentence) => sentence.trim())
+    .find((sentence) => sentence.length <= 500 && citesTerm(sentence, term)) ?? null;
+}
+
+const OBJECT_STOPWORDS = new Set(["a", "an", "the", "and", "or", "of", "for", "to", "with", "your", "our", "on", "in", "at", "by", "is", "it", "all"]);
+const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
+const stem = (word: string) => (word.length > 4 ? word.replace(/e?s$/, "") : word);
+
+/**
+ * Amounts and percentages are specific, so the token alone matches a fact. "Free", "no-cost" and
+ * "guarantee" are not: the thing offered (the next words) must be in the fact too, so "FREE
+ * consultation" is not cited by "Free 15-minute spine check".
+ */
+function sameOffer(output: string, term: string, fact: string): boolean {
+  if (/\d/.test(term)) return true;
+  const factWords = new Set(words(fact).map(stem));
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const uses = [...output.matchAll(new RegExp(`(?<![\\p{L}\\p{M}-])${escaped}(?![\\p{L}\\p{M}])((?:[\\s,:-]+[\\p{L}\\p{M}\\p{N}]+){0,3})`, "giu"))];
+  return uses.length > 0 && uses.every((use) => words(use[1]).filter((word) => !OBJECT_STOPWORDS.has(word)).slice(0, 2)
+    .some((word) => factWords.has(stem(word))));
+}
+
 export const editableCopySchema = z.object({
   headline: creativeConceptSchema.shape.headline,
   primary_text: creativeConceptSchema.shape.primary_text,
@@ -359,13 +384,21 @@ export function validateConcept(
     concept.rationale,
     visualClaims,
   ].join(" ").normalize("NFC");
+  const supported = (term: string) => concept.sourceQuotes.some((quote) => {
+    const text = quote.normalize("NFC");
+    return cites(text, term) && !negation.test(text);
+  });
+  // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
+  // contains it. None or several matching facts leave it uncited; nothing is invented.
+  const facts = [...new Set(sources.map((source) => source.normalize("NFC").trim()).filter(Boolean))];
+  for (const term of new Set(output.match(commercialTerms) ?? [])) {
+    if (supported(term)) continue;
+    const matches = facts.filter((fact) => cites(fact, term));
+    const quote = matches.length === 1 && sameOffer(output, term, matches[0]) ? citationFor(matches[0], term) : null;
+    if (quote && concept.sourceQuotes.length < 8) concept.sourceQuotes.push(quote);
+  }
   for (const term of output.match(commercialTerms) ?? []) {
-    if (
-      !concept.sourceQuotes.some((quote) => {
-        const text = quote.normalize("NFC");
-        return cites(text, term) && !negation.test(text);
-      })
-    ) {
+    if (!supported(term)) {
       issues.push(
         `unsupported-commercial-claim: ${term}; remove it or cite a supplied positive fact supporting it`,
       );

@@ -18,7 +18,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	CTO.
 - **Communication** (Oct 23; #74 is closed). Work talk lives on its issue or PR.
 	Hand off with the label plus one line addressed to the next owner with an arrow
-	(`→ QA: ready at <sha>`), five lines at most; long evidence goes in the PR. Start
+	(`→ QA: ready at <sha>`), five lines at most; long evidence goes in the PR.
+	**Every comment that finishes your part names who acts next** (`→ DevOps: release`,
+	`→ Dev: yours`), and a verdict on a release PR always ends with `→ DevOps`. Move the
+	`owner:` label to whoever acts next. Start PR titles with the issue number (`#274 …`)
+	so the issue's owner hears about the PR. Start
 	your own comments with your role (`Dev 2:`); everyone posts as one GitHub user, so
 	`QA: …` reads as written *by* QA and `wait-for-work` won't wake QA. No status or idle
 	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
@@ -44,9 +48,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
 - **When idle, wait briefly, then stop** (owner, Oct 24: no stale background
 	processes). Run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
-	from a worktree on current `origin/main`, **in the foreground only**. It returns
-	when something is labelled for you, someone comments on your issue, or someone
-	addresses you (`→ QA:`, `→ CEO`). Do the work, then wait again. After 30 minutes
+	from a worktree on current `origin/main`, **in the foreground only**. It first
+	lists any item you own where someone else spoke last (said while you were busy),
+	then returns when something is labelled for you, someone comments on your issue
+	or a PR whose title names it, or someone addresses you (`→ QA:`, `→ CEO`). Do the
+	work, then wait again. Before waiting, finish your worker-table row in order. After 30 minutes
 	with nothing new it exits: stop there. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
