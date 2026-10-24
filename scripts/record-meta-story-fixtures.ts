@@ -3,6 +3,9 @@
  * and a 9:16 Stories/Reels image via asset_feed_spec placement rules, and records the answers for
  * test:core. Any POST without execution_options=["validate_only"] is refused before it leaves the process.
  * A control sends a malformed page_welcome_message: Meta fails it, so the valid greeting is really read.
+ * The real sequence is recorded too: create the creative (an unused creative costs nothing; nothing
+ * runs without an ad), then validate an ad that uses it, with and without the Page's Instagram id.
+ * Without it Meta refuses the ad ("Instagram Account Is Missing", subcode 1772103).
  *
  *   WHATSAPP_NUMBER=+91XXXXXXXXXX npx tsx --env-file=<.env.local> scripts/record-meta-story-fixtures.ts <whatsappAdSetId> <feedHash> <storyHash>
  */
@@ -39,13 +42,27 @@ async function validate(name: string, form: Record<string, string>) {
   const path = `${account}/ads`;
   const response = await fetch(`${GRAPH}${path}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...form, locale: "en_US", access_token: token }) });
   const body = await response.json();
-  tape.push({ name, path, form: JSON.parse(redact(JSON.stringify(form))), status: response.status, body: JSON.parse(redact(JSON.stringify(body))) });
+  tape.push({ name, path, form: JSON.parse(redact(JSON.stringify(form)).replace(/"creative_id":"\d+"/, "\"creative_id\":\"CREATIVE_ID\"")), status: response.status, body: JSON.parse(redact(JSON.stringify(body))) });
   console.log(name, response.status, redact(JSON.stringify(body)).slice(0, 600));
 }
 
+async function createCreative(name: string, form: Record<string, string>) {
+  const path = `${account}/adcreatives`;
+  const response = await fetch(`${GRAPH}${path}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ ...form, locale: "en_US", access_token: token }) });
+  const body = await response.json() as { id?: string };
+  tape.push({ name, path, form: JSON.parse(redact(JSON.stringify(form))), status: response.status, body: { id: body.id ? "CREATIVE_ID" : undefined, ...(body.id ? {} : body) } });
+  console.log(name, response.status, JSON.stringify(body).slice(0, 300));
+  if (!body.id) throw new Error("Creative was not created.");
+  return body.id;
+}
+
 async function main() {
+  const pageToken = (await (await fetch(`${GRAPH}${pageId}?fields=access_token&access_token=${token}`)).json()).access_token as string;
+  const page = await (await fetch(`${GRAPH}${pageId}?fields=instagram_business_account,page_backed_instagram_accounts&access_token=${pageToken}`)).json();
+  const instagramUserId: string = page.instagram_business_account?.id ?? page.page_backed_instagram_accounts.data[0].id;
   const inputs = {
     pageId,
+    instagramUserId,
     feedHash,
     storyHash,
     headline: ad.headline,
@@ -60,6 +77,11 @@ async function main() {
   const bogus = { ...spec, asset_feed_spec: { ...spec.asset_feed_spec, additional_data: { page_welcome_message: "{not json" } } };
   await validate("control-malformed-welcome", { name: "AdBrain #333 validate", adset_id: adSetId, status: "PAUSED", execution_options: VALIDATE, creative: JSON.stringify(bogus) });
   await validate("story-whatsapp", { name: "AdBrain #333 validate", adset_id: adSetId, status: "PAUSED", execution_options: VALIDATE, creative: JSON.stringify(spec) });
+  const name = "AdBrain #333 recorder (unused)";
+  const withInstagram = await createCreative("creative-with-instagram", { name, object_story_spec: JSON.stringify(spec.object_story_spec), asset_feed_spec: JSON.stringify(spec.asset_feed_spec) });
+  await validate("ad-with-instagram", { name: "AdBrain #333 validate", adset_id: adSetId, status: "PAUSED", execution_options: VALIDATE, creative: JSON.stringify({ creative_id: withInstagram }) });
+  const withoutInstagram = await createCreative("control-creative-without-instagram", { name, object_story_spec: JSON.stringify({ page_id: pageId }), asset_feed_spec: JSON.stringify(spec.asset_feed_spec) });
+  await validate("control-ad-without-instagram", { name: "AdBrain #333 validate", adset_id: adSetId, status: "PAUSED", execution_options: VALIDATE, creative: JSON.stringify({ creative_id: withoutInstagram }) });
   writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/story-validate.json"), `${JSON.stringify({ recordedAt: new Date().toISOString(), inputs: JSON.parse(redact(JSON.stringify(inputs))), tape }, null, 2)}\n`);
 }
 
