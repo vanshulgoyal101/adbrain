@@ -354,6 +354,14 @@ export function metaErrorCode(error: unknown): string {
   return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
 }
 
+/**
+ * Meta answered and refused the request (a 4xx with a Meta subcode, e.g. 100/1772103). Timeouts,
+ * transport errors and 5xx are not refusals: the object may exist, so retrying could duplicate it.
+ */
+export function isMetaRefusal(error: unknown): boolean {
+  return error instanceof MetaError && error.status !== undefined && error.status >= 400 && error.status < 500 && error.subcode !== undefined;
+}
+
 const STORY_PLACEMENTS = {
   publisher_platforms: ["facebook", "instagram", "messenger"],
   facebook_positions: ["story", "facebook_reels"],
@@ -1134,6 +1142,7 @@ export class MetaClient {
         // If Meta still refuses the ad on a placement creative, make it with the single image instead.
         const ad = placement
           ? await postAd(creative.id).catch(async (error: unknown) => {
+            if (!isMetaRefusal(error)) throw error;
             params.onStoryFallback?.("ad", metaErrorCode(error));
             const single = await postCreative(singleImageForm);
             await params.onCheckpoint?.({ phase: "creative", externalId: single.id, variantIndex: i, creativeIndex });

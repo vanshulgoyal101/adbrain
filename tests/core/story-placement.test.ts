@@ -35,7 +35,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     }
   });
 
-  async function create(params: { destination: "whatsapp" | "instant_form"; storyImage: Uint8Array | null; failStoryUpload?: boolean; rejectPlacement?: boolean; rejectPlacementAd?: boolean; instagram?: string | null }) {
+  async function create(params: { destination: "whatsapp" | "instant_form"; storyImage: Uint8Array | null; failStoryUpload?: boolean; rejectPlacement?: boolean; rejectPlacementAd?: boolean; failPlacementAd?: "timeout" | "5xx"; instagram?: string | null }) {
     const meta = new MetaClient({ adAccountId: "act_2398686420592052", pageId: inputs.pageId, accessToken: "core-token" });
     vi.spyOn(meta, "getWhatsAppNumber").mockResolvedValue("+919100000874");
     vi.spyOn(meta, "getPageInstagramId").mockResolvedValue(params.instagram === undefined ? inputs.instagramUserId : params.instagram);
@@ -54,9 +54,14 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       }
       // Meta's recorded answer to an ad on a placement creative that doesn't name the Instagram account.
       if (params.rejectPlacementAd && /\/ads(\?|$)/.test(String(url)) && body.includes("creative-1")) return Response.json(exchange("control-ad-without-instagram").body, { status: 400 });
+      if (params.failPlacementAd && /\/ads(\?|$)/.test(String(url)) && body.includes("creative-1")) {
+        if (params.failPlacementAd === "timeout") throw new DOMException("The operation timed out.", "TimeoutError");
+        return Response.json({ error: { message: "An unknown error has occurred.", type: "OAuthException", code: 1 } }, { status: 500 });
+      }
       return Response.json({ id: "created-id" });
     });
     const fallbacks: string[] = [];
+    let error: unknown;
     await meta.createLeadCampaign({
       onStoryFallback: (stage, code) => fallbacks.push(`${stage}:${code}`),
       name: "Core #333", dailyBudgetRupees: 280, destination: params.destination,
@@ -66,10 +71,13 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       link: "https://solaride.in",
       creatives: [{ imageUrl: "https://ads.example.test/feed.png", headline: inputs.headline, message: inputs.message, description: inputs.description, storyImage: params.storyImage }],
       location: { cities: [{ key: "1021145" }] }, ageMin: 25, ageMax: 55, gender: "all",
+    }).catch((caught: unknown) => {
+      if (!params.failPlacementAd) throw caught;
+      error = caught;
     });
     const forms = fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), form: Object.fromEntries(new URLSearchParams(String(init?.body))) }));
     const creatives = forms.filter((call) => call.url.includes("/adcreatives")).map((call) => call.form);
-    return { creative: creatives.at(-1)!, creatives, ads: forms.filter((call) => /\/ads(\?|$)/.test(call.url)).length, fallbacks, uploads: 1 + storyUpload.mock.calls.length };
+    return { creative: creatives.at(-1)!, creatives, ads: forms.filter((call) => /\/ads(\?|$)/.test(call.url)).length, fallbacks, uploads: 1 + storyUpload.mock.calls.length, error };
   }
 
   it("uploads the 9:16 and switches a WhatsApp ad to placement images", async () => {
@@ -116,6 +124,15 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     expect(JSON.parse(creative.object_story_spec).link_data.image_hash).toBe(inputs.feedHash);
     expect(ads).toBe(2);
     expect(fallbacks).toEqual(["ad:100.1772103"]);
+  });
+
+  it.each(["timeout", "5xx"] as const)("fails as before, with no second ad, when the placement ad hits a %s", async (failPlacementAd) => {
+    // Meta may have made the ad anyway; a retry with the single image would leave two ads in the ad set.
+    const { creatives, ads, fallbacks, error } = await create({ destination: "whatsapp", storyImage: new Uint8Array([9]), failPlacementAd });
+    expect(error).toBeDefined();
+    expect(creatives).toHaveLength(1);
+    expect(ads).toBe(1);
+    expect(fallbacks).toEqual([]);
   });
 
   it("lays out a saved overlay ad at 1080×1920 without an AI call, and skips ads without a saved design", async () => {
