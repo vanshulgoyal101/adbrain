@@ -120,7 +120,8 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
     and image prompts. Current brief/instructions and Brand facts take priority.
 2. Choose up to six configured marketing angles; default batch count is three.
 3. For each angle, request a structured concept with caching disabled. First
-   attempt temperature is 0.8; one repair attempt uses 0.4. Max output and
+   attempt temperature is 0.8; one repair attempt uses 0.4 and is told each
+   failed check, with the actual length when text is too long (#281). Max output and
    reasoning effort are configured. Failed validation stops the variant.
    Before validation, cosmetic slips are normalized once:
    - Over-long link description, `visual.medium`, `visual.direction` and rationale are clipped at a word.
