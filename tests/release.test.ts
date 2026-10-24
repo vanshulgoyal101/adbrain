@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, smokeCounts, supersededBy } from "../scripts/release.mjs";
+import { ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -45,6 +45,25 @@ describe("QA approval", () => {
     expect(verdict("QA verdict at c30aaba: **approved.** The tenant-boundary findings from my earlier review still hold.")).toBe(true);
     expect(verdict("QA: c30aaba approved but on hold until #370 lands.")).toBe(false);
     expect(verdict("QA: c30aaba approved; hold off the release until Monday.")).toBe(false);
+  });
+});
+
+describe("verdicts posted as PR reviews (#423)", () => {
+  const review = (body: string, submittedAt: string | null, state = "COMMENTED") => ({ body, state, submitted_at: submittedAt, html_url: `https://example.test/r/${submittedAt}` });
+
+  it("reads review bodies like comments, skipping empty and pending reviews", () => {
+    expect(reviewVerdicts([
+      review("QA verdict at c30aaba: **approved.**", "2026-10-24T12:00:00Z"),
+      review("", "2026-10-24T12:01:00Z", "APPROVED"),
+      review("QA: draft", null, "PENDING"),
+    ])).toEqual([{ body: "QA verdict at c30aaba: **approved.**", createdAt: "2026-10-24T12:00:00Z", url: "https://example.test/r/2026-10-24T12:00:00Z" }]);
+  });
+
+  it("lets a review approve, and a later comment still overrides it", () => {
+    const fromReview = reviewVerdicts([review("QA verdict at c30aaba: **approved.** Migration abc.", "2026-10-24T12:00:00Z")]);
+    expect(qaApproval(fromReview, head).approved).toBe(true);
+    expect(qaApproval([...fromReview, comment("QA: c30aaba changes requested.", "2026-10-24T12:05:00Z")], head).approved).toBe(false);
+    expect(ctoReviews(reviewVerdicts([review("CTO review of c30aaba: **approved**.", "2026-10-24T12:00:00Z")]))).toHaveLength(1);
   });
 });
 
