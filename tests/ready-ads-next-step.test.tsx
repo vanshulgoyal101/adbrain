@@ -21,6 +21,7 @@ describe("<ReadyAdsNextStep>", () => {
     expect(screen.getByRole("img", { name: "Your ad: Headline new" })).toHaveAttribute("src", "https://example.test/new.png");
     expect(screen.getByRole("link", { name: "See all approved ads" })).toHaveAttribute("href", "/studio?status=approved");
     expect(screen.queryByText(/top up|add money/i)).toBeNull();
+    expect(screen.getByRole("link", { name: "Connect Facebook" })).toHaveAttribute("href", "/settings");
   });
 
   it("downloads every approved ad as one pack", async () => {

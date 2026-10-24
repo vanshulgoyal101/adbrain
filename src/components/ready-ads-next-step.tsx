@@ -72,6 +72,9 @@ export function ReadyAdsNextStep({ approved, phone }: { approved: Creative[]; ph
             </Button>
           </>
         )}
+        <p className="mt-1 text-sm text-slate-600">
+          Already have access? <Link href="/settings" className="inline-flex min-h-11 items-center font-medium text-blue-700 hover:underline" data-product-event="meta.connect">Connect Facebook</Link>
+        </p>
       </div>
     </section>
   );
