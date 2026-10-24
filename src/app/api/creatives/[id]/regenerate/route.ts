@@ -19,6 +19,7 @@ import {
   persistLLMUsage,
 } from "@/lib/llm/persist";
 import {
+  createRunRequestId,
   generationReceipt,
   savedGenerationSettings,
   variantUsageEvents,
@@ -153,6 +154,7 @@ async function handlePOST(
         userId: user.id,
         route: "creatives.regenerate",
         requestId: currentRequestId(),
+        creativeId: id,
       }),
     );
     if (!recorded) throw new Error("Regeneration usage could not be recorded");
@@ -189,6 +191,8 @@ async function handlePOST(
           referenceImages,
           settings.sourceFacts,
           photoUrl,
+          // Keeps the Create run that first made this ad; this change's calls carry creativeId (#451).
+          createRunRequestId(creative.generation),
         ),
       })
       .eq("id", id)
@@ -223,6 +227,7 @@ async function handlePOST(
         userId: user.id,
         route: "creatives.regenerate",
         requestId: attemptId,
+        creativeId: id,
       }));
       if (rejection && recorded) unresolved = false;
     } catch {

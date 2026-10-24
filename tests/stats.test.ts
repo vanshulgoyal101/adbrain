@@ -11,7 +11,22 @@ describe("customer filter (#451)", () => {
 
 describe("npm run stats (#451)", () => {
   it("has the sections the CEO asked for", () => {
-    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "business_days", "failures", "speed", "funnel"]);
+    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "business_days", "failures", "speed", "funnel"]);
+  });
+
+  it("gives a receipt for each of the last 20 ads: its own calls, and later changes to it (#451 L1)", () => {
+    const sql = sectionSql("ad_receipts", 7, []);
+    expect(sql).toContain("c.generation->>'requestId'");
+    expect(sql).toContain("e.metadata->>'angle' = c.generation->>'angleId'");
+    expect(sql).toContain("e.metadata->>'creativeId' = c.id::text");
+    expect(sql).toMatch(/order by c\.created_at desc limit 20$/);
+  });
+
+  it("gives a receipt for each of the last 5 Create runs, failed ads included (#451 L1)", () => {
+    const sql = sectionSql("run_receipts", 7, []);
+    expect(sql).toContain("route = 'creatives.generate'");
+    expect(sql).toContain("min(created_at - make_interval(secs => coalesce(latency_ms, 0) / 1000.0))");
+    expect(sql).toMatch(/limit 5$/);
   });
 
   it("filters every event section to customers by default and opts in to everyone", () => {

@@ -313,7 +313,7 @@ async function generate(req: Request, live?: LiveCreate) {
             cta: variant.cta,
             variant_group: variantGroup,
             status: "draft",
-            generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl),
+            generation: generationReceipt(variant, language, referenceImages, sourceFacts, photoUrl, requestId),
           })
           .select("*")
           .single();
