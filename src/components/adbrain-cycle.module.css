@@ -67,8 +67,37 @@
 @keyframes pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
 @keyframes pulse { 50% { opacity: .35; } }
 
+/* Full-screen phone intro (#376): the step fills the space under its title instead of floating in it. */
 .fill .stories { max-width: none; height: 100%; aspect-ratio: auto; border: 0; border-radius: 16px; background: #fff; }
+.fill .stop { inset: 64px 16px 16px; justify-content: flex-start; padding-bottom: 0; gap: 16px; }
 .fill .stopTitle { font-size: 26px; }
+.fill .screen { flex: 1; min-height: 0; align-items: stretch; }
+.fill .screen > * { width: 100%; }
+.fill .brandCard, .fill .live, .fill .results, .fill .chat { display: flex; flex-direction: column; padding: 20px; }
+.fill .brandCard dl, .fill .results dl { flex: 1; display: flex; flex-direction: column; }
+.fill .brandCard dl > div, .fill .results dl > div { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.fill .results dl > div { flex-direction: row; justify-content: space-between; align-items: center; }
+.fill .live { justify-content: space-between; }
+.fill .cardTitle { font-size: 22px; }
+.fill .brandCard dt { font-size: 13px; }
+.fill .brandCard dd { font-size: 17px; }
+.fill .adStack { grid-template-columns: 1fr 1fr; grid-template-rows: 1.4fr 1fr; align-content: stretch; }
+.fill .adStack .miniAd:first-child { grid-column: span 2; }
+.fill .adStack img { object-position: top; }
+.fill .miniAd { aspect-ratio: auto; }
+.fill .miniPoster p { font-size: 15px; }
+.fill .approve { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; }
+.fill .approve img { width: 100%; height: auto; min-height: 0; max-height: calc(100% - 28px); flex: 0 1 auto; object-fit: contain; }
+.fill .liveBudget { font-size: 44px; }
+.fill .liveNote, .fill .bubbleIn, .fill .bubbleOut, .fill .smarter { font-size: 16px; }
+.fill .activePill { align-self: flex-start; font-size: 15px; }
+.fill .chat { justify-content: flex-start; gap: 14px; }
+.fill .chatHead { font-size: 14px; }
+.fill .results dt { font-size: 15px; }
+.fill .results dd { font-size: 32px; }
+
+.approveNote { display: none; }
+.fill .approveNote { display: block; margin: 14px 0 0 !important; font-size: 16px; line-height: 1.4; color: var(--subtle); text-align: center; }
 
 .steps { display: none; }
 .withSteps { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 48px; align-items: center; }
@@ -91,3 +120,4 @@
   .withSteps { grid-template-columns: minmax(0, 1fr); }
   .withSteps .steps { display: none; }
 }
+.fill .approve .approved { position: relative; bottom: auto; margin-top: -22px; font-size: 16px; padding: 10px 18px; }
