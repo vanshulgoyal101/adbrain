@@ -229,9 +229,8 @@ Interview output validates its language choice against the supported list.
 Create offers `en`, `hinglish`, `hi` and `pa` (#290). The interview detects whether
 the owner writes Devanagari Hindi, Gurmukhi Punjabi or Roman-script Hindi, tells the
 model to ask in it (`OWNER WRITES IN`), and suggests that ad language when the model
-leaves `language` out. Words drawn on the image (`headline`, `supportingText`) stay
-in Latin script (`on-image-script`) until the compositor shapes Indic text (#300);
-Hindi or Punjabi goes in `primary_text` and `description`. The claim check reads
+leaves `language` out. Hindi or Punjabi copy can go on the image too (`headline`,
+`supportingText`); the compositor shapes it (#300). The claim check reads
 "फ्री"/"मुफ़्त"/"ਮੁਫ਼ਤ" as free, "गारंटी" as guarantee and "रुपये"/"rupaye" as rupees, and a
 quote with "नहीं" or "बिना" doesn't back a claim.
 Font coverage and language quality still need visual/human review.
@@ -254,8 +253,7 @@ OFL), so headlines are really bold; the brand's sans/serif/mono choice falls
 back to Inter. Words in Devanagari or Gurmukhi (brand, headline, subhead,
 benefits, contact line) are shaped by [sharp/Pango](../src/lib/creative/shaped-text.ts)
 with Noto Sans Devanagari/Gurmukhi (OFL) and drawn as an image in their place,
-because Satori misplaces vowel signs. The concept check's `on-image-script` rule
-still keeps generated headlines Latin until a production Hindi render is checked (#300).
+because Satori misplaces vowel signs.
 With overlay enabled, render/persistence failure fails the variant: **there is
 no implicit bare-photo success fallback**. `AD_DESIGN_OVERLAY=false` explicitly
 chooses the source photo. Source uploads can remain if later steps fail.

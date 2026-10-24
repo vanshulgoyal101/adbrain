@@ -114,28 +114,27 @@ describe("core: the assistant asks in the owner's language (#290)", () => {
   });
 });
 
-describe("core: Create makes Hindi and Hinglish ads (#290)", () => {
-  it("saves the Solaride factory ad in Hindi 3/3, with Hindi post text and Latin words on the image", async () => {
+describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
+  it("saves the Solaride factory ad in Hindi 3/3, in Devanagari on the image and in the post text", async () => {
     const { saved, failed } = await create("hi", "factory");
     expect(failed).toEqual([]);
     expect(saved).toHaveLength(3);
     for (const ad of saved) {
       expect(ad.primaryText).toMatch(DEVANAGARI);
-      expect(`${ad.headline} ${ad.concept.supportingText ?? ""}`).not.toMatch(DEVANAGARI);
+      // #300 shapes Devanagari on the image, so the headline no longer has to be Latin.
+      expect(ad.headline).toMatch(DEVANAGARI);
     }
   });
 
-  // #281: "98%" and "10%" in a rationale are cited with the one Brand fact that states them;
-  // only a "guarantee" that no fact states is still rejected.
-  it("saves the rest, rejecting only a claim no Brand fact states", async () => {
-    for (const [language, goal, count] of [["hi", "vague", 3], ["hinglish", "vague", 2], ["hinglish", "factory", 3]] as const) {
+  it("saves the rest 3/3, retrying only concepts the checks rejected", async () => {
+    const checks = new Set(["too-long", "unsupported-commercial-claim", "offer-below-fold", "all-caps"]);
+    for (const [language, goal] of [["hi", "vague"], ["hinglish", "vague"], ["hinglish", "factory"]] as const) {
       const { saved, failed } = await create(language, goal);
-      expect(saved, `${language} ${goal}`).toHaveLength(count);
-      expect(failed, `${language} ${goal}`).toEqual(count === 3 ? [] : [["unsupported-commercial-claim"]]);
+      expect(saved, `${language} ${goal}`).toHaveLength(3);
+      for (const rules of failed) for (const rule of rules) expect(checks, `${language} ${goal}`).toContain(rule);
       for (const ad of saved) {
-        if (language === "hi") expect(ad.primaryText).toMatch(DEVANAGARI);
-        else expect(`${ad.headline} ${ad.primaryText}`).not.toMatch(DEVANAGARI);
-        expect(`${ad.headline} ${ad.concept.supportingText ?? ""}`).not.toMatch(DEVANAGARI);
+        if (language === "hi") expect(`${ad.headline} ${ad.primaryText}`).toMatch(DEVANAGARI);
+        else expect(`${ad.headline} ${ad.primaryText} ${ad.concept.supportingText ?? ""}`).not.toMatch(DEVANAGARI);
       }
     }
   });
