@@ -4,10 +4,13 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Brain, Check, CirclePause, MapPin, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowRight, Brain, Check, CirclePause, IndianRupee, MapPin, MessageCircle, ShieldCheck } from "lucide-react";
 import { MARKETING_FAQS } from "@/lib/seo/jsonLd";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import styles from "./marketing-home.module.css";
+
+// Digits only, for wa.me; unset renders no support link (#289: the owner supplies the number).
+const SUPPORT_WHATSAPP = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP ?? "").replace(/\D/g, "");
 
 // Below the first screen: kept out of the initial bundle, with its box reserved so nothing shifts.
 const AdbrainCycle = dynamic(() => import("@/components/adbrain-cycle").then((m) => m.AdbrainCycle), {
@@ -159,11 +162,17 @@ export function MarketingHome() {
         </section>
 
         <section className={styles.safety} aria-labelledby="safety-title">
-          <div><ShieldCheck size={30} aria-hidden="true" /><p className={styles.eyebrow}>03 / YOU MAKE THE CALL</p><h2 id="safety-title">Your reputation.<br />Your decisions.</h2><p>AI helps with the work. You decide what represents your business, who you want to reach, and when to spend.</p></div>
+          <div>
+            <ShieldCheck size={30} aria-hidden="true" />
+            <h2 id="safety-title">You approve every rupee.</h2>
+            <p>AI does the work. You decide what goes out under your name, who sees it and what you spend.</p>
+            {SUPPORT_WHATSAPP && <a className={styles.support} href={`https://wa.me/${SUPPORT_WHATSAPP}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={18} aria-hidden="true" /> Questions? WhatsApp us</a>}
+          </div>
           <ul>
-            <li><Check aria-hidden="true" /><div><h3>Approve the creative</h3><p>Check the image, claims, and copy before using an ad.</p></div></li>
-            <li><MapPin aria-hidden="true" /><div><h3>Review the audience and budget</h3><p>Choose the locations, daily budget, and lead form before creating a campaign.</p></div></li>
-            <li><CirclePause aria-hidden="true" /><div><h3>Created paused</h3><p>New campaigns start paused. Activation is a separate decision; Meta eligibility and review still apply.</p></div></li>
+            <li><Check aria-hidden="true" /><div><h3>Approve every ad</h3><p>Check the picture, the words and every claim before an ad is used.</p></div></li>
+            <li><CirclePause aria-hidden="true" /><div><h3>Your limit, your pause button</h3><p>Campaigns start paused with the daily limit you set. Pause any time; Meta&apos;s own review still applies.</p></div></li>
+            <li><IndianRupee aria-hidden="true" /><div><h3>Pay as you go, in rupees</h3><p>Making ads is free. To run them, top up any amount from ₹500; 80% goes to your ads (including Meta&apos;s GST) and 20% to AdBrain.</p></div></li>
+            <li><MapPin aria-hidden="true" /><div><h3>Your own Page, your customers</h3><p>Ads run from your Facebook Page and Instagram, and customers message your WhatsApp directly.</p></div></li>
           </ul>
         </section>
 
