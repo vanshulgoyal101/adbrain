@@ -5,10 +5,12 @@
  * latency, and a blind judge on the post text and the finished ad image. The judge's copy score is
  * first calibrated on the gold-labelled evals/creative fixtures (pass: MAE <= 0.15).
  *
- * Paid: about $0.10 per case plus about $0.01 of judge calls; stops before --cap-usd (default 5).
- * Uses OpenRouter only, never the free Groq/Gemini keys production falls back to (#410).
+ * --profile paid (default): production's models on OpenRouter, about $0.05 per case plus judge calls;
+ * stops before --cap-usd (default 5), never touches the free Groq/Gemini keys (#410).
+ * --profile free: what internal accounts get (#466): Gemini then Groq, Pollinations images, judged
+ * by the same Gemini model on Google directly. $0; OpenRouter is switched off for the run.
  *
- *   npx tsx --env-file=.env.local scripts/eval-create.ts [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge]
+ *   npx tsx --env-file=.env.local scripts/eval-create.ts [--profile free] [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge]
  *
  * Without --write-baseline it compares with tests/eval/baseline.json and exits 1 when a customer
  * would see something worse (the upgrade-only gate). Bake-off: set EVAL_TEXT_MODEL,
@@ -24,34 +26,26 @@ import {
   compareSummaries, expectedScript, offerInFold, summarize, textScript,
   type AdResult, type CaseResult, type JudgeScore,
 } from "./lib/eval-create-score";
+import { evalProfile } from "./lib/eval-profile";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
 const option = (name: string) => { const index = args.indexOf(`--${name}`); return index >= 0 ? args[index + 1] : undefined; };
 
-const settings = {
-  textModel: process.env.EVAL_TEXT_MODEL ?? "anthropic/claude-haiku-5.5",
-  imageModel: process.env.EVAL_IMAGE_MODEL ?? "openai/gpt-image-2.5-flare",
-  judgeModel: process.env.EVAL_JUDGE_MODEL ?? "google/gemini-3.8-flash",
-  schedule: "parallel",
-};
-// Production Create settings (llm_usage_events, Oct 24), pinned over any stale .env.local value.
-Object.assign(process.env, {
-  CREATIVE_PROVIDER_ORDER: "openrouter",
-  OPENROUTER_MODEL: settings.textModel,
-  IMAGE_PROVIDER: "openrouter",
-  IMAGE_PROVIDER_FALLBACK: "none",
-  OPENROUTER_IMAGE_MODEL: settings.imageModel,
-  AD_DESIGN_OVERLAY: "true",
-  CREATIVE_CONCEPT_SCHEDULE: settings.schedule,
-});
+const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEYS ?? "").split(",")[0]?.trim();
+const GOOGLE_KEY = (process.env.GOOGLE_AI_API_KEYS ?? "").split(",")[0]?.trim();
+// Production Create settings (llm_usage_events, Oct 24), pinned over any stale .env.local value,
+// before the pipeline reads its environment.
+const { settings, env: profileEnv } = evalProfile(option("profile") ?? "paid", process.env);
+Object.assign(process.env, profileEnv);
+const FREE = settings.profile === "free";
 
 const ROOT = process.cwd();
 const BASELINE = join(ROOT, "tests/eval/baseline.json");
 const CAP_USD = Number(option("cap-usd") ?? 5);
 const REPEAT = Math.max(1, Number(option("repeat") ?? 1));
-const OPENROUTER_KEY = (process.env.OPENROUTER_API_KEYS ?? "").split(",")[0]?.trim();
-if (!OPENROUTER_KEY) throw new Error("Set OPENROUTER_API_KEYS (run with --env-file=.env.local).");
+if (!FREE && !OPENROUTER_KEY) throw new Error("Set OPENROUTER_API_KEYS (run with --env-file=.env.local).");
+if (FREE && !GOOGLE_KEY) throw new Error("Set GOOGLE_AI_API_KEYS (run with --env-file=.env.local).");
 
 type EvalCase = { id: string; language: string; source: string; brand: BrandContext; brief: string; sourceFacts: string[]; offerTerms: string[] };
 const allCases = (JSON.parse(readFileSync(join(ROOT, "tests/eval/cases.json"), "utf8")) as { cases: EvalCase[] }).cases;
@@ -81,6 +75,7 @@ let spentUsd = 0;
 let prices: Record<string, { prompt: number; completion: number }> = {};
 
 async function loadPrices() {
+  if (FREE) return;
   // The key is shared with production (#449): never let an eval spend production's headroom.
   const key = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${OPENROUTER_KEY}` } });
   const { data: limits } = await key.json() as { data?: { limit?: number | null; limit_remaining?: number | null } };
@@ -98,6 +93,37 @@ function textCost(entries: { model: string; usage: { promptTokens: number; compl
     const price = prices[entry.model] ?? { prompt: 0, completion: 0 };
     return sum + entry.usage.promptTokens * price.prompt + entry.usage.completionTokens * price.completion;
   }, 0);
+}
+
+/** One judge call: a prompt and, for an ad, its image; free runs ask Google directly at $0. */
+async function judgeJSON(text: string, jpeg: Buffer | null, maxTokens: number): Promise<{ value: unknown; costUsd: number }> {
+  return FREE ? googleJSON(text, jpeg, maxTokens) : openRouterJSON([
+    { type: "text", text },
+    ...(jpeg ? [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${jpeg.toString("base64")}` } }] : []),
+  ], maxTokens);
+}
+
+async function googleJSON(text: string, jpeg: Buffer | null, maxTokens: number): Promise<{ value: unknown; costUsd: number }> {
+  for (let attempt = 1; ; attempt++) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${settings.judgeModel}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GOOGLE_KEY },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text }, ...(jpeg ? [{ inline_data: { mime_type: "image/jpeg", data: jpeg.toString("base64") } }] : [])] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: maxTokens * 4 },
+      }),
+      signal: AbortSignal.timeout(90_000),
+    }).catch(() => null);
+    const body = await response?.json().catch(() => ({})) as { candidates?: { content?: { parts?: { text?: string }[] } }[] } | undefined;
+    const reply = body?.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
+    try {
+      return { value: JSON.parse(reply.replace(/^\s*```(?:json)?|```\s*$/g, "")), costUsd: 0 };
+    } catch {
+      // The free tier rate-limits: wait and try again rather than lose the score.
+      if (attempt < 6) { await new Promise((resolve) => setTimeout(resolve, 10_000 * attempt)); continue; }
+      throw new Error(`Judge returned no JSON (${response ? `HTTP ${response.status}` : "timeout"}).`);
+    }
+  }
 }
 
 async function openRouterJSON(content: unknown[], maxTokens: number): Promise<{ value: unknown; costUsd: number }> {
@@ -129,7 +155,7 @@ async function calibrateJudge() {
   const rows = readFileSync(join(ROOT, "evals/creative/fixtures.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
   let error = 0;
   for (const row of rows) {
-    const { value } = await openRouterJSON([{ type: "text", text: `Grade this local-business ad's copy from 1 to 5.\n${COPY_RUBRIC}\nReturn only JSON: {"copy": 1-5}\n\nBrief: ${row.brief}\nHeadline: ${row.headline}\nBody: ${row.primary_text}\nCTA: ${row.cta}` }], 800);
+    const { value } = await judgeJSON(`Grade this local-business ad's copy from 1 to 5.\n${COPY_RUBRIC}\nReturn only JSON: {"copy": 1-5}\n\nBrief: ${row.brief}\nHeadline: ${row.headline}\nBody: ${row.primary_text}\nCTA: ${row.cta}`, null, 800);
     error += Math.abs(Number((value as { copy?: number }).copy) - row.gold_score) / 4;
   }
   return { model: settings.judgeModel, cases: rows.length, mae: Number((error / rows.length).toFixed(3)) };
@@ -139,10 +165,7 @@ async function judge(item: EvalCase, ad: AdResult, png: Uint8Array): Promise<Jud
   const jpeg = await sharp(Buffer.from(png)).resize(768).jpeg({ quality: 82 }).toBuffer();
   const brand = item.brand;
   const facts = [brand.description, ...(brand.usps ?? []), ...(brand.offers ?? []), ...item.sourceFacts].filter(Boolean).map((fact) => `- ${fact}`).join("\n");
-  const { value } = await openRouterJSON([
-    { type: "text", text: `${JUDGE_RUBRIC}\n\nBusiness: ${brand.name} (${(brand.locations ?? []).join(", ")})\nFacts:\n${facts}\n\nBrief: ${item.brief}\n\nHeadline: ${ad.headline}\nPost text:\n${ad.primaryText}\nCTA: ${ad.cta}` },
-    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${jpeg.toString("base64")}` } },
-  ], 1500);
+  const { value } = await judgeJSON(`${JUDGE_RUBRIC}\n\nBusiness: ${brand.name} (${(brand.locations ?? []).join(", ")})\nFacts:\n${facts}\n\nBrief: ${item.brief}\n\nHeadline: ${ad.headline}\nPost text:\n${ad.primaryText}\nCTA: ${ad.cta}`, jpeg, 1500);
   return judgeSchema.parse(value);
 }
 
@@ -214,6 +237,7 @@ async function main() {
   console.log(`\n${JSON.stringify(summary, null, 2)}\nspent $${spentUsd.toFixed(3)} (cap $${CAP_USD}); report and ads in ${outDir}`);
 
   if (flag("write-baseline")) {
+    if (FREE) throw new Error("The baseline is production's paid profile; a free run only compares against it.");
     if (only || results.length < allCases.length * REPEAT) throw new Error("A baseline needs every case, every repeat; run without --cases and under the cap.");
     writeFileSync(BASELINE, `${JSON.stringify(report, null, 2)}\n`);
     console.log(`baseline written to ${BASELINE}`);

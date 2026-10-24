@@ -277,7 +277,11 @@ fewer full batches or saved ads, more invented claims or garbled text, judge sco
 0.25, more than ₹25 per run, or Create p90 over 60 s and slower than before. About $0.05 per case;
 `--cap-usd` (default 5) stops the run, and it refuses to start unless the shared OpenRouter key keeps
 $2 for production after the cap (#449). `--repeat N` runs each case N times; bake-offs set
-`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`.
+`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`. `--profile free` runs what internal
+accounts get (Gemini then Groq, Pollinations images, judged by the same Gemini model on Google) at
+$0 with OpenRouter switched off; it can't write the baseline. Free tiers are small (Gemini 20
+requests per day per model, Groq 6,000 tokens a minute, Pollinations ~1 image per 20–40 s), so a
+free run measures availability as much as quality (#418).
 
 Baseline (2026-10-24, `8e21d29`, anthropic/claude-haiku-5.5 + openai/gpt-image-2.5-flare):
 full batches 71%, 17/21 ads, first try 71%, judge copy
