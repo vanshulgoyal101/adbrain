@@ -1,0 +1,22 @@
+{
+  "repo": "vanshulgoyal101/skills",
+  "sha": "fb8f6e04ce9f8483892464497af55399c10966fb",
+  "skills": [
+    "multi-worker-delivery",
+    "post-deploy-production-guard",
+    "ci-merge-throughput",
+    "verification-gates",
+    "task-aware-llm-routing",
+    "budget-aware-provider-routing",
+    "provider-cooldown-rotation",
+    "validated-multimodal-generation",
+    "external-api-error-contracts",
+    "rendered-ui-evidence",
+    "mobile-input-and-motion",
+    "hydration-determinism",
+    "supabase-rls-complete",
+    "database-invariants",
+    "security-boundary-contracts",
+    "payment-state-reconciliation"
+  ]
+}
