@@ -23,6 +23,7 @@ const metaCostMigration = await readFile(join(root, "db/migrations/20261023_meta
 const metaSettleMigration = await readFile(join(root, "db/migrations/20261023_meta_cost_settle.sql"), "utf8");
 const operatorFundedMigration = await readFile(join(root, "db/migrations/20261023_operator_funded_businesses.sql"), "utf8");
 const schedulerMigration = await readFile(join(root, "db/migrations/20261024_scheduler_pg_cron.sql"), "utf8");
+const advisorsMigration = await readFile(join(root, "db/migrations/20261024_security_advisors.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -1079,6 +1080,41 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyAdvisorHardening(db, database) {
+  await check(`${database}: advisor hardening reapplies cleanly and leaves the expected catalog (#359)`, async () => {
+    await db.query(advisorsMigration);
+    const fn = (await db.query(`select
+      (select prosecdef from pg_proc where oid = 'public.owns_business(uuid)'::regprocedure) as owns_definer,
+      has_function_privilege('authenticated', 'public.handle_new_user()', 'execute') as trigger_auth,
+      has_function_privilege('anon', 'public.handle_new_user()', 'execute') as trigger_anon,
+      (select proconfig from pg_proc where oid = 'public.set_updated_at()'::regprocedure) as touch_config`)).rows[0];
+    assert.deepEqual(fn, { owns_definer: false, trigger_auth: false, trigger_anon: false, touch_config: ['search_path=""'] });
+    const bare = (await db.query(`select count(*)::int n from pg_policies where schemaname = 'public'
+      and (coalesce(qual, '') ~ 'auth\\.uid\\(\\)' or coalesce(with_check, '') ~ 'auth\\.uid\\(\\)')
+      and not (coalesce(qual, '') || coalesce(with_check, '')) ~ 'SELECT auth\\.uid\\(\\)'`)).rows[0].n;
+    assert.equal(bare, 0, "every policy calling auth.uid() wraps it in (select auth.uid())");
+  });
+  await check(`${database}: new users still get a profile, and owns_business answers per caller (#359)`, async () => {
+    const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+    await db.query("insert into auth.users(id,email) values ($1,'advisor-owner@example.invalid'),($2,'advisor-other@example.invalid')", [owner, other]);
+    assert.equal((await db.query("select count(*)::int n from public.profiles where id = any($1)", [[owner, other]])).rows[0].n, 2);
+    await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Advisor fixture')", [business, owner]);
+    const ask = async (role, user) => {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query("begin");
+        if (user) await session.query("select set_config('request.jwt.claim.sub', $1, true)", [user]);
+        await session.query(`set local role ${role}`);
+        return (await session.query("select public.owns_business($1) as owns", [business])).rows[0].owns;
+      } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+    };
+    assert.equal(await ask("authenticated", owner), true);
+    assert.equal(await ask("authenticated", other), false);
+    assert.equal(await ask("anon"), false);
+  });
+}
+
 async function verifyScheduler(db, database) {
   const call = async (path) => (await db.query("select private.call_cron_route($1) as id", [path])).rows[0].id;
   await check(`${database}: without pg_cron no job is scheduled, and the helper is a no-op without Vault (#274)`, async () => {
@@ -1466,6 +1502,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(schedulerMigration);
       await db.query(schedulerMigration);
       await verifyScheduler(db,database);
+      if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       return;
     }
     if (integrityMigration) {
