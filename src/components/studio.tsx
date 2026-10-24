@@ -542,6 +542,7 @@ export function Studio({
                             src={creativeThumbnailUrl(creative.image_url)}
                             alt=""
                             loading="lazy"
+                            fetchPriority="low"
                             className="h-full w-full object-contain"
                             onError={(event) => {
                               if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
@@ -720,7 +721,8 @@ function CreativeCard({
               "h-full w-full object-contain transition-opacity",
               imgLoaded ? "opacity-100" : "opacity-0",
             )}
-            loading="lazy"
+            // The selected ad is the page's largest paint on a phone (#360): fetch it while the HTML parses.
+            loading="eager"
             fetchPriority="high"
             onLoad={() => setLoadedUrl(creative.image_url)}
             onError={(event) => {

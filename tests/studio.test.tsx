@@ -383,13 +383,14 @@ describe("<Studio> creative preview", () => {
     expect(boardImage).toHaveAttribute("src", original);
   });
 
-  it("prioritizes the selected image without eagerly fetching board thumbnails", () => {
+  it("fetches the selected image first and board thumbnails lazily at low priority (#360)", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
 
     expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("fetchpriority", "high");
-    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("loading", "lazy");
-    expect(screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img"))
-      .toHaveAttribute("loading", "lazy");
+    expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("loading", "eager");
+    const thumbnail = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    expect(thumbnail).toHaveAttribute("loading", "lazy");
+    expect(thumbnail).toHaveAttribute("fetchpriority", "low");
   });
 
   it("shows placement context and closes with Escape", () => {
