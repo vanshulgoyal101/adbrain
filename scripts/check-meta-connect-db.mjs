@@ -1156,6 +1156,50 @@ async function verifyManagedAccounts(db, database) {
   });
 }
 
+// QA red checks for #527 T1: no two tenants share a Page or a WhatsApp number, an insert can't skip
+// the state machine, and an offboarding account can't be revived to ready.
+async function verifyManagedAccountsTenantQA(db, database) {
+  const a = randomUUID(), b = randomUUID(), ownerA = randomUUID(), ownerB = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [ownerA, ownerB]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'QA tenant A'),($3,$4,'QA tenant B')", [a, ownerA, b, ownerB]);
+  const asService = async (run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role service_role");
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: 2T QA: two tenants can't share a Page or a WhatsApp number (#527 T1, #253)`, async () => {
+    await asService(async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id,phone_number_id) values ($1,'90001','91001')", [a]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'90001')", [b]), { code: "23505" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.managed_meta_accounts(business_id,page_id,phone_number_id) values ($1,'90002','91001')", [b]), { code: "23505" });
+    });
+  });
+  await check(`${database}: 2T QA: a new managed account starts at requested; an insert can't skip the state machine (#527 T1)`, async () => {
+    await asService(async (session) => {
+      await assert.rejects(session.query(`insert into public.managed_meta_accounts(business_id,state,page_id,child_business_id,ad_account_id,funding_state)
+        values ($1,'ready','90003','90004','act_90005','card_attached')`, [a]), { code: "23514" });
+    });
+  });
+  await check(`${database}: 2T QA: an offboarding account can't be revived to ready through failed (#527 T1)`, async () => {
+    await asService(async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'90006')", [a]);
+      for (const step of ["state='page_linked'", "state='child_created', child_business_id='90007'", "state='ad_account_created', ad_account_id='act_90008'",
+        "state='funded', funding_state='card_attached'", "state='ready'", "state='offboarding'"]) {
+        await session.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [a]);
+      }
+      await session.query("savepoint s");
+      await session.query("update public.managed_meta_accounts set state='failed' where business_id=$1", [a]).catch(() => session.query("rollback to savepoint s"));
+      await assert.rejects(session.query("update public.managed_meta_accounts set state='ready' where business_id=$1", [a]), { code: "23514" });
+    });
+  });
+}
+
 async function verifyAdvisorHardening(db, database) {
   await check(`${database}: advisor hardening reapplies cleanly and leaves the expected catalog (#359)`, async () => {
     await db.query(advisorsMigration);
@@ -1581,6 +1625,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(managedAccountsMigration);
       await db.query(managedAccountsMigration);
       await verifyManagedAccounts(db,database);
+      await verifyManagedAccountsTenantQA(db,database);
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       return;
     }
