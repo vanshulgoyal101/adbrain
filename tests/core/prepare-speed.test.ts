@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import geoTape from "./fixtures/meta/geo-tricity.json";
 import prepareTape from "./fixtures/meta/prepare.json";
+import formTape from "./fixtures/meta/lead-form.json";
 
 // geo-tricity.json: real Graph geo searches recorded read-only from Solaride's account on
 // 2026-10-23 with the previous one-at-a-time resolver (paging links, which embed the token,
@@ -84,6 +85,40 @@ describe("core: Prepare speed keeps every result (#271)", () => {
       await cachedLeadForms(meta, connection());
       expect(formReads()).toBe(5);
       expect(sent.every(call => call.startsWith("GET "))).toBe(true);
+    });
+  });
+
+  // lead-form.json: real single-object reads recorded 2026-10-24 (an active Solaride form, a
+  // campaign ID, an unknown ID). Archived and other-Page cases edit the active body.
+  describe("preflight form check reads one form fresh", () => {
+    const ACTIVE = "2531491190682703";
+    const objectPath = `${ACTIVE}?fields=id%2Cname%2Cstatus%2Cpage`;
+    const withActiveBody = (edit: (body: Record<string, unknown>) => Record<string, unknown>) =>
+      (formTape as Exchange[]).map(entry => entry.path === objectPath
+        ? { ...entry, body: edit(entry.body as Record<string, unknown>) } : entry);
+
+    it("accepts an active form on the connected Page with one object read, not the form list", async () => {
+      const { sent } = replay(formTape as Exchange[]);
+      const form = await new MetaClient(creds).readActiveLeadForm(ACTIVE);
+      expect(form).toEqual({ id: ACTIVE, name: "Solaride | Free Survey | CHD-PKL | Homeowners | Sep 2026", status: "ACTIVE" });
+      expect(sent).toEqual([`GET ${creds.pageId}?fields=access_token`, `GET ${objectPath}`]);
+    });
+
+    it("refuses an archived form and a form on another Page", async () => {
+      replay(withActiveBody(body => ({ ...body, status: "ARCHIVED" })));
+      expect(await new MetaClient(creds).readActiveLeadForm(ACTIVE)).toBeNull();
+      vi.restoreAllMocks();
+      replay(withActiveBody(body => ({ ...body, page: { id: "100000000000001", name: "Other" } })));
+      expect(await new MetaClient(creds).readActiveLeadForm(ACTIVE)).toBeNull();
+    });
+
+    it("refuses objects that are not readable forms, and never calls Meta for a malformed ID", async () => {
+      const { sent } = replay(formTape as Exchange[]);
+      const meta = new MetaClient(creds);
+      expect(await meta.readActiveLeadForm("120253678786150526")).toBeNull();
+      expect(await meta.readActiveLeadForm("9999999999999999")).toBeNull();
+      expect(await meta.readActiveLeadForm("123/leadgen_forms")).toBeNull();
+      expect(sent.filter(call => !call.includes("access_token"))).toHaveLength(2);
     });
   });
 });
