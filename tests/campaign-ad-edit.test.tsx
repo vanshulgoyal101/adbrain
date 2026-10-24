@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
-import type { Business, Creative } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 
 // #280: edit an ad's text or the words on its picture from the campaign's ad picker.
 const mocks = vi.hoisted(() => ({
@@ -108,5 +108,19 @@ describe("campaign ad picker: Edit (#280)", () => {
     await act(async () => { fireEvent.click(within(screen.getByRole("region", { name: "Edit ad" })).getByRole("button", { name: "Save" })); });
     await waitFor(() => expect(screen.queryByText(/Destination: WhatsApp chat/)).not.toBeInTheDocument());
     expect(mocks.createCampaign).not.toHaveBeenCalled();
+  });
+});
+
+describe("campaign results: Share on WhatsApp (#372)", () => {
+  it("opens WhatsApp with the stored results as a plain summary", async () => {
+    const live = { id: "44444444-4444-4444-8444-444444444444", business_id: business.id, name: "Solaride Tricity", objective: "OUTCOME_ENGAGEMENT", destination: "whatsapp",
+      status: "active", daily_budget: 280, meta_campaign_id: "120", creative_ids: [], meta_ad_ids: [], raw: {}, created_at: "2026-10-23T00:00:00Z" } as unknown as Campaign;
+    const result = { campaign_id: live.id, impressions: 900, clicks: 40, leads: 0, spend: 412, cpl: null, conversations: 6, cost_per_conversation: 68.7,
+      destination: "whatsapp", fetched_at: "2026-10-24T09:00:00Z" } as unknown as CampaignResult;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[live]} initialResults={{ [live.id]: result }} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    const link = await screen.findByRole("link", { name: "Share results on WhatsApp" });
+    const text = decodeURIComponent(link.getAttribute("href")!.replace("https://wa.me/?text=", ""));
+    expect(text).toBe("Solaride Tricity\nSpent ₹412 (₹280 a day)\n6 WhatsApp chats\n₹69 per chat\nNext: running fine, nothing to do.");
+    expect(link).toHaveAttribute("target", "_blank");
   });
 });
