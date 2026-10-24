@@ -136,7 +136,11 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    opacity" and "free of detail" are not read as offers (#202); a price, "20% off"
    or "FREE" shown in the visual still needs a supporting fact. A cited "₹10,000"
    is supported by a quote saying "10,000 rupees" or "Rs 10000", the same match
-   the interview uses (#284, #281).
+   the interview uses (#284, #281). An offer the copy states without citing it is cited
+   automatically with the one supplied fact that contains it (#281): an amount or percentage
+   by its token, and "free", "no-cost" or "guarantee" only when the thing offered (the next
+   words) is in that fact too, so "FREE consultation" is not cited by "Free 15-minute spine
+   check". No match or several matches leave it uncited and rejected.
    A first line over 125 characters (`hook-length`) or an offer (price, %, free)
    that starts after character 125 (`offer-below-fold`) is repaired once like any
    other validation failure.

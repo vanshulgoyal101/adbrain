@@ -39,10 +39,11 @@ describe("core: Create concept validation on a recorded production concept", () 
   });
 
   it("still rejects uncited or invented claims and over-length ad copy", () => {
-    expect(rules({
-      ...recorded.concept,
-      sourceQuotes: recorded.concept.sourceQuotes.filter((quote) => !quote.includes("$49")),
-    })).toContain("unsupported-commercial-claim");
+    // #281: a price stated without its quote is cited with the one Brand fact that has it; a made-up price still fails.
+    const uncited = { ...recorded.concept, sourceQuotes: recorded.concept.sourceQuotes.filter((quote) => !quote.includes("$49")) };
+    const cited = validateConcept(uncited, input);
+    expect(cited.success && cited.concept.sourceQuotes).toContain("$49 new-patient exam and consultation");
+    expect(rules(JSON.parse(JSON.stringify(uncited).replaceAll("$49", "$59")))).toContain("unsupported-commercial-claim");
     expect(rules({ ...recorded.concept, sourceQuotes: ["Voted best clinic in Austin"] })).toContain("sourceQuotes");
     expect(rules({ ...recorded.concept, headline: `${recorded.concept.headline} Book today` })).toEqual(["schema:headline:too_big"]);
   });

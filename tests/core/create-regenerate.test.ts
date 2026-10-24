@@ -142,9 +142,23 @@ describe("core: Regenerate fact check on recorded Solaride replies (#281)", () =
       ["unsupported-commercial-claim"], [], ["sourceQuotes", "unsupported-commercial-claim"],
       ["schema:headline:too_big"], ["sourceQuotes"], ["unsupported-commercial-claim"],
     ]);
+    // 2#2 states "10%" and "free" without citing them; each is in exactly one Brand fact, so it is cited (CTO, #281).
     expect(recorded.replies.map(({ content }) => rules(content))).toEqual([
-      [], [], ["sourceQuotes"], ["schema:headline:too_big"], ["sourceQuotes"], ["unsupported-commercial-claim"],
+      [], [], ["sourceQuotes"], ["schema:headline:too_big"], ["sourceQuotes"], [],
     ]);
+  });
+
+  it("cites an offer the copy states only when exactly one fact contains it, and never a made-up one", () => {
+    const [, uncited] = run(2);
+    const saved = validateConcept(parseJSON<unknown>(uncited), input);
+    expect(saved.success && saved.concept.sourceQuotes).toEqual(expect.arrayContaining(["Diwali offer: 10% off rooftop solar installation", "Free site survey"]));
+    expect(rules(uncited.replaceAll("10%", "15%"))).toEqual(["unsupported-commercial-claim"]);
+    const twoFacts = { ...input, brand: { ...input.brand, usps: [...(input.brand.usps ?? []), "Diwali festive pricing: 10% off batteries"] } };
+    const result = validateConcept(parseJSON<unknown>(uncited), twoFacts);
+    expect(result.success ? [] : conceptValidationRules(result.issues)).toEqual(["unsupported-commercial-claim"]);
+    const negated = { ...input, brand: { ...input.brand, offers: ["No 10% discounts this season", "Free site survey"] } };
+    const refused = validateConcept(parseJSON<unknown>(uncited), negated);
+    expect(refused.success ? [] : conceptValidationRules(refused.issues)).toEqual(["unsupported-commercial-claim"]);
   });
 
   it("still rejects a rupee amount the cited fact does not state", () => {
@@ -169,12 +183,21 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
     expect(mocks.claims.size).toBe(0);
   });
 
-  it("names the uncited claim in a plain 422, keeps the ad and lets the owner try again", async () => {
-    replay(run(2), run(0));
+  it("saves the recorded run whose retry stated a Brand offer without citing it", async () => {
+    replay(run(2));
+    const { status, body } = await regenerate();
+    expect(status, JSON.stringify(body)).toBe(200);
+    expect(textCalls).toBe(2);
+    expect(mocks.updates).toEqual([expect.objectContaining({ headline: "Miss 10 Nov, Pay More After 31 Dec" })]);
+    expect(mocks.claims.size).toBe(0);
+  });
+
+  it("names a made-up offer in a plain 422, keeps the ad and lets the owner try again", async () => {
+    replay(run(2).map((content) => content.replaceAll("10%", "15%")), run(0));
     const rejected = await regenerate();
     expect(rejected.status).toBe(422);
     expect(rejected.body.error).toBe(
-      "The new version made a claim our fact check couldn't match to your Brand (10%, free). Your current ad is unchanged. Try again.",
+      "The new version made a claim our fact check couldn't match to your Brand (15%). Your current ad is unchanged. Try again.",
     );
     expect(textCalls).toBe(2);
     expect(mocks.updates).toEqual([]);
