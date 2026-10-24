@@ -19,6 +19,7 @@ import { activationConfirmationPayload, intendedCampaignChildren } from "@/lib/c
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { isOperatorFunded } from "@/lib/payments/operator-funding";
+import { formatMoney } from "@/lib/format";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
@@ -127,9 +128,8 @@ async function handlePATCH(
     if (!projection.verified) return apiError("Campaign budgets or the saved cap could not be verified. Sync campaigns and review spend settings before activating.", 503);
     const { exceeds, projectedAfter } = projection;
     if (exceeds) {
-      const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
       return apiError(
-        `Activating this would commit about ${fmt(projectedAfter)}/week, over your ${fmt(limits.weeklyCapRupees!)}/week cap. Raise the cap in Settings or pause another campaign first.`,
+        `Activating this would commit about ${formatMoney(Math.round(projectedAfter))} a week, over your ${formatMoney(Math.round(limits.weeklyCapRupees!))} a week cap. Raise the cap in Settings or pause another campaign first.`,
         422,
       );
     }

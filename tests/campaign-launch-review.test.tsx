@@ -27,7 +27,7 @@ describe("<CampaignLaunchReview>", () => {
       />,
     );
     expect(screen.getByText("2 selected")).toBeInTheDocument();
-    expect(screen.getByText("₹500/day")).toBeInTheDocument();
+    expect(screen.getByText("₹500 a day")).toBeInTheDocument();
     expect(screen.getByText("Book a consultation")).toBeInTheDocument();
     expect(screen.getByText("Austin, Texas")).toBeInTheDocument();
   });

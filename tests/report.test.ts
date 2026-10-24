@@ -65,7 +65,7 @@ describe("buildPerformanceReport", () => {
     expect(md).toContain("Total leads: 14");
     expect(md).toContain("Total spend: ₹360");
     // Blended CPL = 360/14 ≈ 26
-    expect(md).toContain("Blended cost per lead: ₹26");
+    expect(md).toContain("Blended cost per lead: ₹25.71");
   });
 
   it("renders a table row per campaign and names the best", () => {

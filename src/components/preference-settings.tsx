@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { preferenceCategories, type PreferenceCategory } from "@/lib/preferences/context";
 import type { PreferenceState } from "@/lib/preferences/store";
+import { formatDate } from "@/lib/format";
 
 const labels: Record<PreferenceCategory, string> = {
   copy_length: "Copy length", tone: "Tone", language: "Language", visual_style: "Visual style",
@@ -98,7 +99,7 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
         {state.notes.map(note => <li key={note.category} className="flex flex-wrap items-center gap-3 py-3 text-sm">
           <div className="min-w-0 flex-1"><span className="font-medium text-slate-900">{labels[note.category]}</span>
             <p className="break-words text-slate-700">{note.value}</p>
-            <span className="text-xs text-slate-500">Declared by you · Updated {new Date(note.updated_at).toLocaleDateString()}</span></div>
+            <span className="text-xs text-slate-500">Declared by you · Updated {formatDate(note.updated_at)}</span></div>
           <button type="button" title={`Edit ${labels[note.category]}`} aria-label={`Edit ${labels[note.category]}`} disabled={busy || !state.enabled}
             onClick={() => { setCategory(note.category); setValue(note.value); document.getElementById("preference-value")?.focus(); }}><Pencil className="h-4 w-4" /></button>
           <button type="button" title={`Forget ${labels[note.category]}`} aria-label={`Forget ${labels[note.category]}`} disabled={busy}

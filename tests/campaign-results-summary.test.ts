@@ -18,7 +18,7 @@ describe("campaignWhatsAppSummary (#372)", () => {
       "Solaride Tricity WhatsApp",
       "Spent ₹412 of the ₹1,960 limit",
       "6 WhatsApp chats",
-      "₹69 per chat",
+      "₹68.73 per chat",
       "Next: running fine, nothing to do.",
     ].join("\n"));
   });

@@ -1,5 +1,6 @@
 import { LockKeyhole, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatPerDay } from "@/lib/format";
 
 export function CampaignLaunchReview({
   selectedCount,
@@ -57,7 +58,7 @@ export function CampaignLaunchReview({
         <div>
           <dt className="text-xs text-slate-500">Total daily budget</dt>
           <dd className={cn("mt-1 font-medium", budget > 0 ? "text-slate-900" : "text-amber-700")}>
-            {budget > 0 ? `₹${budget}/day` : "Enter a budget"}
+            {budget > 0 ? formatPerDay(budget) : "Enter a budget"}
           </dd>
         </div>
         <div>
