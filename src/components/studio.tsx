@@ -628,6 +628,7 @@ function CreativeCard({
 }) {
   const [pending, startTransition] = useTransition();
   const [regenerating, setRegenerating] = useState(false);
+  const [confirmingRegen, setConfirmingRegen] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [erroredUrl, setErroredUrl] = useState<string | null>(null);
@@ -636,6 +637,7 @@ function CreativeCard({
   const imgError = erroredUrl === creative.image_url;
 
   async function regenerate() {
+    setConfirmingRegen(false);
     setRegenerating(true);
     setRegenError(null);
     try {
@@ -809,22 +811,6 @@ function CreativeCard({
           <Button
             size="sm"
             variant="ghost"
-            onClick={regenerate}
-            data-product-event="creative.regenerate"
-            disabled={pending || regenerating}
-            aria-label="Regenerate creative"
-            title="Regenerate creative"
-            className="h-11 w-11 shrink-0 p-0"
-          >
-            {regenerating ? (
-              <Spinner className="text-slate-400" />
-            ) : (
-              <RefreshCw className="h-4 w-4 text-slate-400" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
             onClick={remove}
             disabled={pending || regenerating}
             aria-label="Delete creative"
@@ -833,6 +819,60 @@ function CreativeCard({
           >
             <Trash2 className="h-4 w-4 text-slate-400" />
           </Button>
+        </div>
+        {/* Kept off the Approve row: one stray tap used to replace the whole ad (#282). */}
+        <div className="mt-2 border-t border-slate-100 pt-3">
+          {confirmingRegen ? (
+            <div
+              role="alertdialog"
+              aria-labelledby={`regen-ask-${creative.id}`}
+              className="flex flex-col gap-2 rounded-md bg-amber-50 p-3"
+            >
+              <p id={`regen-ask-${creative.id}`} className="text-sm text-slate-800">
+                <span className="font-medium">Regenerate the whole ad?</span>{" "}
+                This replaces the image and all the text. To change only part of it, use Edit.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmingRegen(false)}
+                  className="h-11 flex-1"
+                  autoFocus
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={regenerate}
+                  data-product-event="creative.regenerate"
+                  disabled={pending || regenerating}
+                  className="h-11 flex-1"
+                >
+                  <RefreshCw className="h-4 w-4" /> Regenerate
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setRegenError(null);
+                setConfirmingRegen(true);
+              }}
+              disabled={pending || regenerating}
+              className="h-11 w-full justify-center text-slate-500"
+            >
+              {regenerating ? (
+                <Spinner className="text-slate-400" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Regenerate whole ad
+            </Button>
+          )}
         </div>
         {regenError && (
           <p className="text-xs text-red-600" role="alert">

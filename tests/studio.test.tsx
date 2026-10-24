@@ -431,8 +431,17 @@ describe("<Studio> regenerate", () => {
 
     render(<Studio business={business} initialCreatives={[creative()]} />);
     fireEvent.click(
-      screen.getByRole("button", { name: /regenerate creative/i }),
+      screen.getByRole("button", { name: "Regenerate whole ad" }),
     );
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      "/api/creatives/c1/regenerate",
+      expect.anything(),
+    );
+    const ask = screen.getByRole("alertdialog", { name: /regenerate the whole ad/i });
+    expect(ask).toHaveTextContent(
+      "Regenerate the whole ad? This replaces the image and all the text. To change only part of it, use Edit.",
+    );
+    fireEvent.click(within(ask).getByRole("button", { name: "Regenerate" }));
 
     await waitFor(() =>
       expect(global.fetch).toHaveBeenCalledWith(
@@ -440,6 +449,32 @@ describe("<Studio> regenerate", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+    expect((await screen.findAllByText("Regenerated line")).length).toBeGreaterThan(0);
+  });
+
+  it("Cancel keeps the ad exactly as it was and sends nothing (#282)", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate whole ad" }),
+    );
+    const ask = screen.getByRole("alertdialog");
+    fireEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      "/api/creatives/c1/regenerate",
+      expect.anything(),
+    );
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Cut your power bill").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Two short lines.").length).toBeGreaterThan(0);
+  });
+
+  it("keeps Regenerate out of the Approve row (#282)", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    const approve = screen.getByRole("button", { name: /^approve$/i });
+    const regen = screen.getByRole("button", { name: "Regenerate whole ad" });
+    expect(approve.parentElement).not.toContainElement(regen);
   });
 
   it("reports a regeneration failure on the card", async () => {
@@ -450,7 +485,10 @@ describe("<Studio> regenerate", () => {
 
     render(<Studio business={business} initialCreatives={[creative()]} />);
     fireEvent.click(
-      screen.getByRole("button", { name: /regenerate creative/i }),
+      screen.getByRole("button", { name: "Regenerate whole ad" }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", { name: "Regenerate" }),
     );
     expect(await screen.findByText("Rate limited.")).toBeInTheDocument();
   });
