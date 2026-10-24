@@ -632,6 +632,43 @@ describe("<Studio> edit words on the picture (#280)", () => {
   });
 });
 
+describe("<Studio> change only the background (#280)", () => {
+  it("sends the owner's description, swaps in the new picture and keeps the words and approval", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockResolvedValue(okJson({
+      creative: creative({ status: "approved", image_url: "https://img.example/new-background.png" }),
+    })) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative({ status: "approved" })]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Background" }));
+    const form = screen.getByRole("form", { name: "Change the background" });
+    expect(within(form).getByRole("button", { name: "Make background" })).toBeDisabled();
+    expect(within(form).getByText(/uses one AI\s+image, like Regenerate/)).toBeInTheDocument();
+    await user.type(within(form).getByLabelText("New background"), "Rooftop at sunset");
+    await user.click(within(form).getByRole("button", { name: "Make background" }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/background", expect.objectContaining({ method: "POST" })));
+    const [, init] = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([url]) => url === "/api/creatives/c1/background")!;
+    expect(JSON.parse(String(init.body))).toEqual({ instruction: "Rooftop at sunset" });
+    expect(global.fetch).not.toHaveBeenCalledWith("/api/creatives/c1/regenerate", expect.anything());
+    await waitFor(() => expect(document.querySelector('img[src*="new-background"]')).not.toBeNull());
+    expect(screen.getAllByText("Cut your power bill").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+  });
+
+  it("shows the server's reason and keeps the form when the image can't be made", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "Couldn't make a new background this time. Your ad is unchanged; try again." }) }) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Background" }));
+    await user.type(screen.getByLabelText("New background"), "Rooftop at sunset");
+    await user.click(screen.getByRole("button", { name: "Make background" }));
+    expect(await screen.findByText(/Your ad is unchanged; try again/)).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Change the background" })).toBeInTheDocument();
+  });
+});
+
 describe("<Studio> export", () => {
   it("is disabled until something is approved", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);

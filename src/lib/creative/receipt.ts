@@ -70,30 +70,38 @@ export function variantUsageEvents(
         validationStage: validation.stage, validationRules: validation.rules,
       } : {}) },
     })),
-    ...(variant.ownerPhotoUrl ? [] : variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
-      entry, context, index + 1, variant.angleId,
-      index === variant.imageAttempts!.length - 1 && entry.status === "success" ? variant.imageUsage : undefined,
-    )) : [{
-      ...context,
-      provider: variant.imageUsage.provider,
-      model: variant.imageUsage.model,
-      usageKind: "image" as const,
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      estimatedCostUsd: variant.imageUsage.estimatedCostUsd,
-      latencyMs: variant.imageUsage.latencyMs,
-      imageWidth: variant.imageUsage.width,
-      imageHeight: variant.imageUsage.height,
-      status: variant.imageUsage.fallbackFrom ? "fallback" as const : "success" as const,
-      providerRequestId: variant.imageUsage.providerRequestId,
-      providerFinalStatus: variant.imageUsage.providerFinalStatus,
-      promptVersion: CONCEPT_VERSION,
-      metadata: {
-        angle: variant.angleId,
-        costKnown: variant.imageUsage.estimatedCostUsd !== undefined,
-        fallbackFrom: variant.imageUsage.fallbackFrom ?? null,
-      },
-    }]),
+    ...imageUsageEvents(variant, context),
   ];
+}
+
+/** Usage rows for an ad's image: every attempt, or the one completed image; none for the owner's own photo. */
+export function imageUsageEvents(
+  variant: Pick<GeneratedVariant, "angleId" | "imageUsage" | "imageAttempts" | "ownerPhotoUrl">,
+  context: Pick<LLMUsageEvent, "businessId" | "userId" | "route" | "requestId"> & Pick<LLMUsageEvent, "generationId">,
+): LLMUsageEvent[] {
+  return variant.ownerPhotoUrl ? [] : variant.imageAttempts?.length ? variant.imageAttempts.map((entry, index) => imageAttemptUsage(
+    entry, context, index + 1, variant.angleId,
+    index === variant.imageAttempts!.length - 1 && entry.status === "success" ? variant.imageUsage : undefined,
+  )) : [{
+    ...context,
+    provider: variant.imageUsage.provider,
+    model: variant.imageUsage.model,
+    usageKind: "image" as const,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    estimatedCostUsd: variant.imageUsage.estimatedCostUsd,
+    latencyMs: variant.imageUsage.latencyMs,
+    imageWidth: variant.imageUsage.width,
+    imageHeight: variant.imageUsage.height,
+    status: variant.imageUsage.fallbackFrom ? "fallback" as const : "success" as const,
+    providerRequestId: variant.imageUsage.providerRequestId,
+    providerFinalStatus: variant.imageUsage.providerFinalStatus,
+    promptVersion: CONCEPT_VERSION,
+    metadata: {
+      angle: variant.angleId,
+      costKnown: variant.imageUsage.estimatedCostUsd !== undefined,
+      fallbackFrom: variant.imageUsage.fallbackFrom ?? null,
+    },
+  }];
 }
 
 function imageAttemptUsage(
