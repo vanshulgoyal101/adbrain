@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import type { CreativeConcept } from "@/lib/creative/concept";
@@ -11,10 +11,12 @@ import recorded from "./fixtures/create/solaride-hindi.json";
 const headlineStyle = { size: 76, weight: 800, color: "#ffffff", maxWidth: 952 };
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
+/** Mean per-channel difference, or Infinity when the sizes differ. */
 async function meanDiff(actual: Buffer, goldenPath: string) {
+  if (!existsSync(goldenPath)) return Infinity;
   const a = await sharp(actual).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const b = await sharp(readFileSync(goldenPath)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  expect([a.info.width, a.info.height]).toEqual([b.info.width, b.info.height]);
+  if (a.info.width !== b.info.width || a.info.height !== b.info.height) return Infinity;
   let total = 0;
   for (let i = 0; i < a.data.length; i++) total += Math.abs(a.data[i] - b.data[i]);
   return total / a.data.length;
@@ -30,10 +32,13 @@ function design(headline: string, supportingText: string) {
 
 // #300: Satori drew "बिजली बिल" as "बजिली बलि" and Gurmukhi as empty boxes; Pango/HarfBuzz shape them.
 describe("Indian scripts on the ad image", () => {
-  it.each([["bijli-bil", "बिजली बिल"], ["bill-gurmukhi", "ਬਿੱਲ"]])("shapes %s like the eyeballed golden image", async (name, text) => {
+  // Goldens come from Linux (CI and Vercel); macOS Pango uses CoreText, so its pixels differ.
+  // To refresh one: decode the base64 in the failure message, check it by eye, save it as the golden.
+  it.skipIf(process.platform !== "linux").each([["bijli-bil", "बिजली बिल"], ["bill-gurmukhi", "ਬਿੱਲ"]])("shapes %s like the eyeballed golden image", async (name, text) => {
     const shaped = await shapeText(text, headlineStyle);
     const png = Buffer.from(shaped.src.split(",")[1], "base64");
-    expect(await meanDiff(png, `tests/core/fixtures/render/${name}.png`)).toBeLessThan(2);
+    const diff = await meanDiff(png, `tests/core/fixtures/render/${name}.png`);
+    expect(diff, `${name} differs from its golden; actual PNG (base64): ${png.toString("base64")}`).toBeLessThan(2);
   });
 
   it("shapes only the fields written in Devanagari or Gurmukhi", async () => {
