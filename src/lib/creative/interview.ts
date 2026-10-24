@@ -81,7 +81,21 @@ function brandLine(brand: BrandContext): string {
 }
 
 export const MAX_INTERVIEW_ANSWERS = 3;
-export const INTERVIEW_PROMPT_VERSION = "interview-v3";
+export const INTERVIEW_PROMPT_VERSION = "interview-v4";
+
+const OWNER_LANGUAGES = { hi: "Hindi in Devanagari script", pa: "Punjabi in Gurmukhi script", hinglish: "Hinglish (Hindi in Roman script)" } as const;
+const HINGLISH_WORDS = new Set(["mujhe", "humein", "hume", "chahiye", "karo", "karna", "karwa", "karwao", "banao", "banana", "hai", "hain",
+  "liye", "aur", "nahi", "nahin", "kya", "apne", "apna", "apni", "mera", "meri", "hamara", "zyada", "jyada", "mein", "wala", "wale", "kaise", "abhi"]);
+
+/** The language the owner types in: Devanagari Hindi, Gurmukhi Punjabi or Roman-script Hindi (#290). */
+export function ownerLanguage(input: Pick<InterviewInput, "goal" | "answers">): keyof typeof OWNER_LANGUAGES | undefined {
+  const typed = (input.answers ?? []).filter((answer) => !(answer.options ?? []).includes(answer.answer)).map((answer) => answer.answer);
+  const text = [input.goal, ...typed].join(" ");
+  if (/\p{Script=Devanagari}/u.test(text)) return "hi";
+  if (/\p{Script=Gurmukhi}/u.test(text)) return "pa";
+  const words = new Set(text.toLowerCase().match(/[a-z]+/g) ?? []);
+  return [...HINGLISH_WORDS].filter((word) => words.has(word)).length >= 2 ? "hinglish" : undefined;
+}
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const fieldSchema = z.enum(["objective", "audience", "offer", "visual", "tone", "language", "location", "constraints"]);
@@ -122,7 +136,7 @@ const resultSchema = z.discriminatedUnion("ready", [
 ]);
 
 function normalized(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
 }
 
 export function interviewResultIssues(result: InterviewResult, answers: InterviewAnswer[]): string[] {
@@ -247,6 +261,7 @@ export function buildInterviewMessages(input: InterviewInput): ChatMessage[] {
   const answers = input.answers?.length
     ? formatInterviewAnswers(input.answers)
     : "";
+  const owner = ownerLanguage(input);
 
   return [
     {
@@ -286,7 +301,11 @@ export function buildInterviewMessages(input: InterviewInput): ChatMessage[] {
         "hypothesis specific to this brief (for example a named scene versus a named subject). " +
         "Use specific labels, not generic 'try another' suggestions. Preserve confirmed factual " +
         "constraints; do not suggest unverified offers, claims or imply you saw generated images. " +
-        "Avoid repeating recent directions unless the owner requests them. Output ONLY valid JSON.",
+        "Avoid repeating recent directions unless the owner requests them. " +
+        "Write the question, help, options and brief in the language and script the owner writes in: " +
+        "Hindi in Devanagari gets Devanagari, Roman-script Hindi (Hinglish) gets Hinglish, Punjabi in Gurmukhi " +
+        "gets Gurmukhi; otherwise English. Keep field and ids in English. When the owner writes Hindi, Hinglish " +
+        "or Punjabi, set language to hi, hinglish or pa unless they ask for another ad language. Output ONLY valid JSON.",
     },
     {
       role: "user",
@@ -303,7 +322,9 @@ QUESTIONS REMAINING: ${Math.max(0, MAX_INTERVIEW_ANSWERS - (input.answers?.lengt
 If you still need info, return the SINGLE next question:
 {"ready": false, "question": {"id": string, "field": string, "question": string, "help": string, "options": string[], "allowText": boolean, "allowRandom": boolean, "aiCanDecide": boolean}}
 If you have enough to write a great ad, return:
-{"ready": true, "brief": string, "language": string (a valid language id, optional), "angleId": string (a valid angle id, optional), "recommendations": [{"label": string, "prompt": string}]}`,
+{"ready": true, "brief": string, "language": string (a valid language id, optional), "angleId": string (a valid angle id, optional), "recommendations": [{"label": string, "prompt": string}]}${owner
+  ? `\nOWNER WRITES IN: ${OWNER_LANGUAGES[owner]}. Write the question, help and options in it. Set language to "${owner}" unless the owner asks for another ad language.`
+  : ""}`,
     },
   ];
 }
@@ -355,6 +376,7 @@ export async function runInterview(
         parsed.data.question.allowRandom = false;
         parsed.data.question.aiCanDecide = false;
       }
+      if (parsed.data.ready && !parsed.data.language) parsed.data.language = ownerLanguage(input);
       return parsed.data;
     }
     messages.push(

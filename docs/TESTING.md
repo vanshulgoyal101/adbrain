@@ -83,6 +83,10 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-regenerate-fixtures.ts` (text only). A cited "₹10,000" backed by "10,000 rupees"
   saves on the first call; a real fact-check rejection returns a plain 422 naming the claim, leaves
   the ad untouched and releases the claim so the owner can try again.
+- **Create in Hindi** (`create-hindi`, #290): real Solaride replies recorded by
+  `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
+  in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad
+  language; the Hindi factory ad saves 3/3 with Hindi post text and Latin words on the image.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.

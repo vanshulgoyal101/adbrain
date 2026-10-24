@@ -45,9 +45,9 @@ describe("creative assistant boundary", () => {
     const response = await POST(request({ businessId: "biz", goal: "ad", answers: [{ question: "Audience?", answer: "Homeowners", field: "audience", questionId: "audience", options: ["Homeowners", "Installers"] }] }));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toMatchObject({ ready: false, question: { field: "visual" }, promptVersion: "interview-v3" });
+    expect(await response.json()).toMatchObject({ ready: false, question: { field: "visual" }, promptVersion: "interview-v4" });
     expect(vi.mocked(complete).mock.calls[0][0][1].content).toContain('"field":"audience"');
-    expect(mocks.persist).toHaveBeenCalledWith([expect.objectContaining({ route: "creatives.assistant", promptVersion: "interview-v3", status: "success", usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 } })]);
+    expect(mocks.persist).toHaveBeenCalledWith([expect.objectContaining({ route: "creatives.assistant", promptVersion: "interview-v4", status: "success", usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 } })]);
   });
 
   it("never silently generates from malformed model output", async () => {
