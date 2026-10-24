@@ -309,14 +309,18 @@ export function validateConcept(
 ):
   | { success: true; concept: CreativeConcept }
   | { success: false; issues: string[] } {
-  const parsed = creativeConceptSchema.safeParse(normalizeDraft(value));
+  const draft = normalizeDraft(value);
+  const parsed = creativeConceptSchema.safeParse(draft);
   if (!parsed.success) {
     return {
       success: false,
       issues: parsed.error.issues.map((issue) => {
         const path = issue.path.join(".");
         const field = path.replace(/\.\d+/g, ".*") || "root";
-        return `schema:${field}:${issue.code}: ${path}: ${issue.message}`;
+        // The repair is told how long the text is, so it knows how much to cut (#281).
+        const text = issue.path.reduce<unknown>((node, key) => (isRecord(node) || Array.isArray(node) ? (node as Record<PropertyKey, unknown>)[key as PropertyKey] : undefined), draft);
+        const length = (issue.code === "too_big" || issue.code === "too_small") && typeof text === "string" ? `; it is ${text.trim().length} characters` : "";
+        return `schema:${field}:${issue.code}: ${path}: ${issue.message}${length}`;
       }),
     };
   }
