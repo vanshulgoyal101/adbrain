@@ -96,7 +96,7 @@ beforeEach(() => {
   });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
     execute({
-      listLeadForms: vi.fn().mockResolvedValue([{ id: "form-1", status: "ACTIVE" }]),
+      readActiveLeadForm: vi.fn().mockResolvedValue({ id: "form-1", name: "Leads", status: "ACTIVE" }),
       resolveGeoTargeting: vi.fn().mockResolvedValue({ matched: [{ label: "Jaipur" }], unresolved: [], targeting: {} }),
     }),
   );

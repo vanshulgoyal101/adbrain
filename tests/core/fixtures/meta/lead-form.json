@@ -1,0 +1,52 @@
+[
+  {
+    "method": "GET",
+    "path": "885223068001054?fields=access_token",
+    "status": 200,
+    "body": {
+      "access_token": "REDACTED",
+      "id": "885223068001054"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "2531491190682703?fields=id%2Cname%2Cstatus%2Cpage",
+    "status": 200,
+    "body": {
+      "id": "2531491190682703",
+      "name": "Solaride | Free Survey | CHD-PKL | Homeowners | Sep 2026",
+      "status": "ACTIVE",
+      "page": {
+        "name": "Solaride Energy",
+        "id": "885223068001054"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253678786150526?fields=id%2Cname%2Cstatus%2Cpage",
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "(#100) Tried accessing nonexisting field (page)",
+        "type": "OAuthException",
+        "code": 100,
+        "fbtrace_id": "AKPX5cGlWWTSP0UNGWoxZy2"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "9999999999999999?fields=id%2Cname%2Cstatus%2Cpage",
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Unsupported get request. Object with ID '9999999999999999' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api",
+        "type": "GraphMethodException",
+        "code": 100,
+        "error_subcode": 33,
+        "fbtrace_id": "AiJf8lGlLEee0vdUi4MHfux"
+      }
+    }
+  }
+]

@@ -590,6 +590,21 @@ export class MetaClient {
     return forms.filter(form => form.status === "ACTIVE");
   }
 
+  /** One active lead form on the connected Page, or null if it is archived, elsewhere or unreadable. */
+  async readActiveLeadForm(formId: string): Promise<LeadForm | null> {
+    if (!/^\d+$/.test(formId)) return null;
+    const pageToken = await this.getPageAccessToken();
+    let form: { id?: string; name?: string; status?: string; page?: { id?: string } };
+    try {
+      form = await this.graph(`${formId}?fields=id,name,status,page`, { token: pageToken });
+    } catch (error) {
+      if (error instanceof MetaError && error.code === 100) return null;
+      throw error;
+    }
+    return form.id === formId && form.page?.id === this.creds.pageId && form.status === "ACTIVE"
+      ? { id: form.id, name: form.name ?? "", status: form.status } : null;
+  }
+
   async listLeadFormsPage(opts: { after?: string | null } = {}): Promise<MetaLeadPage<LeadForm>> {
     const pageToken = await this.getPageAccessToken();
     const params = new URLSearchParams({ fields: "id,name,status", limit: "200" });
