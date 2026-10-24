@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import type { ReactElement } from "react";
 import { ImageResponse } from "next/og";
 import sharp from "sharp";
 import type { AdDesignSpec } from "./design";
@@ -5,8 +8,8 @@ import { downloadImage } from "@/lib/imageGen";
 
 /**
  * Rasterise an {@link AdDesignSpec} into a finished poster-style ad using the
- * same Satori/resvg engine that powers our OG image — no extra dependency and
- * no custom font (the bundled sans-serif is used). The AI photo is composited
+ * same Satori/resvg engine that powers our OG image, with Inter (OFL, in
+ * ./fonts) in real 400–800 weights so headlines are bold. The AI photo is composited
  * underneath a legibility scrim, with the logo, headline, benefit checklist and
  * a contact/CTA bar laid on top the way a human designer would.
  */
@@ -20,12 +23,26 @@ export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array>
       return `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`;
     }),
   );
-  const res = new ImageResponse(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} logoRatio={logoRatio} />, {
-    width: spec.width,
-    height: spec.height,
-  });
-  const buffer = await res.arrayBuffer();
-  return new Uint8Array(buffer);
+  return rasterize(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} logoRatio={logoRatio} />, { width: spec.width, height: spec.height });
+}
+
+const FONT_DIR = path.join(process.cwd(), "src/lib/creative/fonts");
+const FONT_FILES = [[400, "Regular"], [600, "SemiBold"], [700, "Bold"], [800, "ExtraBold"]] as const;
+type AdFont = { name: string; data: Buffer; weight: (typeof FONT_FILES)[number][0]; style: "normal" };
+let adFonts: AdFont[] | undefined;
+
+/**
+ * Every family in a spec (the brand picker's sans-serif, serif, monospace) falls back to Inter,
+ * the only font loaded, so all ads get real weights. Read once per server instance.
+ */
+function loadAdFonts(): AdFont[] {
+  adFonts ??= FONT_FILES.map(([weight, file]) => ({ name: "Inter", data: readFileSync(path.join(FONT_DIR, `Inter-${file}.ttf`)), weight, style: "normal" }));
+  return adFonts;
+}
+
+export async function rasterize(element: ReactElement, size: { width: number; height: number }): Promise<Uint8Array> {
+  const res = new ImageResponse(element, { ...size, fonts: loadAdFonts() });
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 /** Width over height of an image, or 1 (square) when it can't be read. */
