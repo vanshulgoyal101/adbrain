@@ -1,11 +1,13 @@
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/create/cedar-ridge-concept.json";
-import { googleReply, openAIReply, requestUrl } from "./replay";
+import { googleReply, openAIReply, requestUrl, settleInVirtualTime, useVirtualDeadlines } from "./replay";
 
-// #449: the OpenRouter key is shared and nearly spent, so internal (team, owner, test) accounts
-// use only free providers and the key is kept for customers. The router, AI SDK providers and
-// image code are real; the network is replaced, and the concept is the recorded Cedar Ridge reply.
+// #449/#466 (CTO): the OpenRouter key is shared and nearly spent. Internal (team, owner, test)
+// accounts write on Haiku like customers (about $0.006 a Create; the free text tiers allow 20
+// requests a day) but make free Pollinations images, one at a time, waiting out its Retry-After.
+// The router, AI SDK providers and image code are real; the network is replaced. The concept is the
+// recorded Cedar Ridge reply; the 402 is Pollinations' recorded answer past its free rate (Oct 24).
 
 const INTERNAL = { id: "6c1f4f0e-5a43-4c55-9b1f-3f7a3f0c2a10", email: "qa@adbrain.vanshul.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
 // CTO (#466): the App Review reviewer and the owner keep the paid models; listed by user id.
@@ -13,6 +15,11 @@ const REVIEWER = { id: "0dc149e7-2b7a-459c-82e5-04aa9915e342", email: "reviewer@
 const OWNER = { id: "da0771ca-c07f-4e86-b6da-023aaf517d74", email: null, email_confirmed_at: null };
 const CUSTOMER = { id: "7d2a5b1f-6b54-4d66-8c2a-4a8b4a1d3b21", email: "owner@example.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
 let png: Buffer;
+// The timing cases run on a virtual clock, which cannot wait for sharp's thread pool (as in create-route).
+vi.mock("@/lib/imageGen/raster", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/imageGen/raster")>();
+  return { ...actual, validateRaster: async (bytes: Uint8Array) => ({ bytes, contentType: "image/png", width: 1024, height: 1536 }) };
+});
 
 beforeEach(async () => {
   vi.resetModules();
@@ -38,22 +45,33 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-function network({ freeBusy = false, pollinationsDown = false } = {}) {
-  const hosts: string[] = [];
+type Pollinations = (index: number) => Response | undefined;
+const PAYMENT_REQUIRED = () => Response.json({ error: "Payment required" }, { status: 402, headers: { "retry-after": "8" } });
+
+function network({ freeBusy = false, pollinations }: { freeBusy?: boolean; pollinations?: Pollinations } = {}) {
+  const calls: string[] = [];
+  let inFlight = 0;
+  let images = 0;
+  const stats = { maxConcurrentImages: 0 };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(requestUrl(input));
-    hosts.push(url.hostname);
+    calls.push(`${url.hostname}${url.pathname.startsWith("/prompt/") ? "/prompt" : url.pathname}`);
     if (freeBusy && ["api.groq.com", "generativelanguage.googleapis.com"].includes(url.hostname)) {
       return Response.json({ error: { message: "Rate limit reached", code: 429 } }, { status: 429 });
     }
     if (url.hostname === "generativelanguage.googleapis.com") return googleReply(JSON.stringify(recorded.concept));
     if (url.hostname === "openrouter.ai" && url.pathname.endsWith("/chat/completions")) return openAIReply(JSON.stringify(recorded.concept), "anthropic/claude-haiku-5.5");
     if (url.hostname === "image.pollinations.ai") {
-      return pollinationsDown ? new Response("Bad gateway", { status: 502 }) : new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+      inFlight += 1;
+      stats.maxConcurrentImages = Math.max(stats.maxConcurrentImages, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      inFlight -= 1;
+      const response = pollinations?.(images++);
+      return response ?? new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
     }
     throw new Error(`Unexpected request to ${url.hostname}${url.pathname}`);
   }));
-  return hosts;
+  return { calls, stats };
 }
 
 async function asUser<T>(user: { id: string; email: string | null; email_confirmed_at: string | null }, work: () => Promise<T>): Promise<T> {
@@ -64,60 +82,72 @@ async function asUser<T>(user: { id: string; email: string | null; email_confirm
   });
 }
 
-describe("core: internal accounts never spend the paid OpenRouter key (#449)", () => {
-  it("writes an internal account's concept on a free provider and makes its image on Pollinations", async () => {
-    const hosts = network();
+const image = { prompt: "A chiropractic front desk", width: 1024, height: 1536 };
+
+describe("core: internal accounts write on Haiku and make free images (#449, #466)", () => {
+  it("writes an internal account's concept on Haiku like a customer's, and its image on Pollinations without references", async () => {
+    const { calls } = network();
     const { complete } = await import("@/lib/llm");
     const { generateImage } = await import("@/lib/imageGen");
-    const [text, image] = await asUser(INTERNAL, async () => [
+    const clock = useVirtualDeadlines();
+    const [text, picture] = await settleInVirtualTime(asUser(INTERNAL, async () => [
       await complete([{ role: "user", content: "Write the concept." }], { routing: "creative", json: true }),
-      await generateImage({ prompt: "A chiropractic front desk", width: 1024, height: 1536, referenceImages: ["https://core-test.supabase.co/brand/logo.png"] }),
-    ] as const);
-    expect(text).toMatchObject({ provider: "google", model: "gemini-3.6-flash" });
+      await generateImage({ ...image, referenceImages: ["https://core-test.supabase.co/brand/logo.png"] }),
+    ] as const));
+    expect(clock.startedAt).toBeGreaterThan(0);
+    expect(text).toMatchObject({ provider: "openrouter", model: "anthropic/claude-haiku-5.5" });
     expect(JSON.parse(text.text).headline).toBe(recorded.concept.headline);
-    expect(image).toMatchObject({ provider: "pollinations", estimatedCostUsd: 0 });
-    expect(hosts).not.toContain("openrouter.ai");
+    expect(picture).toMatchObject({ provider: "pollinations", estimatedCostUsd: 0 });
+    expect(calls).toEqual(["openrouter.ai/api/v1/chat/completions", "image.pollinations.ai/prompt"]);
   });
 
-  it("fails an internal image when Pollinations is down instead of falling back to the paid image model", async () => {
-    vi.stubEnv("IMAGE_PROVIDER_FALLBACK", "openrouter");
-    const hosts = network({ pollinationsDown: true });
+  it("makes an internal account's three images one at a time, waiting out Pollinations' Retry-After", async () => {
+    const { calls, stats } = network({ pollinations: (index) => (index === 1 || index === 2 ? PAYMENT_REQUIRED() : undefined) });
     const { generateImage } = await import("@/lib/imageGen");
-    await expect(asUser(INTERNAL, () => generateImage({ prompt: "A chiropractic front desk", width: 1024, height: 1536 }))).rejects.toThrow();
-    expect(hosts).toEqual(["image.pollinations.ai"]);
+    const clock = useVirtualDeadlines();
+    const pictures = await settleInVirtualTime(asUser(INTERNAL, () => Promise.all([generateImage(image), generateImage(image), generateImage(image)])));
+    expect(pictures.map((picture) => picture.provider)).toEqual(["pollinations", "pollinations", "pollinations"]);
+    expect(stats.maxConcurrentImages).toBe(1);
+    expect(calls.filter((call) => call === "image.pollinations.ai/prompt")).toHaveLength(5);
+    // 5 requests of 2 s each, plus two 8 s Retry-After waits.
+    expect(Date.now() - clock.startedAt).toBe(26_000);
   });
 
-  it("lets an internal interview fail when the free tiers are busy instead of falling back to the paid key", async () => {
-    const hosts = network({ freeBusy: true });
-    const { complete, AllLLMProvidersFailedError } = await import("@/lib/llm");
-    await expect(asUser(INTERNAL, () => complete([{ role: "user", content: "Plan." }], { routing: "budget", json: true })))
-      .rejects.toBeInstanceOf(AllLLMProvidersFailedError);
-    expect(hosts).toEqual(["api.groq.com", "generativelanguage.googleapis.com"]);
+  it("fails an internal image clearly once Pollinations stays busy for about 90 s, never trying the paid model", async () => {
+    vi.stubEnv("IMAGE_PROVIDER_FALLBACK", "openrouter");
+    const { calls } = network({ pollinations: () => PAYMENT_REQUIRED() });
+    const { generateImage } = await import("@/lib/imageGen");
+    const clock = useVirtualDeadlines();
+    await expect(settleInVirtualTime(asUser(INTERNAL, () => generateImage(image)))).rejects.toThrow("Free test images are busy");
+    expect(Date.now() - clock.startedAt).toBeLessThanOrEqual(92_000);
+    expect(calls.every((call) => call === "image.pollinations.ai/prompt")).toBe(true);
   });
 
-  it("still falls back to the paid key for a customer when the free tiers are busy", async () => {
-    const hosts = network({ freeBusy: true });
-    const { complete } = await import("@/lib/llm");
-    const result = await asUser(CUSTOMER, () => complete([{ role: "user", content: "Plan." }], { routing: "budget", json: true }));
-    expect(result.provider).toBe("openrouter");
-    expect(hosts.at(-1)).toBe("openrouter.ai");
+  it("fails an internal image at once when Pollinations is down, never trying the paid model", async () => {
+    vi.stubEnv("IMAGE_PROVIDER_FALLBACK", "openrouter");
+    const { calls } = network({ pollinations: () => new Response("Bad gateway", { status: 502 }) });
+    const { generateImage } = await import("@/lib/imageGen");
+    useVirtualDeadlines();
+    await expect(settleInVirtualTime(asUser(INTERNAL, () => generateImage(image)))).rejects.toThrow();
+    expect(calls).toEqual(["image.pollinations.ai/prompt"]);
   });
 
-  it.each([["the App Review reviewer", REVIEWER], ["the owner", OWNER]])("keeps the paid models for %s, an exempt internal account", async (_who, user) => {
-    const hosts = network();
-    const { complete } = await import("@/lib/llm");
+  it("gives an internal interview the same paid fallback as a customer when the free tiers are busy", async () => {
+    for (const user of [INTERNAL, CUSTOMER]) {
+      const { calls } = network({ freeBusy: true });
+      const { complete } = await import("@/lib/llm");
+      const result = await asUser(user, () => complete([{ role: "user", content: "Plan." }], { routing: "budget", json: true }));
+      expect(result.provider, user.id).toBe("openrouter");
+      expect(calls.at(-1)).toBe("openrouter.ai/api/v1/chat/completions");
+    }
+  });
+
+  it.each([["the App Review reviewer", REVIEWER], ["the owner", OWNER], ["a customer", CUSTOMER]])("keeps the paid image model for %s", async (_who, user) => {
     const { isInternalUser } = await import("@/lib/internal-accounts");
-    expect(isInternalUser(user)).toBe(true);
-    const result = await asUser(user, () => complete([{ role: "user", content: "Write the concept." }], { routing: "creative", json: true }));
-    expect(result).toMatchObject({ provider: "openrouter", model: "anthropic/claude-haiku-5.5" });
-    expect(hosts).toEqual(["openrouter.ai"]);
-  });
-
-  it("still uses the configured paid models for a customer", async () => {
-    const hosts = network();
-    const { complete } = await import("@/lib/llm");
-    const result = await asUser(CUSTOMER, () => complete([{ role: "user", content: "Write the concept." }], { routing: "creative", json: true }));
-    expect(result).toMatchObject({ provider: "openrouter", model: "anthropic/claude-haiku-5.5" });
-    expect(hosts).toEqual(["openrouter.ai"]);
+    const { freeImagesOnly } = await import("@/lib/llm/spend-policy");
+    const { eventContext, newEventContext, observeVerifiedUser } = await import("@/lib/observability/context");
+    const free = eventContext.run(newEventContext(), () => { observeVerifiedUser(user); return freeImagesOnly(); });
+    expect(free).toBe(false);
+    if (user !== CUSTOMER) expect(isInternalUser(user)).toBe(true);
   });
 });

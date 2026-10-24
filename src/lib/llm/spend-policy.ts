@@ -1,15 +1,13 @@
 import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
 import { currentVerifiedActor } from "@/lib/observability/context";
 
-/** Providers billed to the shared paid key. */
-export const PAID_PROVIDERS = new Set(["openrouter"]);
-
 /**
- * Internal (team, owner, test) accounts use only free providers, so the paid OpenRouter key is
- * spent on customers alone (#449), except the listed `exemptFromFreeProviders` (#466). Requests
- * without a signed-in user (cron, workers) are paid.
+ * Internal (team, owner, test) accounts make their ad images on free Pollinations, so the paid
+ * OpenRouter key is spent on customers' images (#449). Their text stays on the normal models: Haiku
+ * is about $0.006 a Create and the free text tiers are too small (#466). The user ids in
+ * `exemptFromFreeProviders` keep the paid path; requests without a signed-in user are paid.
  */
-export function freeProvidersOnly(): boolean {
+export function freeImagesOnly(): boolean {
   const actor = currentVerifiedActor();
   return isInternalUser(actor) && !isExemptFromFreeProviders(actor);
 }
