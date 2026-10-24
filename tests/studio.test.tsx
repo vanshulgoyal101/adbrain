@@ -622,6 +622,20 @@ describe("<Studio> edit text (#280)", () => {
   });
 });
 
+describe("<Studio> owner screens show owner data only (#403)", () => {
+  const receipt = { format: "portrait", composition: "overlay", textModels: [{ provider: "openrouter", model: "anthropic/claude-haiku-5.5" }],
+    image: { provider: "openrouter-image", model: "gpt-image", estimatedCostUsd: 0.04 }, concept: { rationale: "Leads with savings." } };
+  it("hides model names and costs from owners", () => {
+    render(<Studio business={business} initialCreatives={[creative({ generation: receipt as never })]} />);
+    expect(screen.queryByText("Generation details")).toBeNull();
+    expect(screen.queryByText(/claude-haiku/)).toBeNull();
+  });
+  it("shows them to operators", () => {
+    render(<Studio business={business} initialCreatives={[creative({ generation: receipt as never })]} showInternals />);
+    expect(screen.getByText("Generation details")).toBeInTheDocument();
+  });
+});
+
 describe("<Studio> live text preview while editing (#387)", () => {
   it("shows each keystroke in the card at once, marks it unsaved, and Cancel puts the saved ad back", async () => {
     const user = userEvent.setup();

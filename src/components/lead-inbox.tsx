@@ -24,6 +24,15 @@ function saveLeadSyncTime(key: string, completedAt: number) {
   try { localStorage.setItem(key, String(completedAt)); } catch { return; }
 }
 
+/** Meta's Lead Ads testing tool fills every field with "<test lead: dummy data for …>" (#403). */
+function isMetaTestLead(lead: Pick<Lead, "full_name">): boolean {
+  return /^<test lead: dummy data/i.test(lead.full_name ?? "");
+}
+
+function leadName(lead: Pick<Lead, "full_name">): string | null {
+  return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
+}
+
 export function LeadInbox({
   businessName,
   initialLeads,
@@ -152,7 +161,7 @@ export function LeadInbox({
     () =>
       buildLeadDigest(
         leads.map((l) => ({
-          fullName: l.full_name,
+          fullName: leadName(l),
           phone: l.phone,
           email: l.email,
           city: l.city,
@@ -230,8 +239,6 @@ export function LeadInbox({
 
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(digest)}`;
   const now = new Date();
-  const contactableCount = leads.filter((lead) => lead.phone?.trim() || lead.email?.trim()).length;
-  const cityCount = new Set(leads.map((lead) => lead.city).filter(Boolean)).size;
 
   // Render a deterministic absolute date on the server and first client render
   // (same string on both sides = no hydration mismatch), then upgrade to the
@@ -249,24 +256,6 @@ export function LeadInbox({
           Meta isn’t configured, so leads can’t be synced yet. <Link href="/settings" className="font-semibold underline">Connect your account in Settings</Link>.
         </Alert>
       )}
-
-      <div className={styles.metrics}>
-        {[
-          { label: hasFilters ? "Matching responses" : "Total responses", value: page.total },
-          { label: "Loaded with contact", value: contactableCount },
-          { label: "Loaded areas", value: cityCount },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className={styles.metric}
-          >
-            <p className="text-xs text-slate-500">{item.label}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">
-              {item.value}
-            </p>
-          </div>
-        ))}
-      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
@@ -317,7 +306,7 @@ export function LeadInbox({
       </div>
 
       {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>
-        <div className={styles.editorHeading}><div><h3>Follow up: {selected.full_name ?? "Unnamed enquiry"}</h3>{dirty && <p role="status" className="text-xs text-amber-800">Unsaved changes</p>}</div><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
+        <div className={styles.editorHeading}><div><h3>Follow up: {leadName(selected) ?? "Unnamed enquiry"}</h3>{dirty && <p role="status" className="text-xs text-amber-800">Unsaved changes</p>}</div><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
         <label>Follow-up status<select ref={editorField} value={draftStatus} disabled={saving} onChange={event => { setDraftStatus(event.target.value as WorkflowStatus); setSaved(false); }}>
           {workflowStatuses.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
         </select></label>
@@ -357,10 +346,10 @@ export function LeadInbox({
               {leads.map((l) => (
                 <tr role="row" key={l.id} className="hover:bg-slate-50">
                   <td role="cell" className={styles.person}>
-                    {l.full_name ?? "—"}
+                    {leadName(l) ?? "—"}
                   </td>
                   <td role="cell" className={styles.contact}>
-                    {l.phone && (
+                    {!isMetaTestLead(l) && l.phone && (
                       <a
                         href={`tel:${l.phone}`}
                         className="block text-blue-700 hover:underline"
@@ -368,20 +357,20 @@ export function LeadInbox({
                         {l.phone}
                       </a>
                     )}
-                    {l.email && (
+                    {!isMetaTestLead(l) && l.email && (
                       <a href={`mailto:${l.email}`} className="block max-w-64 break-all text-blue-700 hover:underline">
                         {l.email}
                       </a>
                     )}
-                    {!l.phone && !l.email && <span className={styles.blank}>—</span>}
+                    {(isMetaTestLead(l) || (!l.phone && !l.email)) && <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">City</span>{l.city ?? <span className={styles.blank}>—</span>}</td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">City</span>{(isMetaTestLead(l) ? null : l.city) ?? <span className={styles.blank}>—</span>}</td>
                   <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Form</span>{leadSource(l)}</td>
                   <td role="cell" className="text-slate-500">
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
                     {whenLabel(l.created_time) || <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${l.full_name ?? "enquiry"}`} aria-label={`Follow up ${l.full_name ?? "enquiry"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
                 </tr>
               ))}
             </tbody>

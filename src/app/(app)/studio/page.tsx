@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { getUser } from "@/lib/supabase/queries";
 import { businessLLMUsageSummary } from "@/lib/llm/persist";
-import { getEnv } from "@/lib/env";
+import { privacyOperatorAllowed } from "@/lib/privacy-requests";
 import { clientCreative } from "@/lib/creative/client-receipt";
 
 export const metadata = { title: "Creative Studio" };
@@ -48,9 +48,9 @@ export default async function StudioPage({
     );
   }
 
-  const showDemoUsage =
-    user?.email?.toLowerCase() === getEnv().DEMO_USER_EMAIL.toLowerCase();
-  const usage = showDemoUsage ? businessLLMUsageSummary(business.id) : null;
+  // #403: cost, tokens and model names are operator information, not owner information.
+  const operator = user ? await privacyOperatorAllowed().catch(() => false) : false;
+  const usage = operator ? businessLLMUsageSummary(business.id) : null;
   const [creatives, params] = await Promise.all([
     getCreatives(business.id),
     searchParams,
@@ -76,6 +76,7 @@ export default async function StudioPage({
           initialCreatives={creatives.map(clientCreative)}
           initialFilter={filter}
           initialCreativeId={params.creative ?? null}
+          showInternals={operator}
         />
         {usage && <Suspense fallback={null}><StudioUsage usage={usage} /></Suspense>}
       </div>

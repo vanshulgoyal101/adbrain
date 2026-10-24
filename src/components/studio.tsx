@@ -43,11 +43,14 @@ type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 export function Studio({
   business,
   initialCreatives,
+  showInternals = false,
   initialFilter = "all",
   initialCreativeId = null,
 }: {
   business: Business;
   initialCreatives: Creative[];
+  /** Operators see model names and generation costs; owners don't (#403). */
+  showInternals?: boolean;
   initialFilter?: "all" | "draft" | "approved";
   initialCreativeId?: string | null;
 }) {
@@ -581,6 +584,7 @@ export function Studio({
             <CreativeCard
               key={selectedCreative.id}
               business={business}
+              showInternals={showInternals}
               onImageSettled={() => setBoardImages(true)}
               creative={selectedCreative}
               onChange={(updated) =>
@@ -630,6 +634,7 @@ export function Studio({
 
 function CreativeCard({
   business,
+  showInternals = false,
   onImageSettled,
   creative,
   onChange,
@@ -637,6 +642,7 @@ function CreativeCard({
   onPreview,
 }: {
   business: Business;
+  showInternals?: boolean;
   onImageSettled?: () => void;
   creative: Creative;
   onChange: (c: Creative) => void;
@@ -826,7 +832,7 @@ function CreativeCard({
         ) : (
         <>
         {editNotes && <CopyEditNotice notes={editNotes} />}
-        <GenerationDetails value={creative.generation} />
+        {showInternals && <GenerationDetails value={creative.generation} />}
         {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
           <Button

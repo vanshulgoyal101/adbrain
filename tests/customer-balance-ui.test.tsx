@@ -15,6 +15,8 @@ it("distinguishes verified payments, media, tax and unavailable customer funds",
   await screen.findByText("Pending costs require reconciliation.");
   expect(screen.getByText("Attributed Meta tax")).toBeInTheDocument();
   expect(screen.getByText("Available for a new reservation")).toBeInTheDocument();
+  // #403: ₹0 rows are noise for an owner; the available figure always shows.
+  expect(screen.queryByText("Verified refunds")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /pay|activate/i })).not.toBeInTheDocument();
   view.rerender(<CustomerBalance businessId="33333333-3333-4333-8333-333333333333" />);
   expect(screen.queryByText("Attributed Meta tax")).not.toBeInTheDocument();
