@@ -262,7 +262,7 @@ try {
       assert.equal(generationCount, 1, "Paid Create request was blocked");
       assert.equal(response.status(), 200, `Create returned HTTP ${response.status()}`);
       assert.equal(savedCount, 3, `Create saved ${savedCount}/3 ads; do not retry before checking saved work`);
-      await page.getByRole("button", { name: "Open in Creative Studio" }).waitFor({ state: "visible" });
+      await page.getByRole("button", { name: "Review ads" }).waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error after Create");
       console.log(`PASS Create: ${savedCount}/3 saved (one paid run; record in #88)`);
     } catch (error) {

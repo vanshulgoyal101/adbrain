@@ -95,11 +95,11 @@ describe("<AdAssistant> next step after Create", () => {
     render(<AdAssistant business={business} />);
     await screen.findAllByRole("button", { name: "Use this ad" });
     expect(screen.queryByRole("link", { name: /create campaign/i })).toBeNull();
-    expect(screen.getByRole("link", { name: /open in creative studio/i })).toHaveAttribute("href", "/studio");
+    expect(screen.getByRole("link", { name: /review ads/i })).toHaveAttribute("href", "/studio");
 
     await user.click(screen.getAllByRole("button", { name: "Use this ad" })[2]);
     expect(await screen.findByRole("link", { name: "Create campaign (1)" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3");
-    expect(screen.getByRole("link", { name: /open in creative studio/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /review ads/i })).toBeInTheDocument();
   });
 
   it("uses the plural heading for several ads and the singular for one", async () => {
