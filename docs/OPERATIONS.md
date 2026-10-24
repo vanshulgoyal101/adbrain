@@ -219,14 +219,15 @@ Run ad hoc read-only production queries with
 
 ### Activation Funnel
 
-`node scripts/funnel.mjs [--days 14]` (#338) shows where each sign-up of the last N
+`node scripts/funnel.mjs [--days 14] [--include-test]` (#338) shows where each sign-up of the last N
 days (1–365) stopped. It prints one row per user and a total per step:
 signed up → Brand saved → first ad generated → ad approved → Campaigns opened →
 asked to connect Meta → Meta connected → top-up paid → campaign created → first
 lead/chat. Each row has the user-id prefix, sign-up time, last step reached, last
 seen (UTC) and a ✓/· mark per step. The query is read-only, through the same API as `prod-sql.mjs`. It
-never prints emails or names and leaves out the smoke account (`SMOKE_EMAIL` from
-the owner's `.env.smoke`). Steps come from durable tables (businesses,
+never prints emails or names. It leaves out team and QA accounts (`@adbrain.vanshul.com`,
+`@adbrain.local`) and the smoke account (`SMOKE_EMAIL` from the owner's `.env.smoke`)
+unless you pass `--include-test`. Steps come from durable tables (businesses,
 creatives, Meta connections, live captured payments, campaigns with a Meta id,
 leads and WhatsApp conversations). Campaigns opened, asked to connect Meta
 (`/api/meta/oauth/start`, a `meta.connect*` `ui.action`, or `meta.access_request` from

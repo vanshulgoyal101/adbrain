@@ -1,7 +1,7 @@
 // Activation funnel (#338): where each sign-up of the last N days stopped. Read-only: one
 // statement through the Supabase Management API inside BEGIN READ ONLY (docs/ORCHESTRATION.md
 // "Access"). Prints user-id prefixes only, never emails or names, and leaves out the smoke account.
-// Usage: node scripts/funnel.mjs [--days 14]
+// Usage: node scripts/funnel.mjs [--days 14] [--include-test]
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -11,6 +11,9 @@ import { parseArgs, parseEnv } from "node:util";
 
 const projectId = "kmzuxrvfrwwpwmoovwcp";
 const smokeEnvPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
+
+/** Team and QA sign-ups; left out unless --include-test. */
+export const TEST_DOMAINS = ["adbrain.vanshul.com", "adbrain.local"];
 
 export const STEPS = [
   ["signed_up", "Signed up"],
@@ -25,14 +28,16 @@ export const STEPS = [
   ["lead", "First lead/chat"],
 ];
 
-export function funnelSql(days, excludedEmails) {
+export function funnelSql(days, excludedEmails, { includeTest = false } = {}) {
   if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("--days must be a whole number from 1 to 365.");
-  const excluded = excludedEmails.map((email) => `'${email.trim().toLowerCase().replaceAll("'", "''")}'`).join(",");
+  const quote = (value) => `'${value.trim().toLowerCase().replaceAll("'", "''")}'`;
+  const testFilter = includeTest ? "" : `
+    and lower(coalesce(email, '')) <> all(array[${excludedEmails.map(quote).join(",")}]::text[])
+    and split_part(lower(coalesce(email, '')), '@', 2) <> all(array[${TEST_DOMAINS.map(quote).join(",")}]::text[])`;
   // Durable tables first; product_events (pruned over time) only for page views, clicks and last seen.
   return `with u as (
   select id, created_at from auth.users
-  where created_at > now() - make_interval(days => ${days})
-    and lower(coalesce(email, '')) <> all(array[${excluded}]::text[])
+  where created_at > now() - make_interval(days => ${days})${testFilter}
 ), b as (
   select owner_id as user_id, id as business_id from public.businesses where owner_id in (select id from u)
 ), e as (
@@ -76,8 +81,8 @@ export function summarize(rows) {
 
 const minute = (time) => (time ? String(time).replace("T", " ").slice(0, 16) : "-");
 
-export function render({ users, totals }, days) {
-  const lines = [`Sign-ups in the last ${days} days: ${users.length} (times UTC)`, ""];
+export function render({ users, totals }, days, { includeTest = false } = {}) {
+  const lines = [`Sign-ups in the last ${days} days: ${users.length} (times UTC${includeTest ? "; test accounts included" : ""})`, ""];
   if (users.length) {
     lines.push(`${"user".padEnd(10)}${"signed up".padEnd(18)}${"last step".padEnd(24)}${"last seen".padEnd(18)}steps`);
     for (const user of users) {
@@ -107,7 +112,8 @@ async function query(sql) {
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { days: { type: "string", default: "14" } } });
+  const { values } = parseArgs({ options: { days: { type: "string", default: "14" }, "include-test": { type: "boolean", default: false } } });
+  const includeTest = values["include-test"];
   const excluded = [];
   try {
     const smoke = parseEnv(await readFile(smokeEnvPath, "utf8")).SMOKE_EMAIL;
@@ -116,9 +122,9 @@ async function main() {
     // Reported below.
   }
   const days = Number(values.days);
-  const rows = await query(funnelSql(days, excluded));
-  console.log(render(summarize(rows), days));
-  console.log(excluded.length ? "The smoke account is excluded." : "Note: .env.smoke is missing, so the smoke account is not excluded.");
+  const rows = await query(funnelSql(days, excluded, { includeTest }));
+  console.log(render(summarize(rows), days, { includeTest }));
+  if (!includeTest) console.log(`Test accounts (@${TEST_DOMAINS.join(", @")}${excluded.length ? " and the smoke account" : ""}) are excluded; add --include-test to see them.${excluded.length ? "" : " Note: .env.smoke is missing."}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
