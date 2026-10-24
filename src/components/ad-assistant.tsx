@@ -1,4 +1,5 @@
 "use client";
+import { takePendingIdea } from "@/lib/ideas/pending";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
@@ -150,7 +151,10 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
   if (mounted && !restored) {
     setRestored(true);
     const saved = readDraft(business.id);
-    if (saved) {
+    // "Make one like this" from /ideas starts a fresh goal instead of the last session (#289).
+    const idea = takePendingIdea();
+    if (idea) setGoal(idea);
+    else if (saved) {
       setGoal(saved.goal);
       setStarted(saved.started);
       setTurns(saved.turns);

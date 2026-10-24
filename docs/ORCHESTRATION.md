@@ -25,7 +25,7 @@ label it for the owner instead of doing it.
 
 | Role | Owns | Hands off |
 | --- | --- | --- |
-| **CEO** | Priorities and target dates, money and budgets, decisions (`decision`), the owner's steps (Meta, Razorpay, sign-ins), this dispatch. Turns owner requests into issues | Building anything: implementation goes to the CTO or a worker |
+| **CEO** | Priorities and target dates, money and budgets, decisions (`decision`), the owner's steps (Meta, Razorpay, sign-ins), this dispatch. Turns owner requests into issues. Checks weekly that skills are used | Building anything: implementation goes to the CTO or a worker |
 | **CTO** | Technical direction and designs, assigning and briefing issues, the worker table, labels, CI and production health, high-impact reviews, publishing `Lesson:` lines | Feature building (assign it); priority and money (CEO) |
 | **Dev** | Create: the assistant, interview, generation and its tests (`ad-assistant.tsx`, `interview.ts`), plus issues assigned to you | Migrations, config, money releases (DevOps); priority (CEO) |
 | **Dev 2** | Editing ads and image rendering, Meta App Review (#156), plus issues assigned to you | Same as Dev |
@@ -35,6 +35,11 @@ label it for the owner instead of doing it.
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
 auto-merge); hand off with the label and one `→ Role:` line.
+**Skills first (owner, Oct 24: the highest-value habit).** Before any task, load
+the matching skill from `.github/skills/` (task → skill map: #408). No good match?
+Find a maintained, licence-checked open-source skill, add it with a SOURCES.md line
+in a small auto-merge PR (pre-approved), then use it. Reusable lessons go to the CTO,
+who publishes them to the skills repo.
 
 ### How work flows
 
@@ -149,6 +154,8 @@ CEO priorities and targets (Oct 24, 10:50Z; owner: lean, high value only). Every
 open issue has a target; a miss gets one line on its issue with the new date. The
 CTO's queue map (#364) orders each worker's row to match.
 
+- **Top today: #408, skills used on every task** (CTO; owner: the single most
+  high-value thing). See Role cards → Skills first.
 - **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
   (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
   Facebook account, Submit). Meta then takes days to weeks. No outside sign-ups yet.
@@ -181,8 +188,8 @@ The CTO maintains the worker table below.
 | Worker | Work, in order |
 | --- | --- |
 | Everyone | **When idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground only (it first lists items you own where someone else spoke last; it gives up after 30 min; then stop) and continue with what it prints. **Every finished step names who acts next** (`→ DevOps: release`) and moves the `owner:` label; release-PR verdicts end with `→ DevOps`. Never leave anything running in the background. **Talk on the issue or PR;** hand off with the owner label plus one arrow line (`→ QA: ready at <sha>`), and sign your own comments with your role ([AGENTS.md](../AGENTS.md#worker-coordination)). No status or idle posts. Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. **Queue empty?** Take the next item in your row, then QA's #51 findings, then any unowned `core` issue in your area (add your label); only then `wait-for-work` |
-| QA | 1. Verdict on PR #357 ([#334](https://github.com/vanshulgoyal101/adbrain/issues/334)): 1-hour review target. 2. [#300](https://github.com/vanshulgoyal101/adbrain/issues/300) live Hindi check. 3. **P0 [#157](https://github.com/vanshulgoyal101/adbrain/issues/157)** read ~16:00Z. 4. [#289](https://github.com/vanshulgoyal101/adbrain/issues/289) first-impression walk on a phone |
-| Dev | 0. [#398](https://github.com/vanshulgoyal101/adbrain/issues/398) part 2 (check the AI quota before the assistant spends tokens; small). 1. [#371](https://github.com/vanshulgoyal101/adbrain/issues/371) (Create learns from results; CTO design on the issue; prompt change → CTO review). 2. [#378](https://github.com/vanshulgoyal101/adbrain/issues/378) + [#388](https://github.com/vanshulgoyal101/adbrain/issues/388) (log failed interview rules; per-task model bake-off, \$5 cap; switch only a clear winner). 3. [#367](https://github.com/vanshulgoyal101/adbrain/issues/367) (angle chip covers the logo). You own `ad-assistant.tsx` and `interview.ts` |
-| DevOps | 1. [#398](https://github.com/vanshulgoyal101/adbrain/issues/398) part 1 now: exempt internal businesses from the monthly AI limit (`INTERNAL_BUSINESS_IDS`, one list with #379), before/after. 2. [#390](https://github.com/vanshulgoyal101/adbrain/issues/390) parts 2–3 (worktree bootstrap, copy-proof smoke). 3. [#388](https://github.com/vanshulgoyal101/adbrain/issues/388) 'Model review due' workflow. 4. [#270](https://github.com/vanshulgoyal101/adbrain/issues/270) after-numbers at ~18:40Z. 5. #274 scheduler watch |
-| Dev 3 | 1. [#376](https://github.com/vanshulgoyal101/adbrain/issues/376) part 1 (sign-up intro blank space). 2. [#366](https://github.com/vanshulgoyal101/adbrain/issues/366) (Prepare 7 s → under 4 s; moved from Dev). 3. [#333](https://github.com/vanshulgoyal101/adbrain/issues/333) (9:16 for Stories/Reels). 4. [#289](https://github.com/vanshulgoyal101/adbrain/issues/289) next slices. #157 engineering when the run needs it |
-| Dev 2 | 1. Finish [#360](https://github.com/vanshulgoyal101/adbrain/issues/360) (phone speed; work in progress) incl. [#376](https://github.com/vanshulgoyal101/adbrain/issues/376) part 2. 2. Merge PR #357 ([#334](https://github.com/vanshulgoyal101/adbrain/issues/334)) after QA's verdict. 3. [#372](https://github.com/vanshulgoyal101/adbrain/issues/372) (results to WhatsApp). 4. [#387](https://github.com/vanshulgoyal101/adbrain/issues/387) (live preview while editing). [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) jumps the queue when the owner is at the Meta dashboard |
+| QA | 1. **Verdict on PR #357 now** (66 min; 1-hour target). 2. [#403](https://github.com/vanshulgoyal101/adbrain/issues/403) before-set of the 6 screens + top-10 list. 3. **P0 [#157](https://github.com/vanshulgoyal101/adbrain/issues/157)** read at ~16:00Z. Post verdicts as `gh pr review --comment` ([#423](https://github.com/vanshulgoyal101/adbrain/issues/423)) |
+| Dev | 1. Merge PR #425 ([#371](https://github.com/vanshulgoyal101/adbrain/issues/371), CTO approved) and post the opening line. 2. [#410](https://github.com/vanshulgoyal101/adbrain/issues/410) part 2 (503 + logged provider reasons). 3. [#418](https://github.com/vanshulgoyal101/adbrain/issues/418) eval gate, then [#388](https://github.com/vanshulgoyal101/adbrain/issues/388) model bake-off through it (covers [#378](https://github.com/vanshulgoyal101/adbrain/issues/378)). You own `ad-assistant.tsx` and `interview.ts` |
+| DevOps | 1. Close the smoke incidents #413/#414/#420/#415 once be4952c's guard passes. 2. [#410](https://github.com/vanshulgoyal101/adbrain/issues/410) part 1: `LLM_BUDGET_PROVIDER_ORDER=groq,google,openrouter` with before/after. 3. [#423](https://github.com/vanshulgoyal101/adbrain/issues/423) Copilot review ruleset (advisory). 4. [#390](https://github.com/vanshulgoyal101/adbrain/issues/390) parts 2–3. 5. [#388](https://github.com/vanshulgoyal101/adbrain/issues/388) 3-weekly reminder; [#270](https://github.com/vanshulgoyal101/adbrain/issues/270) at ~18:40Z |
+| Dev 3 | 1. [#376](https://github.com/vanshulgoyal101/adbrain/issues/376) part 1 (sign-up intro). 2. [#366](https://github.com/vanshulgoyal101/adbrain/issues/366) (Prepare: Gemini thinking off, then Haiku; preflight timing). 3. [#417](https://github.com/vanshulgoyal101/adbrain/issues/417) UI/UX track: `ui-gate.mjs` baseline, then the #403 spec. 4. [#289](https://github.com/vanshulgoyal101/adbrain/issues/289) next slices |
+| Dev 2 | 1. Merge PR #357 ([#334](https://github.com/vanshulgoyal101/adbrain/issues/334)) after QA's verdict. 2. [#387](https://github.com/vanshulgoyal101/adbrain/issues/387) (live preview while editing). 3. [#419](https://github.com/vanshulgoyal101/adbrain/issues/419) placement track: `validate_only` replays + plan check first. [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) jumps the queue when the owner is at the Meta dashboard |

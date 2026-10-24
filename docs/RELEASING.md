@@ -172,8 +172,10 @@ The rollback drill input `drill` forces the same FAIL, then really rolls
 production back and opens a `[DRILL]` core bug; restore with the recovery steps
 below.
 
-Recovery after an automatic rollback: Vercel stops promoting new production
-deployments until one is promoted manually. Fix forward or revert through a PR.
-When the fixed commit's deployment is READY, run
-`npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`,
-then rerun the workflow with `workflow_dispatch` and close the issue.
+Recovery after an automatic rollback: the guard rolls back by **promoting** the
+last good deployment (#390), so Vercel keeps auto-promoting later deploys; each new
+deploy gets its own guard. Fix forward or revert through a PR; when the fix is live
+and its guard passes, close the issue. While one `Production smoke failed` issue is
+open, further failures comment on it instead of opening more. A rollback done by
+hand with `vercel rollback` (or the dashboard) does turn auto-promotion off: undo it
+with `npx --yes vercel@60.1.3 promote <deployment-url> --scope vanshul-goyals-projects`.

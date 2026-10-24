@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IDEAS } from "@/lib/ideas";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { LEGAL_LINKS } from "@/lib/legal-links";
@@ -48,6 +49,8 @@ describe("sitemap", () => {
         absoluteUrl("/guides"),
         absoluteUrl("/guides/ad-creative-sizes"),
         absoluteUrl("/guides/meta-campaign-checklist"),
+        absoluteUrl("/ideas"),
+        ...IDEAS.map((idea) => absoluteUrl(`/ideas/${idea.slug}`)),
       ]),
     );
   });

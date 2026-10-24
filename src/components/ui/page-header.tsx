@@ -7,8 +7,11 @@ export function PageHeader({
   description,
   actions,
   className,
+  titleInTopBarOnPhone = false,
 }: {
   eyebrow: string;
+  /** The phone top bar already names the page; keep the h1 for screen readers only there. */
+  titleInTopBarOnPhone?: boolean;
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
@@ -22,14 +25,14 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <p className="text-xs font-medium tracking-normal text-slate-500">
+        <p className={cn("text-xs font-medium tracking-normal text-slate-500", titleInTopBarOnPhone && "max-sm:hidden")}>
           {eyebrow}
         </p>
-        <h1 className="mt-1 font-display text-2xl font-semibold tracking-normal text-slate-950">
+        <h1 className={cn("mt-1 font-display text-2xl font-semibold tracking-normal text-slate-950", titleInTopBarOnPhone && "max-sm:sr-only")}>
           {title}
         </h1>
         {description && (
-          <div className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</div>
+          <div className={cn("mt-2 max-w-2xl text-sm leading-6 text-slate-500", titleInTopBarOnPhone && "max-sm:mt-0")}>{description}</div>
         )}
       </div>
       {actions && <div className="flex-none">{actions}</div>}
