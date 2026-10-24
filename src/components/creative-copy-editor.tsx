@@ -8,6 +8,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { editableCopySchema, savedCreativeDescription, type EditableCopy } from "@/lib/creative/concept";
 import { pictureDesign, pictureWordsOf, pictureWordsSchema, type PictureWords } from "@/lib/creative/picture-words";
+import { createClient } from "@/lib/supabase/client";
 import { META_CTAS, type BrandContext } from "@/lib/templates/ads";
 import type { Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -290,9 +291,28 @@ export function BackgroundEditor({
   onBusy?: (busy: boolean) => void;
 }) {
   const [instruction, setInstruction] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => onBusy?.(saving), [saving, onBusy]);
+  useEffect(() => {
+    let alive = true;
+    void Promise.resolve(
+      createClient()
+        .from("brand_assets")
+        .select("url")
+        .eq("business_id", creative.business_id)
+        .eq("type", "product_photo")
+        .order("created_at", { ascending: false })
+        .limit(12),
+    ).then(({ data }) => {
+      if (alive) setPhotos((data ?? []).map((row) => row.url));
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [creative.business_id]);
   const id = `background-${creative.id}`;
 
   async function save(event: React.FormEvent) {
@@ -303,7 +323,7 @@ export function BackgroundEditor({
       const res = await fetch(`/api/creatives/${creative.id}/background`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instruction }),
+        body: JSON.stringify(photo ? { photoUrl: photo } : { instruction }),
       });
       const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
       if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
@@ -328,18 +348,44 @@ export function BackgroundEditor({
           maxLength={300}
           rows={3}
           placeholder="e.g. Rooftop at sunset with solar panels"
-          onChange={(e) => setInstruction(e.target.value)}
+          onChange={(e) => {
+            setInstruction(e.target.value);
+            setPhoto(null);
+          }}
           autoFocus
         />
       </div>
+      {photos.length > 0 && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="mb-1.5 text-sm font-medium text-slate-700">Or use one of your photos</legend>
+          <div className="grid grid-cols-4 gap-2">
+            {photos.map((url, index) => (
+              <button
+                key={url}
+                type="button"
+                aria-pressed={photo === url}
+                aria-label={`Your photo ${index + 1}`}
+                onClick={() => setPhoto((current) => (current === url ? null : url))}
+                className={cn(
+                  "aspect-square overflow-hidden rounded-md border-2 bg-slate-100",
+                  photo === url ? "border-blue-600" : "border-transparent hover:border-slate-300",
+                )}
+              >
+                <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {error && (
         <p className="text-xs text-red-600" role="alert">
           {error}
         </p>
       )}
       <p className="text-xs text-slate-500">
-        Makes a new picture behind the same words. Your text and the words on the picture stay. This uses one AI
-        image, like Regenerate, and takes up to a minute.
+        {photo
+          ? "Puts your photo behind the same words. Your text and the words on the picture stay. No AI and no cost."
+          : "Makes a new picture behind the same words. Your text and the words on the picture stay. This uses one AI image, like Regenerate, and takes up to a minute."}
       </p>
       <div className="flex gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={saving} className="h-11 flex-1">
@@ -349,10 +395,10 @@ export function BackgroundEditor({
           type="submit"
           size="sm"
           variant="primary"
-          disabled={saving || instruction.trim().length < 3}
+          disabled={saving || (!photo && instruction.trim().length < 3)}
           className="h-11 flex-1"
         >
-          {saving ? "Making it…" : "Make background"}
+          {saving ? "Making it…" : photo ? "Use this photo" : "Make background"}
         </Button>
       </div>
     </form>

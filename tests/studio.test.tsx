@@ -16,6 +16,7 @@ const h = vi.hoisted(() => ({
   setCreativeStatus: vi.fn(),
   deleteCreative: vi.fn(),
   updateCreativeCopy: vi.fn(),
+  photos: [] as string[],
   downloadBlob: vi.fn(),
 }));
 
@@ -25,6 +26,17 @@ vi.mock("@/app/(app)/studio/actions", () => ({
   updateCreativeCopy: h.updateCreativeCopy,
 }));
 vi.mock("@/lib/download", () => ({ downloadBlob: h.downloadBlob }));
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => {
+    const query = {
+      select: () => query,
+      eq: () => query,
+      order: () => query,
+      limit: async () => ({ data: h.photos.map((url) => ({ url })), error: null }),
+    };
+    return { from: () => query };
+  },
+}));
 
 const business = { id: "b1", name: "Solaride" } as unknown as Business;
 
@@ -54,6 +66,7 @@ beforeEach(() => {
   sessionStorage.clear();
   h.setCreativeStatus.mockResolvedValue({ ok: true });
   h.deleteCreative.mockResolvedValue({ ok: true });
+  h.photos = [];
   global.fetch = vi
     .fn()
     .mockResolvedValue(okJson({ creatives: [] })) as unknown as typeof fetch;
@@ -654,6 +667,23 @@ describe("<Studio> change only the background (#280)", () => {
     await waitFor(() => expect(document.querySelector('img[src*="new-background"]')).not.toBeNull());
     expect(screen.getAllByText("Cut your power bill").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Approved").length).toBeGreaterThan(0);
+  });
+
+  it("puts one of the owner's Brand photos behind the words, with no AI", async () => {
+    const user = userEvent.setup();
+    h.photos = ["https://cdn.example/brand-assets/b1/front-desk.jpg", "https://cdn.example/brand-assets/b1/roof.jpg"];
+    global.fetch = vi.fn().mockResolvedValue(okJson({ creative: creative({ image_url: "https://img.example/with-photo.png" }) })) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Background" }));
+    const form = screen.getByRole("form", { name: "Change the background" });
+    await user.click(await within(form).findByRole("button", { name: "Your photo 2" }));
+    expect(within(form).getByText(/No AI and no cost/)).toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "Use this photo" }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/background", expect.objectContaining({ method: "POST" })));
+    const [, init] = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([url]) => url === "/api/creatives/c1/background")!;
+    expect(JSON.parse(String(init.body))).toEqual({ photoUrl: "https://cdn.example/brand-assets/b1/roof.jpg" });
+    await waitFor(() => expect(document.querySelector('img[src*="with-photo"]')).not.toBeNull());
   });
 
   it("shows the server's reason and keeps the form when the image can't be made", async () => {
