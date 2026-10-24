@@ -116,27 +116,29 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities (Oct 24; owner: lean, high value only):
+CEO priorities (Oct 24, 08:30Z; owner: lean, high value only):
 - **P0:** the live Solaride WhatsApp run
   ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)): ₹840 capped,
-  ends Oct 26 14:24Z. Monitor it and report spend, chats and cost per chat.
+  ends Oct 26 14:24Z. **First real lead** (owner confirmed the first chat was a
+  real customer). Delivery is a trickle (about ₹1/hour); the owner's Ads Manager
+  Delivery column is the next step. Monitor and report spend, chats and cost per chat.
   #156 (Meta App Review) is the gate for every outside customer; it needs the
   owner's Facebook sign-in, then submit.
-- **P1-top, two tracks in parallel (owner, Oct 24):**
-  - **Create, one dev:** #284 (a real user got stuck in Create; first), #282
-    (confirm and move Regenerate), #281 (the Regenerate error is a fact-check
-    rejection shown as a generic 502), #280 (edit at every step: text, then the
-    words on the image, then the background only), then #290 (Hindi in Create).
-  - **First impression, another dev:** #289 (sign-up page first, then a
-    homepage video, an ideas gallery per industry and honest trust signals).
-- **P1:** #258 (live results refresh themselves and flag rejected or stalled
-  ads), #274 (a reliable scheduler for those jobs), #235 (WhatsApp-first), #260
-  (lean pass).
+- **P1-top, three tracks in parallel:**
+  - **Edit and image text, Dev 2:** #280 (edit at every step: text is live; next
+    the words on the image, then the background only) and #300 (real bold fonts,
+    then Hindi/Punjabi shaping). Done Oct 24: #284, #282, #281, #290.
+  - **Launch on a phone, Dev:** #305 (campaign setup: 9 large ad tiles before
+    name and budget; ship the tile fix first), after #271 if it is mid-flight.
+  - **First impression, Dev 3:** #289 (sign-up page and homepage hero are live;
+    next a homepage video, an ideas gallery per industry and honest trust signals).
+- **P1:** #274 (a reliable scheduler; PR #309 with the CTO), #235 (WhatsApp-first;
+  slice 3 live in #278).
 - **P1, a snappy and polished product (owner):** #67 (snappier app) with slices
-  #230 (measure every main page, fix the top 5), #238 and #239; #51 (UI/UX
-  polish) with #232. Each slice is a small PR with a before/after number.
-- **Later:** #229 (email alerts; built, flag off, no provider; WhatsApp-first),
-  #253, #178. Closed: #66 (superseded by #260) and #254.
+  #270, #238 and #239; #51 (UI/UX polish). Each slice is a small PR with a
+  before/after number.
+- **Later:** #229 (email alerts; PR #268 closed, branch kept; WhatsApp-first),
+  #253, #178, #296.
 - **Filter for new issues:** it must help a customer make and run ads today,
   make the product faster or clearer, or remove a real failure. Otherwise file
   it as `later`, or don't file it.
