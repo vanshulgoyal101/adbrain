@@ -15,7 +15,11 @@ async function vercel(path) {
   const url = new URL(path, "https://api.vercel.com");
   url.searchParams.set("slug", team);
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) throw new Error(`Vercel API ${url.pathname}: HTTP ${response.status}`);
+  if (!response.ok) {
+    // Vercel's error code and message name the cause (expired token, missing scope, rate limit); no secrets.
+    const error = (await response.json().catch(() => null))?.error;
+    throw new Error(`Vercel API ${url.pathname}: HTTP ${response.status}${error ? ` ${error.code ?? ""}: ${String(error.message ?? "").slice(0, 200)}` : ""}`);
+  }
   return response.json();
 }
 
