@@ -10,14 +10,16 @@ const MAX_BYTES = 512;
 
 /**
  * How a browser sign-in step ended (#451 L4): password sign-in, sending a sign-in link, starting
- * Google. Callers are often signed out, so the body is a fixed enum (no email or message), and it
- * is rate limited per address and overall.
+ * Google. Callers are often signed out, so the body is a fixed enum (no email or message), it is
+ * rate limited per address and overall, and a success counts only with a session.
  */
 async function handlePOST(request: Request) {
   if (process.env.PRODUCT_LOGGING_ENABLED === "false") return new Response(null, { status: 204 });
   if (request.headers.get("origin") !== new URL(request.url).origin) return new Response(null, { status: 403 });
   if (request.headers.get("dnt") === "1" || request.headers.get("sec-gpc") === "1") return new Response(null, { status: 204 });
-  const address = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // The platform sets x-real-ip and appends the caller to x-forwarded-for; a script can only prepend.
+  const address = request.headers.get("x-real-ip")?.trim()
+    || request.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
   const limited = await rateLimitResponse(`auth-outcome:${address}`, { limit: 20, windowMs: 60_000 })
     ?? await rateLimitResponse("auth-outcome:all", { limit: 600, windowMs: 60_000 });
   if (limited) return limited;
@@ -42,8 +44,11 @@ async function handlePOST(request: Request) {
   const parsed = authOutcomeSchema.safeParse(await Promise.resolve().then(() => JSON.parse(text)).catch(() => null));
   if (!parsed.success) return new Response(null, { status: 400 });
   const outcome = parsed.data;
-  // A password sign-in that worked carries its session: attach the user.
-  if (outcome.outcome === "success") await (await createClient()).auth.getUser().catch(() => null);
+  // A real password sign-in carries its session; a "success" without one only inflates a count.
+  if (outcome.outcome === "success") {
+    const user = await (await createClient()).auth.getUser().then(({ data }) => data.user, () => null);
+    if (!user) return new Response(null, { status: 204 });
+  }
   recordProductEvent({ kind: "workflow", name: `auth.sign_in.${outcome.method}`, outcome: outcome.outcome,
     attributes: outcome.outcome === "failed" ? { errorCode: `AUTH_CLIENT:${outcome.code}` } : {} });
   return new Response(null, { status: 204 });

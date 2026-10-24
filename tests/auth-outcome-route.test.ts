@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { g
 function beacon(body: unknown, headers: Record<string, string> = {}) {
   return POST(new Request("https://adbrain.example/api/auth/outcome", {
     method: "POST", body: typeof body === "string" ? body : JSON.stringify(body),
-    headers: { origin: "https://adbrain.example", "x-forwarded-for": "203.0.113.9, 10.0.0.1", ...headers },
+    headers: { origin: "https://adbrain.example", "x-real-ip": "203.0.113.9", "x-forwarded-for": "6.6.6.6, 203.0.113.9", ...headers },
   }));
 }
 const events = () => mocks.record.mock.calls.map(([event]) => [event.name, event.outcome, event.attributes?.errorCode ?? null]);
@@ -43,6 +43,19 @@ describe("POST /api/auth/outcome (#451 L4)", () => {
     ["a body over 512 bytes", JSON.stringify({ method: "password", outcome: "failed", code: "other", pad: "x".repeat(600) }), {}, 413],
   ])("refuses %s without recording anything", async (_case, body, headers, status) => {
     expect((await beacon(body, headers)).status).toBe(status);
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+
+  it("limits by the address the platform sets, not a forwarded value a script chose (QA)", async () => {
+    await beacon({ method: "password", outcome: "failed", code: "other" }, { "x-forwarded-for": "1.2.3.4" });
+    await beacon({ method: "password", outcome: "failed", code: "other" }, { "x-real-ip": "", "x-forwarded-for": "6.6.6.6, 198.51.100.7" });
+    expect(mocks.rate.mock.calls.map(([key]) => key).filter((key) => key !== "auth-outcome:all"))
+      .toEqual(["auth-outcome:203.0.113.9", "auth-outcome:198.51.100.7"]);
+  });
+
+  it("ignores a 'success' from someone without a session, so it can't inflate sign-ins (QA)", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: null } });
+    expect((await beacon({ method: "password", outcome: "success" })).status).toBe(204);
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
