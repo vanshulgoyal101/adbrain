@@ -32,6 +32,12 @@ There is one repair opportunity, sharing a 45-second deadline and request
 cancellation. Accepted brief length is at most 2000 characters. Follow-up
 recommendations are optional; the user reviews the next brief before generating.
 An interview response does not itself produce paid image variants.
+Options that mean "I'll type my own" (custom, other, type below) are dropped and the
+text box is kept. An answer that adds no fact (such a chip, skip, not sure) does not
+count as a repeat, so the question can be asked again. A currency amount such as
+"₹10,000" is supported by "10,000 rupees" or "Rs 10000" in a source (#284).
+Failed attempts log rule names only (`metadata.validationRules`, for example
+`unsupported-commercial-claim`, `repeated-question`, `schema:<path>`).
 
 ### Campaign Interview
 

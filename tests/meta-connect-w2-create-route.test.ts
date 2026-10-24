@@ -243,7 +243,7 @@ beforeEach(() => {
   });
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
       execute({
-        listLeadForms: vi.fn().mockResolvedValue([{ id: "form-1", name: "Leads", status: "ACTIVE" }]),
+        readActiveLeadForm: vi.fn().mockResolvedValue({ id: "form-1", name: "Leads", status: "ACTIVE" }),
         resolveGeoTargeting: vi.fn().mockResolvedValue({ targeting: {}, matched: [{ label: "Jaipur" }], unresolved: [] }),
         resolveAudienceInterests: vi.fn().mockResolvedValue({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }),
         createLeadCampaign: vi.fn().mockImplementation(async (params: { onCheckpoint?: (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => Promise<void> }) => {
@@ -304,7 +304,7 @@ describe("durable campaign create route", () => {
     const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
     const forms = vi.fn().mockRejectedValue(new Error("WhatsApp must not load forms"));
     let whatsappNumber: string | null = "+919876543210";
-    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => whatsappNumber, createLeadCampaign: create, listLeadForms: forms, resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => whatsappNumber, createLeadCampaign: create, readActiveLeadForm: forms, resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
     const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
     const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
     expect(reviewed.data).toMatchObject({ canCreatePaused: true, planHash: expect.any(String), whatsappNumber: "+919876543210" });

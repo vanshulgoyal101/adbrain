@@ -74,11 +74,18 @@ All automated production browser runs from the shared Mac come from one IP addre
 `npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time:
 
 - **Create** (`create-route`, `create-concept`): three ads saved from production run 4 through the production provider order, validator repair, OpenRouter overload falling back to Gemini without trying OpenRouter's other keys, and run 4's recorded OpenRouter and image latencies fitting the 270 s route deadline. Recorded and gold-labelled `evals/creative` concepts must be accepted or rejected as graded.
+- **Create interview** (`create-interview`, #284): real Solaride interview replies recorded by
+  `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
+  assistant asks for the offer again instead of failing, and the replies the old claim check
+  rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
 - **Operator funding** (`operator-funding`): the real Solaride ad account read (`spend_cap` 88983, `amount_spent` 4237 paise after the owner's ₹1,000 top-up) that gates an operator-funded capped activation (#245), recorded read-only by `scripts/record-meta-funding-fixtures.ts`.
 - **Prepare speed** (`prepare-speed`, #271): real Tricity geo searches recorded with the previous one-at-a-time resolver resolve identically when searched together, and the recorded Solaride lead-form read is served from cache for ten minutes per business, Page and connection (fresh, reconnect and expiry re-read Meta).
+  Preflight's form check stays uncached and reads only the chosen form, recorded read-only by
+  `scripts/record-meta-form-fixtures.ts`: an active form on the Page passes; a campaign ID and an
+  unknown ID are refused; synthetic edits refuse an archived form and a form on another Page.
 - **Results refresh** (`results-refresh`): the scheduled results job (#258) against real insights and ad review reads from the live #157 run and a paused Solaride campaign, recorded read-only by `scripts/record-meta-results-fixtures.ts`: one result row per campaign per hour, GETs only, the 6-hour no-impressions flag, and a rejected-ad flag from a synthetic DISAPPROVED edit of the recorded ads response.
 - **Campaign stop** (`campaign-stop`): the paused-run settle check (#221) that the whole Meta tree is stopped, from two real Solaride campaigns (a fully PAUSED tree, and ACTIVE children under a paused campaign), recorded read-only by `scripts/record-meta-stop-fixtures.ts`.
 - **WhatsApp** (`campaign-whatsapp`, `whatsapp-number`): Meta's real `validate_only` answers for the WhatsApp campaign, ad set and creative (#209), recorded with [`record-meta-whatsapp-adset.ts`](../scripts/record-meta-whatsapp-adset.ts), plus the Page and business WhatsApp number reads behind the button number (#235).

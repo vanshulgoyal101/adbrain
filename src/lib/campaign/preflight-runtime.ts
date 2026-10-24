@@ -43,15 +43,12 @@ export function buildCampaignPreflightLoaders(
     findForm: async (businessId, formId) => {
       const connection = await getConnectionStatus(authorizedBusiness);
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
-      const forms = await withMetaConnection(
+      const form = await withMetaConnection(
         authorizedBusiness,
         { purpose: "create_paused" },
-        (meta) => meta.listLeadForms(),
+        (meta) => meta.readActiveLeadForm(formId),
       );
-      const form = forms.find((candidate) => candidate.id === formId);
-      return form
-        ? { id: form.id, businessId, active: form.status.toUpperCase() === "ACTIVE" }
-        : null;
+      return form ? { id: form.id, businessId, active: true } : null;
     },
     findWhatsAppNumber: async (_actor, requested) => {
       const connection = await getConnectionStatus(authorizedBusiness);

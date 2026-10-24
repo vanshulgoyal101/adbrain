@@ -1,0 +1,111 @@
+{
+  "recordedAt": "2026-10-24T06:57:21.310Z",
+  "brand": {
+    "name": "Solaride",
+    "vertical": "solar energy",
+    "description": "SOLARIDE provides customized rooftop solar panel installations for residential, commercial, and agricultural sectors across North India, including Punjab, Haryana, Chandigarh, and Rajasthan.",
+    "brand_voice": "professional, mission-driven, transparent",
+    "target_audience": "Homeowners, businesses, and agricultural landowners in North India (Punjab, Haryana, Chandigarh, Rajasthan) looking to reduce electricity bills and adopt clean energy.",
+    "usps": [
+      "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+      "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+      "Local solar teams in Mohali and Hisar",
+      "Assistance with PM Surya Ghar subsidy and net metering",
+      "Free site survey",
+      "Potential to cut electricity bills by up to 98%"
+    ],
+    "offers": [
+      "Free site survey",
+      "PM Surya Ghar subsidy help",
+      "Diwali offer: 10% off rooftop solar installation"
+    ],
+    "languages": [
+      "English"
+    ],
+    "locations": [
+      "Chandigarh",
+      "Panchkula",
+      "Mohali"
+    ]
+  },
+  "goal": "Ad for factory owners: from 31 Dec, non-DCR solar panels are banned and the cost goes up by more than 10,000 rupees per kW. Install before the deadline.",
+  "nonAnswer": {
+    "question": "What offer should the ad highlight for factory owners?",
+    "answer": "Custom offer (type it below)",
+    "questionId": "offer",
+    "field": "offer",
+    "options": [
+      "Free site survey this week",
+      "Lock in today's price",
+      "Custom offer (type it below)"
+    ]
+  },
+  "replies": [
+    {
+      "turn": "goal",
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A high-contrast, urgent visual showing a modern industrial rooftop in North India with a sleek solar array installation in progress, overlaid with a bold red 'DEADLINE' stamp and the date '31 DEC'. The copy leads with the critical regulatory change: 'Non-DCR solar banned from Dec 31. Costs rise by ₹10,000+ per kW.' The hook is the immediate financial risk: 'Don't let a policy change eat your profits.' The offer is the 'Free Site Survey' to lock in current rates before the ban. The mood is professional yet alarming, leveraging the brand's engineering credibility (IIT/PEC backed) to assure factory owners that this is a serious, solvable business issue, not just a sales pitch. The visual should feel like a business alert, not a generic eco-friendly poster.\",\n  \"language\": \"en\",\n  \"angleId\": \"urgency\",\n  \"recommendations\": [\n    {\n      \"label\": \"Financial Loss Calculator\",\n      \"prompt\": \"Create a version that shows a simple graphic comparing 'Cost Now' vs 'Cost After Dec 31' for a 100kW system, highlighting the specific rupee difference to make the urgency tangible.\"\n    },\n    {\n      \"label\": \"Trust & Compliance Angle\",\n      \"prompt\": \"Shift the focus to the engineering team, showing IIT/PEC graduates in site surveys, emphasizing that SOLARIDE ensures full DCR compliance so factory owners avoid legal and financial pitfalls.\"\n    },\n    {\n      \"label\": \"Local Urgency\",\n      \"prompt\": \"Focus specifically on factories in Mohali and Hisar, using a map visual to show local teams ready to install before the deadline, reinforcing the 'local and fast' advantage.\"\n    }\n  ]\n}"
+    },
+    {
+      "turn": "non-answer",
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": false,\n  \"question\": {\n    \"id\": \"offer_details\",\n    \"field\": \"offer\",\n    \"question\": \"Please type the specific offer or incentive you want to highlight for factory owners.\",\n    \"help\": \"This will be the main call-to-action in the ad.\",\n    \"options\": [],\n    \"allowText\": true,\n    \"allowRandom\": false,\n    \"aiCanDecide\": false\n  }\n}"
+    },
+    {
+      "turn": "goal",
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n\"ready\": true,\n\"brief\": \"A high-stakes, urgent visual of a modern industrial factory roof in North India, bathed in harsh sunlight, with a bold, red 'STOP' style graphic overlaying a calendar page showing December 31st. The copy headline reads: 'The 31st is coming. Your costs are going up.' Subtext: 'Non-DCR solar banned. Installation costs jump by ₹10,000+ per kW. Install before the deadline to lock in your savings.' The mood is professional but pressing, emphasizing that waiting is expensive. The CTA is 'Book Your Free Site Survey Today.'\",\n\"language\": \"en\",\n\"angleId\": \"urgency\",\n\"recommendations\": [\n{\n\"label\": \"Visual Contrast: Before vs. After\",\n\"prompt\": \"Create a split-screen image: on the left, a stressed factory owner looking at a high electricity bill; on the right, the same person smiling while looking at a solar dashboard showing savings. Headline: 'Don't let the 31st deadline surprise you. Secure your savings now.'\"\n},\n{\n\"label\": \"Authority & Engineering Focus\",\n\"prompt\": \"Show a professional engineer in a hard hat inspecting a commercial rooftop solar array. Headline: 'Engineered for Compliance. IIT & PEC Backed. Install before the non-DCR ban hits your budget.'\"\n}\n]\n}"
+    },
+    {
+      "turn": "goal",
+      "attempt": 1,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A high-stakes, urgent visual focusing on a modern industrial factory roof in North India under a clear, bright sky. The image features a close-up of a sleek, dark solar panel with a bold, red 'BANNED' or 'COST UP' graphic overlaying a specific section, contrasting with the 'SAFE' installed area, symbolizing the immediate financial threat of the new regulations. The mood is serious and professional, leveraging the 'Urgency' angle to drive immediate action. The headline copy reads: 'The 31st December Deadline: Don't Let Your Factory Pay the Penalty.' The sub-headline states: 'Non-DCR solar panels are banned, adding ₹10,000+ per kW to your costs. Secure your compliant installation now.' The call-to-action is a prominent button: 'Book Free Compliance Survey'. The visual style is clean and corporate, using the brand's professional voice to reassure factory owners that Solaride’s local engineering team can handle the transition before the deadline, highlighting the 'Free Site Survey' as the low-risk next step.\",\n  \"language\": \"en\",\n  \"angleId\": \"urgency\",\n  \"recommendations\": [\n    {\n      \"label\": \"Financial Loss Visualization\",\n      \"prompt\": \"Create a split-screen image: on the left, a factory owner looking stressed at a calculator with a red arrow pointing up labeled '₹10,000+ per kW'; on the right, the same owner smiling while shaking hands with a Solaride engineer, with a green checkmark labeled 'Compliant & Saved'. Headline: 'The Cost of Waiting is Real. Install Before Dec 31.'\"\n    },\n    {\n      \"label\": \"Local Engineering Trust\",\n      \"prompt\": \"Show a Solaride engineer in a branded uniform inspecting a factory rooftop in Punjab or Haryana, with a background of solar panels. Overlay text: 'IIT Bombay & PEC Graduates. Local Teams. Zero Regulatory Surprises.' Headline: 'Navigate the New Solar Rules with Experts Who Know Your Region.'\"\n    },\n    {\n      \"label\": \"Bill Reduction Focus\",\n      \"prompt\": \"A close-up of a factory electricity bill with the 'Solaride' logo stamped on it, showing a dramatic drop in the total amount (visual representation of 98% reduction). Text overlay: 'Cut Industrial Power Bills by Up to 98% Before the Ban Hits.' Headline: 'Turn Your Roof Into a Power Plant, Not a Cost Center.'\"\n    }\n  ]\n}"
+    }
+  ],
+  "rejectedUnderV2": {
+    "recordedAt": "2026-10-24T06:54:16.516Z",
+    "note": "interview-v2 replies the old claim check rejected for ₹10,000 although the goal says 10,000 rupees",
+    "replies": [
+      {
+        "turn": "goal",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "content": "{\n  \"ready\": true,\n  \"brief\": \"A high-stakes, urgent visual narrative targeting factory owners in North India. The image features a close-up of a heavy, industrial solar panel being lifted by a crane onto a factory roof, with a stark red 'STOP' or 'DEADLINE' graphic overlaying the horizon to symbolize the regulatory shift. The mood is professional yet alarming, emphasizing the financial risk of inaction. The copy hook is direct and factual: 'The 31st December DCR Ban is Coming.' The body copy explains that non-DCR solar panels will be banned, increasing installation costs by over ₹10,000 per kW. The offer is the immediate call to action: 'Secure your pre-deadline installation now.' The tone is transparent and mission-driven, leveraging the brand's engineering credibility (IIT Bombay/PEC Chandigarh) to reassure factory owners that SOLARIDE handles the complex compliance and installation seamlessly. The visual style is clean, industrial, and high-contrast to convey authority and urgency.\",\n  \"language\": \"en\",\n  \"angleId\": \"urgency\",\n  \"recommendations\": [\n    {\n      \"label\": \"Cost Comparison Infographic\",\n      \"prompt\": \"Create a split-screen visual: left side shows a factory owner looking stressed with a high electricity bill and a calendar marked '31 Dec'; right side shows the same owner relaxed with a low bill and a 'DCR Compliant' badge. Overlay text highlighting the '₹10,000+ per kW cost increase' to visualize the financial pain point.\"\n    },\n    {\n      \"label\": \"Engineering Trust Focus\",\n      \"prompt\": \"Feature the SOLARIDE engineering team in professional attire standing in front of a large commercial solar array. The copy focuses on the 'IIT Bombay & PEC Chandigarh' backing, positioning the brand as the technical expert who can navigate the new DCR regulations safely, shifting the angle from urgency to trust and competence.\"\n    },\n    {\n      \"label\": \"Local Factory Scene\",\n      \"prompt\": \"Show a specific industrial landscape in Mohali or Hisar with a modern factory roof fully covered in solar panels. The copy emphasizes 'Local Teams, Local Compliance' to reassure factory owners that the installation is handled by neighbors who understand the specific regional regulatory landscape, enhancing the 'Trusted & Local' angle.\"\n    }\n  ]\n}"
+      },
+      {
+        "turn": "non-answer",
+        "provider": "google",
+        "model": "gemini-3.6-flash",
+        "content": "{\"ready\":true,\"brief\":\"A high-impact visual targeting factory owners across North India, featuring an aerial view of a bustling industrial facility with high-capacity rooftop solar panels installed under bright daylight. The copy strikes an urgent, authoritative tone with the headline: 'Attention Factory Owners: Avoid the ₹10,000/kW Solar Price Hike Before Dec 31st!' It explains the upcoming regulatory ban on non-DCR solar panels and urges commercial leaders to lock in current rates now. Supported by Solaride's credentials—IIT Bombay & PEC Chandigarh engineering roots and hassle-free site surveys—the call to action drives immediate bookings before the deadline.\",\"language\":\"en\",\"angleId\":\"urgency\",\"recommendations\":[{\"label\":\"Focus on a Factory Owner Subject\",\"prompt\":\"Show an industrial business owner on their factory floor looking at solar savings charts, focusing on personal leadership and ROI before Dec 31.\"},{\"label\":\"Visual Savings Comparison Graphic\",\"prompt\":\"Use a clean visual infographic contrasting the cost of solar installation before Dec 31 versus the higher post-ban pricing after Dec 31.\"}]}"
+      },
+      {
+        "turn": "goal",
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "content": "{\n  \"ready\": true,\n  \"brief\": \"A high-stakes, urgent visual of a modern factory rooftop in North India, bathed in the harsh midday sun, with a bold red countdown timer overlaying the sky. The copy hooks with 'The 31st is coming. The price is going up.' It explicitly states that non-DCR solar panels are being banned, adding over ₹10,000 per kW to installation costs. The call to action is direct: 'Install before the deadline to lock in current rates.' The mood is professional and alert, leveraging the 'urgency' angle to drive immediate action from factory owners in Chandigarh, Panchkula, and Mohali who need to avoid the impending cost hike.\",\n  \"language\": \"en\",\n  \"angleId\": \"urgency\",\n  \"recommendations\": [\n    {\n      \"label\": \"Cost Comparison Visual\",\n      \"prompt\": \"Create a split-screen ad showing a 'Before 31st' side with a lower cost tag and an 'After 31st' side with a red, higher cost tag, highlighting the specific ₹10,000+ per kW increase to make the financial impact tangible.\"\n    },\n    {\n      \"label\": \"Local Compliance Expert\",\n      \"prompt\": \"Feature a professional engineer from the Solaride team standing in front of a factory, holding a DCR compliance document, with a headline 'We handle the DCR paperwork. You save the money.' to build trust in the technical complexity of the ban.\"\n    },\n    {\n      \"label\": \"Bill Reduction Focus\",\n      \"prompt\": \"Shift the focus from the ban to the savings, showing a factory owner looking at a significantly reduced electricity bill, with the headline 'Beat the ban, slash your bills by up to 98%.' to reframe the urgency as an opportunity.\"\n    }\n  ]\n}"
+      },
+      {
+        "turn": "non-answer",
+        "provider": "google",
+        "model": "gemini-3.6-flash",
+        "content": "{\"ready\":true,\"brief\":\"A high-impact B2B visual showing a large modern industrial manufacturing plant roof undergoing solar panel installation, bathed in clear sunlight with professional structural precision. The ad headline aggressively targets North India factory owners with the urgent message: non-DCR solar panels are banned from December 31st, driving installation costs up by more than ₹10,000 per kW. The copy delivers a clear, professional warning to beat the deadline, secure current rates, and leverage Solaride's IIT Bombay & PEC alumni engineering teams for rapid site survey and net-metering execution.\",\"language\":\"en\",\"angleId\":\"urgency\",\"recommendations\":[{\"label\":\"Focus on cost-comparison graphic\",\"prompt\":\"Create a split-screen financial graphic comparing factory installation costs before December 31 versus after the ₹10,000/kW price hike.\"},{\"label\":\"Feature local industrial park setting\",\"prompt\":\"Show a Solaride engineering team conducting a site survey on top of a textile factory in Mohali with an urgent countdown banner.\"}]}"
+      }
+    ]
+  }
+}
