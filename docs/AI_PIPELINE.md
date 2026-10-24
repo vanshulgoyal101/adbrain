@@ -222,6 +222,14 @@ design; do not confuse source dimensions with final placement dimensions.
 [Language IDs](../src/lib/languages.ts): `brand`, `en`, `hinglish`, `hi`, `pa`,
 `pa_roman`. Unknown generation language IDs normalize to brand-default guidance.
 Interview output validates its language choice against the supported list.
+Create offers `en`, `hinglish`, `hi` and `pa` (#290). The interview detects whether
+the owner writes Devanagari Hindi, Gurmukhi Punjabi or Roman-script Hindi, tells the
+model to ask in it (`OWNER WRITES IN`), and suggests that ad language when the model
+leaves `language` out. Words drawn on the image (`headline`, `supportingText`) stay
+in Latin script (`on-image-script`) until the compositor shapes Indic text (#300);
+Hindi or Punjabi goes in `primary_text` and `description`. The claim check reads
+"फ्री"/"मुफ़्त"/"ਮੁਫ਼ਤ" as free, "गारंटी" as guarantee and "रुपये"/"rupaye" as rupees, and a
+quote with "नहीं" or "बिना" doesn't back a claim.
 Font coverage and language quality still need visual/human review.
 
 ### Raster and Composition Rules

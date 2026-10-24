@@ -78,6 +78,15 @@ describe("bounded interview harness", () => {
     expect(complete).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps Hindi vowel signs, so a different Hindi question is not taken for a repeat (#290)", async () => {
+    const picture = { id: "visual-hi", field: "visual", question: "विज्ञापन में कौन सी तस्वीर दिखाएँ?", options: ["छत पर सोलर पैनल", "काम करती टीम"] };
+    vi.mocked(complete).mockResolvedValue(reply({ ready: false, question: picture }));
+    await expect(runInterview({ brand, goal: "फ़ैक्टरी मालिकों के लिए सोलर का विज्ञापन",
+      answers: [{ question: "विज्ञापन में कौन सा ऑफ़र दिखाएँ?", answer: "मुफ़्त साइट सर्वे", field: "offer", questionId: "offer-hi" }] }))
+      .resolves.toMatchObject({ ready: false, question: { question: picture.question } });
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
   it("enforces the question budget and fails closed on invalid model output", async () => {
     vi.mocked(complete).mockResolvedValue(reply({ ready: false, question }));
     await expect(runInterview({ brand, goal: "ad", answers: Array.from({ length: 3 }, () => ({ question: "Earlier", answer: "Confirmed" })) })).rejects.toBeInstanceOf(InterviewValidationError);
@@ -203,6 +212,35 @@ describe("buildInterviewMessages", () => {
     expect(user).toMatch(/hinglish/);
     expect(user).toMatch(/VALID ANGLE IDS/);
     expect(user).toMatch(/urgency/);
+  });
+
+  it("asks in the language and script the owner writes in (#290)", async () => {
+    const { INTERVIEW_PROMPT_VERSION } = await import("@/lib/creative/interview");
+    const system = buildInterviewMessages({ brand, goal: "फ़ैक्टरी मालिकों के लिए सोलर का विज्ञापन" })[0].content;
+    expect(system).toContain("in the language and script the owner writes in");
+    expect(system).toContain("Devanagari");
+    expect(system).toContain("Roman-script Hindi");
+    expect(INTERVIEW_PROMPT_VERSION).toBe("interview-v4");
+  });
+
+  it("detects the owner's language and states it in the prompt (#290)", async () => {
+    const { ownerLanguage } = await import("@/lib/creative/interview");
+    expect(ownerLanguage({ goal: "मुझे अपने सोलर बिज़नेस के लिए ज़्यादा ग्राहक चाहिए" })).toBe("hi");
+    expect(ownerLanguage({ goal: "ਮੈਨੂੰ ਹੋਰ ਗਾਹਕ ਚਾਹੀਦੇ ਹਨ" })).toBe("pa");
+    expect(ownerLanguage({ goal: "Mujhe apne solar business ke liye zyada customers chahiye" })).toBe("hinglish");
+    expect(ownerLanguage({ goal: "Ad for factory owners: install before the 31 Dec deadline" })).toBeUndefined();
+    expect(ownerLanguage({ goal: "More customers please", answers: [{ question: "Offer?", answer: "Diwali par 10% off aur free survey chahiye" }] })).toBe("hinglish");
+    const user = (goal: string) => buildInterviewMessages({ brand, goal })[1].content;
+    expect(user("Mujhe apne solar business ke liye zyada customers chahiye")).toContain("OWNER WRITES IN: Hinglish");
+    expect(user("मुझे ज़्यादा ग्राहक चाहिए")).toContain("OWNER WRITES IN: Hindi in Devanagari");
+    expect(user("More customers please")).not.toContain("OWNER WRITES IN");
+  });
+
+  it("fills the ad language from the owner's writing when the model leaves it out (#290)", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Show a factory roof with solar panels and invite enquiries." }));
+    await expect(runInterview({ brand, goal: "मुझे ज़्यादा ग्राहक चाहिए" })).resolves.toMatchObject({ ready: true, language: "hi" });
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Show a factory roof with solar panels and invite enquiries.", language: "en" }));
+    await expect(runInterview({ brand, goal: "मुझे ज़्यादा ग्राहक चाहिए, विज्ञापन अंग्रेज़ी में" })).resolves.toMatchObject({ language: "en" });
   });
 
   it("includes prior answers when present", () => {

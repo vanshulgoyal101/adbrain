@@ -115,10 +115,14 @@ details in prompts. See [Data Model](DATA_MODEL.md) and [AI Pipeline](AI_PIPELIN
 
 ## Create and Review Creatives
 
-1. Enter a goal in Create. Brand-aware and seasonal starters are suggestions,
-   not an automatic campaign scheduler.
+1. Enter a goal in Create, in English, Hindi, Hinglish or Punjabi, and pick the **Ad
+   language** (English · Hinglish · हिंदी · ਪੰਜਾਬੀ). It starts on the Brand's first
+   language; if you don't pick, the assistant's suggestion is used. It shows again on
+   the review step. Brand-aware and seasonal starters are suggestions, not an
+   automatic campaign scheduler.
 2. The interviewer can ask up to three new decisions, or finish immediately when
-   saved facts suffice. Questions offer contextual choices or text input.
+   saved facts suffice. It asks in the language you type in (#290). Questions offer
+   contextual choices or text input.
    If a step fails, **Change my answer** brings the last question back with a typed
    answer prefilled; **Start over** is always available in the chat.
 3. Review and edit the complete brief. Changing it changes the generation input.

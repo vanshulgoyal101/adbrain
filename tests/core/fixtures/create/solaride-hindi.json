@@ -1,0 +1,619 @@
+{
+  "recordedAt": "2026-10-24T08:08:54.359Z",
+  "brand": {
+    "name": "Solaride",
+    "vertical": "solar energy",
+    "description": "SOLARIDE provides customized rooftop solar panel installations for residential, commercial, and agricultural sectors across North India, including Punjab, Haryana, Chandigarh, and Rajasthan.",
+    "brand_voice": "professional, mission-driven, transparent",
+    "target_audience": "Homeowners, businesses, and agricultural landowners in North India (Punjab, Haryana, Chandigarh, Rajasthan) looking to reduce electricity bills and adopt clean energy.",
+    "usps": [
+      "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+      "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+      "Local solar teams in Mohali and Hisar",
+      "Assistance with PM Surya Ghar subsidy and net metering",
+      "Free site survey",
+      "Potential to cut electricity bills by up to 98%"
+    ],
+    "offers": [
+      "Free site survey",
+      "PM Surya Ghar subsidy help",
+      "Diwali offer: 10% off rooftop solar installation"
+    ],
+    "languages": [
+      "English"
+    ],
+    "locations": [
+      "Chandigarh",
+      "Panchkula",
+      "Mohali"
+    ]
+  },
+  "goals": {
+    "hi": {
+      "factory": "फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।",
+      "vague": "मुझे अपने सोलर बिज़नेस के लिए ज़्यादा ग्राहक चाहिए"
+    },
+    "hinglish": {
+      "factory": "Factory owners ke liye ad banao: 31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi. Deadline se pehle install karwa lo.",
+      "vague": "Mujhe apne solar business ke liye zyada customers chahiye"
+    }
+  },
+  "typed": {
+    "hi": "मुफ़्त साइट सर्वे और दिवाली पर 10% की छूट",
+    "hinglish": "Free site survey aur Diwali par 10% off"
+  },
+  "recentCopy": [
+    {
+      "headline": "Factory Solar Costs Shift on 31 Dec",
+      "primary_text": "Factory owners: solar rules change on 31 December and costs rise. Get 10% off this Diwali.\nOur engineers, backed by IIT Bombay and PEC Chandigarh graduates, start with a free site survey.\nDecide by 10 November if you want solar installed before 31 December."
+    },
+    {
+      "headline": "Factory Solar: Decide by 10 Nov",
+      "primary_text": "Factory solar costs rise after 31 December. Get 10% off rooftop solar this Diwali and decide by 10 November.\nSolaride's engineers, backed by IIT Bombay and PEC Chandigarh graduates, run a free site survey for commercial sites.\nCall +91 7380280874 to book your free site survey before 10 November."
+    },
+    {
+      "headline": "Your Roof, 10% Off This Diwali",
+      "primary_text": "Chandigarh, Panchkula, Mohali: get 10% off rooftop solar installation this Diwali.\nSolaride starts with a free site survey, then gives PM Surya Ghar subsidy help.\nMessage Solaride on WhatsApp to book your free site survey."
+    },
+    {
+      "headline": "Your Roof, Diwali Offer: 10% Off",
+      "primary_text": "Celebrate Diwali with 10% off rooftop solar installation for homes in Chandigarh, Panchkula and Mohali.\nStart with a free site survey, and Solaride helps with PM Surya Ghar subsidy paperwork.\nMessage Solaride on WhatsApp to book a free site survey."
+    },
+    {
+      "headline": "Wondering Whether Your Roof Is Ready?",
+      "primary_text": "Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\nMessage Solaride on WhatsApp to book your free site survey."
+    },
+    {
+      "headline": "Rising Festive Bills? Ask Us First",
+      "primary_text": "Festive lights and extra appliances can push your power bill up this Diwali. Get 10% off rooftop solar installation.\nStart with a free site survey, and we help with PM Surya Ghar subsidy paperwork.\nMessage Solaride on WhatsApp to book your free site survey."
+    },
+    {
+      "headline": "Diwali Offer: 10% Off Rooftop Solar",
+      "primary_text": "Solaride's Diwali Offer: 10% off rooftop solar installation for homes in Punjab, Haryana and Chandigarh.\nEvery enquiry starts with a free site survey, and we help with PM Surya Ghar subsidy paperwork.\nMessage Solaride on WhatsApp to book your free site survey."
+    },
+    {
+      "headline": "Start Solar on WhatsApp This Diwali",
+      "primary_text": "Ask about the 10% Diwali offer on rooftop solar by messaging Solaride on WhatsApp.\nYour free site survey comes first, and we help with PM Surya Ghar subsidy paperwork.\nLocal teams in Mohali and Hisar, for homes, shops and farms."
+    },
+    {
+      "headline": "A Diwali Offer for Your Rooftop Solar",
+      "primary_text": "Diwali offer: 10% off rooftop solar installation for homes, shops and farms in Punjab, Haryana and Chandigarh.\nA free site survey comes first, and we can help with PM Surya Ghar subsidy paperwork.\nBook your free site survey to see what your roof could offset."
+    },
+    {
+      "headline": "Stop the Festive Bill From Climbing",
+      "primary_text": "Festive nights bring more fans and appliances, and a bigger power bill. Get 10% off rooftop solar installation this Diwali.\nSOLARIDE's engineers run a free site survey and help with PM Surya Ghar subsidy and net metering paperwork for homes, shops and farms.\nBook your free site survey to see how much of your bill your roof could offset."
+    },
+    {
+      "headline": "10% Off Rooftop Solar This Diwali",
+      "primary_text": "Diwali brings 10% off rooftop solar installation, and your electricity bill still arrives at full price.\nBook a free site survey to see what your roof could save. We can also help with PM Surya Ghar subsidy paperwork.\nThis is the Diwali offer for homes, shops and farms in Punjab, Haryana and Chandigarh."
+    },
+    {
+      "headline": "Start Diwali With a Free Roof Check",
+      "primary_text": "Before the diyas are lit, find out what your roof could do. SOLARIDE's engineers run a free site survey for homes, shops and farms across Punjab, Haryana, Chandigarh and Rajasthan, and can help with PM Surya Ghar subsidy and net metering paperwork. Solar can cut electricity bills by up to 98%, depending on your roof."
+    }
+  ],
+  "turns": [
+    {
+      "language": "hi",
+      "goal": "vague",
+      "answers": [],
+      "result": {
+        "ready": false,
+        "question": {
+          "id": "q1_audience",
+          "field": "audience",
+          "question": "आप यह विज्ञापन मुख्य रूप से किसके लिए बनवाना चाहते हैं?",
+          "help": "सही दर्शक चुनने से विज्ञापन का संदेश प्रभावशाली होगा।",
+          "options": [
+            "घर के मालिक (घर की बिजली बचाने के लिए)",
+            "व्यापार/फर्म के मालिक (व्यापारिक खर्च कम करने के लिए)",
+            "किसान/खेती के मालिक (खेती के खर्च कम करने के लिए)"
+          ],
+          "allowText": true,
+          "allowRandom": true,
+          "aiCanDecide": false
+        }
+      }
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "answers": [
+        {
+          "question": "आप यह विज्ञापन मुख्य रूप से किसके लिए बनवाना चाहते हैं?",
+          "questionId": "q1_audience",
+          "field": "audience",
+          "options": [
+            "घर के मालिक (घर की बिजली बचाने के लिए)",
+            "व्यापार/फर्म के मालिक (व्यापारिक खर्च कम करने के लिए)",
+            "किसान/खेती के मालिक (खेती के खर्च कम करने के लिए)"
+          ],
+          "answer": "घर के मालिक (घर की बिजली बचाने के लिए)"
+        }
+      ],
+      "result": {
+        "ready": true,
+        "brief": "विज्ञापन का दृश्य एक आधुनिक, सफेद-रंग के पंजाबी/हरियाणवी शैली के घर की छत पर बिछे चमकदार सोलर पैनल दिखाता है, जिसके नीचे परिवार अपने घर के अंदर आराम से बैठा है। तस्वीर में एक हरा-भरा आसमान और खुशहाल परिवार का चेहरा दिखता है, जो 'बिजली के बिल से मुक्ति' का भाव देता है। कॉपी में बड़ा और स्पष्ट शीर्षक होगा: 'अब घर की बिजली का बिल 98% तक कम करें!' नीचे उपशीर्षक में भरोसे का संदेश: 'IIT Bombay और PEC Chandigarh के इंजीनियरों द्वारा डिज़ाइन किया गया, आपके शहर (Mohali/Hisar) में स्थानीय टीम द्वारा लगाया गया।' कॉल-टू-एक्शन (CTA) बटन पर लिखा होगा: 'फ्री साइट सर्वे बुक करें'। पूरे विज्ञापन का मूड पेशेवर, विश्वसनीय और आशावादी (aspirational) होना चाहिए, जो ग्राहक को यह विश्वास दिलाए कि यह सिर्फ एक उत्पाद नहीं, बल्कि एक सुरक्षित और स्मार्ट निवेश है।",
+        "language": "hi",
+        "angleId": "value",
+        "recommendations": [
+          {
+            "label": "भरोसे का दृश्य (Trust Angle)",
+            "prompt": "एक ऐसा विज्ञापन बनाओ जिसमें हमारी स्थानीय टीम (Mohali/Hisar) घर के बाहर खड़ी हो और ग्राहक से बात कर रही हो, जो 'स्थानीय सेवा और भरोसे' को दर्शाता है।"
+          },
+          {
+            "label": "सब्सिडी पर फोकस (Offer Angle)",
+            "prompt": "एक विज्ञापन बनाओ जो विशेष रूप से 'PM Surya Ghar सब्सिडी' की मदद और 'फ्री साइट सर्वे' के फायदे पर केंद्रित हो, ताकि ग्राहक को लगे कि यह प्रक्रिया बहुत आसान है।"
+          }
+        ]
+      }
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "answers": [
+        {
+          "question": "आप यह विज्ञापन मुख्य रूप से किसके लिए बनवाना चाहते हैं?",
+          "questionId": "q1_audience",
+          "field": "audience",
+          "options": [
+            "घर के मालिक (घर की बिजली बचाने के लिए)",
+            "व्यापार/फर्म के मालिक (व्यापारिक खर्च कम करने के लिए)",
+            "किसान/खेती के मालिक (खेती के खर्च कम करने के लिए)"
+          ],
+          "answer": "घर के मालिक (घर की बिजली बचाने के लिए)"
+        }
+      ],
+      "result": {
+        "brief": "विज्ञापन का दृश्य एक आधुनिक, सफेद-रंग के पंजाबी/हरियाणवी शैली के घर की छत पर बिछे चमकदार सोलर पैनल दिखाता है, जिसके नीचे परिवार अपने घर के अंदर आराम से बैठा है। तस्वीर में एक हरा-भरा आसमान और खुशहाल परिवार का चेहरा दिखता है, जो 'बिजली के बिल से मुक्ति' का भाव देता है। कॉपी में बड़ा और स्पष्ट शीर्षक होगा: 'अब घर की बिजली का बिल 98% तक कम करें!' नीचे उपशीर्षक में भरोसे का संदेश: 'IIT Bombay और PEC Chandigarh के इंजीनियरों द्वारा डिज़ाइन किया गया, आपके शहर (Mohali/Hisar) में स्थानीय टीम द्वारा लगाया गया।' कॉल-टू-एक्शन (CTA) बटन पर लिखा होगा: 'फ्री साइट सर्वे बुक करें'। पूरे विज्ञापन का मूड पेशेवर, विश्वसनीय और आशावादी (aspirational) होना चाहिए, जो ग्राहक को यह विश्वास दिलाए कि यह सिर्फ एक उत्पाद नहीं, बल्कि एक सुरक्षित और स्मार्ट निवेश है।",
+        "sourceFacts": [
+          "मुझे अपने सोलर बिज़नेस के लिए ज़्यादा ग्राहक चाहिए"
+        ]
+      }
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "answers": [],
+      "result": {
+        "ready": true,
+        "brief": "विज्ञापन एक गंभीर और आकृति-बद्ध (urgent) भावना को दर्शाता है। दृश्य में एक आधुनिक, बड़ी फैक्ट्री का बाहरी दृश्य है जिसकी छत पर सोलर पैनल लगे हैं, और आसमान में डार्क ब्लू और गहरे नारंगी रंग का मिश्रण है जो सूर्यास्त और समय की कमी को दर्शाता है। टेक्स्ट बड़ा और स्पष्ट है: '31 दिसंबर तक इंस्टॉल करें!' और नीचे छोटे अक्षरों में 'नॉन-DCR पैनल बंद होने से लागत ₹10,000/किलोवाट से ज़्यादा बढ़ जाएगी।' कॉपी का हुक फैक्टरी मालिकों की बचत और नियमों के बदलाव के डर पर आधारित है, जो उनकी चिंता को तुरंत दूर करता है।",
+        "language": "hi",
+        "angleId": "urgency",
+        "recommendations": [
+          {
+            "label": "फैक्ट्री मालिक का चेहरा",
+            "prompt": "एक आत्मविश्वान, प्रोफेशनल फैक्टरी मालिक को दिखाएं जो अपनी छत पर लगे सोलर पैनलों की ओर इशारा कर रहा है, जिसके पास '31 दिसंबर डेडलाइन' का बैनर है।"
+          },
+          {
+            "label": "बिजली बिल की तुलना",
+            "prompt": "दो बड़े बिजली बिल दिखाएं: एक 'पहले' (उच्च लागत) और एक 'अभी' (कम लागत), जिसके बीच में '31 दिसंबर तक इंस्टॉल करें' का संदेश हो।"
+          }
+        ]
+      }
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "answers": [],
+      "result": {
+        "brief": "विज्ञापन एक गंभीर और आकृति-बद्ध (urgent) भावना को दर्शाता है। दृश्य में एक आधुनिक, बड़ी फैक्ट्री का बाहरी दृश्य है जिसकी छत पर सोलर पैनल लगे हैं, और आसमान में डार्क ब्लू और गहरे नारंगी रंग का मिश्रण है जो सूर्यास्त और समय की कमी को दर्शाता है। टेक्स्ट बड़ा और स्पष्ट है: '31 दिसंबर तक इंस्टॉल करें!' और नीचे छोटे अक्षरों में 'नॉन-DCR पैनल बंद होने से लागत ₹10,000/किलोवाट से ज़्यादा बढ़ जाएगी।' कॉपी का हुक फैक्टरी मालिकों की बचत और नियमों के बदलाव के डर पर आधारित है, जो उनकी चिंता को तुरंत दूर करता है।",
+        "sourceFacts": [
+          "फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।"
+        ]
+      }
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "answers": [],
+      "result": {
+        "ready": false,
+        "question": {
+          "id": "target_segment",
+          "field": "audience",
+          "question": "Aapka main focus kaunsa group hai?",
+          "help": "Homes, businesses, ya farms — target choose karne se ad ka message aur image sahi banega.",
+          "options": [
+            "Residential (Ghar wale)",
+            "Commercial (Dukaan/Office)",
+            "Agricultural (Kisan/Farmers)",
+            "Sabhi (General)"
+          ],
+          "allowText": true,
+          "allowRandom": true,
+          "aiCanDecide": true
+        }
+      }
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "answers": [
+        {
+          "question": "Aapka main focus kaunsa group hai?",
+          "questionId": "target_segment",
+          "field": "audience",
+          "options": [
+            "Residential (Ghar wale)",
+            "Commercial (Dukaan/Office)",
+            "Agricultural (Kisan/Farmers)",
+            "Sabhi (General)"
+          ],
+          "answer": "Residential (Ghar wale)"
+        }
+      ],
+      "result": {
+        "ready": true,
+        "brief": "Ek bright, clean visual jisme ek khush-gwar North Indian family apne ghar ke rooftop pe khadi hai, background mein saaf aasmaan aur solar panels hain jo sun ki roshni mein chamak rahe hain. Mood optimistic aur professional hai. Copy ka hook: 'Kya aapka bijli ka bill aapko pareshan kar raha hai?' Iske baad seedha solution: 'Solaride ke saath apna bill 98% tak kam karein — IIT Bombay aur PEC Chandigarh ke engineers dwara designed, local support ke saath.' Offer clear hai: 'Abhi book karein aur pao 10% OFF (Diwali Offer) + Free Site Survey.' Visual mein trust elements hain: 'PM Surya Ghar Subsidy Assistance' aur 'Net Metering Help' ke chote badges, taaki customer ko lage ki process easy hai. Tone transparent aur mission-driven hai, bina kisi fake urgency ke.",
+        "language": "hinglish",
+        "angleId": "value",
+        "recommendations": [
+          {
+            "label": "Trust Angle: Founder's Journey",
+            "prompt": "Ek ad banao jisme founder ki 4,000 KM solo cycling journey ki story highlight ho, dikhate hue ki Solaride sirf business nahi, ek mission hai. Visual mein founder cycle pe ho aur background mein solar panels."
+          },
+          {
+            "label": "Problem Angle: Bill Shock",
+            "prompt": "Ek ad banao jisme ek homeowner shock mein apna high electricity bill dekh raha ho, aur phir Solaride ka solution dikhaya jaye. Focus ho pain point pe: 'Bijli ka bill badh raha hai? Solution yahan hai.'"
+          },
+          {
+            "label": "Local Trust: Mohali/Hisar Teams",
+            "prompt": "Ek ad banao jisme local Solaride team Mohali/Hisar mein kaam karte hue dikhayi jaye, dikhate hue ki 'Hum aapke paas hain'. Focus ho local support aur quick response pe."
+          }
+        ]
+      }
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "answers": [
+        {
+          "question": "Aapka main focus kaunsa group hai?",
+          "questionId": "target_segment",
+          "field": "audience",
+          "options": [
+            "Residential (Ghar wale)",
+            "Commercial (Dukaan/Office)",
+            "Agricultural (Kisan/Farmers)",
+            "Sabhi (General)"
+          ],
+          "answer": "Residential (Ghar wale)"
+        }
+      ],
+      "result": {
+        "brief": "Ek bright, clean visual jisme ek khush-gwar North Indian family apne ghar ke rooftop pe khadi hai, background mein saaf aasmaan aur solar panels hain jo sun ki roshni mein chamak rahe hain. Mood optimistic aur professional hai. Copy ka hook: 'Kya aapka bijli ka bill aapko pareshan kar raha hai?' Iske baad seedha solution: 'Solaride ke saath apna bill 98% tak kam karein — IIT Bombay aur PEC Chandigarh ke engineers dwara designed, local support ke saath.' Offer clear hai: 'Abhi book karein aur pao 10% OFF (Diwali Offer) + Free Site Survey.' Visual mein trust elements hain: 'PM Surya Ghar Subsidy Assistance' aur 'Net Metering Help' ke chote badges, taaki customer ko lage ki process easy hai. Tone transparent aur mission-driven hai, bina kisi fake urgency ke.",
+        "sourceFacts": [
+          "Mujhe apne solar business ke liye zyada customers chahiye"
+        ]
+      }
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "answers": [],
+      "result": {
+        "ready": true,
+        "brief": "Ek industrial setting mein, ek confident factory owner apne plant ke bahar khada hai, background mein massive solar panels aur clear blue sky. Visual tone urgent aur professional hai, highlighting the ticking clock of the 31st December deadline. Copy hook: '31 December ke baad non-DCR solar panels band, cost ₹10,000/kW se zyada badhegi!' Offer: 'Abhi install karwayein aur paise bachayein.' Mood: Professional urgency, emphasizing the financial loss if they wait, backed by Solaride's engineering expertise.",
+        "language": "hinglish",
+        "angleId": "urgency",
+        "recommendations": [
+          {
+            "label": "Focus on Cost Comparison",
+            "prompt": "Create a split-screen visual showing the 'Before' (high electricity bills) vs 'After' (solar savings) for a factory, highlighting the specific ₹10,000/kW cost increase after the deadline."
+          },
+          {
+            "label": "Engineering Trust Angle",
+            "prompt": "Feature the IIT Bombay/PEC Chandigarh engineering team in a site survey at a factory, emphasizing technical reliability and compliance with the new non-DCR regulations."
+          },
+          {
+            "label": "Subsidy & ROI Focus",
+            "prompt": "Highlight the PM Surya Ghar subsidy assistance and the long-term ROI for commercial factories, focusing on how early installation maximizes the financial benefit before the cost hike."
+          }
+        ]
+      }
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "answers": [],
+      "result": {
+        "brief": "Ek industrial setting mein, ek confident factory owner apne plant ke bahar khada hai, background mein massive solar panels aur clear blue sky. Visual tone urgent aur professional hai, highlighting the ticking clock of the 31st December deadline. Copy hook: '31 December ke baad non-DCR solar panels band, cost ₹10,000/kW se zyada badhegi!' Offer: 'Abhi install karwayein aur paise bachayein.' Mood: Professional urgency, emphasizing the financial loss if they wait, backed by Solaride's engineering expertise.",
+        "sourceFacts": [
+          "Factory owners ke liye ad banao: 31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi. Deadline se pehle install karwa lo."
+        ]
+      }
+    }
+  ],
+  "replies": [
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "interview",
+      "attempt": 1,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": false,\n  \"question\": {\n    \"id\": \"q1_audience\",\n    \"field\": \"audience\",\n    \"question\": \"आप यह विज्ञापन मुख्य रूप से किसके लिए बनवाना चाहते हैं?\",\n    \"help\": \"सही दर्शक चुनने से विज्ञापन का संदेश प्रभावशाली होगा।\",\n    \"options\": [\n      \"घर के मालिक (घर की बिजली बचाने के लिए)\",\n      \"व्यापार/फर्म के मालिक (व्यापारिक खर्च कम करने के लिए)\",\n      \"किसान/खेती के मालिक (खेती के खर्च कम करने के लिए)\"\n    ],\n    \"allowText\": true,\n    \"allowRandom\": true,\n    \"aiCanDecide\": false\n  }\n}",
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "interview",
+      "attempt": 1,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"विज्ञापन का दृश्य एक आधुनिक, सफेद-रंग के पंजाबी/हरियाणवी शैली के घर की छत पर बिछे चमकदार सोलर पैनल दिखाता है, जिसके नीचे परिवार अपने घर के अंदर आराम से बैठा है। तस्वीर में एक हरा-भरा आसमान और खुशहाल परिवार का चेहरा दिखता है, जो 'बिजली के बिल से मुक्ति' का भाव देता है। कॉपी में बड़ा और स्पष्ट शीर्षक होगा: 'अब घर की बिजली का बिल 98% तक कम करें!' नीचे उपशीर्षक में भरोसे का संदेश: 'IIT Bombay और PEC Chandigarh के इंजीनियरों द्वारा डिज़ाइन किया गया, आपके शहर (Mohali/Hisar) में स्थानीय टीम द्वारा लगाया गया।' कॉल-टू-एक्शन (CTA) बटन पर लिखा होगा: 'फ्री साइट सर्वे बुक करें'। पूरे विज्ञापन का मूड पेशेवर, विश्वसनीय और आशावादी (aspirational) होना चाहिए, जो ग्राहक को यह विश्वास दिलाए कि यह सिर्फ एक उत्पाद नहीं, बल्कि एक सुरक्षित और स्मार्ट निवेश है।\",\n  \"language\": \"hi\",\n  \"angleId\": \"value\",\n  \"recommendations\": [\n    {\n      \"label\": \"भरोसे का दृश्य (Trust Angle)\",\n      \"prompt\": \"एक ऐसा विज्ञापन बनाओ जिसमें हमारी स्थानीय टीम (Mohali/Hisar) घर के बाहर खड़ी हो और ग्राहक से बात कर रही हो, जो 'स्थानीय सेवा और भरोसे' को दर्शाता है।\"\n    },\n    {\n      \"label\": \"सब्सिडी पर फोकस (Offer Angle)\",\n      \"prompt\": \"एक विज्ञापन बनाओ जो विशेष रूप से 'PM Surya Ghar सब्सिडी' की मदद और 'फ्री साइट सर्वे' के फायदे पर केंद्रित हो, ताकि ग्राहक को लगे कि यह प्रक्रिया बहुत आसान है।\"\n    }\n  ]\n}",
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Save money / value",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "{\"headline\":\"Your Bill Could Drop Up to 98%\",\"primary_text\":\"आपके घर का बिजली बिल कितना कम हो सकता है? अपनी छत पर सोलर लगाने से पहले यह जानें।\\nसोलराइड के अनुसार बिल में 98% तक कमी संभव है, जो आपकी छत की स्थिति पर निर्भर करती है।\\nपहले मुफ्त साइट सर्वे, फिर PM सूर्य घर सब्सिडी और नेट मीटरिंग के कागज़ी काम में मदद।\",\"description\":\"मुफ्त साइट सर्वे से अपनी छत पर बचत का अनुमान पाएं। चंडीगढ़, पंचकूला और मोहाली में उपलब्ध।\",\"cta\":\"Book Now\",\"rationale\":\"यह विज्ञापन बिजली बिल में बचत को मुख्य लाभ बनाता है, और 'अधिकतम 98%' को संभावना के रूप में रखता है ताकि भरोसा बना रहे। घर के मालिकों के लिए पहला कदम मुफ्त साइट सर्वे है, जो बचत का वास्तविक अनुमान देता है। छत पर सोलर पैनल और शांत, आधुनिक घर का दृश्य सीधे इस बचत के विचार को दिखाता है, बिना किसी व्यक्ति या सजावटी वस्तुओं के ध्यान भटकाए। मुख्य संदेश व्यावहारिक और पारदर्शी रखा गया है, जो पेशेवर ब्रांड की आवाज़ से मेल खाता है।\",\"visual\":{\"medium\":\"Clean flat vector illustration with soft gradient shading and subtle light reflections\",\"direction\":\"A modern, white, single-storey house with a flat roof, seen from a slightly elevated front three-quarter angle, placed in the lower-center of the frame. Rows of dark blue solar panels with thin silver frames cover the roof in neat, precise lines, with a few panels catching soft white highlights. Walls are crisp white with a warm-lit window to suggest a comfortable interior, but no people are shown. Behind the house, a fresh green horizon blends into a pale blue sky gradient that brightens toward the top. Palette: white, deep blue, fresh green, and a restrained sun-yellow accent in the sky glow. Composition leaves the upper third quiet and uncluttered for headline placement. Exclusions: no people or faces, no diyas, lamps, decorations, or other props, no text, no logos, no photographic stock look, no dark or crowded backgrounds.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey first. PM Surya Ghar subsidy help.\",\"sourceQuotes\":[\"Potential to cut electricity bills by up to 98%\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\",\"Local solar teams in Mohali and Hisar\"]}",
+      "attempt": 1,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Solve a pain point",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Still Paying the Full Power Bill?\",\"primary_text\":\"हर महीने बिजली का बिल देखकर परेशान हैं? अपनी छत पर सोलर लगाकर बिल up to 98% तक कम करने की संभावना जानें।\\nसोलराइड की टीम पहले मुफ्त साइट सर्वे करती है, ताकि पता चले आपकी छत पर सोलर कितना काम करेगा।\\nPM सूर्य घर सब्सिडी और नेट मीटरिंग के कागज़ी काम में मदद। मोहाली और हिसार में स्थानीय सोलर टीमें।\",\"description\":\"मुफ्त साइट सर्वे बुक करें और जानें आपकी छत पर सोलर से बिल कितना घट सकता है।\",\"cta\":\"Book Now\",\"rationale\":\"The ad leads with the recurring pain of a high electricity bill, which is the immediate concern for homeowners, shop owners and farmers in the target cities. The relief is a free site survey, a low-risk first step that shows what the user's own roof can do. The 98% figure is framed as a possibility, not a guarantee, because the brand's own facts say the saving depends on the site. Subsidy and net metering help and local teams in Mohali and Hisar address the practical doubts that follow. The visual shows a calm, sunlit rooftop array above a relaxed home, a quiet picture of relief that fits the professional, transparent voice without festive urgency or a repeated offer.\",\"visual\":{\"medium\":\"Architectural photography with natural daylight, clean and realistic, not stock-styled\",\"direction\":\"A modern white house in a North Indian residential style, photographed at golden-hour daylight from a slightly low eye-level angle. Glossy dark-blue solar panels cover a flat rooftop in neat, orderly rows, catching a soft reflection of a clear blue sky. In the lower-middle of the frame, a bright indoor living room is visible through a large window, with a family seated comfortably and relaxed, shown in silhouette or from a distance with no close-up facial focus. A few green trees or shrubs frame the lower edges, adding a fresh, calm feel. Palette: crisp white, clear sky blue, soft green and warm light from the window. The sky occupies the upper third and stays empty and quiet. The focal subject is the rooftop array and the house, placed in the middle and lower portion of the frame. Exclusions: no text, no captions, no logos, no visible brand names, no signage, no screens, no people looking at the camera, no stock-photo poses, no clutter on the roof, no fake certifications or badges, no extra decorative objects in the foreground.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey for your rooftop\",\"sourceQuotes\":[\"Potential to cut electricity bills by up to 98%\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\",\"Local solar teams in Mohali and Hisar\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Solve a pain point",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Tired of Your Monthly Power Bill?\",\"primary_text\":\"हर महीने बढ़ता बिजली का बिल देखकर परेशान हैं? अपनी छत पर सोलर लगवाने से पहले एक मुफ्त साइट सर्वे करवाएं।\\nसोलराइड के अनुसार, सोलर से घर के बिजली बिल में 98% तक कमी की संभावना हो सकती है।\\nIIT Bombay और PEC Chandigarh के इंजीनियरों के मार्गदर्शन में, मोहाली और हिसार की स्थानीय टीमें आपकी छत पर काम करती हैं।\",\"description\":\"मुफ्त साइट सर्वे के साथ PM सूर्य घर सब्सिडी और नेट मीटरिंग के कागज़ी काम में मदद पाएं।\",\"cta\":\"Book Now\",\"rationale\":\"The brief leads with the customer's recurring pain, the power bill that keeps climbing, and then offers relief. The hook names that frustration in Hindi, so the reader recognises their own bill before any product claim appears. The supported potential of up to 98% reduction is framed as a possibility, not a promise, which keeps the message transparent as the brand voice requires. Trust comes from the engineering backing and local Mohali and Hisar teams, and the low-friction next step is a free site survey rather than a hard sell. The visual is a calm, daylit rooftop array above a quiet home, which shows relief and stability without relying on a staged family portrait or a Diwali offer the brief does not mention.\",\"visual\":{\"medium\":\"Photorealistic architectural photograph, natural daylight, shot at eye level with a wide lens.\",\"direction\":\"A modern, white-walled single-storey family home in a North Indian residential setting, seen from a slight low angle. Dark blue solar panels cover the flat rooftop in clean, orderly rows, catching bright afternoon sunlight with subtle reflections. The lower two-thirds of the frame hold the panel array as the clear focal subject, with the roofline and a few green tree canopies at the edges. The upper third is a open, pale blue sky with soft, uncluttered clouds, kept quiet for typography. A faint warm glow comes through a ground-floor window, suggesting a comfortable, lived-in interior, without any visible people in the foreground. Palette: white walls, deep navy panels, fresh green foliage, soft blue sky, warm sunlight accents. Professional, optimistic, and trustworthy mood. Exclusions: no text, no logos, no watermarks, no readable signage, no visible electricity meters or wires, no close-up faces, no stock-photo smiles, no clutter or people posing for camera, no fake brand marks.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey first. Local teams in Mohali and Hisar.\",\"sourceQuotes\":[\"Potential to cut electricity bills by up to 98%\",\"Free site survey\",\"Local solar teams in Mohali and Hisar\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Assistance with PM Surya Ghar subsidy and net metering\"]}\n```",
+      "attempt": 2,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Diwali Ka Offer: Aapki Chhat Par Solar\",\"primary_text\":\"इस दिवाली अपनी छत पर सोलर लगवाएं और रूफटॉप सोलर इंस्टॉलेशन पर 10% की छूट पाएं।\\nसोलराइड की इंजीनियरिंग टीम IIT Bombay और PEC Chandigarh के इंजीनियरिंग ग्रेजुएट्स की योग्यता पर आधारित है, और काम की शुरुआत फ्री साइट सर्वे से होती है।\\nPM सूर्य घर सब्सिडी और नेट मीटरिंग के काग़ज़ी काम में भी हम आपकी मदद करते हैं।\",\"description\":\"फ्री साइट सर्वे बुक करें और जानें आपकी छत पर सोलर से कितनी बचत संभव है।\",\"cta\":\"Book Now\",\"rationale\":\"The brief is a Diwali offer, so the hook leads with the 10% rooftop installation discount in Hindi, the first line the user sees on mobile. The second line supplies the trust fact, graduates from IIT Bombay and PEC Chandigarh, and the free site survey as the first step, which makes the offer feel low-risk. The third line adds subsidy and net metering help, which answers the practical question a homeowner has about paperwork. The visual is a quiet, daytime-to-dusk rooftop scene with no people or festive props, so the offer and trust message carry the ad rather than a generic family scene. Copy avoids the 98% claim and any deadline because neither is supplied as an offer end date.\",\"visual\":{\"medium\":\"Architectural photography, natural light, shot at golden hour with a clean, realistic finish\",\"direction\":\"A modern, white-walled single-storey house with a flat roof in a North Indian residential setting. Rows of dark blue solar panels cover most of the roof, catching warm late-afternoon sunlight with subtle reflections. The camera sits low at a three-quarter angle so the panel array fills the lower two-thirds of the frame and leads the eye toward the house. The sky is a soft gradient of warm gold fading to pale blue at the top, left clear of detail. Palette: white, warm amber, and deep navy blue. Exclusions: no people, no faces, no family scene, no text, no logos, no festive decorations, no diyas, no lamps, no stock-photo styling, no visible brand marks.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey before you decide\",\"sourceQuotes\":[\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hi",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"10% Off Rooftop Solar This Diwali\",\"primary_text\":\"इस दिवाली अपनी छत पर सोलर लगवाएं और पाएं 10% की छूट। शुरुआत मुफ्त साइट सर्वे से होती है।\\nIIT Bombay और PEC Chandigarh के इंजीनियरों द्वारा डिज़ाइन किए गए सिस्टम, मोहाली और हिसार की स्थानीय टीमें लगाती हैं।\\nPM सूर्य घर सब्सिडी और नेट मीटरिंग के काम में भी मदद मिलती है। अभी अपना साइट सर्वे बुक करें।\",\"description\":\"फ्री साइट सर्वे के साथ PM सूर्य घर सब्सिडी और नेट मीटरिंग में सहायता पाएं।\",\"cta\":\"Book Now\",\"rationale\":\"The brief asks for a Diwali incentive, so the hook leads with the supplied 10% Diwali offer and pairs it with the free site survey as the low-risk first step. The 98% bill claim is removed because it was the failing claim. Trust comes from the supplied engineering backing and local teams in Mohali and Hisar, and the subsidy and net metering help answers the practical question a homeowner will ask next. The visual is architectural photography of a rooftop array on a modern white house with the family calm indoors, which fits the professional, aspirational mood. Top placement keeps the sky quiet for the headline.\",\"visual\":{\"medium\":\"Architectural photography, natural daylight, shot with a 35mm lens at eye level\",\"direction\":\"A modern, clean white single-storey house in a North Indian residential setting, with a neatly installed rooftop solar array in straight, even rows catching soft midday light. The roof and array form the focal subject, positioned in the lower and middle part of the frame. Above, a calm, clear blue sky with a gentle green tree canopy at the edges. Through a large window on the ground floor, a family is seen relaxed and comfortable indoors, softly lit and slightly out of focus so they read as a warm, secure home rather than posed portraits. Palette: crisp whites, soft sky blue, fresh greens, warm interior light. Composition leaves the top third quiet and uncluttered for text. Exclusions: no text, no logos, no brand marks, no price tags, no percentage or savings graphics, no visible installer branding, no busy props or extra decorative objects, no stock-style posed smiles, no dark or gloomy tones.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey first, then PM Surya Ghar help\",\"sourceQuotes\":[\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Local solar teams in Mohali and Hisar\"]}\n```",
+      "attempt": 2,
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "phase": "interview",
+      "attempt": 1,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"विज्ञापन एक गंभीर और आकृति-बद्ध (urgent) भावना को दर्शाता है। दृश्य में एक आधुनिक, बड़ी फैक्ट्री का बाहरी दृश्य है जिसकी छत पर सोलर पैनल लगे हैं, और आसमान में डार्क ब्लू और गहरे नारंगी रंग का मिश्रण है जो सूर्यास्त और समय की कमी को दर्शाता है। टेक्स्ट बड़ा और स्पष्ट है: '31 दिसंबर तक इंस्टॉल करें!' और नीचे छोटे अक्षरों में 'नॉन-DCR पैनल बंद होने से लागत ₹10,000/किलोवाट से ज़्यादा बढ़ जाएगी।' कॉपी का हुक फैक्टरी मालिकों की बचत और नियमों के बदलाव के डर पर आधारित है, जो उनकी चिंता को तुरंत दूर करता है।\",\n  \"language\": \"hi\",\n  \"angleId\": \"urgency\",\n  \"recommendations\": [\n    {\n      \"label\": \"फैक्ट्री मालिक का चेहरा\",\n      \"prompt\": \"एक आत्मविश्वान, प्रोफेशनल फैक्टरी मालिक को दिखाएं जो अपनी छत पर लगे सोलर पैनलों की ओर इशारा कर रहा है, जिसके पास '31 दिसंबर डेडलाइन' का बैनर है।\"\n    },\n    {\n      \"label\": \"बिजली बिल की तुलना\",\n      \"prompt\": \"दो बड़े बिजली बिल दिखाएं: एक 'पहले' (उच्च लागत) और एक 'अभी' (कम लागत), जिसके बीच में '31 दिसंबर तक इंस्टॉल करें' का संदेश हो।\"\n    }\n  ]\n}",
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Save money / value",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Beat the Rs 10,000/kW Rise by 31 Dec\",\"primary_text\":\"31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं, और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी।\\nडेडलाइन से पहले इंस्टॉलेशन पर विचार करें। Solaride की टीम पहले मुफ़्त साइट सर्वे करती है।\\nअपनी फ़ैक्टरी की छत के लिए मुफ़्त साइट सर्वे बुक करें।\",\"description\":\"मुफ़्त साइट सर्वे से जानें कि आपकी फ़ैक्टरी की छत 31 दिसंबर से पहले इंस्टॉलेशन के लिए तैयार है या नहीं।\",\"cta\":\"Get Quote\",\"rationale\":\"Factory owners weigh cost and regulatory risk first, so the ad leads with the concrete deadline and the per-kW cost increase from the supplied fact. The headline states the money at stake, and the body keeps the same logic: act before 31 December, then start with a free site survey to check the roof. The visual is a dusk factory roof with a solar array under a dark-blue-to-orange sky, which conveys time pressure without people or props. The sky stays quiet so the headline can sit at the top. Using Get Quote matches a next step that begins with a survey and a quote conversation.\",\"visual\":{\"medium\":\"Photorealistic architectural photography, dusk, shot with a wide lens and a shallow depth of field.\",\"direction\":\"A large, modern factory building seen from a low exterior angle at dusk, with a rooftop solar panel array filling the lower and middle frame as the clear focal subject. The sky is a smooth gradient from deep dark blue at the top to warm deep orange near the horizon, suggesting sunset and a closing window. Keep the building facade plain and unbranded, with no readable signage, logos, or lettering. No people, vehicles, or scattered equipment. The upper third of the frame is calm sky, kept free of detail so text can be placed there. Palette: dark navy, burnt orange, muted grey panel surfaces. Exclude stock-photo styling, lens flares, glowing effects, and any text or watermark.\",\"textPlacement\":\"top\"},\"supportingText\":\"Non-DCR panels stop after 31 Dec\",\"sourceQuotes\":[\"31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी।\",\"डेडलाइन से पहले इंस्टॉल करवाएं।\",\"Free site survey\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": [
+        "offer-below-fold"
+      ]
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Solve a pain point",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Install Before 31 December\",\"primary_text\":\"31 दिसंबर के बाद नॉन-DCR सोलर पैनल बंद हो रहे हैं, और उनकी लागत ₹10,000 प्रति किलोवाट से ज़्यादा बढ़ जाएगी।\\nअगर आपकी फ़ैक्टरी की छत पर सोलर लगवाना है, तो डेडलाइन से पहले बात करें।\\nSolaride की टीम मुफ़्त साइट सर्वे करती है, ताकि आप अपनी छत की स्थिति देखकर फ़ैसला कर सकें।\",\"description\":\"मुफ़्त साइट सर्वे से जानें कि आपकी फ़ैक्टरी की छत पर सोलर लगाना कितना संभव है।\",\"cta\":\"Contact Us\",\"rationale\":\"Factory owners are the audience most exposed to the 31 December cutoff for non-DCR panels, so the hook leads with that deadline and cost rise instead of a general Diwali offer. The copy addresses the worry directly, then offers a free site survey as a low-commitment next step. The visual reinforces urgency with dusk colours and a large factory roof, without people or extra objects, so the headline area stays clear and the message reads as a practical business decision.\",\"visual\":{\"medium\":\"Architectural photography, realistic dusk exterior, shot on a wide lens with a slight low angle.\",\"direction\":\"A modern, large factory building seen from a low wide angle, occupying the lower two-thirds of the frame. Its flat or gently sloped rooftop carries a neat, full array of dark blue solar panels with clean grid lines. The sky behind it blends deep navy at the top into burnt orange near the horizon, with long soft shadows across a plain concrete forecourt in the foreground. Palette: deep navy, burnt orange, dark panel blue, muted concrete grey. Composition: clear focal subject in the lower half; the upper third is a quiet sky area with smooth gradient and no detail, reserved for headline copy. Exclusions: no people, no vehicles, no signage, no readable text, no logos, no watermarks, no lens flare, no glowing neon effects, no stock handshake or clichéd sun imagery, no clutter in the foreground.\",\"textPlacement\":\"top\"},\"supportingText\":\"Non-DCR panels cost more after 31 Dec\",\"sourceQuotes\":[\"फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।\",\"Free site survey\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Save money / value",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Avoid Rs 10,000/kW Rise by 31 Dec\",\"primary_text\":\"फैक्ट्री मालिको: 31 दिसंबर से नॉन-DCR पैनल बंद होंगे। पहले लगवाएं, दिवाली पर 10% छूट और मुफ़्त साइट सर्वे पाएं।\\nलागत ₹10,000/किलोवाट से ज़्यादा बढ़ जाएगी। सोलराइड PM सूर्य घर सब्सिडी और नेट मीटरिंग में मदद करता है।\\nसाइट सर्वे के लिए सोलराइड से संपर्क करें।\",\"description\":\"31 दिसंबर से पहले इंस्टॉल करें। नॉन-DCR पैनल बंद होने से पहले मुफ़्त साइट सर्वे बुक करें।\",\"cta\":\"Contact Us\",\"rationale\":\"Factory owners are the audience for the 31 December non-DCR panel deadline, and the cost rise above Rs 10,000/kW makes the saving concrete. The first line leads with the deadline and the free site survey, so the offer is visible on mobile. The Diwali 10% offer is supported by the supplied offers list. The image is a dusk, urgent but calm illustration of an industrial rooftop, which fits the mood without implying a real Solaride project.\",\"visual\":{\"medium\":\"Architectural photography-style digital illustration, dusk, realistic lighting, no text.\",\"direction\":\"A large, modern industrial building exterior at dusk, seen from a low three-quarter angle, with a flat rooftop fitted with dark solar panels in clean, orderly rows. The building and rooftop fill the lower two-thirds of the frame and are the clear focal subject. The sky is a smooth gradient from deep dark blue at the top to warm deep orange near the horizon, suggesting sunset and time pressure. Keep the upper third of the frame clean and uncluttered, with no objects, clouds or detail, so copy can sit there. Palette: dark navy, deep orange, muted grey concrete, dark blue-black panels. Exclusions: no people, no vehicles, no cranes, no cranes or machinery, no logos, no readable signage, no text, no specific named facility, no stock-photo styling, no luxury adjectives, no clutter on the rooftop.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey + 10% Diwali offer\",\"sourceQuotes\":[\"31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी।\",\"Free site survey\",\"Diwali offer: 10% off rooftop solar installation\",\"PM Surya Ghar subsidy help\"]}\n```",
+      "attempt": 2,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Non-DCR Panels Close on 31 Dec\",\"primary_text\":\"फ़ैक्टरी छत पर सोलर? 31 दिसंबर के बाद नॉन-DCR पैनल बंद, दिवाली पर 10% छूट।\\nफ़ैक्टरी मालिकों के लिए: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत ₹10,000/किलोवाट से ज़्यादा बढ़ सकती है।\\nसोलराइड मुफ़्त साइट सर्वे करता है और PM सूर्य घर सब्सिडी व नेट मीटरिंग में मदद करता है।\",\"description\":\"मुफ़्त साइट सर्वे से शुरू करें और देखें कि आपकी फ़ैक्टरी की छत के लिए कौन सा सेटअप सही रहेगा।\",\"cta\":\"Get Offer\",\"rationale\":\"The brief targets factory owners with a time-bound cost concern. The hook leads with the 31 December non-DCR cutoff and the Diwali 10% offer, so the offer and the deadline appear in the first line. The second line gives the supported cost fact for factory owners. The third line names the free site survey and subsidy help, which answers the immediate question of what to do next. The visual is a dusk photograph of a large modern factory with a rooftop solar array, with a dark blue to deep orange sky that signals time pressure. The top of the frame is kept quiet for the headline, and the factory roof is the focal point. No people appear, so the ad stays on the business case.\",\"visual\":{\"medium\":\"Photorealistic architectural photography at dusk, with a generated scene and no visible text or logos.\",\"direction\":\"A large, modern, single-storey industrial factory exterior seen from a low three-quarter angle, shot at dusk. The flat roof is covered with rows of dark solar panels that catch the last light. The sky is a gradient from deep dark blue at the top to a warm deep orange near the horizon. The factory fills the lower two-thirds of the frame, with the roofline and solar array as the clear focal subject. Keep the upper third as a calm, uncluttered sky with soft tonal gradation so the headline can sit there without competing detail. Palette: deep navy, burnt orange, warm amber highlights on the panels, and muted concrete greys. Lighting is directional golden-hour light from the horizon, with no harsh flare. Exclusions: no people, no vehicles, no clocks, calendars, or signage, no visible text, no logos, no stock-photo styling, and no luxury or glamour treatment.\",\"textPlacement\":\"top\"},\"supportingText\":\"Diwali offer: 10% off + free site survey\",\"sourceQuotes\":[\"फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।\",\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": [
+        "all-caps"
+      ]
+    },
+    {
+      "language": "hi",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Your Factory Roof: Window Ends 31 Dec\",\"primary_text\":\"फ़ैक्टरी की छत पर सोलर: 31 दिसंबर तक इंस्टॉल करवाएं और दिवाली ऑफर में 10% छूट पाएं।\\nनॉन-डीसीआर पैनल बंद होने के बाद लागत ₹10,000/किलोवाट से ज़्यादा बढ़ जाएगी।\\nसोलराइड मुफ़्त साइट सर्वे करता है, और पीएम सूर्य घर सब्सिडी में मदद करता है।\",\"description\":\"मुफ़्त साइट सर्वे से शुरुआत करें, और सब्सिडी व नेट मीटरिंग की प्रक्रिया के बारे में जानें।\",\"cta\":\"Get Offer\",\"rationale\":\"Factory owners respond to a dated deadline and a concrete saving, so the hook leads with the 31 December window and the Diwali 10% offer. The supported cost fact (over ₹10,000 per kW after non-DCR panels close) gives a reason to act now rather than later. The free site survey is presented as the low-risk first step, which suits a cautious, transparent brand voice. The visual is a dusk factory roof under a dark blue and deep orange sky, a text-free image that reflects the urgency of the closing window without inventing people, props or claims. Copy avoids all-caps tokens and keeps the sentence structure distinct from recent headlines.\",\"visual\":{\"medium\":\"Architectural dusk photography, shot straight-on with a slightly low angle, natural colour grading\",\"direction\":\"A large, modern factory building exterior at dusk, seen from street level at a slightly low angle. The roof is covered with neatly aligned dark rectangular solar panels in clean rows that stretch across the frame. The sky transitions from deep dark blue at the top to a warm deep orange near the horizon, suggesting sunset and a closing window. The factory's clean facade, loading area and paved forecourt are visible but kept simple and uncluttered. The focal subject is the solar-paneled roof in the lower two-thirds of the frame. Keep the upper portion of the sky open and quiet with smooth gradient and no clouds or bright elements, so headline copy can sit there. Palette: dark navy, deep orange, muted grey concrete, and dark glossy panel tones. Exclusions: no people, no visible text, signage, logos, watermarks, calendars, clocks, vehicles, or stock-photo styling; no glowing effects or lens flares.\",\"textPlacement\":\"top\"},\"supportingText\":\"Free site survey before you decide\",\"sourceQuotes\":[\"फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।\",\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\"]}\n```",
+      "attempt": 2,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "interview",
+      "attempt": 1,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": false,\n  \"question\": {\n    \"id\": \"target_segment\",\n    \"field\": \"audience\",\n    \"question\": \"Aapka main focus kaunsa group hai?\",\n    \"help\": \"Homes, businesses, ya farms — target choose karne se ad ka message aur image sahi banega.\",\n    \"options\": [\n      \"Residential (Ghar wale)\",\n      \"Commercial (Dukaan/Office)\",\n      \"Agricultural (Kisan/Farmers)\",\n      \"Sabhi (General)\"\n    ],\n    \"allowText\": true,\n    \"allowRandom\": true,\n    \"aiCanDecide\": true\n  }\n}",
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "interview",
+      "attempt": 1,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"Ek bright, clean visual jisme ek khush-gwar North Indian family apne ghar ke rooftop pe khadi hai, background mein saaf aasmaan aur solar panels hain jo sun ki roshni mein chamak rahe hain. Mood optimistic aur professional hai. Copy ka hook: 'Kya aapka bijli ka bill aapko pareshan kar raha hai?' Iske baad seedha solution: 'Solaride ke saath apna bill 98% tak kam karein — IIT Bombay aur PEC Chandigarh ke engineers dwara designed, 100% local support.' Offer clear hai: 'Abhi book karein aur pao 10% OFF (Diwali Offer) + Free Site Survey.' Visual mein trust elements hain: 'PM Surya Ghar Subsidy Assistance' aur 'Net Metering Help' ke chote badges, taaki customer ko lage ki process easy hai. Tone transparent aur mission-driven hai, bina kisi fake urgency ke.\",\n  \"language\": \"hinglish\",\n  \"angleId\": \"value\",\n  \"recommendations\": [\n    {\n      \"label\": \"Trust Angle: Founder's Journey\",\n      \"prompt\": \"Ek ad banao jisme founder ki 4,000 KM solo cycling journey ki story highlight ho, dikhate hue ki Solaride sirf business nahi, ek mission hai. Visual mein founder cycle pe ho aur background mein solar panels.\"\n    },\n    {\n      \"label\": \"Problem Angle: Bill Shock\",\n      \"prompt\": \"Ek ad banao jisme ek homeowner shock mein apna high electricity bill dekh raha ho, aur phir Solaride ka solution dikhaya jaye. Focus ho pain point pe: 'Bijli ka bill badh raha hai? Solution yahan hai.'\"\n    },\n    {\n      \"label\": \"Local Trust: Mohali/Hisar Teams\",\n      \"prompt\": \"Ek ad banao jisme local Solaride team Mohali/Hisar mein kaam karte hue dikhayi jaye, dikhate hue ki 'Hum aapke paas hain'. Focus ho local support aur quick response pe.\"\n    }\n  ]\n}",
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "interview",
+      "attempt": 2,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"Ek bright, clean visual jisme ek khush-gwar North Indian family apne ghar ke rooftop pe khadi hai, background mein saaf aasmaan aur solar panels hain jo sun ki roshni mein chamak rahe hain. Mood optimistic aur professional hai. Copy ka hook: 'Kya aapka bijli ka bill aapko pareshan kar raha hai?' Iske baad seedha solution: 'Solaride ke saath apna bill 98% tak kam karein — IIT Bombay aur PEC Chandigarh ke engineers dwara designed, local support ke saath.' Offer clear hai: 'Abhi book karein aur pao 10% OFF (Diwali Offer) + Free Site Survey.' Visual mein trust elements hain: 'PM Surya Ghar Subsidy Assistance' aur 'Net Metering Help' ke chote badges, taaki customer ko lage ki process easy hai. Tone transparent aur mission-driven hai, bina kisi fake urgency ke.\",\n  \"language\": \"hinglish\",\n  \"angleId\": \"value\",\n  \"recommendations\": [\n    {\n      \"label\": \"Trust Angle: Founder's Journey\",\n      \"prompt\": \"Ek ad banao jisme founder ki 4,000 KM solo cycling journey ki story highlight ho, dikhate hue ki Solaride sirf business nahi, ek mission hai. Visual mein founder cycle pe ho aur background mein solar panels.\"\n    },\n    {\n      \"label\": \"Problem Angle: Bill Shock\",\n      \"prompt\": \"Ek ad banao jisme ek homeowner shock mein apna high electricity bill dekh raha ho, aur phir Solaride ka solution dikhaya jaye. Focus ho pain point pe: 'Bijli ka bill badh raha hai? Solution yahan hai.'\"\n    },\n    {\n      \"label\": \"Local Trust: Mohali/Hisar Teams\",\n      \"prompt\": \"Ek ad banao jisme local Solaride team Mohali/Hisar mein kaam karte hue dikhayi jaye, dikhate hue ki 'Hum aapke paas hain'. Focus ho local support aur quick response pe.\"\n    }\n  ]\n}",
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Save money / value",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Bijli Bill Kam Karein, 10% OFF\",\"primary_text\":\"Kya aapka bijli ka bill aapko pareshan kar raha hai? Diwali par 10% OFF aur Free Site Survey, abhi book karein.\\nSolaride ke engineers, jo IIT Bombay aur PEC Chandigarh ke graduates hain, aapki roof ke hisaab se system design karte hain. Bill up to 98% tak kam karne ki potential hai.\\nPM Surya Ghar subsidy aur net metering mein help bhi milti hai. Pehle survey se jaaniye aapki roof kitni bijli bana sakti hai.\",\"description\":\"Free site survey se pehle jaaniye aapki roof par solar kitna bill kam kar sakta hai.\",\"cta\":\"Book Now\",\"rationale\":\"The hook names a real pain point, a high electricity bill, and the Diwali offer comes right after it, so the value is clear in the first line. The single benefit is the potential bill reduction, backed by the engineering credential. Subsidy and net metering help are presented as a reassurance that the process is manageable, without repeating every credential. The image shows a relaxed family in natural light, which signals comfort and savings rather than urgency. Copy avoids fake deadlines and guaranteed outcomes, using 'potential' and 'depending on your roof' framing.\",\"visual\":{\"medium\":\"Natural-light documentary photography, warm and optimistic, with a clean editorial finish\",\"direction\":\"A happy North Indian family of three generations stands together on a flat rooftop in bright midday sunlight, smiling and looking out toward the horizon. In the background, a row of dark blue rooftop solar panels catches the sun and gleams against a clear, cloudless sky of deep azure. The family sits in the lower-middle part of the frame, occupying roughly the bottom half, with the sky and upper third kept open, uncluttered and quiet for typography. Camera at chest height, slightly wide lens, soft natural shadows, no harsh contrast. Palette: sky blue, warm sand and cream tones for skin and clothing, deep navy for the panels, with a subtle golden glow. Exclude any visible text, logos, badges, watermarks, signage, stock-photo poses, over-posed smiles, fake lens flare, and any dramatic or dark mood.\",\"textPlacement\":\"top\"},\"supportingText\":\"PM Surya Ghar subsidy aur net metering mein help\",\"sourceQuotes\":[\"Potential to cut electricity bills by up to 98%\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": [
+        "too-long",
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Solve a pain point",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Bill se pareshan? 98% tak kam karein\",\"primary_text\":\"Bijli ka bill dekh ke tension hoti hai? Diwali Offer: 10% OFF rooftop solar + Free Site Survey.\\nIIT Bombay aur PEC Chandigarh ke engineers aapke roof ka plan banate hain.\\nBill up to 98% tak kam ho sakta hai, aur PM Surya Ghar subsidy aur net metering mein help bhi milti hai.\",\"description\":\"Free site survey se shuru karein. Subsidy aur net metering ki process mein Solaride aapki help karta hai.\",\"cta\":\"Book Now\",\"rationale\":\"The hook names the everyday worry of a high electricity bill, which fits the pain-point angle and the brief's question. The offer sits in the first line so it is visible before 'See more'. The supporting line carries the engineering credibility, and the closing line gives the reduction potential with its 'up to' qualifier, so the claim stays transparent. The visual shows a relaxed family in daylight, which reads as relief rather than urgency and leaves the upper sky free for copy. The CTA asks for a free survey, which is a low-commitment next step that does not invent a deadline.\",\"visual\":{\"medium\":\"Natural-light documentary photography, warm and optimistic, with a clean, slightly cool sky palette.\",\"direction\":\"A North Indian family of three to four people (adults and a child) relaxing together on a flat rooftop in soft late-morning sunlight. They are smiling and looking toward the camera or toward the open sky, with a calm, confident posture. Behind them, rows of dark, glossy rooftop solar panels catch the light at a slight angle, and the rest of the frame is a clear blue sky with no clouds. Composition: subject placed in the lower-center and lower-right third, eye level, shallow depth of field so the panels recede softly. Palette: clean blues, warm sandy skin tones and soft whites, with no harsh contrast. Keep the top third of the frame empty clear sky, free of objects, so headline text can be placed there. Exclusions: no text, captions, logos, watermarks, badges, or visible brand marks; no stock-style posed group shots; no fake certificates, meters or charts; no props that distract from the family and the panels.\",\"textPlacement\":\"top\"},\"supportingText\":\"PM Surya Ghar Subsidy aur Net Metering Help\",\"sourceQuotes\":[\"Potential to cut electricity bills by up to 98%\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Assistance with PM Surya Ghar subsidy and net metering\",\"Free site survey\",\"Diwali offer: 10% off rooftop solar installation\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Save money / value",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Diwali Offer: 10% OFF + Free Survey\",\"primary_text\":\"Bijli ka bill pareshan kar raha hai? Abhi book karein: 10% OFF (Diwali Offer) + Free Site Survey.\\nIIT Bombay aur PEC Chandigarh ke engineers ka design, bill up to 98% tak kam karne ki potential ke saath.\\nPM Surya Ghar subsidy aur net metering mein help milti hai.\",\"description\":\"Solaride ki free site survey se shuru hoti hai, aur PM Surya Ghar subsidy aur net metering ki help bhi milti hai.\",\"cta\":\"Book Now\",\"rationale\":\"The brief's money-saving hook is a question about a painful electricity bill, so the copy leads with that worry, then gives the offer, a verified engineering credential, and the subsidy and net-metering support that make the path to lower bills feel manageable. A calm rooftop family photo shows the outcome the customer wants, a home where the bill is no longer a burden. The text stays truthful: the 98% figure is framed as potential, the 10% Diwali offer and free site survey are supplied facts, and no deadline or guarantee is added. The sky-and-panels setting supports a clean, optimistic, professional tone without stock-photo styling.\",\"visual\":{\"medium\":\"Natural documentary-style photography, daylight, shallow depth of field, warm and clear colour grade\",\"direction\":\"A happy North Indian family of adults and a child standing together on a clean, flat residential rooftop in the late morning. Their attention is on each other or on the open sky, not the camera, with relaxed, natural expressions. Behind and around them, rows of dark blue solar panels catch bright sunlight, with clean, cloudless blue sky above and a soft horizon of neighbouring low-rise homes in Punjab-style architecture. Composition: family in the lower-middle third of the frame, filling about 40% of the height, with generous open sky across the top third for copy. Palette: clear sky blue, warm sunlight gold, deep solar-panel navy, muted terracotta roof tones. Exclusions: no text, no logos, no badges, no icons, no overlays, no watermarks, no visible brand names, no stock-model poses, no urban smog or dust, no fake urgency or dramatic lighting effects.\",\"textPlacement\":\"top\"},\"supportingText\":\"PM Surya Ghar Subsidy Assistance · Net Metering Help\",\"sourceQuotes\":[\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Assistance with PM Surya Ghar subsidy and net metering\",\"Potential to cut electricity bills by up to 98%\"]}\n```",
+      "attempt": 2,
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hinglish",
+      "goal": "vague",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Chhat se bijli bill mein raahat\",\"primary_text\":\"Kya aapka bijli ka bill aapko pareshan kar raha hai? Abhi book karein: 10% OFF (Diwali Offer) + Free Site Survey.\\nIIT Bombay aur PEC Chandigarh ke qualified engineers ka design, local support ke saath. PM Surya Ghar subsidy aur net metering mein madad bhi.\\nBill up to 98% tak kam ho sakta hai, aapki chhat aur usage ke hisaab se.\",\"description\":\"Free site survey se shuru karein. Subsidy aur net metering ki process mein Solaride help karega.\",\"cta\":\"Get Offer\",\"rationale\":\"The brief's question hook names a real household pain point, then moves straight to a concrete remedy. The offer (10% off Diwali rooftop installation plus a free site survey) sits in the first line so it is seen before the Meta 'See more' cut. The engineering credentials and subsidy help carry trust without a fear or urgency tactic. The image is a warm, generated family-on-rooftop scene that reads as a calm, optimistic home decision rather than a sales pitch. The headline is a new phrasing that does not reuse recent Diwali or 98% headlines. The visual keeps the top third quiet for copy and the lower edge quiet for the PM Surya Ghar and Net Metering badges.\",\"visual\":{\"medium\":\"Natural-light lifestyle photography, generated, text-free, with a clean open composition\",\"direction\":\"A North Indian family of four (two adults, two children) standing together on a flat residential rooftop in late-morning sunlight, naturally relaxed and smiling, the adults gently looking toward a row of dark, neatly aligned solar panels that catch the sun. Background: a clear, pale blue sky with soft horizon haze, a few distant rooftops of low-rise homes in soft focus. Palette: clean sky blue, warm golden sunlight, deep navy panels, cream and terracotta tones on clothing. Composition: family placed in the middle-right third, eye-level slightly low, shallow depth of field so the panels recede into a clean line. Keep the upper third of the frame open and calm with soft sky for the headline. Keep the bottom 15 percent quiet and uncluttered for small trust badges. Exclusions: no visible text, logos, watermarks, signage, brand names, or readable labels on panels; no stock-photo posing or handshake; no luxury styling or fancy props; no dramatic storm or dark mood; no mention of incidental decorative objects.\",\"textPlacement\":\"top\"},\"supportingText\":\"PM Surya Ghar subsidy help\",\"sourceQuotes\":[\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Potential to cut electricity bills by up to 98%\",\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "phase": "interview",
+      "attempt": 1,
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n\"ready\": true,\n\"brief\": \"Ek industrial setting mein, ek confident factory owner apne plant ke bahar khada hai, background mein massive solar panels aur clear blue sky. Visual tone urgent aur professional hai, highlighting the ticking clock of the 31st December deadline. Copy hook: '31 December ke baad non-DCR solar panels band, cost ₹10,000/kW se zyada badhegi!' Offer: 'Abhi install karwayein aur paise bachayein.' Mood: Professional urgency, emphasizing the financial loss if they wait, backed by Solaride's engineering expertise.\",\n\"language\": \"hinglish\",\n\"angleId\": \"urgency\",\n\"recommendations\": [\n{\n\"label\": \"Focus on Cost Comparison\",\n\"prompt\": \"Create a split-screen visual showing the 'Before' (high electricity bills) vs 'After' (solar savings) for a factory, highlighting the specific ₹10,000/kW cost increase after the deadline.\"\n},\n{\n\"label\": \"Engineering Trust Angle\",\n\"prompt\": \"Feature the IIT Bombay/PEC Chandigarh engineering team in a site survey at a factory, emphasizing technical reliability and compliance with the new non-DCR regulations.\"\n},\n{\n\"label\": \"Subsidy & ROI Focus\",\n\"prompt\": \"Highlight the PM Surya Ghar subsidy assistance and the long-term ROI for commercial factories, focusing on how early installation maximizes the financial benefit before the cost hike.\"\n}\n]\n}",
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Save money / value",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"31 Dec ke baad non-DCR solar band\",\"primary_text\":\"31 Dec ke baad non-DCR panels band, cost ₹10,000/kW se zyada badhega. Abhi install karwayein, paise bachayein.\\nDiwali offer: 10% off rooftop solar installation, aur shuruaat free site survey se hoti hai.\\nSolaride ki engineering team se abhi baat karein, deadline se pehle plan ready karwayein.\",\"description\":\"Free site survey pehle, phir PM Surya Ghar subsidy mein madad. WhatsApp par Solaride se poochein.\",\"cta\":\"Get Offer\",\"rationale\":\"Factory owners ke liye loss-avoidance message hai: deadline ke baad solar ki cost badhne ka supplied fact hi main reason hai, isliye urgency paisa bachane se judi hai, dar se nahi. Offer aur next step simple rakhe gaye hain: Diwali 10% off aur free site survey. Visual ek confident business owner ko plant ke bahar dikhata hai, peeche solar arrays aur saaf neela aasman, jo professional aur grounded lagta hai. Subject neeche-beech mein hai, upar ka hissa text ke liye khaali hai.\",\"visual\":{\"medium\":\"Editorial photography, natural daylight, realistic industrial documentary style\",\"direction\":\"A confident business owner in smart work clothes stands outside an industrial plant, positioned in the lower-center third of the frame, facing slightly off-camera with a calm, assured posture. Behind and above him, rows of rooftop solar panels cover the factory roof, crisp and dark blue, with clean metal edges, and a clear, saturated blue sky fills the upper frame. Wide-angle composition at eye level, shallow depth of field so the panels stay sharp but the background stays unforced. Palette: deep blue, steel grey, warm white, with a restrained saffron accent in the owner's clothing or the factory trim. Upper third stays clean, quiet sky with no objects, so copy can sit there. Exclusions: no text, no logos, no readable signage, no clocks or calendars, no red alarm tones, no stock handshake poses, no exaggerated luxury styling, no visible brand marks.\",\"textPlacement\":\"top\"},\"supportingText\":\"31 December se pehle install karwayein\",\"sourceQuotes\":[\"31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi.\",\"Diwali offer: 10% off rooftop solar installation\",\"Free site survey\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Solve a pain point",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"31 Dec se pehle solar lock karein\",\"primary_text\":\"Factory owners, 31 December ke baad non-DCR solar panels band ho rahe hain, aur cost ₹10,000/kW se zyada badhega.\\nSolaride ki engineering team se abhi plan banwayein, taaki deadline se pehle installation ho sake.\\nShuruaat free site survey se hoti hai.\",\"description\":\"Deadline se pehle plan ready karwane ke liye free site survey book karein.\",\"cta\":\"Get Quote\",\"rationale\":\"Factory owners ka main pain point hai ki deadline ke baad solar ki lagat badh jayegi. Ad isi risk ko seedha kehta hai: 31 December ke baad non-DCR panels band honge aur cost ₹10,000/kW se zyada badhega. Relief ke liye ek benefit aur ek fact hi rakha gaya hai: engineering team se plan banwana, aur free site survey se shuruaat. Visual mein factory owner plant ke bahar khada hai, sky aur solar array background mein hain, jo professional urgency deta hai. Text-free image top area ko khali rakhta hai taaki headline aur supporting line aaram se aa sakein.\",\"visual\":{\"medium\":\"Documentary-style photography, natural daylight, shot on a full-frame camera with a 35mm lens\",\"direction\":\"A confident factory owner in his 40s or 50s, in a neat work jacket, stands outside an industrial plant in North India, slightly off-center on the lower-right third, looking toward the camera with a calm, resolute expression. Behind him, rows of rooftop solar panels stretch across the factory roof under a clear, deep blue sky. The subject and the solar array form the focal point. Lighting is crisp midday sun with soft shadows on concrete. Palette: deep sky blue, graphite grey, warm off-white, with a subtle amber accent on the factory signage area. Keep the upper third of the frame clean, open sky with no text, logos, or graphic elements. Exclude stock-photo handshakes, forced smiles, luxury interiors, visible clocks or calendars, and any readable text or brand marks in the scene.\",\"textPlacement\":\"top\"},\"supportingText\":\"Deadline: 31 December\",\"sourceQuotes\":[\"31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi.\",\"Free site survey\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": []
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Intezaar ka bhi ek price hai\",\"primary_text\":\"Intezaar mehenga padega: 31 Dec ke baad non-DCR panels band, cost ₹10,000/kW se zyada. Abhi install karwayein.\\nIIT Bombay aur PEC Chandigarh ke engineers ki team, pehle free site survey karti hai.\\nDiwali offer: 10% off rooftop solar. Abhi free site survey book karein.\",\"description\":\"Free site survey pehle, phir PM Surya Ghar subsidy aur net metering mein help milti hai.\",\"cta\":\"Book Now\",\"rationale\":\"The ad leads with the cost of waiting rather than the calendar, so the deadline reads as a financial loss to a factory owner. The sourced fact about the post-31 December non-DCR change and the ₹10,000/kW rise carries the urgency, and the Diwali 10% offer is the action incentive. Solaride's IIT Bombay and PEC Chandigarh engineering backing is the reason to trust the plan. The visual is a quiet industrial scene with the owner in a non-identifiable pose, which suits a professional, transparent tone and keeps the top sky clear for the headline.\",\"visual\":{\"medium\":\"Cinematic architectural photography, generated; natural daylight, realistic industrial textures\",\"direction\":\"Wide, eye-level shot of a mid-sized factory exterior in North India. A confident factory owner in a plain, well-fitted shirt stands in the lower-right third, seen from behind or three-quarter back so no face is identifiable, facing the plant gate. Behind him, a large array of dark monocrystalline solar panels covers the factory shed roof and extends across the frame, tilted toward a sharp, clear blue sky. Sunlight is warm and directional, creating soft shadows across the concrete forecourt. Palette: deep cobalt sky, graphite and off-white factory walls, amber highlights on the owner's shoulder, dark navy panels. Upper third stays open clear blue sky for copy. Exclusions: no visible text, signage, logos, numbers, clocks, calendars, watermarks, stock-photo handshakes or smiles, no fake brand names, no vehicles or machinery crowding the subject, no heavy filters or lens flare.\",\"textPlacement\":\"top\"},\"supportingText\":\"Abhi plan karein, deadline se pehle\",\"sourceQuotes\":[\"31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi.\",\"Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh\",\"Free site survey\"]}\n```",
+      "attempt": 1,
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    },
+    {
+      "language": "hinglish",
+      "goal": "factory",
+      "phase": "concept",
+      "angle": "Special offer / incentive",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "openrouter.ai",
+      "content": "```json\n{\"headline\":\"Plant ki Solar File, 31 Dec Tak\",\"primary_text\":\"Factory owners: 31 Dec ke baad non-DCR solar band, cost ₹10,000/kW se zyada. Abhi install karwayein, paise bachayein.\\nSolaride ki engineering team free site survey se shuru karke PM Surya Ghar subsidy aur net metering mein help karti hai.\\nAbhi baat karein, deadline se pehle plan ready karwayein.\",\"description\":\"Free site survey se shuru karein. PM Surya Ghar subsidy aur net metering paperwork mein help milti hai.\",\"cta\":\"Get Quote\",\"rationale\":\"The brief's core is a dated cost risk for factory owners: non-DCR panels stop after 31 December and costs rise above ₹10,000/kW. The opening line states that deadline and the offer, so the reader gets the reason to act before scrolling. The second line ties the urgency to Solaride's free site survey and subsidy/net metering help, which are supplied facts. The visual shows a confident owner in front of a working plant with solar panels behind him, which reads as professional and time-sensitive without relying on a discount. The 10% Diwali offer is left out entirely because it was flagged as unsupported in this brief. The headline is new and avoids the recent 'Factory Solar' and '31 Dec ke baad' openings.\",\"visual\":{\"medium\":\"Editorial photography, natural daylight, shot on a full-frame camera with a 35mm lens\",\"direction\":\"A confident Indian factory owner in a plain light-colored shirt stands in the lower-center of the frame, facing slightly off-camera, in front of the main gate of an industrial plant. Behind him, rows of rooftop solar panels cover a large industrial shed, with clean geometric lines receding into the distance. The sky is clear and bright blue across the top of the frame. Camera sits at a slight low angle at chest height so the subject looks composed and in charge. Palette: deep blue, white, steel gray, with warm midday light on the subject. Mood is focused and urgent but calm. Exclusions: no text, no logos, no signage, no readable labels or dates, no visible brand marks, no stock-style smiling poses, no handshakes, no extra people, no generic luxury styling, no clutter in the foreground. Keep the top third of the frame open and uncluttered for overlaid copy.\",\"textPlacement\":\"top\"},\"supportingText\":\"Deadline: 31 December\",\"cta\":\"Get Quote\",\"sourceQuotes\":[\"Factory owners ke liye ad banao: 31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi.\",\"Free site survey\",\"Assistance with PM Surya Ghar subsidy and net metering\"]}\n```",
+      "attempt": 2,
+      "rulesAtRecording": [
+        "unsupported-commercial-claim"
+      ]
+    }
+  ]
+}

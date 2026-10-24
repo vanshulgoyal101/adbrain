@@ -43,6 +43,38 @@ export function languagePromptName(id: string | null | undefined): string {
   return getAdLanguage(id)?.promptName ?? "";
 }
 
+/** Languages the owner can pick when creating ads. */
+export type CreateLanguageId = "en" | "hinglish" | "hi" | "pa";
+
+export const CREATE_LANGUAGES: { id: CreateLanguageId; label: string }[] = [
+  { id: "en", label: "English" },
+  { id: "hinglish", label: "Hinglish" },
+  { id: "hi", label: "हिंदी" },
+  { id: "pa", label: "ਪੰਜਾਬੀ" },
+];
+
+const BRAND_LANGUAGE_ALIASES = new Map<string, CreateLanguageId>([
+  ["english", "en"],
+  ["en", "en"],
+  ["hinglish", "hinglish"],
+  ["hindi", "hi"],
+  ["हिंदी", "hi"],
+  ["हिन्दी", "hi"],
+  ["hi", "hi"],
+  ["punjabi", "pa"],
+  ["ਪੰਜਾਬੀ", "pa"],
+  ["pa", "pa"],
+]);
+
+/** The first Brand language (free text) that maps to a Create language, else English. */
+export function defaultAdLanguage(brandLanguages: string[] | null | undefined): CreateLanguageId {
+  for (const language of brandLanguages ?? []) {
+    const id = BRAND_LANGUAGE_ALIASES.get(String(language).normalize("NFC").trim().toLowerCase());
+    if (id) return id;
+  }
+  return "en";
+}
+
 /** Short UI label for a language id (for badges); "" for brand default. */
 export function languageLabel(id: string | null | undefined): string {
   const lang = getAdLanguage(id);
