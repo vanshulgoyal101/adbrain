@@ -13,7 +13,7 @@ vi.mock("@/lib/security/ssrf", () => ({
 }));
 
 type Exchange = { destination: AdDestination; kind: string; form: Record<string, string>; status: number; body: unknown };
-const tape = recorded.tape as Exchange[];
+const tape = recorded.tape as unknown as Exchange[];
 const inputs = recorded.inputs;
 const KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
 const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
