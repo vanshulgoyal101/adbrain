@@ -130,6 +130,8 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
 | GET | `/api/meta/connections/attempts/[id]` | Path ID -> envelope attempt | Poll owned attempt |
 | POST | `/api/meta/connections/attempts/[id]/retry` | `revision` -> envelope attempt | Retry eligible failed discovery |
+| GET | `/api/meta/managed/page` | `attemptId` -> envelope `{pages, createUrl, linked}` | #523 2-Tier: Pages the owner administers from that attempt's discovery; off unless `MANAGED_ACCOUNTS_ENABLED` |
+| POST | `/api/meta/managed/page` | `{attemptId, pageId}` -> envelope `{state, pageId}` | #523: link an admin Page (`page_linked` in `managed_meta_accounts`); `PAGE_NOT_ADMIN` / `PAGE_LOCKED` 409 |
 | POST | `/api/meta/connections/attempts/[id]/select` | Pair/revision/confirmation -> envelope result | Commit verified connection |
 | POST | `/api/meta/connections/recheck` | Business/optional generation -> envelope connection | Live capability recheck |
 | POST | `/api/meta/disconnect` | Explicit business, or legacy empty body -> `{ok:true}` | Disconnect stored binding, not running ads |
@@ -804,6 +806,17 @@ Retired routes are not compatibility creation paths: OAuth start returns 410;
 accounts requires an owned business before 410; connect validates nonempty
 business/account/Page strings up to 128 characters before 410. OAuth callback
 remains active for the contextual signed/bound flow.
+
+### Managed Page (#523, 2-Tier)
+
+Off (404 `NOT_ENABLED`) unless `MANAGED_ACCOUNTS_ENABLED`. Signed-in, Meta-connect users only; the
+`attemptId` must be the caller's own connection attempt (else 404). `GET` returns the Pages from
+that attempt's discovery where the owner has Meta's `MANAGE` task (Meta requires Page admin for a
+child business's `shared_page_id`), Meta's Page creator URL (Pages can't be created by API), and
+the linked Page if any. `POST` links an admin Page: the business's `managed_meta_accounts` row
+reaches `page_linked` and a `page` step is logged. Another Page can be chosen until the child
+business exists (`PAGE_LOCKED` after). A Page created on Meta appears after the attempt's
+discovery retry (`/api/meta/connections/attempts/[id]/retry`).
 
 ## Jobs and Telemetry
 
