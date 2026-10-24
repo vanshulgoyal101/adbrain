@@ -129,7 +129,7 @@ export function AdbrainCycle({ className, showSteps = false, fill = false }: { c
         <ol className={styles.steps}>
           {STOPS.map((item, i) => (
             <li key={item.id}>
-              <button type="button" aria-current={i === index ? "step" : undefined} onClick={() => setIndex(i)}>{item.title}</button>
+              <button type="button" aria-current={i === index ? "step" : undefined} onClick={() => setIndex(i)}><span aria-hidden="true">{i + 1}</span>{item.title}</button>
             </li>
           ))}
         </ol>

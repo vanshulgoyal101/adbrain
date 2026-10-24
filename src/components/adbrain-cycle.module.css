@@ -14,9 +14,9 @@
 .example { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
 .pause { position: relative; z-index: 4; display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: none; color: var(--ink); cursor: pointer; }
 
-.stop { position: absolute; inset: 72px 18px 18px; display: flex; flex-direction: column; gap: 18px; }
+.stop { position: absolute; inset: 72px 18px 18px; display: flex; flex-direction: column; justify-content: center; gap: 18px; padding-bottom: 32px; }
 .stopTitle { font-family: Georgia, serif; font-size: 23px; line-height: 1.2; }
-.screen { flex: 1; display: flex; align-items: flex-start; }
+.screen { display: flex; align-items: flex-start; }
 .prev, .next { position: absolute; top: 72px; bottom: 0; z-index: 2; border: 0; padding: 0; background: transparent; cursor: pointer; }
 .prev { left: 0; width: 32%; }
 .next { right: 0; width: 68%; }
@@ -68,14 +68,13 @@
 @keyframes pulse { 50% { opacity: .35; } }
 
 .fill .stories { max-width: none; height: 100%; aspect-ratio: auto; border: 0; border-radius: 16px; background: #fff; }
-.fill .stop { justify-content: center; padding-bottom: 40px; }
-.fill .screen { flex: none; }
 .fill .stopTitle { font-size: 26px; }
 
 .steps { display: none; }
 .withSteps { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 48px; align-items: center; }
-.withSteps .steps { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: decimal inside; }
-.steps button { min-height: 44px; border: 0; background: none; text-align: left; font: inherit; font-size: 16px; color: var(--subtle); cursor: pointer; }
+.withSteps .steps { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.steps button { display: flex; align-items: baseline; gap: 12px; min-height: 44px; padding: 8px 0; border: 0; background: none; text-align: left; font: inherit; font-size: 16px; line-height: 1.4; color: var(--subtle); cursor: pointer; }
+.steps button span { flex: 0 0 1.2em; font-variant-numeric: tabular-nums; }
 .steps button[aria-current] { color: var(--ink); font-weight: 700; }
 
 .still { display: none; }
