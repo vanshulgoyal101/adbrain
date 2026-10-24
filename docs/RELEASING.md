@@ -148,7 +148,7 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   production deploy failed within the last hour, it alerts once and retries after the hour.
   Avoid `vercel redeploy`/`deploy` from the CLI on a busy day; push or promote instead.
   Direct merges to `main` only with `hotfix` or a migration; after one, merge `main` into
-  `next` by PR, because the train refuses while `main` has commits `next` lacks.
+  `next` by PR, because the train refuses while `main` has changes `next` lacks (train merge commits don't count).
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
   with a PR to it; production keeps the last train.
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`
