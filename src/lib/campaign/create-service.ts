@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { recordProductEvent } from "@/lib/observability/logger";
 import { renderStoryAd } from "@/lib/creative/story";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
@@ -67,11 +68,23 @@ export async function executeReviewedCampaign(input: {
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
           // Capped well inside the 60 s create lease; a slow photo or logo host just means no 9:16.
           const noStories = creativeInputs.map(() => null);
+          const storyFallback = (stage: "render" | "upload" | "creative", errorCode: string) => recordProductEvent({
+            kind: "workflow", name: "campaign.story_fallback", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: `${stage}:${errorCode}` },
+          });
+          let storyTimer: ReturnType<typeof setTimeout> | undefined;
           const storyImages = draft.input.destination === "whatsapp"
             ? await Promise.race([
-              Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => null))),
-              new Promise<null[]>(resolve => setTimeout(() => resolve(noStories), STORY_RENDER_BUDGET_MS)),
-            ])
+              Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => {
+                storyFallback("render", "error");
+                return null;
+              }))),
+              new Promise<null[]>(resolve => {
+                storyTimer = setTimeout(() => {
+                  storyFallback("render", "timeout");
+                  resolve(noStories);
+                }, STORY_RENDER_BUDGET_MS);
+              }),
+            ]).finally(() => clearTimeout(storyTimer))
             : noStories;
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
@@ -88,6 +101,7 @@ export async function executeReviewedCampaign(input: {
               label: band.label, ageMin: band.ageMin, ageMax: band.ageMax, location, excludedLocation,
             })) : undefined,
             onCheckpoint,
+            onStoryFallback: storyFallback,
           });
           return metaResult;
         });

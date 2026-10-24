@@ -318,6 +318,12 @@ export function destinationCTA(
   };
 }
 
+/** A short, loggable code for a failed Graph call: Meta's code/subcode, else the HTTP status. */
+export function metaErrorCode(error: unknown): string {
+  if (error instanceof MetaError) return error.code ? `${error.code}${error.subcode ? `.${error.subcode}` : ""}` : `http.${error.status ?? "unknown"}`;
+  return error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unknown";
+}
+
 /**
  * A creative with a 4:5 feed image and a 9:16 image that Meta uses for Stories and Reels (#333).
  * Placement asset customisation needs asset_feed_spec; object_story_spec then carries only the Page.
@@ -847,6 +853,8 @@ export class MetaClient {
     phone?: string;
     variants?: AdSetVariant[];
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
+    /** A 9:16 couldn't be used and the ad fell back to the single 4:5 image (#333). */
+    onStoryFallback?: (stage: "upload" | "creative", errorCode: string) => void;
   }): Promise<CreateCampaignResult> {
     const locations = params.variants?.length
       ? params.variants.map((variant) => variant.location ?? params.location)
@@ -918,7 +926,10 @@ export class MetaClient {
       // Placement images are proven for WhatsApp ads only (tests/core/fixtures/meta/story-validate.json).
       let storyHash: string | null = null;
       if (c.storyImage && params.destination === "whatsapp") {
-        storyHash = await this.uploadAdImageBytes(c.storyImage).catch(() => null);
+        storyHash = await this.uploadAdImageBytes(c.storyImage).catch((error: unknown) => {
+          params.onStoryFallback?.("upload", metaErrorCode(error));
+          return null;
+        });
       }
       prepared.push({
         input: c,
@@ -1042,7 +1053,10 @@ export class MetaClient {
             name: singleImageForm.name,
             object_story_spec: JSON.stringify(placement.object_story_spec),
             asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
-          }).catch(() => postCreative(singleImageForm))
+          }).catch((error: unknown) => {
+            params.onStoryFallback?.("creative", metaErrorCode(error));
+            return postCreative(singleImageForm);
+          })
           : await postCreative(singleImageForm);
         await params.onCheckpoint?.({
           phase: "creative",
