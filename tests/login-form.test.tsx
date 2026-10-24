@@ -34,6 +34,36 @@ function fillLogin() {
   fireEvent.change(screen.getByLabelText("Password"), { target: { value: "test-password" } });
 }
 
+describe("sign-in outcomes reach the server without the email (#451 L4)", () => {
+  const beacons = () => vi.mocked(fetch).mock.calls
+    .filter(([url]) => url === "/api/auth/outcome")
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+  beforeEach(() => { vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 }))); });
+
+  it("reports a failed and then a successful password sign-in", async () => {
+    mocks.signInWithPassword.mockResolvedValueOnce({ error: Object.assign(new Error("Invalid login credentials"), { code: "invalid_credentials" }) });
+    fillLogin();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with password" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with password" }));
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalled());
+    expect(beacons()).toEqual([{ method: "password", outcome: "failed", code: "invalid_credentials" }, { method: "password", outcome: "success" }]);
+    expect(JSON.stringify(vi.mocked(fetch).mock.calls)).not.toContain("owner@example.test");
+  });
+
+  it("reports a sign-in link that could not be sent, with an unknown code as 'other'", async () => {
+    mocks.signInWithOtp.mockResolvedValueOnce({ error: Object.assign(new Error("Email rate limit exceeded"), { code: "over_email_send_rate_limit" }) });
+    render(<LoginForm newVisitor />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "owner@example.test" } });
+    fireEvent.submit(screen.getByLabelText("Email").closest("form")!);
+    await screen.findByRole("alert");
+    mocks.signInWithOAuth.mockResolvedValueOnce({ error: Object.assign(new Error("odd"), { code: "something_new" }) });
+    fireEvent.click(screen.getByRole("button", { name: /Google/ }));
+    await waitFor(() => expect(beacons()).toHaveLength(2));
+    expect(beacons()).toEqual([{ method: "email_link", outcome: "failed", code: "over_email_send_rate_limit" }, { method: "google", outcome: "failed", code: "other" }]);
+  });
+});
+
 describe("login completion and recovery", () => {
   it("keeps home and legal navigation available around sign in", async () => {
     render(await LoginPage({}));

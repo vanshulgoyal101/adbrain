@@ -148,6 +148,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/payments/test/verify` | Test payment proof | Nonproduction only |
 | POST | `/api/payments/test/webhook` | Test signed event | Nonproduction only |
 | POST | `/api/events` | Fixed client event | Optional telemetry, normally 204 |
+| POST | `/api/auth/outcome` | How a browser sign-in step ended: `{method: password\|email_link\|google, outcome: success\|started}` or `{…, outcome: failed, code}` (Supabase code from a fixed list, else `other`) | Signed-out allowed; same origin, strict body ≤ 512 bytes, 20/min per address and 600/min overall; 204, never the email (#451 L4) |
 | GET | `/api/cron/keepalive` | Cron Bearer auth | DB health and optional telemetry pruning |
 | GET | `/api/cron/enforce-spend` | Cron Bearer auth | Can pause live campaigns |
 | GET | `/api/cron/sync-leads` | Cron Bearer auth | Imports new Meta leads for every connected business (read-only on Meta) |

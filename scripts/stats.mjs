@@ -17,6 +17,7 @@ export const SECTIONS = [
   { key: "campaign_receipts", title: "Last 5 campaign launches: plan, prepare, create (its Meta calls), first sync" },
   { key: "business_days", title: "AI cost per business per day (top 10)" },
   { key: "failures", title: "Failures by step (AI calls, server errors, workflows)" },
+  { key: "auth", title: "Sign-ins and sign-ups by method, and why sign-ins failed" },
   { key: "speed", title: "Speed of the busiest routes (successful requests, ms)" },
   { key: "funnel", title: "Sign-up funnel (reached each step)" },
 ];
@@ -121,6 +122,13 @@ select step, detail, count(*)::int as count, to_char(max(created_at), 'MM-DD HH2
   select 'workflow ' || name, coalesce(attributes->>'errorCode', 'failed'), created_at
     from ev where kind in ('workflow', 'action', 'system') and outcome = 'failed' and name <> 'ai.completion'
 ) f group by 1, 2 order by count desc limit 15`;
+    // #451 L4: failed sign-ins are often signed out, so rows without a user are kept.
+    case "auth":
+      return `select name as step, outcome, coalesce(attributes->>'errorCode', '-') as detail, count(*)::int as count,
+  to_char(max(created_at), 'MM-DD HH24:MI') as last
+from public.product_events e where e.${since} and e.name like 'auth.%'
+  and (e.user_id is null or ${customers("e")})
+group by 1, 2, 3 order by count desc limit 15`;
     case "speed":
       return `with ev as (${events})
 select attributes->>'route' as route, count(*)::int as n,

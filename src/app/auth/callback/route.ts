@@ -1,4 +1,6 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeVerifiedUser } from "@/lib/observability/context";
+import { safeAuthCode, type AuthMethod } from "@/lib/observability/auth-events";
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -21,15 +23,39 @@ async function handleGET(request: Request) {
   const supabase = await createClient();
 
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) return signedIn("google", data?.user, `${origin}${next}`);
+    recordFailure("auth.sign_in.google", error.code);
   } else if (tokenHash && type) {
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       type,
       token_hash: tokenHash,
     });
-    if (!error) return NextResponse.redirect(`${origin}${next}`);
+    if (!error) return signedIn("email_link", data?.user, `${origin}${next}`);
+    recordFailure("auth.sign_in.email_link", error.code);
+  } else {
+    // A provider error (Google cancelled) or a bare link: this used to be a silent 302 (#451 L4).
+    recordFailure("auth.sign_in", searchParams.get("error_code") ?? searchParams.get("error") ?? "missing_params");
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth`);
+}
+
+type CallbackUser = { id: string; email?: string | null; email_confirmed_at?: string | null; last_sign_in_at?: string | null } | null | undefined;
+
+/** A first sign-in confirms the address in the same moment; a returning owner confirmed it long ago. */
+function isFirstSignIn(user: CallbackUser): boolean {
+  const confirmed = Date.parse(user?.email_confirmed_at ?? "");
+  const signedIn = Date.parse(user?.last_sign_in_at ?? "");
+  return Number.isFinite(confirmed) && Number.isFinite(signedIn) && Math.abs(signedIn - confirmed) < 60_000;
+}
+
+function signedIn(method: AuthMethod, user: CallbackUser, destination: string) {
+  if (user) observeVerifiedUser(user);
+  recordProductEvent({ kind: "workflow", name: `auth.${isFirstSignIn(user) ? "sign_up" : "sign_in"}.${method}`, outcome: "success" });
+  return NextResponse.redirect(destination);
+}
+
+function recordFailure(name: string, code: string | null | undefined) {
+  recordProductEvent({ kind: "workflow", name, outcome: "failed", attributes: { errorCode: `AUTH_CALLBACK:${safeAuthCode(code)}` } });
 }
