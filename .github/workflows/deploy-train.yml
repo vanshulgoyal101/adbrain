@@ -9,10 +9,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # merging the train PR writes to main
   pull-requests: write
   checks: read
   issues: write
+  actions: write # dispatches the drift check; a GITHUB_TOKEN merge triggers no workflows
 
 concurrency:
   # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
@@ -62,6 +63,7 @@ jobs:
           # A merge commit keeps next's history, so the next train needs no rebase.
           gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"
           echo "Promoted ${sha::7} via #$pr."
+          gh workflow run production-drift.yml -R "$repo" --ref main || echo "::warning::drift check not dispatched"
       - name: Alert once when the train is stuck
         if: failure()
         run: |

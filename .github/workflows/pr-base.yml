@@ -25,6 +25,8 @@ jobs:
           [ "$HEAD" != next ] || { echo "The train itself."; exit 0; }
           labels=$(gh pr view "$PR" -R "$repo" --json labels --jq '[.labels[].name] | join(",")')
           if grep -Eq '(^|,)(hotfix|ready-to-ship)(,|$)' <<<"$labels"; then echo "Labelled for main: $labels"; exit 0; fi
-          if gh pr diff "$PR" -R "$repo" --name-only | grep -q '^db/migrations/'; then echo "Migration PR: released to main by DevOps."; exit 0; fi
+          # Read the whole list first: `| grep -q` can SIGPIPE gh, and pipefail would read that as "no migration".
+          files=$(gh pr diff "$PR" -R "$repo" --name-only)
+          if grep -q '^db/migrations/' <<<"$files"; then echo "Migration PR: released to main by DevOps."; exit 0; fi
           gh pr edit "$PR" -R "$repo" --base next
           gh pr comment "$PR" -R "$repo" --body "Retargeted to \`next\`: PRs merge there and the deploy train promotes \`next\` to production at most every 30 min (#461). For a production hotfix, DevOps/CTO label it \`hotfix\` and set the base back to \`main\`."
