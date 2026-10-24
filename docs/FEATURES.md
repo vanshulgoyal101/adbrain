@@ -81,7 +81,8 @@ and safe destination preserved, focus restored, and the password cleared.
 
 Save business name, industry, website, description, voice, audience, languages,
 service areas, selling points, offers, brand colors/font/logo, and contact fields.
-The industry is free text, not a solar-only enum. The reusable fact record drives
+A website typed as a bare domain is saved as a full `https://` link, shown under the field
+as "Ads link to …" (#470). The industry is free text, not a solar-only enum. The reusable fact record drives
 copy, image prompts, and campaign audience suggestions.
 "Saved" acknowledges only the submitted form revision after a successful save.
 Later edits, including edits made while a save is pending, require another save;

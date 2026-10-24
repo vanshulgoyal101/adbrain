@@ -10,6 +10,7 @@ import {
   isValidHttpUrl,
   isValidPhone,
   isValidWebsite,
+  normalizeWebsite,
   validateBrandFields,
 } from "@/lib/brand/validation";
 
@@ -48,6 +49,24 @@ describe("brand validation", () => {
     expect(isValidHttpUrl("cdn.example.com/logo.png")).toBe(false);
     expect(isValidHttpUrl("https://cdn.example.com/logo.png")).toBe(true);
     expect(isValidHttpUrl("javascript:alert(1)")).toBe(false);
+  });
+
+  it("stores a typed domain as a full https link, keeping www and paths (#470)", () => {
+    expect(normalizeWebsite("vanshul.com")).toBe("https://vanshul.com");
+    expect(normalizeWebsite("  www.solaride.in ")).toBe("https://www.solaride.in");
+    expect(normalizeWebsite("solaride.in/rooftop-solar?ref=ad")).toBe("https://solaride.in/rooftop-solar?ref=ad");
+    expect(normalizeWebsite("vanshul.com:8080/solar")).toBe("https://vanshul.com:8080/solar");
+    expect(normalizeWebsite("http://cedarridgechiro.com")).toBe("http://cedarridgechiro.com");
+    expect(normalizeWebsite("HTTPS://Cedarridgechiro.com/Book")).toBe("HTTPS://Cedarridgechiro.com/Book");
+    expect(normalizeWebsite("")).toBeNull();
+    expect(normalizeWebsite(null)).toBeNull();
+  });
+
+  it("rejects garbage and non-web schemes instead of guessing a link (#470)", () => {
+    for (const value of ["not a site", "javascript:alert(1)", "mailto:owner@vanshul.com", "ftp://files.vanshul.com", "localhost:3000", "https://"]) {
+      expect(normalizeWebsite(value), value).toBeNull();
+      expect(isValidWebsite(value), value).toBe(false);
+    }
   });
 
   it("checks phone digit counts", () => {

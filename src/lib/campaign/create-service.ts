@@ -14,6 +14,7 @@ import type { CampaignSupabase } from "./preflight-runtime";
 import type { Json } from "@/lib/types";
 import { saveCampaign } from "./trusted-write";
 import { whatsappGreeting } from "./whatsapp-greeting";
+import { normalizeWebsite } from "@/lib/brand/validation";
 
 const STORY_RENDER_BUDGET_MS = 6_000;
 
@@ -95,7 +96,8 @@ export async function executeReviewedCampaign(input: {
             ...(draft.input.destination === "whatsapp" ? {
               whatsappGreeting: whatsappGreeting(business, creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""])),
             } : {}),
-            link: business.website || "https://facebook.com",
+            // Brands saved before #470 may hold a bare domain; Meta needs a full link.
+            link: normalizeWebsite(business.website) ?? "https://facebook.com",
             creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
             location, excludedLocation, ageMin: targeting.age?.min, ageMax: targeting.age?.max,
             gender: targeting.gender ?? "all", interests: review.audienceInterests,

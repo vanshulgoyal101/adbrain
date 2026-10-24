@@ -13,7 +13,7 @@ import { PhoneField } from "@/components/ui/phone-field";
 import { TokenField } from "@/components/ui/token-field";
 import { Spinner } from "@/components/ui/spinner";
 import { BRAND_FONTS, brandFontId } from "@/lib/brand/fonts";
-import { validateBrandFields } from "@/lib/brand/validation";
+import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import type { Business } from "@/lib/types";
 import type { BrandExtraction } from "@/lib/templates/ads";
 
@@ -153,6 +153,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
   const previewAudience = fields.target_audience.trim() || "your ideal customer";
   const previewLocation = firstLine(fields.locations) || "your service area";
   const previewContact = fields.phone.trim() || fields.website.trim();
+  // What Prepare and Meta will use: a bare domain is stored with https:// (#470).
+  const websiteLink = normalizeWebsite(fields.website);
   const readinessChecks = [
     {
       label: "Business identity",
@@ -355,6 +357,14 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               placeholder="example.com"
               aria-invalid={errors.website ? true : undefined}
             />
+            {websiteLink && (
+              <p className="text-xs text-slate-500">
+                Ads link to{" "}
+                <a href={websiteLink} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-blue-700 underline underline-offset-2">
+                  {websiteLink}
+                </a>
+              </p>
+            )}
           </Field>
           <Field label="Industry / business type">
             <Input
