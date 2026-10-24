@@ -101,6 +101,8 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
   in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad
   language; the Hindi factory ad saves 3/3 with Hindi post text and Latin words on the image.
+  The vague-goal "pain point" ads save on the first try in both languages (#378): their rationale's
+  "no-cost first step (free site survey)" and "not a guaranteed saving" are no longer claims.
   The Hinglish factory ad saves 3/3 on the first try (#418): the Brand's own "SOLARIDE", "IIT/PEC"
   and a first line leading with "10,000 rupaye per kW" no longer fail `all-caps` or `offer-below-fold`.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
