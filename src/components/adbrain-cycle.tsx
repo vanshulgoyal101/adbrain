@@ -44,6 +44,7 @@ function Screen({ id }: { id: StopId }) {
         <div className={styles.approve}>
           <Image src="/solaride-ad.webp" alt="" width={360} height={450} sizes="200px" />
           <p className={styles.approved}><Check size={16} aria-hidden="true" /> Approved</p>
+          <p className={styles.approveNote}>Nothing goes live until you approve it.</p>
         </div>
       );
     case "live":
