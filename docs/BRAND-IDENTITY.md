@@ -41,6 +41,10 @@ ghost and danger variants, fixed 32/40/48px heights, normal tracking and visible
 keyboard focus. The [Card](../src/components/ui/card.tsx) uses the existing
 rounded-lg white bordered surface; its Badge is pill-shaped. Follow the actual
 component defaults rather than assuming every element uses the same radius.
+Every modal uses [Dialog](../src/components/ui/dialog.tsx) (shadcn/ui on Radix, #403 S6): it
+traps focus, closes on Escape or outside click, returns focus to whatever opened it, locks page
+scroll and hides the page from screen readers. A bottom sheet on phones, centred from `sm`; give it
+a `DialogTitle` and a 44px `DialogClose` with an `aria-label`.
 Reuse Lucide icons and accessible names for controls; disabled, busy and failed
 states must remain distinguishable without relying only on color.
 
