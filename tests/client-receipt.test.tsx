@@ -29,7 +29,8 @@ describe("clientReceipt (#360)", () => {
   it("drops what the browser never reads and is much smaller", () => {
     const trimmed = clientReceipt(row.generation);
     expect(JSON.stringify(trimmed).length).toBeLessThan(JSON.stringify(full).length / 4);
-    for (const key of ["imagePrompt", "sourceFacts", "imageAttempts", "referenceImages", "photoUrl"]) expect(trimmed).not.toHaveProperty(key);
+    for (const key of ["imagePrompt", "sourceFacts", "imageAttempts", "referenceImages"]) expect(trimmed).not.toHaveProperty(key);
+    expect(trimmed).toHaveProperty("photoUrl", "https://cdn/x.png");
     expect(JSON.stringify(trimmed)).not.toContain("x".repeat(100));
   });
 

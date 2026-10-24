@@ -17,6 +17,8 @@ vi.mock("@/lib/audit", () => ({ logEvent: h.logEvent }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ AD_DESIGN_OVERLAY: h.overlay }) }));
 vi.mock("@/lib/security/rate-limit", () => ({ rateLimitResponse: async () => null }));
 vi.mock("@/lib/creative/persist", () => ({ renderAndPersistDesign: h.render }));
+const raster = vi.hoisted(() => ({ render: vi.fn() }));
+vi.mock("@/lib/creative/render", () => ({ renderCompositeAd: raster.render }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: h.user } }) },
@@ -85,6 +87,25 @@ async function post(body: unknown = words) {
 }
 
 describe("POST /api/creatives/[id]/picture", () => {
+  it("previews the words for the live editor without saving anything (#387)", async () => {
+    const sharp = (await import("sharp")).default;
+    raster.render.mockResolvedValue(new Uint8Array(await sharp({ create: { width: 1080, height: 1350, channels: 3, background: "#123456" } }).png().toBuffer()));
+    const res = await post({ ...words, preview: true });
+    expect(res.status).toBe(200);
+    expect(res.body.previewUrl).toMatch(/^data:image\/webp;base64,/);
+    const meta = await sharp(Buffer.from(res.body.previewUrl.split(",")[1], "base64")).metadata();
+    expect(meta.width).toBe(720);
+    expect(raster.render).toHaveBeenCalledWith(expect.objectContaining({ ...words, backgroundUrl: "https://cdn.test/creatives/b1/g1/offer-photo.png" }));
+    expect(h.render).not.toHaveBeenCalled();
+    expect(h.updates).toEqual([]);
+    expect(h.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("still refuses invalid words in a preview", async () => {
+    expect((await post({ ...words, headline: "x".repeat(41), preview: true })).status).toBe(400);
+    expect(raster.render).not.toHaveBeenCalled();
+  });
+
   it("needs a signed-in owner and an ad they can see", async () => {
     h.user = null;
     expect((await post()).status).toBe(401);

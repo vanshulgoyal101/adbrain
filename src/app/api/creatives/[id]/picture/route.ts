@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { getEnv } from "@/lib/env";
+import sharp from "sharp";
 import { renderAndPersistDesign } from "@/lib/creative/persist";
+import { renderCompositeAd } from "@/lib/creative/render";
 import {
   findStoredBackground,
   pictureDesign,
@@ -39,7 +41,10 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const parsed = pictureWordsSchema.safeParse(await req.json().catch(() => null));
+  const body = await req.json().catch(() => null);
+  // #387: `preview: true` renders the words for the editor's live preview and saves nothing.
+  const preview = (body as { preview?: unknown } | null)?.preview === true;
+  const parsed = pictureWordsSchema.safeParse(body);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const field = FIELD_NAMES[String(issue?.path[0])] ?? "These words";
@@ -51,7 +56,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const limited = await rateLimitResponse(`picture:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
+  const limited = await rateLimitResponse(preview ? `picture-preview:${user.id}` : `picture:${user.id}`, { limit: preview ? 120 : 30, windowMs: 5 * 60_000 });
   if (limited) return limited;
 
   if (!getEnv().AD_DESIGN_OVERLAY)
@@ -90,6 +95,15 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     );
 
   const design = withPictureWords(pictureDesign(creative, business), parsed.data);
+  if (preview) {
+    try {
+      const bytes = await renderCompositeAd({ ...design, backgroundUrl: photoUrl });
+      const small = await sharp(Buffer.from(bytes)).resize({ width: 720, withoutEnlargement: true }).webp({ quality: 72 }).toBuffer();
+      return NextResponse.json({ previewUrl: `data:image/webp;base64,${small.toString("base64")}` });
+    } catch (error) {
+      return serverError("creative.picture.preview", error, "Couldn't draw the preview.");
+    }
+  }
   let imageUrl: string;
   try {
     imageUrl = await renderAndPersistDesign(

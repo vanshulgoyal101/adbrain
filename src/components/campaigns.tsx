@@ -41,6 +41,7 @@ import {
 import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
+import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
@@ -241,9 +242,10 @@ function BusinessCampaigns({
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
   const [showAllAds, setShowAllAds] = useState(false);
   const [adDraft, setAdDraft] = useState<AdText | null>(null);
+  const [adPicture, setAdPicture] = useState<PicturePreview | null>(null);
   const savedPickerAds = approved.map((c) => editedAds[c.id] ?? c);
   const editingAd = savedPickerAds.find((c) => c.id === editingAdId) ?? null;
-  const adDraftUnsaved = editingAd !== null && adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd));
+  const adDraftUnsaved = editingAd !== null && ((adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd))) || adPicture !== null);
   // While editing, the tile previews the unsaved headline (#387).
   const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
@@ -1320,7 +1322,12 @@ function BusinessCampaigns({
                               : "border-slate-200 hover:border-slate-300",
                           )}
                         >
-                          <div className="aspect-square bg-slate-100">
+                          <div className="relative aspect-square bg-slate-100">
+                            {c.id === editingAdId && adPicture && (
+                              <div className="absolute inset-0 z-[1] bg-slate-100">
+                                <LivePicture preview={adPicture} />
+                              </div>
+                            )}
                             {c.image_url && (
                               <img
                                 src={creativeThumbnailUrl(c.image_url)}
@@ -1374,6 +1381,7 @@ function BusinessCampaigns({
                         creative={editingAd}
                         brand={business}
                         onDraft={setAdDraft}
+                        onPicturePreview={setAdPicture}
                         onCancel={() => setEditingAdId(null)}
                         onSaved={(next, notes) => {
                           setEditedAds((current) => ({ ...current, [next.id]: next }));

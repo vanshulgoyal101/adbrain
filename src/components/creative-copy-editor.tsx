@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import type { PicturePreview } from "@/components/live-picture";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/actions";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { editableCopySchema, savedCreativeDescription, type EditableCopy } from "@/lib/creative/concept";
-import { pictureDesign, pictureWordsOf, pictureWordsSchema, type PictureWords } from "@/lib/creative/picture-words";
+import { pictureDesign, pictureWordsOf, pictureWordsSchema, withPictureWords, type PictureWords } from "@/lib/creative/picture-words";
 import { createClient } from "@/lib/supabase/client";
 import { META_CTAS, type BrandContext } from "@/lib/templates/ads";
 import type { Creative } from "@/lib/types";
@@ -36,6 +37,14 @@ export function savedAdText(creative: Creative): AdText {
 export function sameAdText(a: AdText, b: AdText): boolean {
   return a.headline === b.headline && a.primary_text === b.primary_text && a.description === b.description && a.cta === b.cta;
 }
+
+/** The ad's stored background photo, when its receipt has one (ads made since #315). */
+function savedPhotoUrl(creative: Creative): string | null {
+  const generation = creative.generation as { photoUrl?: unknown } | null;
+  return typeof generation?.photoUrl === "string" ? generation.photoUrl : null;
+}
+
+const PREVIEW_DEBOUNCE_MS = 700;
 
 /** Marks a live preview that isn't saved yet, so nobody mistakes it for the saved ad. */
 export function UnsavedPreviewBadge() {
@@ -217,17 +226,58 @@ export function PictureWordsEditor({
   onSaved,
   onCancel,
   onBusy,
+  onPreview,
 }: {
   creative: Creative;
   brand: BrandContext;
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
   onBusy?: (busy: boolean) => void;
+  /** Live picture with the unsaved words (#387); null when there's nothing to preview. */
+  onPreview?: (preview: PicturePreview | null) => void;
 }) {
-  const [words, setWords] = useState<PictureWords>(() => pictureWordsOf(pictureDesign(creative, brand)));
+  // Keyed on the fields the overlay uses: some cards rebuild `creative` on every render.
+  const { id, headline, primary_text, cta, angle, generation } = creative;
+  const base = useMemo(
+    () => pictureDesign({ headline, primary_text, cta, angle, generation }, brand),
+    [headline, primary_text, cta, angle, generation, brand],
+  );
+  const photoUrl = savedPhotoUrl(creative);
+  const [initial] = useState(() => pictureWordsOf(base));
+  const [words, setWords] = useState<PictureWords>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => onBusy?.(saving), [saving, onBusy]);
+  useEffect(() => {
+    if (!onPreview) return;
+    if (JSON.stringify(words) === JSON.stringify(initial) || !pictureWordsSchema.safeParse(words).success) {
+      onPreview(null);
+      return;
+    }
+    const spec = { ...withPictureWords(base, words), backgroundUrl: photoUrl };
+    onPreview({ spec });
+    // Then swap in the exact server render (fonts, Indic shaping), once typing pauses.
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/creatives/${id}/picture`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...words, preview: true }),
+          signal: controller.signal,
+        });
+        const data = (await res.json().catch(() => ({}))) as { previewUrl?: string };
+        if (res.ok && data.previewUrl && !controller.signal.aborted) onPreview({ spec, renderedUrl: data.previewUrl });
+      } catch {
+        // The instant preview stays; Save still renders the real picture.
+      }
+    }, PREVIEW_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [words, initial, base, id, photoUrl, onPreview]);
+  useEffect(() => () => onPreview?.(null), [onPreview]);
   const field = (key: keyof PictureWords) => `picture-${creative.id}-${key}`;
   const set = <K extends keyof PictureWords>(key: K, value: PictureWords[K]) =>
     setWords((current) => ({ ...current, [key]: value }));
@@ -311,18 +361,32 @@ export function PictureWordsEditor({
 /** A new picture behind the same words (#280 slice 3). One paid AI image, like Regenerate. */
 export function BackgroundEditor({
   creative,
+  brand,
   onSaved,
   onCancel,
   onBusy,
+  onPreview,
 }: {
   creative: Creative;
+  brand: BrandContext;
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
   onBusy?: (busy: boolean) => void;
+  onPreview?: (preview: PicturePreview | null) => void;
 }) {
   const [instruction, setInstruction] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
+  // A picked photo shows behind the same words at once (#387).
+  const { headline, primary_text, cta, angle, generation } = creative;
+  const base = useMemo(
+    () => pictureDesign({ headline, primary_text, cta, angle, generation }, brand),
+    [headline, primary_text, cta, angle, generation, brand],
+  );
+  useEffect(() => {
+    onPreview?.(photo ? { spec: { ...base, backgroundUrl: photo } } : null);
+  }, [photo, base, onPreview]);
+  useEffect(() => () => onPreview?.(null), [onPreview]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => onBusy?.(saving), [saving, onBusy]);
@@ -442,12 +506,14 @@ export function CreativeEditor({
   onSaved,
   onCancel,
   onDraft,
+  onPicturePreview,
 }: {
   creative: Creative;
   brand: BrandContext;
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
   onDraft?: (copy: AdText | null) => void;
+  onPicturePreview?: (preview: PicturePreview | null) => void;
 }) {
   const [tab, setTab] = useState<"text" | "picture" | "background">("text");
   // Switching tabs mid-save would unmount the editor whose request is still running.
@@ -480,9 +546,9 @@ export function CreativeEditor({
       {tab === "text" ? (
         <CreativeCopyEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onDraft={onDraft} />
       ) : tab === "picture" ? (
-        <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
+        <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onPreview={onPicturePreview} />
       ) : (
-        <BackgroundEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
+        <BackgroundEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onPreview={onPicturePreview} />
       )}
     </div>
   );
