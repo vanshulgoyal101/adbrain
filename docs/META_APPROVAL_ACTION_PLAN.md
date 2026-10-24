@@ -155,21 +155,26 @@ consent dialog listing the permission, approve it, and return to AdBrain.
 
 ### Owner Checklist (one sitting)
 
-1. **Business verification** (Business Settings → Security Center): legal business
-   name, address, phone, website `adbrain.vanshul.com`, a verified domain or email,
-   and one official document showing the legal name and address (e.g. GST
-   certificate, certificate of incorporation or a recent utility bill).
-2. **App settings → Basic**: icon (1024×1024), category, contact email, and the
-   URLs in the table above. Save and confirm there are no red warnings.
-3. **Facebook Login → Settings**: redirect URI and deauthorize callback as above.
-4. **App Review → Permissions and Features**: request advanced access for each
-   of the seven permissions (and Ads Management Standard Access if it is listed).
-   For each one, paste the "Why" text from the table, attach its screencast,
-   and give the reviewer login through the dashboard's secure test-credentials field.
-5. Complete **Data Use Checkup** and any Access Verification the dashboard asks
-   for, then click **Submit**.
-6. Wait: Meta usually answers within days to a few weeks. Business verification
-   can add more time. Reply to the feedback point by point.
+Already done (App Dashboard, read 24 Oct): business verification (Solaride,
+Verified), Data Use Checkup, app Published, Marketing API Access Tier approved.
+No required actions are open. A draft submission already exists (Not submitted):
+Business Asset User Profile Access plus a Marketing API Access Tier renewal. Add
+to that draft; don't start a new one.
+
+1. **Advanced access, per permission**: App Dashboard → **Use cases** → open each
+   use case → **Customize** → Permissions. Note which of the seven above are not yet
+   "Advanced access" and request it there. Ads Management Standard Access, if listed,
+   follows the same path.
+2. **Check settings** (no change expected): **App settings → Basic** has the icon,
+   category, contact email and the URLs in the table above, with no red warnings;
+   **Facebook Login → Settings** has the redirect URI and deauthorize callback.
+3. **No-role connect test and screencasts**: sign in as a reviewer account that has
+   no role on the app and run the script above, one recording per permission.
+4. **In the draft**, for each permission paste the "Why" text from the table, attach
+   its screencast, and give the reviewer login in the dashboard's secure
+   test-credentials field. Then click **Submit**.
+5. Wait: Meta usually answers within days to a few weeks. Reply to feedback point
+   by point.
 
 ## After Submission
 
