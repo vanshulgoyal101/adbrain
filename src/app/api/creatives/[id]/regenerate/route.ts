@@ -188,6 +188,7 @@ async function handlePOST(
           settings.language ?? undefined,
           referenceImages,
           settings.sourceFacts,
+          photoUrl,
         ),
       })
       .eq("id", id)

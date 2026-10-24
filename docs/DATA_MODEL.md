@@ -144,7 +144,10 @@ database length bounds; prompt builders truncate selected fields independently.
 | `public.campaign_operations` | Business/draft/version/generation, kind `campaign_create`, idempotency key, request hash, state/phase, lease, attempt count, payload/result/external IDs, sanitized error, timestamps |
 
 Creative receipt JSON records generation settings and provenance; it is not a
-provider credential store. `variant_group` is indexed, not unique: a generation
+provider credential store. Ads made since #280 also keep the overlay `design`
+spec (without `backgroundUrl`) and the stored background `photoUrl`, so the words
+on the picture can be re-rendered without the AI; `generation.concept.description`
+holds the owner-editable link description. `variant_group` is indexed, not unique: a generation
 UUID groups rows but does not prevent duplicate paid POSTs.
 
 Campaign uniqueness is `(business_id, meta_campaign_id)` for non-null Meta IDs.
