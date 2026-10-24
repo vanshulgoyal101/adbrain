@@ -29,6 +29,12 @@ const RATE_LIMITED: Record<Provider, () => Response> = {
   } }, { status: 429 }),
   openrouter: () => Response.json({ error: { message: "Rate limit exceeded", code: 429 } }, { status: 429 }),
 };
+// Recorded 2026-10-24 12:02Z from OpenRouter when the key reached its total limit (#449); the
+// key-management link is shortened.
+const KEY_LIMIT = () => Response.json({ error: {
+  message: "Key limit exceeded (total limit). Manage it using https://openrouter.ai/workspaces/default/keys/… $7.03 of $7.00 used; does not reset.",
+  code: 403, metadata: { limit_source: "openrouter_key_limit" },
+} }, { status: 403 });
 
 const mocks = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -134,6 +140,22 @@ describe("core: Create step 1 when the AI providers are busy (#410)", () => {
       ["creatives.assistant", "google", "error", "LLM_HTTP_429", 0],
       ["creatives.assistant", "openrouter", "error", "LLM_HTTP_429", 0],
     ]);
+  });
+
+  it("returns 500, not 'busy', when a key is refused for good, so the outage alerts (#449)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const calls = providers({ openrouter: KEY_LIMIT });
+    const events = productEvents();
+
+    const { response } = await startCreating(useVirtualDeadlines);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).not.toHaveProperty("code", "AI_BUSY");
+    expect(calls).toEqual(["groq", "groq", "google", "openrouter"]);
+    expect(events().filter((event) => event.name === "ai.completion").map((event) => event.attributes.errorCode))
+      .toEqual(["LLM_HTTP_429", "LLM_HTTP_429", "LLM_HTTP_429", "LLM_HTTP_403"]);
+    expect(events().filter((event) => event.name === "creative.interview").map((event) => [event.outcome, event.attributes.errorCode]))
+      .toEqual([["failed", "ASSISTANT_HTTP_403"]]);
   });
 
   it("answers from the paid fallback and still logs the refused free-tier attempts", async () => {

@@ -324,7 +324,8 @@ Create's assistant also logs each provider attempt the router gave up on as
 `ai.completion` failed with `errorCode` `LLM_HTTP_429`, `LLM_TIMEOUT` and so on,
 even when a fallback then answers. When none answers, a `creative.interview`
 workflow event records `ASSISTANT_EXHAUSTED_<reason>` and the owner gets a 503
-"busy" (#410). Refusals per provider and hour:
+"busy" (#410); a refused key or request records `ASSISTANT_HTTP_401`/`_403`/`_400`
+and stays a 500 (#449). Refusals per provider and hour:
 
 ```sql
 select date_trunc('hour', created_at) as hour, attributes->>'provider' as provider,

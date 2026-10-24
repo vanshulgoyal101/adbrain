@@ -78,6 +78,16 @@ describe("creative assistant boundary", () => {
     expect((await POST(request({ businessId: "biz", goal: "ad" }))).status).toBe(500);
   });
 
+  it.each([
+    ["a revoked key", new LLMError("groq: HTTP 401", { provider: "groq", status: 401, retryable: true })],
+    ["a key over its spending limit", new LLMError("openrouter: HTTP 403", { provider: "openrouter", status: 403, retryable: true })],
+    ["every provider rejecting the request", new AllLLMProvidersFailedError("PROVIDER_CLIENT", 2)],
+  ])("keeps a 500 for %s: that is our fault, not load, so it must alert (#410)", async (_case, error) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(complete).mockRejectedValue(error);
+    expect((await POST(request({ businessId: "biz", goal: "ad" }))).status).toBe(500);
+  });
+
   it.each([[null, 503], [1000, 429]])("blocks interviews when usage is %s", async (used, status) => {
     mocks.usage.mockResolvedValue(used);
     expect((await POST(request({ businessId: "biz", goal: "ad" }))).status).toBe(status);
