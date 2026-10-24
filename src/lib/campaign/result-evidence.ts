@@ -1,3 +1,4 @@
+import { formatMoney } from "@/lib/format";
 /**
  * #371: what past campaigns achieved, for Create. Pure functions; the wording is decided here,
  * not by the model, so a tiny sample is never called a winner.
@@ -34,10 +35,9 @@ export interface OpeningLine {
 const noun = (destination: EvidenceCampaign["destination"], count: number) =>
   `${destination === "whatsapp" ? "chat" : "lead"}${count === 1 ? "" : "s"}`;
 
-/** Whole rupees stay whole; anything else shows paise. */
+/** Money in evidence text, the same way the rest of the product writes it (#403 S2). */
 export function rupees(value: number): string {
-  const rounded = Math.round(value * 100) / 100;
-  return `₹${new Intl.NumberFormat("en-IN", { minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2, maximumFractionDigits: 2 }).format(rounded)}`;
+  return formatMoney(value);
 }
 
 const costPerResult = (campaign: EvidenceCampaign) => (campaign.results > 0 ? campaign.spend / campaign.results : null);

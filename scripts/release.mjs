@@ -16,6 +16,12 @@ const projectId = "kmzuxrvfrwwpwmoovwcp";
 const negative = /\b(not (approved|fine|ready)|changes requested|request(ed)? changes|blocked|reject(ed)?|on hold|hold (off|on|it|this|that|the (release|merge))|do not merge|please|once you|when you|if you|you (approved|accepted))\b/i;
 
 // The latest QA verdict comment that names the head decides; approvals for the head carry the reviewed hashes.
+/** PR reviews posted with `gh pr review --comment` count as verdicts, like comments (#423). */
+export function reviewVerdicts(reviews) {
+  return reviews.filter((r) => r.body?.trim() && r.submitted_at && r.state !== "PENDING")
+    .map((r) => ({ body: r.body, createdAt: r.submitted_at, url: r.html_url }));
+}
+
 export function qaApproval(comments, headSha) {
   const head = headSha.slice(0, 7).toLowerCase();
   const verdicts = comments
@@ -154,7 +160,10 @@ async function main() {
   console.log(`    CI: ${required.join(", ")} green`);
 
   const threads = [pr.number, ...pr.closingIssuesReferences.map((issue) => issue.number)];
-  const comments = threads.flatMap((n) => ghJson("api", "--paginate", `repos/${repo}/issues/${n}/comments`, "--jq", "[.[]|{body,createdAt:.created_at,url:.html_url}]"));
+  const comments = [
+    ...threads.flatMap((n) => ghJson("api", "--paginate", `repos/${repo}/issues/${n}/comments?per_page=100`, "--jq", "[.[]|{body,createdAt:.created_at,url:.html_url}]")),
+    ...reviewVerdicts(ghJson("api", "--paginate", `repos/${repo}/pulls/${pr.number}/reviews?per_page=100`, "--jq", "[.[]|{body,state,submitted_at,html_url}]")),
+  ];
   const qa = qaApproval(comments, head);
   if (qa.approved) console.log(`    QA approved ${head.slice(0, 7)}: ${qa.latest.url}`);
   else if (dry) console.log(`    QA has not approved ${head.slice(0, 7)} yet (latest QA verdict: ${qa.latest?.url ?? "none"}); continuing because --dry-run.`);

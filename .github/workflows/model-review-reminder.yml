@@ -1,0 +1,44 @@
+name: Model review reminder
+on:
+  # Weekly check; opens a review issue once the last one is 21 days old (#388).
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: model-review-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TITLE: "Model review due"
+    steps:
+      - name: Open the review issue when 21 days have passed
+        run: |
+          set -euo pipefail
+          last=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title \"$TITLE\"" --limit 20 \
+            --json number,state,createdAt --jq 'sort_by(.createdAt) | last // empty | .age = ((now - (.createdAt | fromdateiso8601)) / 86400 | floor)')
+          if [ -n "$last" ]; then
+            number=$(jq -r .number <<<"$last"); state=$(jq -r .state <<<"$last"); age=$(jq -r .age <<<"$last")
+            echo "Last review issue #$number ($state), $age days old."
+            [ "$state" = OPEN ] && { echo "Still open; nothing to do."; exit 0; }
+            [ "$age" -ge 21 ] || { echo "Next one is due in $((21 - age)) days."; exit 0; }
+            previous="Last review: #$number."
+          else
+            # The first cycle counts from #388, where the first review runs.
+            age=$(gh issue view 388 -R "$GITHUB_REPOSITORY" --json createdAt --jq '(now - (.createdAt | fromdateiso8601)) / 86400 | floor')
+            [ "$age" -ge 21 ] || { echo "First review (#388) is $age days old; next one is due in $((21 - age)) days."; exit 0; }
+            previous="First scheduled review after #388."
+          fi
+          gh issue create -R "$GITHUB_REPOSITORY" -l later -l owner:cto -t "$TITLE ($(date -u +%Y-%m-%d))" -b "$(printf '%s\n\nEvery 21 days: one blind bake-off per task (interview + planner, concept/copy, image) on the #98 recorded inputs, 2-3 current OpenRouter candidates each, with p50/p90 and cost per Create run ($5 cap per review). Switch only a clear winner, with before/after and the core smoke; record the pick and why in docs/AI_PIPELINE.md#reliability-budget. Process: #388.\n' "$previous")"

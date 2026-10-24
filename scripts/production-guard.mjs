@@ -11,11 +11,20 @@ const domain = "adbrain.vanshul.com";
 const token = process.env.VERCEL_TOKEN;
 if (!token) throw new Error("VERCEL_TOKEN is not set.");
 
+/** Strips the token and anything shaped like a Vercel token from text bound for logs or issues. */
+function redact(text) {
+  return (token ? text.split(token).join("[token]") : text).replace(/\b(vc[a-z])_[A-Za-z0-9]{16,}/g, "$1_[redacted]");
+}
+
 async function vercel(path) {
   const url = new URL(path, "https://api.vercel.com");
   url.searchParams.set("slug", team);
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) throw new Error(`Vercel API ${url.pathname}: HTTP ${response.status}`);
+  if (!response.ok) {
+    // Vercel's error code and message name the cause (expired token, missing scope, rate limit); no secrets.
+    const error = (await response.json().catch(() => null))?.error;
+    throw new Error(`Vercel API ${url.pathname}: HTTP ${response.status}${error ? ` ${error.code ?? ""}: ${String(error.message ?? "").slice(0, 200)}` : ""}`);
+  }
   return response.json();
 }
 
@@ -79,7 +88,15 @@ if (command === "live") {
   console.log(`Rolling back ${current.sha.slice(0, 7)} -> ${target.meta?.githubCommitSha?.slice(0, 7)} (${target.url})`);
   // Promote, not `vercel rollback`: a rollback turns off auto-assignment and holds every later
   // deploy until someone promotes by hand (#316, #390). The next push still gets its own guard.
-  execFileSync("npx", ["--yes", "vercel@60.1.3", "promote", target.url, "--yes", "--scope", team, "--token", token], { stdio: ["ignore", "ignore", "inherit"] });
+  // The CLI reads VERCEL_TOKEN from the environment. Never pass it as an argument: a failed
+  // command's error repeats its arguments, and this output is posted to a public issue (#413).
+  try {
+    execFileSync("npx", ["--yes", "vercel@60.1.3", "promote", target.url, "--yes", "--scope", team], {
+      stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, VERCEL_TOKEN: token },
+    });
+  } catch (error) {
+    throw new Error(`vercel promote failed: ${redact(String(error.stderr ?? "")).trim().split("\n").at(-1)?.slice(0, 300) ?? "no output"}`);
+  }
   const after = await live();
   console.log(`Production now serves ${after.sha.slice(0, 7)} (${after.url})`);
   if (after.id !== target.uid) process.exitCode = 1;

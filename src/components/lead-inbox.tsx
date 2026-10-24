@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { buildLeadDigest, relativeAge } from "@/lib/leads/digest";
-import { formatDateShort } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
 import type { Lead } from "@/lib/types";
 import { useLeadList } from "@/lib/leads/use-lead-list";
@@ -238,8 +238,8 @@ export function LeadInbox({
   // friendlier relative "2h ago" once mounted on the client.
   function whenLabel(createdTime: string | null): string {
     if (!createdTime) return "—";
-    if (mounted) return relativeAge(createdTime, now) || formatDateShort(createdTime);
-    return formatDateShort(createdTime) || "—";
+    if (mounted) return relativeAge(createdTime, now) || formatDate(createdTime);
+    return formatDate(createdTime) || "—";
   }
 
   return (

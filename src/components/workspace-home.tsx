@@ -11,7 +11,7 @@ import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue, missingBrandContext } from "@/lib/work-queue";
 import { describeAuditEvent } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { formatDateShort } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
@@ -213,7 +213,7 @@ export function WorkspaceHome({
                         {campaign.name || "Untitled campaign"}
                       </Link>
                       <p className="mt-1 text-xs text-slate-500">
-                        {formatDateShort(campaign.created_at)}
+                        {formatDate(campaign.created_at)}
                       </p>
                       {campaignAttention(campaign) ? (
                         <p className="mt-1 text-xs font-medium text-red-800">
@@ -341,7 +341,7 @@ export function RecentActivity({ audit }: { audit: AuditLog[] }) {
               {describeAuditEvent(event.action, event.reason)}
               {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
             </span>
-            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDateShort(event.created_at)}</time>
+            <time dateTime={event.created_at} className="text-xs text-slate-500">{formatDate(event.created_at)}</time>
           </li>
         ))}
       </ul>

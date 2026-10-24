@@ -56,6 +56,11 @@ jobs:
         id: wait
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs wait "$SHA"
+      # No token (CEO, #413): fix forward. Give the deploy ~3 min to go live, then smoke production;
+      # no rollback, and an issue only when the smoke itself fails.
+      - name: Wait for the deploy to go live (no token)
+        if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN == ''
+        run: sleep 180
       - name: Read-only core smoke (one retry)
         id: smoke
         if: steps.wait.outputs.superseded != 'true'
@@ -85,6 +90,8 @@ jobs:
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           smoke=$(grep -E '^(PASS|FAIL)' smoke.txt 2>/dev/null || echo "smoke did not run; see the run log")
           rollback=$(cat rollback.txt 2>/dev/null || echo "not attempted (scheduled run, install or wait failed, Chromium OS packages missing, or no VERCEL_TOKEN)")
+          # Public repo: never post anything token-shaped (#413).
+          rollback=$(sed -E 's/\b(vc[a-z])_[A-Za-z0-9]{16,}/\1_[redacted]/g; s/--token[= ][^ ]+/--token [redacted]/g' <<<"$rollback")
           body="$(printf 'Run: %s\n\nSmoke:\n```\n%s\n```\nRollback:\n```\n%s\n```\nRecovery: docs/RELEASING.md#production-guard\n' "$run" "$smoke" "$rollback")"
           # One open alert at a time: a repeat failure comments on it instead of opening another.
           open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"${PREFIX}Production smoke failed on\"" --json number --jq '.[0].number // empty')

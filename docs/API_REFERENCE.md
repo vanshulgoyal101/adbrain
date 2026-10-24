@@ -425,6 +425,9 @@ or for older ads the newest `<angle>-<uuid>` file stored no later than the finis
 picture in the ad's folder. If neither exists it returns 409 `no_background`.
 The new picture gets a new versioned path; status is unchanged. It returns 409
 when overlays are off or the ad is image-only, and rate-limits at 30 per 5 minutes.
+With `preview: true` in the body it only renders the words for the editor's live
+preview (#387) and returns `{previewUrl}` (a 720 px WebP data URL): no upload, no row
+update, no audit event, own rate limit (120 per 5 minutes).
 
 `POST /api/creatives/[id]/background` makes one new background image from the
 owner's short description (the owner's direction wins over the ad's earlier visual

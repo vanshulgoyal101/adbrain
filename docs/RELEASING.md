@@ -89,6 +89,12 @@ exclude entire test directories or suppress uninvestigated findings.
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
   and the schema tests all use it, so two migration PRs never conflict. Name a
   migration so it sorts after the ones it depends on.
+- **Code review (#423):** every PR gets an automatic, advisory Copilot review (repository
+  ruleset 'Copilot code review on every PR (advisory)', on open and each push; not a
+  required check, so low-risk PRs still auto-merge on green). Authors fix real findings in
+  the same PR. QA and CTO post high-risk verdicts as reviews, not comments:
+  `gh pr review <n> --comment --body "QA verdict at <sha>: **approved**. …"` (or
+  `CTO review of <sha>: **approved**`). `release.mjs` reads PR reviews and comments alike.
 - **Supabase advisors (#359):** run `node scripts/advisors.mjs` before and after
   every migration release. It reads the production security and performance
   advisors (read-only) and exits 1 on any WARN or ERROR outside its reviewed
@@ -171,6 +177,12 @@ failed smoke green (#153). To prove that, run the workflow manually with
 The rollback drill input `drill` forces the same FAIL, then really rolls
 production back and opens a `[DRILL]` core bug; restore with the recovery steps
 below.
+
+**Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** the guard waits 3 minutes after each
+production deploy, runs the read-only smoke and only reports (one tracker issue); there
+is no automatic rollback and the drift check is skipped. Roll back by hand from a
+logged-in CLI: `npx --yes vercel@60.1.3 promote <previous-deployment-url> --scope vanshul-goyals-projects`.
+Revisit if a bad deploy ever stays live longer than an hour.
 
 Recovery after an automatic rollback: the guard rolls back by **promoting** the
 last good deployment (#390), so Vercel keeps auto-promoting later deploys; each new

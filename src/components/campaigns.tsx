@@ -41,7 +41,8 @@ import {
 import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
-import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { LivePicture, type PicturePreview } from "@/components/live-picture";
+import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
   createMetaConnectClient,
@@ -82,7 +83,8 @@ import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
-import { cn, formatCurrency, formatNumber, timeAgo } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
+import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
@@ -239,9 +241,14 @@ function BusinessCampaigns({
   const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
-  const pickerAds = approved.map((c) => editedAds[c.id] ?? c);
   const [showAllAds, setShowAllAds] = useState(false);
-  const editingAd = pickerAds.find((c) => c.id === editingAdId) ?? null;
+  const [adDraft, setAdDraft] = useState<AdText | null>(null);
+  const [adPicture, setAdPicture] = useState<PicturePreview | null>(null);
+  const savedPickerAds = approved.map((c) => editedAds[c.id] ?? c);
+  const editingAd = savedPickerAds.find((c) => c.id === editingAdId) ?? null;
+  const adDraftUnsaved = editingAd !== null && ((adDraft !== null && !sameAdText(adDraft, savedAdText(editingAd))) || adPicture !== null);
+  // While editing, the tile previews the unsaved headline (#387).
+  const pickerAds = savedPickerAds.map((c) => (c.id === editingAdId && adDraft ? { ...c, headline: adDraft.headline } : c));
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
     const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
@@ -962,7 +969,7 @@ function BusinessCampaigns({
         );
         setNotice(next === "active"
           ? reviewedDays
-            ? `Activated with a ${formatCurrency((c.daily_budget ?? 0) * reviewedDays)} total limit on Meta for ${reviewedDays} ${reviewedDays === 1 ? "day" : "days"}. Meta reviews the ads before they deliver.`
+            ? `Activated with a ${formatMoney((c.daily_budget ?? 0) * reviewedDays)} total limit on Meta for ${reviewedDays} ${reviewedDays === 1 ? "day" : "days"}. Meta reviews the ads before they deliver.`
             : "Activation requested. Check Meta for effective delivery and eligibility."
           : "Campaign paused.");
         if (next === "active") {
@@ -1049,14 +1056,14 @@ function BusinessCampaigns({
             <span className="mt-2 block text-sm font-normal text-amber-900">
               Account: {reviewConnection.selected.accountName} ({reviewConnection.selected.adAccountId}) · Page: {reviewConnection.selected.pageName} · Currency: {reviewConnection.selected.currency} · Timezone: {reviewConnection.selected.timezoneName}
               <br />
-              Effective daily total: {activationReview.daily_budget == null ? "Unavailable" : formatCurrency(activationReview.daily_budget)}
+              Effective daily total: {activationReview.daily_budget == null ? "Unavailable" : formatMoney(activationReview.daily_budget)}
             </span>
           )}
           {activationDelivery && <div className="mt-3 text-sm font-normal text-amber-900">
             <p>Parent: {activationDelivery.campaign.id} · Requested {activationDelivery.campaign.status} · Effective {activationDelivery.campaign.effectiveStatus ?? "unconfirmed"}</p>
             <ul className="mt-2 list-inside list-disc">
               {activationDelivery.adSets.map(adSet => <li key={adSet.id}>
-                Ad set {adSet.id}: {adSet.dailyBudgetPaise ? `${formatCurrency(adSet.dailyBudgetPaise / 100)}/day` : "campaign-level budget"}, destination {adSet.destinationType ?? "not reported"}, requested {adSet.status}, effective {adSet.effectiveStatus ?? "unconfirmed"}
+                Ad set {adSet.id}: {adSet.dailyBudgetPaise ? formatPerDay(adSet.dailyBudgetPaise / 100) : "campaign-level budget"}, destination {adSet.destinationType ?? "not reported"}, requested {adSet.status}, effective {adSet.effectiveStatus ?? "unconfirmed"}
                 <pre className="ml-4 max-h-32 overflow-auto whitespace-pre-wrap break-all text-xs">Targeting: {JSON.stringify(adSet.targeting)}</pre>
               </li>)}
               {activationDelivery.ads.map(ad => <li key={ad.id}>Ad {ad.id} (set {ad.adSetId}, creative {ad.creativeId}): requested {ad.status}, effective {ad.effectiveStatus ?? "unconfirmed"}</li>)}
@@ -1067,7 +1074,7 @@ function BusinessCampaigns({
                 <select id="cap-days" value={capDays} onChange={event => setCapDays(Number(event.target.value))} className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm">
                   {[1, 2, 3, 4, 5, 6, 7].map(days => <option key={days} value={days}>{days} {days === 1 ? "day" : "days"}</option>)}
                 </select>
-                <p className="mt-1 font-medium">Total limit on Meta: {formatCurrency((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
+                <p className="mt-1 font-medium">Total limit on Meta: {formatMoney((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
                     ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
@@ -1129,7 +1136,7 @@ function BusinessCampaigns({
                 <br />
                 Destination: {prepareReview.draft.input.destination === "whatsapp" ? `WhatsApp chat ${prepareReview.review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}
                 <br />
-                Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatCurrency(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatCurrency(prepareReview.review.totalDailyBudgetRupees)}
+                Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatMoney(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatMoney(prepareReview.review.totalDailyBudgetRupees)}
                 <br />
                 Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · Gender: {{ all: "All genders", men: "Men", women: "Women" }[prepareReview.draft.input.targeting.gender ?? "all"]} · City coverage: {prepareReview.draft.input.targeting.location?.cityScope === "city_only" ? "City only (no added radius)" : `${prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km radius`}
                 <br />
@@ -1216,7 +1223,7 @@ function BusinessCampaigns({
           {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
             <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
               <span className="block wrap-break-word">{draft.input.name}</span>
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatCurrency(draft.input.dailyBudgetRupees)} per ad set</span>
+              <span className="mt-0.5 block text-xs font-normal text-slate-500">{formatMoney(draft.input.dailyBudgetRupees)} per ad set</span>
             </button>
             <Button variant="ghost" size="sm" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
           </li>)}
@@ -1316,7 +1323,12 @@ function BusinessCampaigns({
                               : "border-slate-200 hover:border-slate-300",
                           )}
                         >
-                          <div className="aspect-square bg-slate-100">
+                          <div className="relative aspect-square bg-slate-100">
+                            {c.id === editingAdId && adPicture && (
+                              <div className="absolute inset-0 z-[1] bg-slate-100">
+                                <LivePicture preview={adPicture} />
+                              </div>
+                            )}
                             {c.image_url && (
                               <img
                                 src={creativeThumbnailUrl(c.image_url)}
@@ -1363,11 +1375,14 @@ function BusinessCampaigns({
                   )}
                   {editingAd && (
                     <section aria-label="Edit ad" className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
-                      <p className="mb-3 truncate text-sm font-medium text-slate-800">Editing: {editingAd.headline}</p>
+                      <p className="mb-1 truncate text-sm font-medium text-slate-800">Editing: {adDraft?.headline ?? editingAd.headline}</p>
+                      {adDraftUnsaved && <div className="mb-2"><UnsavedPreviewBadge /></div>}
                       <CreativeEditor
                         key={editingAd.id}
                         creative={editingAd}
                         brand={business}
+                        onDraft={setAdDraft}
+                        onPicturePreview={setAdPicture}
                         onCancel={() => setEditingAdId(null)}
                         onSaved={(next, notes) => {
                           setEditedAds((current) => ({ ...current, [next.id]: next }));
@@ -1462,11 +1477,11 @@ function BusinessCampaigns({
                           : "border-slate-200 text-slate-600 hover:border-slate-300",
                       )}
                     >
-                      ₹{amount}/day
+                      {formatPerDay(amount)}
                     </button>
                   ))}
                   <span className="ml-auto text-xs font-medium text-slate-600">
-                    Total: {formatCurrency(totalDailyBudget)}/day{abTest ? " across 2 ad sets" : ""}
+                    Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
 
@@ -1519,7 +1534,7 @@ function BusinessCampaigns({
                       A/B test the audience by age
                     </span>
                     <span className="block text-xs text-slate-500">
-                      Two ad sets, each with the entered daily budget. Total daily budget: {formatCurrency(totalDailyBudget)}.
+                      Two ad sets, each with the entered daily budget. Total daily budget: {formatMoney(totalDailyBudget)}.
                     </span>
                   </span>
                 </label>
@@ -1650,7 +1665,7 @@ function BusinessCampaigns({
                       <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <span className="text-sm text-slate-500">
                           {c.daily_budget != null
-                            ? `${formatCurrency(c.daily_budget)}/day`
+                            ? formatPerDay(c.daily_budget)
                             : c.objective}
                         </span>
                         {c.meta_campaign_id && (
@@ -1724,7 +1739,7 @@ function BusinessCampaigns({
                         <Stat label={outcome === "whatsapp" ? "WhatsApp conversations" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
                         <Stat
                           label={outcome === "whatsapp" ? "Cost / conversation" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
-                          value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatCurrency(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatCurrency(r.cpl) : "—"}
+                          value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
                     )}
@@ -1754,11 +1769,11 @@ function BusinessCampaigns({
                       (() => {
                         const h = spendHealth(
                           { spend: r.spend, leads: r.leads, cpl: r.cpl },
-                          formatCurrency,
+                          formatMoney,
                         );
                         const narrative = campaignNarrative(
                           { spend: r.spend, leads: r.leads, cpl: r.cpl },
-                          formatCurrency,
+                          formatMoney,
                         );
                         const nextAction = campaignNextAction({
                           spend: r.spend,

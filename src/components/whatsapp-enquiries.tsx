@@ -5,7 +5,7 @@ import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { costPerRealEnquiry } from "@/lib/campaign/real-enquiries";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { formatMoney, formatNumber } from "@/lib/format";
 
 /**
  * #335: Meta counts chats started, not customers. The owner logs each real enquiry from a WhatsApp
@@ -54,7 +54,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged }: {
           <p className="text-xs text-slate-500">Real enquiries</p>
         </div>
         <div>
-          <p className="text-lg font-bold text-slate-900">{cost === null ? "—" : formatCurrency(cost)}</p>
+          <p className="text-lg font-bold text-slate-900">{cost === null ? "—" : formatMoney(cost)}</p>
           <p className="text-xs text-slate-500">Cost / real enquiry</p>
         </div>
       </div>

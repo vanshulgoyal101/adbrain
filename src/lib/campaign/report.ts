@@ -1,4 +1,5 @@
 import type { CampaignPerf } from "./performance";
+import { formatMoney } from "@/lib/format";
 
 /** A campaign row with full metrics, for the exportable report. */
 export interface ReportRow extends CampaignPerf {
@@ -7,7 +8,7 @@ export interface ReportRow extends CampaignPerf {
 }
 
 function money(n: number): string {
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  return formatMoney(n);
 }
 
 function markdownText(value: string): string {

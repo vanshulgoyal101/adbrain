@@ -1,0 +1,261 @@
+{
+  "about": "Frozen Create eval inputs (#418). Do not edit a case in place: add a new id, so baselines stay comparable.",
+  "cases": [
+    {
+      "id": "cedar-ridge-en",
+      "language": "en",
+      "source": "tests/core/fixtures/create/cedar-ridge-run4.json (production run 4 brief)",
+      "brand": {
+        "name": "Cedar Ridge Chiropractic",
+        "vertical": "chiropractic clinic",
+        "description": "A family chiropractic clinic in Austin, Texas offering spinal adjustments, posture care, and sports injury rehab. Same-day appointments for new patients.",
+        "target_audience": "Adults 30-60 with desk jobs, weekend athletes, and new parents in the Austin area.",
+        "usps": [
+          "Same-day appointments for new patients",
+          "Board-certified chiropractors with 15+ years combined experience",
+          "Insurance accepted, plus transparent cash pricing",
+          "Digital posture scan included on your first visit",
+          "Evening and Saturday hours"
+        ],
+        "offers": [
+          "$49 new-patient exam and consultation",
+          "Free 15-minute spine check"
+        ],
+        "locations": [
+          "Austin, Texas",
+          "Round Rock",
+          "Cedar Park"
+        ],
+        "languages": [
+          "English"
+        ],
+        "brand_voice": "Warm, professional, plain-spoken. No hype, no exclamation marks, no medical promises.",
+        "address": "2100 Cedar Ridge Drive, Suite 210, Austin, TX 78745",
+        "primary_color": "#74A7FE",
+        "secondary_color": "#FFC677",
+        "font": "sans"
+      },
+      "brief": "Create three distinct ads for Cedar Ridge Chiropractic's saved $49 new-patient exam and consultation. Speak to adults in the Austin area considering a first visit. Use a warm, professional, plain-spoken tone and invite them to learn about the consultation and book an appointment. Use only supplied brand facts; do not promise results or invent services, availability, included scans, or offer terms.",
+      "sourceFacts": [],
+      "offerTerms": [
+        "$49"
+      ]
+    },
+    {
+      "id": "solaride-factory-en",
+      "language": "en",
+      "source": "tests/core/fixtures/create/solaride-regenerate.json (production Solaride factory brief)",
+      "brand": {
+        "name": "Solaride",
+        "vertical": "solar energy",
+        "description": "SOLARIDE provides customized rooftop solar panel installations for residential, commercial, and agricultural sectors across North India, including Punjab, Haryana, Chandigarh, and Rajasthan.",
+        "brand_voice": "professional, mission-driven, transparent",
+        "target_audience": "Homeowners, businesses, and agricultural landowners in North India (Punjab, Haryana, Chandigarh, Rajasthan) looking to reduce electricity bills and adopt clean energy.",
+        "usps": [
+          "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+          "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+          "Local solar teams in Mohali and Hisar",
+          "Assistance with PM Surya Ghar subsidy and net metering",
+          "Free site survey",
+          "Potential to cut electricity bills by up to 98%"
+        ],
+        "offers": [
+          "Free site survey",
+          "PM Surya Ghar subsidy help",
+          "Diwali offer: 10% off rooftop solar installation"
+        ],
+        "languages": [
+          "English"
+        ],
+        "locations": [
+          "Chandigarh",
+          "Panchkula",
+          "Mohali"
+        ]
+      },
+      "brief": "A high-tension, professional visual featuring the expansive roof of a large, modern industrial factory in North India, bathed in the warm, urgent light of a late afternoon sun. The composition emphasizes scale and industry, with a subtle, sleek graphic overlay of a countdown clock or calendar highlighting the critical November 10th decision date. The copy hook is 'Don't Let the December 31st Price Hike Hit Your Factory.' The message avoids technical jargon like 'DCR' and instead frames the upcoming regulatory shift as a significant cost increase (over 10,000 rupees per kilowatt) that can be avoided by acting now. Solaride is positioned as the trusted, engineering-backed partner (IIT/PEC) that helps factory owners secure compliant, cost-effective energy before the deadline. The mood is serious, urgent, and authoritative, leveraging the trust of local expertise and the Diwali offer of 10% off to drive immediate action. The call to action is to book a free site survey by November 10th to lock in current rates and avoid the upcoming cost surge.",
+      "sourceFacts": [
+        "I want to make a ad for specifically big factory as on 31st December, the government is banning the panels which are non-DCR panels, and because of which the cost of the solar panels or cost of the solar installation will go more than 10,000 rupees per kilowatt.So I don't want to confuse customers by non-DCR and DCR, I just want to marketize this and want to attract the customers who are factory owners. If the customer wants solar before 31 December, he has to take decision before 10th november"
+      ],
+      "offerTerms": []
+    },
+    {
+      "id": "solaride-factory-hi",
+      "language": "hi",
+      "source": "tests/core/fixtures/create/solaride-hindi.json (recorded hi factory interview brief)",
+      "brand": {
+        "name": "Solaride",
+        "vertical": "solar energy",
+        "description": "SOLARIDE provides customized rooftop solar panel installations for residential, commercial, and agricultural sectors across North India, including Punjab, Haryana, Chandigarh, and Rajasthan.",
+        "brand_voice": "professional, mission-driven, transparent",
+        "target_audience": "Homeowners, businesses, and agricultural landowners in North India (Punjab, Haryana, Chandigarh, Rajasthan) looking to reduce electricity bills and adopt clean energy.",
+        "usps": [
+          "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+          "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+          "Local solar teams in Mohali and Hisar",
+          "Assistance with PM Surya Ghar subsidy and net metering",
+          "Free site survey",
+          "Potential to cut electricity bills by up to 98%"
+        ],
+        "offers": [
+          "Free site survey",
+          "PM Surya Ghar subsidy help",
+          "Diwali offer: 10% off rooftop solar installation"
+        ],
+        "languages": [
+          "English"
+        ],
+        "locations": [
+          "Chandigarh",
+          "Panchkula",
+          "Mohali"
+        ]
+      },
+      "brief": "विजुअल: एक बड़ी, शक्तिशाली फैक्ट्री की छत पर चमकते हुए सोलर पैनल, जिसके नीचे हरे-भरे खेत और आधुनिक इंडस्ट्रियल क्षेत्र दिखाई दे रहे हैं। रोशनी में एक '31 दिसंबर' की टाइमलाइन या कैलेंडर का दृश्य, जो अगले साल की बढ़ती लागत (₹10,000+/kW) की चेतावनी दे रहा है। कॉपी: शीर्षक में '31 दिसंबर की डेडलाइन से पहले फैक्ट्री की बिजली बिल पर लगाम लगाएं!' और बॉडी में स्पष्ट संदेश: 'नॉन-DCR सोलर पैनल की उपलब्धता 31 दिसंबर के बाद बंद हो रही है और लागत ₹10,000 प्रति किलोवाट से ज़्यादा बढ़ जाएगी। अभी इंस्टॉलेशन करवाकर अपनी फैक्ट्री को सस्ता और स्वच्छ ऊर्जा से जोड़ें।' CTA: 'आज ही फ्री साइट सर्वे बुक करें।' मूड: पेशेवर, अर्जेंट और भरोसेमंद, जो फैक्ट्री मालिकों के लिए आर्थिक बचत और समय पर निर्णय की महत्वपूर्णता को उभारता है।",
+      "sourceFacts": [
+        "फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी। डेडलाइन से पहले इंस्टॉल करवाएं।"
+      ],
+      "offerTerms": []
+    },
+    {
+      "id": "solaride-factory-hinglish",
+      "language": "hinglish",
+      "source": "tests/core/fixtures/create/solaride-hindi.json (recorded hinglish factory interview brief)",
+      "brand": {
+        "name": "Solaride",
+        "vertical": "solar energy",
+        "description": "SOLARIDE provides customized rooftop solar panel installations for residential, commercial, and agricultural sectors across North India, including Punjab, Haryana, Chandigarh, and Rajasthan.",
+        "brand_voice": "professional, mission-driven, transparent",
+        "target_audience": "Homeowners, businesses, and agricultural landowners in North India (Punjab, Haryana, Chandigarh, Rajasthan) looking to reduce electricity bills and adopt clean energy.",
+        "usps": [
+          "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+          "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+          "Local solar teams in Mohali and Hisar",
+          "Assistance with PM Surya Ghar subsidy and net metering",
+          "Free site survey",
+          "Potential to cut electricity bills by up to 98%"
+        ],
+        "offers": [
+          "Free site survey",
+          "PM Surya Ghar subsidy help",
+          "Diwali offer: 10% off rooftop solar installation"
+        ],
+        "languages": [
+          "English"
+        ],
+        "locations": [
+          "Chandigarh",
+          "Panchkula",
+          "Mohali"
+        ]
+      },
+      "brief": "Ek industrial setting mein, jahan ek modern factory ka exterior dikhta hai aur uske roof par SOLARIDE ke branded solar panels installed hain. Image mein ek confident factory owner apne team ke saath khada hai, background mein clear blue sky aur bright sunlight hai jo clean energy ki shakti ko highlight kare. Copy ka tone urgent aur professional hai. Headline: '31 December Deadline: Non-DCR Solar Abhi Install Karwao!' Subtext: '31 December ke baad cost 10,000 rupees/kW se zyada badh jayegi. Abhi install karke apni factory ki electricity bills kam karein aur clean energy adopt karein. SOLARIDE ke expert IIT/PEC engineers se free site survey book karein.' CTA: 'Free Site Survey Book Karein'. Mood: Professional urgency, clarity, and trust in engineering expertise.",
+      "sourceFacts": [
+        "Factory owners ke liye ad banao: 31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi. Deadline se pehle install karwa lo."
+      ],
+      "offerTerms": []
+    },
+    {
+      "id": "solaride-vague-hi",
+      "language": "hi",
+      "source": "tests/core/fixtures/create/solaride-hindi.json (recorded hi vague interview brief)",
+      "brand": {
+        "name": "Solaride",
+        "vertical": "solar energy",
+        "description": "SOLARIDE provides customized rooftop solar panel installations for residential, commercial, and agricultural sectors across North India, including Punjab, Haryana, Chandigarh, and Rajasthan.",
+        "brand_voice": "professional, mission-driven, transparent",
+        "target_audience": "Homeowners, businesses, and agricultural landowners in North India (Punjab, Haryana, Chandigarh, Rajasthan) looking to reduce electricity bills and adopt clean energy.",
+        "usps": [
+          "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+          "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+          "Local solar teams in Mohali and Hisar",
+          "Assistance with PM Surya Ghar subsidy and net metering",
+          "Free site survey",
+          "Potential to cut electricity bills by up to 98%"
+        ],
+        "offers": [
+          "Free site survey",
+          "PM Surya Ghar subsidy help",
+          "Diwali offer: 10% off rooftop solar installation"
+        ],
+        "languages": [
+          "English"
+        ],
+        "locations": [
+          "Chandigarh",
+          "Panchkula",
+          "Mohali"
+        ]
+      },
+      "brief": "विज्ञापन में पंजाब और हरियाणा के एक आधुनिक घर की छत पर साफ-सुथरी सोलर पैनल इन्स्टॉलेशन दिखाई देती है, जिसके नीचे एक खुश परिवार बैठकर अपने कम बिल पर मुस्कुरा रहा है। बैकग्राउंड में उजला दिन और हरी-भरी वादियाँ हैं। कॉपी का हुक है: 'अपनी छत पर लगाएँ सौर ऊर्जा, और बिजली का बिल कटवाएँ।' ऑफर के रूप में 'फ्री साइट सर्वे' और 'PM Surya Ghar सब्सिडी में पूरी मदद' को स्पष्ट रूप से उल्लेख किया गया है। टोन पेशेवर, भरोसेमंद और स्थानीय (Local) है, जो दर्शाता है कि यह सेवा पंजाब और हरियाणा के घरों के लिए ही है।",
+      "sourceFacts": [
+        "मुझे अपने सोलर बिज़नेस के लिए ज़्यादा ग्राहक चाहिए"
+      ],
+      "offerTerms": []
+    },
+    {
+      "id": "dental-clinic-en",
+      "language": "en",
+      "source": "src/lib/ideas/businesses.ts (dental-clinic example business; goal as brief)",
+      "brand": {
+        "name": "Smile Studio Dental",
+        "vertical": "dental clinic",
+        "description": "A family dental clinic for check-ups, cleaning, fillings and braces.",
+        "target_audience": "Parents and working adults who have put off a dental visit",
+        "usps": [
+          "Evening and Sunday appointments",
+          "Gentle care for children"
+        ],
+        "offers": [
+          "Check-up and cleaning for ₹499"
+        ],
+        "locations": [
+          "Pune"
+        ],
+        "primary_color": "#0f5c78",
+        "languages": [
+          "English"
+        ]
+      },
+      "brief": "Get families nearby to message us on WhatsApp to book a dental check-up.",
+      "sourceFacts": [
+        "Get families nearby to message us on WhatsApp to book a dental check-up."
+      ],
+      "offerTerms": [
+        "₹499"
+      ]
+    },
+    {
+      "id": "coaching-institute-en",
+      "language": "en",
+      "source": "src/lib/ideas/businesses.ts (coaching-institute example business; goal as brief)",
+      "brand": {
+        "name": "Pathshala Academy",
+        "vertical": "coaching institute",
+        "description": "Maths and science coaching for classes 9 to 12 in small batches.",
+        "target_audience": "Parents of school students preparing for board exams",
+        "usps": [
+          "Batches of at most 20 students",
+          "Weekly tests with progress reports for parents"
+        ],
+        "offers": [
+          "Free demo class"
+        ],
+        "locations": [
+          "Lucknow"
+        ],
+        "primary_color": "#23407a",
+        "languages": [
+          "English"
+        ]
+      },
+      "brief": "Get parents of class 9 to 12 students to message us on WhatsApp to book a free demo class.",
+      "sourceFacts": [
+        "Get parents of class 9 to 12 students to message us on WhatsApp to book a free demo class."
+      ],
+      "offerTerms": [
+        "demo"
+      ]
+    }
+  ]
+}

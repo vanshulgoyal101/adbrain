@@ -72,7 +72,9 @@ export async function executeReviewedCampaign(input: {
             kind: "workflow", name: "campaign.story_fallback", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: `${stage}:${errorCode}` },
           });
           let storyTimer: ReturnType<typeof setTimeout> | undefined;
-          const storyImages = draft.input.destination === "whatsapp"
+          // Off until #333 waits for a new placement creative: Meta refused the ad right after it (subcode 1772103).
+          const storiesEnabled = false;
+          const storyImages = storiesEnabled && draft.input.destination === "whatsapp"
             ? await Promise.race([
               Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => {
                 storyFallback("render", "error");

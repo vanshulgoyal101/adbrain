@@ -30,8 +30,9 @@ import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
-import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { ShareCreativeButton } from "@/components/share-creative-button";
+import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { z } from "zod";
 
 z.config({ jitless: true });
@@ -647,6 +648,13 @@ function CreativeCard({
   const [confirmingRegen, setConfirmingRegen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
+  // The owner's unsaved words, shown in the card as they type (#387).
+  const [draft, setDraft] = useState<AdText | null>(null);
+  const [picturePreview, setPicturePreview] = useState<PicturePreview | null>(null);
+  const saved = savedAdText(creative);
+  const shown = editing && draft ? draft : saved;
+  const livePicture = editing ? picturePreview : null;
+  const unsaved = (editing && draft !== null && !sameAdText(draft, saved)) || livePicture !== null;
   const [regenError, setRegenError] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [erroredUrl, setErroredUrl] = useState<string | null>(null);
@@ -757,6 +765,11 @@ function CreativeCard({
             </span>
           </div>
         )}
+{livePicture && (
+          <div className="absolute inset-0 bg-slate-100">
+            <LivePicture preview={livePicture} />
+          </div>
+        )}
         {regenerating && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/60">
             <Spinner className="h-6 w-6 text-blue-600" />
@@ -780,33 +793,38 @@ function CreativeCard({
             </span>
           )}
         </div>
-        {editing ? (
-          <CreativeEditor
-            creative={creative}
-            brand={business}
-            onCancel={() => setEditing(false)}
-            onSaved={(next, notes) => {
-              onChange(next);
-              setEditNotes(notes);
-              setEditing(false);
-            }}
-          />
-        ) : (
-        <>
-        <h3 className="font-semibold text-slate-900">{creative.headline}</h3>
+        {unsaved && <UnsavedPreviewBadge />}
+        <h3 className="font-semibold text-slate-900">{shown.headline}</h3>
         <p className="whitespace-pre-line text-sm text-slate-600">
-          {creative.primary_text}
+          {shown.primary_text}
         </p>
-        {savedCreativeDescription(creative.generation) && (
+        {shown.description && (
           <p className="break-words text-sm text-slate-600">
-            <span className="font-medium">Description: </span>{savedCreativeDescription(creative.generation)}
+            <span className="font-medium">Description: </span>{shown.description}
           </p>
         )}
-        {creative.cta && (
+        {shown.cta && (
           <span className="mt-1 inline-flex w-fit rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">
-            {creative.cta}
+            {shown.cta}
           </span>
         )}
+        {editing ? (
+          <div className="mt-2 border-t border-slate-100 pt-3">
+            <CreativeEditor
+              creative={creative}
+              brand={business}
+              onDraft={setDraft}
+              onPicturePreview={setPicturePreview}
+              onCancel={() => setEditing(false)}
+              onSaved={(next, notes) => {
+                onChange(next);
+                setEditNotes(notes);
+                setEditing(false);
+              }}
+            />
+          </div>
+        ) : (
+        <>
         {editNotes && <CopyEditNotice notes={editNotes} />}
         <GenerationDetails value={creative.generation} />
         {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" className="pt-2" />}

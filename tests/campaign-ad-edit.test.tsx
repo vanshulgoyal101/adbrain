@@ -83,6 +83,20 @@ describe("campaign ad picker: Edit (#280)", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("previews the unsaved headline on the tile while typing, and Cancel restores it (#387)", async () => {
+    view();
+    await statusRead();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: `Edit ${creative.headline}` }));
+    const panel = screen.getByRole("region", { name: "Edit ad" });
+    fireEvent.change(within(panel).getByLabelText("Headline"), { target: { value: "Roof ready in a week?" } });
+    expect(screen.getByRole("button", { name: "Roof ready in a week?" })).toBeInTheDocument();
+    expect(within(panel).getByText("Preview · unsaved changes")).toBeInTheDocument();
+    expect(actions.updateCreativeCopy).not.toHaveBeenCalled();
+    fireEvent.click(within(panel).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: creative.headline! })).toBeInTheDocument();
+  });
+
   it("redraws the words on the picture and shows the live-on-Meta note", async () => {
     view();
     await statusRead();
@@ -120,7 +134,7 @@ describe("campaign results: Share on WhatsApp (#372)", () => {
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[live]} initialResults={{ [live.id]: result }} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
     const link = await screen.findByRole("link", { name: "Share results on WhatsApp" });
     const text = decodeURIComponent(link.getAttribute("href")!.replace("https://wa.me/?text=", ""));
-    expect(text).toBe("Solaride Tricity\nSpent ₹412 (₹280 a day)\n6 WhatsApp chats\n₹69 per chat\nNext: running fine, nothing to do.");
+    expect(text).toBe("Solaride Tricity\nSpent ₹412 (₹280 a day)\n6 WhatsApp chats\n₹68.70 per chat\nNext: running fine, nothing to do.");
     expect(link).toHaveAttribute("target", "_blank");
   });
 });

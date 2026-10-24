@@ -152,7 +152,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    check". No match or several matches leave it uncited and rejected.
    A first line over 125 characters (`hook-length`) or an offer (price, %, free)
    that starts after character 125 (`offer-below-fold`) is repaired once like any
-   other validation failure.
+   other validation failure. An amount in words leading the first line ("10,000
+   rupaye per kW") counts like the same amount in ₹. `all-caps` ignores acronyms
+   joined by "/" or "-" ("IIT/PEC", "नॉन-DCR") and capitals the owner's own facts use
+   (a brand written "SOLARIDE") (#418).
 4. Generate an image from the validated concept and up to three reference images.
    When the business has uploaded product photos (Brand assets), the first ad
    uses the newest one as its image instead (#195): no image call or image cost,
@@ -347,7 +350,7 @@ request rather than reading a stored artifact.
 
 ## Reliability Budget
 
-Owned by the CTO (#378). Measured from `product_events` (`ai.completion`, `creative.batch`) over the last 3 days, real traffic and QA alike (models don't know who calls them):
+Owned by the CTO (#378). Models are re-reviewed every 21 days (#388): [model-review-reminder.yml](../.github/workflows/model-review-reminder.yml) opens a `Model review due` issue for the CTO 21 days after the last one. Measured from `product_events` (`ai.completion`, `creative.batch`) over the last 3 days, real traffic and QA alike (models don't know who calls them):
 
 | Measure | Budget |
 | --- | --- |
