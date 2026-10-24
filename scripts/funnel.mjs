@@ -18,7 +18,7 @@ export const STEPS = [
   ["ad", "First ad generated"],
   ["approved", "Ad approved"],
   ["campaigns", "Campaigns opened"],
-  ["connect_clicked", "Connect Meta clicked"],
+  ["connect_clicked", "Asked to connect Meta"],
   ["meta_connected", "Meta connected"],
   ["paid", "Top-up paid"],
   ["campaign", "Campaign created"],
@@ -38,8 +38,9 @@ export function funnelSql(days, excludedEmails) {
 ), e as (
   select user_id, max(created_at) as last_seen,
     bool_or(name = 'page.view' and attributes->>'route' = '/campaigns') as campaigns,
+    -- Connect Meta, or (before Meta App Review) "Ask for Facebook access" on Campaigns (#336).
     bool_or((name = 'http.request' and attributes->>'route' = '/api/meta/oauth/start')
-      or (name = 'ui.action' and attributes->>'action' like 'meta.connect%')) as connect_clicked,
+      or (name = 'ui.action' and (attributes->>'action' like 'meta.connect%' or attributes->>'action' = 'meta.access_request'))) as connect_clicked,
     bool_or(name = 'creative.approve') as approved
   from public.product_events where user_id in (select id from u) group by user_id
 ), s as (
@@ -78,14 +79,14 @@ const minute = (time) => (time ? String(time).replace("T", " ").slice(0, 16) : "
 export function render({ users, totals }, days) {
   const lines = [`Sign-ups in the last ${days} days: ${users.length} (times UTC)`, ""];
   if (users.length) {
-    lines.push(`${"user".padEnd(10)}${"signed up".padEnd(18)}${"last step".padEnd(22)}${"last seen".padEnd(18)}steps`);
+    lines.push(`${"user".padEnd(10)}${"signed up".padEnd(18)}${"last step".padEnd(24)}${"last seen".padEnd(18)}steps`);
     for (const user of users) {
-      lines.push(`${user.user.padEnd(10)}${minute(user.signedUp).padEnd(18)}${user.lastStep.padEnd(22)}${minute(user.lastSeen).padEnd(18)}${user.reached.map((done) => (done ? "✓" : "·")).join("")}`);
+      lines.push(`${user.user.padEnd(10)}${minute(user.signedUp).padEnd(18)}${user.lastStep.padEnd(24)}${minute(user.lastSeen).padEnd(18)}${user.reached.map((done) => (done ? "✓" : "·")).join("")}`);
     }
     lines.push("");
   }
   lines.push("Reached each step:");
-  for (const [label, count] of totals) lines.push(`  ${label.padEnd(22)}${count}`);
+  for (const [label, count] of totals) lines.push(`  ${label.padEnd(24)}${count}`);
   lines.push("", `Steps: ${STEPS.map(([, label], index) => `${index + 1} ${label}`).join(" → ")}`);
   return lines.join("\n");
 }

@@ -222,14 +222,15 @@ Run ad hoc read-only production queries with
 `node scripts/funnel.mjs [--days 14]` (#338) shows where each sign-up of the last N
 days (1–365) stopped. It prints one row per user and a total per step:
 signed up → Brand saved → first ad generated → ad approved → Campaigns opened →
-Connect Meta clicked → Meta connected → top-up paid → campaign created → first
+asked to connect Meta → Meta connected → top-up paid → campaign created → first
 lead/chat. Each row has the user-id prefix, sign-up time, last step reached, last
 seen (UTC) and a ✓/· mark per step. The query is read-only, through the same API as `prod-sql.mjs`. It
 never prints emails or names and leaves out the smoke account (`SMOKE_EMAIL` from
 the owner's `.env.smoke`). Steps come from durable tables (businesses,
 creatives, Meta connections, live captured payments, campaigns with a Meta id,
-leads and WhatsApp conversations). Campaigns opened, Connect Meta clicked
-(`/api/meta/oauth/start` or a `meta.connect*` `ui.action`) and last seen come from
+leads and WhatsApp conversations). Campaigns opened, asked to connect Meta
+(`/api/meta/oauth/start`, a `meta.connect*` `ui.action`, or `meta.access_request` from
+**Ask for Facebook access** before Meta App Review) and last seen come from
 `product_events`, which are pruned over time. A later step can be reached
 without an earlier one, for example an operator-funded business never tops up.
 The CEO and CTO rerun it weekly.
