@@ -370,7 +370,7 @@ export function LeadInbox({
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
                     {whenLabel(l.created_time) || <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}, status ${confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
                 </tr>
               ))}
             </tbody>

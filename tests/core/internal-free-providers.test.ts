@@ -18,7 +18,9 @@ let png: Buffer;
 // The timing cases run on a virtual clock, which cannot wait for sharp's thread pool (as in create-route).
 vi.mock("@/lib/imageGen/raster", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/imageGen/raster")>();
-  return { ...actual, validateRaster: async (bytes: Uint8Array) => ({ bytes, contentType: "image/png", width: 1024, height: 1536 }) };
+  const isPng = (bytes: Uint8Array) => bytes[0] === 0x89 && bytes[1] === 0x50;
+  return { ...actual, validateRaster: async (bytes: Uint8Array) => (isPng(bytes)
+    ? { bytes, contentType: "image/png", width: 1024, height: 1536 } : actual.validateRaster(bytes)) };
 });
 
 beforeEach(async () => {
@@ -121,6 +123,19 @@ describe("core: internal accounts write on Haiku and make free images (#449, #46
     await expect(settleInVirtualTime(asUser(INTERNAL, () => generateImage(image)))).rejects.toThrow("Free test images are busy");
     expect(Date.now() - clock.startedAt).toBeLessThanOrEqual(92_000);
     expect(calls.every((call) => call === "image.pollinations.ai/prompt")).toBe(true);
+  });
+
+  it.each([
+    ["stays busy past the cap", () => PAYMENT_REQUIRED(), "IMAGE_FREE_BUSY"],
+    ["is down", () => new Response("Bad gateway", { status: 502 }), "IMAGE_HTTP_502"],
+    ["answers 200 with a message instead of a picture", () => Response.json({ error: "Free limit reached" }), "IMAGE_INVALID"],
+  ])("records why an internal image failed when Pollinations %s (#451)", async (_case, answer, code) => {
+    network({ pollinations: answer });
+    const { generateImage } = await import("@/lib/imageGen");
+    useVirtualDeadlines();
+    const attempts: { status: string; errorCode?: string }[] = [];
+    await expect(settleInVirtualTime(asUser(INTERNAL, () => generateImage({ ...image, onAttempt: (entry) => attempts.push(entry) })))).rejects.toThrow();
+    expect(attempts.map(({ status, errorCode }) => [status, errorCode])).toEqual([["error", code]]);
   });
 
   it("fails an internal image at once when Pollinations is down, never trying the paid model", async () => {

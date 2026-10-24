@@ -363,6 +363,11 @@ where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - in
 group by 1, 2 order by failures desc;
 ```
 
+A failed image attempt's usage row and `ai.completion` event carry a short reason in
+`errorCode`: `IMAGE_HTTP_<status>`, `IMAGE_FREE_BUSY` (an internal account's Pollinations stayed
+busy past ~90 s), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,
+`IMAGE_TIMEOUT`, `IMAGE_PROVIDER` or `IMAGE_OTHER` (#451).
+
 Create's assistant also logs each provider attempt the router gave up on as
 `ai.completion` failed with `errorCode` `LLM_HTTP_429`, `LLM_TIMEOUT` and so on,
 even when a fallback then answers. When none answers, a `creative.interview`

@@ -77,6 +77,18 @@ async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): P
   }
 }
 
+/** A short, fixed reason for a failed image attempt, for usage rows and events (#451). */
+export function imageFailureCode(error: unknown): string {
+  if (error instanceof FreeImageBusyError) return "IMAGE_FREE_BUSY";
+  if (error instanceof SafeFetchError) return error.code === "status" ? `IMAGE_HTTP_${error.status ?? "unknown"}` : `IMAGE_FETCH_${error.code.toUpperCase()}`;
+  if (error instanceof ImageProviderError) return "IMAGE_PROVIDER";
+  if (error instanceof Error && error.name === "TimeoutError") return "IMAGE_TIMEOUT";
+  if (error instanceof Error && error.name === "AbortError") return "IMAGE_ABORTED";
+  // validateRaster and readBoundedResponse: the body was not a usable picture.
+  if (error instanceof Error && /image|png|jpeg|webp|raster|dimension/i.test(error.message)) return "IMAGE_INVALID";
+  return "IMAGE_OTHER";
+}
+
 /** Generate a single image with the configured provider. */
 export async function generateImage(
   req: ImageRequest,
@@ -97,7 +109,7 @@ export async function generateImage(
       estimatedCostUsd: generated.estimatedCostUsd, status: "success" });
     return generated;
   } catch (error) {
-    req.onAttempt?.({ provider: provider.name, model: provider.name, status: "error",
+    req.onAttempt?.({ provider: provider.name, model: provider.name, status: "error", errorCode: imageFailureCode(error),
       providerRequestId: error instanceof ImageProviderError ? error.providerRequestId : undefined,
       providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
     req.signal?.throwIfAborted();
@@ -105,7 +117,7 @@ export async function generateImage(
     const fallback = getFallbackProvider();
     if (!fallback || fallback.name === provider.name) throw error;
     const generated = await executeImage(fallback, req).catch((fallbackError: unknown) => {
-      req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error",
+      req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
         providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
         providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });
       throw fallbackError;

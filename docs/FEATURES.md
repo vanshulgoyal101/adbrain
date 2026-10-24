@@ -358,8 +358,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - Background audience plan (#366): in Choose settings, 1.5 s after the ads are
   chosen (and the audience still needs AdBrain), the audience is planned in the
   background, at most three times per composer. Prepare uses that reply once if
-  the goal, ads, targeting and destination are unchanged and it succeeded;
-  otherwise Prepare plans as before. The reply stays in the browser until used.
+  the Campaign goal field, ads, targeting and destination are unchanged and it
+  succeeded (a name or budget typed later doesn't count); otherwise Prepare stops
+  the stale request quietly and plans as before. The reply stays in the browser.
 - Up to five interest names and a nonempty rationale can be saved. Meta resolves
   IDs and eligibility; unresolved interests block creation.
 - Missing geography does not silently broaden to nationwide. Nationwide must be
