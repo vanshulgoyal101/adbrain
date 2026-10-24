@@ -94,6 +94,21 @@ describe("persistent quota accounting", () => {
     }));
   });
 
+  it("puts a rejected attempt's rule names on its ai.completion event (#378)", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    await persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "creatives.assistant", provider: "groq",
+      model: "qwen/qwen3.8-27b", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 }, requestId: "request",
+      status: "error", errorCode: "INTERVIEW_VALIDATION", metadata: { validationRules: ["unsupported-commercial-claim", "repeated-question"] },
+    }]);
+    expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({
+      name: "ai.completion", outcome: "failed",
+      attributes: expect.objectContaining({ errorCode: "INTERVIEW_VALIDATION", validationRules: ["unsupported-commercial-claim", "repeated-question"] }),
+    }));
+  });
+
   it("bounds best-effort ledger writes without failing the completed operation", async () => {
     const timeout = vi.spyOn(AbortSignal, "timeout");
     adminFrom.mockReturnValue({ insert });

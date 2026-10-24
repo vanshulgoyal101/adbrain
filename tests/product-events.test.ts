@@ -30,6 +30,13 @@ describe("product event privacy contract", () => {
     expect(sanitizeProductEvent({ ...event, ...overrides })).toBeNull();
   });
 
+  it("keeps the names of failed validation rules, never their text (#378)", () => {
+    const rules = ["unsupported-commercial-claim", "schema:visual.*:too_big", "repeated-question"];
+    expect(sanitizeProductEvent({ ...event, attributes: { ...event.attributes, validationRules: rules } })?.attributes.validationRules).toEqual(rules);
+    expect(sanitizeProductEvent({ ...event, attributes: { ...event.attributes, validationRules: ["unsupported-commercial-claim: ₹10,000; remove it"] } })).toBeNull();
+    expect(sanitizeProductEvent({ ...event, attributes: { ...event.attributes, validationRules: Array.from({ length: 13 }, (_, i) => `rule-${i}`) } })).toBeNull();
+  });
+
   it("classifies HTTP outcomes without reading response bodies", () => {
     expect(requestOutcome(200)).toBe("success");
     expect(requestOutcome(303)).toBe("success");
