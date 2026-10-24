@@ -125,11 +125,13 @@ describe("core: Create makes Hindi and Hinglish ads (#290)", () => {
     }
   });
 
-  it("saves the rest, rejecting only uncited claims in a concept's rationale", async () => {
-    for (const [language, goal] of [["hi", "vague"], ["hinglish", "vague"], ["hinglish", "factory"]] as const) {
+  // #281: "98%" and "10%" in a rationale are cited with the one Brand fact that states them;
+  // only a "guarantee" that no fact states is still rejected.
+  it("saves the rest, rejecting only a claim no Brand fact states", async () => {
+    for (const [language, goal, count] of [["hi", "vague", 3], ["hinglish", "vague", 2], ["hinglish", "factory", 3]] as const) {
       const { saved, failed } = await create(language, goal);
-      expect(saved, `${language} ${goal}`).toHaveLength(2);
-      expect(failed, `${language} ${goal}`).toEqual([["unsupported-commercial-claim"]]);
+      expect(saved, `${language} ${goal}`).toHaveLength(count);
+      expect(failed, `${language} ${goal}`).toEqual(count === 3 ? [] : [["unsupported-commercial-claim"]]);
       for (const ad of saved) {
         if (language === "hi") expect(ad.primaryText).toMatch(DEVANAGARI);
         else expect(`${ad.headline} ${ad.primaryText}`).not.toMatch(DEVANAGARI);
