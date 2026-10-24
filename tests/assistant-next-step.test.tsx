@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdAssistant } from "@/components/ad-assistant";
 import type { Business, Creative } from "@/lib/types";
 
-const setCreativeStatus = vi.hoisted(() => vi.fn());
-vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus }));
+const { setCreativeStatus, updateCreativeCopy } = vi.hoisted(() => ({ setCreativeStatus: vi.fn(), updateCreativeCopy: vi.fn() }));
+vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus, updateCreativeCopy }));
 
 const business = { id: "biz-1", name: "Cedar Ridge Chiro" } as Business;
 const key = `adbrain:assistant:${business.id}`;
@@ -24,6 +24,7 @@ describe("<AdAssistant> next step after Create", () => {
   beforeEach(() => {
     sessionStorage.clear();
     setCreativeStatus.mockReset();
+    updateCreativeCopy.mockReset();
     Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, value: vi.fn() });
   });
   afterEach(() => {
@@ -44,6 +45,35 @@ describe("<AdAssistant> next step after Create", () => {
     render(<AdAssistant business={business} />);
     expect(await screen.findByRole("button", { name: "Selected" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Use this ad" })).toHaveLength(2);
+  });
+
+  it("edits an ad's text in place and keeps the edit after leaving and returning (#280)", async () => {
+    updateCreativeCopy.mockResolvedValue({
+      ok: true,
+      warnings: ["\"20%\" isn't in your Brand. Check it's true, or add it to your Brand's offers."],
+      creative: { headline: "20% off your first visit", primary_text: "Book a visit.", cta: "Book Now", generation: { concept: { description: "Austin chiropractic" } } },
+    });
+    doneDraft([{ ...ad("ad-1"), status: "approved", cta: "Book Now" } as Creative]);
+    const user = userEvent.setup();
+    const first = render(<AdAssistant business={business} />);
+    await user.click(await screen.findByRole("button", { name: "Edit text" }));
+    await user.clear(screen.getByLabelText("Headline"));
+    await user.type(screen.getByLabelText("Headline"), "20% off your first visit");
+    await user.type(screen.getByLabelText("Description"), "Austin chiropractic");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateCreativeCopy).toHaveBeenCalledWith("ad-1", {
+      headline: "20% off your first visit", primary_text: "Book a visit.", description: "Austin chiropractic", cta: "Book Now",
+    });
+    expect(await screen.findByText(/"20%" isn't in your Brand/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "20% off your first visit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Selected" })).toBeInTheDocument();
+    expect(setCreativeStatus).not.toHaveBeenCalled();
+    await waitFor(() => expect(JSON.parse(sessionStorage.getItem(key)!).turns[1].creatives[0].headline).toBe("20% off your first visit"));
+    first.unmount();
+
+    render(<AdAssistant business={business} />);
+    expect(await screen.findByRole("heading", { name: "20% off your first visit" })).toBeInTheDocument();
+    expect(screen.getByText("Austin chiropractic")).toBeInTheDocument();
   });
 
   it("rolls the selection back when saving fails", async () => {

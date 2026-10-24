@@ -17,6 +17,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
+import { CopyEditNotice, CreativeCopyEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -203,6 +204,13 @@ export function AdAssistant({ business }: { business: Business }) {
   function setResultStatus(id: string, status: "draft" | "approved") {
     setTurns((t) => t.map((turn) => turn.role === "result"
       ? { ...turn, creatives: turn.creatives.map((c) => (c.id === id ? { ...c, status } : c)) }
+      : turn));
+  }
+
+  function setResultCopy(edited: Creative) {
+    const { headline, primary_text, cta, generation } = edited;
+    setTurns((t) => t.map((turn) => turn.role === "result"
+      ? { ...turn, creatives: turn.creatives.map((c) => (c.id === edited.id ? { ...c, headline, primary_text, cta, generation } : c)) }
       : turn));
   }
 
@@ -530,6 +538,7 @@ export function AdAssistant({ business }: { business: Business }) {
               setCustom={setCustom}
               onAnswer={answer}
               onStatus={setResultStatus}
+              onEdited={setResultCopy}
             />
           ))}
 
@@ -618,6 +627,7 @@ function TurnView({
   setCustom,
   onAnswer,
   onStatus,
+  onEdited,
 }: {
   turn: Turn;
   active: boolean;
@@ -626,6 +636,7 @@ function TurnView({
   setCustom: (v: string) => void;
   onAnswer: (q: Question, text: string, displayText?: string) => void;
   onStatus: (id: string, status: "draft" | "approved") => void;
+  onEdited: (creative: Creative) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   if (turn.role === "user") {
@@ -658,13 +669,13 @@ function TurnView({
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           {turn.creatives.map((c) => (
-            <ResultCard key={c.id} creative={c} onStatus={(status) => onStatus(c.id, status)} />
+            <ResultCard key={c.id} creative={c} onStatus={(status) => onStatus(c.id, status)} onEdited={onEdited} />
           ))}
         </div>
         <p className="text-xs text-slate-500">
           Tap <span className="font-medium">Use this ad</span> on the ones you like — that
-          approves them for launch. Use <span className="font-medium">Edit</span> to tweak or
-          regenerate in the Creative Studio.
+          approves them for launch. Use <span className="font-medium">Edit text</span> to change the
+          words; regenerate or delete in Review.
         </p>
       </div>
     );
@@ -755,8 +766,21 @@ function TurnView({
   );
 }
 
-function ResultCard({ creative, onStatus }: { creative: Creative; onStatus?: (status: "draft" | "approved") => void }) {
+function ResultCard({
+  creative: given,
+  onStatus,
+  onEdited,
+}: {
+  creative: Creative;
+  onStatus?: (status: "draft" | "approved") => void;
+  onEdited?: (creative: Creative) => void;
+}) {
   const [errored, setErrored] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
+  // Live cards aren't in turns yet, so their saved words are kept here too.
+  const [savedCopy, setSavedCopy] = useState<Pick<Creative, "headline" | "primary_text" | "cta" | "generation"> | null>(null);
+  const creative = savedCopy ? { ...given, ...savedCopy } : given;
   // Live cards are not in turns yet, so they keep their own state.
   const [localApproved, setLocalApproved] = useState(creative.status === "approved");
   const approved = onStatus ? creative.status === "approved" : localApproved;
@@ -815,6 +839,20 @@ function ResultCard({ creative, onStatus }: { creative: Creative; onStatus?: (st
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
+        {editing ? (
+          <CreativeCopyEditor
+            creative={creative}
+            onCancel={() => setEditing(false)}
+            onSaved={(next, notes) => {
+              const { headline, primary_text, cta, generation } = next;
+              setSavedCopy({ headline, primary_text, cta, generation });
+              onEdited?.(next);
+              setEditNotes(notes);
+              setEditing(false);
+            }}
+          />
+        ) : (
+        <>
         <h3 className="text-sm font-semibold text-slate-900">{creative.headline}</h3>
         <p className="line-clamp-4 whitespace-pre-line text-xs text-slate-600">
           {creative.primary_text}
@@ -829,6 +867,7 @@ function ResultCard({ creative, onStatus }: { creative: Creative; onStatus?: (st
             {creative.cta}
           </span>
         )}
+        {editNotes && <CopyEditNotice notes={editNotes} />}
         <div className="mt-auto flex items-center gap-2 pt-2">
           <Button
             size="sm"
@@ -844,14 +883,21 @@ function ResultCard({ creative, onStatus }: { creative: Creative; onStatus?: (st
             ) : null}
             {approved ? "Selected" : "Use this ad"}
           </Button>
-          <Link
-            href="/studio"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:border-blue-400 hover:text-blue-700"
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditNotes(null);
+              setEditing(true);
+            }}
+            disabled={pending}
           >
-            <Pencil className="h-3.5 w-3.5" /> Edit
-          </Link>
+            <Pencil className="h-3.5 w-3.5" /> Edit text
+          </Button>
         </div>
         {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+        </>
+        )}
       </div>
     </div>
   );
