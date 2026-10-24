@@ -92,6 +92,8 @@ const STATUS_STYLES: Record<string, string> = {
 
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
+/** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
+const PHONE_PICKER_ADS = 6;
 
 function readCampaignSyncTime(key: string): number {
   try { return Number(localStorage.getItem(key)); } catch { return 0; }
@@ -235,6 +237,7 @@ function BusinessCampaigns({
   const [editingAdId, setEditingAdId] = useState<string | null>(null);
   const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
   const pickerAds = approved.map((c) => editedAds[c.id] ?? c);
+  const [showAllAds, setShowAllAds] = useState(false);
   const editingAd = pickerAds.find((c) => c.id === editingAdId) ?? null;
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
@@ -1289,11 +1292,12 @@ function BusinessCampaigns({
               <>
                 <div>
                   <Label>Choose creatives</Label>
-                  <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                    {pickerAds.map((c) => {
+                  <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
+                    {pickerAds.map((c, index) => {
                       const isSel = selected.has(c.id);
                       return (
-                        <div key={c.id} className="flex min-w-0 flex-col gap-1.5">
+                        // #305: on a phone, ads after the first two rows wait behind "Show all" unless selected.
+                        <div key={c.id} className={cn("flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
                         <button
                           type="button"
                           onClick={() => toggle(c.id)}
@@ -1324,7 +1328,7 @@ function BusinessCampaigns({
                               <CheckCircle2 className="h-4 w-4" />
                             </span>
                           )}
-                          <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700">
+                          <p className="truncate px-2 py-1.5 text-xs font-medium text-slate-700 max-sm:hidden">
                             {c.headline}
                           </p>
                         </button>
@@ -1338,7 +1342,7 @@ function BusinessCampaigns({
                             setAdEditNotes(null);
                             setEditingAdId(c.id);
                           }}
-                          className="h-9 w-full"
+                          className="h-8 w-full sm:h-9"
                         >
                           <Pencil className="h-3.5 w-3.5" /> Edit
                         </Button>
@@ -1346,6 +1350,11 @@ function BusinessCampaigns({
                       );
                     })}
                   </div>
+                  {!showAllAds && pickerAds.length > PHONE_PICKER_ADS && (
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 w-full sm:hidden">
+                      Show all {pickerAds.length} ads
+                    </Button>
+                  )}
                   {editingAd && (
                     <section aria-label="Edit ad" className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                       <p className="mb-3 truncate text-sm font-medium text-slate-800">Editing: {editingAd.headline}</p>
