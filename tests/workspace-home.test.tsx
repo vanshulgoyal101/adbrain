@@ -61,6 +61,16 @@ const empty = {
   spend: null,
 };
 
+
+// #403 S5: Settings sections sit in layout columns; each still streams in its own Suspense boundary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function suspenseBoundaries(node: any): any[] {
+  if (!node || typeof node !== "object") return [];
+  if (Array.isArray(node)) return node.flatMap(suspenseBoundaries);
+  if (node.type === Suspense) return [node];
+  return suspenseBoundaries(node.props?.children);
+}
+
 describe("Home workspace", () => {
   it("shows workspace loading while auth is pending and gates the shell on user and business", async () => {
     let resolveAuth!: (value: { id: string; email: string }) => void;
@@ -102,7 +112,7 @@ describe("Home workspace", () => {
     queries.getSpendEvaluation.mockReturnValue(new Promise(resolve => { resolveSpend = resolve; }));
     const { default: SettingsPage } = await import("@/app/(app)/settings/page");
     const page = await SettingsPage({ searchParams: Promise.resolve({}) });
-    const boundaries = page.props.children.filter((child: { type?: unknown }) => child?.type === Suspense);
+    const boundaries = suspenseBoundaries(page);
     const boundary = (name: string) => boundaries.find((child: { props: { children: { type: { name: string } } } }) => child.props.children.type.name === name);
     const connectionBoundary = boundary("ConnectionSettings");
     const spendBoundary = boundary("SpendSettings");
@@ -111,7 +121,7 @@ describe("Home workspace", () => {
     // #235: the WhatsApp status streams in its own boundary.
     expect(boundary("WhatsAppStatusSection")).toBeDefined();
     // #238: preferences and privacy requests load in their own server-rendered boundary.
-    const privacyBoundary = page.props.children.at(-1);
+    const privacyBoundary = boundaries.at(-1);
     expect(privacyBoundary.type).toBe(Suspense);
     expect(privacyBoundary.props.children.type.name).toBe("PreferenceAndPrivacySettings");
     const spendSection = spendBoundary.props.children;
@@ -136,8 +146,8 @@ describe("Home workspace", () => {
     queries.getSpendEvaluation.mockRejectedValue(new Error("Unavailable"));
     const { default: SettingsPage } = await import("@/app/(app)/settings/page");
     const page = await SettingsPage({ searchParams: Promise.resolve({}) });
-    const section = page.props.children.find((child: { type?: unknown; props?: { children?: { type?: { name?: string } } } }) =>
-      child?.type === Suspense && child.props?.children?.type?.name === "SpendSettings").props.children;
+    const section = suspenseBoundaries(page).find((child: { props: { children: { type: { name: string } } } }) =>
+      child.props.children.type.name === "SpendSettings").props.children;
     render(await section.type(section.props));
     expect(screen.getByRole("alert")).toHaveTextContent("Your saved limits have not changed.");
     expect(screen.queryByText("Guardrails loaded")).not.toBeInTheDocument();

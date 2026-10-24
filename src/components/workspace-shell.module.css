@@ -16,13 +16,11 @@
 .account > div > span:last-child { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #e0e8e9; color: #3e5b5f; display: grid; place-items: center; font-size: 12px; font-weight: 600; }
 .body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.header { min-height: 65px; position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e7eaed; padding: 10px 32px; background: rgba(255,255,255,.97); }
-.breadcrumb { min-width: 0; display: flex; align-items: center; gap: 12px; font-size: 12px; color: #78828c; }
-.breadcrumb > span { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.breadcrumb strong { color: #424a52; font-weight: 500; white-space: nowrap; }
-.breadcrumb svg { flex-shrink: 0; }
-.create { display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-left: auto; min-height: 36px; padding: 8px 12px; border: 1px solid #d9dfe5; background: #fff; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.create:hover { border-color: #9cafd0; background: #f5f8fd; }
+.header { min-height: 65px; position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); padding: 10px 32px; background: rgba(255,255,255,.97); }
+.breadcrumb { display: none; min-width: 0; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.breadcrumb strong { color: var(--foreground); font-weight: 500; white-space: nowrap; }
+.create { display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-left: auto; min-height: 36px; padding: 8px 12px; border: 1px solid var(--border); background: #fff; border-radius: 10px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.create:hover { border-color: var(--primary); background: var(--background); }
 .main { width: 100%; max-width: 1440px; margin: 0 auto; padding: 32px; flex: 1; outline: none; }
 .footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid #eceef0; padding: 18px 32px; font-size: 10px; color: #7d8790; }
 .footer nav { display: flex; gap: 16px; }
@@ -38,7 +36,7 @@
   .sidebar { display: none; }
   .header { padding: 8px 16px; min-height: 60px; }
   .menu { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 40px; border-radius: 6px; }
-  .breadcrumb > span, .breadcrumb > svg { display: none; }
+  .breadcrumb { display: flex; }
   .breadcrumb strong { font-size: 13px; }
   .create { padding-inline: 10px; }
   .main { padding: 24px 20px; }

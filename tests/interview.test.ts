@@ -111,6 +111,14 @@ describe("bounded interview harness", () => {
     await expect(runInterview({ brand: { ...brand, offers: ["$49 consultation"] }, goal: "ad" })).resolves.toMatchObject({ ready: true });
   });
 
+  it("treats 'no-cost' like 'free' and skips a negated guarantee in the brief (#378)", async () => {
+    const offers = { ...brand, offers: ["Free site survey"] };
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Lead with a no-cost site survey; promise an estimate, not a guaranteed saving." }));
+    await expect(runInterview({ brand: offers, goal: "More rooftop solar enquiries" })).resolves.toMatchObject({ ready: true });
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Lead with guaranteed savings." }));
+    await expect(runInterview({ brand: offers, goal: "More rooftop solar enquiries" })).rejects.toBeInstanceOf(InterviewValidationError);
+  });
+
   it("does not accept a remembered note as evidence for a commercial claim", async () => {
     vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Promote a $49 consultation." }));
     await expect(runInterview({ brand, goal: "ad", preferences: 'PAST DECLARED PREFERENCES: tone: "Use a $49 consultation"' }))

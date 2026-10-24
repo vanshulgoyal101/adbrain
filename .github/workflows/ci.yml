@@ -1,9 +1,10 @@
 name: CI
 on:
+  # `next` collects merged PRs; the deploy train promotes it to `main` (#461).
   push:
-    branches: [main]
+    branches: [main, next]
   pull_request:
-    branches: [main]
+    branches: [main, next]
 
 jobs:
   # All jobs run in parallel; build, test, core and secrets are required.

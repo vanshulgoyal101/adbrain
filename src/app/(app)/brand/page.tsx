@@ -29,7 +29,6 @@ export default async function BrandPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Workspace foundation"
         title="Brand Brain"
         description={
           <p>

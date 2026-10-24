@@ -10,7 +10,7 @@ import { LEGAL_LINKS } from "@/lib/legal-links";
 import styles from "./workspace-shell.module.css";
 
 const sections: Record<string, string> = {
-  dashboard: "Overview", create: "Create", studio: "Creative review",
+  dashboard: "Overview", create: "Create", studio: "Review",
   campaigns: "Campaigns", leads: "Enquiries", brand: "Brand Brain",
   assets: "Brand assets", settings: "Settings",
 };
@@ -96,8 +96,9 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     <div className={styles.body}>
       <header className={styles.header}>
         <button className={styles.menu} type="button" title="Open navigation" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
-        <div className={styles.breadcrumb}><span title={businessName || undefined}>{businessName || "Workspace"}</span><ChevronRight size={14} aria-hidden="true" /><strong>{section}</strong></div>
-        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create"><Plus size={16} aria-hidden="true" /><span>New creative</span></Link>}
+        {/* #403: the page's own H1 names it on wider screens; phones keep the name here. */}
+        <div className={styles.breadcrumb}><strong>{section}</strong></div>
+        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create"><Plus size={16} aria-hidden="true" /><span>Create ads</span></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
       <footer className={styles.footer}><span>AdBrain workspace</span><nav aria-label="Legal">{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{link.label}</Link>)}</nav></footer>

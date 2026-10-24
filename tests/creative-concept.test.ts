@@ -323,3 +323,34 @@ describe("offer placement with amounts in words (#418)", () => {
     expect(result).toMatchObject({ success: false, issues: [expect.stringMatching(/^offer-below-fold: "free"/)] });
   });
 });
+
+// #378: the recorded Hindi and Hinglish first replies (solaride-hindi.json) were rejected only for
+// their rationale: "a no-cost first step (free site survey)" and "not a guaranteed saving".
+describe("claims a reader would not take as an offer (#378)", () => {
+  const facts = { ...input, brand: { ...input.brand, offers: ["Free site survey"] } };
+  const rules = async (value: Record<string, unknown>) => {
+    const { conceptValidationRules } = await import("@/lib/creative/concept");
+    const result = validateConcept({ ...concept, sourceQuotes: ["Free site survey"], ...value }, facts);
+    return result.success ? [] : conceptValidationRules(result.issues);
+  };
+
+  it("cites 'no-cost' with the Brand's 'Free site survey', like 'free'", async () => {
+    expect(await rules({ rationale: "Names the bill first, then offers a no-cost first step (free site survey)." })).toEqual([]);
+    expect(await rules({ supportingText: "No-cost site survey" })).toEqual([]);
+    // A survey the Brand offers free is auto-cited; installation it doesn't offer free is not.
+    expect(await rules({ supportingText: "No-cost site survey", sourceQuotes: ["Local installation team"] })).toEqual([]);
+    expect(await rules({ supportingText: "No-cost installation", sourceQuotes: ["Local installation team"] })).toEqual(["unsupported-commercial-claim"]);
+  });
+
+  it("does not count a negated guarantee as a claim, in English or Hindi", async () => {
+    expect(await rules({ rationale: "It promises a survey to estimate the offset, not a guaranteed saving." })).toEqual([]);
+    expect(await rules({ rationale: "There is no guarantee of savings; the survey estimates them." })).toEqual([]);
+    expect(await rules({ rationale: "बचत की गारंटी नहीं, सर्वे से अनुमान मिलेगा।" })).toEqual([]);
+  });
+
+  it("still rejects a guarantee or a free offer that is stated, even next to a negation elsewhere", async () => {
+    expect(await rules({ supportingText: "Guaranteed savings" })).toEqual(["unsupported-commercial-claim"]);
+    expect(await rules({ rationale: "Not just a survey: guaranteed savings." })).toEqual(["unsupported-commercial-claim"]);
+    expect(await rules({ supportingText: "Not just free installation", sourceQuotes: ["Local installation team"] })).toEqual(["unsupported-commercial-claim"]);
+  });
+});

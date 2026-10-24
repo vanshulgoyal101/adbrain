@@ -11,7 +11,7 @@ describe("customer filter (#451)", () => {
 
 describe("npm run stats (#451)", () => {
   it("has the sections the CEO asked for", () => {
-    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "business_days", "failures", "speed", "funnel"]);
+    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "campaign_receipts", "business_days", "failures", "auth", "speed", "funnel"]);
   });
 
   it("gives a receipt for each of the last 20 ads: its own calls, and later changes to it (#451 L1)", () => {
@@ -29,6 +29,13 @@ describe("npm run stats (#451)", () => {
     expect(sql).toMatch(/limit 5$/);
   });
 
+  it("gives a receipt for each of the last 5 campaign launches, Meta calls joined by request (#451 L2)", () => {
+    const sql = sectionSql("campaign_receipts", 7, []);
+    for (const route of ["/api/campaigns/plan", "/api/campaigns/preflight", "/api/campaigns/create", "/api/campaigns/[id]/refresh"]) expect(sql).toContain(`'${route}'`);
+    expect(sql).toContain("e.request_id = cr.request_id and e.name = 'meta.graph'");
+    expect(sql).toContain("from public.campaign_operations o");
+  });
+
   it("filters every event section to customers by default and opts in to everyone", () => {
     for (const { key } of SECTIONS.filter(({ key }) => key !== "funnel")) {
       const sql = sectionSql(key, 7, []);
@@ -37,6 +44,12 @@ describe("npm run stats (#451)", () => {
       expect(sectionSql(key, 7, [], { includeInternal: true }), key).not.toContain("auth.users u where");
       expect(sql, key).not.toMatch(/;\s*\S/);
     }
+  });
+
+  it("counts sign-ins by method and keeps signed-out failures (#451 L4)", () => {
+    const sql = sectionSql("auth", 7, []);
+    expect(sql).toContain("e.name like 'auth.%'");
+    expect(sql).toContain("e.user_id is null or ");
   });
 
   it("rejects a bad window", () => {

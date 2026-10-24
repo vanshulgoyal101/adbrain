@@ -20,9 +20,11 @@ import {
   Sparkles,
   Search,
   Save,
+  MoreHorizontal,
   Trash2,
   X,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -1237,7 +1239,7 @@ function BusinessCampaigns({
             className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-3"
           >
             {[
-              ["Creative", approved.length ? `${approved.length} approved` : "Needs approval", Boolean(approved.length)],
+              ["Ads", approved.length ? `${approved.length} approved` : "Needs approval", Boolean(approved.length)],
               ["Meta connection", connectedForDraft ? "Connected" : "Not connected", connectedForDraft],
               ["Safety", "Created paused", true],
             ].map(([label, value, ready]) => (
@@ -1304,7 +1306,7 @@ function BusinessCampaigns({
             ) : (
               <>
                 <div>
-                  <Label>Choose creatives</Label>
+                  <Label>Choose ads</Label>
                   <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
                     {pickerAds.map((c, index) => {
                       const isSel = selected.has(c.id);
@@ -1315,7 +1317,7 @@ function BusinessCampaigns({
                           type="button"
                           onClick={() => toggle(c.id)}
                           aria-pressed={isSel}
-                          aria-label={c.headline || "Select creative"}
+                          aria-label={c.headline || "Select ad"}
                           className={cn(
                             "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
                             isSel
@@ -1332,7 +1334,7 @@ function BusinessCampaigns({
                             {c.image_url && (
                               <img
                                 src={creativeThumbnailUrl(c.image_url)}
-                                alt={c.headline || "Ad creative preview"}
+                                alt={c.headline || "Ad preview"}
                                 className="h-full w-full object-contain"
                                 loading="lazy"
                                 onError={(event) => {
@@ -1644,11 +1646,10 @@ function BusinessCampaigns({
               const outcome = campaignDestination(c, r);
               const attention = campaignAttention(c);
               return (
-                <Card key={c.id} className="rounded-none border-x-0 border-t-0">
-                  <CardContent className="flex flex-col gap-3 px-0 py-5">
+                <article key={c.id} aria-labelledby={`campaign-${c.id}-name`} className="flex flex-col gap-3 border-b border-slate-200 py-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <h3 className="min-w-0 wrap-break-word font-semibold text-slate-900">
+                        <h3 id={`campaign-${c.id}-name`} className="min-w-0 wrap-break-word font-semibold text-slate-900">
                           {c.name ?? `${business.name} — ${c.objective}`}
                         </h3>
                         <Badge
@@ -1662,39 +1663,15 @@ function BusinessCampaigns({
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
                       </div>
-                      <div className="flex min-w-0 flex-wrap items-center gap-3">
-                        <span className="text-sm text-slate-500">
+                      <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
+                        <span className="basis-full text-sm text-slate-500 sm:basis-auto">
                           {c.daily_budget != null
                             ? formatPerDay(c.daily_budget)
                             : c.objective}
                         </span>
-                        {c.meta_campaign_id && (
-                          <a
-                            href={adsLink(c)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline"
-                          >
-                            Ads Manager <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => refresh(c.id)}
-                          disabled={refreshingId === c.id}
-                        >
-                          {refreshingId === c.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
-                          )}
-                          Refresh results
-                        </Button>
                         {c.meta_campaign_id &&
                           (c.status === "active" || c.status === "paused") && (
                             <Button
-                              size="sm"
                               variant="outline"
                               data-product-event={c.status === "active" ? "campaign.pause" : "campaign.review"}
                               onClick={() =>
@@ -1716,21 +1693,48 @@ function BusinessCampaigns({
                             </Button>
                           )}
                         <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteCampaign(c)}
-                          disabled={deletingId === c.id}
-                          aria-label="Delete campaign"
+                          variant="outline"
+                          onClick={() => refresh(c.id)}
+                          aria-label="Refresh results"
+                          disabled={refreshingId === c.id}
                         >
-                          {deletingId === c.id ? (
+                          {refreshingId === c.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <Trash2 className="h-4 w-4 text-slate-400" />
+                            <RefreshCw className="h-4 w-4" />
                           )}
+                          Refresh<span className="-ml-1 hidden sm:inline">results</span>
                         </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label={`More actions for ${c.name ?? "this campaign"}`}
+                            disabled={deletingId === c.id}
+                            className="inline-flex size-11 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50"
+                          >
+                            {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <MoreHorizontal className="h-5 w-5" aria-hidden="true" />}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            {c.meta_campaign_id && (
+                              <DropdownMenuItem asChild>
+                                <a href={adsLink(c)} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open in Ads Manager
+                                </a>
+                              </DropdownMenuItem>
+                            )}
+                            {c.meta_campaign_id && <DropdownMenuSeparator />}
+                            <DropdownMenuItem variant="danger" onSelect={() => void deleteCampaign(c)}>
+                              <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete campaign
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
+                    {!r && (
+                      <p className="text-sm text-slate-500">
+                        No results yet.{c.meta_campaign_id ? " Refresh results to get Meta's latest numbers." : ""}
+                      </p>
+                    )}
 
                     {r && (
                       <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">
@@ -1800,8 +1804,7 @@ function BusinessCampaigns({
                     {summaries[c.id] && !(r && outcome === "instant_form" && !(r.spend > 0)) && (
                       <p className="text-sm text-slate-600">{summaries[c.id]}</p>
                     )}
-                  </CardContent>
-                </Card>
+                </article>
               );
             })}
           </div>

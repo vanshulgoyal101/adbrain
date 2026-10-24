@@ -230,6 +230,20 @@ const COMMERCIAL_TERMS = new RegExp(
   "giu",
 );
 
+/**
+ * "Not a guaranteed saving", "no guarantee", "गारंटी नहीं": a negated term is not a claim (#378).
+ * Only a negation right next to the term counts, so "not just free installation" is still a claim.
+ */
+export function negatedTerm(text: string, index: number, term: string): boolean {
+  return /\b(?:not|never|no|without)\s+(?:(?:a|an|any)\s+)?$/i.test(text.slice(Math.max(0, index - 24), index))
+    || /^\s*(?:नहीं|ਨਹੀਂ)(?![\p{L}\p{M}])/u.test(text.slice(index + term.length, index + term.length + 12));
+}
+
+/** The commercial terms text states, skipping negated ones. */
+function claimedTerms(text: string): string[] {
+  return [...text.matchAll(COMMERCIAL_TERMS)].filter((match) => !negatedTerm(text, match.index, match[0])).map((match) => match[0]);
+}
+
 /** Whether text states an offer, a price or a percentage: things only a Brand fact may supply (#371). */
 export function statesOffer(text: string): boolean {
   const value = text.normalize("NFC");
@@ -239,7 +253,8 @@ export function statesOffer(text: string): boolean {
 
 // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
 function citesTerm(quote: string, term: string): boolean {
-  if (/^free$/i.test(term) || FREE_WORD.test(term)) return quote.toLowerCase().includes("free") || FREE_WORD.test(quote);
+  // "No-cost" is the same offer as "free" (#378).
+  if (/^(?:free|no[- ]cost)$/i.test(term) || FREE_WORD.test(term)) return /free|no[- ]cost/i.test(quote) || FREE_WORD.test(quote);
   if (GUARANTEE_WORD.test(term)) return quote.toLowerCase().includes("guarantee") || GUARANTEE_WORD.test(quote);
   if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -405,13 +420,14 @@ export function validateConcept(
   // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
   // contains it. None or several matching facts leave it uncited; nothing is invented.
   const facts = [...new Set(sources.map((source) => source.normalize("NFC").trim()).filter(Boolean))];
-  for (const term of new Set(output.match(commercialTerms) ?? [])) {
+  const claimed = claimedTerms(output);
+  for (const term of new Set(claimed)) {
     if (supported(term)) continue;
     const matches = facts.filter((fact) => cites(fact, term));
     const quote = matches.length === 1 && sameOffer(output, term, matches[0]) ? citationFor(matches[0], term) : null;
     if (quote && concept.sourceQuotes.length < 8) concept.sourceQuotes.push(quote);
   }
-  for (const term of output.match(commercialTerms) ?? []) {
+  for (const term of claimed) {
     if (!supported(term)) {
       issues.push(
         `unsupported-commercial-claim: ${term}; remove it or cite a supplied positive fact supporting it`,

@@ -153,7 +153,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    automatically with the one supplied fact that contains it (#281): an amount or percentage
    by its token, and "free", "no-cost" or "guarantee" only when the thing offered (the next
    words) is in that fact too, so "FREE consultation" is not cited by "Free 15-minute spine
-   check". No match or several matches leave it uncited and rejected.
+   check". No match or several matches leave it uncited and rejected. "No-cost" counts as
+   "free", and a negated term ("not a guaranteed saving", "no guarantee", "गारंटी नहीं") is not a
+   claim; "not just free installation" still is (#378). The interview's claim check follows
+   the same two rules.
    A first line over 125 characters (`hook-length`) or an offer (price, %, free)
    that starts after character 125 (`offer-below-fold`) is repaired once like any
    other validation failure. An amount in words leading the first line ("10,000

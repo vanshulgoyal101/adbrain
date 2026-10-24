@@ -5,7 +5,7 @@ import { observeAction } from "@/lib/observability/logger";
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
-import { validateBrandFields } from "@/lib/brand/validation";
+import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -61,6 +61,8 @@ export async function saveBusiness(
     if (issues.length) {
       return { ok: false, error: issues.map((i) => i.message).join(" ") };
     }
+    // Stored as a full link, so Prepare and Meta can use it as typed (#470).
+    payload.website = normalizeWebsite(payload.website);
 
     const query = id
       ? supabase.from("businesses").update(payload).eq("id", id).select("id").single()

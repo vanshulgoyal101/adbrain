@@ -14,8 +14,10 @@ export const SECTIONS = [
   { key: "create_runs", title: "Create runs (one generate request = one run)" },
   { key: "ad_receipts", title: "Last 20 ads: what each cost (its Create call plus later changes to it)" },
   { key: "run_receipts", title: "Last 5 Create runs: what each cost, failed ads included" },
+  { key: "campaign_receipts", title: "Last 5 campaign launches: plan, prepare, create (its Meta calls), first sync" },
   { key: "business_days", title: "AI cost per business per day (top 10)" },
   { key: "failures", title: "Failures by step (AI calls, server errors, workflows)" },
+  { key: "auth", title: "Sign-ins and sign-ups by method, and why sign-ins failed" },
   { key: "speed", title: "Speed of the busiest routes (successful requests, ms)" },
   { key: "funnel", title: "Sign-up funnel (reached each step)" },
 ];
@@ -76,6 +78,34 @@ select to_char(r.started, 'MM-DD HH24:MI') as started, left(r.business_id::text,
   r.calls::int as ai_calls, r.failed::int as failed, r.retries::int as retries, r.tokens::int as tokens, round(r.usd, 4) as usd,
   round(r.seconds::numeric, 1) as seconds, r.models
 from runs r order by r.started desc limit 5`;
+    // #451 L2: a launch is its campaign_operations row. Plan and prepare are that business's
+    // requests in the day before it; the create request is the first one after it, and its Meta
+    // calls share that request_id (meta.graph events); sync is the first refresh after it.
+    case "campaign_receipts":
+      return `with ev as (${events}), ops as (
+  select o.id, o.business_id, o.created_at, o.state from public.campaign_operations o join public.businesses b on b.id = o.business_id
+  where o.${since} and ${includeInternal ? "true" : customerFilterSql("b.owner_id", "b.id", emails)}
+  order by o.created_at desc limit 5
+)
+select to_char(o.created_at, 'MM-DD HH24:MI') as launched, left(o.business_id::text, 8) as business, o.state,
+  plan.n as plans, plan.ms as plan_ms, prep.n as prepares, prep.ms as prepare_ms,
+  cr.attributes->>'status' as create_status, cr.duration_ms as create_ms,
+  g.calls as meta_calls, g.failed as meta_failed, g.ms as meta_ms, g.errors as meta_errors,
+  to_char(sync.at, 'MM-DD HH24:MI') as first_sync
+from ops o
+left join lateral (select count(*)::int as n, max(duration_ms) as ms from ev e where e.business_id = o.business_id and e.name = 'http.request'
+  and e.attributes->>'route' = '/api/campaigns/plan' and e.created_at between o.created_at - interval '1 day' and o.created_at) plan on true
+left join lateral (select count(*)::int as n, max(duration_ms) as ms from ev e where e.business_id = o.business_id and e.name = 'http.request'
+  and e.attributes->>'route' = '/api/campaigns/preflight' and e.created_at between o.created_at - interval '1 day' and o.created_at) prep on true
+left join lateral (select e.request_id, e.attributes, e.duration_ms from ev e where e.business_id = o.business_id and e.name = 'http.request'
+  and e.attributes->>'route' = '/api/campaigns/create' and e.created_at between o.created_at and o.created_at + interval '10 minutes'
+  order by e.created_at limit 1) cr on true
+left join lateral (select count(*)::int as calls, count(*) filter (where e.outcome <> 'success')::int as failed,
+  sum(e.duration_ms)::int as ms, string_agg(distinct e.attributes->>'errorCode', ', ') as errors
+  from ev e where e.request_id = cr.request_id and e.name = 'meta.graph') g on true
+left join lateral (select min(e.created_at) as at from ev e where e.business_id = o.business_id and e.name = 'http.request'
+  and e.attributes->>'route' in ('/api/campaigns/[id]/refresh', '/api/campaigns/sync') and e.outcome = 'success' and e.created_at > o.created_at) sync on true
+order by o.created_at desc`;
     case "business_days":
       return `with ai as (${ai})
 select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, left(business_id::text, 8) as business,
@@ -92,6 +122,13 @@ select step, detail, count(*)::int as count, to_char(max(created_at), 'MM-DD HH2
   select 'workflow ' || name, coalesce(attributes->>'errorCode', 'failed'), created_at
     from ev where kind in ('workflow', 'action', 'system') and outcome = 'failed' and name <> 'ai.completion'
 ) f group by 1, 2 order by count desc limit 15`;
+    // #451 L4: failed sign-ins are often signed out, so rows without a user are kept.
+    case "auth":
+      return `select name as step, outcome, coalesce(attributes->>'errorCode', '-') as detail, count(*)::int as count,
+  to_char(max(created_at), 'MM-DD HH24:MI') as last
+from public.product_events e where e.${since} and e.name like 'auth.%'
+  and (e.user_id is null or ${customers("e")})
+group by 1, 2, 3 order by count desc limit 15`;
     case "speed":
       return `with ev as (${events})
 select attributes->>'route' as route, count(*)::int as n,

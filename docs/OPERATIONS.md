@@ -41,6 +41,7 @@ Inspect durable evidence before retrying anything that can create objects or spe
 | Open Campaigns or Leads, or press Sync/Refresh | Each page auto-syncs from Meta when this browser's last sync is over 15 minutes old and saves campaigns/leads; Refresh also runs spend enforcement and can pause campaigns |
 | Call a cron URL or `gh workflow run scheduled-jobs.yml` | Keepalive prunes old product events; enforce-spend can pause campaigns; sync-leads imports leads. All are GET (see [Scheduled Jobs](#scheduled-jobs)) |
 | `npm run smoke:core` | Signs in to production, views pages and prepares one campaign review without sending it, then deletes that draft |
+| `npm run ui-gate` | UI gate (#417): screenshots, axe violations, LCP and CLS for the homepage, sign-in and six owner screens at 390 and 1440 px, read-only with the smoke account. `--origin http://localhost:3000` for an after run, `--compare <before dir>` fails if anything got worse. Output goes to the ignored `.superpowers/ui-gate/` |
 | `npm run worker:campaigns -- --once` | Claims and executes one queued job; can create paused Meta objects |
 | Local QA `setup`, seed, backfill or migration scripts | Write their target database and possibly Auth/Storage; inspect guards and target first |
 

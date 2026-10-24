@@ -6,10 +6,11 @@ import { AdAssistant } from "@/components/ad-assistant";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { Stepper } from "@/components/ui/stepper";
 import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = {
-  title: "Create marketing",
+  title: "Create ads",
   description:
     "Start with your customer goal and create campaign images and copy for review.",
 };
@@ -20,15 +21,15 @@ export default async function CreatePage() {
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Create marketing</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Create ads</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain first — the assistant uses it to make
-              marketing that reflects your business.
+              Set up your Brand Brain first: the assistant uses it to make
+              ads that reflect your business.
             </p>
             <Link href="/brand">
               <Button>Go to Brand Brain</Button>
@@ -52,10 +53,10 @@ export default async function CreatePage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Create"
-        title="Create marketing"
-        description="Who do you want to reach? Start with your customer goal, then create images and copy to review before building a campaign."
+        title="Create ads"
+        description="Who do you want to reach? Start with your customer goal; you review every ad before a campaign."
       />
+      <Stepper current="Create" className="mt-4" />
       <div className="mt-7 grid gap-8 border-t border-slate-200 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
         <AdAssistant business={business} opening={openingLine(evidence)} />
         <aside aria-label="Saved brand context" className="min-w-0 border-t border-slate-200 pt-6 lg:sticky lg:top-24 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">

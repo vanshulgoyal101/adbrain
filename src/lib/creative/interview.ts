@@ -5,6 +5,7 @@ import { AD_LANGUAGES } from "@/lib/languages";
 import { formatPromptContext } from "@/lib/preferences/context";
 import { AD_ANGLES, brandIndustry, type BrandContext } from "@/lib/templates/ads";
 import { spelledCurrency } from "./currency";
+import { negatedTerm } from "./concept";
 import { isNonAnswer, isWriteYourOwnOption } from "./interview-options";
 
 /**
@@ -183,9 +184,13 @@ function commercialClaimIssues(result: InterviewResult, input: InterviewInput): 
     ...(input.brand.offers ?? []),
     ...(input.brand.usps ?? []),
   ];
-  const terms = output.match(/(?<![\p{L}-])free\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d[\d,.]*/giu) ?? [];
+  const terms = [...output.matchAll(/(?<![\p{L}-])free\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d[\d,.]*/giu)]
+    .filter((match) => !negatedTerm(output, match.index, match[0])).map((match) => match[0]);
+  // "No-cost" is the same offer as "free" (#378).
+  const free = (term: string) => /^(?:free|no[- ]cost)$/i.test(term);
   return [...new Set(terms)].filter((term) => !sources.some((source) =>
-    (source.toLowerCase().includes(term.toLowerCase()) || spelledCurrency(term, source)) && !/\b(no|not|never|without|avoid)\b/i.test(source),
+    (source.toLowerCase().includes(term.toLowerCase()) || (free(term) && /free|no[- ]cost/i.test(source)) || spelledCurrency(term, source))
+      && !/\b(no|not|never|without|avoid)\b/i.test(source),
   )).map((term) => `Unsupported commercial term: ${term}. Omit it; do not convert a creative suggestion into a business fact.`);
 }
 

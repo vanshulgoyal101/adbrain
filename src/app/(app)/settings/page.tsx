@@ -80,24 +80,30 @@ export default async function SettingsPage({
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    // #403 S5: one column up to xl; from xl, connections and money left, limits and preferences right.
+    <div className="max-w-2xl space-y-6 xl:max-w-6xl">
       <PageHeader
-        eyebrow="Workspace controls"
         title="Settings"
         description="Manage publishing connections and the safety limits that protect your advertising budget."
       />
-      <Suspense fallback={<SettingsLoading label="Meta connection" />}>
-        <ConnectionSettings businessId={business.id} searchParams={searchParams} />
-      </Suspense>
-      <Suspense fallback={<SettingsLoading label="WhatsApp chat ads" />}>
-        <WhatsAppStatusSection businessId={business.id} />
-      </Suspense>
-      <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
-        <SpendSettings businessId={business.id} />
-      </Suspense>
-      <Suspense fallback={<SettingsLoading label="Preferences" />}>
-        <PreferenceAndPrivacySettings businessId={business.id} />
-      </Suspense>
+      <div className="space-y-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-6 xl:space-y-0">
+        <div className="min-w-0 space-y-6">
+          <Suspense fallback={<SettingsLoading label="Meta connection" />}>
+            <ConnectionSettings businessId={business.id} searchParams={searchParams} />
+          </Suspense>
+          <Suspense fallback={<SettingsLoading label="WhatsApp chat ads" />}>
+            <WhatsAppStatusSection businessId={business.id} />
+          </Suspense>
+        </div>
+        <div className="min-w-0 space-y-6">
+          <Suspense fallback={<SettingsLoading label="Spend guardrails" />}>
+            <SpendSettings businessId={business.id} />
+          </Suspense>
+          <Suspense fallback={<SettingsLoading label="Preferences" />}>
+            <PreferenceAndPrivacySettings businessId={business.id} />
+          </Suspense>
+        </div>
+      </div>
     </div>
   );
 }

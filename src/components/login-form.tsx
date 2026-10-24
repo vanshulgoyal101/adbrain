@@ -2,19 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Mail, MailCheck } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import { safeAuthRedirect } from "@/lib/auth-redirect";
+import { openAfterSignIn, safeAuthRedirect } from "@/lib/auth-redirect";
 import { rememberReturningVisitor } from "@/lib/login-visitor";
+import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
+import { authCode } from "@/lib/observability/auth-events";
 
-const primaryClass = "bg-[#dcf77a] font-bold text-[#18211f] shadow-none hover:bg-[#c9ed53] focus-visible:outline-[#216849]";
+const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs hover:bg-primary-hover";
 
 /** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
 export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const redirect = safeAuthRedirect(searchParams.get("redirect"));
   const authError = searchParams.get("error");
 
@@ -59,7 +60,11 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
         email,
         options: { emailRedirectTo: callbackUrl() },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        reportAuthOutcome({ method: "email_link", outcome: "failed", code: authCode(error) });
+        throw new Error(error.message);
+      }
+      reportAuthOutcome({ method: "email_link", outcome: "started" });
       remember();
       setStatus("sent");
     } catch (error) {
@@ -80,7 +85,10 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
         provider: "google",
         options: { redirectTo: callbackUrl() },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        reportAuthOutcome({ method: "google", outcome: "failed", code: authCode(error) });
+        throw new Error(error.message);
+      }
       remember();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in with Google. Please try again.");
@@ -97,13 +105,15 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw new Error(error.message);
+      if (error) {
+        reportAuthOutcome({ method: "password", outcome: "failed", code: authCode(error) });
+        throw new Error(error.message);
+      }
+      reportAuthOutcome({ method: "password", outcome: "success" });
       remember();
-      router.replace(redirect);
-      router.refresh();
+      openAfterSignIn(redirect);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
-    } finally {
       setPending(null);
     }
   }
@@ -111,8 +121,8 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
   if (status === "sent") {
     return (
       <div className="flex flex-col gap-6">
-        <div role="status" className="border-l-2 border-[#216849] pl-4">
-          <MailCheck size={24} aria-hidden="true" className="mb-3 text-[#216849]" />
+        <div role="status" className="border-l-2 border-primary pl-4">
+          <MailCheck size={24} aria-hidden="true" className="mb-3 text-primary" />
           <h2 className="text-lg font-semibold text-slate-900">Check your email</h2>
           <p className="mt-2 break-words text-sm leading-6 text-slate-600">
             We sent a sign-in link to <span className="font-medium text-slate-900">{email}</span>. Open it on this device to {newVisitor ? "finish creating your account" : "sign in"}.

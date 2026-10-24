@@ -1,6 +1,7 @@
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { SelectedAssets } from "@/lib/meta/connect-contracts";
+import { normalizeWebsite } from "@/lib/brand/validation";
 
 export interface PreflightCreative {
   id: string;
@@ -89,12 +90,10 @@ function blocker(code: ReviewBlocker["code"], message: string, action: ReviewBlo
 }
 
 function isAdvertiserWebsite(website: string | null): boolean {
-  let url: URL;
-  try {
-    url = new URL(website ?? "");
-  } catch {
-    return false;
-  }
+  // Brands saved before #470 may hold a bare domain.
+  const normalized = normalizeWebsite(website);
+  if (!normalized) return false;
+  const url = new URL(normalized);
   const host = url.hostname.toLowerCase().replace(/^www\./, "");
   return (url.protocol === "https:" || url.protocol === "http:") &&
     !["facebook.com", "fb.com", "fb.me", "instagram.com", "m.me", "wa.me"].some((blocked) => host === blocked || host.endsWith(`.${blocked}`));

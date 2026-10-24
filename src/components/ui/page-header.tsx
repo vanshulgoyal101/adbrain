@@ -2,14 +2,14 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
-  eyebrow,
   title,
   description,
   actions,
   className,
   titleInTopBarOnPhone = false,
 }: {
-  eyebrow: string;
+  /** @deprecated #403: no eyebrow labels; kept so call sites compile until S3 removes them. */
+  eyebrow?: string;
   /** The phone top bar already names the page; keep the h1 for screen readers only there. */
   titleInTopBarOnPhone?: boolean;
   title: string;
@@ -25,10 +25,7 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <p className={cn("text-xs font-medium tracking-normal text-slate-500", titleInTopBarOnPhone && "max-sm:hidden")}>
-          {eyebrow}
-        </p>
-        <h1 className={cn("mt-1 font-display text-2xl font-semibold tracking-normal text-slate-950", titleInTopBarOnPhone && "max-sm:sr-only")}>
+        <h1 className={cn("font-display text-2xl font-semibold tracking-[-0.01em] text-slate-950", titleInTopBarOnPhone && "max-sm:sr-only")}>
           {title}
         </h1>
         {description && (
