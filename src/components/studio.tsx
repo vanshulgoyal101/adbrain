@@ -32,6 +32,7 @@ import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { ShareCreativeButton } from "@/components/share-creative-button";
+import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { z } from "zod";
 
 z.config({ jitless: true });
@@ -649,9 +650,11 @@ function CreativeCard({
   const [editNotes, setEditNotes] = useState<CopyEditNotes | null>(null);
   // The owner's unsaved words, shown in the card as they type (#387).
   const [draft, setDraft] = useState<AdText | null>(null);
+  const [picturePreview, setPicturePreview] = useState<PicturePreview | null>(null);
   const saved = savedAdText(creative);
   const shown = editing && draft ? draft : saved;
-  const unsaved = editing && draft !== null && !sameAdText(draft, saved);
+  const livePicture = editing ? picturePreview : null;
+  const unsaved = (editing && draft !== null && !sameAdText(draft, saved)) || livePicture !== null;
   const [regenError, setRegenError] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [erroredUrl, setErroredUrl] = useState<string | null>(null);
@@ -762,6 +765,11 @@ function CreativeCard({
             </span>
           </div>
         )}
+{livePicture && (
+          <div className="absolute inset-0 bg-slate-100">
+            <LivePicture preview={livePicture} />
+          </div>
+        )}
         {regenerating && (
           <div className="absolute inset-0 flex items-center justify-center bg-white/60">
             <Spinner className="h-6 w-6 text-blue-600" />
@@ -806,6 +814,7 @@ function CreativeCard({
               creative={creative}
               brand={business}
               onDraft={setDraft}
+              onPicturePreview={setPicturePreview}
               onCancel={() => setEditing(false)}
               onSaved={(next, notes) => {
                 onChange(next);

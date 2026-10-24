@@ -20,6 +20,7 @@ import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { AdLanguagePicker } from "@/components/ad-language-picker";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { ShareCreativeButton } from "@/components/share-creative-button";
+import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -849,9 +850,11 @@ function ResultCard({
   const creative = savedCopy ? { ...given, ...savedCopy } : given;
   // The owner's unsaved words, shown in the card as they type (#387).
   const [draft, setDraft] = useState<AdText | null>(null);
+  const [picturePreview, setPicturePreview] = useState<PicturePreview | null>(null);
   const saved = savedAdText(creative);
   const shown = editing && draft ? draft : saved;
-  const unsaved = editing && draft !== null && !sameAdText(draft, saved);
+  const livePicture = editing ? picturePreview : null;
+  const unsaved = (editing && draft !== null && !sameAdText(draft, saved)) || livePicture !== null;
   // Live cards are not in turns yet, so they keep their own state.
   const [localApproved, setLocalApproved] = useState(creative.status === "approved");
   const approved = onStatus ? creative.status === "approved" : localApproved;
@@ -898,6 +901,11 @@ function ResultCard({
         ) : (
           <div className="h-full w-full animate-pulse bg-slate-200" />
         )}
+        {livePicture && (
+          <div className="absolute inset-0 bg-slate-100">
+            <LivePicture preview={livePicture} />
+          </div>
+        )}
       </div>
       {/* #367: chips sit under the picture; its top edge is the brand's logo and name. */}
       {(creative.angle || approved) && (
@@ -932,6 +940,7 @@ function ResultCard({
               creative={creative}
               brand={brand}
               onDraft={setDraft}
+              onPicturePreview={setPicturePreview}
               onCancel={() => setEditing(false)}
               onSaved={(next, notes) => {
                 const { headline, primary_text, cta, generation, image_url } = next;

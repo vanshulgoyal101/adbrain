@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Studio } from "@/components/studio";
 import type { Business, Creative } from "@/lib/types";
 
@@ -653,6 +653,57 @@ describe("<Studio> live text preview while editing (#387)", () => {
     await waitFor(() => expect(screen.queryByRole("form", { name: "Edit ad text" })).toBeNull());
     expect(screen.getAllByText("Solar in 7 days").length).toBeGreaterThan(0);
     expect(screen.queryByText("Preview · unsaved changes")).toBeNull();
+  });
+});
+
+describe("<Studio> live picture preview while editing (#387)", () => {
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 360 });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 360 });
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+    Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+  });
+
+  it("draws new words on the picture at once, then swaps in the server render, and saves nothing", async () => {
+    const user = userEvent.setup();
+    const photo = "https://cdn.example/creatives/b1/g1/offer-photo.png";
+    global.fetch = vi.fn().mockResolvedValue(okJson({ previewUrl: "data:image/webp;base64,UklGRg==" })) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative({ generation: { photoUrl: photo } as never })]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Words on picture" }));
+    await user.clear(screen.getByLabelText("Headline on picture"));
+    await user.type(screen.getByLabelText("Headline on picture"), "Diwali offer");
+
+    const live = screen.getByRole("img", { name: "Preview of the edited picture" });
+    expect(live).toHaveTextContent("Diwali offer");
+    expect(live.querySelector(`img[src="${photo}"]`)).not.toBeNull();
+    expect(screen.getByText("Preview · unsaved changes")).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("img", { name: "Preview of the edited picture" })).toHaveAttribute("src", "data:image/webp;base64,UklGRg=="), { timeout: 3000 });
+    const previews = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.filter(([url]) => url === "/api/creatives/c1/picture");
+    expect(previews.length).toBeGreaterThan(0);
+    for (const [, init] of previews) expect(JSON.parse(String(init.body))).toMatchObject({ preview: true });
+    expect(JSON.parse(String(previews.at(-1)![1].body))).toMatchObject({ headline: "Diwali offer" });
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("img", { name: "Preview of the edited picture" })).toBeNull();
+    expect(screen.queryByText("Preview · unsaved changes")).toBeNull();
+  });
+
+  it("shows a picked Brand photo behind the same words at once", async () => {
+    const user = userEvent.setup();
+    h.photos = ["https://cdn.example/brand-assets/b1/roof.jpg"];
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Background" }));
+    await user.click(await screen.findByRole("button", { name: "Your photo 1" }));
+    const live = screen.getByRole("img", { name: "Preview of the edited picture" });
+    expect(live.querySelector('img[src="https://cdn.example/brand-assets/b1/roof.jpg"]')).not.toBeNull();
+    expect(live).toHaveTextContent("Cut your power bill");
+    await user.click(screen.getByRole("button", { name: "Your photo 1" }));
+    expect(screen.queryByRole("img", { name: "Preview of the edited picture" })).toBeNull();
   });
 });
 
