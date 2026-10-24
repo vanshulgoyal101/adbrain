@@ -25,6 +25,8 @@ const queries = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/queries", () => queries);
 vi.mock("@/lib/llm/persist", () => ({ businessLLMUsageSummary: queries.businessLLMUsageSummary }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.test" }) }));
+const operator = vi.hoisted(() => ({ allowed: true }));
+vi.mock("@/lib/privacy-requests", () => ({ privacyOperatorAllowed: async () => operator.allowed }));
 vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));
 vi.mock("@/components/campaigns", () => ({ Campaigns: () => <div>Campaigns loaded</div> }));
 vi.mock("@/components/meta-connection", () => ({ MetaConnectionPanel: () => <div>Connection loaded</div> }));
@@ -158,7 +160,7 @@ describe("Home workspace", () => {
     expect(screen.getByText("Campaigns loaded")).toBeInTheDocument();
   });
 
-  it("loads Studio without waiting for the concurrent demo usage report", async () => {
+  it("loads Studio without waiting for the operator's concurrent usage report", async () => {
     queries.getPrimaryBusiness.mockResolvedValue(business);
     queries.getUser.mockResolvedValue({ email: "demo@example.test" });
     let resolveUsage!: (value: object) => void;
@@ -178,10 +180,24 @@ describe("Home workspace", () => {
     expect(boundary.type).toBe(Suspense);
     expect(boundary.props.fallback).toBeNull();
     const report = boundary.props.children;
-    expect(report.props.usage).toBe(usage);
     resolveUsage({});
     render(await report.type(report.props));
     expect(screen.getByText("Usage loaded")).toBeInTheDocument();
+  });
+
+  it("never starts the usage report for an owner who isn't an operator (#403)", async () => {
+    operator.allowed = false;
+    try {
+      queries.getPrimaryBusiness.mockResolvedValue(business);
+      queries.getUser.mockResolvedValue({ email: "owner@example.test" });
+      queries.getCreatives.mockResolvedValue([]);
+      const { default: StudioPage } = await import("@/app/(app)/studio/page");
+      const content = (await StudioPage({ searchParams: Promise.resolve({}) })).props.children[1];
+      expect(content.props.children[1]).toBeFalsy();
+      expect(queries.businessLLMUsageSummary).not.toHaveBeenCalled();
+    } finally {
+      operator.allowed = true;
+    }
   });
 
   it("shows a first-run action without fabricated metrics", () => {

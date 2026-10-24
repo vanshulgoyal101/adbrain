@@ -7,13 +7,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getCreatives, getPrimaryBusiness } from "@/lib/supabase/queries";
 import { getUser } from "@/lib/supabase/queries";
 import { businessLLMUsageSummary } from "@/lib/llm/persist";
-import { getEnv } from "@/lib/env";
+import { privacyOperatorAllowed } from "@/lib/privacy-requests";
 import { clientCreative } from "@/lib/creative/client-receipt";
 
 export const metadata = { title: "Creative Studio" };
 
-async function StudioUsage({ usage }: { usage: ReturnType<typeof businessLLMUsageSummary> }) {
-  return <DemoLlmUsage usage={await usage} />;
+async function StudioUsage({ usage }: { usage: Promise<Awaited<ReturnType<typeof businessLLMUsageSummary>> | null> }) {
+  const summary = await usage;
+  return summary ? <DemoLlmUsage usage={summary} /> : null;
 }
 
 export default async function StudioPage({
@@ -48,13 +49,16 @@ export default async function StudioPage({
     );
   }
 
-  const showDemoUsage =
-    user?.email?.toLowerCase() === getEnv().DEMO_USER_EMAIL.toLowerCase();
-  const usage = showDemoUsage ? businessLLMUsageSummary(business.id) : null;
-  const [creatives, params] = await Promise.all([
+  // #403: cost, tokens and model names are operator information, not owner information.
+  // Checked alongside the creatives; the usage report starts as soon as it's known and streams in.
+  const operatorCheck = user ? privacyOperatorAllowed().catch(() => false) : Promise.resolve(false);
+  const usageReport = operatorCheck.then((allowed) => (allowed ? businessLLMUsageSummary(business.id) : null));
+  const [creatives, params, operator] = await Promise.all([
     getCreatives(business.id),
     searchParams,
+    operatorCheck,
   ]);
+  const usage = operator ? usageReport : null;
   const filter = params.creative
     ? "all"
     : params.status === "draft" || params.status === "approved"
@@ -76,6 +80,7 @@ export default async function StudioPage({
           initialCreatives={creatives.map(clientCreative)}
           initialFilter={filter}
           initialCreativeId={params.creative ?? null}
+          showInternals={operator}
         />
         {usage && <Suspense fallback={null}><StudioUsage usage={usage} /></Suspense>}
       </div>

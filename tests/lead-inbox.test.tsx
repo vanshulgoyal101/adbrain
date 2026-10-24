@@ -105,7 +105,6 @@ describe("<LeadInbox> table", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Contact availability" }), { target: { value: "missing" } });
     expect(screen.queryByText("Asha Verma")).toBeNull();
     expect(await screen.findByText("Ravi Shah")).toBeInTheDocument();
-    expect(screen.getByText("Matching responses").nextSibling).toHaveTextContent("1");
     expect(screen.getByRole("status")).toHaveTextContent("1 of 1 enquiries");
   });
 
@@ -116,21 +115,18 @@ describe("<LeadInbox> table", () => {
     expect(container.querySelector("details")).toHaveAttribute("open");
   });
 
-  it("summarises responses, contactability, and represented areas", () => {
-    render(
-      <LeadInbox
-        businessName="Solaride"
-        initialLeads={[
-          lead(),
-          lead({ id: "l2", meta_lead_id: "m2", phone: null, email: null }),
-          lead({ id: "l3", meta_lead_id: "m3", city: "Ajmer" }),
-        ]}
-        metaReady
-      />,
-    );
-    expect(screen.getByText("Total responses").nextSibling).toHaveTextContent("3");
-    expect(screen.getByText("Loaded with contact").nextSibling).toHaveTextContent("2");
-    expect(screen.getByText("Loaded areas").nextSibling).toHaveTextContent("2");
+  it("shows Meta's test lead as a test, not as placeholder text (#403)", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>", city: "<test lead: dummy data for city>", phone: "<test lead: dummy data for phone_number>", email: null })]} metaReady />);
+    expect(screen.getByText("Test enquiry from Meta")).toBeInTheDocument();
+    expect(screen.queryByText(/dummy data/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Follow up Test enquiry from Meta" })).toBeInTheDocument();
+  });
+
+  it("has no internal 'Loaded …' stats (#403)", () => {
+    render(<LeadInbox businessName="Solaride" initialLeads={[lead(), lead({ id: "l2", meta_lead_id: "m2" })]} metaReady />);
+    expect(screen.queryByText("Loaded with contact")).toBeNull();
+    expect(screen.queryByText("Loaded areas")).toBeNull();
+    expect(screen.queryByText("Total responses")).toBeNull();
   });
 
   it("lists each lead's contact details", () => {
@@ -151,7 +147,6 @@ describe("<LeadInbox> table", () => {
 
   it("makes an email-only enquiry actionable", () => {
     render(<LeadInbox businessName="Form Studio" initialLeads={[lead({ phone: null })]} metaReady />);
-    expect(screen.getByText("Loaded with contact").nextSibling).toHaveTextContent("1");
     expect(screen.getByRole("link", { name: "asha@example.com" })).toHaveAttribute("href", "mailto:asha@example.com");
     expect(screen.getByRole("columnheader", { name: "Contact" })).toBeInTheDocument();
   });

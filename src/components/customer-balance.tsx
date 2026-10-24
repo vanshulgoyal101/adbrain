@@ -46,7 +46,7 @@ export function CustomerBalance({ businessId, initialBalance = null }: { busines
           ["Service allocation", balance.serviceAllocationPaise], ["Advertising allocation, including tax", balance.advertisingAllocationPaise],
           ["Attributed media costs", balance.mediaCostPaise], ["Attributed Meta tax", balance.taxCostPaise],
           ["Reserved for campaigns and pending costs", balance.reservedPaise], ["Available for a new reservation", balance.remainingPaise],
-        ] as const).map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
+        ] as const).filter(([label, amount]) => amount !== 0 || label === "Available for a new reservation").map(([label, amount]) => <div key={label} className="min-w-0"><dt className="text-slate-500">{label}</dt><dd className="font-medium tabular-nums text-slate-900">{money(amount)}</dd></div>)}
       </dl>
     </>}
   </section>;

@@ -9,10 +9,6 @@
 .editorActions span { color: #5e6b72; font-size: 12px; }
 .followUpButton { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: #166c64; text-transform: capitalize; }
 .inbox :is(button, a, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid #e2e6e8; padding: 20px 0; }
-.metric { padding: 0 20px; border-right: 1px solid #e2e6e8; }
-.metric:first-child { padding-left: 0; }
-.metric:last-child { border: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; }
 .filters { display: contents; }
 .filterToggle { display: none; }
@@ -43,7 +39,6 @@
 .digest summary::after { content: "+"; font-size: 20px; font-weight: 400; }
 .digest[open] summary::after { content: "-"; }
 @media (max-width: 900px) {
-  .metric { padding: 0 12px; }
   .table, .table tbody { display: block; }
   .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 18px; padding: 18px 0; border-bottom: 1px solid #e2e6e8; }
