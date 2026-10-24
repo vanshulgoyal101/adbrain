@@ -1288,6 +1288,22 @@ export class MetaClient {
   }
 
   /**
+   * Sets the ad account's spending limit (#522, managed child accounts) and reads it back. Meta takes
+   * the limit in rupees and reports it in paise; 0 would mean no limit, so it is refused, and no
+   * `spend_cap_action` (reset or delete) is ever sent.
+   */
+  async setAccountSpendCap(capPaise: number): Promise<AccountFunding> {
+    if (!Number.isSafeInteger(capPaise) || capPaise <= 0) throw new MetaError("Invalid ad account spending limit.");
+    const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(this.creds.adAccountId), {
+      method: "POST", form: { spend_cap: (capPaise / 100).toFixed(2) },
+    });
+    if (updated.success !== true) throw new MetaError("Ad account spending limit is unconfirmed. Keep its campaigns paused.");
+    const funding = await this.readAccountFunding();
+    if (funding.spendCapPaise !== capPaise) throw new MetaError("Ad account spending limit changed. Keep its campaigns paused.");
+    return funding;
+  }
+
+  /**
    * Read-only: true only when Meta reads the campaign back PAUSED and every ad set and ad as
    * PAUSED, either set directly or inherited from a paused campaign or ad set (#221).
    */

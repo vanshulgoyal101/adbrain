@@ -224,6 +224,16 @@ guards to enable production or reinterpret existing test captures as real money.
   It has no allowance, reservation, cost evidence or refund; the sweep and Refresh
   skip the allowance hold, and the weekly cap still applies. Clearing the mark
   restores the customer gate and the sweep pauses its active runs.
+- Managed child ad accounts (#522, 2-Tier, behind `MANAGED_ACCOUNTS_ENABLED`): each
+  customer's child account also gets a Meta ad account spending limit
+  (`src/lib/managed/spend-cap.ts`). Its media allowance is the customer's ad share net of
+  advertising refunds, divided by 1 + GST and rounded down, minus media attributed on their other
+  accounts. Because a new Meta limit only applies to spend after it is set, the limit is Meta's
+  live `amount_spent` plus the allowance not yet spent (lifetime spend is the larger of Meta's
+  figure and AdBrain's). It is raised after a payment, lowered after a refund, never below what
+  Meta has spent, frozen at that amount while the balance is held, and never written as 0 (Meta's
+  "no limit"): with nothing spent and no room the account is blocked from activation instead.
+  Meta takes the limit in rupees and reports it in paise; the write is read back.
 - Paused-run settle (#221): a paused or finished funded run no longer blocks
   the next run until an operator acts. The `enforce-spend` sweep also visits
   businesses with a paused reservation. It first confirms on Meta that the
