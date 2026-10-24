@@ -12,6 +12,9 @@ export function buildCampaignPreflightLoaders(
   supabase: CampaignSupabase,
   authorizedBusiness: AuthorizedBusiness,
 ): PreflightLoaders {
+  // #366: one connection read per preflight; four loaders used to read it separately.
+  let connectionStatus: ReturnType<typeof getConnectionStatus> | undefined;
+  const status = () => (connectionStatus ??= getConnectionStatus(authorizedBusiness));
   return {
     findDraft: async (actor, draftId) => {
       const { data } = await supabase
@@ -41,7 +44,7 @@ export function buildCampaignPreflightLoaders(
       }));
     },
     findForm: async (businessId, formId) => {
-      const connection = await getConnectionStatus(authorizedBusiness);
+      const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
       const form = await withMetaConnection(
         authorizedBusiness,
@@ -51,7 +54,7 @@ export function buildCampaignPreflightLoaders(
       return form ? { id: form.id, businessId, active: true } : null;
     },
     findWhatsAppNumber: async (_actor, requested) => {
-      const connection = await getConnectionStatus(authorizedBusiness);
+      const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
       try {
         return await withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => meta.getWhatsAppNumber(requested));
@@ -64,7 +67,7 @@ export function buildCampaignPreflightLoaders(
       return data?.website ?? null;
     },
     getConnection: async () => {
-      const connection = await getConnectionStatus(authorizedBusiness);
+      const connection = await status();
       return {
         generation: connection.generation,
         selected: connection.selected,
@@ -83,7 +86,7 @@ export function buildCampaignPreflightLoaders(
         .maybeSingle();
       const names = location?.includedNames?.length ? location.includedNames : business?.locations ?? [];
       if (!names.length && !location?.included?.length) return { resolvedAreaLabel: null, unresolvedNames: [], explicitlyNationwide: false };
-      const connection = await getConnectionStatus(authorizedBusiness);
+      const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") {
         return { resolvedAreaLabel: null, unresolvedNames: names, explicitlyNationwide: false };
       }
