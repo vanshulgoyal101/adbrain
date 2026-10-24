@@ -60,7 +60,9 @@ Routine steps never wait for the CEO or the CTO.
    per problem; do not bury new failures in long comment threads.
 7. **The CEO** (coordinator chat) sets priority and the milestone, approves budgets
    and money, handles the owner's steps (Meta, Razorpay, browser sign-in) and
-   maintains this file except the worker table.
+   maintains this file except the worker table. **The CEO delegates, not builds**
+   (owner, Oct 24): an owner request becomes an issue with done-criteria, labelled
+   for its owner (`owner:cto` to slot, or a worker directly), and tracked to done.
 8. **The CTO** turns priorities into work: owns the worker table under "Now",
    assigns and briefs issues, keeps labels honest, closes or parks stale issues,
    watches CI and production health, reviews high-impact diffs and publishes
