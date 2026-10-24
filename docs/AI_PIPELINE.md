@@ -134,7 +134,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    Headline and primary text are never clipped, and every claim check still runs.
    In `visual.direction`, layout notes such as "55% of the frame height", "45%
    opacity" and "free of detail" are not read as offers (#202); a price, "20% off"
-   or "FREE" shown in the visual still needs a supporting fact.
+   or "FREE" shown in the visual still needs a supporting fact. A cited "₹10,000"
+   is supported by a quote saying "10,000 rupees" or "Rs 10000", the same match
+   the interview uses (#284, #281).
    A first line over 125 characters (`hook-length`) or an offer (price, %, free)
    that starts after character 125 (`offer-below-fold`) is repaired once like any
    other validation failure.
