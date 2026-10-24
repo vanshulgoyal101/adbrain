@@ -77,6 +77,31 @@ describe("persistent quota accounting", () => {
     })]);
   });
 
+  it("links a later change's AI calls to the ad they changed (#451)", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    await persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "creatives.regenerate", provider: "openrouter", model: "haiku",
+      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 }, requestId: "regenerate-request", creativeId: "creative-789",
+    }]);
+    expect(insert).toHaveBeenCalledWith([expect.objectContaining({
+      request_id: "regenerate-request", metadata: expect.objectContaining({ creativeId: "creative-789" }),
+    })]);
+  });
+
+  it("estimates Claude Haiku 5.5 at its OpenRouter list price, so receipts aren't 10x high (#451)", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    await persistLLMUsage([{
+      businessId: "owned-business", userId: "owner", route: "creatives.generate", provider: "openrouter", model: "anthropic/claude-haiku-5.5",
+      usage: { promptTokens: 4_000, completionTokens: 1_000, totalTokens: 5_000 }, requestId: "generate-request",
+    }]);
+    // $0.10 and $0.50 per million tokens (openrouter.ai/api/v1/models, Oct 24).
+    expect(insert.mock.calls.at(-1)![0][0].estimated_cost_usd).toBeCloseTo(0.0009, 6);
+  });
+
   it("records the sanitized provider failure class for failed attempts", async () => {
     adminFrom.mockReturnValue({ insert });
     insert.mockReturnValue({ abortSignal });

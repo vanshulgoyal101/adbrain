@@ -168,7 +168,12 @@ the sink does not remove existing rows or runtime log copies.
 real customers only by default): AI calls, tokens and estimated USD by model; Create runs
 (cost, tokens, AI calls, retries and AI seconds per run, cost per saved ad); AI cost per
 business per day; failures by step (AI calls with their provider reason, 5xx routes, failed
-workflows); p50/p90 of the busiest routes; and the sign-up funnel. Page-load timing in a
+workflows); p50/p90 of the busiest routes; and the sign-up funnel. Receipts (#451 L1): the
+last 20 ads, each with its AI calls, failures, retries, tokens, USD, AI seconds and models (its
+own angle in the Create run that made it, from `creatives.generation.requestId`/`angleId`, plus
+every later regenerate or background change, from `llm_usage_events.metadata.creativeId`; ads
+made before Oct 24 show none), and the last 5 Create runs with failed ads included and wall
+seconds from the first call's start to the last call's end. Page-load timing in a
 real browser: `node scripts/perf-pages.mjs [--runs 5] [--pages /dashboard,/campaigns,/brand]`
 (TTFB, DOMContentLoaded and load p50/p90; read-only, signed in as the smoke account).
 
