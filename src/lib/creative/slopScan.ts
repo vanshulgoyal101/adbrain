@@ -31,6 +31,17 @@ export interface SlopScanOptions {
   maxWords?: number;
   /** Substrings a customer's instructions forbid, e.g. "discount", "guarantee". */
   bannedClaims?: string[];
+  /** Words the business itself writes in capitals (see `capitalWords`); repeating them isn't shouting. */
+  allowedCaps?: string[];
+}
+
+function bareWord(word: string): string {
+  return word.normalize("NFC").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+/** Every word written fully in capitals with at least two capital letters: "SOLARIDE", "PM", "IIT". */
+export function capitalWords(text: string): string[] {
+  return [...new Set(text.split(/[\s/-]+/).map(bareWord).filter((w) => w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w)))];
 }
 
 /** Return every quality problem found in `text`. Empty array = clean. */
@@ -49,8 +60,14 @@ export function scanAdCopy(text: string, opts: SlopScanOptions = {}): SlopFindin
   const bangs = (text.match(/!/g) ?? []).length;
   if (bangs > 2) findings.push({ rule: "exclamation-spam", detail: String(bangs) });
 
-  // Shouting needs letters: "$49," or "2026" equal their uppercase but are not caps.
-  const caps = words.filter((w) => w.length > 3 && w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w)).length;
+  // Shouting needs letters: "$49," or "2026" equal their uppercase but are not caps. Acronyms joined by
+  // "/" or "-" ("IIT/PEC", "नॉन-DCR") are short words, and capitals the business writes itself
+  // ("SOLARIDE") are its own spelling, not shouting (#418).
+  const allowedCaps = new Set(opts.allowedCaps ?? []);
+  const caps = words
+    .flatMap((w) => w.split(/[/-]/))
+    .filter((w) => w.length > 3 && w === w.toUpperCase() && /\p{Lu}.*\p{Lu}/u.test(w) && !allowedCaps.has(bareWord(w)))
+    .length;
   if (caps > 1) findings.push({ rule: "all-caps", detail: `${caps} words` });
 
   if (opts.maxWords && words.length > opts.maxWords) {

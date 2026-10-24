@@ -138,4 +138,15 @@ describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
       }
     }
   });
+
+  // #418: the eval saved this goal 1 of 3. The recorded first replies were rejected for "SOLARIDE" (the
+  // Brand's own spelling) and "IIT/PEC" as shouting, and for "free" below the fold although the
+  // first line already leads with "10,000 rupaye per kW", which the ₹ pattern did not see.
+  it("saves the Hinglish factory ad 3/3 on the first try: the Brand's capitals and a spelled ₹ amount", async () => {
+    const { saved, failed } = await create("hinglish", "factory");
+    expect(failed).toEqual([]);
+    expect(saved.map((ad) => ad.llmUsage.length)).toEqual([1, 1, 1]);
+    expect(saved.map((ad) => ad.headline)).toContain("31 Dec ke baad factory solar mehenga");
+    expect(saved.some((ad) => /SOLARIDE ke IIT\/PEC engineers/.test(ad.primaryText))).toBe(true);
+  });
 });

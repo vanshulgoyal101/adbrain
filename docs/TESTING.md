@@ -94,6 +94,8 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
   in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad
   language; the Hindi factory ad saves 3/3 with Hindi post text and Latin words on the image.
+  The Hinglish factory ad saves 3/3 on the first try (#418): the Brand's own "SOLARIDE", "IIT/PEC"
+  and a first line leading with "10,000 rupaye per kW" no longer fail `all-caps` or `offer-below-fold`.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.

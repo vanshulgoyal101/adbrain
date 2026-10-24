@@ -307,3 +307,19 @@ describe("creative concept contract", () => {
       .toEqual(["unsupported-commercial-claim"]);
   });
 });
+
+describe("offer placement with amounts in words (#418)", () => {
+  const facts = { ...input, brand: { ...input.brand, offers: ["Free site survey"] }, sourceFacts: ["Cost rises by 10,000 rupees per kW after 31 December"] };
+  const withText = (primary_text: string) => validateConcept({ ...concept, primary_text, sourceQuotes: ["Free site survey"] }, facts);
+  const later = "\nOur local installation team checks your roof first, and we explain every step of the plan to you.\nBook a free site survey today.";
+
+  it("accepts a first line that leads with an amount in words, like the same amount in ₹", () => {
+    expect(withText(`Costs rise by 10,000 rupees per kW after 31 December.${later}`)).toMatchObject({ success: true });
+    expect(withText(`Costs rise by ₹10,000 per kW after 31 December.${later}`)).toMatchObject({ success: true });
+  });
+
+  it("still rejects an offer below the fold when nothing in the first line states it", () => {
+    const result = withText(`Rooftop solar for factories in Mohali, Hisar and nearby, planned by our local installation team.${later}`);
+    expect(result).toMatchObject({ success: false, issues: [expect.stringMatching(/^offer-below-fold: "free"/)] });
+  });
+});
