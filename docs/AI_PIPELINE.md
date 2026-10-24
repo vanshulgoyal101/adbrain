@@ -347,7 +347,7 @@ request rather than reading a stored artifact.
 
 ## Reliability Budget
 
-Owned by the CTO (#378). Measured from `product_events` (`ai.completion`, `creative.batch`) over the last 3 days, real traffic and QA alike (models don't know who calls them):
+Owned by the CTO (#378). Models are re-reviewed every 21 days (#388): [model-review-reminder.yml](../.github/workflows/model-review-reminder.yml) opens a `Model review due` issue for the CTO 21 days after the last one. Measured from `product_events` (`ai.completion`, `creative.batch`) over the last 3 days, real traffic and QA alike (models don't know who calls them):
 
 | Measure | Budget |
 | --- | --- |
