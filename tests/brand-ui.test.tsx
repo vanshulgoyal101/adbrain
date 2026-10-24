@@ -78,6 +78,15 @@ describe("<BrandForm> prefill", () => {
     expect(container.querySelector('[name="logo_url"]')).toHaveValue("");
   });
 
+  it("shows the full link ads will use for a website saved or typed as a bare domain (#470)", () => {
+    const { container } = render(<BrandForm business={business({ website: "vanshul.com" })} />);
+    expect(screen.getByRole("link", { name: "https://vanshul.com" })).toHaveAttribute("href", "https://vanshul.com");
+    fireEvent.change(container.querySelector('[name="website"]')!, { target: { value: "www.solaride.in/solar" } });
+    expect(screen.getByRole("link", { name: "https://www.solaride.in/solar" })).toHaveAttribute("rel", "noopener noreferrer");
+    fireEvent.change(container.querySelector('[name="website"]')!, { target: { value: "not a site" } });
+    expect(screen.queryByText(/Ads link to/)).toBeNull();
+  });
+
   it("does not overwrite an explicit unsaved logo edit on refresh", () => {
     const { container, rerender } = render(<BrandForm business={business()} />);
     fireEvent.change(container.querySelector('[name="logo_url"]')!, { target: { value: "https://example.com/manual.png" } });

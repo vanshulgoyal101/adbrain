@@ -49,6 +49,18 @@ describe("core: launch preflight", () => {
     expect(review("https://cedarridgechiro.com").canCreatePaused).toBe(true);
   });
 
+  // #470: Brand Brain stored "vanshul.com" as typed, and Prepare said no website was set.
+  it.each(["vanshul.com", "www.cedarridgechiro.com", "cedarridgechiro.com/new-patients"])(
+    "allows the launch when the Brand's website was saved as a bare domain: %j", (website) => {
+      const result = review(website);
+      expect(result.blockers).toEqual([]);
+      expect(result.canCreatePaused).toBe(true);
+    });
+
+  it("still blocks a bare Facebook or WhatsApp address", () => {
+    for (const website of ["facebook.com/cedarridge", "wa.me/919876543210"]) expect(review(website).canCreatePaused, website).toBe(false);
+  });
+
   it("does not require a website for WhatsApp campaigns", () => {
     expect(review(null, "whatsapp").canCreatePaused).toBe(true);
   });

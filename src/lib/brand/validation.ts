@@ -33,15 +33,22 @@ export function isValidPhone(raw: string): boolean {
 }
 
 /**
- * Websites may be typed bare ("solaride.in") — `hostFromUrl` prepends the
- * scheme — so accept a domain as well as a full URL.
+ * The website as a full link: owners type it bare ("solaride.in", "www.solaride.in/solar"), Meta
+ * and the preflight need "https://…" (#470). Null for empty input, garbage and non-web schemes.
  */
+export function normalizeWebsite(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value || /\s/.test(value)) return null;
+  if (/^https?:\/\//i.test(value)) return isValidHttpUrl(value) ? value : null;
+  // "javascript:", "mailto:" or "ftp://" are not websites; "vanshul.com:8080" is a port.
+  if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(value)) return null;
+  const url = `https://${value}`;
+  return isValidHttpUrl(url) && /\.[a-z]{2,}$/i.test(new URL(url).hostname) ? url : null;
+}
+
+/** A domain as well as a full URL is a valid website; it is stored normalised. */
 export function isValidWebsite(raw: string): boolean {
-  const value = raw.trim();
-  if (!value) return false;
-  if (/^https?:\/\//i.test(value)) return isValidHttpUrl(value);
-  if (/\s/.test(value)) return false;
-  return isValidHttpUrl(`https://${value}`) && /\.[a-z]{2,}/i.test(value);
+  return normalizeWebsite(raw) !== null;
 }
 
 export interface FieldIssue {
