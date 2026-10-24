@@ -6,6 +6,7 @@
  *   npm run ui-gate -- --out .superpowers/ui-gate/before                    # production baseline
  *   npm run ui-gate -- --origin http://localhost:3000 --out .superpowers/ui-gate/after
  *   npm run ui-gate -- --compare .superpowers/ui-gate/before --out .superpowers/ui-gate/after
+ *   npm run ui-gate -- --public-only ...   # no sign-in: public pages only (CI has no database)
  *
  * --compare exits 1 if any page has more axe violations, LCP worse by over 20% and 250 ms, or CLS
  * worse by over 0.05 than the baseline (the #416 rule: after must be at least as good as before).
@@ -24,12 +25,13 @@ const { values: args } = parseArgs({
     out: { type: "string", default: ".superpowers/ui-gate/run" },
     compare: { type: "string" },
     "compare-only": { type: "boolean", default: false },
+    "public-only": { type: "boolean", default: false },
   },
 });
 const origin = new URL(args.origin).origin;
 assert.ok(origin === "https://adbrain.vanshul.com" || new URL(origin).hostname === "localhost", "The gate runs against production or localhost only.");
 
-const PUBLIC_PAGES = [["home", "/"], ["login", "/login"]];
+const PUBLIC_PAGES = [["home", "/"], ["login", "/login"], ["ideas", "/ideas"], ["idea", "/ideas/rooftop-solar"]];
 const OWNER_PAGES = [["dashboard", "/dashboard"], ["brand", "/brand"], ["create", "/create"], ["review", "/studio"], ["campaigns", "/campaigns"], ["enquiries", "/leads"]];
 const VIEWPORTS = [[390, 844], [1440, 900]];
 
@@ -98,7 +100,7 @@ async function run() {
   const browser = await chromium.launch();
   const report = { origin, ranAt: new Date().toISOString(), pages: {} };
   try {
-    const login = await credentials();
+    const login = args["public-only"] ? null : await credentials();
     for (const [width, height] of VIEWPORTS) {
       const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, serviceWorkers: "block", ...(width < 500 ? { isMobile: true, hasTouch: true } : {}) });
       context.setDefaultTimeout(30_000);
@@ -110,6 +112,7 @@ async function run() {
         report.pages[`${name}@${width}`] = await measure(page, path, join(args.out, `${name}-${width}.png`));
         await page.close();
       }
+      if (!login) { await context.close(); continue; }
       const auth = await context.newPage();
       await signIn(auth, login);
       await auth.close();
