@@ -94,7 +94,8 @@ export function CreateProgress({ ads, renderReady }: {
 
   return (
     <section aria-label="Ads being created" className="flex min-w-0 flex-col gap-3">
-      <div className="sticky top-0 z-10 flex flex-col gap-2 bg-white pb-2">
+      {/* Below the workspace top bar (60–65 px) when the page scrolls; inside the history box on desktop (#344). */}
+      <div className="sticky top-[68px] z-10 flex flex-col gap-2 bg-white pb-2 lg:top-0">
         <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
           <span className="font-medium text-slate-900">Creating {ads.length} ads</span>
           <span className="tabular-nums text-slate-500">
