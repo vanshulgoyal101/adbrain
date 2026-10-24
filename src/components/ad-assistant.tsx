@@ -303,7 +303,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
       try {
         const recovered = await recoverPersistedGeneration(generationId);
         if (!recovered) {
-          setError("No saved ads found yet. Check again shortly or open Creative Studio. No new generation was started.");
+          setError("No saved ads found yet. Check again shortly or open Review. No new ads were started.");
           setPhase("chat");
         }
       } finally {
@@ -343,7 +343,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
         if (status >= 500 || status === 408) {
           const recovered = await recoverPersistedGeneration(newGenerationId);
           if (recovered) return;
-          setError("The generation result is not confirmed. Check again shortly or open Creative Studio. No new generation was started.");
+          setError("We can't confirm your ads were saved yet. Check again shortly or open Review. No new ads were started.");
           setPhase("chat");
           return;
         }
@@ -358,7 +358,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
       if (!data.creatives?.length) {
         const recovered = await recoverPersistedGeneration(newGenerationId);
         if (recovered) return;
-        setError("The generation completed without returning saved creatives. Open Creative Studio to check the result.");
+        setError("Your ads finished, but none came back here. Open Review to see what was saved.");
         setPhase("chat");
         return;
       }
@@ -367,7 +367,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
     } catch {
       const recovered = await recoverPersistedGeneration(newGenerationId);
       if (!recovered) {
-        setError("Generation is still processing or the server stopped responding. Open Creative Studio shortly; do not retry yet, because completed image work may already be saved.");
+        setError("Your ads are still being made, or the server stopped responding. Open Review shortly; don't try again yet, because finished ads may already be saved.");
         setPhase("chat");
       }
     } finally {
@@ -397,7 +397,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
             setTurns((t) => [...t, { role: "result", creatives: withLiveEdits(data.creatives!) }]);
             setPhase("done");
             if (data.status === "partial") {
-              setError("Some ads finished while the request was reconnecting. Review the saved work in Creative Studio; no duplicate generation was started.");
+              setError("Some ads finished while we reconnected. See them in Review; no duplicate ads were started.");
             }
             return true;
           }
@@ -409,7 +409,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
           }
           if (data.status === "unresolved") {
             setPhase("chat");
-            setError("No ads were saved. This generation is held for review. Check Creative Studio later; do not start another paid attempt yet.");
+            setError("No ads were saved yet; this attempt is held for a check. Look in Review later, and don't start another one yet.");
             return true;
           }
         }
@@ -553,20 +553,6 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
               </div>
             </div>
           </div>
-          <ol aria-label="Creation stages" className="mt-8 grid grid-cols-3 border-t border-slate-200 text-xs">
-            {[
-              ["1", "Brief"],
-              ["2", "Create"],
-              ["3", "Review"],
-            ].map(([number, label]) => (
-              <li key={number} aria-current={number === "1" ? "step" : undefined} className="flex items-center gap-2 py-4">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-semibold text-blue-700 ring-1 ring-slate-200">
-                  {number}
-                </span>
-                <span className="text-slate-600">{label}</span>
-              </li>
-            ))}
-          </ol>
         </div>
       </section>
     );
@@ -664,7 +650,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
             )}
             <Link href="/studio">
               <Button variant={selectedIds.length > 0 ? "outline" : "primary"}>
-                Open in Creative Studio <ArrowRight className="h-4 w-4" />
+                Review ads <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
             <Button variant="outline" onClick={() => reset()}>

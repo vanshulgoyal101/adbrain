@@ -106,7 +106,7 @@ describe("<AdAssistant> draft persistence", () => {
       fireEvent.click(screen.getByRole("button", { name: "Generate 3 ads" }));
       await vi.advanceTimersByTimeAsync(30_000);
     });
-    expect(screen.getByText(/generation result is not confirmed/i)).toBeInTheDocument();
+    expect(screen.getByText(/can.t confirm your ads were saved/i)).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Check saved results" }));
       await vi.advanceTimersByTimeAsync(30_000);
@@ -153,7 +153,7 @@ describe("<AdAssistant> draft persistence", () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/no ads were saved.*held for review/i)).toBeInTheDocument();
+    expect(screen.getByText(/no ads were saved yet; this attempt is held/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check saved results" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
@@ -175,7 +175,7 @@ describe("<AdAssistant> draft persistence", () => {
     });
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST" && JSON.stringify(init.body).includes("generationId"))).toHaveLength(1);
     expect(fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/creatives/generate?"))).toHaveLength(1);
-    expect(screen.getByText(/no ads were saved.*held for review/i)).toBeInTheDocument();
+    expect(screen.getByText(/no ads were saved yet; this attempt is held/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check saved results" })).toBeEnabled();
   });
 
@@ -203,7 +203,8 @@ describe("<AdAssistant> draft persistence", () => {
     render(<AdAssistant business={business} />);
 
     expect(screen.getByText("Grounded in Cedar Ridge Chiro")).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Creation stages" })).toBeInTheDocument();
+    // #403: the page's Stepper shows Brief → Create → Review; the assistant has no second strip.
+    expect(screen.queryByRole("list", { name: "Creation stages" })).toBeNull();
     expect(screen.queryByText("Brief preview")).toBeNull();
 
     const goal = screen.getByRole("textbox", { name: "Campaign goal" });
@@ -346,6 +347,8 @@ describe("<AdAssistant> draft persistence", () => {
     render(<AdAssistant business={business} />);
     await user.click(await screen.findByRole("button", { name: "Check saved results" }));
     await screen.findByRole("button", { name: "Make another" });
+    expect(screen.getByRole("link", { name: /Review ads/ })).toHaveAttribute("href", "/studio");
+    expect(screen.queryByText(/Creative Studio/)).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toContain(`generationId=${identity}`);
     expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store" });
