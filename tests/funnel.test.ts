@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STEPS, funnelSql, render, summarize } from "../scripts/funnel.mjs";
+import { STEPS, TEST_DOMAINS, funnelSql, render, summarize } from "../scripts/funnel.mjs";
 
 const row = (user: string, reached: string[], extra: Record<string, unknown> = {}) => ({
   user, signed_up_at: "2026-10-22 10:01:00+00", last_seen: "2026-10-22 16:57:00+00",
@@ -16,6 +16,14 @@ describe("activation funnel (#338)", () => {
     expect(sql).toContain("'meta.access_request'");
     expect(sql).not.toMatch(/;\s*\S/);
     expect(funnelSql(7, [])).toContain("array[]::text[]");
+  });
+
+  it("leaves out internal test accounts by default and includes them on request", () => {
+    const sql = funnelSql(14, []);
+    for (const domain of TEST_DOMAINS) expect(sql).toContain(`'${domain}'`);
+    expect(sql).toContain("split_part(lower(coalesce(email, '')), '@', 2) <> all(");
+    expect(funnelSql(14, [], { includeTest: true })).not.toContain("split_part(");
+    expect(funnelSql(14, ["smoke@example.com"], { includeTest: true })).not.toContain("smoke@example.com");
   });
 
   it("rejects a window that isn't a whole number of days", () => {
