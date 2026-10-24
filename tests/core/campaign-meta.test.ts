@@ -78,10 +78,16 @@ describe("core: Meta campaign half against recorded Graph responses", () => {
     }
     expect(JSON.stringify(tape.sent)).not.toContain("ACTIVE");
     expect(posts.find(call => call.path.endsWith("/adsets"))?.form.daily_budget).toBe("20000");
-    // Request bodies still match what Meta accepted when recorded.
+    // Request bodies still match what Meta accepted when recorded. Targeting changed in #334
+    // (Advantage+ audience); advantage-audience.test.ts checks it against Meta's validate_only answers.
     for (const exchange of createTape as unknown as Exchange[]) {
       const sent = posts.find(call => call.path === exchange.path)!;
-      expect({ ...sent.form, bytes: exchange.form?.bytes }).toEqual({ ...exchange.form, bytes: exchange.form?.bytes });
+      const { targeting, ...rest } = sent.form;
+      const { targeting: recordedTargeting, ...recordedRest } = exchange.form ?? {};
+      expect({ ...rest, bytes: exchange.form?.bytes }).toEqual({ ...recordedRest, bytes: exchange.form?.bytes });
+      if (recordedTargeting) {
+        expect(JSON.parse(targeting)).toEqual({ ...JSON.parse(String(recordedTargeting)), age_min: 25, age_max: 65, age_range: [25, 55], targeting_automation: { advantage_audience: 1 } });
+      }
     }
   });
 

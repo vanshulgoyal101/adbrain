@@ -1,0 +1,291 @@
+{
+  "recordedAt": "2026-10-24T10:11:42.971Z",
+  "tape": [
+    {
+      "name": "interest-search",
+      "method": "GET",
+      "path": "search?type=adinterest&q=Solar%20energy&limit=1",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "6003437140731",
+            "name": "Solar energy",
+            "audience_size_lower_bound": 124729107,
+            "audience_size_upper_bound": 146681430,
+            "path": [
+              "रुचियाँ",
+              "अतिरिक्त रुचियाँ",
+              "Solar energy"
+            ],
+            "description": null,
+            "topic": "Business and industry"
+          }
+        ]
+      }
+    },
+    {
+      "name": "campaign-paused",
+      "method": "POST",
+      "path": "act_ACCOUNT/campaigns",
+      "form": {
+        "name": "AdBrain #334 ad set check (PAUSED, empty, deleted after)",
+        "objective": "OUTCOME_LEADS",
+        "status": "PAUSED",
+        "special_ad_categories": "[]",
+        "is_adset_budget_sharing_enabled": "false"
+      },
+      "status": 200,
+      "body": {
+        "id": "TEMP_CAMPAIGN"
+      }
+    },
+    {
+      "name": "adset-off-baseline",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate off-baseline",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":55,\"targeting_automation\":{\"advantage_audience\":0}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-age-25-55",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-age-25-55",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":55,\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid parameter",
+          "type": "OAuthException",
+          "code": 100,
+          "error_subcode": 1870189,
+          "is_transient": false,
+          "error_user_title": "Advantage+ ऑडियंस का उपयोग करने वाले विज्ञापन सेट में, ऑडियंस कंट्रोल की सेटिंग के तहत अधिकतम उम्र को 65 से कम नहीं रखा जा सकता",
+          "error_user_msg": "You can add a lower maximum age as a suggestion instead when creating or editing an ad set.",
+          "fbtrace_id": "AP7i2quOZMb87dtoU1gjvG4"
+        }
+      }
+    },
+    {
+      "name": "adset-on-age-25-65",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-age-25-65",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-min-25-no-max",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-min-25-no-max",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-min-30",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-min-30",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":30,\"age_max\":65,\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid parameter",
+          "type": "OAuthException",
+          "code": 100,
+          "error_subcode": 1870188,
+          "is_transient": false,
+          "error_user_title": "With ad sets that use Advantage+ audience, the minimum age audience control can’t be set to higher than 25",
+          "error_user_msg": "इसके बजाय, विज्ञापन सेट बनाते या एडिट करते समय, आप सुझाव के तौर पर ज़्यादा अधिक न्यूनतम उम्र जोड़ सकते हैं.",
+          "fbtrace_id": "AgKL978LtbB6DvKTk00GASN"
+        }
+      }
+    },
+    {
+      "name": "adset-on-age-range-suggestion",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-age-range-suggestion",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-age-range-30-55",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-age-range-30-55",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[30,55],\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-age-range-41-55-split",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-age-range-41-55-split",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[41,55],\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-gender-interest",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-gender-interest",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"genders\":[1],\"flexible_spec\":[{\"interests\":[{\"id\":\"6003437140731\",\"name\":\"Solar energy\"}]}],\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "adset-on-excluded-geo",
+      "method": "POST",
+      "path": "act_ACCOUNT/adsets",
+      "form": {
+        "name": "AdBrain #334 validate on-excluded-geo",
+        "campaign_id": "TEMP_CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"excluded_geo_locations\":{\"cities\":[{\"key\":\"1035473\"}]},\"age_min\":25,\"age_max\":65,\"targeting_automation\":{\"advantage_audience\":1}}",
+        "execution_options": "[\"validate_only\"]"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "campaign-delete",
+      "method": "DELETE",
+      "path": "TEMP_CAMPAIGN",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    }
+  ]
+}

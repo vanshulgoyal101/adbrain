@@ -73,3 +73,10 @@ describe("<CampaignLaunchReview>", () => {
     expect(screen.getByText(/ready for campaign review/i)).toBeInTheDocument();
   });
 });
+
+describe("Advantage+ audience note (#334)", () => {
+  it("tells the owner Meta may widen age and interests but never the area", () => {
+    render(<CampaignLaunchReview selectedCount={1} budget={280} leadFormName="Enquiries" audience="Tricity, ages 25–55" />);
+    expect(screen.getByText("Meta may reach people beyond your age range and interests; never outside your area.")).toBeInTheDocument();
+  });
+});

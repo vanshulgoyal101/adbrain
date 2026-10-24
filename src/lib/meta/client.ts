@@ -316,6 +316,36 @@ export function destinationCTA(
   };
 }
 
+/** Meta rejects a hard minimum age above this with Advantage+ audience on (subcode 1870188). */
+export const ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN = 25;
+
+/**
+ * Ad set targeting with Advantage+ audience on (#334). Area and exclusions stay hard
+ * limits; Meta may go beyond the owner's age range, gender and interests, which it
+ * treats as suggestions. Meta only accepts a hard age_min up to 25 and no hard
+ * age_max below 65 (subcode 1870189), so the owner's range is sent as `age_range`.
+ */
+export function adSetTargeting(params: {
+  location: GeoTargeting | undefined;
+  excludedLocation?: GeoTargeting;
+  ageMin: number;
+  ageMax: number;
+  gender?: "all" | "men" | "women";
+  interests?: AudienceInterest[];
+}): Record<string, unknown> {
+  const hardMin = Math.min(params.ageMin, ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN);
+  return {
+    geo_locations: { ...buildGeoLocations(params.location, []), location_types: ["home", "recent"] },
+    ...(hasGeo(params.excludedLocation) ? { excluded_geo_locations: buildGeoLocations(params.excludedLocation, []) } : {}),
+    age_min: hardMin,
+    age_max: 65,
+    ...(params.ageMin !== hardMin || params.ageMax !== 65 ? { age_range: [params.ageMin, params.ageMax] } : {}),
+    ...(params.gender === "men" ? { genders: [1] } : params.gender === "women" ? { genders: [2] } : {}),
+    ...(params.interests?.length ? { flexible_spec: [{ interests: params.interests }] } : {}),
+    targeting_automation: { advantage_audience: 1 },
+  };
+}
+
 /** One ad set in a campaign — its own audience, for an audience A/B test. */
 export interface AdSetVariant {
   label?: string;
@@ -886,26 +916,15 @@ export class MetaClient {
           },
         ];
 
-    const targetingFor = (v: AdSetVariant) => {
-      const loc = v.location ?? params.location;
-      const excl = v.excludedLocation ?? params.excludedLocation;
-      const ageMin = v.ageMin ?? params.ageMin;
-      const ageMax = v.ageMax ?? params.ageMax;
-      return JSON.stringify({
-        geo_locations: {
-          ...buildGeoLocations(loc, []),
-          location_types: ["home", "recent"],
-        },
-        ...(hasGeo(excl)
-          ? { excluded_geo_locations: buildGeoLocations(excl, []) }
-          : {}),
-        ...(ageMin ? { age_min: ageMin } : {}),
-        ...(ageMax ? { age_max: ageMax } : {}),
-        ...(params.gender === "men" ? { genders: [1] } : params.gender === "women" ? { genders: [2] } : {}),
-        ...(params.interests?.length ? { flexible_spec: [{ interests: params.interests }] } : {}),
-        targeting_automation: { advantage_audience: 0 },
-      });
-    };
+    // Ages are validated above, so both bounds are set here.
+    const targetingFor = (v: AdSetVariant) => JSON.stringify(adSetTargeting({
+      location: v.location ?? params.location,
+      excludedLocation: v.excludedLocation ?? params.excludedLocation,
+      ageMin: (v.ageMin ?? params.ageMin)!,
+      ageMax: (v.ageMax ?? params.ageMax)!,
+      gender: params.gender,
+      interests: params.interests,
+    }));
 
     const makeAdSet = (dest: AdDestination, v: AdSetVariant, i: number) => {
       const dp = destinationPlan(dest);

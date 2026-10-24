@@ -535,6 +535,8 @@ export function TargetingControls({
         {audience}
         {" "}{value.gender === "men" ? "Men." : value.gender === "women" ? "Women." : "All genders."}
         {plannedExclusions.length > 0 && <> Excluding {plannedExclusions.join(", ")}.</>}
+        {/* #334: Advantage+ audience is on, so age, gender and interests are suggestions to Meta. */}
+        <p className="mt-1 text-xs text-slate-500">Meta may reach people beyond your age range and interests; never outside your area.</p>
       </div>
     </div>
   );
