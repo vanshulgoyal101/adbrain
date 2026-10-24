@@ -676,20 +676,34 @@ describe("<Studio> live picture preview while editing (#387)", () => {
     await user.clear(screen.getByLabelText("Headline on picture"));
     await user.type(screen.getByLabelText("Headline on picture"), "Diwali offer");
 
-    const live = screen.getByRole("img", { name: "Preview of the edited picture" });
+    const live = screen.getAllByRole("img", { name: "Preview of the edited picture" })[0];
     expect(live).toHaveTextContent("Diwali offer");
     expect(live.querySelector(`img[src="${photo}"]`)).not.toBeNull();
     expect(screen.getByText("Preview · unsaved changes")).toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByRole("img", { name: "Preview of the edited picture" })).toHaveAttribute("src", "data:image/webp;base64,UklGRg=="), { timeout: 3000 });
+    await waitFor(() => expect(screen.getAllByRole("img", { name: "Preview of the edited picture" })[0]).toHaveAttribute("src", "data:image/webp;base64,UklGRg=="), { timeout: 3000 });
     const previews = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.filter(([url]) => url === "/api/creatives/c1/picture");
     expect(previews.length).toBeGreaterThan(0);
     for (const [, init] of previews) expect(JSON.parse(String(init.body))).toMatchObject({ preview: true });
     expect(JSON.parse(String(previews.at(-1)![1].body))).toMatchObject({ headline: "Diwali offer" });
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("img", { name: "Preview of the edited picture" })).toBeNull();
+    expect(screen.queryAllByRole("img", { name: "Preview of the edited picture" })).toHaveLength(0);
     expect(screen.queryByText("Preview · unsaved changes")).toBeNull();
+  });
+
+  it("keeps a small copy of the live picture beside the form, since the card's picture scrolls away on a phone", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockReturnValue(new Promise(() => {})) as unknown as typeof fetch;
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("tab", { name: "Words on picture" }));
+    expect(screen.queryByTestId("phone-picture-preview")).toBeNull();
+    await user.type(screen.getByLabelText("Headline on picture"), "!");
+    expect(screen.getByTestId("phone-picture-preview")).toHaveTextContent("Cut your power bill!");
+    expect(screen.getAllByRole("img", { name: "Preview of the edited picture" })).toHaveLength(2);
+    await user.click(screen.getByRole("tab", { name: "Ad text" }));
+    expect(screen.queryByTestId("phone-picture-preview")).toBeNull();
   });
 
   it("shows a picked Brand photo behind the same words at once", async () => {
@@ -699,11 +713,11 @@ describe("<Studio> live picture preview while editing (#387)", () => {
     await user.click(screen.getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("tab", { name: "Background" }));
     await user.click(await screen.findByRole("button", { name: "Your photo 1" }));
-    const live = screen.getByRole("img", { name: "Preview of the edited picture" });
+    const live = screen.getAllByRole("img", { name: "Preview of the edited picture" })[0];
     expect(live.querySelector('img[src="https://cdn.example/brand-assets/b1/roof.jpg"]')).not.toBeNull();
     expect(live).toHaveTextContent("Cut your power bill");
     await user.click(screen.getByRole("button", { name: "Your photo 1" }));
-    expect(screen.queryByRole("img", { name: "Preview of the edited picture" })).toBeNull();
+    expect(screen.queryAllByRole("img", { name: "Preview of the edited picture" })).toHaveLength(0);
   });
 });
 
