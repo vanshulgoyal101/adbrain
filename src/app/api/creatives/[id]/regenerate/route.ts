@@ -2,7 +2,7 @@ import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
-import { generateOneVariant } from "@/lib/creative/generate";
+import { CreativeValidationError, generateOneVariant } from "@/lib/creative/generate";
 import {
   persistCreativeImage,
   renderAndPersistDesign,
@@ -31,6 +31,14 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export const POST = observeRoute("/api/creatives/[id]/regenerate", "POST", handlePOST);
+
+function rejectionMessage(issues: string[]): string {
+  const claims = [...new Set(issues.flatMap((issue) =>
+    /^unsupported-commercial-claim: (.+?);/.exec(issue)?.[1].toLowerCase() ?? []))];
+  return claims.length
+    ? `The new version made a claim our fact check couldn't match to your Brand (${claims.join(", ")}). Your current ad is unchanged. Try again.`
+    : "The new version didn't pass our ad checks. Your current ad is unchanged. Try again.";
+}
 
 async function handlePOST(
   _req: Request,
@@ -204,22 +212,28 @@ async function handlePOST(
       response = NextResponse.json({ creative: updated });
     }
   } catch (err) {
+    // Every text attempt finished and our fact check refused it: nothing was saved and the spend is known.
+    const rejection = err instanceof CreativeValidationError && err.stage !== "provider" && err.usage.length > 0 &&
+      err.usage.every((entry) => entry.providerFinalStatus === "completed") ? err : null;
     unresolved = paidAttemptStarted && !(err instanceof NoLLMKeysError);
     try {
-      await persistLLMUsage(failedVariantUsage(err, {
+      const recorded = await persistLLMUsage(failedVariantUsage(err, {
         businessId: business.id,
         userId: user.id,
         route: "creatives.regenerate",
         requestId: attemptId,
       }));
+      if (rejection && recorded) unresolved = false;
     } catch {
       unresolved = paidAttemptStarted;
     }
     if (err instanceof NoLLMKeysError)
       response = NextResponse.json({ error: err.message }, { status: 400 });
+    else if (rejection && !unresolved)
+      response = NextResponse.json({ error: rejectionMessage(rejection.issues) }, { status: 422 });
     else response = NextResponse.json(
       {
-        error: "Regeneration could not be completed. Refresh the creative before trying again.",
+        error: "Regeneration could not be completed. This attempt needs a check before the ad can be regenerated again.",
       },
       { status: 502 },
     );
