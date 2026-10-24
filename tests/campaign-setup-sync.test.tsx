@@ -62,6 +62,8 @@ describe("unsaved campaign setup", () => {
     fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Jaipur solar enquiries" } });
     fireEvent.change(screen.getByLabelText("Daily budget (₹)"), { target: { value: "350" } });
     fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Enquiries for a local solar offer" } });
+    // #305: typed areas live under the location "Choose myself".
+    fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[0]);
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Jaipur" } });
     fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Ajmer" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /A\/B test the audience by age/ }));

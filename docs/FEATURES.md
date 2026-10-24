@@ -294,6 +294,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   radius, interests, and rationale remain editable; the action does not save or
   create a campaign. Failures retain existing inputs. Budget, creative selection,
   destination, and lead form remain owner-controlled in audience-only planning.
+- Location is asked once, in "Where should ads show?" (#305). "Let AdBrain decide"
+  shows the decided areas and exclusions as a summary; "Choose myself" holds the
+  location search plus the typed planned and excluded areas.
 - Planned and excluded area entries use one place per line, preserving commas
   inside names. Manual areas and radius edits are retained; explicitly requesting
   a fresh location decision replaces prior suggested areas. Age-only decisions
