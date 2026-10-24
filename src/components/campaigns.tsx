@@ -690,13 +690,16 @@ function BusinessCampaigns({
       return;
     }
     const signal = beginPreparation();
+    const client = createMetaConnectClient();
+    // #366: the connection check doesn't depend on the plan or the draft, so it runs alongside them.
+    const connectionCheck = reviewAfterSave ? client.status(business.id, signal) : null;
+    connectionCheck?.catch(() => {});
     try {
       if (reviewAfterSave && (input.targeting.age?.mode === "ai" || !input.targeting.audience)) {
         input = await recommendAudience(input, signal);
       }
       signal.throwIfAborted();
       setPreparationStage(signal, "Saving draft...");
-      const client = createMetaConnectClient();
       const previous = preparedDraftRef.current;
       const draft = previous && !recoveryRef.current?.request
         ? await client.updateDraft(previous.draftId, previous.version, input, signal)
@@ -707,9 +710,9 @@ function BusinessCampaigns({
       operationRef.current = null;
       setRecoveryPending(false);
       preparedDraftRef.current = draft;
-      if (!reviewAfterSave) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
+      if (!reviewAfterSave || !connectionCheck) { setPrepareReview(null); setNotice("Campaign draft saved."); return; }
       setPreparationStage(signal, "Checking Meta connection...");
-      const connection = await client.status(business.id, signal);
+      const connection = await connectionCheck;
       signal.throwIfAborted();
       setConnectedForDraft(connection.authorization === "connected" && Boolean(connection.selected));
       if (connection.authorization !== "connected" || !connection.selected) {
