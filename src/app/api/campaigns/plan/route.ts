@@ -112,19 +112,21 @@ async function handlePOST(req: Request) {
 
   let result;
   let failureStage: "QUOTA" | "INSTRUCTIONS" | "PREFERENCES" | "PERFORMANCE" | "MODEL" | "USAGE" = "QUOTA";
+  // Each read names its stage when it fails, so the failure log stays as specific as before.
+  const stage = <T,>(name: typeof failureStage, work: Promise<T>) => work.catch((error: unknown) => { failureStage = name; throw error; });
   try {
     const limit = configuredMonthlyTokenLimit();
+    // #366: these reads are independent, so Prepare waits for the slowest, not their sum.
+    const [used, instructions, preferences, performance] = await Promise.all([
+      limit > 0 ? stage("QUOTA", monthlyTokenUsage(business.id)) : Promise.resolve(0),
+      stage("INSTRUCTIONS", getActiveInstructionsText(business.id)),
+      stage("PREFERENCES", preferenceContext(business.id, "campaign", `${goal}\n${answers ?? ""}`)),
+      stage("PERFORMANCE", getPerformanceContext(business.id)),
+    ]);
     if (limit > 0) {
-      const used = await monthlyTokenUsage(business.id);
       if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified. No plan was started." }, { status: 503 });
       if (used >= limit) return NextResponse.json({ error: "This business has reached its monthly AI generation limit." }, { status: 429 });
     }
-    failureStage = "INSTRUCTIONS";
-    const instructions = await getActiveInstructionsText(business.id);
-    failureStage = "PREFERENCES";
-    const preferences = await preferenceContext(business.id, "campaign", `${goal}\n${answers ?? ""}`);
-    failureStage = "PERFORMANCE";
-    const performance = await getPerformanceContext(business.id);
     const requestId = currentRequestId();
     failureStage = "MODEL";
     result = await runPlanner({
