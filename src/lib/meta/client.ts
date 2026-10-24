@@ -5,6 +5,8 @@ import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
+import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
+import { recordProductEvent } from "@/lib/observability/logger";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -581,10 +583,38 @@ export class MetaClient {
     ]);
     signal.throwIfAborted();
 
+    const started = performance.now();
+    let reply: { status: number; body: unknown };
+    try {
+      reply = await this.send(path, method, token, opts.form, signal);
+    } catch (error) {
+      this.recordCall(path, method, started, error instanceof MetaError ? error.status : undefined, error);
+      throw error;
+    }
+    this.recordCall(path, method, started, reply.status, null);
+    return reply.body as T;
+  }
+
+  /** #451 L2: one product event per Graph call; endpoint template, status, Meta code and latency only. */
+  private recordCall(path: string, method: string, started: number, status: number | undefined, error: unknown) {
+    try {
+      const endpoint = graphEndpoint(path);
+      recordProductEvent({
+        kind: "system", name: "meta.graph", outcome: graphOutcome(error), durationMs: Math.round(performance.now() - started),
+        attributes: {
+          route: endpoint, method: method as "GET" | "POST" | "DELETE", entityType: graphEntity(endpoint),
+          ...(status !== undefined && status >= 100 && status <= 599 ? { status } : {}),
+          ...(error ? { errorCode: graphErrorCode(error) } : {}),
+        },
+      });
+    } catch {}
+  }
+
+  private async send(path: string, method: string, token: string, form: Record<string, string> | undefined, signal: AbortSignal) {
     let res: Response;
     if (method === "POST") {
       const body = new URLSearchParams({
-        ...(opts.form ?? {}),
+        ...(form ?? {}),
         access_token: token,
       });
       res = await fetch(`${GRAPH}/${path}`, {
@@ -606,7 +636,7 @@ export class MetaClient {
       const err = (json as { error?: GraphErrorBody }).error;
       throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode);
     }
-    return json as T;
+    return { status: res.status, body: json as unknown };
   }
 
   getPageAccessToken(): Promise<string> {
