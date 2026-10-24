@@ -215,7 +215,11 @@ describe("campaign Ads Manager links", () => {
   ])("uses the bound account %s with connection %s", async (boundAccount, connectionAccount, expectedAccount) => {
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "paused", meta_campaign_id: "120252972379040526", meta_ad_account_id: boundAccount } as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId={connectionAccount ?? ""} />);
-    const link = await screen.findByRole("link", { name: "Ads Manager" });
+    // #403 S5: the link lives in the row's More menu.
+    const more = await screen.findByRole("button", { name: "More actions for Saved campaign" });
+    more.focus();
+    fireEvent.keyDown(more, { key: "Enter" });
+    const link = await screen.findByRole("menuitem", { name: /Open in Ads Manager/ });
     const url = new URL(link.getAttribute("href")!);
     expect(url.origin).toBe("https://adsmanager.facebook.com");
     expect(url.pathname).toBe("/adsmanager/manage/campaigns/");

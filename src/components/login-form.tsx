@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Mail, MailCheck } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import { safeAuthRedirect } from "@/lib/auth-redirect";
+import { openAfterSignIn, safeAuthRedirect } from "@/lib/auth-redirect";
 import { rememberReturningVisitor } from "@/lib/login-visitor";
 import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
 import { authCode } from "@/lib/observability/auth-events";
@@ -16,7 +16,6 @@ const primaryClass = "bg-primary font-semibold text-primary-foreground shadow-xs
 /** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
 export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const redirect = safeAuthRedirect(searchParams.get("redirect"));
   const authError = searchParams.get("error");
 
@@ -112,11 +111,9 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
       }
       reportAuthOutcome({ method: "password", outcome: "success" });
       remember();
-      router.replace(redirect);
-      router.refresh();
+      openAfterSignIn(redirect);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in. Please try again.");
-    } finally {
       setPending(null);
     }
   }
