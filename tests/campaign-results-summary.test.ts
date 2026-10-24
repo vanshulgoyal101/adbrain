@@ -40,7 +40,7 @@ describe("campaignWhatsAppSummary (#372)", () => {
   it.each([
     [{ status: "paused" }, {}, "Next: paused. Open AdBrain to review and resume."],
     [{}, { spend: 0, conversations: 0, cost_per_conversation: null }, "Next: waiting for Meta to start showing the ad."],
-    [{ raw: { health: { checkedAt: "2026-10-24T09:00:00Z", activeSince: "2026-10-20T00:00:00Z", flags: [{ kind: "not_delivering", reason: "No one has seen the ad for 2 days.", since: "2026-10-22T00:00:00Z", key: "abcdef123456" }] } } }, {}, "Next: needs a look. No one has seen the ad for 2 days."],
+    [{ raw: { health: { checkedAt: "2026-10-24T09:00:00Z", activeSince: "2026-10-20T00:00:00Z", flags: [{ kind: "not_delivering", reason: "No one has seen the ad for 2 days.", since: "2026-10-22T00:00:00Z", key: "aaaaaaaaaaaa" }] } } }, {}, "Next: needs a look. No one has seen the ad for 2 days."],
     [{ status: "completed" }, {}, "Next: finished. Open AdBrain to run it again."],
   ])("picks the next step from the campaign's state (%o)", (over, res, line) => {
     expect(campaignWhatsAppSummary(campaign(over as Partial<Campaign>), result(res)).split("\n").at(-1)).toBe(line);
