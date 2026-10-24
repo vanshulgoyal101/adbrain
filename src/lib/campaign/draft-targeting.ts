@@ -8,6 +8,14 @@ function mergeGeo(first: GeoTargeting, second: GeoTargeting): GeoTargeting {
   return { ...(countries.length ? { countries } : {}), ...(regions.length ? { regions } : {}), ...(cities.length ? { cities } : {}) };
 }
 
+/** The place names a draft targets: manual places and named areas, else the Brand's (#493). */
+export function draftAreaNames(input: DraftInput, businessLocations: string[]): string[] {
+  const location = input.targeting.location;
+  const included = location?.mode === "manual" ? (location.included ?? []).map((place) => place.name) : [];
+  const named = location?.includedNames?.length ? location.includedNames : location?.mode === "manual" ? [] : businessLocations;
+  return [...new Set([...included, ...named].map((name) => name.trim()).filter(Boolean))];
+}
+
 export async function resolveDraftTargeting(
   input: DraftInput,
   businessLocations: string[],
