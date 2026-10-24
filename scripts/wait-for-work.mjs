@@ -125,6 +125,30 @@ export function unsavedWork(trees, ownedNumbers) {
     && [...`${t.path} ${t.branch ?? ""}`.matchAll(/(?:^|[^\d])(\d{2,5})(?=[^\d]|$)/g)].some((m) => ownedNumbers.has(Number(m[1]))));
 }
 
+/** The task → skill map from AGENTS.md "Skills" (the only copy): [{ keywords, skills }]. */
+export function skillMap(markdown) {
+  const rows = [];
+  for (const line of markdown.split("\n")) {
+    const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
+    if (cells.length !== 3 || /^-+$/.test(cells[0]) || cells[0] === "Task") continue;
+    const skills = cells[2].split(",").map((x) => x.trim()).filter((x) => /^[a-z0-9-]+$/.test(x));
+    const keywords = cells[1].split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+    if (skills.length && keywords.length) rows.push({ keywords, skills });
+  }
+  return rows;
+}
+
+/** 1–2 skills for an item: the best-matching row's two, or the lead skill of the two best rows. */
+export function skillsFor(map, title, labels = []) {
+  const text = ` ${[title, ...labels].join(" ").toLowerCase()} `;
+  const hits = (kw) => new RegExp(`(^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(text);
+  const scored = map.map((row, index) => ({ row, index, score: row.keywords.filter(hits).length }))
+    .filter((x) => x.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
+  if (!scored.length) return [];
+  if (scored.length === 1) return scored[0].row.skills.slice(0, 2);
+  return [...new Set([scored[0].row.skills[0], scored[1].row.skills[0]])];
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) await main();
 
 async function main() {
@@ -212,7 +236,7 @@ function findWork() {
   const found = [];
   const mine = owned();
   for (const item of mine) {
-    if (!startOwned.has(item.number)) found.push(`#${item.number} is now labelled ${label}: ${item.title}`);
+    if (!startOwned.has(item.number)) found.push(`#${item.number} is now labelled ${label}${withSkills(item)}: ${item.title}`);
   }
   const mineNumbers = new Set(mine.map(item => item.number));
   // A PR whose title names one of your issues is yours to watch too (QA's #309 verdict was for #274's owner).
@@ -251,7 +275,7 @@ function backlog() {
     const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
     const last = comments.length ? comments[comments.length - 1] : null;
     if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
-      found.push(last ? `#${item.number} is waiting on you: "${brief(last.body)}" ${last.html_url}` : `#${item.number} is yours and not started: ${item.title}`);
+      found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.html_url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
     }
   }
   return found;
@@ -281,6 +305,11 @@ function localTrees() {
     return { ...t, dirty, ahead };
   });
 }
+const skillRows = (() => { try { return skillMap(readFileSync(join(repoRoot, "AGENTS.md"), "utf8")); } catch { return []; } })();
+const withSkills = (item) => {
+  const skills = skillsFor(skillRows, item.title ?? "", (item.labels ?? []).map((l) => (typeof l === "string" ? l : l.name)));
+  return skills.length ? ` [skills: ${skills.join(", ")}]` : "";
+};
 function startupSummary() {
   if (card) console.log(`Role: ${card}`);
   const items = owned();
@@ -288,7 +317,7 @@ function startupSummary() {
   for (const item of items) {
     const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
     const last = comments.at(-1)?.body;
-    console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
+    console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${withSkills(item)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
   }
   const unsaved = unsavedWork(localTrees(), new Set(items.map((item) => item.number)));
   for (const t of unsaved) console.log(`Unsaved local work: ${t.path} (${t.branch ?? "detached"}): ${t.dirty} uncommitted, ${t.ahead} unpushed`);

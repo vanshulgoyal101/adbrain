@@ -104,10 +104,31 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Skills
 
-- **Open-source skills** live in `.github/skills/` (list, sources and licenses in
-	[SOURCES.md](.github/skills/SOURCES.md)). They cover UI design, React/Next speed,
-	Postgres/Supabase, debugging, red-test-first, browser QA, security review, CI
-	hardening and planning with subagents. Load the matching skill before the task.
+- **Before any task, load the matching skills** (owner, Oct 24). `wait-for-work`
+	prints them next to each item from the map below; this table is the only copy.
+	Open-source skills and ours live in `.github/skills/` (sources, pins and licenses
+	in [SOURCES.md](.github/skills/SOURCES.md); ours sync from the `skills` repo with
+	`node scripts/sync-own-skills.mjs`).
+- **No good match? Get one:** search maintained sources (anthropics/skills,
+	obra/superpowers, vercel-labs/agent-skills, supabase, trailofbits), check the
+	licence, add the folder plus a SOURCES.md row in a small auto-merge PR, then
+	use it. Pre-approved. Reusable lessons go to the CTO as `Lesson:` lines, who
+	publishes them to the `skills` repo and re-syncs.
+
+| Task | Keywords (title or label) | Skills |
+| --- | --- | --- |
+| UI and visual design | ui, design, look, phone, homepage, sign-up, screen, layout, dead space, professional, polish | frontend-design, web-design-guidelines |
+| Speed | slow, speed, faster, snappy, lcp, perf, load, waterfall | core-web-vitals, vercel-react-best-practices |
+| Database and migrations | migration, database, rls, supabase, index, advisor, schema | supabase-postgres-best-practices, supabase-rls-complete |
+| Bug or failure | bug, fails, failure, error, broken, stuck, wrong, 500, 429 | systematic-debugging, test-driven-development |
+| Money, tenant, auth | money, payment, razorpay, tenant, auth, security, quota | differential-review, security-boundary-contracts |
+| AI models and prompts | model, llm, ai, provider, prompt, groq, gemini, openrouter | task-aware-llm-routing, provider-cooldown-rotation |
+| Ad images and generation | image, render, creative, font, 9:16, picture, create | validated-multimodal-generation, verification-before-completion |
+| Meta and external APIs | meta, whatsapp, insights, campaign, graph, advantage | external-api-error-contracts, verification-before-completion |
+| Release, deploy, rollback | release, deploy, rollback, smoke, guard, production | post-deploy-production-guard, verification-gates |
+| CI and workflows | ci, workflow, actions, scheduler, cron | github-actions-hardening, ci-merge-throughput |
+| QA walks and live checks | walk, verify, live check, qa, screenshot | playwright-cli, rendered-ui-evidence |
+| Coordination | queue, handoff, worker, orchestration, roles, skills | multi-worker-delivery, dispatching-parallel-agents |
 - They are advice: this file and `docs/ORCHESTRATION.md` win on any conflict.
 	"Your human partner" means the issue's owner (the CTO for technical calls, the
 	CEO for priority and money); decide and note it on the issue, never ask the

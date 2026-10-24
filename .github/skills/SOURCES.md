@@ -39,3 +39,29 @@ in its README and ships no license file.
 - obra/superpowers `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`
 - trailofbits/skills `196a9073ab10d35bacf111f945e02c00b2c6883a`
 - github/awesome-copilot `d85f762d6e521abf5fe16703946e9b38adc42da7`
+
+## Our own skills (vanshulgoyal101/skills)
+
+Synced unchanged (frontmatter added) from the commit pinned in
+[own-skills.json](own-skills.json) by `node scripts/sync-own-skills.mjs`. Edit them
+upstream, not here; to update, change the pin or list and re-run the script. Same
+owner, so no licence question. The CTO publishes `Lesson:` lines there.
+
+| Skill | Use it for |
+|---|---|
+| multi-worker-delivery | Coordinating several agents: one writer, handoffs, idle workers |
+| post-deploy-production-guard | Smoke, rollback and promotion after a deploy |
+| ci-merge-throughput | Keeping CI and auto-merge fast |
+| verification-gates | Gates before claiming done or released |
+| task-aware-llm-routing | Which model for which task |
+| budget-aware-provider-routing | Paid vs free provider order |
+| provider-cooldown-rotation | Rate limits and fallbacks across providers and keys |
+| validated-multimodal-generation | Generating and validating ad images and copy |
+| external-api-error-contracts | Meta and other API errors, honest user messages |
+| rendered-ui-evidence | Screenshots and evidence for UI changes |
+| mobile-input-and-motion | Phone input, gestures and motion |
+| hydration-determinism | React hydration mismatches |
+| supabase-rls-complete | Complete RLS coverage |
+| database-invariants | Constraints that match what the product does |
+| security-boundary-contracts | Tenant and auth boundaries |
+| payment-state-reconciliation | Payment states that match the provider |
