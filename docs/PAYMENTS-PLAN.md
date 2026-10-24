@@ -232,8 +232,11 @@ guards to enable production or reinterpret existing test captures as real money.
   live `amount_spent` plus the allowance not yet spent (lifetime spend is the larger of Meta's
   figure and AdBrain's). It is raised after a payment, lowered after a refund, never below what
   Meta has spent, frozen at that amount while the balance is held, and never written as 0 (Meta's
-  "no limit"): with nothing spent and no room the account is blocked from activation instead.
-  Meta takes the limit in rupees and reports it in paise; the write is read back.
+  "no limit"): with nothing spent and no room, every campaign on the child is paused and its limit
+  lowered to the smallest Meta accepts, so an older limit can't stay usable after a refund or hold.
+  Meta takes the limit in rupees and reports it in paise; the write is read back, and fails closed
+  if Meta's room (limit − amount spent) exceeds what the customer has left (a reset counter).
+  Wiring must serialize limit writes per child account so a stale, higher limit never lands last.
 - Paused-run settle (#221): a paused or finished funded run no longer blocks
   the next run until an operator acts. The `enforce-spend` sweep also visits
   businesses with a paused reservation. It first confirms on Meta that the

@@ -38,20 +38,28 @@ describe("core: a managed customer's ad account spending limit (#522)", () => {
       mediaOnOtherAccountsPaise: 0, lifetimeMediaSpentPaise: 0, account: { spendCapPaise: 0, amountSpentPaise: 0 },
     });
     expect(decision).toEqual({ action: "set", capPaise: 33_898, roomPaise: 33_898 });
+    if (decision.action !== "set") throw new Error("expected a limit to set");
     const sent = replay();
-    await expect(new MetaClient(creds).setAccountSpendCap(33_898)).resolves.toMatchObject({ spendCapPaise: 33_898, roomPaise: 33_898 });
+    await expect(new MetaClient(creds).setAccountSpendCap(decision.capPaise, decision.roomPaise)).resolves.toMatchObject({ spendCapPaise: 33_898, roomPaise: 33_898 });
     // Rupees on the write, paise on the read; never a spend_cap_action (reset or delete).
     expect(sent).toEqual([`POST ${tape.adAccountId} spend_cap=338.98`, exchanges[1].method + " " + exchanges[1].path]);
   });
 
   it("keeps campaigns paused when Meta reads back a different limit", async () => {
     replay({ ...exchanges[1].body, spend_cap: "33800" });
-    await expect(new MetaClient(creds).setAccountSpendCap(33_898)).rejects.toThrow(/spending limit changed/);
+    await expect(new MetaClient(creds).setAccountSpendCap(33_898, 33_898)).rejects.toThrow(/spending limit changed/);
+  });
+
+  it("keeps campaigns paused when writing the limit restarted Meta's spent counter, leaving more room than allowed (QA)", async () => {
+    // Spent 10,000 before the write; allowed room 23,898. If Meta now reads 0 spent, the room is 33,898.
+    replay({ ...exchanges[1].body, spend_cap: "33898", amount_spent: "0" });
+    await expect(new MetaClient(creds).setAccountSpendCap(33_898, 23_898)).rejects.toThrow(/more than the customer has left/);
   });
 
   it("never writes 0 or a fraction, which Meta would read as no limit or reject", async () => {
     const sent = replay();
-    for (const cap of [0, -1, 338.98, Number.NaN]) await expect(new MetaClient(creds).setAccountSpendCap(cap)).rejects.toThrow(/Invalid ad account spending limit/);
+    for (const cap of [0, -1, 338.98, Number.NaN]) await expect(new MetaClient(creds).setAccountSpendCap(cap, 0)).rejects.toThrow(/Invalid ad account spending limit/);
+    await expect(new MetaClient(creds).setAccountSpendCap(33_898, -1)).rejects.toThrow(/Invalid ad account spending limit/);
     expect(sent).toEqual([]);
   });
 });

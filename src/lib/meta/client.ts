@@ -1290,16 +1290,22 @@ export class MetaClient {
   /**
    * Sets the ad account's spending limit (#522, managed child accounts) and reads it back. Meta takes
    * the limit in rupees and reports it in paise; 0 would mean no limit, so it is refused, and no
-   * `spend_cap_action` (reset or delete) is ever sent.
+   * `spend_cap_action` (reset or delete) is ever sent. If writing the limit restarted Meta's spent
+   * counter, the room read back exceeds `maxRoomPaise` and this fails closed (new spend only shrinks it).
    */
-  async setAccountSpendCap(capPaise: number): Promise<AccountFunding> {
-    if (!Number.isSafeInteger(capPaise) || capPaise <= 0) throw new MetaError("Invalid ad account spending limit.");
+  async setAccountSpendCap(capPaise: number, maxRoomPaise: number): Promise<AccountFunding> {
+    if (!Number.isSafeInteger(capPaise) || capPaise <= 0 || !Number.isSafeInteger(maxRoomPaise) || maxRoomPaise < 0) {
+      throw new MetaError("Invalid ad account spending limit.");
+    }
     const updated = await this.graph<{ success?: boolean }>(encodeURIComponent(this.creds.adAccountId), {
       method: "POST", form: { spend_cap: (capPaise / 100).toFixed(2) },
     });
     if (updated.success !== true) throw new MetaError("Ad account spending limit is unconfirmed. Keep its campaigns paused.");
     const funding = await this.readAccountFunding();
     if (funding.spendCapPaise !== capPaise) throw new MetaError("Ad account spending limit changed. Keep its campaigns paused.");
+    if (funding.roomPaise > maxRoomPaise) {
+      throw new MetaError("Meta allows more than the customer has left on this ad account. Keep its campaigns paused.");
+    }
     return funding;
   }
 

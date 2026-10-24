@@ -116,7 +116,8 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
 - **Managed spending limit** (`managed-spend-cap`, #522): a ₹500 annual-quote customer's child
   ad account gets a ₹338.98 limit (₹400 ad share net of 18% GST), written in rupees and read back
-  in paise; a different read-back keeps campaigns paused, and 0 is never written. The Graph
+  in paise; a different read-back, or one whose room exceeds what the customer has left (Meta's
+  counter restarted), keeps campaigns paused, and 0 is never written. The Graph
   exchange is **provisional** (Meta's documented shape) until a managed account can be recorded.
 - **Operator funding** (`operator-funding`): the real Solaride ad account read (`spend_cap` 88983, `amount_spent` 4237 paise after the owner's ₹1,000 top-up) that gates an operator-funded capped activation (#245), recorded read-only by `scripts/record-meta-funding-fixtures.ts`.
 - **Prepare speed** (`prepare-speed`, #271): real Tricity geo searches recorded with the previous one-at-a-time resolver resolve identically when searched together, and the recorded Solaride lead-form read is served from cache for ten minutes per business, Page and connection (fresh, reconnect and expiry re-read Meta).

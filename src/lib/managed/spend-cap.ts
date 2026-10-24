@@ -28,7 +28,11 @@ export interface ChildSpendCapInput {
 export type ChildSpendCapDecision =
   | { action: "set" | "keep"; capPaise: number; roomPaise: number }
   | { action: "freeze"; capPaise: number; reason: "held" | "exhausted" }
-  | { action: "block"; reason: "held" | "no_allowance" };
+  /**
+   * No room and nothing spent: only a cap of 0 would stop Meta, and 0 means no limit. Pause every
+   * campaign on the child account and lower its limit to the smallest Meta accepts (#527 records it).
+   */
+  | { action: "stop"; reason: "held" | "no_allowance" };
 
 export class SpendCapInputError extends Error {
   constructor() {
@@ -63,7 +67,7 @@ export function childSpendCap(input: ChildSpendCapInput): ChildSpendCapDecision 
     return { action: input.account.spendCapPaise === capPaise ? "keep" : "set", capPaise, roomPaise: room };
   }
   // A cap equal to the amount spent stops delivery. With nothing spent only 0 would, and 0 means no limit,
-  // so the account is blocked: AdBrain activates nothing on it (the allowance gate) until there is room.
-  if (spentNow === 0) return { action: "block", reason: input.held ? "held" : "no_allowance" };
+  // so an older limit could stay usable after a refund or hold: the caller stops the account instead.
+  if (spentNow === 0) return { action: "stop", reason: input.held ? "held" : "no_allowance" };
   return { action: "freeze", capPaise: spentNow, reason: input.held ? "held" : "exhausted" };
 }
