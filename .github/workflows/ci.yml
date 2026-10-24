@@ -150,3 +150,65 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
           GITLEAKS_CONFIG: .gitleaks.toml
+
+  # #417: axe, LCP and CLS on the public pages, this PR against its base on the same runner,
+  # when a PR touches src/app, src/components or the gate itself. Not required; fails only if something got worse.
+  # Owner screens need a database, so they stay on the local `npm run ui-gate` before/after.
+  ui-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      BASE_REF: ${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: changed
+        run: |
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(src/(app|components)/|scripts/ui-gate\.mjs$|\.github/workflows/ci\.yml$)'; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ui=false" >> "$GITHUB_OUTPUT"
+            echo "No change under src/app or src/components; nothing to compare."
+          fi
+      - if: steps.changed.outputs.ui == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Build this PR and its base
+        if: steps.changed.outputs.ui == 'true'
+        run: |
+          npm ci
+          npm run build
+          git worktree add ../base "origin/$BASE_REF"
+          (cd ../base && npm ci && npm run build)
+      - name: Install Chromium
+        if: steps.changed.outputs.ui == 'true'
+        run: |
+          timeout -k 30s 8m npx playwright install --with-deps chromium && exit 0
+          echo "::warning::playwright install --with-deps did not finish in 8 min; installing Chromium without OS packages"
+          timeout -k 30s 4m npx playwright install chromium
+      - name: Compare public pages (base → this PR)
+        if: steps.changed.outputs.ui == 'true'
+        run: |
+          (cd ../base && npx next start -p 3001 > ../base.log 2>&1 &)
+          npx next start -p 3002 > ../head.log 2>&1 &
+          for port in 3001 3002; do
+            for _ in $(seq 60); do curl -sf -o /dev/null "http://localhost:$port/login" && break; sleep 1; done
+          done
+          # The same (this PR's) gate script measures both, so only the app differs.
+          node scripts/ui-gate.mjs --public-only --origin http://localhost:3001 --out ui-gate/base
+          node scripts/ui-gate.mjs --public-only --origin http://localhost:3002 --compare ui-gate/base --out ui-gate/head
+      - if: failure() && steps.changed.outputs.ui == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-gate
+          path: ui-gate/
+          retention-days: 7
