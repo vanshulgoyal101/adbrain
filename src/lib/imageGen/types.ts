@@ -16,6 +16,8 @@ export interface ImageAttempt {
   providerRequestId?: string;
   providerFinalStatus: "completed" | "failed" | "unknown";
   estimatedCostUsd?: number;
+  /** Why a failed attempt failed (`IMAGE_HTTP_402`, `IMAGE_INVALID`…); never provider text (#451). */
+  errorCode?: string;
 }
 
 export interface GeneratedImage {
