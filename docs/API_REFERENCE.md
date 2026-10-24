@@ -404,7 +404,10 @@ After the [regeneration claims migration](../db/migrations/20261001_creative_reg
 is applied, the server claims the owned creative before paid work. A concurrent
 attempt or unresolved previous attempt returns 409 without another provider call;
 unavailable admission returns 503 before paid work. A confirmed save or pre-provider
-failure releases the claim. An uncertain paid failure retains it for operator review.
+failure releases the claim. So does a fact-check rejection whose text attempts all
+completed and were receipted: it returns 422 with a plain message naming any
+uncited claim (for example "10%, free"), and the creative is unchanged (#281).
+An uncertain paid failure returns 502 and retains the claim for operator review.
 The claim's attempt UUID is the request ID in usage receipts. It does not expire
 automatically, and there is no customer-facing regeneration recovery endpoint.
 

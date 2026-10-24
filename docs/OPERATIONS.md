@@ -134,6 +134,8 @@ execute grants on both claim and finish RPCs. Do not replay the canonical schema
 An overlapping request receives 409; a `processing` or `unresolved` claim does
 not expire or authorize another paid attempt. The finish RPC releases only a
 `processing` claim with a known outcome; it cannot clear an `unresolved` claim.
+A fact-check rejection is a known outcome when every text attempt completed and its
+usage receipt saved: the route releases it and returns 422 (#281).
 
 For an uncertain regeneration, retain the creative, business, owner and original
 attempt ID (the request ID). Compare the saved creative and usage receipts with

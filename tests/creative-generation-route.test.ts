@@ -272,6 +272,28 @@ describe("creative generation route", () => {
     expect(mocks.generateOneVariant).toHaveBeenCalledOnce();
   });
 
+  it("holds a fact-check rejection whose spend is unconfirmed or unrecorded (#281)", async () => {
+    const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
+    const attempt = (providerFinalStatus: "completed" | "unknown") => ({
+      provider: "openrouter", model: "anthropic/claude-haiku-5.5", providerFinalStatus, status: "success" as const,
+      usage: { promptTokens: 4285, completionTokens: 2968, totalTokens: 7253 },
+    });
+    const claim = ["unsupported-commercial-claim: ₹10,000; remove it or cite a supplied positive fact supporting it"];
+    for (const [error, recorded] of [
+      [new CreativeValidationError(claim, [attempt("completed"), attempt("unknown")]), true],
+      [new CreativeValidationError(["Provider attempt could not be confirmed"], [attempt("completed")], "provider"), true],
+      [new CreativeValidationError(claim, [attempt("completed"), attempt("completed")]), false],
+    ] as const) {
+      mocks.regenerateClaims.clear();
+      mocks.generateOneVariant.mockRejectedValueOnce(error);
+      mocks.persist.mockResolvedValueOnce(recorded);
+      const response = await POST(request(), { params: Promise.resolve({ id: "creative" }) });
+      expect(response.status).toBe(502);
+      expect((await response.json()).error).not.toMatch(/refresh/i);
+      expect(mocks.regenerateClaims.get("creative")?.state).toBe("unresolved");
+    }
+  });
+
   it("fails closed when the claim or a paid usage receipt cannot be recorded", async () => {
     const { POST } = await import("@/app/api/creatives/[id]/regenerate/route");
     const context = { params: Promise.resolve({ id: "creative" }) };

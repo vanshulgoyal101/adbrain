@@ -32,7 +32,7 @@ export function normalizeSiteUrl(raw: string | undefined): string {
 
 export const siteConfig = {
   name: "AdBrain",
-  assetVersion: "brain-2",
+  assetVersion: "brain-3",
   url: normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL),
   tagline: "Customer-focused marketing for local businesses",
   description:

@@ -78,6 +78,11 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Regenerate** (`create-regenerate`, #281): six real Claude Haiku replies for the Solaride ad that
+  failed in production, recorded through the route's own input by
+  `scripts/record-regenerate-fixtures.ts` (text only). A cited "₹10,000" backed by "10,000 rupees"
+  saves on the first call; a real fact-check rejection returns a plain 422 naming the claim, leaves
+  the ad untouched and releases the claim so the owner can try again.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.

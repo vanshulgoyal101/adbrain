@@ -7,6 +7,7 @@ import {
 } from "@/lib/templates/ads";
 import { formatDimensions, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
+import { spelledCurrency } from "./currency";
 
 export const CONCEPT_VERSION = "creative-concept-v2";
 // Primary text Meta shows on mobile before "See more" (#194).
@@ -225,7 +226,7 @@ const COMMERCIAL_TERMS =
 function citesTerm(quote: string, term: string): boolean {
   if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase());
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote);
+  return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
 }
 
 export const editableCopySchema = z.object({
