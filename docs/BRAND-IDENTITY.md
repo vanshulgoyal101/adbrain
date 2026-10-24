@@ -45,6 +45,10 @@ Every modal uses [Dialog](../src/components/ui/dialog.tsx) (shadcn/ui on Radix, 
 traps focus, closes on Escape or outside click, returns focus to whatever opened it, locks page
 scroll and hides the page from screen readers. A bottom sheet on phones, centred from `sm`; give it
 a `DialogTitle` and a 44px `DialogClose` with an `aria-label`.
+Row and card actions beyond the main one or two go in one 44px "More"
+[DropdownMenu](../src/components/ui/dropdown-menu.tsx) (Radix): name the trigger after its row
+("More actions for …"), keep items 44px, use `asChild` with `<a>` for links and
+`variant="danger"` for destructive items.
 Reuse Lucide icons and accessible names for controls; disabled, busy and failed
 states must remain distinguishable without relying only on color.
 
