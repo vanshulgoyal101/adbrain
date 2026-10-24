@@ -33,6 +33,7 @@
 }
 
 html {
+  color-scheme: only light;
   /* Reserve the scrollbar's width always, so content doesn't jump sideways when
      a page grows past the viewport. */
   scrollbar-gutter: stable;
