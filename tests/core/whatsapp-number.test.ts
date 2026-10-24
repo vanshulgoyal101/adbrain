@@ -30,6 +30,7 @@ function replay(tape: { path: string; status: number; body: unknown }[] = record
 }
 
 afterEach(() => vi.restoreAllMocks());
+const both = ["+919999994842", "+919999990874"];
 
 describe("core: WhatsApp button number against recorded Graph reads (#157)", () => {
   it("has Meta's validate_only acceptance of the Page's WhatsApp ad set with either business number, in either format", () => {
@@ -46,7 +47,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     expect(recorded.tape[0].body).not.toHaveProperty("whatsapp_number");
     for (const number of ["+919999994842", "+919999990874"]) {
       replay();
-      expect(await new MetaClient(creds).getWhatsAppNumber(number)).toBe(number);
+      expect(await new MetaClient(creds).getWhatsAppNumber(number, [number])).toBe(number);
       vi.restoreAllMocks();
     }
   });
@@ -58,10 +59,29 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
 
   it("refuses a number the business does not own, and keeps the Page-only rule when no number is requested", async () => {
     replay();
-    expect(await new MetaClient(creds).getWhatsAppNumber("+919876543210")).toBeNull();
+    expect(await new MetaClient(creds).getWhatsAppNumber("+919876543210", ["+919876543210"])).toBeNull();
     vi.restoreAllMocks();
     const calls = replay();
-    expect(await new MetaClient(creds).getWhatsAppNumber()).toBeNull();
+    expect(await new MetaClient(creds).getWhatsAppNumber(null, both)).toBeNull();
+    expect(calls.some((path) => path.includes("owned_whatsapp_business_accounts"))).toBe(false);
+  });
+
+  it("refuses another AdBrain business's number on the same Meta business; accepts this business's own binding (#253)", async () => {
+    // Business A has 0874 bound; business B has 4842. Both numbers sit on WABAs of the one Meta business.
+    const businessA = ["+919999990874"];
+    for (const asked of ["+919999994842", "+91 ••••• 4842"]) {
+      replay();
+      expect(await new MetaClient(creds).getWhatsAppNumber(asked, businessA)).toBeNull();
+      vi.restoreAllMocks();
+    }
+    for (const asked of ["+919999990874", "+91 ••••• 0874"]) {
+      replay();
+      expect(await new MetaClient(creds).getWhatsAppNumber(asked, businessA)).toBe("+919999990874");
+      vi.restoreAllMocks();
+    }
+    // With nothing bound, only the Page's own number could pass, and the business's WABAs aren't even read.
+    const calls = replay();
+    expect(await new MetaClient(creds).getWhatsAppNumber("+919999994842", [])).toBeNull();
     expect(calls.some((path) => path.includes("owned_whatsapp_business_accounts"))).toBe(false);
   });
 
@@ -80,17 +100,17 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
 
   it("resolves a masked choice to the one number behind it, and refuses unknown or shared masks (#235)", async () => {
     replay();
-    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842")).toBe("+919999994842");
+    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842", both)).toBe("+919999994842");
     vi.restoreAllMocks();
     replay();
-    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 1234")).toBeNull();
+    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 1234", both)).toBeNull();
     vi.restoreAllMocks();
     // Same reads, with the second account's number changed to share 4842's mask.
     const tape: { path: string; status: number; body: unknown }[] = structuredClone(recorded.tape);
     const wabas = tape.find((entry) => entry.path.includes("owned_whatsapp_business_accounts"))!.body as { data: { phone_numbers: { data: { display_phone_number: string }[] } }[] };
     wabas.data[1].phone_numbers.data[0].display_phone_number = "+91 88888 84842";
     replay(tape);
-    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842")).toBeNull();
+    expect(await new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842", [...both, "+918888884842"])).toBeNull();
   });
 
   it("starts the Page and business lookups together for a masked choice (#366)", async () => {
@@ -104,7 +124,7 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
       await gate;
       return replayed(input, init);
     });
-    const result = new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842");
+    const result = new MetaClient(creds).getWhatsAppNumber("+91 ••••• 4842", both);
     await vi.waitFor(() => expect(started).toEqual(expect.arrayContaining([`/v21.0/${creds.pageId}`, `/v21.0/${creds.adAccountId}`])));
     release();
     expect(await result).toBe("+919999994842");
