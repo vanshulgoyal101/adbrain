@@ -1,5 +1,20 @@
 {
-  "$comment": "Internal (team, owner, test) accounts (#379, #398): left out of reported numbers and exempt from the monthly AI limit. Add a domain or an auth user id, never an email: this repo is public.",
-  "domains": ["adbrain.vanshul.com", "adbrain.local"],
-  "userIds": ["da0771ca-c07f-4e86-b6da-023aaf517d74"]
+  "$comment": "Internal (team, owner, test) accounts (#379, #398): left out of reported numbers and exempt from the monthly AI limit. Add a domain or an auth user id, never an email: this repo is public. They use only free AI providers (#449) unless listed in exemptFromFreeProviders with a reason (#466).",
+  "domains": [
+    "adbrain.vanshul.com",
+    "adbrain.local"
+  ],
+  "userIds": [
+    "da0771ca-c07f-4e86-b6da-023aaf517d74"
+  ],
+  "exemptFromFreeProviders": [
+    {
+      "userId": "0dc149e7-2b7a-459c-82e5-04aa9915e342",
+      "why": "Meta App Review reviewer: Meta must see production quality (CTO, #466). Remove once App Review (#156) is decided."
+    },
+    {
+      "userId": "da0771ca-c07f-4e86-b6da-023aaf517d74",
+      "why": "The owner: Solaride is a real business that advertises (CTO, #466)."
+    }
+  ]
 }

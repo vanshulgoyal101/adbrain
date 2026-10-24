@@ -90,7 +90,9 @@ try {
       }
     }
     if (campaignSetup && request.method() === "POST" && url.origin === origin) {
-      if (url.pathname === "/api/campaigns/plan" && planCount++ === 0) return route.continue();
+      // #497: Review starts a background plan; when it is still running (cold start), Prepare plans again.
+      // Both are read-only (no Meta write), so allow two.
+      if (url.pathname === "/api/campaigns/plan" && planCount++ < 2) return route.continue();
       if (url.pathname === "/api/campaign-drafts" && draftCount++ === 0) {
         const response = await route.fetch();
         const draft = (await response.json().catch(() => null))?.data;
