@@ -89,7 +89,7 @@ async function measure(page, path, file) {
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo(0, 0); });
   await page.screenshot({ path: file, fullPage: true });
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
-  const violations = axe.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length }));
+  const violations = axe.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, targets: v.nodes.slice(0, 10).map((n) => n.target.join(" ")) }));
   return { lcpMs: Math.round(vitals.lcp), cls: Number(vitals.cls.toFixed(3)), axe: violations.reduce((sum, v) => sum + v.nodes, 0), violations };
 }
 
