@@ -14,4 +14,6 @@ regexes = [
   '''^operation-key-1$''',
   '''your-.*-key''',
   '''https://placeholder\.supabase\.co''',
+  # The verification-gates skill quotes this example of a gitleaks false positive (#258, #408).
+  '''^0123456789ab$''',
 ]
