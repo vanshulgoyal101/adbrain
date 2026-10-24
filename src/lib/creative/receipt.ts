@@ -25,13 +25,18 @@ export function generationReceipt(
   language?: string,
   referenceImages: string[] = [],
   sourceFacts: string[] = [],
+  photoUrl?: string,
 ): Json {
+  // Kept so the words on the picture can be re-rendered without the AI (#280).
+  const design = { ...variant.design, backgroundUrl: undefined };
   return JSON.parse(
     JSON.stringify({
       version: CONCEPT_VERSION,
       concept: variant.concept,
       imagePrompt: variant.imagePrompt,
       format: variant.design.format,
+      design,
+      photoUrl: photoUrl ?? null,
       language: language ?? null,
       referenceImages,
       sourceFacts,

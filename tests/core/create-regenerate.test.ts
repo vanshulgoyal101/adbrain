@@ -162,6 +162,10 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
     expect(status, JSON.stringify(body)).toBe(200);
     expect(textCalls).toBe(1);
     expect(mocks.updates).toEqual([expect.objectContaining({ headline: "Act Before the 31 Dec Cost Jump", status: "draft" })]);
+    const generation = mocks.updates[0].generation as { photoUrl?: string; design?: Record<string, unknown> };
+    expect(generation.photoUrl).toBe("https://core-test.supabase.co/storage/v1/object/public/creatives/photo.webp");
+    expect(generation.design).toMatchObject({ headline: "Act Before the 31 Dec Cost Jump" });
+    expect(generation.design).not.toHaveProperty("backgroundUrl");
     expect(mocks.claims.size).toBe(0);
   });
 

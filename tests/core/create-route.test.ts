@@ -202,6 +202,11 @@ async function expectThreeSavedAds(response: Response) {
   for (const row of mocks.inserts) {
     expect(row).toMatchObject({ status: "draft", variant_group: "6d0e7324-171e-45df-894a-28ef6c910196" });
     expect(String(row.image_url)).toMatch(/^https:\/\/core-test\.supabase\.co\/storage\/v1\/object\/public\/creatives\//);
+    // #280: what the "words on the picture" editor needs to re-render without the AI.
+    const generation = row.generation as { photoUrl?: string; design?: Record<string, unknown> };
+    expect(generation.photoUrl).toMatch(/\/creatives\/[^/]+\/6d0e7324-171e-45df-894a-28ef6c910196\/[a-z-]+\.webp$/);
+    expect(generation.design).toMatchObject({ headline: row.headline, ctaLabel: row.cta, format: "portrait" });
+    expect(generation.design).not.toHaveProperty("backgroundUrl");
   }
   expect(mocks.progress.at(-1)).toMatchObject({ p_complete: true, p_uncertain: false });
   return body;
