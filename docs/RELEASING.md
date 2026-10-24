@@ -89,6 +89,12 @@ exclude entire test directories or suppress uninvestigated findings.
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
   and the schema tests all use it, so two migration PRs never conflict. Name a
   migration so it sorts after the ones it depends on.
+- **Code review (#423):** every PR gets an automatic, advisory Copilot review (repository
+  ruleset 'Copilot code review on every PR (advisory)', on open and each push; not a
+  required check, so low-risk PRs still auto-merge on green). Authors fix real findings in
+  the same PR. QA and CTO post high-risk verdicts as reviews, not comments:
+  `gh pr review <n> --comment --body "QA verdict at <sha>: **approved**. …"` (or
+  `CTO review of <sha>: **approved**`). `release.mjs` reads PR reviews and comments alike.
 - **Supabase advisors (#359):** run `node scripts/advisors.mjs` before and after
   every migration release. It reads the production security and performance
   advisors (read-only) and exits 1 on any WARN or ERROR outside its reviewed
