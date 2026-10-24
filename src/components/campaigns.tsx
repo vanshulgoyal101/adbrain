@@ -11,6 +11,7 @@ import {
   Link2,
   Loader2,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -38,6 +39,7 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
+import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
   createMetaConnectClient,
@@ -228,6 +230,12 @@ function BusinessCampaigns({
   const activationFunded = !activationFunding
     || (activationCapped && activationFunding.spendCapPaise > 0 && activationFunding.roomPaise >= activationCapPaise);
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
+  // Ads edited from the picker (#280); the server reads the saved copy at launch.
+  const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
+  const [editingAdId, setEditingAdId] = useState<string | null>(null);
+  const [adEditNotes, setAdEditNotes] = useState<{ id: string; notes: CopyEditNotes } | null>(null);
+  const pickerAds = approved.map((c) => editedAds[c.id] ?? c);
+  const editingAd = pickerAds.find((c) => c.id === editingAdId) ?? null;
   const { preparing, preparationStage, beginPreparation, finishPreparation, stopPreparation, setPreparationStage, isPreparing } = useCampaignPreparation(`${business.owner_id}:${business.id}`, timedOut => {
     setPrepareReview(null);
     const message = "Your inputs are preserved. A draft save already sent may still finish; check Saved drafts before retrying. No campaign was created.";
@@ -1282,12 +1290,12 @@ function BusinessCampaigns({
                 <div>
                   <Label>Choose creatives</Label>
                   <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                    {approved.map((c) => {
+                    {pickerAds.map((c) => {
                       const isSel = selected.has(c.id);
                       return (
+                        <div key={c.id} className="flex min-w-0 flex-col gap-1.5">
                         <button
                           type="button"
-                          key={c.id}
                           onClick={() => toggle(c.id)}
                           aria-pressed={isSel}
                           aria-label={c.headline || "Select creative"}
@@ -1320,9 +1328,50 @@ function BusinessCampaigns({
                             {c.headline}
                           </p>
                         </button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          aria-label={`Edit ${c.headline || "ad"}`}
+                          aria-expanded={editingAdId === c.id}
+                          onClick={() => {
+                            setAdEditNotes(null);
+                            setEditingAdId(c.id);
+                          }}
+                          className="h-9 w-full"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </Button>
+                        </div>
                       );
                     })}
                   </div>
+                  {editingAd && (
+                    <section aria-label="Edit ad" className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                      <p className="mb-3 truncate text-sm font-medium text-slate-800">Editing: {editingAd.headline}</p>
+                      <CreativeEditor
+                        key={editingAd.id}
+                        creative={editingAd}
+                        brand={business}
+                        onCancel={() => setEditingAdId(null)}
+                        onSaved={(next, notes) => {
+                          setEditedAds((current) => ({ ...current, [next.id]: next }));
+                          setAdEditNotes({ id: next.id, notes });
+                          setEditingAdId(null);
+                          // A review prepared before the edit would show the old words.
+                          if (!unresolvedRecovery()) setPrepareReview(null);
+                        }}
+                      />
+                    </section>
+                  )}
+                  {adEditNotes && !editingAd && (
+                    <div className="mt-3">
+                      <p className="mb-1 truncate text-xs font-medium text-slate-700">
+                        {pickerAds.find((c) => c.id === adEditNotes.id)?.headline}
+                      </p>
+                      <CopyEditNotice notes={adEditNotes.notes} />
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
