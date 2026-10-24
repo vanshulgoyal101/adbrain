@@ -78,7 +78,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     if (!asset) return NextResponse.json({ error: "That photo isn't in your Brand assets." }, { status: 400 });
   }
 
-  const limit = ownerPhoto ? 0 : configuredMonthlyTokenLimit();
+  const limit = ownerPhoto ? 0 : configuredMonthlyTokenLimit(user);
   if (limit > 0) {
     const used = await monthlyTokenUsage(business.id);
     if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified." }, { status: 503 });

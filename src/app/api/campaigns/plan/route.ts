@@ -115,7 +115,7 @@ async function handlePOST(req: Request) {
   // Each read names its stage when it fails, so the failure log stays as specific as before.
   const stage = <T,>(name: typeof failureStage, work: Promise<T>) => work.catch((error: unknown) => { failureStage = name; throw error; });
   try {
-    const limit = configuredMonthlyTokenLimit();
+    const limit = configuredMonthlyTokenLimit(user);
     // #366: these reads are independent, so Prepare waits for the slowest, not their sum.
     const [used, instructions, preferences, performance] = await Promise.all([
       limit > 0 ? stage("QUOTA", monthlyTokenUsage(business.id)) : Promise.resolve(0),

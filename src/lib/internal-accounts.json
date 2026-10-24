@@ -1,0 +1,5 @@
+{
+  "$comment": "Internal (team, owner, test) accounts (#379, #398): left out of reported numbers and exempt from the monthly AI limit. Add a domain or an auth user id, never an email: this repo is public.",
+  "domains": ["adbrain.vanshul.com", "adbrain.local"],
+  "userIds": ["da0771ca-c07f-4e86-b6da-023aaf517d74"]
+}

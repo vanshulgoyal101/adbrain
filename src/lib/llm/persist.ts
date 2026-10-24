@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import type { LLMFailureCode, TokenUsage } from "./types";
 import type { Json } from "@/lib/types";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
 
 export interface LLMUsageEvent {
   businessId: string;
@@ -112,8 +113,9 @@ export async function businessLLMUsageSummary(
   }
 }
 
-export function configuredMonthlyTokenLimit(): number {
-  return getEnv().LLM_MONTHLY_TOKEN_LIMIT;
+/** Tokens a business may use per month; 0 means no limit. Internal accounts have none (#398). */
+export function configuredMonthlyTokenLimit(user?: AccountIdentity): number {
+  return isInternalUser(user) ? 0 : getEnv().LLM_MONTHLY_TOKEN_LIMIT;
 }
 
 /** Best-effort persistence; callers admitting paid work can retain a hold on failure. */

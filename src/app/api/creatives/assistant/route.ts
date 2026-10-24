@@ -45,7 +45,7 @@ async function handlePOST(req: Request) {
   if (!business) return apiError("Business not found", 404);
 
   try {
-    const limit = configuredMonthlyTokenLimit();
+    const limit = configuredMonthlyTokenLimit(user);
     if (limit > 0) {
       const used = await monthlyTokenUsage(businessId);
       if (used === null) return apiError("AI usage limits could not be verified. No interview was started.", 503);

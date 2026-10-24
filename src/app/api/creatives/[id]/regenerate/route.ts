@@ -78,7 +78,7 @@ async function handlePOST(
   }
 
   const angle = getAngleByName(creative.angle ?? "") ?? AD_ANGLES[0];
-  const limit = configuredMonthlyTokenLimit();
+  const limit = configuredMonthlyTokenLimit(user);
   if (limit > 0) {
     const used = await monthlyTokenUsage(business.id);
     if (used === null)

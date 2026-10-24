@@ -1,15 +1,13 @@
-// Internal accounts (#379): the one definition of "not a real customer" for every number we
-// report. Add a new internal account here, by domain or by user id (never by email: this repo
-// is public). The smoke and demo emails come from the owner's local .env.smoke at run time.
+// Internal accounts (#379, #398): the one definition of "not a real customer". The list lives in
+// src/lib/internal-accounts.json, shared with the app (no monthly AI limit for these accounts).
+// Add a domain or an auth user id there, never an email: this repo is public. The smoke and demo
+// emails come from the owner's local .env.smoke at run time.
 import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
+import internal from "../../src/lib/internal-accounts.json" with { type: "json" };
 
-export const INTERNAL_DOMAINS = ["adbrain.vanshul.com", "adbrain.local"];
-
-/** Owner and team accounts outside INTERNAL_DOMAINS, by auth user id. */
-export const INTERNAL_USER_IDS = [
-  "da0771ca-c07f-4e86-b6da-023aaf517d74", // owner (Solaride, the live #157 run)
-];
+export const INTERNAL_DOMAINS = internal.domains;
+export const INTERNAL_USER_IDS = internal.userIds;
 
 const quote = (value) => `'${String(value).trim().toLowerCase().replaceAll("'", "''")}'`;
 const list = (values, type) => `array[${values.map(quote).join(",")}]::${type}[]`;

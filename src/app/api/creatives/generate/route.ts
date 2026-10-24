@@ -201,7 +201,7 @@ async function generate(req: Request, live?: LiveCreate) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
-  const monthlyLimit = configuredMonthlyTokenLimit();
+  const monthlyLimit = configuredMonthlyTokenLimit(user);
   const { error: schemaError } = await supabase
     .from("creatives")
     .select("generation")
