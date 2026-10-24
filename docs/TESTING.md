@@ -82,8 +82,8 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Internal accounts stay free** (`internal-free-providers`, #449): with production's paid
   orders, an internal account's concept (the recorded Cedar Ridge reply) comes from Gemini and its
   image from Pollinations without references; with the free tiers busy its interview fails, and
-  with Pollinations down its image fails, instead of reaching OpenRouter, while a customer still
-  gets OpenRouter.
+  with Pollinations down its image fails, instead of reaching OpenRouter, while a customer and the
+  exempt reviewer and owner (#466) still get OpenRouter.
 - **Create when the AI is busy** (`create-busy`, #410): through the production order
   (Groq, Gemini, then the paid OpenRouter fallback), every provider rate-limited returns a 503
   "busy, try again" instead of a 500, and each refused attempt is logged as `ai.completion`

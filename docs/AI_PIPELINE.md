@@ -290,7 +290,9 @@ Internal accounts (team, owner, test; [internal-accounts.json](../src/lib/intern
 never use the paid OpenRouter key (#449): the router drops OpenRouter from every order, falling
 back to `INTERNAL_PROVIDER_ORDER` (default `google,groq`) when nothing free is left, and their
 images come from Pollinations without reference images. The request's verified Supabase user
-decides; requests without one (cron, workers) are billed as customers.
+decides; requests without one (cron, workers) are billed as customers. Exceptions are listed by
+user id in `exemptFromFreeProviders`, each with its reason: the Meta App Review reviewer (until
+#156 is decided) and the owner, whose Solaride is a real advertiser (#466).
 
 The text adapters use pinned `ai@7.0.116`, `@ai-sdk/google@4.0.82`, and
 `@ai-sdk/openai-compatible@3.0.57`. These packages use Apache-2.0 licenses,
