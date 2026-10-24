@@ -14,6 +14,8 @@ import type { Json } from "@/lib/types";
 import { saveCampaign } from "./trusted-write";
 import { whatsappGreeting } from "./whatsapp-greeting";
 
+const STORY_RENDER_BUDGET_MS = 6_000;
+
 export async function executeReviewedCampaign(input: {
   database: CampaignSupabase;
   operationDatabase: CampaignSupabase;
@@ -63,9 +65,14 @@ export async function executeReviewedCampaign(input: {
           }))))).digest("hex");
           if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
+          // Capped well inside the 60 s create lease; a slow photo or logo host just means no 9:16.
+          const noStories = creativeInputs.map(() => null);
           const storyImages = draft.input.destination === "whatsapp"
-            ? await Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => null)))
-            : creativeInputs.map(() => null);
+            ? await Promise.race([
+              Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => null))),
+              new Promise<null[]>(resolve => setTimeout(() => resolve(noStories), STORY_RENDER_BUDGET_MS)),
+            ])
+            : noStories;
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,

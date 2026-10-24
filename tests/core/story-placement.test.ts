@@ -23,7 +23,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     expect(rules[0]).toMatchObject({ image_label: { name: "adbrain_story" }, customization_spec: { instagram_positions: ["story", "reels"], facebook_positions: ["story", "facebook_reels"] } });
   });
 
-  async function create(params: { destination: "whatsapp" | "instant_form"; storyImage: Uint8Array | null; failStoryUpload?: boolean }) {
+  async function create(params: { destination: "whatsapp" | "instant_form"; storyImage: Uint8Array | null; failStoryUpload?: boolean; rejectPlacement?: boolean }) {
     const meta = new MetaClient({ adAccountId: "act_2398686420592052", pageId: inputs.pageId, accessToken: "core-token" });
     vi.spyOn(meta, "getWhatsAppNumber").mockResolvedValue("+919100000874");
     vi.spyOn(meta, "uploadAdImage").mockResolvedValue(inputs.feedHash);
@@ -31,7 +31,9 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       if (params.failStoryUpload) throw new Error("Image too large");
       return inputs.storyHash;
     });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "created-id" }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => params.rejectPlacement && String(init?.body).includes("asset_feed_spec")
+      ? Response.json({ error: { message: "Invalid parameter", type: "OAuthException", code: 100 } }, { status: 400 })
+      : Response.json({ id: "created-id" }));
     await meta.createLeadCampaign({
       name: "Core #333", dailyBudgetRupees: 280, destination: params.destination,
       leadFormId: params.destination === "instant_form" ? "form-1" : undefined,
@@ -42,7 +44,8 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       location: { cities: [{ key: "1021145" }] }, ageMin: 25, ageMax: 55, gender: "all",
     });
     const forms = fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), form: Object.fromEntries(new URLSearchParams(String(init?.body))) }));
-    return { creative: forms.find((call) => call.url.includes("/adcreatives"))!.form, uploads: 1 + storyUpload.mock.calls.length };
+    const creatives = forms.filter((call) => call.url.includes("/adcreatives")).map((call) => call.form);
+    return { creative: creatives.at(-1)!, creatives, ads: forms.filter((call) => /\/ads(\?|$)/.test(call.url)).length, uploads: 1 + storyUpload.mock.calls.length };
   }
 
   it("uploads the 9:16 and switches a WhatsApp ad to placement images", async () => {
@@ -63,6 +66,15 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       expect(run.creative.asset_feed_spec).toBeUndefined();
       expect(JSON.parse(run.creative.object_story_spec).link_data.image_hash).toBe(inputs.feedHash);
     }
+  });
+
+  it("falls back to the single-image creative when Meta refuses the placement one, and still makes the ad", async () => {
+    const { creatives, creative, ads } = await create({ destination: "whatsapp", storyImage: new Uint8Array([9]), rejectPlacement: true });
+    expect(creatives).toHaveLength(2);
+    expect(creatives[0].asset_feed_spec).toBeDefined();
+    expect(creative.asset_feed_spec).toBeUndefined();
+    expect(JSON.parse(creative.object_story_spec).link_data.page_welcome_message).toContain("autofill_message");
+    expect(ads).toBe(1);
   });
 
   it("lays out a saved overlay ad at 1080×1920 without an AI call, and skips ads without a saved design", async () => {

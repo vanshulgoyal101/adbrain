@@ -258,7 +258,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   the saved design and photo at 1080×1920 (no AI call; text kept out of the
   Stories safe zones) and sends both images through `asset_feed_spec` placement
   rules, with the greeting in `additional_data`. Ads made before the design was
-  saved, a failed render or upload, and lead-form ads keep the single 4:5 image.
+  saved, a render over 6 s, a failed upload, a creative Meta refuses (retried as the
+  single image) and lead-form ads keep the single 4:5 image.
   Meta's `validate_only` answers are recorded by `scripts/record-meta-story-fixtures.ts`.
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
   pause, and activation safeguards. Refresh detects all-WhatsApp ad sets and

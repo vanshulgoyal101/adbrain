@@ -1014,37 +1014,36 @@ export class MetaClient {
             destination, whatsappNumber: params.whatsappNumber, whatsappGreeting: params.whatsappGreeting,
           })
           : null;
-        const creative = await this.graph<{ id: string }>(
-          `${acct}/adcreatives`,
-          {
-            method: "POST",
-            form: placement ? {
-              name: c.headline.slice(0, 90) || "AdBrain creative",
-              object_story_spec: JSON.stringify(placement.object_story_spec),
-              asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
-            } : {
-              name: c.headline.slice(0, 90) || "AdBrain creative",
-              object_story_spec: JSON.stringify({
-                page_id: this.creds.pageId,
-                link_data: {
-                  image_hash: imageHash,
-                  message: c.message,
-                  name: c.headline,
-                  ...(c.description?.trim() ? { description: c.description.trim() } : {}),
-                  link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
-                  ...(destination === "whatsapp" && params.whatsappGreeting
-                    ? { page_welcome_message: whatsappWelcomeMessage(params.whatsappGreeting) }
-                    : {}),
-                  call_to_action: destinationCTA(destination, {
-                    leadFormId: params.leadFormId,
-                    phone: destination === "whatsapp" ? params.whatsappNumber : phone,
-                    ctaLabel: c.cta,
-                  }),
-                },
+        const singleImageForm = {
+          name: c.headline.slice(0, 90) || "AdBrain creative",
+          object_story_spec: JSON.stringify({
+            page_id: this.creds.pageId,
+            link_data: {
+              image_hash: imageHash,
+              message: c.message,
+              name: c.headline,
+              ...(c.description?.trim() ? { description: c.description.trim() } : {}),
+              link: destination === "whatsapp" ? `https://wa.me/${params.whatsappNumber!.slice(1)}` : params.link,
+              ...(destination === "whatsapp" && params.whatsappGreeting
+                ? { page_welcome_message: whatsappWelcomeMessage(params.whatsappGreeting) }
+                : {}),
+              call_to_action: destinationCTA(destination, {
+                leadFormId: params.leadFormId,
+                phone: destination === "whatsapp" ? params.whatsappNumber : phone,
+                ctaLabel: c.cta,
               }),
             },
-          },
-        );
+          }),
+        };
+        const postCreative = (form: Record<string, string>) => this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
+        // A placement creative Meta refuses must not fail the campaign: fall back to the single image.
+        const creative = placement
+          ? await postCreative({
+            name: singleImageForm.name,
+            object_story_spec: JSON.stringify(placement.object_story_spec),
+            asset_feed_spec: JSON.stringify(placement.asset_feed_spec),
+          }).catch(() => postCreative(singleImageForm))
+          : await postCreative(singleImageForm);
         await params.onCheckpoint?.({
           phase: "creative",
           externalId: creative.id,
