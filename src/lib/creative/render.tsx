@@ -5,6 +5,7 @@ import { ImageResponse } from "next/og";
 import sharp from "sharp";
 import type { AdDesignSpec } from "./design";
 import { downloadImage } from "@/lib/imageGen";
+import { INDIC_SCRIPT, shapeText, type ShapedText } from "./shaped-text";
 
 /**
  * Rasterise an {@link AdDesignSpec} into a finished poster-style ad using the
@@ -23,7 +24,48 @@ export async function renderCompositeAd(spec: AdDesignSpec): Promise<Uint8Array>
       return `data:image/png;base64,${Buffer.from(image.bytes).toString("base64")}`;
     }),
   );
-  return rasterize(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} logoRatio={logoRatio} />, { width: spec.width, height: spec.height });
+  const shaped = await shapeIndicText(spec, logoRatio);
+  return rasterize(<AdComposite spec={{ ...spec, backgroundUrl, logoUrl }} logoRatio={logoRatio} shaped={shaped} />, { width: spec.width, height: spec.height });
+}
+
+/** On-image words keyed by where they're drawn; values in Devanagari or Gurmukhi get pre-shaped. */
+export type ShapedWords = Partial<Record<string, ShapedText>>;
+
+export async function shapeIndicText(spec: AdDesignSpec, logoRatio = 1): Promise<ShapedWords> {
+  const m = adMetrics(spec);
+  type Field = [key: string, text: string | null | undefined, style: Parameters<typeof shapeText>[1]];
+  const fields: Field[] = [
+    ["brand", spec.brandName, { size: m.brandSize, weight: 800, color: "#ffffff", maxWidth: m.contentWidth - logoTileWidth(logoRatio, m.s) - Math.round(18 * m.s) }],
+    ["headline", spec.headline, { size: m.headlineSize, weight: 800, color: "#ffffff", maxWidth: m.contentWidth }],
+    ["subhead", spec.subhead, { size: m.subheadSize, weight: 400, color: "#e2e8f0", maxWidth: m.contentWidth }],
+    ...spec.benefits.map((benefit, i): Field => [`benefit:${i}`, benefit, { size: m.benefitSize, weight: 600, color: "#ffffff", maxWidth: m.contentWidth - Math.round(90 * m.s) }]),
+    ["contact", spec.contactLine, { size: m.contactSize, weight: 400, color: "#cbd5e1", maxWidth: Math.round(m.contentWidth * 0.6) }],
+  ];
+  const entries = await Promise.all(fields.filter(([, text]) => text && INDIC_SCRIPT.test(text)).map(async ([key, text, style]) => [key, await shapeText(text!, style)] as const));
+  return Object.fromEntries(entries);
+}
+
+export function adMetrics(spec: AdDesignSpec) {
+  // Scale every dimension to the canvas so all formats stay balanced.
+  const s = spec.width / 1080;
+  const pad = Math.round(Math.min(64 * s, spec.height * 0.06));
+  const ctaSize = Math.round(30 * s);
+  return {
+    s,
+    pad,
+    contentWidth: spec.width - pad * 2,
+    headlineSize: Math.round((spec.format === "landscape" ? 58 : 76) * s),
+    subheadSize: Math.round(34 * s),
+    benefitSize: Math.round(30 * s),
+    brandSize: Math.round(Math.min(38, Math.max(20, 1500 / Math.max(spec.brandName.length, 1))) * s),
+    ctaSize,
+    contactSize: Math.min(ctaSize, Math.max(18 * s, 850 * s / Math.max(spec.contactLine?.length ?? 1, 1))),
+    phoneSize: Math.round(Math.min(spec.format === "landscape" ? 40 : 52, 760 / Math.max(spec.phone?.length ?? 1, 1)) * s),
+  };
+}
+
+function Words({ shaped, children }: { shaped?: ShapedText; children: string }) {
+  return shaped ? <img src={shaped.src} alt="" width={shaped.width} height={shaped.height} style={{ width: shaped.width, height: shaped.height }} /> : <>{children}</>;
 }
 
 const FONT_DIR = path.join(process.cwd(), "src/lib/creative/fonts");
@@ -64,16 +106,8 @@ export function logoTileWidth(ratio: number, s: number): number {
   return Math.round(clamped * s);
 }
 
-export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoRatio?: number }) {
-  // Scale every dimension to the canvas so all formats stay balanced.
-  const s = spec.width / 1080;
-  const pad = Math.round(Math.min(64 * s, spec.height * 0.06));
-  const headlineSize = Math.round((spec.format === "landscape" ? 58 : 76) * s);
-  const subheadSize = Math.round(34 * s);
-  const benefitSize = Math.round(30 * s);
-  const brandSize = Math.round(Math.min(38, Math.max(20, 1500 / Math.max(spec.brandName.length, 1))) * s);
-  const ctaSize = Math.round(30 * s);
-  const phoneSize = Math.round(Math.min(spec.format === "landscape" ? 40 : 52, 760 / Math.max(spec.phone?.length ?? 1, 1)) * s);
+export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesignSpec; logoRatio?: number; shaped?: ShapedWords }) {
+  const { s, pad, headlineSize, subheadSize, benefitSize, brandSize, ctaSize, contactSize, phoneSize } = adMetrics(spec);
   const contentTop =
     spec.layout === "top"
       ? pad + Math.round(96 * s)
@@ -177,8 +211,8 @@ export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoR
             {spec.brandName.charAt(0).toUpperCase()}
           </div>
         )}
-        <div style={{ fontSize: brandSize, fontWeight: 800, color: "#ffffff", flex: 1, wordBreak: "break-word" }}>
-          {spec.brandName}
+        <div style={{ display: "flex", fontSize: brandSize, fontWeight: 800, color: "#ffffff", flex: 1, wordBreak: "break-word" }}>
+          <Words shaped={shaped.brand}>{spec.brandName}</Words>
         </div>
       </div>
 
@@ -206,9 +240,10 @@ export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoR
             lineHeight: 1.05,
             maxWidth: spec.width - pad * 2,
             wordBreak: "break-word",
+            display: "flex",
           }}
         >
-          {spec.headline}
+          <Words shaped={shaped.headline}>{spec.headline}</Words>
         </div>
 
         {spec.subhead ? (
@@ -217,9 +252,10 @@ export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoR
               fontSize: subheadSize,
               color: "#e2e8f0",
               maxWidth: spec.width - pad * 2,
+              display: "flex",
             }}
           >
-            {spec.subhead}
+            <Words shaped={shaped.subhead}>{spec.subhead}</Words>
           </div>
         ) : null}
 
@@ -232,7 +268,7 @@ export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoR
               marginTop: Math.round(4 * s),
             }}
           >
-            {spec.benefits.map((benefit) => (
+            {spec.benefits.map((benefit, i) => (
               <div
                 key={benefit}
                 style={{
@@ -271,9 +307,9 @@ export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoR
                   </svg>
                 </div>
                 <div
-                  style={{ fontSize: benefitSize, color: "#ffffff", fontWeight: 600 }}
+                  style={{ display: "flex", fontSize: benefitSize, color: "#ffffff", fontWeight: 600 }}
                 >
-                  {benefit}
+                  <Words shaped={shaped[`benefit:${i}`]}>{benefit}</Words>
                 </div>
               </div>
             ))}
@@ -321,8 +357,8 @@ export function AdComposite({ spec, logoRatio = 1 }: { spec: AdDesignSpec; logoR
               </div>
             ) : null}
             {spec.contactLine ? (
-              <div style={{ fontSize: Math.min(ctaSize, Math.max(18 * s, 850 * s / Math.max(spec.contactLine.length, 1))), color: "#cbd5e1", display: "flex", wordBreak: "break-word" }}>
-                {spec.contactLine}
+              <div style={{ fontSize: contactSize, color: "#cbd5e1", display: "flex", wordBreak: "break-word" }}>
+                <Words shaped={shaped.contact}>{spec.contactLine}</Words>
               </div>
             ) : null}
           </div>
