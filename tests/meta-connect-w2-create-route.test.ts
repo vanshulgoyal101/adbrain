@@ -317,7 +317,8 @@ describe("durable campaign create route", () => {
       expect((await response.json()).data.state).toBe("succeeded");
       expect(create).toHaveBeenCalledOnce();
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, leadFormId: undefined, gender: "women",
-        whatsappGreeting: { autofill: "Namaste! Mujhe Solaride ke baare mein jaankari chahiye.", greeting: expect.stringContaining("Solaride") } }));
+        // #493: one targeted city (the manual "Jaipur" place) is named in the one-tap ask.
+        whatsappGreeting: { autofill: "Hi, I'd like to know more about Solaride in Jaipur.", greeting: expect.stringContaining("Solaride") } }));
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(create).not.toHaveBeenCalled();

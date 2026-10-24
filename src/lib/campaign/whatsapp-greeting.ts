@@ -6,23 +6,82 @@ function mentions(copy: string, phrase: string): boolean {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu").test(copy);
 }
 
+/** "Diwali offer: 10% off" → "10% off"; "Diwali offer:" → "Diwali offer". */
+function offerPhrase(offer: string): string {
+  const trimmed = offer.trim().replace(/:+$/, "").trim();
+  return (trimmed.split(":").pop() ?? "").trim() || trimmed;
+}
+
+type Language = "en" | "hi" | "pa" | "hinglish";
+
+const TEXT: Record<Language, {
+  offer: (offer: string, city: string | null) => string;
+  business: (name: string, city: string | null) => string;
+  greeting: (name: string) => string;
+}> = {
+  en: {
+    offer: (offer, city) => `Hi, I'm interested in the ${offer}${city ? ` in ${city}` : ""}.`,
+    business: (name, city) => `Hi, I'd like to know more about ${name}${city ? ` in ${city}` : ""}.`,
+    greeting: (name) => `Hi! Thanks for messaging ${name}. Send this message and we'll reply here.`,
+  },
+  hi: {
+    offer: (offer, city) => `नमस्ते, मुझे ${city ? `${city} में ` : ""}${offer} के बारे में जानकारी चाहिए।`,
+    business: (name, city) => `नमस्ते, मुझे ${city ? `${city} में ` : ""}${name} के बारे में जानकारी चाहिए।`,
+    greeting: (name) => `नमस्ते! ${name} को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।`,
+  },
+  hinglish: {
+    offer: (offer, city) => `Namaste, mujhe ${city ? `${city} mein ` : ""}${offer} ke baare mein jaankari chahiye.`,
+    business: (name, city) => `Namaste, mujhe ${city ? `${city} mein ` : ""}${name} ke baare mein jaankari chahiye.`,
+    greeting: (name) => `Namaste! ${name} ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.`,
+  },
+  pa: {
+    offer: (offer, city) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ ${city ? `${city} ਵਿੱਚ ` : ""}${offer} ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।`,
+    business: (name, city) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ ${city ? `${city} ਵਿੱਚ ` : ""}${name} ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।`,
+    greeting: (name) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ${name} ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।`,
+  },
+};
+
+function languageFrom(stored: (string | null | undefined)[]): Language | null {
+  for (const value of stored) {
+    if (!value) continue;
+    if (/hinglish/i.test(value)) return "hinglish";
+    if (/devanagari/i.test(value)) return "hi";
+    if (/gurmukhi/i.test(value)) return "pa";
+    if (/^english\b/i.test(value)) return "en";
+  }
+  return null;
+}
+
 /**
- * Hinglish click-to-WhatsApp texts built only from Brand facts (#209). AdBrain
- * campaigns are INR-only, so the audience is Indian. `autofill` is the message
- * pre-typed for the customer; it names up to two Brand offers the ads mention,
- * a numbered offer (price, %) first.
+ * Click-to-WhatsApp texts built only from Brand facts (#209). `autofill` is the message pre-typed
+ * for the customer, `greeting` the business's welcome above it. #493: one short ask in the ad's own
+ * language (their stored language, else Devanagari → Hindi, Gurmukhi → Punjabi, else English) naming one offer the ads mention
+ * (a free, bookable offer first, then a numbered one) and the city when the campaign has just one.
  */
-export function whatsappGreeting(brand: { name: string; offers?: string[] | null }, adCopy: string[]): WhatsAppGreeting {
+export function whatsappGreeting(
+  brand: { name: string; offers?: string[] | null },
+  adCopy: string[],
+  areas: string[] = [],
+  /** The ads' stored language (`generation.design.language`); the script decides when there is none. */
+  adLanguages: (string | null | undefined)[] = [],
+): WhatsAppGreeting {
   const name = brand.name.trim();
   const copy = adCopy.join(" ");
-  const offers = (brand.offers ?? [])
-    .map((offer) => offer.trim().replace(/:+$/, "").trim())
-    .filter((offer) => offer && mentions(copy, (offer.split(":").pop() ?? "").trim() || offer))
-    .sort((left, right) => Number(/\d/.test(right)) - Number(/\d/.test(left)))
-    .slice(0, 2);
-  const about = offers.length ? `${name} ke ${offers.join(" aur ")}` : name;
+  const language: Language = languageFrom(adLanguages)
+    ?? (/\p{Script=Devanagari}/u.test(copy) ? "hi" : /\p{Script=Gurmukhi}/u.test(copy) ? "pa" : "en");
+  const rank = (offer: string) => (/^free\b/i.test(offer) ? 2 : /\d/.test(offer) ? 1 : 0);
+  const offer = (brand.offers ?? [])
+    .map(offerPhrase)
+    .filter((phrase) => phrase && mentions(copy, phrase))
+    .sort((left, right) => rank(right) - rank(left))[0];
+  const places = areas.map((area) => area.trim()).filter(Boolean);
+  const city = places.length === 1 ? places[0] : null;
+  const text = TEXT[language];
+  // Mid-sentence, follow the ad's own casing: "a free site survey" but "a Diwali offer".
+  const lower = offer && offer[0].toLowerCase() + offer.slice(1);
+  const phrase = offer && lower !== offer && copy.includes(lower) ? lower : offer;
   return {
-    autofill: `Namaste! Mujhe ${about} ke baare mein jaankari chahiye.`.slice(0, 300),
-    greeting: `Namaste! ${name} mein aapka swagat hai. Apna sawaal yahan likhiye.`.slice(0, 300),
+    autofill: (phrase ? text.offer(phrase, city) : text.business(name, city)).slice(0, 300),
+    greeting: text.greeting(name).slice(0, 300),
   };
 }

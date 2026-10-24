@@ -149,6 +149,15 @@ export function skillsFor(map, title, labels = []) {
   return [...new Set([scored[0].row.skills[0], scored[1].row.skills[0]])];
 }
 
+/** The latest word on an item across issue comments and PR reviews (verdicts are reviews since #423). */
+export function latestWord(comments = [], reviews = []) {
+  const words = [
+    ...comments.map((c) => ({ body: c.body ?? "", at: c.created_at, url: c.html_url })),
+    ...reviews.filter((r) => (r.body ?? "").trim()).map((r) => ({ body: r.body, at: r.submitted_at, url: r.html_url })),
+  ].filter((w) => w.at).sort((a, b) => a.at.localeCompare(b.at));
+  return words.at(-1) ?? null;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) await main();
 
 async function main() {
@@ -206,7 +215,7 @@ const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
 const ghEnv = { ...process.env, PATH: [process.env.PATH, "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(":") };
 
 function api(path) {
-  // All chats share one gh login (5,000 requests/hour), so each poll makes at most 5 calls (CTO) or 3–4 (others).
+  // All chats share one gh login (5,000 requests/hour): each poll makes 4–5 calls plus one per PR updated during the wait.
   return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 , env: ghEnv }));
 }
 
@@ -240,8 +249,19 @@ function findWork() {
   }
   const mineNumbers = new Set(mine.map(item => item.number));
   // A PR whose title names one of your issues is yours to watch too (QA's #309 verdict was for #274's owner).
-  const linkedToMine = new Set(api(`repos/${repo}/pulls?state=open&per_page=100`)
+  const openPulls = api(`repos/${repo}/pulls?state=open&per_page=100`);
+  const linkedToMine = new Set(openPulls
     .filter(pr => linkedIssues(pr.title).some(n => mineNumbers.has(n))).map(pr => pr.number));
+  // Verdicts are PR reviews (#423): read reviews on PRs touched since this wait began.
+  for (const pr of openPulls.filter(pr => pr.updated_at >= since)) {
+    for (const review of api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`)) {
+      const body = review.body ?? "";
+      if (!body.trim() || !review.submitted_at || review.submitted_at < since || writtenByMe(body)) continue;
+      if (mineNumbers.has(pr.number) || addressedToMe(body) || linkedToMine.has(pr.number)) {
+        found.push(`#${pr.number} new review: "${brief(body)}" ${review.html_url}`);
+      }
+    }
+  }
   // One repo-wide call (newest first) instead of one call per updated issue.
   for (const comment of api(`repos/${repo}/issues/comments?since=${since}&sort=created&direction=desc&per_page=100`)) {
     const number = Number(comment.issue_url.split("/").pop());
@@ -273,9 +293,10 @@ function backlog() {
   const found = [];
   for (const item of owned().slice(0, 20)) {
     const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const last = comments.length ? comments[comments.length - 1] : null;
+    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+    const last = latestWord(comments, reviews);
     if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
-      found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.html_url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
+      found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
     }
   }
   return found;
@@ -316,7 +337,8 @@ function startupSummary() {
   console.log(items.length ? `In flight for ${name} (${items.length}):` : `Nothing labelled ${label}; take the next item in your worker-table row.`);
   for (const item of items) {
     const comments = item.comments ? api(`repos/${repo}/issues/${item.number}/comments?per_page=100`) : [];
-    const last = comments.at(-1)?.body;
+    const reviews = item.pull_request ? api(`repos/${repo}/pulls/${item.number}/reviews?per_page=100`) : [];
+    const last = latestWord(comments, reviews)?.body;
     console.log(`- ${item.pull_request ? "PR " : ""}#${item.number} ${item.title.slice(0, 70)}${withSkills(item)}${last ? ` | last: ${brief(last.split("\n")[0]).slice(0, 120)}` : " | no comments yet"}`);
   }
   const unsaved = unsavedWork(localTrees(), new Set(items.map((item) => item.number)));

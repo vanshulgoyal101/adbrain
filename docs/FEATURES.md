@@ -260,9 +260,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - A WhatsApp campaign's results say how many opened WhatsApp and how many messaged
   ("12 opened WhatsApp, 1 messaged you": Meta `link_click` vs
   `messaging_conversation_started_7d`, #493).
-- Each WhatsApp creative carries a Hinglish `page_welcome_message` built from Brand
-  facts: a greeting from the business and a message pre-typed for the customer
-  that names up to two Brand offers the approved ads mention (#209).
+- Each WhatsApp creative carries a `page_welcome_message` built from Brand facts
+  (#209, #493): a short greeting asking the customer to send, and one pre-typed
+  ask in the ads' language (their saved language, else Devanagari → Hindi,
+  Gurmukhi → Punjabi, else English) that names one offer the ads mention (a free
+  offer first) and the city when the campaign targets exactly one.
 - Stories and Reels get a 9:16 version of each WhatsApp ad (#333): Prepare lays out
   the saved design and photo at 1080×1920 (no AI call; text kept out of the
   Stories safe zones) and sends both images through `asset_feed_spec` placement
@@ -352,6 +354,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   Real-account acceptance and returned coverage must be verified before rollout.
 - City + radius requires 17-80 km at preflight. Draft schemas accept 5-80 km so a
   saved legacy/incomplete value can be edited, not so an invalid radius can launch.
+- Background audience plan (#366): in Choose settings, 1.5 s after the ads are
+  chosen (and the audience still needs AdBrain), the audience is planned in the
+  background, at most three times per composer. Prepare uses that reply once if
+  the goal, ads, targeting and destination are unchanged and it succeeded;
+  otherwise Prepare plans as before. The reply stays in the browser until used.
 - Up to five interest names and a nonempty rationale can be saved. Meta resolves
   IDs and eligibility; unresolved interests block creation.
 - Missing geography does not silently broaden to nationwide. Nationwide must be
