@@ -253,6 +253,14 @@ describe("<Studio> generation", () => {
     expect(within(await screen.findByRole("dialog")).getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
   });
 
+  it("shows the angle chip under the picture, never over the logo (#367)", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    const chip = screen.getByText("savings");
+    expect(chip.closest(".aspect-square")).toBeNull();
+    const picture = screen.getAllByRole("img", { name: "Cut your power bill" })[0].closest(".aspect-square")!;
+    expect(picture.querySelector(".absolute.top-2, .absolute.left-2, .absolute.right-2")).toBeNull();
+  });
+
   it("keeps successful creatives visible and reports a partial batch failure", async () => {
     global.fetch = vi.fn().mockResolvedValue(okJson({ creatives: [creative()], failures: [{ angle: "Trust", error: "Image unavailable" }] }));
     render(<Studio business={business} initialCreatives={[]} />);
