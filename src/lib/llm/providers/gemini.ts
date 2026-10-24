@@ -31,7 +31,8 @@ export function createGeminiProvider(config?: {
       return sdkCompletion("google", provider(ctx.model), [
         ...(system ? [{ role: "system" as const, content: system }] : []),
         ...turns,
-      ], options, options.maxTokens ? options.maxTokens + THINKING_HEADROOM : undefined);
+      ], options, options.maxTokens ? options.maxTokens + (options.thinking === "off" ? 0 : THINKING_HEADROOM) : undefined,
+      options.thinking === "off" ? { google: { thinkingConfig: { thinkingBudget: 0 } } } : undefined);
     },
   };
 }

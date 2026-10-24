@@ -62,4 +62,36 @@ describe("task-aware LLM routing", () => {
       complete([{ role: "user", content: "extract" }], { routing: "budget" }),
     ).rejects.toBeInstanceOf(NoLLMKeysError);
   });
+
+  it("lets a caller add a last-resort provider, cap one provider's attempt and turn Gemini thinking off (#366)", async () => {
+    const urls: string[] = [];
+    const bodies: Record<string, unknown> = {};
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("groq") || url.includes("cerebras")) return Response.json({ error: { message: "rate limited" } }, { status: 429 });
+      if (url.includes("generativelanguage")) {
+        bodies.google = JSON.parse(String(init?.body));
+        return Response.json({ error: { message: "quota", status: "RESOURCE_EXHAUSTED" } }, { status: 429 });
+      }
+      return Response.json({ choices: [{ message: { content: "{}" } }] });
+    }));
+    const { complete } = await import("@/lib/llm");
+    const result = await complete([{ role: "user", content: "plan" }], {
+      routing: "budget", task: "campaign planner", maxTokens: 3000,
+      thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, extraProviders: ["openrouter"],
+    });
+    expect(result.provider).toBe("openrouter");
+    expect(urls.map((url) => new URL(url).hostname)).toEqual(["api.groq.com", "generativelanguage.googleapis.com", "api.cerebras.ai", "openrouter.ai"]);
+    expect(bodies.google).toMatchObject({ generationConfig: { thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 3000 } });
+  });
+
+  it("still keeps other budget tasks off OpenRouter", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => Response.json({ error: { message: "down" } }, { status: 503 })));
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "x" }], { routing: "budget" })).rejects.toThrow();
+    const hosts = (vi.mocked(fetch).mock.calls).map(([url]) => new URL(String(url)).hostname);
+    expect(hosts).not.toContain("openrouter.ai");
+  });
 });
+

@@ -67,7 +67,11 @@ repeated output gets at most one correction call under the same 45-second deadli
 transport/provider failures are not retried by this progress check. Each completed
 attempt retains usage and validity metadata. The planner uses budget routing
 (`LLM_BUDGET_PROVIDER_ORDER`) with a 20-second attempt deadline, because the
-standard reasoning model needs 30-90 seconds per plan. Provider routing has its own
+standard reasoning model needs 30-90 seconds per plan. For speed (#366) it asks
+Gemini not to think (`thinking: "off"`, a zero thinking budget) with a 5-second
+cap, and adds OpenRouter (production's Claude Haiku) as a last resort after the
+budget order (`extraProviders`): Groq ~1 s, Gemini was 12 s with thinking, Haiku
+6-8 s. Other budget tasks still never use OpenRouter. Provider routing has its own
 bounded fallback behavior; two planner attempts are not a guarantee of only two
 physical provider requests.
 

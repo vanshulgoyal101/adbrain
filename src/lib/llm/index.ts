@@ -41,7 +41,7 @@ const cooldownUntil = new Map<string, number>();
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
-function buildRegistry(routing: "standard" | "budget" | "creative" = "standard"): RegisteredProvider[] {
+function buildRegistry(routing: "standard" | "budget" | "creative" = "standard", extraProviders: string[] = []): RegisteredProvider[] {
   const env = getEnv();
 
   const registry: Record<string, RegisteredProvider[] | RegisteredProvider | null> = {
@@ -97,9 +97,10 @@ function buildRegistry(routing: "standard" | "budget" | "creative" = "standard")
     ? env.LLM_BUDGET_PROVIDER_ORDER
     : routing === "creative" ? env.CREATIVE_PROVIDER_ORDER || env.LLM_PROVIDER_ORDER
       : env.LLM_PROVIDER_ORDER;
-  const order = orderValue.split(",")
+  const configured = orderValue.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  const order = [...configured, ...extraProviders.filter((name) => !configured.includes(name))];
 
   return order
     .flatMap((name) => registry[name] ?? []);
@@ -120,7 +121,7 @@ export async function complete(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<CompletionResult> {
-  const registry = buildRegistry(options.routing);
+  const registry = buildRegistry(options.routing, options.extraProviders);
   if (registry.length === 0) throw new NoLLMKeysError();
 
   const startedAt = Date.now();
@@ -159,7 +160,8 @@ async function callProviders(
 
         const attemptStart = Date.now();
         try {
-          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, options, {
+          const attemptTimeoutMs = options.providerAttemptTimeoutMs?.[provider.name] ?? options.attemptTimeoutMs;
+          const { text, usage, providerRequestId, providerFinalStatus } = await provider.complete(messages, { ...options, attemptTimeoutMs }, {
             apiKey: keys[idx],
             model,
           });

@@ -11,6 +11,7 @@ export async function sdkCompletion(
   messages: ChatMessage[],
   options: CompletionOptions,
   maxOutputTokens = options.maxTokens,
+  providerOptions?: Parameters<typeof generateText>[0]["providerOptions"],
 ): Promise<ProviderCompletion> {
   options.signal?.throwIfAborted();
   const deadline = AbortSignal.timeout(options.attemptTimeoutMs ?? 90_000);
@@ -30,6 +31,7 @@ export async function sdkCompletion(
       include: { responseBody: true },
       abortSignal: signal,
       output,
+      ...(providerOptions ? { providerOptions } : {}),
     }).catch((error: unknown) => {
       if (!NoObjectGeneratedError.isInstance(error)) throw error;
       return {
