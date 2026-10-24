@@ -177,7 +177,10 @@ function needsAudiencePlan(input: AudiencePlanInput): boolean {
   return input.targeting.age?.mode === "ai" || !input.targeting.audience;
 }
 
-/** What the audience plan depends on (#366): the goal, the ads, the targeting and the destination. */
+/**
+ * What the audience plan depends on (#366): the owner's goal, the ads, the targeting and the destination.
+ * The goal is the Campaign goal field only; a campaign name or budget typed later doesn't re-plan (#504).
+ */
 function audiencePlanKey(input: AudiencePlanInput): string {
   return JSON.stringify([input.goal, [...input.creativeIds].sort(), input.targeting, input.destination]);
 }
@@ -671,10 +674,13 @@ function BusinessCampaigns({
   // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
   const backgroundPlanRef = useRef<{ key: string; reply: Promise<PlanReply>; controller: AbortController } | null>(null);
   const backgroundPlansRef = useRef(0);
+  function backgroundKeyFor(input: DraftInput): string {
+    return audiencePlanKey({ ...input, goal: draftGoal });
+  }
   const backgroundPlanKey = (() => {
     if (!showComposer || creationMode !== "manual" || selected.size === 0) return null;
     try {
-      const planned = { goal: draftGoal || name, creativeIds: [...selected], targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions), destination };
+      const planned = { goal: draftGoal, creativeIds: [...selected], targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions), destination };
       return needsAudiencePlan(planned) ? audiencePlanKey(planned) : null;
     } catch {
       return null;
@@ -688,7 +694,7 @@ function BusinessCampaigns({
     } catch {
       return;
     }
-    const key = audiencePlanKey(input);
+    const key = backgroundKeyFor(input);
     if (!needsAudiencePlan(input) || backgroundPlanRef.current?.key === key) return;
     backgroundPlansRef.current += 1;
     backgroundPlanRef.current?.controller.abort();
@@ -707,8 +713,13 @@ function BusinessCampaigns({
   /** The background reply for exactly this input, used once; null if there is none or it failed. */
   function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply | null> | null {
     const planned = backgroundPlanRef.current;
-    if (!planned || planned.key !== audiencePlanKey(input)) return null;
+    if (!planned) return null;
     backgroundPlanRef.current = null;
+    // A stale plan is stopped quietly; Prepare plans for itself.
+    if (planned.key !== backgroundKeyFor(input)) {
+      planned.controller.abort();
+      return null;
+    }
     return Promise.race([
       planned.reply.catch(() => null),
       new Promise<null>((resolve) => signal.addEventListener("abort", () => resolve(null), { once: true })),
