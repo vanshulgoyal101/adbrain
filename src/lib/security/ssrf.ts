@@ -99,6 +99,8 @@ export class SafeFetchError extends Error {
   constructor(
     readonly code: SafeFetchErrorCode,
     readonly status?: number,
+    /** From a non-2xx answer's Retry-After header, in seconds; for callers that may wait (#466). */
+    readonly retryAfterMs?: number,
   ) {
     super(code);
     this.name = "SafeFetchError";
@@ -164,7 +166,8 @@ export async function fetchPublicUrl(
 
     if (!res.ok) {
       await res.body?.cancel();
-      throw new SafeFetchError("status", res.status);
+      const retryAfter = Number(res.headers.get("retry-after"));
+      throw new SafeFetchError("status", res.status, Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : undefined);
     }
     return res;
   }

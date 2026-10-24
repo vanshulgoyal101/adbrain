@@ -289,6 +289,17 @@ limit, so rotating keys does not add capacity. A 5xx skips that model's other
 keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
+Internal accounts (team, owner, test; [internal-accounts.json](../src/lib/internal-accounts.json))
+write on the same models as customers (Haiku text is about $0.006 a Create, and the free text
+tiers allow 20 Gemini requests a day) but make their images on free Pollinations, without
+reference images and never falling back to the paid image model (#449, #466). Pollinations answers
+402/429/503 with Retry-After past about one image per 20–40 s per address, so free images run one
+at a time per server instance, wait out Retry-After (10 s when absent) and fail with "Free test
+images are busy" after about 90 s. The request's verified Supabase user decides; requests without
+one (cron, workers) are billed as customers. Exceptions are listed by user id in
+`exemptFromFreeProviders`, each with its reason: the Meta App Review reviewer (until #156 is
+decided) and the owner, whose Solaride is a real advertiser (#466).
+
 The text adapters use pinned `ai@7.0.116`, `@ai-sdk/google@4.0.82`, and
 `@ai-sdk/openai-compatible@3.0.57`. These packages use Apache-2.0 licenses,
 require Node >=22, and accept the project's Zod 4 version. Package-distributed
