@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
+import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -66,7 +67,10 @@ export default async function CampaignsPage({
         description="Turn approved ads into Meta lead campaigns with the audience, budget, and destination reviewed before anything can spend."
       />
       <div className="mt-6">
-        <Campaigns
+        {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
+        {!metaReady && !campaigns.length && approved.length ? (
+          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} />
+        ) : <Campaigns
           business={business}
           approved={approved}
           initialCampaigns={campaigns}
@@ -77,7 +81,7 @@ export default async function CampaignsPage({
           metaReady={metaReady}
           adAccountId={connection.adAccountId ?? ""}
           newCampaign={params.new === "1" ? { creativeIds: requested } : undefined}
-        />
+        />}
       </div>
     </div>
   );
