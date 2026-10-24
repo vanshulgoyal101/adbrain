@@ -58,6 +58,14 @@ select {
   outline-offset: 2px;
 }
 
+/* Owner preference: typing in a field never highlights it. Unlayered, so it beats Tailwind utilities. */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 .scrollbar-stable {
   scrollbar-gutter: stable;
 }

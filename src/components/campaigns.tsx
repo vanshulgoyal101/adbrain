@@ -1319,7 +1319,7 @@ function BusinessCampaigns({
                       id="leadform"
                       value={leadFormId}
                       onChange={(e) => setLeadFormId(e.target.value)}
-                      className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                      className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none"
                     >
                       <option value="">{connectedForDraft ? "Choose a lead form" : "Connect Meta to choose a form"}</option>
                       {availableForms.map((f) => (

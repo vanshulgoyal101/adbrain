@@ -735,7 +735,7 @@ function TurnView({
                     }
                   }}
                   placeholder="…or type your own answer"
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 />
                 <Button
                   size="sm"
