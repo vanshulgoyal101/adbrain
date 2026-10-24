@@ -10,7 +10,7 @@ import { businessLLMUsageSummary } from "@/lib/llm/persist";
 import { privacyOperatorAllowed } from "@/lib/privacy-requests";
 import { clientCreative } from "@/lib/creative/client-receipt";
 
-export const metadata = { title: "Creative Studio" };
+export const metadata = { title: "Review ads" };
 
 async function StudioUsage({ usage }: { usage: Promise<Awaited<ReturnType<typeof businessLLMUsageSummary>> | null> }) {
   const summary = await usage;
@@ -27,14 +27,14 @@ export default async function StudioPage({
   if (!business) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Creative Studio</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Review ads</h1>
         <Card className="mt-6">
           <CardContent className="flex flex-col items-start gap-4 p-8">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain first — the studio uses it to write
+              Set up your Brand Brain first: AdBrain uses it to write
               on-brand ads.
             </p>
             <Link
@@ -68,10 +68,7 @@ export default async function StudioPage({
   return (
     <div>
       <header className="border-b border-slate-200 pb-5">
-        <p className="text-xs text-slate-500">
-          {business.name} / Creative workspace
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-950">Review</h1>
+        <h1 className="text-3xl font-semibold text-slate-950">Review</h1>
       </header>
       <div className="mt-6">
         <Studio

@@ -43,7 +43,6 @@ export default async function LeadsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Customer conversations"
         title="Enquiries"
         titleInTopBarOnPhone
         description="People who responded to your campaigns. Find their details and make the next conversation count."

@@ -82,7 +82,6 @@ export default async function SettingsPage({
   return (
     <div className="max-w-2xl space-y-6">
       <PageHeader
-        eyebrow="Workspace controls"
         title="Settings"
         description="Manage publishing connections and the safety limits that protect your advertising budget."
       />

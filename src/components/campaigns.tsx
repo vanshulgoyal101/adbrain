@@ -1239,7 +1239,7 @@ function BusinessCampaigns({
             className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-3"
           >
             {[
-              ["Creative", approved.length ? `${approved.length} approved` : "Needs approval", Boolean(approved.length)],
+              ["Ads", approved.length ? `${approved.length} approved` : "Needs approval", Boolean(approved.length)],
               ["Meta connection", connectedForDraft ? "Connected" : "Not connected", connectedForDraft],
               ["Safety", "Created paused", true],
             ].map(([label, value, ready]) => (
@@ -1306,7 +1306,7 @@ function BusinessCampaigns({
             ) : (
               <>
                 <div>
-                  <Label>Choose creatives</Label>
+                  <Label>Choose ads</Label>
                   <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
                     {pickerAds.map((c, index) => {
                       const isSel = selected.has(c.id);
@@ -1317,7 +1317,7 @@ function BusinessCampaigns({
                           type="button"
                           onClick={() => toggle(c.id)}
                           aria-pressed={isSel}
-                          aria-label={c.headline || "Select creative"}
+                          aria-label={c.headline || "Select ad"}
                           className={cn(
                             "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
                             isSel
@@ -1334,7 +1334,7 @@ function BusinessCampaigns({
                             {c.image_url && (
                               <img
                                 src={creativeThumbnailUrl(c.image_url)}
-                                alt={c.headline || "Ad creative preview"}
+                                alt={c.headline || "Ad preview"}
                                 className="h-full w-full object-contain"
                                 loading="lazy"
                                 onError={(event) => {
