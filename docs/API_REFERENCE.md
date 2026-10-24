@@ -92,7 +92,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept |
-| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) -> `{creative,liveNotice?}` | Paid image (like Regenerate), same claim; keeps copy, overlay words and status |
+| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
 | POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
 | POST | `/api/campaign-drafts` | DraftInput -> envelope draft | DB write, no model or Meta creation |
@@ -429,6 +429,10 @@ and status are kept; the receipt gets the new `photoUrl`, `imagePrompt`, image u
 and `backgroundInstruction`. If the provider confirms every attempt failed, the claim
 is released with a retry message. Any other failure (OpenRouter reports `unknown`)
 holds the claim as `unresolved` with a 502, exactly like Regenerate.
+With `{photoUrl}` instead, the URL must be one of the business's `product_photo`
+Brand assets (else 400 before the claim). There is no image call, no usage row and
+no monthly-limit check; the photo is copied through the guarded downloader, the
+receipt records `ownerPhoto`, and a failure releases the claim.
 The claim's attempt UUID is the request ID in usage receipts. It does not expire
 automatically, and there is no customer-facing regeneration recovery endpoint.
 

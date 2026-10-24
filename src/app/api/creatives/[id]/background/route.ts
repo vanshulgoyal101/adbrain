@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
 import { backgroundImagePrompt, backgroundRequestSchema } from "@/lib/creative/background";
 import { formatDimensions } from "@/lib/creative/design";
-import { CreativeImageError } from "@/lib/creative/generate";
+import { CreativeImageError, OWNER_PHOTO_PROVIDER } from "@/lib/creative/generate";
 import { persistCreativeImage, renderAndPersistDesign } from "@/lib/creative/persist";
 import { pictureDesign } from "@/lib/creative/picture-words";
 import { creativeReferences } from "@/lib/creative/references";
@@ -37,15 +37,17 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const parsed = backgroundRequestSchema.safeParse(await req.json().catch(() => null));
+  const body = await req.json().catch(() => null);
+  const parsed = backgroundRequestSchema.safeParse(body);
   if (!parsed.success) {
-    const tooLong = parsed.error.issues[0]?.code === "too_big";
+    const tooLong = typeof (body as { instruction?: unknown } | null)?.instruction === "string" && (body as { instruction: string }).instruction.trim().length > 300;
     return NextResponse.json(
       { error: tooLong ? "Keep the description to 300 characters or fewer." : "Describe the background you want, for example \"rooftop at sunset\"." },
       { status: 400 },
     );
   }
-  const { instruction } = parsed.data;
+  const instruction = "instruction" in parsed.data ? parsed.data.instruction : null;
+  const ownerPhoto = "photoUrl" in parsed.data ? parsed.data.photoUrl : null;
 
   const limited = await rateLimitResponse(`regenerate:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
   if (limited) return limited;
@@ -63,7 +65,20 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
     .maybeSingle();
   if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
 
-  const limit = configuredMonthlyTokenLimit();
+  if (ownerPhoto) {
+    // Only the business's own product photos; never an arbitrary URL.
+    const { data: asset } = await supabase
+      .from("brand_assets")
+      .select("url")
+      .eq("business_id", business.id)
+      .eq("type", "product_photo")
+      .eq("url", ownerPhoto)
+      .limit(1)
+      .maybeSingle();
+    if (!asset) return NextResponse.json({ error: "That photo isn't in your Brand assets." }, { status: 400 });
+  }
+
+  const limit = ownerPhoto ? 0 : configuredMonthlyTokenLimit();
   if (limit > 0) {
     const used = await monthlyTokenUsage(business.id);
     if (used === null) return NextResponse.json({ error: "AI usage limits could not be verified." }, { status: 503 });
@@ -99,23 +114,29 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
   let unresolved = false;
   let response: NextResponse;
   try {
-    const referenceImages = await creativeReferences(supabase, business.id);
     const { format } = savedGenerationSettings(creative.generation);
-    const prompt = backgroundImagePrompt({
-      generation: creative.generation, design: pictureDesign(creative, business), brand: business, format, instruction, referenceImages,
-    });
     const dims = formatDimensions(format);
     const imageAttempts: ImageAttempt[] = [];
-    paidAttemptStarted = true;
-    const image = await generateImage({
-      prompt,
-      width: dims.width,
-      height: dims.height,
-      referenceImages: referenceImages.slice(0, 3),
-      onAttempt: (entry) => imageAttempts.push(entry),
-    }).catch((error) => {
-      throw new CreativeImageError(error, [], imageAttempts);
-    });
+    let prompt = "[No image prompt: this ad uses the business's own photo from Brand assets.]";
+    let image: { url: string; provider: string; model?: string; estimatedCostUsd?: number; latencyMs?: number; width?: number; height?: number;
+      fallbackFrom?: string; providerRequestId?: string; providerFinalStatus?: "completed" | "failed" | "unknown" } =
+      { url: ownerPhoto ?? "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0 };
+    if (!ownerPhoto) {
+      const referenceImages = await creativeReferences(supabase, business.id);
+      prompt = backgroundImagePrompt({
+        generation: creative.generation, design: pictureDesign(creative, business), brand: business, format, instruction: instruction!, referenceImages,
+      });
+      paidAttemptStarted = true;
+      image = await generateImage({
+        prompt,
+        width: dims.width,
+        height: dims.height,
+        referenceImages: referenceImages.slice(0, 3),
+        onAttempt: (entry) => imageAttempts.push(entry),
+      }).catch((error) => {
+        throw new CreativeImageError(error, [], imageAttempts);
+      });
+    }
     const imageUsage = {
       provider: image.provider,
       model: image.model ?? image.provider,
@@ -127,8 +148,10 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       providerRequestId: image.providerRequestId,
       providerFinalStatus: image.providerFinalStatus,
     };
-    const recorded = await persistLLMUsage(imageUsageEvents({ angleId: angle.id, imageUsage, imageAttempts }, usageContext));
-    if (!recorded) throw new Error("Background usage could not be recorded");
+    if (!ownerPhoto) {
+      const recorded = await persistLLMUsage(imageUsageEvents({ angleId: angle.id, imageUsage, imageAttempts }, usageContext));
+      if (!recorded) throw new Error("Background usage could not be recorded");
+    }
 
     // Re-read after the slow image call so text or picture words edited meanwhile are kept.
     const { data: fresh } = await supabase.from("creatives").select("generation").eq("id", id).maybeSingle();
@@ -144,7 +167,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       imagePrompt: prompt,
       image: { ...imageUsage, estimatedCostUsd: imageUsage.estimatedCostUsd ?? null },
       imageAttempts,
-      ownerPhoto: null,
+      ownerPhoto,
       backgroundInstruction: instruction,
       backgroundChangedAt: new Date().toISOString(),
     })) as Json;
@@ -156,7 +179,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       .maybeSingle();
     if (error || !updated) {
       // Paid and stored, but not attached to the ad: hold the claim for a check.
-      unresolved = true;
+      unresolved = paidAttemptStarted;
       response = NextResponse.json({ error: "The new background was made but couldn't be saved to this ad. It needs a check before trying again." }, { status: 502 });
     } else {
       const { data: live } = await supabase
@@ -171,7 +194,7 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
         action: "creative.change_background",
         entityType: "creative",
         entityId: id,
-        reason: instruction,
+        reason: instruction ?? "owner photo",
       });
       response = NextResponse.json({
         creative: updated,
@@ -193,7 +216,9 @@ async function handlePOST(req: Request, { params }: { params: Promise<{ id: stri
       {
         error: unresolved
           ? "The new background could not be finished. This attempt needs a check before the ad's picture can be changed again."
-          : "Couldn't make a new background this time. Your ad is unchanged; try again.",
+          : ownerPhoto
+            ? "Couldn't use that photo. Your ad is unchanged; try another photo."
+            : "Couldn't make a new background this time. Your ad is unchanged; try again.",
       },
       { status: 502 },
     );

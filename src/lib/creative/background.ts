@@ -3,10 +3,14 @@ import { conceptImagePrompt, type CreativeConcept } from "@/lib/creative/concept
 import type { AdDesignSpec, AdFormat } from "@/lib/creative/design";
 import type { BrandContext } from "@/lib/templates/ads";
 
-/** What the owner wants behind the same words (#280 slice 3), e.g. "rooftop at sunset". */
-export const backgroundRequestSchema = z.object({
-  instruction: z.string().trim().min(3).max(300),
-});
+/**
+ * What the owner wants behind the same words (#280 slice 3): a short description
+ * for a new AI picture ("rooftop at sunset"), or one of their own Brand photos.
+ */
+export const backgroundRequestSchema = z.union([
+  z.object({ instruction: z.string().trim().min(3).max(300) }).strict(),
+  z.object({ photoUrl: z.string().url().max(2000) }).strict(),
+]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

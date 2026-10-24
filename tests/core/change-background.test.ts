@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   imageStatus: 200,
   /** Words saved on the picture by another tab while the image is being made. */
   editedDuringImage: null as Record<string, unknown> | null,
+  assets: [] as string[],
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -55,14 +56,17 @@ vi.mock("@/lib/supabase/server", () => ({
         eq: () => query,
         contains: () => query,
         not: () => query,
-        limit: async () => ({ data: [], error: null }),
+        limit: () => query,
+        then: (resolve: (value: unknown) => unknown) => resolve({ data: [], error: null }),
         update: (row: Record<string, unknown>) => {
           payload = row;
           mocks.updates.push(row);
           return query;
         },
         maybeSingle: async () => ({
-          data: table === "creatives" ? { ...creativeRow(), ...(payload ?? {}) } : run4.brand,
+          data: table === "creatives" ? { ...creativeRow(), ...(payload ?? {}) }
+            : table === "brand_assets" ? (mocks.assets.length ? { url: mocks.assets[0] } : null)
+            : run4.brand,
           error: null,
         }),
       };
@@ -97,6 +101,7 @@ beforeEach(() => {
   mocks.usage.length = 0;
   mocks.imageStatus = 200;
   mocks.editedDuringImage = null;
+  mocks.assets = [];
   imageBodies = [];
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: SUPABASE,
@@ -129,10 +134,10 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function post(instruction: unknown = "Rooftop at sunset, warm light") {
+async function post(instruction: unknown = "Rooftop at sunset, warm light", body: unknown = { instruction }) {
   const { POST } = await import("@/app/api/creatives/[id]/background/route");
   const res = await POST(
-    new Request(`http://localhost/api/creatives/${CREATIVE}/background`, { method: "POST", body: JSON.stringify({ instruction }) }),
+    new Request(`http://localhost/api/creatives/${CREATIVE}/background`, { method: "POST", body: JSON.stringify(body) }),
     { params: Promise.resolve({ id: CREATIVE }) },
   );
   return { status: res.status, body: await res.json() };
@@ -193,6 +198,30 @@ describe("core: change only the background on a recorded run-4 ad", () => {
     const again = await post();
     expect(again).toEqual({ status: 409, body: { error: "A previous paid change to this ad needs a check before trying again." } });
     expect(imageBodies).toHaveLength(1);
+  });
+
+  it("uses the owner's own Brand photo with no image call, no spend and the same words", async () => {
+    const photo = `${SUPABASE}/storage/v1/object/public/brand-assets/${run4.brand.id}/front-desk.jpg`;
+    mocks.assets = [photo];
+    const res = await post(undefined, { photoUrl: photo });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(imageBodies).toEqual([]);
+    expect(mocks.usage).toEqual([]);
+    expect(mocks.updates[0].generation).toMatchObject({
+      concept: angle.concept,
+      ownerPhoto: photo,
+      design: { headline: angle.concept.headline },
+      image: { provider: "owner-photo", estimatedCostUsd: 0 },
+      imagePrompt: "[No image prompt: this ad uses the business's own photo from Brand assets.]",
+    });
+    expect(mocks.claims.size).toBe(0);
+  });
+
+  it("refuses a photo that isn't one of the business's Brand photos", async () => {
+    const res = await post(undefined, { photoUrl: "https://example.com/not-ours.jpg" });
+    expect(res).toEqual({ status: 400, body: { error: "That photo isn't in your Brand assets." } });
+    expect(mocks.updates).toEqual([]);
+    expect(mocks.claims.size).toBe(0);
   });
 
   it("rejects an empty or over-long direction before any paid work", async () => {
