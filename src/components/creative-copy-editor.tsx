@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import type { PicturePreview } from "@/components/live-picture";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { updateCreativeCopy, type CopyEditResult } from "@/app/(app)/studio/actions";
 import { Button } from "@/components/ui/button";
@@ -516,6 +516,12 @@ export function CreativeEditor({
   onPicturePreview?: (preview: PicturePreview | null) => void;
 }) {
   const [tab, setTab] = useState<"text" | "picture" | "background">("text");
+  // On a phone the card's picture scrolls away while typing; keep a small copy in view (#387).
+  const [mini, setMini] = useState<PicturePreview | null>(null);
+  const picturePreview = useCallback((preview: PicturePreview | null) => {
+    setMini(preview);
+    onPicturePreview?.(preview);
+  }, [onPicturePreview]);
   // Switching tabs mid-save would unmount the editor whose request is still running.
   const [busy, setBusy] = useState(false);
   const tabs = [
@@ -543,12 +549,21 @@ export function CreativeEditor({
           </button>
         ))}
       </div>
+      {mini && tab !== "text" && (
+        <div
+          data-testid="phone-picture-preview"
+          className="sticky top-16 z-10 mx-auto w-36 overflow-hidden rounded-md bg-slate-100 shadow-md ring-1 ring-slate-200 sm:hidden"
+          style={{ aspectRatio: `${mini.spec.width} / ${mini.spec.height}` }}
+        >
+          <LivePicture preview={mini} />
+        </div>
+      )}
       {tab === "text" ? (
         <CreativeCopyEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onDraft={onDraft} />
       ) : tab === "picture" ? (
-        <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onPreview={onPicturePreview} />
+        <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onPreview={picturePreview} />
       ) : (
-        <BackgroundEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onPreview={onPicturePreview} />
+        <BackgroundEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} onPreview={picturePreview} />
       )}
     </div>
   );
