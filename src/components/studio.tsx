@@ -99,6 +99,12 @@ export function Studio({
     variants.sort((first, second) => first.id < second.id ? -1 : first.id > second.id ? 1 : 0);
     variants.forEach((item, index) => variantLabels.set(item.id, `Variant ${index + 1} of ${variants.length}`));
   }
+  // #360: on a phone the selected ad's picture is the largest paint; board tiles wait for it.
+  const [boardImages, setBoardImages] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setBoardImages(true), 2_500);
+    return () => clearTimeout(timer);
+  }, []);
   const selectedCreative =
     visibleItems.find((item) => item.id === selectedId) ??
     visibleItems[0] ??
@@ -537,7 +543,7 @@ export function Studio({
                       )}
                     >
                       <div className="flex aspect-square items-center justify-center bg-slate-100">
-                        {creative.image_url ? (
+                        {creative.image_url && boardImages ? (
                           <img
                             src={creativeThumbnailUrl(creative.image_url)}
                             alt=""
@@ -574,6 +580,7 @@ export function Studio({
             <CreativeCard
               key={selectedCreative.id}
               business={business}
+              onImageSettled={() => setBoardImages(true)}
               creative={selectedCreative}
               onChange={(updated) =>
                 setItems((previous) =>
@@ -622,12 +629,14 @@ export function Studio({
 
 function CreativeCard({
   business,
+  onImageSettled,
   creative,
   onChange,
   onDelete,
   onPreview,
 }: {
   business: Business;
+  onImageSettled?: () => void;
   creative: Creative;
   onChange: (c: Creative) => void;
   onDelete: (id: string) => void;
@@ -713,6 +722,7 @@ function CreativeCard({
               // detect that in the commit phase so we skip the placeholder flash.
               if (node?.complete && node.naturalWidth > 0) {
                 setLoadedUrl(creative.image_url);
+                onImageSettled?.();
               }
             }}
             src={creativeThumbnailUrl(creative.image_url)}
@@ -724,11 +734,17 @@ function CreativeCard({
             // The selected ad is the page's largest paint on a phone (#360): fetch it while the HTML parses.
             loading="eager"
             fetchPriority="high"
-            onLoad={() => setLoadedUrl(creative.image_url)}
+            onLoad={() => {
+              setLoadedUrl(creative.image_url);
+              onImageSettled?.();
+            }}
             onError={(event) => {
               // The 960 px thumbnail can be missing for older ads; fall back to the original once.
               if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
-              else setErroredUrl(creative.image_url);
+              else {
+                setErroredUrl(creative.image_url);
+                onImageSettled?.();
+              }
             }}
           />
         )}
