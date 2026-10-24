@@ -1,0 +1,30 @@
+name: PR base
+on:
+  # Never checks out PR code: it only reads PR metadata and changes the base branch.
+  pull_request_target:
+    types: [opened, reopened]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  retarget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send ordinary PRs to next (#461 deploy train)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          [ "$HEAD" != next ] || { echo "The train itself."; exit 0; }
+          labels=$(gh pr view "$PR" -R "$repo" --json labels --jq '[.labels[].name] | join(",")')
+          if grep -Eq '(^|,)(hotfix|ready-to-ship)(,|$)' <<<"$labels"; then echo "Labelled for main: $labels"; exit 0; fi
+          if gh pr diff "$PR" -R "$repo" --name-only | grep -q '^db/migrations/'; then echo "Migration PR: released to main by DevOps."; exit 0; fi
+          gh pr edit "$PR" -R "$repo" --base next
+          gh pr comment "$PR" -R "$repo" --body "Retargeted to \`next\`: PRs merge there and the deploy train promotes \`next\` to production at most every 30 min (#461). For a production hotfix, DevOps/CTO label it \`hotfix\` and set the base back to \`main\`."

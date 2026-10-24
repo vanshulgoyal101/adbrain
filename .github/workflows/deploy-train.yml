@@ -1,0 +1,72 @@
+name: Deploy train
+on:
+  # PRs merge into `next` (no Vercel deploy). This promotes `next` to `main` (one production
+  # deploy) at most every 30 minutes, only when `next` is green (#461, Hobby: 100 deploys/day).
+  push:
+    branches: [next]
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+  issues: write
+
+concurrency:
+  # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
+  group: deploy-train
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GAP_MINUTES: "30"
+    steps:
+      - name: Promote next to main
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
+          [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
+          # At most one production deploy per GAP_MINUTES.
+          last=$(gh pr list -R "$repo" --state merged --base main --head next --limit 1 --json mergedAt --jq '.[0].mergedAt // empty')
+          if [ -n "$last" ]; then
+            wait=$(jq -rn --arg t "$last" --argjson gap "$GAP_MINUTES" '($gap * 60) - (now - ($t | fromdateiso8601)) | floor')
+            if [ "$wait" -gt 0 ]; then echo "Last train left at $last; waiting ${wait}s."; sleep "$wait"; fi
+          fi
+          sha=$(gh api "repos/$repo/commits/next" --jq .sha)
+          echo "Promoting next at ${sha::7} ($ahead commits)."
+          # Required checks must be green on that exact commit (CI runs on every push to next).
+          for i in $(seq 1 60); do
+            states=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | "\(.name)=\(.conclusion // .status)"] | unique | join(" ")')
+            echo "checks: ${states:-none yet}"
+            if grep -Eq '=(failure|cancelled|timed_out|action_required)' <<<"$states"; then echo "::error::next ${sha::7} is red; not promoting."; exit 1; fi
+            [ "$(grep -o '=success' <<<"$states" | wc -l)" -eq 4 ] && break
+            [ "$i" -lt 60 ] || { echo "::error::checks on ${sha::7} did not finish in 30 min"; exit 1; }
+            sleep 30
+          done
+          pr=$(gh pr list -R "$repo" --state open --base main --head next --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then
+            pr=$(gh pr create -R "$repo" --base main --head next --title "Deploy train $(date -u +%H:%MZ): next → main" \
+              --body "Automatic promotion of \`next\` (${sha::7}) to production (#461). Merged PRs: see the commits.")
+            pr=${pr##*/}
+          fi
+          # A merge commit keeps next's history, so the next train needs no rebase.
+          gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"
+          echo "Promoted ${sha::7} via #$pr."
+      - name: Alert once when the train is stuck
+        if: failure()
+        run: |
+          title="Deploy train stuck"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          body="$(printf 'next could not be promoted to main (red or slow checks on next, or a merge error).\n\nRun: %s/%s/actions/runs/%s\nFix next, or ship a hotfix PR to main (DevOps/CTO). Runbook: docs/RELEASING.md#deploy-train\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          if [ -n "$open" ]; then gh issue comment "$open" -R "$GITHUB_REPOSITORY" -b "$body"
+          else gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" -b "$body"; fi

@@ -8,9 +8,9 @@ PRs, not here. Last verified: 2026-10-23.
 
 The release process ([AGENTS.md](../AGENTS.md)).
 
-1. Branch from current `origin/main` in an isolated worktree under
-   `adbrain-wt/`, build a small complete slice and open a PR to `main` with
-   auto-merge enabled. The branch need not be up to date with `main`.
+1. Branch from current `origin/next` in an isolated worktree under
+   `adbrain-wt/`, build a small complete slice and open a PR to `next` with
+   auto-merge enabled. The branch need not be up to date. See [Deploy train](#deploy-train).
 2. Required checks are `build`, `test`, `core` and `secrets`
    ([ci.yml](../.github/workflows/ci.yml)); `audit` and `docs` also run but do
    not block. A change to generation, validation, prompts, models, timeouts, the
@@ -129,6 +129,25 @@ exclude entire test directories or suppress uninvestigated findings.
   resources or reuse production credentials to bypass the lack of free staging.
 - Real Meta consent requires the user in the browser. Never collect passwords or
   tokens in chat. Connection verification must not create or activate campaigns.
+
+## Deploy train
+
+Vercel Hobby allows 100 production deploys a day, and every push to `main` is one
+(#461). So PRs merge into **`next`**, which Vercel doesn't deploy, and
+[deploy-train.yml](../.github/workflows/deploy-train.yml) promotes it:
+- On every push to `next` (and at :11/:41 as a backup), if `next` has commits `main`
+  lacks, it waits until 30 minutes after the last train, then requires build, test, core
+  and secrets green on `next`'s exact commit (CI runs on pushes to `next`). Then it opens
+  and merges a `next → main` PR with a merge commit. That's at most 48 deploys a day;
+  each train gets the production guard's smoke.
+- A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
+  with a PR to it; production keeps the last train.
+- [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`
+  to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs
+  that add `db/migrations/` (released to `main` by DevOps with `release.mjs`).
+- Hotfix: DevOps or CTO opens the PR to `main` with the `hotfix` label. It's one deploy,
+  so use it for production breakage only. Then open a PR merging `main` into `next`
+  (or the same fix to `next`) so the next train doesn't lack it.
 
 ## Rollback and Incident Handling
 
