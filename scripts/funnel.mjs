@@ -1,19 +1,14 @@
 // Activation funnel (#338): where each sign-up of the last N days stopped. Read-only: one
 // statement through the Supabase Management API inside BEGIN READ ONLY (docs/ORCHESTRATION.md
-// "Access"). Prints user-id prefixes only, never emails or names, and leaves out the smoke account.
-// Usage: node scripts/funnel.mjs [--days 14] [--include-test]
+// "Access"). Prints user-id prefixes only, never emails or names, and leaves out internal
+// accounts (scripts/lib/internal-accounts.mjs).
+// Usage: node scripts/funnel.mjs [--days 14] [--include-internal]
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseArgs, parseEnv } from "node:util";
+import { parseArgs } from "node:util";
+import { isInternalUserSql, localInternalEmails } from "./lib/internal-accounts.mjs";
+import { readOnlyQuery } from "./lib/prod-query.mjs";
 
-const projectId = "kmzuxrvfrwwpwmoovwcp";
-const smokeEnvPath = "/Users/vanshulgoyal/Development/copilot/adbrain/.env.smoke";
-
-/** Team and QA sign-ups; left out unless --include-test. */
-export const TEST_DOMAINS = ["adbrain.vanshul.com", "adbrain.local"];
 
 export const STEPS = [
   ["signed_up", "Signed up"],
@@ -28,16 +23,14 @@ export const STEPS = [
   ["lead", "First lead/chat"],
 ];
 
-export function funnelSql(days, excludedEmails, { includeTest = false } = {}) {
+export function funnelSql(days, internalEmails, { includeInternal = false } = {}) {
   if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("--days must be a whole number from 1 to 365.");
-  const quote = (value) => `'${value.trim().toLowerCase().replaceAll("'", "''")}'`;
-  const testFilter = includeTest ? "" : `
-    and lower(coalesce(email, '')) <> all(array[${excludedEmails.map(quote).join(",")}]::text[])
-    and split_part(lower(coalesce(email, '')), '@', 2) <> all(array[${TEST_DOMAINS.map(quote).join(",")}]::text[])`;
+  const internalFilter = includeInternal ? "" : `
+    and not ${isInternalUserSql("users", internalEmails)}`;
   // Durable tables first; product_events (pruned over time) only for page views, clicks and last seen.
   return `with u as (
-  select id, created_at from auth.users
-  where created_at > now() - make_interval(days => ${days})${testFilter}
+  select id, created_at from auth.users users
+  where created_at > now() - make_interval(days => ${days})${internalFilter}
 ), b as (
   select owner_id as user_id, id as business_id from public.businesses where owner_id in (select id from u)
 ), e as (
@@ -81,8 +74,8 @@ export function summarize(rows) {
 
 const minute = (time) => (time ? String(time).replace("T", " ").slice(0, 16) : "-");
 
-export function render({ users, totals }, days, { includeTest = false } = {}) {
-  const lines = [`Sign-ups in the last ${days} days: ${users.length} (times UTC${includeTest ? "; test accounts included" : ""})`, ""];
+export function render({ users, totals }, days, { includeInternal = false } = {}) {
+  const lines = [`Sign-ups in the last ${days} days: ${users.length} (times UTC${includeInternal ? "; internal accounts included" : ""})`, ""];
   if (users.length) {
     lines.push(`${"user".padEnd(10)}${"signed up".padEnd(18)}${"last step".padEnd(24)}${"last seen".padEnd(18)}steps`);
     for (const user of users) {
@@ -96,35 +89,13 @@ export function render({ users, totals }, days, { includeTest = false } = {}) {
   return lines.join("\n");
 }
 
-async function query(sql) {
-  const env = parseEnv(await readFile(join(homedir(), "Development/copilot/arcade/.env"), "utf8"));
-  if (!env.SUPABASE_TOKEN) throw new Error("Supabase Management token is unavailable.");
-  const response = await fetch(`https://api.supabase.com/v1/projects/${projectId}/database/query`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.SUPABASE_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query: `BEGIN READ ONLY;\n${sql};\nCOMMIT;`, read_only: true }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`Read-only query failed (HTTP ${response.status}).`);
-  const rows = await response.json();
-  if (!Array.isArray(rows)) throw new Error("Unexpected database response.");
-  return rows;
-}
-
 async function main() {
-  const { values } = parseArgs({ options: { days: { type: "string", default: "14" }, "include-test": { type: "boolean", default: false } } });
-  const includeTest = values["include-test"];
-  const excluded = [];
-  try {
-    const smoke = parseEnv(await readFile(smokeEnvPath, "utf8")).SMOKE_EMAIL;
-    if (smoke) excluded.push(smoke);
-  } catch {
-    // Reported below.
-  }
+  const { values } = parseArgs({ options: { days: { type: "string", default: "14" }, "include-internal": { type: "boolean", default: false } } });
+  const includeInternal = values["include-internal"];
   const days = Number(values.days);
-  const rows = await query(funnelSql(days, excluded, { includeTest }));
-  console.log(render(summarize(rows), days, { includeTest }));
-  if (!includeTest) console.log(`Test accounts (@${TEST_DOMAINS.join(", @")}${excluded.length ? " and the smoke account" : ""}) are excluded; add --include-test to see them.${excluded.length ? "" : " Note: .env.smoke is missing."}`);
+  const rows = await readOnlyQuery(funnelSql(days, await localInternalEmails(), { includeInternal }));
+  console.log(render(summarize(rows), days, { includeInternal }));
+  if (!includeInternal) console.log("Internal accounts (scripts/lib/internal-accounts.mjs) are excluded; add --include-internal to see them.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
