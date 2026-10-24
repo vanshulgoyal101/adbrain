@@ -8,6 +8,8 @@ import { Input, Label } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { safeAuthRedirect } from "@/lib/auth-redirect";
 import { rememberReturningVisitor } from "@/lib/login-visitor";
+import { reportAuthOutcome } from "@/lib/observability/auth-beacon";
+import { authCode } from "@/lib/observability/auth-events";
 
 const primaryClass = "bg-[#dcf77a] font-bold text-[#18211f] shadow-none hover:bg-[#c9ed53] focus-visible:outline-[#216849]";
 
@@ -59,7 +61,11 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
         email,
         options: { emailRedirectTo: callbackUrl() },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        reportAuthOutcome({ method: "email_link", outcome: "failed", code: authCode(error) });
+        throw new Error(error.message);
+      }
+      reportAuthOutcome({ method: "email_link", outcome: "started" });
       remember();
       setStatus("sent");
     } catch (error) {
@@ -80,7 +86,10 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
         provider: "google",
         options: { redirectTo: callbackUrl() },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        reportAuthOutcome({ method: "google", outcome: "failed", code: authCode(error) });
+        throw new Error(error.message);
+      }
       remember();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in with Google. Please try again.");
@@ -97,7 +106,11 @@ export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: bo
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw new Error(error.message);
+      if (error) {
+        reportAuthOutcome({ method: "password", outcome: "failed", code: authCode(error) });
+        throw new Error(error.message);
+      }
+      reportAuthOutcome({ method: "password", outcome: "success" });
       remember();
       router.replace(redirect);
       router.refresh();

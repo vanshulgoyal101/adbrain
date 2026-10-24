@@ -168,6 +168,18 @@ and browser collection on unless disabled or denied by DNT/GPC. Turning off
 `PRODUCT_LOGGING_ENABLED` also drops browser events at `/api/events`. Disabling
 the sink does not remove existing rows or runtime log copies.
 
+## Sign-in Events (#451 L4)
+
+Workflow events `auth.sign_in.<method>` and, for a first sign-in (the address is confirmed in the
+same moment), `auth.sign_up.<method>`, with `<method>` `password`, `email_link` or `google`.
+`/auth/callback` records Google and email-link outcomes; a failed callback, which redirects to
+`/login?error=auth` with a 302 and so looks like a successful request, records `failed` with
+`errorCode` `AUTH_CALLBACK:<Supabase code>` (`missing_params` for a bare link, `other` for
+anything that is not a plain code). Password sign-in, sending a sign-in link (`started`) and
+starting Google happen in the browser, which reports them to `POST /api/auth/outcome` with
+`AUTH_CLIENT:<code>` on failure. Events carry codes, never the email or message; `npm run stats`
+shows them in its auth section, including signed-out failures.
+
 ## Reading It (#451)
 
 `npm run stats [-- --days 7] [-- --include-internal]` prints, from production (read-only,
