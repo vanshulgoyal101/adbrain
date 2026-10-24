@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { AdbrainCycle } from "@/components/adbrain-cycle";
 import { LoginForm } from "@/components/login-form";
+import { useHasPendingIdea } from "@/lib/ideas/pending";
 import { markLoginIntroSeen, useLoginIntroSeen, useReturningVisitor } from "@/lib/login-visitor";
 import styles from "./login-experience.module.css";
 
@@ -51,7 +52,9 @@ export function LoginExperience({ deepLink = false }: { deepLink?: boolean }) {
   const [choice, setChoice] = useState<"new" | "returning" | null>(null);
   const [introClosed, setIntroClosed] = useState(false);
   const phone = useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
-  const mode = choice ?? (returning || deepLink ? "returning" : "new");
+  // A visitor who picked an idea in the gallery is most likely new, even though /create sent them here.
+  const pendingIdea = useHasPendingIdea();
+  const mode = choice ?? (returning || (deepLink && !pendingIdea) ? "returning" : "new");
   const isNew = mode === "new";
 
   const closeIntro = () => {
