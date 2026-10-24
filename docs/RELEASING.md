@@ -178,6 +178,12 @@ The rollback drill input `drill` forces the same FAIL, then really rolls
 production back and opens a `[DRILL]` core bug; restore with the recovery steps
 below.
 
+**Without `VERCEL_TOKEN` (CEO, Oct 24, #413):** the guard waits 3 minutes after each
+production deploy, runs the read-only smoke and only reports (one tracker issue); there
+is no automatic rollback and the drift check is skipped. Roll back by hand from a
+logged-in CLI: `npx --yes vercel@60.1.3 promote <previous-deployment-url> --scope vanshul-goyals-projects`.
+Revisit if a bad deploy ever stays live longer than an hour.
+
 Recovery after an automatic rollback: the guard rolls back by **promoting** the
 last good deployment (#390), so Vercel keeps auto-promoting later deploys; each new
 deploy gets its own guard. Fix forward or revert through a PR; when the fix is live

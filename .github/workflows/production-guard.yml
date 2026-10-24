@@ -56,6 +56,11 @@ jobs:
         id: wait
         if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs wait "$SHA"
+      # No token (CEO, #413): fix forward. Give the deploy ~3 min to go live, then smoke production;
+      # no rollback, and an issue only when the smoke itself fails.
+      - name: Wait for the deploy to go live (no token)
+        if: github.event_name == 'deployment_status' && env.VERCEL_TOKEN == ''
+        run: sleep 180
       - name: Read-only core smoke (one retry)
         id: smoke
         if: steps.wait.outputs.superseded != 'true'
