@@ -88,6 +88,12 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     expect(mocks.insights).not.toHaveBeenCalled();
   });
 
+  it("refreshes a campaign on the 15-minute call nearest the hour, despite the last run's Meta latency (#274)", async () => {
+    mocks.latest = { fetched_at: new Date(Date.now() - 57 * 60_000).toISOString() };
+    mocks.campaigns = [bound("c1", "m1")];
+    expect((await call()).body).toMatchObject({ refreshed: 1, skipped: 0 });
+  });
+
   it("keeps refreshing other campaigns when one Meta read fails, and reports 503", async () => {
     mocks.insights.mockRejectedValueOnce(new Error("Meta unavailable"));
     const { status, body } = await call();

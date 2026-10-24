@@ -3,7 +3,8 @@ set local lock_timeout = '5s';
 set local statement_timeout = '30s';
 
 -- #274: Supabase pg_cron + pg_net call the existing CRON_SECRET routes on time (GitHub's
--- 15-minute schedule fired every few hours). The secret lives only in Supabase Vault as
+-- 15-minute schedule fired every few hours). refresh-results is called every 15 minutes and
+-- refreshes each campaign about hourly itself. The secret lives only in Supabase Vault as
 -- `adbrain_cron_secret`, loaded once by DevOps (docs/OPERATIONS.md#scheduled-jobs). Without
 -- it every call is a no-op. Databases that do not preload pg_cron and pg_net (CI, local)
 -- get the helper but no schedule.
@@ -37,7 +38,7 @@ begin
   -- cron.schedule replaces a job with the same name, so reapplying is safe.
   perform cron.schedule('adbrain-enforce-spend', '*/15 * * * *', $job$select private.call_cron_route('/api/cron/enforce-spend')$job$);
   perform cron.schedule('adbrain-sync-leads', '5,20,35,50 * * * *', $job$select private.call_cron_route('/api/cron/sync-leads')$job$);
-  perform cron.schedule('adbrain-refresh-results', '10 * * * *', $job$select private.call_cron_route('/api/cron/refresh-results')$job$);
+  perform cron.schedule('adbrain-refresh-results', '10,25,40,55 * * * *', $job$select private.call_cron_route('/api/cron/refresh-results')$job$);
   perform cron.schedule('adbrain-cron-history-cleanup', '40 3 * * *', $job$delete from cron.job_run_details where end_time < now() - interval '7 days'$job$);
 end;
 $do$;

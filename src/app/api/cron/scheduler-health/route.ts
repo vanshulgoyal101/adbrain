@@ -5,10 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
-/** The jobs Supabase pg_cron calls (#274; db/migrations/20261024_scheduler_pg_cron.sql) and how often. */
+/** The jobs Supabase pg_cron calls (#274; db/migrations/20261024_scheduler_pg_cron.sql) and how often each must succeed. */
 const JOBS = [
   { job: "enforce-spend", everyMinutes: 15 },
   { job: "sync-leads", everyMinutes: 15 },
+  // Called every 15 min, but a single failing campaign makes a call 503; an hour keeps that from paging.
   { job: "refresh-results", everyMinutes: 60 },
 ] as const;
 const LOOKBACK_MS = 24 * 3_600_000;

@@ -420,7 +420,7 @@ alone is not a safe deployment plan.
 | [20261022_payment_webhook_health.sql](../db/migrations/20261022_payment_webhook_health.sql) | Service-only `production_payment_webhook_health` counts (#178); apply before serving `/api/cron/payment-health` |
 | [20261022_meta_revoke_subject_scope.sql](../db/migrations/20261022_meta_revoke_subject_scope.sql) | Same-signature service-only `meta_revoke_subject`; deauthorize clears only connections using that Meta user's token (#181) |
 | [20261023_meta_cost_settle.sql](../db/migrations/20261023_meta_cost_settle.sql) | Service-only `customer_ad_settle_costs` and `customer_ad_settling_businesses`, evidence campaign index, balance no longer held by a settling run's stale evidence (#221); apply before serving the updated `enforce-spend` sweep |
-| [20261024_scheduler_pg_cron.sql](../db/migrations/20261024_scheduler_pg_cron.sql) | `pg_cron` + `pg_net` jobs calling the cron routes on time (#274): enforce-spend and sync-leads every 15 min, refresh-results hourly; owner-only `private.call_cron_route` reads `adbrain_cron_secret` from Vault and is a no-op without it; skipped where `pg_cron`/`pg_net` are not preloaded |
+| [20261024_scheduler_pg_cron.sql](../db/migrations/20261024_scheduler_pg_cron.sql) | `pg_cron` + `pg_net` jobs calling the cron routes on time (#274): enforce-spend, sync-leads and refresh-results every 15 min (refresh-results reads each campaign about hourly); owner-only `private.call_cron_route` reads `adbrain_cron_secret` from Vault and is a no-op without it; skipped where `pg_cron`/`pg_net` are not preloaded |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and
