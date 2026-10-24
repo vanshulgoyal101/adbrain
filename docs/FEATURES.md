@@ -460,6 +460,12 @@ sitemap, and social images. Workspace pages are authenticated and noindex; robot
 rules are indexing hints, not access control. No search-ranking guarantee follows
 from metadata correctness.
 
+`/ideas` and `/ideas/<industry>` (#289) show three real AdBrain ads for each of ten
+example local businesses, labelled as examples, made by `scripts/make-idea-ads.ts`
+with the production Create pipeline (no phone numbers, evergreen offers). "Make one
+like this" saves the idea's goal in localStorage and opens Create, which starts from
+it after sign-in; the login page keeps the create-account view while it's pending.
+
 Owner activity records, AI usage events, and structured product telemetry serve
 different purposes. See [Observability](OBSERVABILITY.md) for privacy, access, and
 best-effort persistence; do not call an owner-insertable audit log tamper-proof.
