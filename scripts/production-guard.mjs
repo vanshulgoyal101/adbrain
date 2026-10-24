@@ -77,7 +77,9 @@ if (command === "live") {
   const target = deployments.find((deployment) => deployment.created < before && deployment.meta?.githubCommitSha !== sha);
   if (!target) throw new Error(`No earlier READY production deployment to roll back to from ${sha.slice(0, 7)}`);
   console.log(`Rolling back ${current.sha.slice(0, 7)} -> ${target.meta?.githubCommitSha?.slice(0, 7)} (${target.url})`);
-  execFileSync("npx", ["--yes", "vercel@60.1.3", "rollback", target.url, "--yes", "--scope", team, "--token", token], { stdio: ["ignore", "ignore", "inherit"] });
+  // Promote, not `vercel rollback`: a rollback turns off auto-assignment and holds every later
+  // deploy until someone promotes by hand (#316, #390). The next push still gets its own guard.
+  execFileSync("npx", ["--yes", "vercel@60.1.3", "promote", target.url, "--yes", "--scope", team, "--token", token], { stdio: ["ignore", "ignore", "inherit"] });
   const after = await live();
   console.log(`Production now serves ${after.sha.slice(0, 7)} (${after.url})`);
   if (after.id !== target.uid) process.exitCode = 1;
