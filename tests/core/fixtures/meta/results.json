@@ -45,54 +45,10 @@
   },
   {
     "method": "GET",
-    "path": "120253678786150526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop&date_preset=maximum",
+    "path": "120253678786150526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop",
     "status": 200,
     "body": {
-      "data": [
-        {
-          "impressions": "70",
-          "clicks": "2",
-          "spend": "10.69",
-          "actions": [
-            {
-              "action_type": "link_click",
-              "value": "1"
-            },
-            {
-              "action_type": "onsite_conversion.total_messaging_connection",
-              "value": "1"
-            },
-            {
-              "action_type": "post_engagement",
-              "value": "1"
-            },
-            {
-              "action_type": "page_engagement",
-              "value": "1"
-            },
-            {
-              "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
-              "value": "1"
-            },
-            {
-              "action_type": "onsite_conversion.messaging_first_reply",
-              "value": "1"
-            },
-            {
-              "action_type": "onsite_conversion.messaging_conversation_started_7d",
-              "value": "1"
-            }
-          ],
-          "date_start": "2026-10-23",
-          "date_stop": "2026-10-24"
-        }
-      ],
-      "paging": {
-        "cursors": {
-          "before": "MAZDZD",
-          "after": "MAZDZD"
-        }
-      }
+      "data": []
     }
   },
   {
@@ -160,7 +116,7 @@
       ],
       "paging": {
         "cursors": {
-          "before": "QVFIVERHODBYOGdTeGVHbF9HSHdjLUljTXR2RFdTRjRqby1fREhaR2dVYW5saWRUZAzRFenByVkhVYXVKRTY4VTRYOTF2ek9uclR4X2w0VzZAhZAXYyaGZAIMDNR",
+          "before": "QVFIVEdialF2TGhNSG9fZAC04ZAWVsd3l4ZAXVENXdyUXJ2QWxxZAG4xU29uS1piN2diTW5zVHZAUU2dGNVlPVkRWYUhYVmYwelBkaGhINzRkSVU4UmZAVbWkzTHRB",
           "after": "QVFIVGwyM19fZAm5yTExTSnZARZAzJnczl2blFJUnNHZATNkeElSNEtBUnRpN05pa1JjZAmtqc3JyUVFLTHFaTUQzYW1jZAEIwSHRoZAkFWcjBtVncxNmZAUbjZAEZAmxR"
         }
       }
@@ -200,7 +156,7 @@
   },
   {
     "method": "GET",
-    "path": "120253164673180526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop&date_preset=maximum",
+    "path": "120253164673180526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop",
     "status": 200,
     "body": {
       "data": []

@@ -35,11 +35,38 @@
 .sectionHeading { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 32px; }
 .sectionHeading h2, .faq h2, .safety h2 { font-family: Georgia, serif; font-size: 34px; font-weight: 400; line-height: 1.2; margin-top: 10px; }
 .sectionHeading > p { flex: 0 0 300px; font-size: 12px; line-height: 1.7; color: var(--subtle); }
-.ideaGrid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
-.ideaGrid a { display: block; }
-.ideaGrid img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; border-radius: 6px; border: 1px solid var(--line); }
-.ideaGrid + .exampleFoot { margin-top: 28px; }
-.ideaGrid span { display: block; margin-top: 10px; font-size: 15px; font-weight: 700; }
+.exampleGrid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 64px; align-items: start; }
+.brief { border-top: 2px solid var(--ink); padding-top: 24px; }
+.label { font-size: 10px; font-weight: 700; color: var(--subtle); }
+.brief h3 { font-size: 25px; margin: 10px 0 8px; }
+.location { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--subtle); }
+.brandDetails { margin: 24px 0; }
+.brandDetails > div { display: grid; grid-template-columns: 100px 1fr; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; font-size: 13px; line-height: 1.5; }
+.brandDetails dt { color: var(--subtle); }
+.brandDetails dd { margin: 0; }
+.goal { border-left: 3px solid #739641; padding-left: 16px; }
+.goal p { margin-top: 8px; font-family: Georgia, serif; font-size: 21px; line-height: 1.5; }
+.industries { border: 0; padding: 0; margin: 0 0 28px; display: flex; flex-wrap: wrap; gap: 8px; }
+.industries legend { font-weight: 700; font-size: 12px; margin-bottom: 10px; }
+.industries label { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; cursor: pointer; }
+.industries .selectedIndustry { background: #eff5e6; border-color: #66883b; }
+.industries input { accent-color: #395b23; width: 16px; height: 16px; }
+.ad { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.adTop { padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-size: 13px; }
+.adTop span { color: var(--subtle); font-size: 11px; }
+.poster { background: #eef3d7; }
+.ad[data-tone="fitness"] .poster { background: #dfeef6; }
+.ad[data-tone="interiors"] .poster { background: #f7e8e5; }
+.posterCopy { padding: 28px 32px; min-height: 242px; }
+.posterCopy > span { font-size: 10px; font-weight: 700; }
+.posterCopy h3 { font-family: Georgia, serif; font-size: 36px; font-weight: 400; line-height: 1.12; max-width: 340px; margin: 18px 0; }
+.posterCopy p { font-size: 11px; }
+.adPhoto { width: 100%; height: auto; aspect-ratio: 1.8; object-fit: cover; object-position: center; }
+.adCopy { padding: 20px; }
+.adCopy > p { font-size: 13px; line-height: 1.7; min-height: 90px; }
+.adCopy > div { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+.adCopy span { font-size: 10px; color: var(--subtle); }
+.adCopy strong { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .exampleFoot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 20px; font-size: 10px; line-height: 1.6; color: var(--subtle); }
 .exampleFoot a { text-decoration: underline; }
 .workflow { border-top: 1px solid var(--line); }
@@ -67,11 +94,12 @@
 .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
 @media (max-width: 1000px) {
   .hero::after { background: linear-gradient(90deg, #f5f7f6 0%, rgba(245, 247, 246, .98) 60%, rgba(245, 247, 246, .9) 72%, rgba(245, 247, 246, 0) 94%); }
-  .safety, .faq { gap: 32px; }
-  .ideaGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .exampleGrid, .safety, .faq { gap: 32px; }
   .sectionHeading { align-items: start; flex-direction: column; }
   .sectionHeading > p { flex-basis: auto; }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .posterCopy { padding: 24px; min-height: 266px; }
+  .posterCopy h3 { font-size: 32px; }
 }
 @media (max-width: 760px) {
   .header { height: 68px; padding: 0 20px; }
@@ -88,7 +116,9 @@
   .cycle h2 { font-size: 29px; }
   .sectionHeading h2, .faq h2, .safety h2 { font-size: 29px; }
   .sectionHeading { gap: 16px; }
-  .steps, .safety, .faq { grid-template-columns: minmax(0, 1fr); }
+  .exampleGrid, .steps, .safety, .faq { grid-template-columns: minmax(0, 1fr); }
+  .posterCopy { min-height: 262px; }
+  .adCopy > p { min-height: 110px; }
   .safety { padding: 36px 24px; }
   .steps { gap: 24px; }
   .steps h3 { margin-top: 10px; }

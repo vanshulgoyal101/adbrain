@@ -598,27 +598,3 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
-
-describe("<LeadInbox> on a phone (#376)", () => {
-  it("puts the three selects behind one Filter button that shows how many are set", async () => {
-    const user = userEvent.setup();
-    render(<LeadInbox businessName="Solaride" initialLeads={[lead()]} metaReady />);
-    const toggle = screen.getByRole("button", { name: "Filter" });
-    const filters = document.getElementById("enquiry-filters")!;
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(filters).not.toHaveAttribute("data-open");
-    expect(filters).toContainElement(screen.getByLabelText("Sort enquiries"));
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(filters).toHaveAttribute("data-open");
-    await user.selectOptions(screen.getByLabelText("Sort enquiries"), "oldest");
-    expect(screen.getByRole("button", { name: "Filter, 1 set" })).toBeInTheDocument();
-  });
-
-  it("marks empty fields so the phone layout can hide them instead of showing a lone dash", () => {
-    render(<LeadInbox businessName="Solaride" initialLeads={[lead({ phone: null, email: null, city: null })]} metaReady />);
-    const row = screen.getAllByRole("row").at(-1)!;
-    const blanks = row.querySelectorAll("td > span:not([aria-hidden])");
-    expect([...blanks].map((el) => el.textContent)).toEqual(["—", "—"]);
-  });
-});

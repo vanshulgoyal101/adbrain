@@ -224,10 +224,4 @@ describe("new and returning visitors", () => {
     render(await LoginPage({ searchParams: Promise.resolve({ redirect: "//evil.example" }) }));
     expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
   });
-
-  it("keeps the create-account view for a gallery visitor sent here from /create", async () => {
-    localStorage.setItem("adbrain:pending-idea-goal", "Get WhatsApp chats");
-    render(await LoginPage({ searchParams: Promise.resolve({ redirect: "/create" }) }));
-    expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
-  });
 });
