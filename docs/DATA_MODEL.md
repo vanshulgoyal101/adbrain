@@ -141,7 +141,7 @@ database length bounds; prompt builders truncate selected fields independently.
 | --- | --- |
 | `public.creatives` | Business, brief, angle, headline, primary text, CTA, image URL, `variant_group` UUID, status `draft`/`approved`, optional `generation` JSON, timestamps |
 | `public.campaigns` | Business, name, objective, total daily budget, status `draft`/`active`/`paused`/`completed`, creative UUID array, Meta campaign/adset/ad IDs, account/Page/generation binding, raw metadata, launch/create times |
-| `public.campaign_results` | Campaign FK, impressions/clicks/leads, spend, nullable CPL, nullable conversations/cost-per-conversation, destination/period, fetch timestamp; ownership follows campaign -> business |
+| `public.campaign_results` | Campaign FK, impressions/clicks/leads, spend, nullable CPL, nullable conversations/cost-per-conversation, nullable `whatsapp_opens` (Meta `link_click` on WhatsApp ads, #493), destination/period, fetch timestamp; ownership follows campaign -> business |
 | `public.campaign_drafts` | Business/owner, version >= 1, input JSON, expiry, creation/update times; composite unique `(business_id,id)` |
 | `public.campaign_operations` | Business/draft/version/generation, kind `campaign_create`, idempotency key, request hash, state/phase, lease, attempt count, payload/result/external IDs, sanitized error, timestamps |
 
@@ -430,6 +430,7 @@ alone is not a safe deployment plan.
 | [20261023_meta_cost_settle.sql](../db/migrations/20261023_meta_cost_settle.sql) | Service-only `customer_ad_settle_costs` and `customer_ad_settling_businesses`, evidence campaign index, balance no longer held by a settling run's stale evidence (#221); apply before serving the updated `enforce-spend` sweep |
 | [20261024_scheduler_pg_cron.sql](../db/migrations/20261024_scheduler_pg_cron.sql) | `pg_cron` + `pg_net` jobs calling the cron routes on time (#274): enforce-spend, sync-leads and refresh-results every 15 min (refresh-results reads each campaign at most hourly); owner-only `private.call_cron_route` reads `adbrain_cron_secret` from Vault and is a no-op without it; skipped where `pg_cron`/`pg_net` are not preloaded |
 | [20261024_security_advisors.sql](../db/migrations/20261024_security_advisors.sql) | Advisor hardening (#359): `owns_business` becomes SECURITY INVOKER (same answer), `handle_new_user` trigger not executable by API roles, fixed `set_updated_at` search path, 8 RLS policies use `(select auth.uid())` (same predicates), indexes on lead/operation/connection tenant foreign keys |
+| [20261024_whatsapp_opens.sql](../db/migrations/20261024_whatsapp_opens.sql) | Additive nullable `campaign_results.whatsapp_opens` (>= 0, #493); release before the code that writes it |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and
