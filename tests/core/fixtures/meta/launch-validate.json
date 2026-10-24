@@ -1,0 +1,159 @@
+{
+  "recordedAt": "2026-10-24T12:23:34.284Z",
+  "inputs": {
+    "name": "AdBrain #419 validate (PAUSED, deleted after)",
+    "dailyBudgetRupees": 280,
+    "link": "https://adbrain.vanshul.com",
+    "ageMin": 25,
+    "ageMax": 55,
+    "gender": "all",
+    "location": {
+      "cities": [
+        {
+          "key": "1021145"
+        },
+        {
+          "key": "2676092"
+        },
+        {
+          "key": "1035473"
+        }
+      ]
+    },
+    "creative": {
+      "headline": "Rooftop solar in 7 days",
+      "message": "Cut your power bill with rooftop solar.\nFree site visit.",
+      "description": "Free site visit in Tricity",
+      "cta": "Get Quote"
+    },
+    "whatsappGreeting": {
+      "autofill": "Hi, I'd like a solar quote.",
+      "greeting": "Hi! Thanks for reaching out to Solaride."
+    },
+    "phone": "+910000000000"
+  },
+  "tape": [
+    {
+      "destination": "instant_form",
+      "kind": "campaigns",
+      "form": {
+        "name": "AdBrain #419 validate (PAUSED, deleted after)",
+        "objective": "OUTCOME_LEADS",
+        "status": "PAUSED",
+        "special_ad_categories": "[]",
+        "is_adset_budget_sharing_enabled": "false"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "instant_form",
+      "kind": "adsets",
+      "form": {
+        "name": "AdBrain #419 validate (PAUSED, deleted after) — Ad set",
+        "campaign_id": "CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "LEAD_GENERATION",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "ON_AD",
+        "promoted_object": "{\"page_id\":\"PAGE\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"targeting_automation\":{\"advantage_audience\":1}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "instant_form",
+      "kind": "adcreatives",
+      "form": {
+        "name": "Rooftop solar in 7 days",
+        "object_story_spec": "{\"page_id\":\"PAGE\",\"link_data\":{\"image_hash\":\"FEED_HASH\",\"message\":\"Cut your power bill with rooftop solar.\\nFree site visit.\",\"name\":\"Rooftop solar in 7 days\",\"description\":\"Free site visit in Tricity\",\"link\":\"https://adbrain.vanshul.com\",\"call_to_action\":{\"type\":\"LEARN_MORE\",\"value\":{\"lead_gen_form_id\":\"LEAD_FORM\"}}}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "instant_form",
+      "kind": "ads",
+      "form": {
+        "name": "Rooftop solar in 7 days",
+        "adset_id": "ADSET",
+        "status": "PAUSED",
+        "creative": "{\"creative_id\":\"CREATIVE\"}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "whatsapp",
+      "kind": "campaigns",
+      "form": {
+        "name": "AdBrain #419 validate (PAUSED, deleted after)",
+        "objective": "OUTCOME_ENGAGEMENT",
+        "status": "PAUSED",
+        "special_ad_categories": "[]",
+        "is_adset_budget_sharing_enabled": "false"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "whatsapp",
+      "kind": "adsets",
+      "form": {
+        "name": "AdBrain #419 validate (PAUSED, deleted after) — Ad set",
+        "campaign_id": "CAMPAIGN",
+        "status": "PAUSED",
+        "daily_budget": "28000",
+        "billing_event": "IMPRESSIONS",
+        "optimization_goal": "CONVERSATIONS",
+        "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "destination_type": "WHATSAPP",
+        "promoted_object": "{\"page_id\":\"PAGE\",\"whatsapp_phone_number\":\"+910000000000\"}",
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"targeting_automation\":{\"advantage_audience\":1}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "whatsapp",
+      "kind": "adcreatives",
+      "form": {
+        "name": "Rooftop solar in 7 days",
+        "object_story_spec": "{\"page_id\":\"PAGE\",\"link_data\":{\"image_hash\":\"FEED_HASH\",\"message\":\"Cut your power bill with rooftop solar.\\nFree site visit.\",\"name\":\"Rooftop solar in 7 days\",\"description\":\"Free site visit in Tricity\",\"link\":\"https://wa.me/910000000000\",\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'd like a solar quote.\\\"},\\\"text\\\":\\\"Hi! Thanks for reaching out to Solaride.\\\"}}}\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/910000000000\"}}}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "destination": "whatsapp",
+      "kind": "ads",
+      "form": {
+        "name": "Rooftop solar in 7 days",
+        "adset_id": "ADSET",
+        "status": "PAUSED",
+        "creative": "{\"creative_id\":\"CREATIVE\"}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    }
+  ]
+}
