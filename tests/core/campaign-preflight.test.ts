@@ -49,6 +49,15 @@ describe("core: launch preflight", () => {
     expect(review("https://cedarridgechiro.com").canCreatePaused).toBe(true);
   });
 
+  // #470: Brand Brain accepted "vanshul.com" and old rows store it that way.
+  it.each(["vanshul.com", "www.cedarridgechiro.com/book"])("allows a website saved without https:// (%j)", (website) => {
+    expect(review(website).canCreatePaused).toBe(true);
+  });
+
+  it.each(["facebook.com/cedarridge", "javascript:alert(1)"])("still blocks %j", (website) => {
+    expect(review(website).canCreatePaused).toBe(false);
+  });
+
   it("does not require a website for WhatsApp campaigns", () => {
     expect(review(null, "whatsapp").canCreatePaused).toBe(true);
   });

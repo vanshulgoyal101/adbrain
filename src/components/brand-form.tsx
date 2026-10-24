@@ -13,7 +13,7 @@ import { PhoneField } from "@/components/ui/phone-field";
 import { TokenField } from "@/components/ui/token-field";
 import { Spinner } from "@/components/ui/spinner";
 import { BRAND_FONTS, brandFontId } from "@/lib/brand/fonts";
-import { validateBrandFields } from "@/lib/brand/validation";
+import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import type { Business } from "@/lib/types";
 import type { BrandExtraction } from "@/lib/templates/ads";
 
@@ -153,6 +153,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
   const previewAudience = fields.target_audience.trim() || "your ideal customer";
   const previewLocation = firstLine(fields.locations) || "your service area";
   const previewContact = fields.phone.trim() || fields.website.trim();
+  const websiteUrl = normalizeWebsite(fields.website);
   const readinessChecks = [
     {
       label: "Business identity",
@@ -347,15 +348,22 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               placeholder="Your business name"
             />
           </Field>
-          <Field label="Website" error={errors.website}>
-            <Input
-              name="website"
-              value={fields.website}
-              onChange={(e) => set("website", e.target.value)}
-              placeholder="example.com"
-              aria-invalid={errors.website ? true : undefined}
-            />
-          </Field>
+          <div className="flex flex-col gap-1">
+            <Field label="Website" error={errors.website}>
+              <Input
+                name="website"
+                value={fields.website}
+                onChange={(e) => set("website", e.target.value)}
+                placeholder="example.com"
+                aria-invalid={errors.website ? true : undefined}
+              />
+            </Field>
+            {websiteUrl && (
+              <a href={websiteUrl} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-slate-500 underline-offset-2 hover:underline">
+                Ads link to {websiteUrl.replace(/^https?:\/\//i, "")}
+              </a>
+            )}
+          </div>
           <Field label="Industry / business type">
             <Input
               name="vertical"

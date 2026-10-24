@@ -83,6 +83,9 @@ Save business name, industry, website, description, voice, audience, languages,
 service areas, selling points, offers, brand colors/font/logo, and contact fields.
 The industry is free text, not a solar-only enum. The reusable fact record drives
 copy, image prompts, and campaign audience suggestions.
+A website typed as a bare domain (`solaride.in`) is saved as `https://solaride.in` and shown
+under the field as the link ads open; other schemes are refused. Preflight and launch read
+older bare-domain rows the same way (#470).
 "Saved" acknowledges only the submitted form revision after a successful save.
 Later edits, including edits made while a save is pending, require another save;
 failed saves leave the draft available for retry. There is no autosave.

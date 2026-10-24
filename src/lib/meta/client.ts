@@ -7,6 +7,7 @@ import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { normalizeWebsite } from "@/lib/brand/validation";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -916,6 +917,8 @@ export class MetaClient {
     /** A 9:16 couldn't be used and the ad fell back to the single 4:5 image (#333). */
     onStoryFallback?: (stage: "upload" | "creative", errorCode: string) => void;
   }): Promise<CreateCampaignResult> {
+    // #470: older Brand rows store a bare domain ("solaride.in"); Meta needs a full URL.
+    params = { ...params, link: normalizeWebsite(params.link) ?? params.link };
     const locations = params.variants?.length
       ? params.variants.map((variant) => variant.location ?? params.location)
       : [params.location];

@@ -121,6 +121,17 @@ describe("<BrandForm> prefill", () => {
     expect(hidden).toHaveValue("b1");
   });
 
+  it("shows the website as the link ads will open, even when typed without https:// (#470)", () => {
+    render(<BrandForm business={business({ website: "solaride.in" })} />);
+    const link = screen.getByRole("link", { name: /solaride\.in/ });
+    expect(link).toHaveAttribute("href", "https://solaride.in");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+
+    fireEvent.change(screen.getByLabelText("Website"), { target: { value: "not a site" } });
+    expect(screen.queryByRole("link", { name: /not a site/ })).toBeNull();
+  });
+
   it("previews the context AdBrain will use and updates as fields change", () => {
     render(<BrandForm business={business()} />);
     const preview = screen.getByRole("region", { name: "Live brand context" });

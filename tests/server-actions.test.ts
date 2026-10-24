@@ -97,6 +97,12 @@ describe("saveBusiness", () => {
     );
   });
 
+  it("stores a website typed without https:// as a full URL (#470)", async () => {
+    const { saveBusiness } = await import("@/app/(app)/brand/actions");
+    await saveBusiness({ ok: false }, form({ name: "Acme", website: " vanshul.com/solar " }));
+    expect(insert.mock.calls[0][0]).toMatchObject({ website: "https://vanshul.com/solar" });
+  });
+
   it("splits languages and locations on newlines only", async () => {
     const { saveBusiness } = await import("@/app/(app)/brand/actions");
     await saveBusiness(

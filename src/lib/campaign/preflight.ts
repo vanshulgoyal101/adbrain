@@ -1,6 +1,7 @@
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { SelectedAssets } from "@/lib/meta/connect-contracts";
+import { normalizeWebsite } from "@/lib/brand/validation";
 
 export interface PreflightCreative {
   id: string;
@@ -91,7 +92,7 @@ function blocker(code: ReviewBlocker["code"], message: string, action: ReviewBlo
 function isAdvertiserWebsite(website: string | null): boolean {
   let url: URL;
   try {
-    url = new URL(website ?? "");
+    url = new URL(normalizeWebsite(website) ?? "");
   } catch {
     return false;
   }

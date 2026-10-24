@@ -5,7 +5,7 @@ import { observeAction } from "@/lib/observability/logger";
 import { revalidatePath } from "next/cache";
 import { logEvent } from "@/lib/audit";
 import { fieldList, fieldStr } from "@/lib/brand/fields";
-import { validateBrandFields } from "@/lib/brand/validation";
+import { normalizeWebsite, validateBrandFields } from "@/lib/brand/validation";
 import { createClient } from "@/lib/supabase/server";
 import type { BusinessInsert } from "@/lib/types";
 
@@ -39,7 +39,7 @@ export async function saveBusiness(
       owner_id: user.id,
       name,
       vertical: str(formData, "vertical") ?? undefined,
-      website: str(formData, "website"),
+      website: normalizeWebsite(str(formData, "website")) ?? str(formData, "website"),
       description: str(formData, "description"),
       brand_voice: str(formData, "brand_voice"),
       primary_color: str(formData, "primary_color"),

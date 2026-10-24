@@ -18,7 +18,7 @@ const inputs = recorded.inputs;
 const KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
 const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
 
-async function launch(destination: AdDestination) {
+async function launch(destination: AdDestination, link = inputs.link) {
   const sent: { kind: string; form: Record<string, string> }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -38,7 +38,7 @@ async function launch(destination: AdDestination) {
   });
   const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "test-token" });
   await meta.createLeadCampaign({
-    name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link: inputs.link,
+    name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link,
     ageMin: inputs.ageMin, ageMax: inputs.ageMax, gender: inputs.gender as "all", location: inputs.location,
     creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative }],
     destination,
@@ -68,5 +68,14 @@ describe("core: launch payloads Meta accepted with validate_only (#419)", () => 
     sent.forEach((s, i) => {
       expect(s.form, `${destination} ${s.kind} changed: re-record with scripts/record-meta-launch-validate.ts`).toEqual(accepted[i].form);
     });
+  });
+
+  // #470: Brand Brain stored "solaride.in" for owners who typed it that way.
+  it("a website saved without https:// still sends Meta the accepted payloads", async () => {
+    const bare = inputs.link.replace(/^https:\/\//, "");
+    expect(bare).not.toMatch(/^https?:/);
+    const sent = await launch("instant_form", bare);
+    const accepted = tape.filter((e) => e.destination === "instant_form");
+    sent.forEach((s, i) => expect(s.form, s.kind).toEqual(accepted[i].form));
   });
 });

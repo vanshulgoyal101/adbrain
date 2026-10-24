@@ -44,6 +44,18 @@ export function isValidWebsite(raw: string): boolean {
   return isValidHttpUrl(`https://${value}`) && /\.[a-z]{2,}/i.test(value);
 }
 
+/**
+ * #470: the website as stored and sent to Meta. A bare domain gets https://; any other
+ * scheme (javascript:, ftp:, mailto:) or garbage is null. Old rows are read through this too.
+ */
+export function normalizeWebsite(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return isValidHttpUrl(value) ? value : null;
+  if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(value)) return null;
+  return isValidWebsite(value) ? `https://${value}` : null;
+}
+
 export interface FieldIssue {
   field: string;
   message: string;
@@ -65,7 +77,7 @@ export function validateBrandFields(values: {
     issues.push({ field: "email", message: "Enter a valid email address." });
   }
   const website = (values.website ?? "").trim();
-  if (website && !isValidWebsite(website)) {
+  if (website && !normalizeWebsite(website)) {
     issues.push({
       field: "website",
       message: "Enter a valid website, like yourbusiness.com",
