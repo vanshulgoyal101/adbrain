@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 
@@ -7,29 +9,22 @@ export const INDIC_SCRIPT = /[\u0900-\u097F\u0A00-\u0A7F]/;
 export type ShapedText = { src: string; width: number; height: number };
 
 const FONT_DIR = path.join(process.cwd(), "src/lib/creative/fonts");
+// Inter supplies Latin letters and digits; the Noto Indic fonts have none.
 const FAMILIES = "Noto Sans Devanagari, Noto Sans Gurmukhi, Inter";
-// Fontconfig keeps every registered file for the process, so Pango can fall back across the
-// family list (Latin letters and digits come from Inter; the Noto Indic fonts have no Latin).
-const FONT_FILES = [
-  ["NotoSansDevanagari-Regular.ttf", "Noto Sans Devanagari"],
-  ["NotoSansDevanagari-Bold.ttf", "Noto Sans Devanagari Bold"],
-  ["NotoSansGurmukhi-Regular.ttf", "Noto Sans Gurmukhi"],
-  ["NotoSansGurmukhi-Bold.ttf", "Noto Sans Gurmukhi Bold"],
-  ["Inter-Regular.ttf", "Inter"],
-  ["Inter-Bold.ttf", "Inter Bold"],
-] as const;
-let registered: Promise<void> | undefined;
+let configured = false;
 
-function registerFonts(): Promise<void> {
-  registered ??= (async () => {
-    for (const [file, font] of FONT_FILES) {
-      await sharp({ text: { text: "x", font: `${font} 8`, fontfile: path.join(FONT_DIR, file), rgba: true } }).png().toBuffer();
-    }
-  })().catch((error: unknown) => {
-    registered = undefined;
-    throw error;
-  });
-  return registered;
+/**
+ * Point fontconfig at our font folder only, before Pango first starts. Otherwise a machine's own
+ * fonts (Ubuntu ships other Devanagari faces) win, and ads would look different per server.
+ */
+function configureBundledFontsOnly() {
+  if (configured) return;
+  const dir = path.join(tmpdir(), "adbrain-fontconfig");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "fonts.conf");
+  writeFileSync(file, `<?xml version="1.0"?>\n<fontconfig><dir>${FONT_DIR}</dir><cachedir>${path.join(dir, "cache")}</cachedir></fontconfig>\n`);
+  process.env.FONTCONFIG_FILE = file;
+  configured = true;
 }
 
 const escapeMarkup = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -39,7 +34,7 @@ const escapeMarkup = (text: string) => text.replace(/&/g, "&amp;").replace(/</g,
  * draws in place of the words. Sizes are pixels; weights of 600 and above use the bold fonts.
  */
 export async function shapeText(text: string, style: { size: number; weight: number; color: string; maxWidth: number }): Promise<ShapedText> {
-  await registerFonts();
+  configureBundledFontsOnly();
   const bold = style.weight >= 600 ? " Bold" : "";
   const png = await sharp({
     text: {
