@@ -1,0 +1,533 @@
+{
+  "version": 1,
+  "ranAt": "2026-10-24T11:57:44.795Z",
+  "commit": "8e21d29",
+  "settings": {
+    "textModel": "anthropic/claude-haiku-5.5",
+    "imageModel": "openai/gpt-image-2.5-flare",
+    "judgeModel": "google/gemini-3.8-flash",
+    "schedule": "parallel",
+    "repeat": 1
+  },
+  "judgeCalibration": {
+    "model": "google/gemini-3.8-flash",
+    "cases": 10,
+    "mae": 0.075
+  },
+  "spentUsd": 0.3637,
+  "summary": {
+    "runs": 7,
+    "fullBatchRate": 0.7143,
+    "adsSaved": 17,
+    "adsExpected": 21,
+    "firstTryRate": 0.7059,
+    "offerInFoldRate": 1,
+    "scriptRate": 1,
+    "judgeCopy": 4.059,
+    "judgeImage": 3.765,
+    "inventedClaimRate": 0,
+    "imageTextErrorRate": 0.0588,
+    "costPerRunUsd": 0.0422,
+    "spentUsd": 0.2953,
+    "wallMsP50": 53172,
+    "wallMsP90": 78709,
+    "rejectedRules": {
+      "sourceQuotes": 4,
+      "repeated-headline": 1,
+      "offer-below-fold": 5,
+      "unsupported-commercial-claim": 1,
+      "hook-length": 1,
+      "all-caps": 4
+    }
+  },
+  "cases": [
+    {
+      "id": "cedar-ridge-en",
+      "language": "en",
+      "saved": 3,
+      "expected": 3,
+      "failures": [],
+      "ads": [
+        {
+          "angle": "value",
+          "headline": "$49 New-Patient Exam",
+          "primaryText": "A $49 new-patient exam and consultation is open to you if you're weighing a first visit in Austin.\nTalk through neck, back, desk-job stiffness or a sports injury with a board-certified chiropractor before you commit to anything.\nSame-day appointments are available for new patients, with evening and Saturday hours too.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.0159,
+          "judge": {
+            "copy": 4,
+            "image": 3,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "problem",
+          "headline": "Stiff from a desk job all day?",
+          "primaryText": "Stiff from a desk job or sore after weekend sports? A $49 new-patient exam lets you talk it through first.\nBring your neck, back or sports-injury concerns to a board-certified chiropractor before you commit to any care.\nSame-day appointments are available for new patients, with evening and Saturday hours too.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5",
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "sourceQuotes"
+          ],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.0176,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "offer",
+          "headline": "Know the Cost Before Your First Visit",
+          "primaryText": "Wondering what a first visit costs? The $49 new-patient exam and consultation gives you a clear answer first.\nAsk a board-certified chiropractor about neck, back or sports pain before committing to care.\nSame-day new-patient appointments, with evening and Saturday hours.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5",
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "repeated-headline"
+          ],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01803,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        }
+      ],
+      "costUsd": 0.05153,
+      "wallMs": 62450
+    },
+    {
+      "id": "solaride-factory-en",
+      "language": "en",
+      "saved": 3,
+      "expected": 3,
+      "failures": [],
+      "ads": [
+        {
+          "angle": "value",
+          "headline": "Solar costs rise after 31 December",
+          "primaryText": "Don't let the 31 December price rise hit your factory: solar costs go up by more than ₹10,000 per kW after that date.\nDecide by 10 November for a free site survey from qualified engineering graduates of IIT Bombay and PEC Chandigarh.\nDiwali offer: 10% off rooftop solar installation.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01665,
+          "judge": {
+            "copy": 5,
+            "image": 5,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "problem",
+          "headline": "Your Factory's Solar Cost Jumps 31 Dec",
+          "primaryText": "Factory solar costs more after 31 December. Book by 10 November and get 10% off rooftop installation this Diwali.\nAfter that date, costs rise by over ₹10,000 per kW. Decide by 10 November.\nBacked by IIT Bombay and PEC Chandigarh engineering graduates. Start with a free site survey.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5",
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "sourceQuotes"
+          ],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01874,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "offer",
+          "headline": "Factory Solar: Decide by 10 November",
+          "primaryText": "Diwali offer: 10% off factory rooftop solar. Costs rise over ₹10,000 per kW after 31 December.\nWant panels before 31 December? Decide by 10 November, with engineering graduates from IIT Bombay and PEC Chandigarh.\nBook your free site survey now.",
+          "cta": "Get Offer",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01658,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        }
+      ],
+      "costUsd": 0.05197,
+      "wallMs": 53172
+    },
+    {
+      "id": "solaride-factory-hi",
+      "language": "hi",
+      "saved": 1,
+      "expected": 3,
+      "failures": [
+        {
+          "angle": "value",
+          "stage": "concept",
+          "rules": [
+            "hook-length",
+            "all-caps"
+          ]
+        },
+        {
+          "angle": "problem",
+          "stage": "concept",
+          "rules": [
+            "all-caps",
+            "offer-below-fold"
+          ]
+        }
+      ],
+      "ads": [
+        {
+          "angle": "offer",
+          "headline": "31 दिसंबर से पहले बिजली बिल कम करें",
+          "primaryText": "31 दिसंबर के बाद नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा होगी।\nअभी फ्री साइट सर्वे बुक करें और अपनी फैक्ट्री की छत का आकलन करवाएं।\nडेडलाइन से पहले इंस्टॉल करवाकर फैक्ट्री को स्वच्छ ऊर्जा से जोड़ें।",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01702,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        }
+      ],
+      "costUsd": 0.02481,
+      "wallMs": 65940
+    },
+    {
+      "id": "solaride-factory-hinglish",
+      "language": "hinglish",
+      "saved": 1,
+      "expected": 3,
+      "failures": [
+        {
+          "angle": "value",
+          "stage": "concept",
+          "rules": [
+            "all-caps",
+            "offer-below-fold",
+            "offer-below-fold"
+          ]
+        },
+        {
+          "angle": "problem",
+          "stage": "concept",
+          "rules": [
+            "all-caps",
+            "offer-below-fold",
+            "sourceQuotes"
+          ]
+        }
+      ],
+      "ads": [
+        {
+          "angle": "offer",
+          "headline": "31 December se pehle Non-DCR Solar",
+          "primaryText": "Free site survey abhi book karein: 31 December ke baad non-DCR solar panels band ho rahe hain.\n31 December ke baad cost 10,000 rupaye/kW se zyada badh jayegi.\nIIT Bombay aur PEC Chandigarh ke engineers aapki factory ki site survey karenge.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5",
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "offer-below-fold"
+          ],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01807,
+          "judge": {
+            "copy": 4,
+            "image": 3,
+            "inventedClaims": [],
+            "imageTextErrors": [
+              "31 December ke baad cost 10,000 rupaye/kW se zyada (sentence is cut off mid-thought)"
+            ]
+          }
+        }
+      ],
+      "costUsd": 0.02496,
+      "wallMs": 78709
+    },
+    {
+      "id": "solaride-vague-hi",
+      "language": "hi",
+      "saved": 3,
+      "expected": 3,
+      "failures": [],
+      "ads": [
+        {
+          "angle": "value",
+          "headline": "छत की धूप से बिजली बिल में कटौती",
+          "primaryText": "छत की धूप से बिजली बिल में बचत की संभावना? पहले फ्री साइट सर्वे से जानें, PM Surya Ghar सब्सिडी में भी मदद।\nSolaride आपकी छत और धूप की स्थिति देखकर सिस्टम का सुझाव देता है। कितना बिल घटेगा, यह आपके घर के सर्वे के बाद साफ़ होगा।\nसर्वे बुक करें और अपने घर के लिए सही विकल्प जानें।",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01621,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "problem",
+          "headline": "बिजली का बिल? छत से हल करें",
+          "primaryText": "बिजली का बिल हर महीने भारी लगता है? अपनी छत से इसे कम करें, पहले मुफ़्त साइट सर्वे करवाएँ।\nSolaride आपकी छत देखकर बताएगी कि सोलर आपके घर के लिए कितना सही है। PM Surya Ghar सब्सिडी में भी मदद मिलेगी।\nमोहाली की स्थानीय टीम से अभी सर्वे बुक करें।",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01732,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "offer",
+          "headline": "दिवाली ऑफर: छत पर सोलर पर 10% छूट",
+          "primaryText": "दिवाली ऑफर: अपनी छत पर सोलर इंस्टॉलेशन पर 10% छूट पाएँ और बिजली का बिल कम करने की शुरुआत आज ही करें।\nपहले फ्री साइट सर्वे करवाएँ, और PM Surya Ghar सब्सिडी में सहायता भी लें। मोहाली और हिसार की स्थानीय सोलर टीमें आपकी छत देखकर सही सिस्टम सुझाती हैं।\nसर्वे बुक करने के लिए अभी संपर्क करें।",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5",
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "sourceQuotes",
+            "unsupported-commercial-claim"
+          ],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0.01806,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        }
+      ],
+      "costUsd": 0.05159,
+      "wallMs": 51014
+    },
+    {
+      "id": "dental-clinic-en",
+      "language": "en",
+      "saved": 3,
+      "expected": 3,
+      "failures": [],
+      "ads": [
+        {
+          "angle": "problem",
+          "headline": "Dentist Keeps Slipping? Book Sunday",
+          "primaryText": "Keep putting off the dentist? Evening and Sunday slots make it easy: ₹499 check-up and cleaning in Pune.\nParents, your children can get gentle care too. Message us on WhatsApp to book a family check-up.\nSmile Studio Dental, Pune.",
+          "cta": "Contact Us",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01518,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "value",
+          "headline": "Check-up and cleaning ₹499",
+          "primaryText": "Put off the dentist? A check-up and cleaning for ₹499, with evening and Sunday slots in Pune.\nGentle care for children, and appointments that fit around your working week.\nMessage us on WhatsApp to book your family's check-up.",
+          "cta": "Contact Us",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01507,
+          "judge": {
+            "copy": 4,
+            "image": 3,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "offer",
+          "headline": "Check-up and cleaning for ₹499",
+          "primaryText": "A family check-up and cleaning for ₹499, with evening and Sunday slots in Pune.\nGentle care for children, booked around your working week.\nMessage us on WhatsApp to pick a time and book your check-up.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01503,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        }
+      ],
+      "costUsd": 0.04528,
+      "wallMs": 30050
+    },
+    {
+      "id": "coaching-institute-en",
+      "language": "en",
+      "saved": 3,
+      "expected": 3,
+      "failures": [],
+      "ads": [
+        {
+          "angle": "problem",
+          "headline": "Is board-year maths slipping away?",
+          "primaryText": "Is your child struggling with maths or science before board exams? Book a free demo class on WhatsApp.\nOur batches have at most 20 students, so teachers can spot gaps early.\nWeekly tests come with progress reports you can read as a parent.",
+          "cta": "Book Now",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01502,
+          "judge": {
+            "copy": 4,
+            "image": 3,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "value",
+          "headline": "Try one class free before you pay",
+          "primaryText": "Judge the teaching first: book a free demo class for your Class 9–12 student and pay nothing to try it.\nOur batches have at most 20 students each, so every child gets more time with the teacher.\nMessage us on WhatsApp to pick a demo slot.",
+          "cta": "Get Offer",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01491,
+          "judge": {
+            "copy": 4,
+            "image": 3,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        },
+        {
+          "angle": "offer",
+          "headline": "Free demo class for Class 9–12",
+          "primaryText": "Parents in Lucknow: book a free demo class for your Class 9–12 maths or science student.\nBatches hold at most 20 students, and weekly tests come with progress reports for you.\nMessage us on WhatsApp to reserve your child's free demo seat.",
+          "cta": "Get Offer",
+          "textModels": [
+            "anthropic/claude-haiku-5.5"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0.01522,
+          "judge": {
+            "copy": 4,
+            "image": 4,
+            "inventedClaims": [],
+            "imageTextErrors": []
+          }
+        }
+      ],
+      "costUsd": 0.04515,
+      "wallMs": 26363
+    }
+  ]
+}

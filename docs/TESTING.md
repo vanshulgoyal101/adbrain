@@ -50,6 +50,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `seed:demo-clinic` | Writes demo data; use only on the approved target |
 | `generate:icons` | Regenerates local icon assets |
 | `eval:creative` | Sends fixture copy to Google judge model; consumes provider quota/cost |
+| `eval:create` | Paid Create eval gate (#418): frozen cases through the production pipeline on OpenRouter, blind judge, compare with `tests/eval/baseline.json` |
 
 ### Production Core Smoke
 
@@ -248,6 +249,26 @@ Block provider mutations at the server/mock boundary as well as in browser route
 Mock login success does not prove Supabase email or Google OAuth delivery.
 
 ## Paid and External Evaluation
+
+`eval:create` (#418) is the gate every generation change (prompt, validator, model, routing) must
+match or beat. It runs the 7 frozen cases in [cases.json](../tests/eval/cases.json) (Cedar Ridge,
+Solaride English/Hindi/Hinglish, two example businesses, all from committed recordings) through the
+production Create pipeline with the production models pinned, and scores 3 of 3 saved, first-try
+passes, offer in the first 125 characters, post text in the chosen script, cost and wall time. A
+blind judge (`google/gemini-3.8-flash` on OpenRouter, calibrated first on the gold `evals/creative`
+ads: MAE must stay at or under 0.15) scores the copy and the finished ad image, and lists invented
+claims and garbled image text. Without `--write-baseline` it compares with
+[baseline.json](../tests/eval/baseline.json) and exits 1 when a customer would see something worse:
+fewer full batches or saved ads, more invented claims or garbled text, judge scores down more than
+0.25, more than ₹25 per run, or Create p90 over 60 s and slower than before. About $0.05 per case;
+`--cap-usd` (default 5) stops the run, and it refuses to start unless the shared OpenRouter key keeps
+$2 for production after the cap (#449). `--repeat N` runs each case N times; bake-offs set
+`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`.
+
+Baseline (2026-10-24, `8e21d29`, anthropic/claude-haiku-5.5 + openai/gpt-image-2.5-flare):
+full batches 71%, 17/21 ads, first try 71%, judge copy
+4.059 / image 3.765, invented claims 0%, $0.042 per run, p50 53 s / p90 79 s.
+The Solaride factory goal in Hindi and Hinglish saved 1 of 3: `all-caps` and `offer-below-fold`.
 
 `eval:creative` reads [fixtures.jsonl](../evals/creative/fixtures.jsonl), uses the
 first Google key, calls the configured judge model (script default differs from
