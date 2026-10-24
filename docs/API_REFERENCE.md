@@ -92,6 +92,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
 | POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept |
+| POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) -> `{creative,liveNotice?}` | Paid image (like Regenerate), same claim; keeps copy, overlay words and status |
 | POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
 | POST | `/api/campaign-drafts` | DraftInput -> envelope draft | DB write, no model or Meta creation |
@@ -418,6 +419,16 @@ or for older ads the newest `<angle>-<uuid>` file stored no later than the finis
 picture in the ad's folder. If neither exists it returns 409 `no_background`.
 The new picture gets a new versioned path; status is unchanged. It returns 409
 when overlays are off or the ad is image-only, and rate-limits at 30 per 5 minutes.
+
+`POST /api/creatives/[id]/background` makes one new background image from the
+owner's short description (the owner's direction wins over the ad's earlier visual
+direction) and redraws the same overlay words on it (#280). It shares Regenerate's
+rate limit, monthly AI limit and `creative_regeneration_claim`, so only one paid job
+runs per ad. Usage is recorded as `creatives.background`. The copy, overlay words
+and status are kept; the receipt gets the new `photoUrl`, `imagePrompt`, image usage
+and `backgroundInstruction`. If the provider confirms every attempt failed, the claim
+is released with a retry message. Any other failure (OpenRouter reports `unknown`)
+holds the claim as `unresolved` with a 502, exactly like Regenerate.
 The claim's attempt UUID is the request ID in usage receipts. It does not expire
 automatically, and there is no customer-facing regeneration recovery endpoint.
 

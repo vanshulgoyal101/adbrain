@@ -277,6 +277,88 @@ export function PictureWordsEditor({
   );
 }
 
+/** A new picture behind the same words (#280 slice 3). One paid AI image, like Regenerate. */
+export function BackgroundEditor({
+  creative,
+  onSaved,
+  onCancel,
+  onBusy,
+}: {
+  creative: Creative;
+  onSaved: (creative: Creative, notes: CopyEditNotes) => void;
+  onCancel: () => void;
+  onBusy?: (busy: boolean) => void;
+}) {
+  const [instruction, setInstruction] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => onBusy?.(saving), [saving, onBusy]);
+  const id = `background-${creative.id}`;
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/creatives/${creative.id}/background`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { creative?: Creative; liveNotice?: string; error?: string };
+      if (res.ok && data.creative) onSaved({ ...creative, ...data.creative }, { warnings: [], liveNotice: data.liveNotice });
+      else setError(data.error ?? "Couldn't make a new background. Try again.");
+    } catch {
+      setError("Couldn't make a new background. Check your connection, then refresh before trying again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form aria-label="Change the background" onSubmit={save} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <Label htmlFor={id}>New background</Label>
+          <span className="text-xs tabular-nums text-slate-400">{instruction.length}/300</span>
+        </div>
+        <Textarea
+          id={id}
+          value={instruction}
+          maxLength={300}
+          rows={3}
+          placeholder="e.g. Rooftop at sunset with solar panels"
+          onChange={(e) => setInstruction(e.target.value)}
+          autoFocus
+        />
+      </div>
+      {error && (
+        <p className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">
+        Makes a new picture behind the same words. Your text and the words on the picture stay. This uses one AI
+        image, like Regenerate, and takes up to a minute.
+      </p>
+      <div className="flex gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={saving} className="h-11 flex-1">
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          size="sm"
+          variant="primary"
+          disabled={saving || instruction.trim().length < 3}
+          className="h-11 flex-1"
+        >
+          {saving ? "Making it…" : "Make background"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 /** One Edit entry point with a tab per part of the ad. */
 export function CreativeEditor({
   creative,
@@ -289,16 +371,17 @@ export function CreativeEditor({
   onSaved: (creative: Creative, notes: CopyEditNotes) => void;
   onCancel: () => void;
 }) {
-  const [tab, setTab] = useState<"text" | "picture">("text");
+  const [tab, setTab] = useState<"text" | "picture" | "background">("text");
   // Switching tabs mid-save would unmount the editor whose request is still running.
   const [busy, setBusy] = useState(false);
   const tabs = [
     ["text", "Ad text"],
     ["picture", "Words on picture"],
+    ["background", "Background"],
   ] as const;
   return (
     <div className="flex flex-col gap-3">
-      <div role="tablist" aria-label="What to edit" className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+      <div role="tablist" aria-label="What to edit" className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
         {tabs.map(([id, label]) => (
           <button
             key={id}
@@ -308,7 +391,7 @@ export function CreativeEditor({
             disabled={busy}
             onClick={() => setTab(id)}
             className={cn(
-              "h-9 rounded-md text-sm font-medium transition-colors disabled:opacity-60",
+              "min-h-9 rounded-md px-1 py-1 text-xs font-medium leading-tight transition-colors disabled:opacity-60 sm:text-sm",
               tab === id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
             )}
           >
@@ -318,8 +401,10 @@ export function CreativeEditor({
       </div>
       {tab === "text" ? (
         <CreativeCopyEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
-      ) : (
+      ) : tab === "picture" ? (
         <PictureWordsEditor creative={creative} brand={brand} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
+      ) : (
+        <BackgroundEditor creative={creative} onSaved={onSaved} onCancel={onCancel} onBusy={setBusy} />
       )}
     </div>
   );

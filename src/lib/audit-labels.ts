@@ -13,6 +13,7 @@ const ACTION_LABELS: Record<string, string> = {
   "creative.regenerate": "Creative regenerated",
   "creative.edit": "Ad text edited",
   "creative.edit_picture": "Words on the picture changed",
+  "creative.change_background": "Picture background changed",
   "creatives.export": "Ad pack exported",
   "campaign.create": "Campaign created",
   "campaign.create.traffic_probe": "Test campaign created",
