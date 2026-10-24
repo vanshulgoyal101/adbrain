@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "@/components/login-form";
 import LoginPage from "@/app/login/page";
@@ -15,8 +15,13 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: mocks }) }));
 
+let phoneViewport = false;
+
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.clear();
+  phoneViewport = false;
+  window.matchMedia = ((query: string) => ({ matches: phoneViewport, media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
   mocks.redirect = "/studio?view=drafts";
   mocks.signInWithOtp.mockResolvedValue({ error: null });
   mocks.signInWithOAuth.mockResolvedValue({ error: null });
@@ -32,7 +37,7 @@ function fillLogin() {
 describe("login completion and recovery", () => {
   it("keeps home and legal navigation available around sign in", () => {
     render(<LoginPage />);
-    expect(screen.getByRole("heading", { name: "Sign in to AdBrain" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AdBrain home" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Skip to sign in" })).toHaveAttribute("href", "#sign-in");
@@ -125,3 +130,70 @@ describe("login completion and recovery", () => {
     expect(mocks.signInWithPassword).not.toHaveBeenCalled();
   });
 });
+
+describe("new and returning visitors", () => {
+  it("leads a new visitor with a sign-in link and keeps the password one tap away", async () => {
+    render(<LoginForm newVisitor />);
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.test" } });
+    fireEvent.submit(screen.getByLabelText("Email").closest("form")!);
+    expect(await screen.findByText("Check your email")).toBeInTheDocument();
+    expect(mocks.signInWithOtp).toHaveBeenCalledOnce();
+    expect(mocks.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("reveals and focuses the password field for a new visitor who has one", () => {
+    render(<LoginForm newVisitor />);
+    fireEvent.click(screen.getByRole("button", { name: "I have a password" }));
+    expect(screen.getByLabelText("Password")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Sign in with password" })).toBeInTheDocument();
+  });
+
+  it("does not mark a visitor as returning when sign-in fails", async () => {
+    mocks.signInWithOtp.mockResolvedValue({ error: { message: "Rate limited" } });
+    render(<LoginForm newVisitor />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Rate limited");
+    expect(localStorage.getItem("adbrain:returning-visitor")).toBeNull();
+  });
+
+  it("welcomes back a visitor who signed in before, and either view can switch", async () => {
+    render(<LoginForm newVisitor />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
+    await screen.findByText("Check your email");
+    expect(localStorage.getItem("adbrain:returning-visitor")).toBe("1");
+    render(<LoginPage />);
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create a free account" }));
+    expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
+  });
+
+  it("shows the phone intro once, and Skip returns to the form", () => {
+    phoneViewport = true;
+    const first = render(<LoginPage />);
+    expect(screen.getByRole("dialog", { name: "From your business to WhatsApp chats" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Skip/ })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+    first.unmount();
+    render(<LoginPage />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("never covers the form for a returning visitor or on a laptop", () => {
+    render(<LoginPage />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    phoneViewport = true;
+    localStorage.setItem("adbrain:returning-visitor", "1");
+    localStorage.setItem("adbrain:login-intro-seen", "1");
+    act(() => { window.dispatchEvent(new StorageEvent("storage")); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
