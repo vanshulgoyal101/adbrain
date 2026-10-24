@@ -44,7 +44,8 @@ describe("<Button>", () => {
 
   it("applies the variant and size styles", () => {
     const { rerender } = render(<Button variant="danger">Delete</Button>);
-    expect(screen.getByRole("button")).toHaveClass("bg-red-600");
+    // #403: danger is an outline; solid red is kept for confirm dialogs.
+    expect(screen.getByRole("button")).toHaveClass("text-danger", "border");
     rerender(
       <Button variant="outline" size="sm">
         Cancel
@@ -52,7 +53,7 @@ describe("<Button>", () => {
     );
     const btn = screen.getByRole("button");
     expect(btn).toHaveClass("border-slate-300");
-    expect(btn).toHaveClass("h-8");
+    expect(btn).toHaveClass("h-9");
   });
 
   it("keeps caller classes alongside the variant", () => {
@@ -99,7 +100,7 @@ describe("<Card>", () => {
 });
 
 describe("<PageHeader>", () => {
-  it("renders product context, title, description, and actions", () => {
+  it("renders the title, description and actions without an eyebrow label (#403)", () => {
     render(
       <PageHeader
         eyebrow="Launch"
@@ -108,7 +109,7 @@ describe("<PageHeader>", () => {
         actions={<Button>New campaign</Button>}
       />,
     );
-    expect(screen.getByText("Launch")).toBeInTheDocument();
+    expect(screen.queryByText("Launch")).toBeNull();
     expect(screen.getByRole("heading", { name: "Campaigns" })).toBeInTheDocument();
     expect(screen.getByText("Review before anything spends.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New campaign" })).toBeInTheDocument();
