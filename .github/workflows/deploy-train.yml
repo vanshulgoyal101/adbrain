@@ -37,8 +37,13 @@ jobs:
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
-          ahead=$(gh api "repos/$repo/compare/main...next" --jq '.ahead_by')
+          read -r ahead behind < <(gh api "repos/$repo/compare/main...next" --jq '"\(.ahead_by) \(.behind_by)"')
           [ "$ahead" -gt 0 ] || { echo "next has nothing main lacks."; exit 0; }
+          # A hotfix or migration on main that next lacks would ship a merged tree no CI has seen.
+          if [ "$behind" -gt 0 ]; then
+            echo "main has $behind commit(s) next lacks: merge main into next first (a person's PR, so CI runs on it)." > "$RUNNER_TEMP/reason"
+            echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
+          fi
           # At most one production deploy per GAP_MINUTES.
           last=$(gh pr list -R "$repo" --state merged --base main --head next --limit 1 --json mergedAt --jq '.[0].mergedAt // empty')
           if [ -n "$last" ]; then
@@ -47,12 +52,13 @@ jobs:
           fi
           # Every production deploy (train, hotfix, migration) shows up as a GitHub deployment from Vercel.
           since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-          used=$(gh api "repos/$repo/deployments?environment=Production&per_page=100" --paginate --jq ".[] | select(.created_at >= \"$since\") | .id" | wc -l)
+          # One page (newest first) is enough: the train stops at 80 anyway.
+          used=$(gh api "repos/$repo/deployments?environment=Production&per_page=100" --jq "[.[] | select(.created_at >= \"$since\")] | length")
           echo "deploys in last 24h: $used/100 (train budget $DEPLOY_BUDGET)"
           if [ "$used" -ge "$DEPLOY_BUDGET" ]; then
-            echo "Deploy budget: $used production deploys in the last 24 h (train stops at $DEPLOY_BUDGET of Hobby's 100)." > "$RUNNER_TEMP/reason"
-            echo "::warning::$(cat "$RUNNER_TEMP/reason") Retrying on the next push or schedule."
-            exit 1
+            # Expected after a busy day: hold quietly (no alert issue) and retry on the next push or schedule.
+            echo "::warning::Deploy budget: $used production deploys in the last 24 h; the train holds at $DEPLOY_BUDGET of Hobby's 100 and retries on the next push or schedule."
+            exit 0
           fi
           sha=$(gh api "repos/$repo/commits/next" --jq .sha)
           echo "Promoting next at ${sha::7} ($ahead commits)."
