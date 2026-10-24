@@ -12,8 +12,9 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 
 export const metadata = { title: "Creative Studio" };
 
-async function StudioUsage({ usage }: { usage: ReturnType<typeof businessLLMUsageSummary> }) {
-  return <DemoLlmUsage usage={await usage} />;
+async function StudioUsage({ usage }: { usage: Promise<Awaited<ReturnType<typeof businessLLMUsageSummary>> | null> }) {
+  const summary = await usage;
+  return summary ? <DemoLlmUsage usage={summary} /> : null;
 }
 
 export default async function StudioPage({
@@ -49,12 +50,15 @@ export default async function StudioPage({
   }
 
   // #403: cost, tokens and model names are operator information, not owner information.
-  const operator = user ? await privacyOperatorAllowed().catch(() => false) : false;
-  const usage = operator ? businessLLMUsageSummary(business.id) : null;
-  const [creatives, params] = await Promise.all([
+  // Checked alongside the creatives; the usage report starts as soon as it's known and streams in.
+  const operatorCheck = user ? privacyOperatorAllowed().catch(() => false) : Promise.resolve(false);
+  const usageReport = operatorCheck.then((allowed) => (allowed ? businessLLMUsageSummary(business.id) : null));
+  const [creatives, params, operator] = await Promise.all([
     getCreatives(business.id),
     searchParams,
+    operatorCheck,
   ]);
+  const usage = operator ? usageReport : null;
   const filter = params.creative
     ? "all"
     : params.status === "draft" || params.status === "approved"
