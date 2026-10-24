@@ -2,19 +2,24 @@
 @import "@fontsource-variable/dm-sans";
 
 :root {
-  --background: #f6f7f9;
-  --foreground: #24292e;
+  /* #403 design system: one set of tokens for the homepage and the app. */
+  --background: #f6f7f4; /* canvas */
+  --foreground: #1b2420; /* ink */
   --card: #ffffff;
-  --border: #e1e5e9;
-  --muted: #67727d;
-  --primary: #2563eb;
-  --primary-foreground: #f9fbff;
-  --accent: #d97706;
-  --accent-soft: #fff1dc;
-  --surface-subtle: #f5f7f8;
-  --surface-strong: #edf0f3;
-  --focus-ring: #2563eb;
-  --shadow-soft: 0 2px 6px rgba(25, 32, 39, 0.04);
+  --border: #e2e6df; /* line */
+  --muted: #5a6660;
+  --primary: #13784a; /* leaf: the one action colour */
+  --primary-hover: #0f6440;
+  --primary-foreground: #ffffff;
+  --lime-wash: #e8f6cf; /* highlights only */
+  --danger: #b42318;
+  --warning: #a15c07;
+  --accent: #a15c07;
+  --accent-soft: #fdf3e2;
+  --surface-subtle: #f6f7f4;
+  --surface-strong: #eef0ec;
+  --focus-ring: #13784a;
+  --shadow-soft: 0 1px 2px rgb(16 24 20 / 0.06);
 }
 
 @theme inline {
@@ -30,6 +35,55 @@
   --font-sans: "DM Sans Variable", sans-serif;
   --font-display: "DM Sans Variable", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --color-primary-hover: var(--primary-hover);
+  --color-lime-wash: var(--lime-wash);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+}
+
+/*
+ * The app's classes name Tailwind's palette directly (slate-*, blue-*). Retheming the palette here
+ * moves every screen to the #403 tokens at once: slate is the ink family (text greys pass WCAG AA on
+ * white and canvas) and blue is the leaf action colour. Later slices rename call sites semantically.
+ */
+@theme {
+  --color-slate-50: #f6f7f4;
+  --color-slate-100: #eef0ec;
+  --color-slate-200: #e2e6df;
+  --color-slate-300: #cbd2c9;
+  --color-slate-400: #687370;
+  --color-slate-500: #5a6660;
+  --color-slate-600: #4a5650;
+  --color-slate-700: #36413b;
+  --color-slate-800: #26302b;
+  --color-slate-900: #1b2420;
+  --color-slate-950: #121915;
+  --color-blue-50: #ecf7f0;
+  --color-blue-100: #d3eedd;
+  --color-blue-200: #a8dcbc;
+  --color-blue-300: #74c495;
+  --color-blue-400: #3fa86d;
+  --color-blue-500: #1d8f57;
+  --color-blue-600: #13784a;
+  --color-blue-700: #0f6440;
+  --color-blue-800: #0d5034;
+  --color-blue-900: #0b412b;
+  --color-blue-950: #062617;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.35;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 1.25;
+  --font-weight-semibold: 650;
+  --radius-md: 10px;
+  --radius-lg: 10px;
+  --shadow-xs: 0 1px 2px rgb(16 24 20 / 0.06);
+  --shadow-sm: 0 1px 2px rgb(16 24 20 / 0.06);
 }
 
 html {
@@ -42,8 +96,9 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), "Noto Sans Devanagari", "Noto Sans Gurmukhi", sans-serif;
   letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 button,

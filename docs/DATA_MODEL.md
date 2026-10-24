@@ -128,7 +128,9 @@ and recovery limitations.
 Blank optional form strings become null; list fields split on newlines, not
 commas, preserving locations such as `Jaipur, Rajasthan`. Business name is required.
 Email validation permits up to 254 characters, phone permits 7-15 digits with
-common separators, website allows a bare domain or HTTP(S) URL, and logo requires
+common separators, website allows a bare domain or HTTP(S) URL (saved as a full link:
+`vanshul.com` → `https://vanshul.com`, paths kept, other schemes rejected; older bare
+rows are read the same way by Prepare and the Meta ad link, #470), and logo requires
 an absolute HTTP(S) URL. These validators do not prove a remote resource is public
 or safe; outbound fetch policy is separate. Profile fields do not all have strict
 database length bounds; prompt builders truncate selected fields independently.

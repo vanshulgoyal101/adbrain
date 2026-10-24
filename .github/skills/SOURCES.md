@@ -27,6 +27,9 @@ its folder again from a newer commit and change the pin.
 | sev-triage | Severity call before root cause when production breaks | SkillMedev/skills | MIT |
 | postmortem-writer | Blameless postmortem with a log timeline and owned actions | SkillMedev/skills | MIT |
 
+AdBrain's own repo-local skill (not imported): `meta-ads-campaign-qa` (#419), the Meta
+dry-run gate and plan check before any campaign change.
+
 License texts are in [LICENSES](LICENSES/). vercel-labs/agent-skills states MIT
 in its README and ships no license file.
 

@@ -1,20 +1,22 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
+/** #403: primary (leaf, solid), secondary/outline, quiet/ghost (text), danger (outline; solid red only in a confirm dialog). */
+type Variant = "primary" | "secondary" | "outline" | "ghost" | "quiet" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-blue-600 text-white shadow-sm hover:bg-blue-700",
-  secondary: "bg-slate-900 text-white hover:bg-slate-800",
+  primary: "bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover",
+  secondary: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
   outline: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
   ghost: "text-slate-700 hover:bg-slate-100",
-  danger: "bg-red-600 text-white hover:bg-red-700",
+  quiet: "text-slate-700 hover:bg-slate-100",
+  danger: "border border-danger/40 bg-white text-danger hover:bg-red-50",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-10 px-4 text-sm",
+  sm: "h-9 px-3 text-sm",
+  md: "h-11 px-4 text-sm",
   lg: "h-12 px-6 text-base",
 };
 
@@ -33,7 +35,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium tracking-normal transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-medium tracking-normal transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:pointer-events-none disabled:opacity-50",
         variants[variant],
         sizes[size],
         className,

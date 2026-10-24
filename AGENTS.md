@@ -124,7 +124,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 | Money, tenant, auth | money, payment, razorpay, tenant, auth, security, quota | differential-review, security-boundary-contracts |
 | AI models and prompts | model, llm, ai, provider, prompt, groq, gemini, openrouter | task-aware-llm-routing, provider-cooldown-rotation |
 | Ad images and generation | image, render, creative, font, 9:16, picture, create | validated-multimodal-generation, verification-before-completion |
-| Meta and external APIs | meta, whatsapp, insights, campaign, graph, advantage | external-api-error-contracts, verification-before-completion |
+| Meta and external APIs | meta, whatsapp, insights, campaign, graph, advantage | meta-ads-campaign-qa, external-api-error-contracts, verification-before-completion |
 | Release, deploy, rollback | release, deploy, rollback, promote, guard | post-deploy-production-guard, vercel-deploy-pipeline |
 | Incident | smoke failed, production is not, outage, incident, down, sev, postmortem | sev-triage, postmortem-writer |
 | CI and workflows | ci, workflow, actions, scheduler, cron | github-actions-hardening, ci-merge-throughput |

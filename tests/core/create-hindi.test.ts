@@ -139,6 +139,16 @@ describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
     }
   });
 
+  // #378: these first replies were rejected only for their rationale, which owners see in the ad's
+  // details: "offers a no-cost first step (free site survey)" and "not a guaranteed saving".
+  it("saves the vague-goal 'pain point' ads on the first try in Hindi and Hinglish", async () => {
+    for (const language of ["hi", "hinglish"] as const) {
+      const { saved } = await create(language, "vague");
+      const painPoint = saved.find((ad) => ad.angleName === "Solve a pain point")!;
+      expect(painPoint.llmUsage, language).toHaveLength(1);
+    }
+  });
+
   // #418: the eval saved this goal 1 of 3. The recorded first replies were rejected for "SOLARIDE" (the
   // Brand's own spelling) and "IIT/PEC" as shouting, and for "free" below the fold although the
   // first line already leads with "10,000 rupaye per kW", which the ₹ pattern did not see.
