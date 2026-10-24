@@ -12,9 +12,7 @@ import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// About hourly per campaign. pg_cron calls every 15 min (#274); the 5 min of slack keeps the
-// previous run's Meta latency from pushing the refresh to the next call.
-const RESULT_INTERVAL_MS = 55 * 60_000;
+const RESULT_INTERVAL_MS = 3_600_000;
 const START_BUDGET_MS = 40_000;
 // Problems first seen this recently are reported. pg_cron refreshes hourly (#274) but the issue-opening
 // GitHub run can come hours later; it dedupes by key, so a wide window repeats nothing.

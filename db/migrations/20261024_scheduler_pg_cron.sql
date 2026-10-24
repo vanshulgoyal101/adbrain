@@ -4,7 +4,7 @@ set local statement_timeout = '30s';
 
 -- #274: Supabase pg_cron + pg_net call the existing CRON_SECRET routes on time (GitHub's
 -- 15-minute schedule fired every few hours). refresh-results is called every 15 minutes and
--- refreshes each campaign about hourly itself. The secret lives only in Supabase Vault as
+-- refreshes each campaign at most hourly itself. The secret lives only in Supabase Vault as
 -- `adbrain_cron_secret`, loaded once by DevOps (docs/OPERATIONS.md#scheduled-jobs). Without
 -- it every call is a no-op. Databases that do not preload pg_cron and pg_net (CI, local)
 -- get the helper but no schedule.
