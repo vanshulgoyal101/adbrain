@@ -124,6 +124,12 @@ CEO priorities (Oct 24, 08:30Z; owner: lean, high value only):
   Delivery column is the next step. Monitor and report spend, chats and cost per chat.
   #156 (Meta App Review) is the gate for every outside customer; it needs the
   owner's Facebook sign-in, then submit.
+- **P0, first customers (#339, Oct 24):** 3 real businesses signed up, made ads
+  and stopped at Campaigns, because Meta blocks anyone without an app role until #156
+  passes. The owner WhatsApps all 3 today; whoever says yes gets Tester access and
+  launches on their own ad account (PAUSED first, Solaride caps). Before approval, new
+  owners see "launching opens soon" plus download/share (#336, #337). Measure the
+  funnel (#338).
 - **P1-top, three tracks in parallel:**
   - **Edit and image text, Dev 2:** #280 (edit at every step: text is live; next
     the words on the image, then the background only) and #300 (real bold fonts,
@@ -133,7 +139,8 @@ CEO priorities (Oct 24, 08:30Z; owner: lean, high value only):
   - **First impression, Dev 3:** #289 (sign-up page and homepage hero are live;
     next a homepage video, an ideas gallery per industry and honest trust signals).
 - **P1:** #274 (a reliable scheduler; PR #309 with the CTO), #235 (WhatsApp-first;
-  slice 3 live in #278).
+  slice 3 live in #278), #334 (Advantage+ audience off starves delivery), #333
+  (9:16 assets for Stories/Reels), #335 (cost per real WhatsApp enquiry).
 - **P1, a snappy and polished product (owner):** #67 (snappier app) with slices
   #270, #238 and #239; #51 (UI/UX polish). Each slice is a small PR with a
   before/after number.
