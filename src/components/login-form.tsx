@@ -12,7 +12,7 @@ import { rememberReturningVisitor } from "@/lib/login-visitor";
 const primaryClass = "bg-[#dcf77a] font-bold text-[#18211f] shadow-none hover:bg-[#c9ed53] focus-visible:outline-[#216849]";
 
 /** `newVisitor` leads with a sign-in link, which also creates the account; passwords stay one tap away. */
-export function LoginForm({ newVisitor = false }: { newVisitor?: boolean }) {
+export function LoginForm({ newVisitor = false, onSucceeded }: { newVisitor?: boolean; onSucceeded?: () => void }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const redirect = safeAuthRedirect(searchParams.get("redirect"));
@@ -38,6 +38,11 @@ export function LoginForm({ newVisitor = false }: { newVisitor?: boolean }) {
     }
   }, [status]);
 
+  function remember() {
+    onSucceeded?.();
+    rememberReturningVisitor();
+  }
+
   function callbackUrl() {
     return `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`;
   }
@@ -55,7 +60,7 @@ export function LoginForm({ newVisitor = false }: { newVisitor?: boolean }) {
         options: { emailRedirectTo: callbackUrl() },
       });
       if (error) throw new Error(error.message);
-      rememberReturningVisitor();
+      remember();
       setStatus("sent");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not send a sign-in link. Please try again.");
@@ -76,7 +81,7 @@ export function LoginForm({ newVisitor = false }: { newVisitor?: boolean }) {
         options: { redirectTo: callbackUrl() },
       });
       if (error) throw new Error(error.message);
-      rememberReturningVisitor();
+      remember();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign in with Google. Please try again.");
     } finally {
@@ -93,7 +98,7 @@ export function LoginForm({ newVisitor = false }: { newVisitor?: boolean }) {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw new Error(error.message);
-      rememberReturningVisitor();
+      remember();
       router.replace(redirect);
       router.refresh();
     } catch (error) {

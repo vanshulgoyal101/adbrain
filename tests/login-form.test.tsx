@@ -173,6 +173,23 @@ describe("new and returning visitors", () => {
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
   });
 
+  it("keeps a new visitor on the create-account view after their link is sent", async () => {
+    render(<LoginPage />);
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
+    expect(await screen.findByText(/finish creating your account/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Create your free account" })).toBeInTheDocument();
+    expect(localStorage.getItem("adbrain:returning-visitor")).toBe("1");
+  });
+
+  it("makes the page behind the phone intro inert until it closes", () => {
+    phoneViewport = true;
+    const { container } = render(<LoginPage />);
+    expect(container.inert).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
+    expect(container.inert).toBe(false);
+  });
+
   it("shows the phone intro once, and Skip returns to the form", () => {
     phoneViewport = true;
     const first = render(<LoginPage />);
