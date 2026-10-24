@@ -247,8 +247,11 @@ top/center/bottom placement.
 The [renderer](../src/lib/creative/render.tsx) receives validated inline media.
 It draws all text in Inter 400/600/700/800 ([fonts](../src/lib/creative/fonts/),
 OFL), so headlines are really bold; the brand's sans/serif/mono choice falls
-back to Inter. Devanagari and Gurmukhi are not shaped yet (#300), so words on
-the image stay Latin.
+back to Inter. Words in Devanagari or Gurmukhi (brand, headline, subhead,
+benefits, contact line) are shaped by [sharp/Pango](../src/lib/creative/shaped-text.ts)
+with Noto Sans Devanagari/Gurmukhi (OFL) and drawn as an image in their place,
+because Satori misplaces vowel signs. The concept check's `on-image-script` rule
+still keeps generated headlines Latin until a production Hindi render is checked (#300).
 With overlay enabled, render/persistence failure fails the variant: **there is
 no implicit bare-photo success fallback**. `AD_DESIGN_OVERLAY=false` explicitly
 chooses the source photo. Source uploads can remain if later steps fail.
