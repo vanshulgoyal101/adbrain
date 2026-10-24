@@ -119,7 +119,7 @@ describe("<LeadInbox> table", () => {
     render(<LeadInbox businessName="Solaride" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>", city: "<test lead: dummy data for city>", phone: "<test lead: dummy data for phone_number>", email: null })]} metaReady />);
     expect(screen.getByText("Test enquiry from Meta")).toBeInTheDocument();
     expect(screen.queryByText(/dummy data/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Follow up Test enquiry from Meta" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Follow up Test enquiry from Meta,/ })).toBeInTheDocument();
   });
 
   it("has no internal 'Loaded …' stats (#403)", () => {
@@ -329,19 +329,19 @@ describe("<LeadInbox> saved enquiry workflow", () => {
   it("keeps two unsaved drafts separate and returns focus after closing", () => {
     const second = lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Shah", follow_up_note: "Other" });
     render(<LeadInbox businessName="Fixture" initialLeads={[lead(), second]} metaReady={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up status")).toHaveFocus();
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Call Asha" } });
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Other");
     expect(screen.getByLabelText("Follow-up status")).toHaveFocus();
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Call Ravi" } });
     fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
-    expect(screen.getByRole("button", { name: "Follow up Ravi Shah" })).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    expect(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Call Asha");
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Call Ravi");
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -354,15 +354,15 @@ describe("<LeadInbox> saved enquiry workflow", () => {
       : { ok: true, json: async () => ({ leads: [first, second], total: 2, nextCursor: null }) });
     vi.stubGlobal("fetch", fetcher);
     render(<LeadInbox businessName="Fixture" initialLeads={[first, second]} metaReady={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     fireEvent.change(screen.getByLabelText("Follow-up status"), { target: { value: "booked" } });
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Friday appointment" } });
     fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
     expect(await screen.findByText(/Your edits are still here/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Other");
     fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up status")).toHaveValue("booked");
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Friday appointment");
     expect(fetcher.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(1);
@@ -372,14 +372,14 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     const first = lead({ follow_up_note: "Original" });
     const second = lead({ id: "l2", meta_lead_id: "m2", full_name: "Ravi Shah" });
     render(<LeadInbox businessName="Fixture" initialLeads={[first, second]} metaReady={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Temporary" } });
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Temporary");
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Original" } });
     fireEvent.click(screen.getByRole("button", { name: "Close follow-up" }));
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Original");
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -393,19 +393,19 @@ describe("<LeadInbox> saved enquiry workflow", () => {
       : Promise.resolve({ ok: true, json: async () => ({ leads: [first, second], total: 2, nextCursor: null }) }));
     vi.stubGlobal("fetch", fetcher);
     render(<LeadInbox businessName="Fixture" initialLeads={[first, second]} metaReady={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Saved after delay" } });
     fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
-    expect(screen.getByRole("button", { name: "Follow up Ravi Shah" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Close follow-up" })).toBeDisabled();
     expect(screen.getByLabelText("Follow-up note")).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ }));
     expect(screen.getByRole("heading", { name: "Follow up: Asha Verma" })).toBeInTheDocument();
     await act(async () => resolveSave({ ok: true, json: async () => ({ lead: { ...first, follow_up_note: "Saved after delay" } }) }));
     expect(await screen.findByText("Follow-up saved.")).toBeInTheDocument();
     expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Ravi Shah" }));
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Ravi Shah,/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Saved after delay");
     expect(fetcher.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(1);
   });
@@ -438,7 +438,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     const view = render(<LeadInbox businessName="Fixture" initialLeads={[stored]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     fireEvent.change(screen.getByLabelText("Follow-up status"), { target: { value: "booked" } });
     fireEvent.change(screen.getByLabelText("Follow-up note"), { target: { value: "Friday appointment" } });
     fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
@@ -448,10 +448,10 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     failSave = false;
     fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
     expect(await screen.findByText("Follow-up saved.")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Follow up Asha Verma" })).toHaveTextContent("booked"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Follow up Asha Verma,/ })).toHaveTextContent("booked"));
     view.unmount();
     render(<LeadInbox businessName="Fixture" initialLeads={[stored]} metaReady />);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Friday appointment");
     expect(screen.getByLabelText("Follow-up status")).toHaveValue("booked");
     expect(fetcher.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(2);
@@ -519,7 +519,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     expect(screen.queryByText("Not the filtered list")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("2 of 2");
     expect(screen.getAllByText("Asha Verma")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Follow up Asha Verma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
     expect(screen.getByLabelText("Follow-up note")).toHaveValue("Synthetic saved follow-up");
     expect(screen.getByLabelText("Follow-up status")).toHaveValue("qualified");
     expect(syncCalls).toBe(2);
@@ -547,7 +547,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     expect(oldSignal?.aborted).toBe(true);
     await act(async () => resolveOld({ ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
     expect(screen.getByText("Late arrival")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Follow up Late arrival" })).toHaveTextContent("contacted");
+    expect(screen.getByRole("button", { name: /^Follow up Late arrival,/ })).toHaveTextContent("contacted");
     expect(screen.queryByText("Asha Verma")).toBeNull();
   });
 

@@ -383,7 +383,7 @@ describe("<Studio> creative preview", () => {
     render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
     fireEvent.load(screen.getByRole("img", { name: "Cut your power bill" }));
 
-    const boardImage = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    const boardImage = screen.getByRole("button", { name: /^Cut your power bill/ }).querySelector("img");
     expect(boardImage)
       .toHaveAttribute("src", "https://cdn.example/storage/v1/object/public/creatives/b1/group/thumbnails-v1/ad.webp");
     expect(screen.getByRole("img", { name: "Cut your power bill" }))
@@ -397,10 +397,10 @@ describe("<Studio> creative preview", () => {
 
     expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("fetchpriority", "high");
     expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("loading", "eager");
-    const tile = () => screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    const tile = () => screen.getByRole("button", { name: /^Cut your power bill/ }).querySelector("img");
     expect(tile()).toBeNull();
     fireEvent.load(screen.getByRole("img", { name: "Cut your power bill" }));
-    const thumbnail = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    const thumbnail = screen.getByRole("button", { name: /^Cut your power bill/ }).querySelector("img");
     expect(thumbnail).toHaveAttribute("loading", "lazy");
     expect(thumbnail).toHaveAttribute("fetchpriority", "low");
   });
@@ -418,7 +418,7 @@ describe("<Studio> creative preview", () => {
     vi.useFakeTimers();
     try {
       render(<Studio business={business} initialCreatives={[creative()]} />);
-      const tile = () => screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+      const tile = () => screen.getByRole("button", { name: /^Cut your power bill/ }).querySelector("img");
       expect(tile()).toBeNull();
       act(() => { vi.advanceTimersByTime(2_500); });
       expect(tile()).not.toBeNull();
@@ -926,8 +926,8 @@ describe("<Studio> review board", () => {
     ];
     const { rerender } = render(<Studio key="first" business={business} initialCreatives={variants} />);
     const board = within(screen.getByRole("region", { name: "Ads" }));
-    const first = board.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 1 of 2" });
-    const second = board.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" });
+    const first = board.getByRole("button", { name: "Same offer Needs review Variant 1 of 2" });
+    const second = board.getByRole("button", { name: "Same offer Needs review Variant 2 of 2" });
     expect(board.getByText("Variant 1 of 2")).toBeVisible();
     expect(board.getByText("Variant 2 of 2")).toBeVisible();
     second.focus();
@@ -938,13 +938,13 @@ describe("<Studio> review board", () => {
     const search = screen.getByRole("searchbox", { name: "Search ads" });
     await user.type(search, "First concept copy.");
     expect(first).toHaveAttribute("aria-pressed", "true");
-    expect(board.queryByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" })).not.toBeInTheDocument();
+    expect(board.queryByRole("button", { name: "Same offer Needs review Variant 2 of 2" })).not.toBeInTheDocument();
     await user.clear(search);
     expect(second).toHaveAttribute("aria-pressed", "true");
 
     rerender(<Studio key="reordered" business={business} initialCreatives={[...variants].reverse()} />);
     const reorderedBoard = within(screen.getByRole("region", { name: "Ads" }));
-    const reorderedSecond = reorderedBoard.getByRole("button", { name: "Inspect Same offer, Needs review, Variant 2 of 2" });
+    const reorderedSecond = reorderedBoard.getByRole("button", { name: "Same offer Needs review Variant 2 of 2" });
     reorderedSecond.focus();
     await user.keyboard("{Enter}");
     expect(reorderedSecond).toHaveAttribute("aria-pressed", "true");
@@ -968,7 +968,7 @@ describe("<Studio> review board", () => {
       ).getByRole("heading", { name: "Second concept" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Inspect Second concept, Needs review" }),
+      screen.getByRole("button", { name: "Second concept Needs review" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -989,7 +989,7 @@ describe("<Studio> review board", () => {
       />,
     );
     expect(
-      screen.queryByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
+      screen.queryByRole("button", { name: "Cut your power bill Needs review" }),
     ).not.toBeInTheDocument();
     await user.type(
       screen.getByRole("searchbox", { name: "Search ads" }),
@@ -998,10 +998,10 @@ describe("<Studio> review board", () => {
     expect(screen.getByText("No matching creatives")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(
-      screen.getByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
+      screen.getByRole("button", { name: "Cut your power bill Needs review" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Inspect Second concept, Approved" }),
+      screen.getByRole("button", { name: "Second concept Approved" }),
     ).toBeInTheDocument();
   });
 
@@ -1019,7 +1019,7 @@ describe("<Studio> review board", () => {
     fireEvent.click(screen.getByRole("button", { name: /^approve$/i }));
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: "Inspect Cut your power bill, Needs review" }),
+        screen.queryByRole("button", { name: "Cut your power bill Needs review" }),
       ).not.toBeInTheDocument(),
     );
     expect(

@@ -1790,7 +1790,8 @@ function BusinessCampaigns({
                           ) : (
                             <RefreshCw className="h-4 w-4" />
                           )}
-                          Refresh<span className="-ml-1 hidden sm:inline">results</span>
+                          {/* #417: a real space, so the visible text reads "Refresh results" like the label. */}
+                          Refresh{" "}<span className="-ml-1 hidden sm:inline">results</span>
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger
