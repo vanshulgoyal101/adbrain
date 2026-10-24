@@ -10,7 +10,7 @@ import DataDeletionPage from "@/app/data-deletion/page";
 describe("public product example", () => {
   it("labels the example without claiming a live generation or customer result", () => {
     render(<MarketingHome />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("AdBrain");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ads that bring customers to your WhatsApp.");
     expect(screen.getByText(/Not a customer campaign or a live AI generation/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /illustrative ad photograph/ })).toHaveAttribute("src");
     expect(screen.getByRole("heading", { name: "Created paused" })).toBeInTheDocument();
@@ -39,16 +39,21 @@ describe("public product example", () => {
 
   it("positions the product around customers without a solar identity or promised results", () => {
     const { container } = render(<MarketingHome />);
-    expect(screen.getByText("Reach the right customers.")).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/solar|run ads|guaranteed customers/i);
+    expect(screen.getByText("Ad banao, customers paao, seedha WhatsApp par.")).toHaveAttribute("lang", "hi-Latn");
+    expect(screen.getByText("Making ads is free. You pay only when you choose to run one.")).toBeInTheDocument();
+    // Solaride appears only as a labelled example further down, never in the hero.
+    expect(container.querySelector("#hero-title")!.closest("section")!.textContent).not.toMatch(/solar/i);
+    expect(container.textContent).not.toMatch(/run ads|guaranteed customers/i);
     expect(screen.getByRole("heading", { name: "Keep the conversation going" })).toBeInTheDocument();
   });
 
   it("keeps conversion, example, and legal navigation accessible", () => {
     const { container } = render(<MarketingHome />);
-    expect(screen.getByRole("link", { name: "Create your first campaign" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Make my first ad free" })).toHaveAttribute("href", "/login");
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    expect(screen.getByRole("link", { name: "Explore campaign ideas" })).toHaveAttribute("href", "#example");
+    expect(screen.getByRole("link", { name: "See how it works" })).toHaveAttribute("href", "#cycle");
+    expect(screen.getByRole("region", { name: "From your business to WhatsApp chats" })).toHaveAttribute("id", "cycle");
+    expect(screen.getByRole("link", { name: "Campaign ideas" })).toHaveAttribute("href", "#example");
     expect(container.querySelector("#example")).toBeInTheDocument();
     expect(container.querySelector("a button")).toBeNull();
     for (const link of LEGAL_LINKS) expect(screen.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
