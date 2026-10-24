@@ -120,4 +120,16 @@ describe("campaign draft HTTP routes", () => {
       expect.objectContaining({ p_draft_id: draftId, p_expected_version: 1 }),
     );
   });
+
+  it.each(["23503", "23001"])("DELETE keeps a draft that a campaign operation references (Postgres %s) with a 409", async code => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code, message: "violates foreign key constraint" } });
+    const { DELETE } = await import("@/app/api/campaign-drafts/[id]/route");
+    const response = await DELETE(
+      new Request(`http://localhost/api/campaign-drafts/${draftId}?version=2`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: draftId }) },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ ok: false, error: { code: "CONFLICT", message: expect.stringMatching(/campaign operation/) } });
+  });
 });

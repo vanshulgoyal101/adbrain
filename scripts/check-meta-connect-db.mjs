@@ -2321,7 +2321,8 @@ async function verify(database, source, integrityMigration, customerOnly = false
         await session.query("select set_config('request.jwt.claim.sub', $1, false)", [ownerId]);
         const editable = await session.query("select * from public.update_campaign_draft_if_version($1, $2, $3, 2, '{}')", [draftId, businessId, ownerId]);
         assert.equal(editable.rowCount, 0);
-        await assert.rejects(session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId]), { code: "23503" });
+        // ON DELETE RESTRICT: 23503 up to PostgreSQL 17, 23001 restrict_violation from PostgreSQL 18 (ubuntu-26.04 runners).
+        await assert.rejects(session.query("select * from public.delete_campaign_draft_if_version($1,2)", [draftId]), { code: /^(23503|23001)$/ });
       } finally { await session.end(); }
     });
     await check(`${database}: expired running operation requires reconciliation`, async () => {
