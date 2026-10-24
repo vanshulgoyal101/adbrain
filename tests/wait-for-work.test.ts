@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { linkedIssues, matchers, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { linkedIssues, lowQueues, matchers, waitingOnMe } from "../scripts/wait-for-work.mjs";
+
+describe("CTO queue watch", () => {
+  const issue = (...labels: string[]) => ({ labels: labels.map((name) => ({ name })) });
+
+  it("flags workers with fewer than 2 actionable items, ignoring parked ones", () => {
+    const low = lowQueues([
+      issue("core", "owner:dev"), issue("owner:dev"),
+      issue("owner:dev2"), issue("owner:dev2", "waiting-owner"),
+      issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
+      issue("owner:qa", "owner:dev"), issue("owner:qa"),
+    ]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "devops", count: 0 }]);
+  });
+});
 
 describe("wait-for-work handoffs", () => {
   const devops = matchers("devops");

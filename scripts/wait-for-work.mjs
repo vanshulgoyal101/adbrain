@@ -9,7 +9,7 @@
 // Work is: an item newly labelled for you; a comment on your item, addressed to you, or on an open PR
 // whose title names your issue (#309 "#274 …"); and, at start and before giving up, any item you own
 // where someone else spoke last and didn't address another role (so handoffs made while you were busy
-// are never lost).
+// are never lost). For the CTO it also reports any worker with fewer than 2 actionable items.
 import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,6 +55,20 @@ export function waitingOnMe(lastBody, m, labels = []) {
   if (m.writtenByMe(lastBody)) return false;
   if (m.addressedToMe(lastBody)) return true;
   return !m.handedToOther(lastBody);
+}
+
+export const WORKERS = ["dev", "dev2", "dev3", "qa", "devops"];
+export const MIN_QUEUE = 2;
+
+/** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
+export function lowQueues(issues) {
+  const counts = Object.fromEntries(WORKERS.map((r) => [r, 0]));
+  for (const issue of issues) {
+    const labels = (issue.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+    if (labels.some((l) => PARKED.has(l) || l === "decision")) continue;
+    for (const r of WORKERS) if (labels.includes(`owner:${r}`)) counts[r]++;
+  }
+  return WORKERS.filter((r) => counts[r] < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) await main();
@@ -114,7 +128,7 @@ const pollMs = Math.max(15, Number(values["poll-sec"])) * 1000;
 const ghEnv = { ...process.env, PATH: [process.env.PATH, "/opt/homebrew/bin", "/usr/local/bin"].filter(Boolean).join(":") };
 
 function api(path) {
-  // All chats share one gh login (5,000 requests/hour), so each poll makes at most 4 calls.
+  // All chats share one gh login (5,000 requests/hour), so each poll makes at most 5 calls (CTO) or 3–4 (others).
   return JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024 , env: ghEnv }));
 }
 
@@ -135,6 +149,10 @@ async function firstOwned() {
 }
 
 const startOwned = new Set((await firstOwned()).map(item => item.number));
+// CTO only: workers about to run dry (one extra call per poll). Reported at start, then only when newly low.
+const openIssues = () => api(`repos/${repo}/issues?state=open&per_page=100`).filter(item => !item.pull_request);
+const describeLow = (low) => low.map(({ role: r, count }) => `Queue low: ${NAMES[r]} has ${count} actionable item(s); refill from the CEO priorities (worker table)`);
+let startLow = new Set();
 
 function findWork() {
   const found = [];
@@ -154,6 +172,13 @@ function findWork() {
     if (mineNumbers.has(number) || addressedToMe(body) || linkedToMine.has(number)) {
       found.push(`#${number} new comment: "${brief(body)}" ${comment.html_url}`);
     }
+  }
+  if (role === "cto") {
+    const low = lowQueues(openIssues());
+    const lowNow = new Set(low.map(({ role: r }) => r));
+    // A refilled worker leaves the known-low set, so running dry again alerts again.
+    for (const r of startLow) if (!lowNow.has(r)) startLow.delete(r);
+    for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
   }
   if (role === "cto" || role === "devops") {
     for (const run of api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=30`).workflow_runs ?? []) {
@@ -181,6 +206,11 @@ const report = (found) => { console.log(`WORK for ${name} (${found.length}):\n- 
 
 try {
   const waiting = backlog();
+  if (role === "cto") {
+    const low = lowQueues(openIssues());
+    startLow = new Set(low.map(({ role: r }) => r));
+    waiting.push(...describeLow(low));
+  }
   if (waiting.length) report(waiting);
 } catch (error) {
   console.error(`Queue check failed, continuing: ${error.message.split("\n")[0]}`);
