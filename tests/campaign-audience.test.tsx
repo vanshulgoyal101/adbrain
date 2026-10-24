@@ -711,6 +711,23 @@ describe("background audience plan (#366)", () => {
     expect(consoleError).not.toHaveBeenCalled();
   }, 10_000);
 
+  it("stops an in-flight background plan quietly when the page closes (#504)", async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      if (url !== "/api/campaigns/plan") return Promise.resolve(Response.json({ forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] }));
+      signals.push(init!.signal!);
+      return new Promise<Response>((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+    }));
+    const consoleError = vi.spyOn(console, "error");
+    const { unmount } = view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    await planned();
+    unmount();
+    expect(signals[0].aborted).toBe(true);
+    await act(async () => {});
+    expect(consoleError).not.toHaveBeenCalled();
+  }, 10_000);
+
   it("plans again at Prepare when the background plan failed", async () => {
     let first = true;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
