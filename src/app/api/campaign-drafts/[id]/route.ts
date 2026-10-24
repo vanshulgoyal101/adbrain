@@ -136,7 +136,9 @@ async function handleDELETE(
   const { data: removed, error: deleteError } = await supabase.rpc("delete_campaign_draft_if_version", {
     p_draft_id: id, p_expected_version: expectedVersion,
   });
-  if (deleteError?.code === "23503") return errorResponse(requestId, 409, "CONFLICT", "This draft has a campaign operation and must be retained for recovery.");
+  // The draft is referenced by a campaign operation (ON DELETE RESTRICT). PostgreSQL 18 reports this
+  // as 23001 restrict_violation; earlier versions report 23503 foreign_key_violation.
+  if (deleteError?.code === "23503" || deleteError?.code === "23001") return errorResponse(requestId, 409, "CONFLICT", "This draft has a campaign operation and must be retained for recovery.");
   if (deleteError) return errorResponse(requestId, 503, "UNAVAILABLE", "Draft could not be removed.", true);
   if (!removed?.length) return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Reload before removing it.", true);
   return NextResponse.json({ ok: true, data: { deleted: true }, requestId });
