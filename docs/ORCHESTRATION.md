@@ -143,30 +143,33 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities and targets (Oct 24, 10:30Z; owner: lean, high value only). Every
-open issue has a target; a miss gets one line on its issue with the new date.
+CEO priorities and targets (Oct 24, 10:50Z; owner: lean, high value only). Every
+open issue has a target; a miss gets one line on its issue with the new date. The
+CTO's queue map (#364) orders each worker's row to match.
 
 - **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
   (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
-  Facebook account, Submit). Meta then takes days to weeks. There are no outside
-  sign-ups yet (#339 closed: they were QA test accounts).
-- **Live run #157 (Dev 3, QA reads): ends Oct 26 14:24Z.** First real lead in;
-  delivery picking up (₹7.78, 27 impressions at 10:09Z). No edits. Final report
-  Oct 26, then plan the next Solaride run with #333 and #334 in it.
-- **Today, Oct 24:** #334 Advantage+ audience (Dev 2, PR #357 → QA review → merge);
-  #281 auto-cite + Regenerate (Dev, QA red tests); #344 phone Create header (QA
-  verify, close); #289 slice 4 trust + pricing (Dev 3); #270 after-number at 18:40Z
-  (DevOps, then close).
-- **Oct 25:** #335 log real WhatsApp enquiries (Dev; migration → QA → DevOps);
-  #300 bold + Indic text on images (Dev 3); #360 phone speed slice of #67 (Dev 2);
-  #280 remaining edit slices (Dev 2, QA walk); #274 scheduler 24 h check, then
-  close (DevOps); #359 database hardening (DevOps).
-- **Oct 26:** #333 9:16 version of each ad for Stories/Reels (Dev 3, after #300);
-  #157 final report.
+  Facebook account, Submit). Meta then takes days to weeks. No outside sign-ups yet.
+- **Live run #157 (Dev 3, QA reads): ends Oct 26 14:24Z.** First real lead in; no
+  edits. Final report Oct 26, then the next Solaride run uses #333 and #334.
+- **Today, Oct 24:** #334 Advantage+ audience (Dev 2, PR #357); #281 auto-cite
+  (Dev); #376 part 1, phone dead space on the sign-up intro (Dev 3); #383 role
+  cards read by all; #270 after-number at 18:40Z (DevOps).
+- **Oct 25:** #300 bold + Indic image text (Dev 3, PR #358); #372 results to WhatsApp
+  (Dev 2); #371 Create learns from results (Dev, CTO design on the issue); #384
+  restart-proof roles (CTO); #390 dev speed, the biggest of its 3 causes (DevOps);
+  #274 scheduler 24 h check, then close (DevOps).
+- **Oct 26:** #333 9:16 ads (Dev 3); #387 live edit preview (Dev 2); #360 + #376
+  part 2 phone speed and Enquiries layout (Dev 2); #378 interview validation gap
+  (Dev); #379 internal accounts excluded from metrics (DevOps); #157 final report.
+- **By Oct 28:** #335 log real WhatsApp enquiries (Dev; migration → QA → DevOps);
+  #366 faster Prepare (Dev 3); #367 angle chip over the logo (Dev); #388 model
+  picks per task, then a review every 3 weeks (CTO; first review about Nov 14).
 - **Umbrellas, close when their slices are done:** #67 (snappier app), #51 (UI/UX
-  polish; QA's walk feeds it).
+  polish; QA's top 5 next). #364 is the CTO's standing queue map.
 - **Later (no date):** #178 (Razorpay webhook proof), #229 (email alerts), #253
   (managed-account WhatsApp numbers), #296 (AI-answer visibility).
+- **Owner batch (CEO asks):** #156 sitting; #337 30-second share test on his phone.
 - **Filter for new issues:** it must help a customer make and run ads today,
   make the product faster or clearer, or remove a real failure. Otherwise file
   it as `later`, or don't file it.
