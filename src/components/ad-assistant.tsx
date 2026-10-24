@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { useMounted } from "@/lib/use-mounted";
 import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/interview";
+import { isWriteYourOwnOption } from "@/lib/creative/interview-options";
 import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -382,6 +383,24 @@ export function AdAssistant({ business }: { business: Business }) {
     else generate(lastAction.brief, lastAction.language);
   }
 
+  function changeAnswer() {
+    if (loading || lastAction?.type !== "step") return;
+    const sent = lastAction.answers;
+    const last = sent.at(-1);
+    setError(null);
+    setLastAction(null);
+    if (!last) {
+      setStarted(false);
+      setTurns([]);
+      setAnswers([]);
+      return;
+    }
+    setAnswers(sent.slice(0, -1));
+    setTurns((t) => (t.at(-1)?.role === "user" ? t.slice(0, -1) : t));
+    const typed = !(last.options ?? []).includes(last.answer) && last.answer !== AI_ANSWER && last.answer !== RANDOM_ANSWER && !isWriteYourOwnOption(last.answer);
+    setCustom(typed ? last.answer : "");
+  }
+
   function answer(q: Question, text: string, displayText?: string) {
     if (loading) return;
     const next = [...answers, { question: q.question, answer: text, questionId: q.id, field: q.field, options: q.options }];
@@ -538,13 +557,28 @@ export function AdAssistant({ business }: { business: Business }) {
           <Alert variant="error">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span>{error}</span>
-              {lastAction && (
-                <Button size="sm" variant="outline" onClick={retry} disabled={loading}>
-                  <RotateCcw className="h-4 w-4" /> {generationId ? "Check saved results" : "Try again"}
-                </Button>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {lastAction?.type === "step" && (
+                  <Button size="sm" variant="outline" onClick={changeAnswer} disabled={loading}>
+                    <Pencil className="h-4 w-4" /> Change my answer
+                  </Button>
+                )}
+                {lastAction && (
+                  <Button size="sm" variant="outline" onClick={retry} disabled={loading}>
+                    <RotateCcw className="h-4 w-4" /> {generationId ? "Check saved results" : "Try again"}
+                  </Button>
+                )}
+              </div>
             </div>
           </Alert>
+        )}
+
+        {phase === "chat" && !generationId && (
+          <div className="flex justify-end">
+            <Button size="sm" variant="ghost" onClick={() => reset()} disabled={loading}>
+              <RotateCcw className="h-4 w-4" /> Start over
+            </Button>
+          </div>
         )}
 
         {phase === "done" && (
@@ -593,6 +627,7 @@ function TurnView({
   onAnswer: (q: Question, text: string, displayText?: string) => void;
   onStatus: (id: string, status: "draft" | "approved") => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   if (turn.role === "user") {
     return (
       <div className="flex justify-end">
@@ -654,7 +689,7 @@ function TurnView({
                     key={opt}
                     type="button"
                     disabled={disabled}
-                    onClick={() => onAnswer(q, opt)}
+                    onClick={() => (isWriteYourOwnOption(opt) ? inputRef.current?.focus() : onAnswer(q, opt))}
                     className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
                   >
                     {opt}
@@ -684,9 +719,10 @@ function TurnView({
                 </button>
               )}
             </div>
-            {q.allowText !== false && (
+            {(q.allowText !== false || q.options?.some(isWriteYourOwnOption)) && (
               <div className="flex items-center gap-2">
                 <input
+                  ref={inputRef}
                   value={custom}
                   aria-label="Your answer"
                   maxLength={1000}

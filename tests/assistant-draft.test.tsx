@@ -339,4 +339,52 @@ describe("<AdAssistant> draft persistence", () => {
     expect(fetchMock.mock.calls[0][0]).toContain(`generationId=${identity}`);
     expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store" });
   });
+
+  describe("never a dead end in the chat (#284)", () => {
+    const question = { id: "offer", field: "offer", question: "Which offer?", options: ["Free site survey", "Custom offer (type it below)"], allowText: true };
+
+    it("focuses the text box for a 'type it below' chip and sends nothing", async () => {
+      sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+        goal: "Factory owners", started: true, answers: [], phase: "chat",
+        turns: [{ role: "user", text: "Factory owners" }, { role: "question", question }],
+      }));
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
+      render(<AdAssistant business={business} />);
+      await user.click(await screen.findByRole("button", { name: "Custom offer (type it below)" }));
+      expect(screen.getByRole("textbox", { name: "Your answer" })).toHaveFocus();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("after a failed step on a restored chat, brings the question back with the typed answer to change", async () => {
+      const answer = { question: "Which offer?", answer: "Survey by Friday", questionId: "offer", field: "offer", options: question.options };
+      sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+        goal: "Factory owners", started: true, answers: [answer], phase: "chat",
+        turns: [{ role: "user", text: "Factory owners" }, { role: "question", question }, { role: "user", text: "Survey by Friday" }],
+      }));
+      const fetchMock = vi.fn().mockResolvedValue(Response.json({ ready: false, question: { id: "audience", field: "audience", question: "Who exactly?", options: ["Plant managers", "Owners"] } }));
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
+      render(<AdAssistant business={business} />);
+      expect(await screen.findByRole("button", { name: "Start over" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Change my answer" }));
+      expect(screen.getByRole("textbox", { name: "Your answer" })).toHaveValue("Survey by Friday");
+      expect(screen.getByRole("button", { name: "Free site survey" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Free site survey" }));
+      await screen.findByText("Who exactly?");
+      const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(sent.answers.map((item: { answer: string }) => item.answer)).toEqual(["Free site survey"]);
+    });
+
+    it("returns to the editable goal when the first step failed", async () => {
+      sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
+        goal: "Factory owners", started: true, answers: [], phase: "chat", turns: [{ role: "user", text: "Factory owners" }],
+      }));
+      const user = userEvent.setup();
+      render(<AdAssistant business={business} />);
+      await user.click(await screen.findByRole("button", { name: "Change my answer" }));
+      expect(screen.getByLabelText("Campaign goal")).toHaveValue("Factory owners");
+    });
+  });
 });
