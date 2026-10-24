@@ -373,6 +373,7 @@ describe("<Studio> creative preview", () => {
   it("uses the smaller versioned image on the board and in the selected card; the enlarged preview keeps the original (#230)", () => {
     const original = "https://cdn.example/storage/v1/object/public/creatives/b1/group/originals-v1/ad.jpg";
     render(<Studio business={business} initialCreatives={[creative({ image_url: original })]} />);
+    fireEvent.load(screen.getByRole("img", { name: "Cut your power bill" }));
 
     const boardImage = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
     expect(boardImage)
@@ -388,9 +389,25 @@ describe("<Studio> creative preview", () => {
 
     expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("fetchpriority", "high");
     expect(screen.getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("loading", "eager");
+    const tile = () => screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+    expect(tile()).toBeNull();
+    fireEvent.load(screen.getByRole("img", { name: "Cut your power bill" }));
     const thumbnail = screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
     expect(thumbnail).toHaveAttribute("loading", "lazy");
     expect(thumbnail).toHaveAttribute("fetchpriority", "low");
+  });
+
+  it("shows board tiles after 2.5 s even if the selected image never loads (#360)", () => {
+    vi.useFakeTimers();
+    try {
+      render(<Studio business={business} initialCreatives={[creative()]} />);
+      const tile = () => screen.getByRole("button", { name: /Inspect Cut your power bill/ }).querySelector("img");
+      expect(tile()).toBeNull();
+      act(() => { vi.advanceTimersByTime(2_500); });
+      expect(tile()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows placement context and closes with Escape", () => {
