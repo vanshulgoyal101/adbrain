@@ -29,6 +29,7 @@ function errorResponse(
 export const POST = observeRoute("/api/campaigns/preflight", "POST", handlePOST);
 
 async function handlePOST(request: Request) {
+  const started = performance.now();
   const requestId = currentRequestId();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -63,7 +64,8 @@ async function handlePOST(request: Request) {
     if (result.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", "Draft access is not allowed.");
     if (result.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);
     recordProductEvent({ kind: "workflow", name: "campaign.review", outcome: result.review.canCreatePaused ? "success" : "rejected",
-      businessId: actor.businessId, attributes: { failedCount: result.review.blockers.length, errorCode: result.review.blockers[0]?.code } });
+      businessId: actor.businessId, durationMs: Math.round(performance.now() - started),
+      attributes: { failedCount: result.review.blockers.length, errorCode: result.review.blockers[0]?.code, destination: result.review.destination } });
     return NextResponse.json(
       { ok: true, data: result.review, requestId },
       { headers: { "Cache-Control": "no-store" } },

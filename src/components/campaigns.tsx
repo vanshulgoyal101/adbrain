@@ -152,6 +152,35 @@ type CampaignsProps = {
   newCampaign?: { creativeIds: string[] };
 };
 
+
+type PlanReply = {
+  response: Response;
+  data: { ready?: boolean; fallback?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
+};
+const BACKGROUND_PLAN_DELAY_MS = 1500;
+const MAX_BACKGROUND_PLANS = 3;
+
+async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply> {
+  const response = await fetch("/api/campaigns/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
+    signal,
+  });
+  return { response, data: await response.json() as PlanReply["data"] };
+}
+
+type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
+
+function needsAudiencePlan(input: AudiencePlanInput): boolean {
+  return input.targeting.age?.mode === "ai" || !input.targeting.audience;
+}
+
+/** What the audience plan depends on (#366): the goal, the ads, the targeting and the destination. */
+function audiencePlanKey(input: AudiencePlanInput): string {
+  return JSON.stringify([input.goal, [...input.creativeIds].sort(), input.targeting, input.destination]);
+}
+
 export function Campaigns(props: CampaignsProps) {
   const [setups, saveSetup] = useReducer((current: Map<string, ComposerSetup>, [scope, setup]: [string, ComposerSetup]) => {
     const next = new Map(current);
@@ -638,15 +667,57 @@ function BusinessCampaigns({
     };
   }
 
-  async function recommendAudience(input: DraftInput, signal: AbortSignal): Promise<DraftInput> {
+  // #366: plan the audience in the background once ads are chosen, so Prepare usually doesn't wait for the AI.
+  const backgroundPlanRef = useRef<{ key: string; reply: Promise<PlanReply>; controller: AbortController } | null>(null);
+  const backgroundPlansRef = useRef(0);
+  const backgroundPlanKey = (() => {
+    if (!showComposer || creationMode !== "manual" || selected.size === 0) return null;
+    try {
+      const planned = { goal: draftGoal || name, creativeIds: [...selected], targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions), destination };
+      return needsAudiencePlan(planned) ? audiencePlanKey(planned) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const startBackgroundPlan = useEffectEvent(() => {
+    if (isPreparing() || unresolvedRecovery() || backgroundPlansRef.current >= MAX_BACKGROUND_PLANS) return;
+    let input: DraftInput;
+    try {
+      input = manualDraftInput(false);
+    } catch {
+      return;
+    }
+    const key = audiencePlanKey(input);
+    if (!needsAudiencePlan(input) || backgroundPlanRef.current?.key === key) return;
+    backgroundPlansRef.current += 1;
+    backgroundPlanRef.current?.controller.abort();
+    const controller = new AbortController();
+    const reply = fetchAudiencePlan(input, controller.signal);
+    reply.catch(() => {});
+    backgroundPlanRef.current = { key, reply, controller };
+  });
+  useEffect(() => {
+    if (!backgroundPlanKey) return;
+    const timer = window.setTimeout(startBackgroundPlan, BACKGROUND_PLAN_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [backgroundPlanKey]);
+  useEffect(() => () => backgroundPlanRef.current?.controller.abort(), []);
+
+  /** The background reply for exactly this input, used once; null if there is none or it failed. */
+  function takeBackgroundPlan(input: DraftInput, signal: AbortSignal): Promise<PlanReply | null> | null {
+    const planned = backgroundPlanRef.current;
+    if (!planned || planned.key !== audiencePlanKey(input)) return null;
+    backgroundPlanRef.current = null;
+    return Promise.race([
+      planned.reply.catch(() => null),
+      new Promise<null>((resolve) => signal.addEventListener("abort", () => resolve(null), { once: true })),
+    ]).then((reply) => (reply?.response.ok ? reply : null));
+  }
+
+  async function recommendAudience(input: DraftInput, signal: AbortSignal, reuseBackground = false): Promise<DraftInput> {
     setPreparationStage(signal, "Recommending audience...");
-    const response = await fetch("/api/campaigns/plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ goal: input.goal, audienceDraft: input }),
-      signal,
-    });
-    const data = await response.json() as { ready?: boolean; fallback?: boolean; targeting?: unknown; error?: string; questions?: { question: string }[]; handoff?: { message: string } };
+    const background = reuseBackground ? takeBackgroundPlan(input, signal) : null;
+    const { response, data } = (background && await background) || await fetchAudiencePlan(input, signal);
     signal.throwIfAborted();
     if (!response.ok || !data.ready) throw new Error(data.error ?? data.handoff?.message ?? (data.questions?.map((question) => question.question).join(" ") || "Could not recommend an audience."));
     const recommended = { ...targetingInputSchema.parse(data.targeting), gender: input.targeting.gender ?? "all" as const };
@@ -707,8 +778,8 @@ function BusinessCampaigns({
     const connectionCheck = reviewAfterSave ? client.status(business.id, signal) : null;
     connectionCheck?.catch(() => {});
     try {
-      if (reviewAfterSave && (input.targeting.age?.mode === "ai" || !input.targeting.audience)) {
-        input = await recommendAudience(input, signal);
+      if (reviewAfterSave && needsAudiencePlan(input)) {
+        input = await recommendAudience(input, signal, true);
       }
       signal.throwIfAborted();
       setPreparationStage(signal, "Saving draft...");
