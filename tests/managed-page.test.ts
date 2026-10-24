@@ -17,7 +17,11 @@ function memory(row?: Record<string, unknown>) {
   let current = row ? { ...row } : null;
   const store: ManagedAccountStore = {
     get: async () => current as never,
-    insert: async (values) => { current = { child_business_id: null, ...values }; },
+    insert: async (values) => {
+      // The database (#533) only accepts new rows at `requested`.
+      if (values.state !== "requested") throw new Error("23514");
+      current = { child_business_id: null, ...values };
+    },
     update: async (values) => { current = { ...current!, ...values }; },
     event: async (event) => { events.push(event); },
   };
@@ -37,6 +41,13 @@ describe("managed Page (#523)", () => {
     expect(await linkManagedPage(db.store, { businessId: "b1", pageId: "111", snapshot, requestId: "r1" })).toEqual({ ok: true, state: "page_linked", pageId: "111" });
     expect(db.row()).toMatchObject({ business_id: "b1", page_id: "111", state: "page_linked" });
     expect(db.events).toEqual([{ business_id: "b1", step: "page", outcome: "succeeded", meta_object_id: "111", request_id: "r1" }]);
+  });
+
+  it("says when another AdBrain business already uses the Page", async () => {
+    const db = memory();
+    db.store.insert = async () => { throw Object.assign(new Error("duplicate"), { code: "23505" }); };
+    expect(await linkManagedPage(db.store, { businessId: "b1", pageId: "111", snapshot })).toEqual({ ok: false, code: "PAGE_TAKEN" });
+    expect(db.events).toEqual([]);
   });
 
   it("refuses a Page the customer doesn't administer", async () => {

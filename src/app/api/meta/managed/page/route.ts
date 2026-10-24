@@ -41,8 +41,8 @@ function store(businessId: string): ManagedAccountStore {
       if (error) throw new Error("Managed account could not be read.");
       return data;
     },
-    insert: async (values) => { const { error } = await table().insert(values); if (error) throw new Error("Managed account could not be saved."); },
-    update: async (values) => { const { error } = await table().update(values).eq("business_id", businessId); if (error) throw new Error("Managed account could not be saved."); },
+    insert: async (values) => { const { error } = await table().insert(values); if (error) throw Object.assign(new Error("Managed account could not be saved."), { code: error.code }); },
+    update: async (values) => { const { error } = await table().update(values).eq("business_id", businessId); if (error) throw Object.assign(new Error("Managed account could not be saved."), { code: error.code }); },
     event: async (values) => { const { error } = await admin.from("managed_meta_account_events").insert(values); if (error) throw new Error("Managed account step could not be logged."); },
   };
 }
@@ -74,9 +74,11 @@ async function handlePOST(request: NextRequest) {
     const result = await linkManagedPage(store(businessId), { businessId, pageId: body.data.pageId, snapshot, requestId: currentRequestId() });
     recordProductEvent({ kind: "workflow", name: "managed.page_link", businessId, outcome: result.ok ? "success" : "rejected", attributes: result.ok ? {} : { errorCode: result.code } });
     if (!result.ok) {
-      return result.code === "PAGE_NOT_ADMIN"
-        ? fail(409, result.code, "You need to be an admin of this Page. Choose a Page you manage, or create one on Facebook.")
-        : fail(409, result.code, "Your ad business already uses another Page. Contact AdBrain to change it.");
+      return fail(409, result.code, {
+        PAGE_NOT_ADMIN: "You need to be an admin of this Page. Choose a Page you manage, or create one on Facebook.",
+        PAGE_LOCKED: "Your ad business already uses another Page. Contact AdBrain to change it.",
+        PAGE_TAKEN: "Another AdBrain business already uses this Page. Choose a different Page, or contact AdBrain.",
+      }[result.code]);
     }
     return NextResponse.json({ ok: true, data: result, requestId: currentRequestId() });
   } catch {

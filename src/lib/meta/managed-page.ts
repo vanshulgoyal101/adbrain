@@ -27,14 +27,17 @@ type ManagedRow = { business_id: string; state: string; page_id: string | null; 
 /** The ledger writes this step needs (service role; the database enforces the state machine). */
 export interface ManagedAccountStore {
   get(businessId: string): Promise<ManagedRow | null>;
-  insert(values: { business_id: string; page_id: string; state: "page_linked" }): Promise<void>;
+  insert(values: { business_id: string; page_id: string; state: "requested" }): Promise<void>;
   update(values: { page_id: string; state: "page_linked" }): Promise<void>;
   event(values: { business_id: string; step: "page"; outcome: "succeeded"; meta_object_id: string; request_id?: string }): Promise<void>;
 }
 
 export type LinkPageResult =
   | { ok: true; state: string; pageId: string }
-  | { ok: false; code: "PAGE_NOT_ADMIN" | "PAGE_LOCKED" };
+  | { ok: false; code: "PAGE_NOT_ADMIN" | "PAGE_LOCKED" | "PAGE_TAKEN" };
+
+/** Postgres unique violation: another active AdBrain business already uses this Page (#533 index). */
+const isTaken = (error: unknown) => Boolean(error && typeof error === "object" && (error as { code?: unknown }).code === "23505");
 
 const RELINKABLE = new Set(["requested", "page_linked", "failed"]);
 
@@ -47,8 +50,14 @@ export async function linkManagedPage(
   if (row?.page_id === input.pageId && row.state !== "requested") return { ok: true, state: row.state, pageId: input.pageId };
   // Once the child business exists, its Page is part of it; changing it means offboarding.
   if (row && (row.child_business_id || !RELINKABLE.has(row.state))) return { ok: false, code: "PAGE_LOCKED" };
-  if (row) await store.update({ page_id: input.pageId, state: "page_linked" });
-  else await store.insert({ business_id: input.businessId, page_id: input.pageId, state: "page_linked" });
+  try {
+    // New rows start at `requested` (the database refuses anything else), then link.
+    if (!row) await store.insert({ business_id: input.businessId, page_id: input.pageId, state: "requested" });
+    await store.update({ page_id: input.pageId, state: "page_linked" });
+  } catch (error) {
+    if (isTaken(error)) return { ok: false, code: "PAGE_TAKEN" };
+    throw error;
+  }
   await store.event({
     business_id: input.businessId, step: "page", outcome: "succeeded", meta_object_id: input.pageId,
     ...(input.requestId ? { request_id: input.requestId } : {}),
