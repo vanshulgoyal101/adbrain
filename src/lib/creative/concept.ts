@@ -9,7 +9,7 @@ import { formatDimensions, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, scanAdCopy } from "@/lib/creative/slopScan";
 import { spelledCurrency } from "./currency";
 
-export const CONCEPT_VERSION = "creative-concept-v2";
+export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
 const FOLD_CHARACTERS = 125;
 
@@ -93,7 +93,10 @@ Return only JSON, with this shape. Character limits include spaces and are hard 
 "sourceQuotes":["1-8 verbatim quotes from supplied facts supporting the message, each up to 500 characters"]}
 The headline, primary_text and supportingText together should stay under 85 words. Avoid
 unsubstantiated health promises and personal-attribute assumptions. Customer stylistic preferences
-matter, but never override factual constraints. Use the requested language for all customer copy.`,
+matter, but never override factual constraints. Use the requested language for all customer copy.
+The headline and supportingText are drawn on the image, which renders Latin script only for now. When the
+requested language uses another script (Hindi in Devanagari, Punjabi in Gurmukhi), write those two in English
+or Roman-script Hinglish/Punjabi, and write primary_text and description in the requested language and script.`,
     },
     {
       role: "user",
@@ -122,7 +125,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-    "hook-length", "offer-below-fold",
+    "hook-length", "offer-below-fold", "on-image-script",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -218,13 +221,23 @@ function verbatimQuote(quote: string, sources: string[]): string | null {
   return null;
 }
 
-// "text-free" is the visual the prompt asks for, not a free offer.
-const COMMERCIAL_TERMS =
-  /(?<!\btext-)\bfree\b|\bno[- ]cost\b|\bguaranteed?\b|\d+(?:\.\d+)?\s*%|[$\u00a3\u20ac\u20b9]\s*\d+(?:[.,]\d+)*/gi;
+// Hindi and Punjabi "free" and "guarantee" are the same claims as the English words (#290).
+const FREE_WORD = /(?<![\p{L}\p{M}])(?:फ\u093C?्री|मुफ\u093C?्त|ਮੁਫ\u0A3C?ਤ|ਫ੍ਰੀ)(?![\p{L}\p{M}])|\bmuft\b/iu;
+const GUARANTEE_WORD = /(?<![\p{L}\p{M}])(?:गारंटी|ਗਾਰੰਟੀ)(?![\p{L}\p{M}])/u;
+/** A fact that negates ("no", "not", "नहीं", "बिना") doesn't back a claim. */
+const NEGATION = /\b(?:no|not|never|without|avoid)\b|(?<![\p{L}\p{M}])(?:नहीं|बिना|ਨਹੀਂ|ਬਿਨਾਂ)(?![\p{L}\p{M}])/iu;
+
+// "text-free" is the visual the prompt asks for, not a free offer. Match on NFC text.
+const COMMERCIAL_TERMS = new RegExp(
+  `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`,
+  "giu",
+);
 
 // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
 function citesTerm(quote: string, term: string): boolean {
-  if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase());
+  if (/^free$/i.test(term) || FREE_WORD.test(term)) return quote.toLowerCase().includes("free") || FREE_WORD.test(quote);
+  if (GUARANTEE_WORD.test(term)) return quote.toLowerCase().includes("guarantee") || GUARANTEE_WORD.test(quote);
+  if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
 }
@@ -248,15 +261,15 @@ export function copyClaimWarnings(
   facts: (string | null | undefined)[],
   vertical?: string | null,
 ): string[] {
-  const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "");
-  const text = [copy.headline, copy.primary_text, copy.description].join(" ");
+  const sources = facts.filter((fact): fact is string => typeof fact === "string" && fact.trim() !== "").map((fact) => fact.normalize("NFC"));
+  const text = [copy.headline, copy.primary_text, copy.description].join(" ").normalize("NFC");
   const warnings: string[] = [];
   const seen = new Set<string>();
   for (const term of text.match(COMMERCIAL_TERMS) ?? []) {
     const key = term.toLowerCase().replace(/\s+/g, "");
     if (seen.has(key)) continue;
     seen.add(key);
-    if (!sources.some((fact) => citesTerm(fact, term) && !/\b(no|not|never|without|avoid)\b/i.test(fact))) {
+    if (!sources.some((fact) => citesTerm(fact, term) && !NEGATION.test(fact))) {
       warnings.push(`"${term.trim()}" isn't in your Brand. Check it's true, or add it to your Brand's offers.`);
     }
   }
@@ -304,7 +317,7 @@ export function validateConcept(
       return verbatim ?? quote;
     }),
   };
-  const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
   const issues = scanAdCopy(
     [concept.headline, concept.primary_text, concept.supportingText]
@@ -333,6 +346,7 @@ export function validateConcept(
   }
   const commercialTerms = COMMERCIAL_TERMS;
   const cites = citesTerm;
+  const negation = NEGATION;
   const visualClaims = concept.visual.direction
     .split(/(?:[.!?;](?=\s|$)\s*|\s+\bbut\b\s+)/i)
     .filter((clause) => !/^(?:avoid|do not|don't|omit|exclude|never (?:show|include|add|render|depict|use))\b/i.test(clause.trim()))
@@ -347,23 +361,28 @@ export function validateConcept(
     concept.supportingText,
     concept.rationale,
     visualClaims,
-  ].join(" ");
+  ].join(" ").normalize("NFC");
   for (const term of output.match(commercialTerms) ?? []) {
     if (
-      !concept.sourceQuotes.some(
-        (quote) =>
-          cites(quote, term) &&
-          !/\b(no|not|never|without|avoid)\b/i.test(quote),
-      )
+      !concept.sourceQuotes.some((quote) => {
+        const text = quote.normalize("NFC");
+        return cites(text, term) && !negation.test(text);
+      })
     ) {
       issues.push(
         `unsupported-commercial-claim: ${term}; remove it or cite a supplied positive fact supporting it`,
       );
     }
   }
-  const offer = new RegExp(commercialTerms.source, "i").exec(concept.primary_text);
+  const offer = new RegExp(commercialTerms.source, "iu").exec(concept.primary_text.normalize("NFC"));
   if (offer && offer.index >= FOLD_CHARACTERS) {
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
+  }
+  // Until #300 ships Indic shaping, the image misspells Devanagari and shows Gurmukhi as boxes.
+  for (const [field, text] of [["headline", concept.headline], ["supportingText", concept.supportingText ?? ""]] as const) {
+    if (/[\p{Script=Devanagari}\p{Script=Gurmukhi}]/u.test(text)) {
+      issues.push(`on-image-script: ${field} is drawn on the image, which renders Latin script only; write it in English or Roman-script Hinglish/Punjabi and keep Hindi or Punjabi script for primary_text and description`);
+    }
   }
   return issues.length
     ? { success: false, issues }

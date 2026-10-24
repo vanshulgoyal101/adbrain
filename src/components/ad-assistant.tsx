@@ -17,6 +17,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
+import { AdLanguagePicker } from "@/components/ad-language-picker";
 import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
@@ -27,6 +28,7 @@ import { useMounted } from "@/lib/use-mounted";
 import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/interview";
 import { isWriteYourOwnOption } from "@/lib/creative/interview-options";
 import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
+import { CREATE_LANGUAGES, defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import type { Business, Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -55,6 +57,12 @@ interface Draft {
   recentGoals?: string[];
   generationId?: string;
   referenceBrief?: string;
+  language?: CreateLanguageId;
+  languagePicked?: boolean;
+}
+
+function isCreateLanguage(value: unknown): value is CreateLanguageId {
+  return CREATE_LANGUAGES.some((language) => language.id === value);
 }
 
 const draftKey = (businessId: string) => `adbrain:assistant:${businessId}`;
@@ -84,6 +92,8 @@ function readDraft(businessId: string): Draft | null {
       recentGoals: Array.isArray(d.recentGoals) ? d.recentGoals.filter((item): item is string => typeof item === "string").slice(-6) : [],
       generationId: typeof d.generationId === "string" && /^[0-9a-f-]{36}$/i.test(d.generationId) ? d.generationId : undefined,
       referenceBrief: typeof d.referenceBrief === "string" ? d.referenceBrief.slice(0, 2000) : undefined,
+      language: isCreateLanguage(d.language) ? d.language : undefined,
+      languagePicked: d.languagePicked === true,
     };
   } catch {
     return null;
@@ -117,6 +127,9 @@ export function AdAssistant({ business }: { business: Business }) {
   const [prepared, setPrepared] = useState<PreparedBrief | undefined>();
   const [recentGoals, setRecentGoals] = useState<string[]>([]);
   const [referenceBrief, setReferenceBrief] = useState<string | undefined>();
+  const [language, setLanguage] = useState<CreateLanguageId>(() => defaultAdLanguage(business.languages));
+  // An explicit pick wins over the language the interview suggests.
+  const [languagePicked, setLanguagePicked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Remembers the last network action so an error can be retried in place.
   const [lastAction, setLastAction] = useState<
@@ -145,6 +158,10 @@ export function AdAssistant({ business }: { business: Business }) {
       setRecentGoals(saved.recentGoals ?? []);
       setReferenceBrief(saved.referenceBrief);
       setGenerationId(saved.generationId ?? null);
+      // Older drafts kept only the interview's language on the prepared brief.
+      const savedLanguage = saved.language ?? (isCreateLanguage(saved.prepared?.language) ? saved.prepared.language : undefined);
+      if (savedLanguage) setLanguage(savedLanguage);
+      setLanguagePicked(saved.languagePicked === true);
       if (saved.generationId && saved.phase !== "done" && saved.prepared) {
         setPhase("chat");
         setLastAction({ type: "generate", ...saved.prepared });
@@ -158,7 +175,7 @@ export function AdAssistant({ business }: { business: Business }) {
 
   useEffect(() => {
     if (!restored) return;
-    if (!goal && !started && turns.length === 0 && !recentGoals.length) {
+    if (!goal && !started && turns.length === 0 && !recentGoals.length && !languagePicked) {
       clearDraft(business.id);
       return;
     }
@@ -172,8 +189,10 @@ export function AdAssistant({ business }: { business: Business }) {
       recentGoals,
       generationId: generationId ?? undefined,
       referenceBrief,
+      language,
+      languagePicked,
     });
-  }, [restored, business.id, goal, started, turns, answers, phase, prepared, recentGoals, referenceBrief, generationId]);
+  }, [restored, business.id, goal, started, turns, answers, phase, prepared, recentGoals, referenceBrief, generationId, language, languagePicked]);
 
   useLayoutEffect(() => {
     const node = scrollRef.current;
@@ -251,6 +270,7 @@ export function AdAssistant({ business }: { business: Business }) {
       }
       if (data.ready && data.brief) {
         setPrepared({ brief: data.brief, language: data.language, recommendations: data.recommendations });
+        if (!languagePicked && isCreateLanguage(data.language)) setLanguage(data.language);
         setPhase("review");
         setLastAction(null);
       } else if (data.question) {
@@ -287,7 +307,7 @@ export function AdAssistant({ business }: { business: Business }) {
     }
     const newGenerationId = crypto.randomUUID();
     setGenerationId(newGenerationId);
-    writeDraft(business.id, { goal, started, turns, answers, phase: "chat", prepared: { ...prepared, brief, language }, recentGoals, generationId: newGenerationId, referenceBrief });
+    writeDraft(business.id, { goal, started, turns, answers, phase: "chat", prepared: { ...prepared, brief, language }, recentGoals, generationId: newGenerationId, referenceBrief, language: isCreateLanguage(language) ? language : undefined, languagePicked });
     setTurns((t) => [
       ...t,
       { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
@@ -439,6 +459,11 @@ export function AdAssistant({ business }: { business: Business }) {
     step([]);
   }
 
+  function pickLanguage(id: CreateLanguageId) {
+    setLanguage(id);
+    setLanguagePicked(true);
+  }
+
   function reset(nextGoal = "", nextReference?: string) {
     if (loading || inFlightRef.current) return;
     clearDraft(business.id);
@@ -496,6 +521,9 @@ export function AdAssistant({ business }: { business: Business }) {
                     {s.label}<ArrowRight size={15} aria-hidden="true" />
                   </button>
                 ))}
+              </div>
+              <div className="mt-5">
+                <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
               </div>
               <div className="mt-5 flex justify-end">
                 <Button onClick={start} disabled={!goal.trim()}>
@@ -566,9 +594,12 @@ export function AdAssistant({ business }: { business: Business }) {
           <section aria-label="Review creative brief" className="min-w-0 border-t border-slate-200 pt-4">
             <label htmlFor="prepared-brief" className="text-sm font-semibold text-slate-900">Creative brief</label>
             <Textarea id="prepared-brief" value={prepared.brief} onChange={(event) => setPrepared({ ...prepared, brief: event.target.value, recommendations: undefined })} maxLength={2000} rows={7} className="mt-3 w-full" />
+            <div className="mt-3">
+              <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
+            </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <Button variant="outline" onClick={() => reset(goal, prepared.brief)} disabled={loading}><Pencil className="h-4 w-4" /> Revise goal</Button>
-              <Button onClick={() => generate(prepared.brief.trim(), prepared.language)} disabled={loading || !prepared.brief.trim()}><Sparkles className="h-4 w-4" /> Generate 3 ads</Button>
+              <Button onClick={() => generate(prepared.brief.trim(), language)} disabled={loading || !prepared.brief.trim()}><Sparkles className="h-4 w-4" /> Generate 3 ads</Button>
             </div>
           </section>
         )}

@@ -248,4 +248,53 @@ describe("creative concept contract", () => {
       ).success,
     ).toBe(false);
   });
+
+  // Until #300 ships Indic shaping, the image misspells Devanagari ("बजिली बलि") and boxes Gurmukhi.
+  it("keeps words drawn on the image in Latin script and lets Hindi post text through (#290)", async () => {
+    const { conceptValidationRules } = await import("@/lib/creative/concept");
+    const hindi = { ...input, language: "Hindi in Devanagari script" };
+    const rules = (value: unknown) => {
+      const result = validateConcept(value, hindi);
+      return result.success ? [] : conceptValidationRules(result.issues);
+    };
+    const post = { ...concept, primary_text: "हमारी लोकल टीम के साथ रूफ़टॉप सोलर के बारे में जानें।", description: "अपनी छत के बारे में हमारी टीम से बात करें।" };
+    expect(rules(post)).toEqual([]);
+    expect(rules({ ...post, headline: "Apni chhat ko kaam pe lagao" })).toEqual([]);
+    expect(rules({ ...post, headline: "अपनी छत को काम पर लगाएँ" })).toEqual(["on-image-script"]);
+    expect(rules({ ...post, supportingText: "ਲੋਕਲ ਟੀਮ" })).toEqual(["on-image-script"]);
+    expect(buildConceptMessages(hindi)[0].content).toContain("headline and supportingText are drawn on the image");
+  });
+
+  // Recorded Solaride replies (tests/core/fixtures/create/solaride-hindi.json).
+  const factory = "फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी।";
+  const hindiRules = (value: Record<string, unknown>, extra: Partial<typeof input> & { sourceFacts?: string[]; recentCopy?: { headline: string; primary_text: string }[] } = {}) => {
+    const result = validateConcept({ ...concept, ...value }, { ...input, language: "Hindi in Devanagari script", ...extra });
+    return result.success ? [] : [...new Set(result.issues.map((issue) => issue.split(":", 1)[0]))];
+  };
+
+  it("accepts ₹10,000 cited by '10,000 रुपये' or '10,000 rupaye', and still requires the whole amount (#290)", () => {
+    const hinglish = "31 December se non-DCR solar panel band ho rahe hain aur cost 10,000 rupaye per kW se zyada badh jayegi.";
+    expect(hindiRules({ supportingText: "Costs may rise over ₹10,000/kW after 31 Dec", sourceQuotes: [factory] }, { sourceFacts: [factory] })).toEqual([]);
+    expect(hindiRules({ supportingText: "Costs may rise over ₹10,000/kW after 31 Dec", sourceQuotes: [hinglish] }, { sourceFacts: [hinglish] })).toEqual([]);
+    expect(hindiRules({ supportingText: "Costs may rise over ₹1,000/kW after 31 Dec", sourceQuotes: [factory] }, { sourceFacts: [factory] }))
+      .toEqual(["unsupported-commercial-claim"]);
+  });
+
+  it("compares Hindi openings with their vowel signs (#290)", () => {
+    const recentCopy = [{ headline: "Earlier ad", primary_text: "फ़ैक्टरी की छत पर सोलर लगवाएं और बचत करें।" }];
+    expect(hindiRules({ primary_text: "फ़ैक्टरी की छत पर सोलर से बिल घटाएँ।" }, { recentCopy })).toEqual([]);
+    expect(hindiRules({ primary_text: "फ़ैक्टरी की छत पर सोलर लगवाएं और बचत करें, आज ही।" }, { recentCopy })).toEqual(["repeated-opening"]);
+  });
+
+  it("checks Hindi and Punjabi 'free' and 'guarantee' like the English words (#290)", () => {
+    const offers = { brand: { ...input.brand, offers: ["Free site survey"] } };
+    expect(hindiRules({ primary_text: "मुफ़्त इंस्टॉलेशन बुक करें।" })).toEqual(["unsupported-commercial-claim"]);
+    expect(hindiRules({ primary_text: "पहले फ्री साइट सर्वे बुक करें।" })).toEqual(["unsupported-commercial-claim"]);
+    expect(hindiRules({ primary_text: "ਮੁਫ਼ਤ ਸਾਈਟ ਸਰਵੇ ਬੁੱਕ ਕਰੋ।" })).toEqual(["unsupported-commercial-claim"]);
+    expect(hindiRules({ primary_text: "25 साल की गारंटी के साथ सोलर लगवाएं।" })).toEqual(["unsupported-commercial-claim"]);
+    expect(hindiRules({ primary_text: "पहले मुफ़्त साइट सर्वे बुक करें।", sourceQuotes: ["Free site survey"] }, offers)).toEqual([]);
+    expect(hindiRules({ supportingText: "Free site survey first", sourceQuotes: ["मुफ़्त साइट सर्वे"] }, { sourceFacts: ["मुफ़्त साइट सर्वे"] })).toEqual([]);
+    expect(hindiRules({ supportingText: "Free site survey first", sourceQuotes: ["मुफ़्त साइट सर्वे नहीं मिलेगा"] }, { sourceFacts: ["मुफ़्त साइट सर्वे नहीं मिलेगा"] }))
+      .toEqual(["unsupported-commercial-claim"]);
+  });
 });

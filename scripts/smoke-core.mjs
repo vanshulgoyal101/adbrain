@@ -116,8 +116,13 @@ try {
   });
 
   await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
+  const emailField = page.getByLabel("Email", { exact: true });
+  const passwordField = page.getByLabel("Password", { exact: true });
+  await emailField.waitFor();
+  // #289: a new browser opens on "Create your free account"; an existing user taps "Sign in" for the password form.
+  if (!(await passwordField.isVisible())) await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await emailField.fill(email);
+  await passwordField.fill(password);
   const loginResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/auth/v1/token" && response.request().method() === "POST");
   await page.getByRole("button", { name: "Sign in with password", exact: true }).click();
   const response = await loginResponse;
