@@ -245,6 +245,10 @@ the Brand phone (drawn large and bold with a call icon), a small contact line
 (website and first service area), CTA, colors, font, and angle-specific
 top/center/bottom placement.
 The [renderer](../src/lib/creative/render.tsx) receives validated inline media.
+It draws all text in Inter 400/600/700/800 ([fonts](../src/lib/creative/fonts/),
+OFL), so headlines are really bold; the brand's sans/serif/mono choice falls
+back to Inter. Devanagari and Gurmukhi are not shaped yet (#300), so words on
+the image stay Latin.
 With overlay enabled, render/persistence failure fails the variant: **there is
 no implicit bare-photo success fallback**. `AD_DESIGN_OVERLAY=false` explicitly
 chooses the source photo. Source uploads can remain if later steps fail.
