@@ -8,7 +8,7 @@
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { internalUserIdsSql, localInternalEmails } from "./lib/internal-accounts.mjs";
+import { customerFilterSql, localInternalEmails } from "./lib/internal-accounts.mjs";
 import { readOnlyQuery } from "./lib/prod-query.mjs";
 
 export function eventsSql(query, emails, { includeInternal = false } = {}) {
@@ -17,7 +17,7 @@ export function eventsSql(query, emails, { includeInternal = false } = {}) {
   const events = includeInternal
     ? "events as (select * from public.product_events)"
     // A customer's own events, or background events for a customer's business; never system rows.
-    : `events as (select * from public.product_events where coalesce(user_id, (select b.owner_id from public.businesses b where b.id = business_id)) not in (${internalUserIdsSql(emails)}))`;
+    : `events as (select * from public.product_events where ${customerFilterSql("user_id", "business_id", emails)})`;
   return /^with\b/i.test(sql) ? `with ${events}, ${sql.replace(/^with\s+/i, "")}` : `with ${events} ${sql}`;
 }
 

@@ -32,7 +32,9 @@
     "test:scroll-layout": "node scripts/check-scroll-layout.mjs",
     "eval:creative": "node scripts/eval-creative.mjs",
     "eval:create": "tsx --env-file=.env.local scripts/eval-create.ts",
-    "smoke:core": "node scripts/smoke-core.mjs"
+    "smoke:core": "node scripts/smoke-core.mjs",
+    "stats": "node scripts/stats.mjs",
+    "perf:pages": "node scripts/perf-pages.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.104",

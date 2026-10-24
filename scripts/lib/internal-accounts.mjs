@@ -37,3 +37,8 @@ export async function localInternalEmails() {
   }
   return [...new Set(emails.filter(Boolean).map((email) => email.trim().toLowerCase()))];
 }
+
+/** SQL boolean: a row belongs to a real customer, by its user or, for background rows, its business owner. */
+export function customerFilterSql(userColumn, businessColumn, emails) {
+  return `coalesce(${userColumn}, (select b.owner_id from public.businesses b where b.id = ${businessColumn})) not in (${internalUserIdsSql(emails)})`;
+}

@@ -162,6 +162,23 @@ and browser collection on unless disabled or denied by DNT/GPC. Turning off
 `PRODUCT_LOGGING_ENABLED` also drops browser events at `/api/events`. Disabling
 the sink does not remove existing rows or runtime log copies.
 
+## Reading It (#451)
+
+`npm run stats [-- --days 7] [-- --include-internal]` prints, from production (read-only,
+real customers only by default): AI calls, tokens and estimated USD by model; Create runs
+(cost, tokens, AI calls, retries and AI seconds per run, cost per saved ad); AI cost per
+business per day; failures by step (AI calls with their provider reason, 5xx routes, failed
+workflows); p50/p90 of the busiest routes; and the sign-up funnel. Page-load timing in a
+real browser: `node scripts/perf-pages.mjs [--runs 5] [--pages /dashboard,/campaigns,/brand]`
+(TTFB, DOMContentLoaded and load p50/p90; read-only, signed in as the smoke account).
+
+| Table | Kept |
+| --- | --- |
+| `product_events` (raw) | 90 days, then rolled up |
+| `product_event_daily` (rollups) | 730 days |
+| `llm_usage_events` (every AI call: model, tokens, cost) | kept: the per-ad and per-run cost receipt (hundreds of rows a week) |
+| `campaign_results`, `leads`, payments | kept: business records |
+
 ## Retention and Health
 
 The existing authenticated daily keepalive invokes `prune_product_events` when
