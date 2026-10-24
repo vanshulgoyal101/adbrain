@@ -286,6 +286,12 @@ limit, so rotating keys does not add capacity. A 5xx skips that model's other
 keys. First successful provider response wins. Cancellation and
 terminal local errors do not mean trying every key indefinitely.
 
+Internal accounts (team, owner, test; [internal-accounts.json](../src/lib/internal-accounts.json))
+never use the paid OpenRouter key (#449): the router drops OpenRouter from every order, falling
+back to `INTERNAL_PROVIDER_ORDER` (default `google,groq`) when nothing free is left, and their
+images come from Pollinations without reference images. The request's verified Supabase user
+decides; requests without one (cron, workers) are billed as customers.
+
 The text adapters use pinned `ai@7.0.116`, `@ai-sdk/google@4.0.82`, and
 `@ai-sdk/openai-compatible@3.0.57`. These packages use Apache-2.0 licenses,
 require Node >=22, and accept the project's Zod 4 version. Package-distributed

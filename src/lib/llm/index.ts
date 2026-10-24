@@ -3,6 +3,7 @@ import { createGeminiProvider } from "./providers/gemini";
 import { createOpenAICompatibleProvider } from "./providers/openai-compatible";
 import { cacheKey, withCache } from "./cache";
 import { recordUsage } from "./usage";
+import { freeProvidersOnly, PAID_PROVIDERS } from "./spend-policy";
 import {
   AllLLMProvidersFailedError,
   LLMError,
@@ -100,7 +101,11 @@ function buildRegistry(routing: "standard" | "budget" | "creative" = "standard",
   const configured = orderValue.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const order = [...configured, ...extraProviders.filter((name) => !configured.includes(name))];
+  let order = [...configured, ...extraProviders.filter((name) => !configured.includes(name))];
+  if (freeProvidersOnly()) {
+    order = order.filter((name) => !PAID_PROVIDERS.has(name));
+    if (!order.length) order = env.INTERNAL_PROVIDER_ORDER.split(",").map((s) => s.trim()).filter((name) => name && !PAID_PROVIDERS.has(name));
+  }
 
   return order
     .flatMap((name) => registry[name] ?? []);

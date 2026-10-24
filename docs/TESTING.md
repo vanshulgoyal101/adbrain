@@ -79,6 +79,10 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Internal accounts stay free** (`internal-free-providers`, #449): with production's paid
+  orders, an internal account's concept (the recorded Cedar Ridge reply) comes from Gemini and its
+  image from Pollinations without references; with the free tiers busy its interview fails instead
+  of reaching OpenRouter, while a customer still gets OpenRouter.
 - **Create when the AI is busy** (`create-busy`, #410): through the production order
   (Groq, Gemini, then the paid OpenRouter fallback), every provider rate-limited returns a 503
   "busy, try again" instead of a 500, and each refused attempt is logged as `ai.completion`
