@@ -42,7 +42,15 @@ async function validate(name: string, path: string, form: Record<string, string>
 }
 
 const plan = destinationPlan("whatsapp");
-const greeting = whatsappGreeting(brand, [approved.headline, approved.primary_text]);
+// #493: the campaign covers three cities, so the English ask names none; the variants prove Meta
+// accepts the one-city, Hindi and Punjabi texts too.
+const areas = ["Chandigarh", "Panchkula", "Mohali"];
+const greeting = whatsappGreeting(brand, [approved.headline, approved.primary_text], areas);
+const variants = {
+  "one-city": whatsappGreeting(brand, [approved.headline, approved.primary_text], ["Mohali"]),
+  hindi: whatsappGreeting(brand, ["छत पर सोलर, Free site survey के साथ"], ["Mohali"]),
+  punjabi: whatsappGreeting(brand, ["ਛੱਤ 'ਤੇ ਸੋਲਰ, Free site survey ਨਾਲ"], ["Mohali"]),
+};
 const targeting = JSON.stringify({ geo_locations: { cities: [{ key: "1021145" }, { key: "2676092" }, { key: "1035473" }], location_types: ["home", "recent"] }, age_min: 25, age_max: 55, targeting_automation: { advantage_audience: 0 } });
 
 async function main() {
@@ -56,9 +64,9 @@ for (const [label, number] of [["plus", phone], ["digits", digits]] as const) {
     promoted_object: JSON.stringify({ page_id: pageId, whatsapp_phone_number: number }), targeting, execution_options: VALIDATE,
   });
 }
-const linkData = (link: string, cta: ReturnType<typeof destinationCTA>) => ({
+const linkData = (link: string, cta: ReturnType<typeof destinationCTA>, welcome = greeting) => ({
   image_hash: imageHash, message: approved.primary_text, name: approved.headline, description: approved.description,
-  link, call_to_action: cta, page_welcome_message: whatsappWelcomeMessage(greeting),
+  link, call_to_action: cta, page_welcome_message: whatsappWelcomeMessage(welcome),
 });
 for (const [label, link, cta] of [
   ["ad-wa-me", `https://wa.me/${digits}`, destinationCTA("whatsapp", { phone })],
@@ -69,7 +77,13 @@ for (const [label, link, cta] of [
     creative: JSON.stringify({ object_story_spec: { page_id: pageId, link_data: linkData(link, cta) } }),
   });
 }
-writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/whatsapp-validate.json"), `${JSON.stringify({ recordedAt: new Date().toISOString(), greeting, tape }, null, 2)}\n`);
+for (const [label, welcome] of Object.entries(variants)) {
+  await validate(`ad-wa-me-${label}`, `${account}/ads`, {
+    name: "AdBrain #493 validate", adset_id: adSetId, status: "PAUSED", execution_options: VALIDATE,
+    creative: JSON.stringify({ object_story_spec: { page_id: pageId, link_data: linkData(`https://wa.me/${digits}`, destinationCTA("whatsapp", { phone }), welcome) } }),
+  });
+}
+writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/whatsapp-validate.json"), `${JSON.stringify({ recordedAt: new Date().toISOString(), greeting, variants, tape }, null, 2)}\n`);
 console.log(`whatsapp-validate: ${tape.length} exchanges`);
 }
 

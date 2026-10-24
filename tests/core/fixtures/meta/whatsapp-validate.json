@@ -1,8 +1,22 @@
 {
-  "recordedAt": "2026-10-23T13:32:05.513Z",
+  "recordedAt": "2026-10-24T16:32:38.352Z",
   "greeting": {
-    "autofill": "Namaste! Mujhe Solaride ke Diwali offer: 10% off rooftop solar installation aur Free site survey ke baare mein jaankari chahiye.",
-    "greeting": "Namaste! Solaride mein aapka swagat hai. Apna sawaal yahan likhiye."
+    "autofill": "Hi, I'm interested in the free site survey.",
+    "greeting": "Hi! Thanks for messaging Solaride. Send this message and we'll reply here."
+  },
+  "variants": {
+    "one-city": {
+      "autofill": "Hi, I'm interested in the free site survey in Mohali.",
+      "greeting": "Hi! Thanks for messaging Solaride. Send this message and we'll reply here."
+    },
+    "hindi": {
+      "autofill": "नमस्ते, मुझे Mohali में Free site survey के बारे में जानकारी चाहिए।",
+      "greeting": "नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।"
+    },
+    "punjabi": {
+      "autofill": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ Mohali ਵਿੱਚ Free site survey ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।",
+      "greeting": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Solaride ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।"
+    }
   },
   "tape": [
     {
@@ -89,7 +103,7 @@
         "adset_id": "120240969992670526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"98c998c9dfe80c40619ce866714283bf\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Namaste! Mujhe Solaride ke Diwali offer: 10% off rooftop solar installation aur Free site survey ke baare mein jaankari chahiye.\\\"},\\\"text\\\":\\\"Namaste! Solaride mein aapka swagat hai. Apna sawaal yahan likhiye.\\\"}}}\"}}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'm interested in the free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
       },
       "status": 200,
       "body": {
@@ -104,12 +118,58 @@
         "adset_id": "120240969992670526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"98c998c9dfe80c40619ce866714283bf\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://api.whatsapp.com/send\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://api.whatsapp.com/send\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Namaste! Mujhe Solaride ke Diwali offer: 10% off rooftop solar installation aur Free site survey ke baare mein jaankari chahiye.\\\"},\\\"text\\\":\\\"Namaste! Solaride mein aapka swagat hai. Apna sawaal yahan likhiye.\\\"}}}\"}}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://api.whatsapp.com/send\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://api.whatsapp.com/send\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'm interested in the free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "ad-wa-me-one-city",
+      "path": "act_2398686420592052/ads",
+      "form": {
+        "name": "AdBrain #493 validate",
+        "adset_id": "120240969992670526",
+        "status": "PAUSED",
+        "execution_options": "[\"validate_only\"]",
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'm interested in the free site survey in Mohali.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "ad-wa-me-hindi",
+      "path": "act_2398686420592052/ads",
+      "form": {
+        "name": "AdBrain #493 validate",
+        "adset_id": "120240969992670526",
+        "status": "PAUSED",
+        "execution_options": "[\"validate_only\"]",
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"नमस्ते, मुझे Mohali में Free site survey के बारे में जानकारी चाहिए।\\\"},\\\"text\\\":\\\"नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।\\\"}}}\"}}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "name": "ad-wa-me-punjabi",
+      "path": "act_2398686420592052/ads",
+      "form": {
+        "name": "AdBrain #493 validate",
+        "adset_id": "120240969992670526",
+        "status": "PAUSED",
+        "execution_options": "[\"validate_only\"]",
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ Mohali ਵਿੱਚ Free site survey ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।\\\"},\\\"text\\\":\\\"ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Solaride ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।\\\"}}}\"}}}"
       },
       "status": 200,
       "body": {
         "success": true
       }
     }
-  ]
+  ],
+  "note": "#493: re-recorded against the PAUSED 'WhatsApp | Jan' ad set (never the live #157 ad). adset-* are refused (1885621, campaign budget) as on Oct 23; only the ads matter here."
 }

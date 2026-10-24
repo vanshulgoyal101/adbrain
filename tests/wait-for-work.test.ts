@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+
+describe("PR reviews count as the latest word (#423)", () => {
+  it("picks a review posted after the last comment, and ignores empty approvals", () => {
+    const comments = [{ body: "DevOps: → CTO: please review", created_at: "2026-10-24T16:40:00Z", html_url: "c1" }];
+    const reviews = [
+      { body: "", submitted_at: "2026-10-24T16:50:00Z", html_url: "r0" },
+      { body: "CTO review of e22d633: approved. → DevOps: release", submitted_at: "2026-10-24T16:45:00Z", html_url: "r1" },
+    ];
+    expect(latestWord(comments, reviews)).toEqual({ body: "CTO review of e22d633: approved. → DevOps: release", at: "2026-10-24T16:45:00Z", url: "r1" });
+    expect(waitingOnMe(latestWord(comments, reviews)!.body, matchers("cto"))).toBe(false);
+    expect(waitingOnMe(latestWord(comments, reviews)!.body, matchers("devops"))).toBe(true);
+    expect(latestWord([], [])).toBeNull();
+  });
+});
 
 describe("restart-proof start (#384)", () => {
   const md = [

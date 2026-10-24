@@ -651,3 +651,47 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 });
+
+describe("background audience plan (#366)", () => {
+  const planCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan").length;
+  const planned = () => waitFor(() => expect(planCalls()).toBe(1), { timeout: 3000 });
+
+  it("plans once the ads are chosen, and Prepare uses that plan instead of waiting for another", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(planCalls()).toBe(0);
+    await planned();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(planCalls()).toBe(1);
+    expect(mocks.saveDraft.mock.calls[0][0].targeting.audience).toEqual(recommended.audience);
+  }, 10_000);
+
+  it("plans again at Prepare when the goal changed after the background plan", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    await planned();
+    fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Rooftop solar for homes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(planCalls()).toBe(2);
+    const prepared = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")[1][1] as RequestInit;
+    expect(JSON.parse(String(prepared.body)).goal).toBe("Rooftop solar for homes");
+  }, 10_000);
+
+  it("plans again at Prepare when the background plan failed", async () => {
+    let first = true;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url !== "/api/campaigns/plan") return Response.json({ forms: [{ id: "form-1", name: "Enquiries", status: "ACTIVE" }] });
+      if (first) { first = false; return Response.json({ error: "Planner unavailable" }, { status: 503 }); }
+      return Response.json({ ready: true, targeting: recommended });
+    }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    await planned();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText("Campaign review");
+    expect(planCalls()).toBe(2);
+    expect(screen.queryByText("Planner unavailable")).not.toBeInTheDocument();
+  }, 10_000);
+});

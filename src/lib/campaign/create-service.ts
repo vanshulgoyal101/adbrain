@@ -14,6 +14,8 @@ import type { CampaignSupabase } from "./preflight-runtime";
 import type { Json } from "@/lib/types";
 import { saveCampaign } from "./trusted-write";
 import { whatsappGreeting } from "./whatsapp-greeting";
+import { draftAreaNames } from "./draft-targeting";
+import { savedGenerationSettings } from "@/lib/creative/receipt";
 import { normalizeWebsite } from "@/lib/brand/validation";
 
 const STORY_RENDER_BUDGET_MS = 6_000;
@@ -92,7 +94,13 @@ export async function executeReviewedCampaign(input: {
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
             destination: draft.input.destination ?? "instant_form", whatsappNumber: review.whatsappNumber ?? undefined,
             ...(draft.input.destination === "whatsapp" ? {
-              whatsappGreeting: whatsappGreeting(business, creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""])),
+              // #493: the ask names the city only when the campaign targets one (same areas as targeting).
+              whatsappGreeting: whatsappGreeting(
+                business,
+                creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""]),
+                draftAreaNames(draft.input, business.locations ?? []),
+                creativeInputs.map(creative => savedGenerationSettings(creative.generation).language),
+              ),
             } : {}),
             // Brands saved before #470 may hold a bare domain; Meta needs a full link.
             link: normalizeWebsite(business.website) ?? "https://facebook.com",
