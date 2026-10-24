@@ -1007,7 +1007,7 @@ function BusinessCampaigns({
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} requested active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
           {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
-          <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer"><Plus className="h-4 w-4" aria-hidden="true" />{showComposer ? "Close campaign setup" : "New campaign"}</Button>
+          <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>
         </div>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
@@ -1476,11 +1476,7 @@ function BusinessCampaigns({
 
                 <div className="flex flex-col gap-2">
                   <div><Label htmlFor="campaign-goal">Campaign goal</Label><Input id="campaign-goal" value={draftGoal} onChange={(event) => setDraftGoal(event.target.value)} placeholder="Qualified enquiries for the current offer" /></div>
-                  <div className="mb-4 grid gap-3 sm:grid-cols-2">
-                    <div><Label htmlFor="planned-areas">Planned areas</Label><Textarea id="planned-areas" rows={2} placeholder="One place per line" value={includedNames} onChange={(event) => { setIncludedNames(event.target.value); setTargeting({ ...targeting, locationMode: "manual" }); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
-                    <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
-                  </div>
-                  <Label>Audience &amp; location</Label>
+                  <Label className="mt-4">Audience &amp; location</Label>
                   <TargetingControls
                     value={targeting}
                     onDecide={(field) => void requestAudienceRecommendation(field)}
@@ -1488,6 +1484,10 @@ function BusinessCampaigns({
                     brandAreas={business.locations ?? []}
                     plannedAreas={plannedAreas}
                     plannedExclusions={plannedExclusions}
+                    areaFields={<>
+                      <div><Label htmlFor="planned-areas">Planned areas</Label><Textarea id="planned-areas" rows={2} placeholder="One place per line" value={includedNames} onChange={(event) => { setIncludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
+                      <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
+                    </>}
                   />
                   <Button variant="outline" onClick={() => void requestAudienceRecommendation()} disabled={preparing || selected.size === 0 || budget <= 0}>
                     <Sparkles className="h-4 w-4" aria-hidden="true" /> Recommend audience

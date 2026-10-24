@@ -313,6 +313,7 @@ export function TargetingControls({
   plannedAreas = [],
   plannedExclusions = [],
   onDecide,
+  areaFields,
 }: {
   value: TargetingValue;
   onChange: (v: TargetingValue) => void;
@@ -320,6 +321,8 @@ export function TargetingControls({
   plannedAreas?: string[];
   plannedExclusions?: string[];
   onDecide?: (field: "location" | "age") => void;
+  /** Typed place lists, shown only under "Choose myself" so location is asked once (#305). */
+  areaFields?: React.ReactNode;
 }) {
   const set = (patch: Partial<TargetingValue>) => onChange({ ...value, ...patch });
 
@@ -377,11 +380,11 @@ export function TargetingControls({
         {value.locationMode === "ai" ? (
           <p className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-sm text-blue-800">
             {plannedAreas.length ? (
-              <>Saved campaign areas: <span className="font-medium">{plannedAreas.join(", ")}</span>.</>
+              <>Saved campaign areas: <span className="font-medium">{plannedAreas.join(", ")}</span>{plannedExclusions.length ? <>; excluding <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}.</>
             ) : brandAreas.length ? (
               <>
                 AdBrain will target your service areas from your Brand Brain:{" "}
-                <span className="font-medium">{brandAreas.join(", ")}</span>.
+                <span className="font-medium">{brandAreas.join(", ")}</span>{plannedExclusions.length ? <>; excluding <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}.
               </>
             ) : (
               <>
@@ -390,6 +393,7 @@ export function TargetingControls({
             )}
           </p>
         ) : (
+          <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label className="flex items-center gap-1.5 text-xs text-slate-600">
@@ -422,6 +426,8 @@ export function TargetingControls({
               />
             </div>
           </div>
+          {areaFields && <div className="grid gap-3 sm:grid-cols-2">{areaFields}</div>}
+          </>
         )}
 
         {(value.locationMode === "ai" || hasCities || plannedAreas.length > 0 || plannedExclusions.length > 0) && (

@@ -29,6 +29,10 @@ const recommended: DraftInput["targeting"] = {
 const selected = { adAccountId: "act_1", accountName: "Solar account", pageId: "page_1", pageName: "Solar Page", currency: "INR", timezoneName: "Asia/Kolkata", metaBusinessId: null };
 let saved: DraftDTO;
 
+// #305: typed areas live under the location "Choose myself"; "Let AdBrain decide" shows them as a summary.
+const chooseAreas = () => fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[0]);
+const savedAreas = (text: string) => waitFor(() => expect(document.body).toHaveTextContent(text));
+
 function view(metaReady = false) {
   return render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[{ id: "form-1", name: "Enquiries", status: "ACTIVE" }]} leadFormError={null} metaReady={metaReady} adAccountId="" />);
 }
@@ -262,9 +266,32 @@ describe("campaign audience workflow", () => {
     expect(screen.queryByRole("button", { name: "Show all 9 ads" })).not.toBeInTheDocument();
   });
 
+  it("asks where ads show once: the area boxes live under Choose myself (#305)", async () => {
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    expect(screen.getAllByText("Where should ads show?")).toHaveLength(1);
+    expect(screen.queryByLabelText("Planned areas")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Excluded areas")).not.toBeInTheDocument();
+    chooseAreas();
+    fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Jaipur" } });
+    fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Ajmer" } });
+    expect(screen.getAllByRole("button", { name: "Choose myself" })[0]).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
+    await savedAreas("Saved campaign areas: Jaipur; excluding Ajmer.");
+    expect(screen.queryByLabelText("Planned areas")).not.toBeInTheDocument();
+  });
+
+  it("shows a close icon, not a plus, while campaign setup is open (#305)", () => {
+    view();
+    const close = screen.getByRole("button", { name: "Close campaign setup" });
+    expect(close.querySelector(".lucide-x")).not.toBeNull();
+    expect(close.querySelector(".lucide-plus")).toBeNull();
+  });
+
   it("generates detailed targeting even when location and age are manual", async () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Jaipur" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[1]);
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
@@ -314,6 +341,7 @@ describe("campaign audience workflow", () => {
   it("re-decides age using the new mode while retaining chosen locations and campaign settings", async () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Austin, Texas\nRound Rock, Texas" } });
     fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Dallas, Texas" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[1]);
@@ -331,6 +359,7 @@ describe("campaign audience workflow", () => {
   it("releases old areas for a fresh location decision but retains exclusions and manual ages", async () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Delhi" } });
     fireEvent.change(screen.getByLabelText("Excluded areas"), { target: { value: "Ajmer" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Choose myself" })[1]);
@@ -340,7 +369,7 @@ describe("campaign audience workflow", () => {
     const input = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).audienceDraft;
     expect(input.targeting.location).toMatchObject({ mode: "ai", included: [], includedNames: [], excludedNames: ["Ajmer"] });
     expect(input.targeting.age).toMatchObject({ mode: "manual", min: 40 });
-    await waitFor(() => expect(screen.getByLabelText("Planned areas")).toHaveValue("Jaipur"));
+    await savedAreas("Saved campaign areas: Jaipur; excluding Ajmer.");
   });
 
   it("preserves comma-containing locations, radius and edited interests through save and reopen", async () => {
@@ -351,7 +380,7 @@ describe("campaign audience workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Recommend audience" }));
     await screen.findByLabelText("Minimum age");
-    expect(screen.getByLabelText("Planned areas")).toHaveValue("Austin, Texas\nRound Rock, Texas");
+    await savedAreas("Saved campaign areas: Austin, Texas, Round Rock, Texas; excluding Ajmer.");
     fireEvent.change(screen.getByRole("slider"), { target: { value: "35" } });
     fireEvent.change(screen.getByLabelText(/Interests \(up to 5/), { target: { value: "Home improvement" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
@@ -374,12 +403,13 @@ describe("campaign audience workflow", () => {
     vi.mocked(fetch).mockResolvedValueOnce(Response.json({ error: "Recommendation unavailable" }, { status: 502 }));
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Delhi" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
     await screen.findByText("Recommendation unavailable");
     expect(screen.getByLabelText("Planned areas")).toHaveValue("Delhi");
     fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
-    await waitFor(() => expect(screen.getByLabelText("Planned areas")).toHaveValue("Jaipur"));
+    await savedAreas("Saved campaign areas: Jaipur; excluding Ajmer.");
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(mocks.saveDraft).not.toHaveBeenCalled();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
@@ -390,7 +420,7 @@ describe("campaign audience workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getAllByRole("button", { name: "Let AdBrain decide" })[0]);
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/campaigns/plan")).toHaveLength(1));
-    expect(await screen.findByLabelText("Planned areas")).toHaveValue("Jaipur");
+    await savedAreas("Saved campaign areas: Jaipur; excluding Ajmer.");
     expect(screen.getByLabelText("Minimum age")).toHaveValue(30);
     expect(mocks.saveDraft).not.toHaveBeenCalled();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
@@ -499,7 +529,7 @@ describe("campaign audience workflow", () => {
     view();
     await waitFor(() => expect(screen.getByLabelText("Minimum age")).toHaveValue(30));
     expect(screen.getByLabelText(/Interests \(up to 5/)).toHaveValue("Solar energy");
-    expect(screen.getByLabelText("Planned areas")).toHaveValue("Jaipur");
+    expect(document.body).toHaveTextContent("Saved campaign areas: Jaipur; excluding Ajmer.");
     fireEvent.change(screen.getByLabelText(/Interests \(up to 5/), { target: { value: " Solar energy \n\nHome improvement\n" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(mocks.updateDraft).toHaveBeenCalledWith(saved.draftId, 1, expect.objectContaining({
@@ -531,6 +561,7 @@ describe("campaign audience workflow", () => {
     } }));
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    chooseAreas();
     fireEvent.change(screen.getByLabelText("Planned areas"), { target: { value: "Hisar" } });
     fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
     expect(await screen.findByText("Your answers are saved. Finish the remaining settings in the campaign editor.")).toBeVisible();
