@@ -116,36 +116,30 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities (Oct 24, 08:30Z; owner: lean, high value only):
-- **P0:** the live Solaride WhatsApp run
-  ([#157](https://github.com/vanshulgoyal101/adbrain/issues/157)): ₹840 capped,
-  ends Oct 26 14:24Z. **First real lead** (owner confirmed the first chat was a
-  real customer). Delivery is a trickle (about ₹1/hour); the owner's Ads Manager
-  Delivery column is the next step. Monitor and report spend, chats and cost per chat.
-  #156 (Meta App Review) is the gate for every outside customer; it needs the
-  owner's Facebook sign-in, then submit.
-- **P0, first customers (#339, Oct 24):** 3 real businesses signed up, made ads
-  and stopped at Campaigns, because Meta blocks anyone without an app role until #156
-  passes. The owner WhatsApps all 3 today; whoever says yes gets Tester access and
-  launches on their own ad account (PAUSED first, Solaride caps). Before approval, new
-  owners see "launching opens soon" plus download/share (#336, #337). Measure the
-  funnel (#338).
-- **P1-top, three tracks in parallel:**
-  - **Edit and image text, Dev 2:** #280 (edit at every step: text is live; next
-    the words on the image, then the background only) and #300 (real bold fonts,
-    then Hindi/Punjabi shaping). Done Oct 24: #284, #282, #281, #290.
-  - **Launch on a phone, Dev:** #305 (campaign setup: 9 large ad tiles before
-    name and budget; ship the tile fix first), after #271 if it is mid-flight.
-  - **First impression, Dev 3:** #289 (sign-up page and homepage hero are live;
-    next a homepage video, an ideas gallery per industry and honest trust signals).
-- **P1:** #274 (a reliable scheduler; PR #309 with the CTO), #235 (WhatsApp-first;
-  slice 3 live in #278), #334 (Advantage+ audience off starves delivery), #333
-  (9:16 assets for Stories/Reels), #335 (cost per real WhatsApp enquiry).
-- **P1, a snappy and polished product (owner):** #67 (snappier app) with slices
-  #270, #238 and #239; #51 (UI/UX polish). Each slice is a small PR with a
-  before/after number.
-- **Later:** #229 (email alerts; PR #268 closed, branch kept; WhatsApp-first),
-  #253, #178, #296.
+CEO priorities and targets (Oct 24, 10:30Z; owner: lean, high value only). Every
+open issue has a target; a miss gets one line on its issue with the new date.
+
+- **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
+  (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
+  Facebook account, Submit). Meta then takes days to weeks. There are no outside
+  sign-ups yet (#339 closed: they were QA test accounts).
+- **Live run #157 (Dev 3, QA reads): ends Oct 26 14:24Z.** First real lead in;
+  delivery picking up (₹7.78, 27 impressions at 10:09Z). No edits. Final report
+  Oct 26, then plan the next Solaride run with #333 and #334 in it.
+- **Today, Oct 24:** #334 Advantage+ audience (Dev 2, PR #357 → QA review → merge);
+  #281 auto-cite + Regenerate (Dev, QA red tests); #344 phone Create header (QA
+  verify, close); #289 slice 4 trust + pricing (Dev 3); #270 after-number at 18:40Z
+  (DevOps, then close).
+- **Oct 25:** #335 log real WhatsApp enquiries (Dev; migration → QA → DevOps);
+  #300 bold + Indic text on images (Dev 3); #360 phone speed slice of #67 (Dev 2);
+  #280 remaining edit slices (Dev 2, QA walk); #274 scheduler 24 h check, then
+  close (DevOps); #359 database hardening (DevOps).
+- **Oct 26:** #333 9:16 version of each ad for Stories/Reels (Dev 3, after #300);
+  #157 final report.
+- **Umbrellas, close when their slices are done:** #67 (snappier app), #51 (UI/UX
+  polish; QA's walk feeds it).
+- **Later (no date):** #178 (Razorpay webhook proof), #229 (email alerts), #253
+  (managed-account WhatsApp numbers), #296 (AI-answer visibility).
 - **Filter for new issues:** it must help a customer make and run ads today,
   make the product faster or clearer, or remove a real failure. Otherwise file
   it as `later`, or don't file it.
