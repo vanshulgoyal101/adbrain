@@ -2,7 +2,7 @@
 .page h1, .page h2, .page h3, .page p { margin: 0; }
 .page a, .page button, .page input, .page summary { scroll-margin-top: 24px; }
 .page section { scroll-margin-top: 24px; }
-.page a:focus-visible, .page summary:focus-visible, .page input:focus-visible { outline: 3px solid #216849; outline-offset: 5px; }
+.page a:focus-visible, .page summary:focus-visible { outline: 3px solid #216849; outline-offset: 5px; }
 .skip { position: absolute; top: -100px; z-index: 20; padding: 12px; background: white; }
 .skip:focus { top: 8px; }
 .header { max-width: 1440px; margin: auto; height: 80px; padding: 0 48px; display: flex; align-items: center; justify-content: space-between; }

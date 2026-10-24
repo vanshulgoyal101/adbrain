@@ -492,7 +492,7 @@ export function TargetingControls({
               // isn't fought by the clamp.
               onChange={(e) => setAge("ageMin", e.target.value)}
               onBlur={() => settleAges()}
-              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-blue-500"
+              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none"
             />
             <span className="text-slate-400">to</span>
             <input
@@ -503,7 +503,7 @@ export function TargetingControls({
               value={value.ageMax}
               onChange={(e) => setAge("ageMax", e.target.value)}
               onBlur={() => settleAges()}
-              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none focus:border-blue-500"
+              className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-3 text-center outline-none"
             />
           </div>
         )}
@@ -515,7 +515,7 @@ export function TargetingControls({
           id="audience-gender"
           value={value.gender ?? "all"}
           onChange={(event) => set({ gender: event.target.value as TargetingValue["gender"] })}
-          className="h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 sm:max-w-64"
+          className="h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none sm:max-w-64"
         >
           <option value="all">All genders</option>
           <option value="men">Men</option>

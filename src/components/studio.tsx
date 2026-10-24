@@ -359,7 +359,7 @@ export function Studio({
                   id="count"
                   value={count}
                   onChange={(e) => setCount(Number(e.target.value))}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>
@@ -374,7 +374,7 @@ export function Studio({
                   id="language"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none"
                 >
                   {AD_LANGUAGES.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -385,7 +385,7 @@ export function Studio({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="format">Placement</Label>
-                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500">
+                <select id="format" value={format} onChange={(event) => setFormat(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none">
                   <option value="portrait">Feed 4:5</option>
                   <option value="square">Square 1:1</option>
                   <option value="story">Story 9:16</option>
