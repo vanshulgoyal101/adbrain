@@ -95,7 +95,8 @@ All automated production browser runs from the shared Mac come from one IP addre
   lifetime insights and its stored campaign and ad give the exact opening line and `PAST RESULTS`
   block through the real interview route; a campaign with several ads isn't credited to one; a
   business without results gets a byte-identical prompt; a past offer dropped from the Brand still
-  fails the fact check.
+  fails the fact check, and **More like this** keeps that ad's look and angle without its old
+  "10% off … Diwali offer" sentence.
 - **Create in Hindi** (`create-hindi`, #290): real Solaride replies recorded by
   `scripts/record-hindi-create-fixtures.ts` (text only) for a vague goal and the factory goal typed
   in Hindi and in Hinglish. The assistant asks in the owner's language and suggests that ad

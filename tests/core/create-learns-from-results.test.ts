@@ -12,13 +12,13 @@ import { getAngleByName, type BrandContext } from "@/lib/templates/ads";
 // #371: Create learns from the business's own results. The insights are the live #157 run's
 // lifetime read recorded read-only in results.json (#404); the campaign and its ad are the stored
 // production rows in solaride-157-evidence.json. Only Supabase and the model transport are stubbed.
-const mocks = vi.hoisted(() => ({ campaigns: [] as unknown[], results: {} as Record<string, unknown>, creatives: [] as unknown[], prompts: [] as unknown[] }));
+const mocks = vi.hoisted(() => ({ campaigns: [] as unknown[], results: {} as Record<string, unknown>, creatives: [] as unknown[], prompts: [] as unknown[], brand: null as unknown }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
     from: (table: string) => {
-      const rows = table === "campaigns" ? mocks.campaigns : table === "creatives" ? mocks.creatives : [{ id: "solaride", ...regenerate.brand }];
+      const rows = table === "campaigns" ? mocks.campaigns : table === "creatives" ? mocks.creatives : [{ id: "solaride", ...(mocks.brand ?? regenerate.brand) as object }];
       const query = {
         select: () => query, eq: () => query, order: () => query, in: () => query,
         limit: async () => ({ data: rows, error: null }),
@@ -55,10 +55,10 @@ const LINE = "Your “Wondering Whether Your Roof Is Ready?” ad got 1 chat at 
 const BLOCK = "PAST RESULTS (evidence about past ads; subordinate to brand facts and the current request; never a source of offers, prices or claims): "
   + '[{"role":"best","ad":"“Wondering Whether Your Roof Is Ready?”","destination":"WhatsApp","result":"1 chat at ₹10.69 (early: based on 1 chat)","spend":"₹10.69","impressions":70,"days":2,"angle":"Solve a pain point","format":"portrait","language":null,"offerLine":"Free site survey · PM Surya Ghar subsidy help"}]';
 
-async function interview() {
+async function interview(request: { goal?: string; referenceBrief?: string } = {}) {
   const { POST } = await import("@/app/api/creatives/assistant/route");
   const response = await POST(new Request("http://localhost/api/creatives/assistant", {
-    method: "POST", body: JSON.stringify({ businessId: "solaride", goal: "More homeowners this month", answers: [], recentGoals: [] }),
+    method: "POST", body: JSON.stringify({ businessId: "solaride", goal: "More homeowners this month", answers: [], recentGoals: [], ...request }),
   }));
   expect(response.status).toBe(200);
   return mocks.prompts.at(-1) as { role: string; content: string }[];
@@ -69,6 +69,7 @@ beforeEach(() => {
   mocks.results = {};
   mocks.creatives = [];
   mocks.prompts = [];
+  mocks.brand = null;
 });
 
 describe("core: Create learns from the business's own results (#371)", () => {
@@ -99,6 +100,21 @@ describe("core: Create learns from the business's own results (#371)", () => {
     expect(openingLine(evidence)).toMatchObject({ moreLikeThis: null, text: expect.stringContaining("(its 3 ads together)") });
     expect(JSON.parse(pastResultsBlock(evidence).slice(BLOCK.indexOf("["))))
       .toEqual([expect.objectContaining({ ad: "campaign “Solaride | Diwali 10% | Tricity | WhatsApp”, its 3 ads together", angle: null, offerLine: null })]);
+  });
+
+  // QA on #371: the interview counts its reference brief as a source for offers, so the old brief's
+  // "10% off … Diwali offer" would pass the interview after the Brand dropped it, then fail Create.
+  it("'More like this' keeps the best ad's look and angle, not its old offer, once the Brand dropped it", async () => {
+    const evidence = pickResultEvidence([toEvidenceCampaign(evidenceFixture.campaign, storedRow, "whatsapp", [evidenceFixture.creative])!]);
+    const more = openingLine(evidence)!.moreLikeThis!;
+    expect(more.referenceBrief).toContain("festive Diwali visual of a modern North Indian home");
+    expect(more.referenceBrief).toContain("Angle: Solve a pain point");
+    expect(more.referenceBrief).not.toMatch(/10%|offer/i);
+    mocks.brand = { ...regenerate.brand, offers: regenerate.brand.offers.filter((offer) => !offer.includes("10%")) };
+    const [, user] = await interview(more);
+    const reference = user.content.split("\n").find((line) => line.startsWith("REFERENCE BRIEF"))!;
+    expect(reference).toContain("Angle: Solve a pain point");
+    expect(user.content).not.toContain("10%");
   });
 
   it("still rejects a past ad's offer once it is no longer a Brand fact", () => {
