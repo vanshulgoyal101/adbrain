@@ -1,4 +1,5 @@
 import { formatMoney } from "@/lib/format";
+import { statesOffer } from "@/lib/creative/concept";
 /**
  * #371: what past campaigns achieved, for Create. Pure functions; the wording is decided here,
  * not by the model, so a tiny sample is never called a winner.
@@ -65,6 +66,14 @@ export function pickResultEvidence(campaigns: EvidenceCampaign[]): ResultEvidenc
   ];
 }
 
+/**
+ * The old brief without its offer, price or percentage sentences. The interview counts its reference
+ * brief as a source, so an offer the Brand has since dropped must not ride along (#371).
+ */
+export function briefWithoutOffers(brief: string): string {
+  return brief.split(/(?<=[.!?।])\s+/).filter((sentence) => !statesOffer(sentence)).join(" ").trim();
+}
+
 const label = (campaign: EvidenceCampaign) => campaign.ads.length === 1
   ? `“${campaign.ads[0].headline}”`
   : `campaign “${campaign.name}”, its ${campaign.ads.length} ads together`;
@@ -83,7 +92,7 @@ export function openingLine(evidence: ResultEvidence[]): OpeningLine | null {
     // The goal never quotes the old ad: its words would become claim evidence for the new ones.
     moreLikeThis: {
       goal: "Make 3 more ads like my best one, with fresh words",
-      referenceBrief: [single.brief, single.angle ? `Angle: ${single.angle}` : ""].filter(Boolean).join("\n"),
+      referenceBrief: [briefWithoutOffers(single.brief), single.angle ? `Angle: ${single.angle}` : ""].filter(Boolean).join("\n"),
     },
     newAngle,
   };

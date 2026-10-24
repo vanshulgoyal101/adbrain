@@ -230,6 +230,13 @@ const COMMERCIAL_TERMS = new RegExp(
   "giu",
 );
 
+/** Whether text states an offer, a price or a percentage: things only a Brand fact may supply (#371). */
+export function statesOffer(text: string): boolean {
+  const value = text.normalize("NFC");
+  return new RegExp(COMMERCIAL_TERMS.source, "iu").test(value) || spelledAmountIndex(value) >= 0
+    || /\b(?:offers?|discounts?|deals?|cashback|coupons?)\b/i.test(value);
+}
+
 // An amount must be cited whole: $49 is not supported by $490 or $49.99, nor 5% by 15%.
 function citesTerm(quote: string, term: string): boolean {
   if (/^free$/i.test(term) || FREE_WORD.test(term)) return quote.toLowerCase().includes("free") || FREE_WORD.test(quote);

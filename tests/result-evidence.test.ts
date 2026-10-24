@@ -34,7 +34,8 @@ describe("result evidence for Create (#371)", () => {
     const line = openingLine(pickResultEvidence([campaign("Free site survey", { spend: 7.78, results: 1, ads: [ad("Free site survey", { brief: "Factory roof, free site survey", angle: "Special offer / incentive" })] })]));
     expect(line).toEqual({
       text: "Your “Free site survey” ad got 1 chat at ₹7.78 (early: based on 1 chat). Make 3 more like it, or try a new angle?",
-      moreLikeThis: { goal: "Make 3 more ads like my best one, with fresh words", referenceBrief: "Factory roof, free site survey\nAngle: Special offer / incentive" },
+      // The old brief's offer sentence stays behind: only today's Brand may supply an offer.
+      moreLikeThis: { goal: "Make 3 more ads like my best one, with fresh words", referenceBrief: "Angle: Special offer / incentive" },
       newAngle: { goal: "Try a new angle, different from my last ads" },
     });
   });
@@ -71,5 +72,16 @@ describe("result evidence for Create (#371)", () => {
     expect(toEvidenceCampaign({ name: "Form run", creative_ids: ["c1"] }, { ...stored, leads: 3, conversations: null, period_start: null }, "instant_form", [creative]))
       .toMatchObject({ results: 3, days: 1 });
     expect(toEvidenceCampaign({ name: "No ads", creative_ids: ["gone"] }, stored, "whatsapp", [creative])).toBeNull();
+  });
+});
+
+describe("the old brief behind 'More like this' (#371)", () => {
+  it("drops sentences that state an offer, a price or a percentage, and keeps the look", async () => {
+    const { briefWithoutOffers } = await import("@/lib/campaign/result-evidence");
+    expect(briefWithoutOffers("A warm rooftop at dusk with diyas. Lead with 10% off installation. Book a free site survey! Calm, local tone."))
+      .toBe("A warm rooftop at dusk with diyas. Calm, local tone.");
+    expect(briefWithoutOffers("Show a clinic. Exam for ₹499 or Rs 499 today. Mention our Diwali offer.")).toBe("Show a clinic.");
+    expect(briefWithoutOffers("फ़ैक्टरी की छत पर सोलर। लागत 10,000 रुपये बढ़ेगी। भरोसेमंद टोन।")).toBe("फ़ैक्टरी की छत पर सोलर। भरोसेमंद टोन।");
+    expect(briefWithoutOffers("Only 50% off today!")).toBe("");
   });
 });
