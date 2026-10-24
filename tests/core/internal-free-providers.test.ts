@@ -35,7 +35,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-function network({ freeBusy = false } = {}) {
+function network({ freeBusy = false, pollinationsDown = false } = {}) {
   const hosts: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(requestUrl(input));
@@ -45,7 +45,9 @@ function network({ freeBusy = false } = {}) {
     }
     if (url.hostname === "generativelanguage.googleapis.com") return googleReply(JSON.stringify(recorded.concept));
     if (url.hostname === "openrouter.ai" && url.pathname.endsWith("/chat/completions")) return openAIReply(JSON.stringify(recorded.concept), "anthropic/claude-haiku-5.5");
-    if (url.hostname === "image.pollinations.ai") return new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+    if (url.hostname === "image.pollinations.ai") {
+      return pollinationsDown ? new Response("Bad gateway", { status: 502 }) : new Response(new Uint8Array(png), { headers: { "content-type": "image/png" } });
+    }
     throw new Error(`Unexpected request to ${url.hostname}${url.pathname}`);
   }));
   return hosts;
@@ -72,6 +74,14 @@ describe("core: internal accounts never spend the paid OpenRouter key (#449)", (
     expect(JSON.parse(text.text).headline).toBe(recorded.concept.headline);
     expect(image).toMatchObject({ provider: "pollinations", estimatedCostUsd: 0 });
     expect(hosts).not.toContain("openrouter.ai");
+  });
+
+  it("fails an internal image when Pollinations is down instead of falling back to the paid image model", async () => {
+    vi.stubEnv("IMAGE_PROVIDER_FALLBACK", "openrouter");
+    const hosts = network({ pollinationsDown: true });
+    const { generateImage } = await import("@/lib/imageGen");
+    await expect(asUser(INTERNAL, () => generateImage({ prompt: "A chiropractic front desk", width: 1024, height: 1536 }))).rejects.toThrow();
+    expect(hosts).toEqual(["image.pollinations.ai"]);
   });
 
   it("lets an internal interview fail when the free tiers are busy instead of falling back to the paid key", async () => {
