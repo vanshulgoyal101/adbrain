@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import resultsTape from "./fixtures/meta/results.json";
 
 // Graph insights and ad review reads recorded read-only by scripts/record-meta-results-fixtures.ts
-// from the live #157 run (120253678786150526, no impressions yet) and a paused Solaride
+// from the live #157 run (120253678786150526; lifetime 70 impressions, ₹10.69, 1 chat on Oct 24) and a paused Solaride
 // campaign (120253164673180526) (#258). The DISAPPROVED ad below is a synthetic edit of the
 // recorded ads response; Solaride has no rejected ad to record.
 type Exchange = { method: string; path: string; status: number; body: unknown };
@@ -110,13 +110,23 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("core: live campaigns refresh their results and health by themselves (#258)", () => {
+  it("stores Meta's lifetime numbers, including today's delivery (#404)", async () => {
+    const sent = replay();
+    await run();
+    expect(sent.filter(call => call.includes("/insights")).every(call => call.endsWith("&date_preset=maximum"))).toBe(true);
+    expect(db.results.find(row => row.campaign_id.endsWith("157"))).toMatchObject({
+      impressions: 70, clicks: 2, spend: 10.69, conversations: 1, cost_per_conversation: 10.69,
+      destination: "whatsapp", period_start: "2026-10-23", period_end: "2026-10-24",
+    });
+  });
+
   it("saves one result row per campaign from recorded Meta reads, flags 0 impressions after 6 h, and only reads", async () => {
     const sent = replay();
     const { status, body } = await run();
     expect(status).toBe(200);
     expect(body).toMatchObject({ refreshed: 2, skipped: 0, failed: 0 });
     expect(sent.every(call => call.startsWith("GET "))).toBe(true);
-    expect(db.results.map(row => [row.campaign_id.slice(-3), row.impressions])).toEqual([["157", 0], ["999", 0]]);
+    expect(db.results.map(row => [row.campaign_id.slice(-3), row.impressions])).toEqual([["157", 70], ["999", 0]]);
     // The live run started with its capped ad set (14:24Z), under 6 h ago: no flag yet.
     expect(healthOf(live)).toMatchObject({ activeSince: "2026-10-23T14:24:16.000Z", flags: [] });
     expect(healthOf(paused).flags).toEqual([expect.objectContaining({ kind: "not_delivering" })]);

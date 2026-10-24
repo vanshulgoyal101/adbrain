@@ -255,7 +255,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   facts: a greeting from the business and a message pre-typed for the customer
   that names up to two Brand offers the approved ads mention (#209).
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
-  pause, and activation safeguards. Refresh detects all-WhatsApp ad sets and
+  pause, and activation safeguards. Stored results are lifetime insights (`date_preset=maximum`):
+  Meta's default `last_30d` leaves out today, so a new campaign used to read ₹0 (#404). Refresh detects all-WhatsApp ad sets and
   stores `onsite_conversion.messaging_conversation_started_7d` separately from
   leads. Overlapping messaging actions are not summed. Mixed-destination
   campaigns are not attributed wholly to WhatsApp.
