@@ -30,8 +30,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GAP_MINUTES: "30"
-      # Hobby allows 100 production deploys per rolling 24 h; keep 20 for hotfixes and migrations.
-      DEPLOY_BUDGET: "80"
     steps:
       - name: Promote next to main
         run: |
@@ -50,15 +48,20 @@ jobs:
             wait=$(jq -rn --arg t "$last" --argjson gap "$GAP_MINUTES" '($gap * 60) - (now - ($t | fromdateiso8601)) | floor')
             if [ "$wait" -gt 0 ]; then echo "Last train left at $last; waiting ${wait}s."; sleep "$wait"; fi
           fi
-          # Every production deploy (train, hotfix, migration) shows up as a GitHub deployment from Vercel.
+          # Advisory only (#461): GitHub's count isn't what Vercel limits; git-triggered deploys kept succeeding past it.
           since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-          # One page (newest first) is enough: the train stops at 80 anyway.
           used=$(gh api "repos/$repo/deployments?environment=Production&per_page=100" --jq "[.[] | select(.created_at >= \"$since\")] | length")
-          echo "deploys in last 24h: $used/100 (train budget $DEPLOY_BUDGET)"
-          if [ "$used" -ge "$DEPLOY_BUDGET" ]; then
-            # Expected after a busy day: hold quietly (no alert issue) and retry on the next push or schedule.
-            echo "::warning::Deploy budget: $used production deploys in the last 24 h; the train holds at $DEPLOY_BUDGET of Hobby's 100 and retries on the next push or schedule."
-            exit 0
+          echo "production deploys in last 24h (GitHub, advisory): $used"
+          # Hold only on Vercel's real answer: the newest production deploy failed less than an hour ago.
+          last=$(gh api "repos/$repo/deployments?environment=Production&per_page=1" --jq '.[0].id // empty')
+          if [ -n "$last" ]; then
+            read -r state age desc < <(gh api "repos/$repo/deployments/$last/statuses?per_page=1" \
+              --jq '.[0] | "\(.state) \((now - (.created_at | fromdateiso8601)) / 60 | floor) \(.description // "" | gsub("\\s+"; "_"))"')
+            echo "newest production deploy: $state, ${age} min ago"
+            if [[ "$state" =~ ^(failure|error)$ ]] && [ "$age" -lt 60 ]; then
+              echo "Vercel refused or failed the last production deploy ${age} min ago (${desc//_/ }); holding for an hour." > "$RUNNER_TEMP/reason"
+              echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
+            fi
           fi
           sha=$(gh api "repos/$repo/commits/next" --jq .sha)
           echo "Promoting next at ${sha::7} ($ahead commits)."
