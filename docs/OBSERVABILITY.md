@@ -63,6 +63,12 @@ The stream includes:
 - AI completion provider/model, tokens, estimated cost, attempt, cache status
   and reported latency. Existing `llm_usage_events` remains the detailed ledger.
 - Authorized Meta operation purpose, duration, outcome and safe error category.
+- Every Meta Graph call (#451 L2): `meta.graph`, `kind=system`, with the endpoint as a template
+  (`act_[id]/adsets`, `[id]/insights`, `search`; no IDs, query values or token), method, HTTP
+  status, entity type, latency and, on failure, `META_<code>_<subcode>` (or `META_HTTP_<status>`,
+  `META_TIMEOUT`, `META_NETWORK`). Meta's 4xx refusals are `rejected`; 5xx, throttling and network
+  errors are `failed`. Calls inside a request share its request ID; a context keeps at most 100
+  events, so a long cron run logs its first 100 calls to the database (all to the log stream).
 - Audit/usage persistence failures and product-log persistence health warnings.
 - Authenticated page views and browser error/rejection categories on the eight
   workspace pages. These are marked `kind=client`: client-reported signals, not
@@ -173,7 +179,10 @@ last 20 ads, each with its AI calls, failures, retries, tokens, USD, AI seconds 
 own angle in the Create run that made it, from `creatives.generation.requestId`/`angleId`, plus
 every later regenerate or background change, from `llm_usage_events.metadata.creativeId`; ads
 made before Oct 24 show none), and the last 5 Create runs with failed ads included and wall
-seconds from the first call's start to the last call's end. Page-load timing in a
+seconds from the first call's start to the last call's end. Campaign receipts (#451 L2): the last 5 launches
+(`campaign_operations`), each with that business's plan and prepare requests in the day before,
+the create request's status and time, its Meta calls (count, failed, ms, error codes; joined on
+the create request ID) and the first refresh or sync after it. Page-load timing in a
 real browser: `node scripts/perf-pages.mjs [--runs 5] [--pages /dashboard,/campaigns,/brand]`
 (TTFB, DOMContentLoaded and load p50/p90; read-only, signed in as the smoke account).
 
