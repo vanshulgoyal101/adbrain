@@ -714,6 +714,10 @@ function CreativeCard({
   return (
     <Card className="flex flex-col overflow-hidden rounded-md">
       <div className="relative aspect-square max-h-[480px] bg-slate-100">
+        {/* Behind the picture, not over it: a hidden image doesn't count as painted until JS runs (#360). */}
+        {creative.image_url && !imgLoaded && !imgError && (
+          <div className="absolute inset-0 animate-pulse bg-slate-200" />
+        )}
         {creative.image_url && !imgError && (
           <img
             key={creative.image_url}
@@ -727,10 +731,7 @@ function CreativeCard({
             }}
             src={creativeThumbnailUrl(creative.image_url)}
             alt={creative.headline ?? "Ad creative"}
-            className={cn(
-              "h-full w-full object-contain transition-opacity",
-              imgLoaded ? "opacity-100" : "opacity-0",
-            )}
+            className="relative h-full w-full object-contain"
             // The selected ad is the page's largest paint on a phone (#360): fetch it while the HTML parses.
             loading="eager"
             fetchPriority="high"
@@ -748,16 +749,12 @@ function CreativeCard({
             }}
           />
         )}
-        {(!creative.image_url || !imgLoaded || imgError) && (
+        {(!creative.image_url || imgError) && (
           <div className="absolute inset-0 flex items-center justify-center">
-            {imgError || !creative.image_url ? (
-              <span className="flex items-center gap-2 text-sm text-slate-500">
-                <ImageIcon className="h-5 w-5" />
-                Image unavailable
-              </span>
-            ) : (
-              <div className="h-full w-full animate-pulse bg-slate-200" />
-            )}
+            <span className="flex items-center gap-2 text-sm text-slate-500">
+              <ImageIcon className="h-5 w-5" />
+              Image unavailable
+            </span>
           </div>
         )}
         {regenerating && (

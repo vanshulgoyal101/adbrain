@@ -397,6 +397,15 @@ describe("<Studio> creative preview", () => {
     expect(thumbnail).toHaveAttribute("fetchpriority", "low");
   });
 
+  it("never hides the selected picture while it loads, so it paints before the page's JS runs (#360)", () => {
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    const hero = screen.getByRole("img", { name: "Cut your power bill" });
+    expect(hero.className).not.toMatch(/opacity-0/);
+    expect(document.querySelector(".animate-pulse")).not.toBeNull();
+    fireEvent.load(hero);
+    expect(document.querySelector(".animate-pulse")).toBeNull();
+  });
+
   it("shows board tiles after 2.5 s even if the selected image never loads (#360)", () => {
     vi.useFakeTimers();
     try {
