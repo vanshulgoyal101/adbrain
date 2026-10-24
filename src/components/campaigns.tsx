@@ -1238,6 +1238,8 @@ function BusinessCampaigns({
           {showComposer && creationMode === "guided" && <CampaignChat
             businessId={business.id}
             destination={destination}
+            whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
+            onStarted={() => { destinationChosenRef.current = true; }}
             onDraftReady={(draft) => void handleGuidedDraft(draft)}
             onEditManually={(goal) => {
               if (unresolvedRecovery()) return;

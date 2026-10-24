@@ -24,6 +24,17 @@ function mockPlan(...responses: unknown[]) {
 }
 
 describe("<CampaignChat>", () => {
+  it("sends the chosen WhatsApp number with a WhatsApp plan and reports the start", async () => {
+    const fetchMock = mockPlan({ ready: false, questions: [{ id: "location", topic: "location", question: "Which city?", type: "text" }] });
+    const onStarted = vi.fn();
+    render(<CampaignChat businessId="biz-1" destination="whatsapp" whatsappNumber="+91 ••••• 4842" onStarted={onStarted} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Solar chats" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await screen.findByText("Which city?");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842" });
+    expect(onStarted).toHaveBeenCalledTimes(1);
+  });
+
   it("offers an editor handoff and preserves answered context after reload", async () => {
     const fetchMock = mockPlan({ ready: false, questions: [
       { id: "location", topic: "location", question: "Which city?", type: "text" },

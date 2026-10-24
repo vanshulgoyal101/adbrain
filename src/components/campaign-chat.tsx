@@ -50,6 +50,9 @@ function reviveSession(raw: unknown): ChatSession | null {
 type CampaignChatProps = {
   businessId: string;
   destination?: "instant_form" | "whatsapp";
+  /** Masked WhatsApp number chosen above the chat; saved on the guided draft. */
+  whatsappNumber?: string;
+  onStarted?: () => void;
   onCreated?: (campaign: Campaign) => void;
   onDraftReady?: (draft: DraftDTO) => void;
   onEditManually?: (goal: string) => void;
@@ -59,7 +62,7 @@ export function CampaignChat(props: CampaignChatProps) {
   return <CampaignChatSession key={`${props.businessId}:${props.destination ?? "instant_form"}`} {...props} />;
 }
 
-function CampaignChatSession({ businessId, destination = "instant_form", onCreated, onDraftReady, onEditManually }: CampaignChatProps) {
+function CampaignChatSession({ businessId, destination = "instant_form", whatsappNumber, onStarted, onCreated, onDraftReady, onEditManually }: CampaignChatProps) {
   const sessionKey = `adbrain:campaign-chat:${businessId}${destination === "whatsapp" ? ":whatsapp" : ""}`;
   // Keeps the interview alive across tab changes; a finished one is discarded.
   const [session, setSession, clearSession] = useSessionDraft<ChatSession>(
@@ -89,6 +92,7 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
     if (requestRef.current) return;
     const controller = new AbortController();
     requestRef.current = controller;
+    onStarted?.();
     setLoading(true);
     setError(null);
     setSession((current) => ({ ...current, collected: answers, pending: { goal: goalText, answers }, handoff: undefined }));
@@ -96,7 +100,7 @@ function CampaignChatSession({ businessId, destination = "instant_form", onCreat
       const res = await fetch("/api/campaigns/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: goalText, answers, destination }),
+        body: JSON.stringify({ goal: goalText, answers, destination, ...(destination === "whatsapp" && whatsappNumber ? { whatsappNumber } : {}) }),
         signal: controller.signal,
       });
       const data = (await res.json()) as {
