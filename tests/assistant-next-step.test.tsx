@@ -56,7 +56,7 @@ describe("<AdAssistant> next step after Create", () => {
     doneDraft([{ ...ad("ad-1"), status: "approved", cta: "Book Now" } as Creative]);
     const user = userEvent.setup();
     const first = render(<AdAssistant business={business} />);
-    await user.click(await screen.findByRole("button", { name: "Edit text" }));
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
     await user.clear(screen.getByLabelText("Headline"));
     await user.type(screen.getByLabelText("Headline"), "20% off your first visit");
     await user.type(screen.getByLabelText("Description"), "Austin chiropractic");

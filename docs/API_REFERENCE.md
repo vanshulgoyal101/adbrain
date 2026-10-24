@@ -91,6 +91,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
+| POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept |
 | POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
 | POST | `/api/campaign-drafts` | DraftInput -> envelope draft | DB write, no model or Meta creation |
@@ -408,6 +409,15 @@ failure releases the claim. So does a fact-check rejection whose text attempts a
 completed and were receipted: it returns 422 with a plain message naming any
 uncited claim (for example "10%, free"), and the creative is unchanged (#281).
 An uncertain paid failure returns 502 and retains the claim for operator review.
+
+`POST /api/creatives/[id]/picture` redraws the words printed on the picture
+(headline up to 40, offer line up to 64, phone, a Meta button label) over the
+ad's stored background, with no AI call (#280). It uses the saved `design` spec,
+or rebuilds one from the Brand for older ads. The background is `generation.photoUrl`,
+or for older ads the newest `<angle>-<uuid>` file stored no later than the finished
+picture in the ad's folder. If neither exists it returns 409 `no_background`.
+The new picture gets a new versioned path; status is unchanged. It returns 409
+when overlays are off or the ad is image-only, and rate-limits at 30 per 5 minutes.
 The claim's attempt UUID is the request ID in usage receipts. It does not expire
 automatically, and there is no customer-facing regeneration recovery endpoint.
 

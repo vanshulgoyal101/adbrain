@@ -30,7 +30,7 @@ import { useMounted } from "@/lib/use-mounted";
 import { cn } from "@/lib/utils";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { GenerationDetails } from "@/components/generation-details";
-import { CopyEditNotice, CreativeCopyEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
+import { CopyEditNotice, CreativeEditor, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { z } from "zod";
 
 z.config({ jitless: true });
@@ -571,6 +571,7 @@ export function Studio({
           >
             <CreativeCard
               key={selectedCreative.id}
+              business={business}
               creative={selectedCreative}
               onChange={(updated) =>
                 setItems((previous) =>
@@ -618,11 +619,13 @@ export function Studio({
 }
 
 function CreativeCard({
+  business,
   creative,
   onChange,
   onDelete,
   onPreview,
 }: {
+  business: Business;
   creative: Creative;
   onChange: (c: Creative) => void;
   onDelete: (id: string) => void;
@@ -769,8 +772,9 @@ function CreativeCard({
           )}
         </div>
         {editing ? (
-          <CreativeCopyEditor
+          <CreativeEditor
             creative={creative}
+            brand={business}
             onCancel={() => setEditing(false)}
             onSaved={(next, notes) => {
               onChange(next);
@@ -820,7 +824,7 @@ function CreativeCard({
             disabled={pending || regenerating}
             className="h-11 shrink-0"
           >
-            <Pencil className="h-4 w-4" /> Edit text
+            <Pencil className="h-4 w-4" /> Edit
           </Button>
           <Button
             size="sm"

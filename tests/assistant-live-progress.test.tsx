@@ -5,6 +5,9 @@ import type { CreateStreamLine } from "@/app/api/creatives/generate/route";
 import { AdAssistant } from "@/components/ad-assistant";
 import type { Business, Creative } from "@/lib/types";
 
+const actions = vi.hoisted(() => ({ setCreativeStatus: vi.fn(), updateCreativeCopy: vi.fn() }));
+vi.mock("@/app/(app)/studio/actions", () => actions);
+
 const business = { id: "biz-1", name: "Cedar Ridge Chiro" } as Business;
 
 const proofAd = { id: "creative-proof", headline: "Trusted by 400 local families", primary_text: "Book a visit.", status: "draft", angle: "Customer proof" } as Creative;
@@ -119,6 +122,28 @@ describe("<AdAssistant> live Create progress", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "Ads being created" })).toBeNull());
     expect(screen.getByText("Trusted by 400 local families")).toBeInTheDocument();
     expect(screen.getByText(/Your ad is ready/)).toBeInTheDocument();
+  });
+
+  it("keeps an edit made on a finished ad while the others were still generating (#280)", async () => {
+    actions.updateCreativeCopy.mockResolvedValue({ ok: true, warnings: [], creative: { headline: "Edited while waiting", primary_text: "Book a visit.", cta: "Book Now", generation: null } });
+    const { send, close } = streamedCreate();
+    await startGenerating();
+    await send(
+      progress("proof", "Customer proof", "queued"),
+      progress("value", "Clear value", "queued"),
+      { type: "creative", angleId: "proof", creative: proofAd },
+      progress("proof", "Customer proof", "ready"),
+    );
+    const section = await screen.findByRole("region", { name: "Ads being created" });
+    const edit = await within(section).findByRole("button", { name: "Edit" });
+    await act(async () => { fireEvent.click(edit); });
+    await act(async () => { fireEvent.click(within(section).getByRole("button", { name: "Save" })); });
+    expect(await within(section).findByText("Edited while waiting")).toBeInTheDocument();
+
+    await close({ type: "result", status: 200, body: { variantGroup: "group-1", creatives: [proofAd], failures: [] } });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Ads being created" })).toBeNull());
+    expect(screen.getByRole("heading", { name: "Edited while waiting" })).toBeInTheDocument();
+    expect(screen.queryByText("Trusted by 400 local families")).toBeNull();
   });
 
   it("keeps finished ads in the slots they were watched in, not save order (#177)", async () => {
