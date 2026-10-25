@@ -290,12 +290,15 @@ Supabase Auth client APIs rather than an invented `/api/login` endpoint.
 
 ### Website Autofill
 
-`POST /api/brand/autofill`: `{url: string}`; trimmed length 1-2048. Public URL
+`POST /api/brand/autofill`: `{url: string, businessId?: uuid}`; trimmed length 1-2048. Public URL
 policy and redirect/DNS checks apply. Returns `{extraction}` with suggested brand
 fields; the caller must review and save separately. Blocked URL: 400; fetch/model
 failure: 502; no readable text: 422. Extraction is a model result, not a factual
 verification. `extraction.phone` comes only from the page's first `tel:` link in
 international `+` format (never from the model). Website fetch deadline is 10 seconds; route duration setting is 30.
+Every provider attempt (and a response-cache hit, as a zero-token row) is logged as usage with
+route `brand.autofill` on `businessId` when the owner's session can read that business; on
+first Brand setup there is no business yet, so only the `ai.completion` product event is kept (#650).
 
 ### Interview
 
@@ -623,8 +626,12 @@ Activation: strict `{status:"active", confirmationDigest:<64 lowercase hex>,
 connectionGeneration:<nonnegative-safe-integer>}`. The digest is derived from
 [the activation payload](../src/lib/campaign/activation.ts) after the owner reviews
 current assets/budget and exact Meta campaign/ad-set/ad delivery snapshot from
-`GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Legacy or
-incomplete stored child identity requires reconciliation; the route does not guess.
+`GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Only a campaign
+AdBrain launched (stored ad sets and ads plus account, Page and connection binding,
+`reviewableCampaign`) can be reviewed; synced, legacy or incomplete rows get a 409
+"AdBrain can only resume campaigns it launched. Resume this one in Ads Manager." and
+the route does not guess. The Campaigns card uses the same check to offer "Resume in
+Ads Manager" instead of Resume (#662).
 GET and PATCH verify business ownership before reporting binding or child
 reconciliation details.
 

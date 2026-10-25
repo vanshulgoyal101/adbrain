@@ -79,6 +79,12 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Brand autofill** (`brand-autofill`, #650): Solaride's real home page and the real Groq
+  extraction reply, recorded by `scripts/record-brand-autofill-fixtures.ts`, drive the real route:
+  description, vertical, USPs and languages come from the reply, the phone from the page's `tel:`
+  link, and no offer is invented. Unsafe URLs (metadata IP, localhost, private ranges, `file:`,
+  credentials) are refused before any fetch; a provider outage or a non-JSON reply gives the
+  documented 502, and every attempt, a cache hit included, is a `brand.autofill` usage row.
 - **Internal accounts make free images** (`internal-free-providers`, #449, #466): an internal
   account's concept (the recorded Cedar Ridge reply) comes from Haiku like a customer's, and its
   image from Pollinations without references. Three images run one at a time, waiting out
@@ -144,6 +150,7 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-meta-form-fixtures.ts`: an active form on the Page passes; a campaign ID and an
   unknown ID are refused; synthetic edits refuse an archived form and a form on another Page.
 - **Results refresh** (`results-refresh`): the scheduled results job (#258) against real insights and ad review reads from the live #157 run and a paused Solaride campaign, recorded read-only by `scripts/record-meta-results-fixtures.ts`: lifetime insights (`date_preset=maximum`, #404; the live run's 70 impressions, ₹10.69 and 1 chat), one result row per campaign per hour, GETs only, the 6-hour no-impressions flag, and a rejected-ad flag from a synthetic DISAPPROVED edit of the recorded ads response. Ad review reads send `locale=en_US`: `meta-safety` replays a real rejected ad recorded both ways (Oct 25), and the reason reads in English although the token user's Facebook is in Hindi (#635).
+- **Free image watermark** (`pollinations-watermark`, #661): a real anonymous Pollinations image (686×858, logo at rows ~828–850) comes out of `downloadImage` trimmed above the logo with its 4:5 shape; other sources are untouched.
 - **Manage routes** (`manage-routes`, #649): `PATCH /api/campaigns/[id]` (pause), `POST /api/campaigns/sync` and `POST /api/campaigns/[id]/refresh` through their real handlers, connection access, trusted writes, spend enforcement and audit; only Supabase (in-memory) and the LLM are stubbed. Pause replays the recorded #157 tree (three PAUSED writes, the connection's token) and refuses another account, Page, stale generation or missing binding before any Meta call; sync imports only the campaign bound to the connected account and Page and skips another account, a capped #157 tree and stored rows on another account or Page; refresh writes one result row from `results.json`; signed out is 401 and another owner's business is refused, with no Meta call. Activation isn't covered (its reads and ACTIVE write are never recorded).
 - **Campaign stop** (`campaign-stop`): the paused-run settle check (#221) that the whole Meta tree is stopped, from two real Solaride campaigns (a fully PAUSED tree, and ACTIVE children under a paused campaign), recorded read-only by `scripts/record-meta-stop-fixtures.ts`.
 - **Launch gate** (`launch-validate`, #419): every object the launch code creates (campaign, ad set, creative, ad) for a lead-form and a WhatsApp campaign must equal a payload Meta accepted with `validate_only`. Recorded by [`record-meta-launch-validate.ts`](../scripts/record-meta-launch-validate.ts), which runs the real `createLeadCampaign`: ads are only validated, and the PAUSED campaign, empty ad set and creative it needs exist briefly and are deleted. A deliberate change to what we send Meta fails this test until the tape is re-recorded and Meta's answers reviewed.

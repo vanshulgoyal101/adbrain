@@ -1,11 +1,12 @@
-import { observeRoute } from "@/lib/observability/logger";
+import { currentRequestId, observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parse } from "node-html-parser";
+import { BRAND_EXTRACTION, extractPhone, extractWebsiteText } from "@/lib/brand/autofill";
 import { completeJSON, NoLLMKeysError } from "@/lib/llm";
+import { persistLLMUsage } from "@/lib/llm/persist";
+import type { CompletionResult, ProviderAttempt } from "@/lib/llm/types";
 import { fetchPublicUrlText, parsePublicUrl, SafeFetchError } from "@/lib/security/ssrf";
 import { rateLimitResponse } from "@/lib/security/rate-limit";
-import { isValidPhone } from "@/lib/brand/validation";
 import { createClient } from "@/lib/supabase/server";
 import {
   buildBrandExtractionMessages,
@@ -14,32 +15,6 @@ import {
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-function extractText(html: string): string {
-  const root = parse(html);
-  root
-    .querySelectorAll("script, style, noscript, svg")
-    .forEach((n) => n.remove());
-  const title = root.querySelector("title")?.text ?? "";
-  const metaDesc =
-    root.querySelector('meta[name="description"]')?.getAttribute("content") ??
-    "";
-  const body = root.querySelector("body")?.text ?? root.text;
-  return `${title}\n${metaDesc}\n${body}`.replace(/\s+/g, " ").trim();
-}
-
-/** First international-format tel: link; national numbers are skipped because the country is unknown. */
-function extractPhone(html: string): string | undefined {
-  for (const link of parse(html).querySelectorAll('a[href^="tel:"]')) {
-    let phone: string;
-    try {
-      phone = decodeURIComponent(link.getAttribute("href")!.slice(4)).replace(/[.\u00a0]/g, " ").trim();
-    } catch {
-      continue;
-    }
-    if (phone.startsWith("+") && isValidPhone(phone)) return phone;
-  }
-}
 
 export const POST = observeRoute("/api/brand/autofill", "POST", handlePOST);
 
@@ -58,7 +33,7 @@ async function handlePOST(req: Request) {
   });
   if (limited) return limited;
 
-  const body = z.object({ url: z.string().trim().min(1).max(2048) })
+  const body = z.object({ url: z.string().trim().min(1).max(2048), businessId: z.string().uuid().optional() })
     .safeParse(await req.json().catch(() => null));
   if (!body.success) {
     return NextResponse.json({ error: "A website URL of at most 2048 characters is required." }, { status: 400 });
@@ -93,7 +68,7 @@ async function handlePOST(req: Request) {
     );
   }
 
-  const text = extractText(html);
+  const text = extractWebsiteText(html);
   if (!text) {
     return NextResponse.json(
       { error: "No readable text found on that page" },
@@ -101,20 +76,37 @@ async function handlePOST(req: Request) {
     );
   }
 
+  // #650: every provider attempt is a usage row, on the owner's business when it already exists
+  // (RLS); on first Brand setup there is none yet, so only the ai.completion event is kept.
+  const owned = body.data.businessId
+    ? await supabase.from("businesses").select("id").eq("id", body.data.businessId).maybeSingle().then(({ data }) => data?.id ?? null, () => null)
+    : null;
+  const attempts: ProviderAttempt[] = [];
+  const requestId = currentRequestId();
+  const logUsage = (completion?: CompletionResult) => {
+    // A response-cache hit makes no provider call: one zero-token row says it was served.
+    const calls: (ProviderAttempt & { cacheHit: boolean })[] = completion?.cached && !attempts.length
+      ? [{ provider: completion.provider, model: completion.model, status: "success", providerFinalStatus: "completed", cacheHit: true }]
+      : attempts.map((attempt) => ({ ...attempt, cacheHit: false }));
+    return persistLLMUsage(calls.map((call) => ({
+      businessId: owned, userId: user.id, requestId, route: "brand.autofill",
+      provider: call.provider, model: call.model, usage: call.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      latencyMs: call.latencyMs, attempt: 1, cacheHit: call.cacheHit,
+      maxTokens: BRAND_EXTRACTION.maxTokens, temperature: BRAND_EXTRACTION.temperature,
+      status: call.status, failure: call.failure,
+      providerRequestId: call.providerRequestId, providerFinalStatus: call.providerFinalStatus,
+    })));
+  };
+
   try {
     const extraction = await completeJSON<BrandExtraction>(
       buildBrandExtractionMessages(text, parsed.toString()),
-      {
-        routing: "budget",
-        task: "website brand extraction",
-        temperature: 0.3,
-        maxTokens: 1_200,
-        reasoningEffort: "minimal",
-        cache: true,
-      },
+      { ...BRAND_EXTRACTION, cache: true, onAttempt: (attempt) => attempts.push(attempt) },
     );
+    await logUsage((extraction as { __completion?: CompletionResult }).__completion);
     return NextResponse.json({ extraction: { ...extraction, phone: extractPhone(html) } });
   } catch (err) {
+    await logUsage();
     if (err instanceof NoLLMKeysError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
