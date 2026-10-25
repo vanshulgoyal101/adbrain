@@ -1619,11 +1619,12 @@ export class MetaClient {
     };
   }
 
-  /** Meta's review state for every ad in the campaign. */
+  /** Meta's review state for every ad in the campaign, with its reasons in English. */
   async readAdReview(campaignId: string): Promise<AdReview[]> {
     await this.verifyCampaignBinding(campaignId);
+    // ad_review_feedback follows the token user's Facebook language unless a locale is given (#635).
     const ads = await this.graph<{ data?: Array<{ id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }>; paging?: { next?: string } }>(
-      `${encodeURIComponent(campaignId)}/ads?fields=id,status,effective_status,configured_status,ad_review_feedback,issues_info&limit=100`,
+      `${encodeURIComponent(campaignId)}/ads?fields=id,status,effective_status,configured_status,ad_review_feedback,issues_info&limit=100&locale=en_US`,
     );
     if (!Array.isArray(ads.data) || ads.paging?.next) throw new MetaError("Ad review status could not be read completely.");
     return ads.data.map(adReviewState);
