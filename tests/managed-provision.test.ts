@@ -251,4 +251,53 @@ describe("provisionManagedAccount (#521)", () => {
     expect(removed).toEqual(["00000000-0000-4000-8000-000000000009"]);
     expect(JSON.stringify(calls)).not.toContain("old-child-token");
   });
+
+  // Reviewer on #643: the Page grant writes no state, and a set-up account is repaired in place.
+  it("the Page grant writes only its step key, and a failed set-up row still resumes to ad_account_created", async () => {
+    vault.set("00000000-0000-4000-8000-000000000009", "child-token");
+    const db = ledger({ business_id: business, state: "failed", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001",
+      manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000009",
+      step_keys: { child_business: "x", ad_account: "y", manager: "z", manager_scope: MANAGER_SCOPE, grant: "g" } });
+    const writes: Record<string, unknown>[] = [];
+    const update = db.store.update;
+    db.store.update = async (values) => { writes.push(values); return update(values); };
+    const { graph } = meta();
+    expect(await run(db.store, graph)).toMatchObject({ ok: true, state: "ad_account_created" });
+    const pageWrite = writes.find((values) => (values.step_keys as Record<string, string> | undefined)?.page_grant)!;
+    expect(pageWrite).not.toHaveProperty("state");
+    expect(db.row()).toMatchObject({ state: "ad_account_created", last_error: null });
+  });
+
+  it.each(["funded", "whatsapp_linked", "ready"])("repairs a %s account in place: re-mints the old-scope token and grants the Page, keeping its state", async (state) => {
+    vault.set("00000000-0000-4000-8000-000000000009", "old-child-token");
+    const db = ledger({ business_id: business, state, page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001",
+      manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000009",
+      step_keys: { child_business: "x", ad_account: "y", manager: "z", grant: "g" } });
+    const { graph, calls } = meta();
+    expect(await run(db.store, graph)).toEqual({ ok: true, state, childBusinessId: "7000000000001", adAccountId: "act_8000000000001" });
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual(["7000000000001/access_token", "111/assigned_users"]);
+    expect(db.row()).toMatchObject({ state, manager_token_id: "00000000-0000-4000-8000-000000000001",
+      step_keys: expect.objectContaining({ manager_scope: MANAGER_SCOPE, page_grant: `page:${business}` }) });
+  });
+
+  it("a failed repair keeps a ready account ready and records the error; retrying finishes it", async () => {
+    vault.set("00000000-0000-4000-8000-000000000009", "child-token");
+    const db = ledger({ business_id: business, state: "ready", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001",
+      manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000009",
+      step_keys: { child_business: "x", ad_account: "y", manager: "z", manager_scope: MANAGER_SCOPE, grant: "g" } });
+    const failing = meta({ failPageGrantWith: Object.assign(new Error("busy"), { status: 500, code: 2 }) });
+    expect(await run(db.store, failing.graph)).toMatchObject({ ok: false, code: "META_BUSY", retryable: true });
+    expect(db.row()).toMatchObject({ state: "ready", last_error: "META_BUSY" });
+    const retry = meta();
+    expect(await run(db.store, retry.graph)).toMatchObject({ ok: true, state: "ready" });
+    expect(db.row()).toMatchObject({ state: "ready", last_error: null });
+  });
+
+  it("still refuses an account that is offboarding or has no ad account", async () => {
+    for (const row of [{ state: "offboarding", child_business_id: "7000000000001", ad_account_id: "act_8000000000001" }, { state: "ready", child_business_id: null, ad_account_id: null }]) {
+      const { graph, calls } = meta();
+      expect(await run(ledger({ business_id: business, page_id: "111", ...row }).store, graph)).toEqual({ ok: false, code: "PAGE_NOT_LINKED", retryable: false });
+      expect(calls).toEqual([]);
+    }
+  });
 });

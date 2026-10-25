@@ -227,7 +227,9 @@ by `manager_token_id` (same business only), then assigned to the ad account and 
 (`ADVERTISE`, `ANALYZE`, `MESSAGING`: the tasks shared with the child) with its own token. It is
 minted with `ads_management,business_management,pages_read_engagement,pages_manage_ads,pages_show_list,leads_retrieval`
 because campaigns, sync, spend caps and the WhatsApp check run on it (#624); a token stored before
-that scope (no `step_keys.manager_scope`) is minted again. One customer's token can't reach another's account. Every
+that scope (no `step_keys.manager_scope`) is minted again. An account already set up (`funded`,
+`whatsapp_linked`, `ready`) can be repaired the same way (re-mint, grants) without changing its
+state; a failed repair keeps the state and records `last_error`, so only set-up runs reach `failed`. One customer's token can't reach another's account. Every
 provisioning Graph call carries `appsecret_proof` (HMAC-SHA256 of its token with `META_APP_SECRET`;
 Meta rejects the child-token mint without it), so a missing secret is `NOT_CONFIGURED`. A token
 the ledger no longer references (replaced, or saved before a failed update) is deleted.

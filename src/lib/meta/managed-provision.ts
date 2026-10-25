@@ -70,6 +70,8 @@ async function findChild(graph: ProvisionGraph, parentBusinessId: string, busine
 const MANAGER_TASKS = ["MANAGE", "ADVERTISE", "ANALYZE"];
 /** #624: campaigns run on the child token, so it needs the Page and lead reads too (Meta OBO guide, step 2). */
 export const MANAGER_SCOPE = "ads_management,business_management,pages_read_engagement,pages_manage_ads,pages_show_list,leads_retrieval";
+const SETUP_STATES = ["page_linked", "child_created", "ad_account_created", "failed"];
+const REPAIRABLE_STATES = ["funded", "whatsapp_linked", "ready"];
 /** The tasks the customer shared with the child business (child creation's page_permitted_tasks). */
 const PAGE_TASKS = ["ADVERTISE", "ANALYZE", "MESSAGING"];
 
@@ -100,13 +102,17 @@ export async function provisionManagedAccount(input: {
 }): Promise<ProvisionResult> {
   const { businessId, store, graph, tokens, parentBusinessId, requestId } = input;
   const row = await store.get(businessId);
-  if (!row?.page_id || !["page_linked", "child_created", "ad_account_created", "failed"].includes(row.state)) {
+  // #624 (Reviewer): a set-up account (funded onwards) can be repaired, re-minting its manager token or
+  // granting its Page, without moving its state; a failed repair keeps the state and records last_error.
+  const repair = Boolean(row && REPAIRABLE_STATES.includes(row.state) && row.child_business_id && row.ad_account_id);
+  if (!row?.page_id || !(SETUP_STATES.includes(row.state) || repair)) {
     return { ok: false, code: "PAGE_NOT_LINKED", retryable: false };
   }
   const keys = row.step_keys && typeof row.step_keys === "object" && !Array.isArray(row.step_keys) ? { ...(row.step_keys as Record<string, string>) } : {};
   let childId = row.child_business_id;
   let adAccountId = row.ad_account_id;
   let step: "child_business" | "ad_account" = "child_business";
+  let state = row.state;
 
   try {
     if (!childId) {
@@ -125,6 +131,7 @@ export async function provisionManagedAccount(input: {
       }
       keys.child_business = key;
       await store.update({ state: "child_created", child_business_id: childId, step_keys: keys, last_error: null });
+      state = "child_created";
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: childId });
     }
 
@@ -147,6 +154,7 @@ export async function provisionManagedAccount(input: {
       adAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
       keys.ad_account = key;
       await store.update({ state: "ad_account_created", ad_account_id: adAccountId, step_keys: keys, last_error: null });
+      state = "ad_account_created";
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
     }
 
@@ -190,7 +198,8 @@ export async function provisionManagedAccount(input: {
         await graph.post(`${adAccountId}/assigned_users`, { user: managerUserId, tasks: JSON.stringify(MANAGER_TASKS), business: childId }, managerToken);
       }
       keys.grant = key;
-      await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });
+      await store.update({ ...(repair ? {} : { state: "ad_account_created" as const }), step_keys: keys, last_error: null });
+      if (!repair) state = "ad_account_created";
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
     }
 
@@ -206,13 +215,16 @@ export async function provisionManagedAccount(input: {
         await graph.post(`${pageId}/assigned_users`, { user: managerUserId, tasks: JSON.stringify(PAGE_TASKS), business: childId }, managerToken);
       }
       keys.page_grant = key;
-      await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });
+      await store.update({ step_keys: keys, last_error: null });
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: pageId });
     }
-    return { ok: true, state: "ad_account_created", childBusinessId: childId, adAccountId };
+    // Only set-up runs reach "failed" (a repair keeps its state), so a failed row whose remaining step was
+    // the Page grant resumes to ad_account_created here, as the earlier steps do.
+    if (!repair && state === "failed") await store.update({ state: "ad_account_created", last_error: null });
+    return { ok: true, state: repair ? row.state : "ad_account_created", childBusinessId: childId, adAccountId };
   } catch (error) {
     const failure = provisionErrorCode(error);
-    await store.update({ state: "failed", last_error: failure.code });
+    await store.update({ ...(repair ? {} : { state: "failed" as const }), last_error: failure.code });
     await store.event({ business_id: businessId, step, outcome: "failed", request_id: requestId, error_code: failure.code });
     return { ok: false, ...failure };
   }
