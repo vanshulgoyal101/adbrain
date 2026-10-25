@@ -410,10 +410,12 @@ async function checkOfflineAssetsFocus() {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       const bounds = await deleteButton.boundingBox();
       assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
-      const confirms = [];
-      page.on("dialog", async dialog => { confirms.push(dialog.message()); await dialog.dismiss(); });
+      // #403 S6: AdBrain's own confirm dialog (not window.confirm); cancel it.
       await page.keyboard.press("Enter");
-      assert.deepEqual(confirms, ["Delete this asset?"]);
+      const confirmDialog = page.getByRole("dialog", { name: "Delete this asset?" });
+      await expect(confirmDialog).toBeVisible();
+      await confirmDialog.getByRole("button", { name: "Cancel" }).click();
+      await expect(confirmDialog).not.toBeVisible();
       await page.getByRole("button", { name: "Upload" }).focus();
       await page.getByRole("img", { name: "Synthetic logo" }).first().hover();
       await expect(deleteButton).toHaveCSS("opacity", "1");

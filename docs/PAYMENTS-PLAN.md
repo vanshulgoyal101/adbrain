@@ -237,7 +237,21 @@ guards to enable production or reinterpret existing test captures as real money.
   lowered to the smallest Meta accepts, so an older limit can't stay usable after a refund or hold.
   Meta takes the limit in rupees and reports it in paise; the write is read back, and fails closed
   if Meta's room (limit − amount spent) exceeds what the customer has left (a reset counter).
-  Wiring must serialize limit writes per child account so a stale, higher limit never lands last.
+  Wiring (`src/lib/managed/spend-cap-sync.ts`, `spend-cap-wiring.ts`): a received payment webhook,
+  a claimed refund and every observed capture, refund or dispute first mark the child account's
+  limit stale inside the request (before processing, so a failure later can't leave it current),
+  then refresh it after the response. The 15-minute `enforce-spend` sweep refreshes managed child
+  accounts stale first, then oldest decision, three at a time, starting none after 45 s; the rest
+  are reported deferred and lead the next run. Activation refreshes a stale limit first, or waits
+  while a pass is running. Writes are serialized per child ad
+  account by a writer lease in `private.managed_spend_caps`: an event that finds the lease taken
+  marks the limit stale, and the holder runs again with fresh figures before releasing, so a
+  stale, higher limit never lands last. "Stop" pauses every active campaign on the child, then
+  tries a ₹1 limit even if a campaign couldn't be paused (that one can still spend), then marks
+  AdBrain's campaigns paused with their reserve and an audit event; any failure fails the pass.
+  Meta's real minimum is recorded by #527, and a refusal leaves the campaigns paused. Activation
+  needs the last decision to be set or keep with room and nothing newer pending: a pass clears the
+  decision when it starts and a failed pass leaves none, so nothing activates on an old limit.
 - Paused-run settle (#221): a paused or finished funded run no longer blocks
   the next run until an operator acts. The `enforce-spend` sweep also visits
   businesses with a paused reservation. It first confirms on Meta that the

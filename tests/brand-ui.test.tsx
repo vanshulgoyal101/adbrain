@@ -5,6 +5,10 @@ import { BrandForm } from "@/components/brand-form";
 import { BrandAssets } from "@/components/brand-assets";
 import { Instructions } from "@/components/instructions";
 import type { AdInstruction, BrandAsset, Business } from "@/lib/types";
+// #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
+vi.mock("@/components/ui/confirm-dialog", () => ({
+  useConfirm: () => [async (options: { title: string; description?: string }) => window.confirm([options.title, options.description].filter(Boolean).join(" ")), null],
+}));
 
 // vi.mock factories are hoisted above module scope, so the spies must be too.
 const h = vi.hoisted(() => ({
@@ -328,6 +332,7 @@ describe("<BrandForm> autofill", () => {
     global.fetch = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof fetch;
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: /Save Brand Brain/ })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Target audience"), { target: { value: "Owner's new audience" } });
     finish({ ok: true, json: async () => ({ extraction: { description: "Extracted description", target_audience: "Website audience" } }) });
@@ -340,6 +345,7 @@ describe("<BrandForm> autofill", () => {
     global.fetch = vi.fn(() => new Promise((resolve) => { finish = resolve; })) as typeof fetch;
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     fireEvent.change(screen.getByPlaceholderText("example.com"), { target: { value: "https://different.example" } });
     finish({ ok: true, json: async () => ({ extraction: { description: "Wrong website description" } }) });
     expect(await screen.findByText(/Website changed during autofill/)).toBeInTheDocument();

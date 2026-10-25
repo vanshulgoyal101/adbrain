@@ -3,6 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import type { MetaConnection } from "@/lib/meta/credentials";
+// #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
+vi.mock("@/components/ui/confirm-dialog", () => ({
+  useConfirm: () => [async (options: { title: string; description?: string }) => window.confirm([options.title, options.description].filter(Boolean).join(" ")), null],
+}));
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
@@ -42,7 +46,7 @@ describe("MetaConnectionPanel", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { complete = resolve; })));
     render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: true })} oauthConfigured />);
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
-    expect(screen.getByRole("button", { name: "Disconnecting..." })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Disconnecting..." })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Manage connection" })).toBeDisabled();
     expect(refresh).not.toHaveBeenCalled();
     complete(new Response(JSON.stringify({ ok: true })));

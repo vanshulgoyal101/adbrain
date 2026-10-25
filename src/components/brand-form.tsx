@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
 import { Alert } from "@/components/ui/alert";
@@ -131,6 +132,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     { ok: false },
   );
   const [autofilling, setAutofilling] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   const [autofillError, setAutofillError] = useState<string | null>(null);
   const [autofillNote, setAutofillNote] = useState<string | null>(null);
   const websiteRevision = useRef(0);
@@ -201,9 +203,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     );
     if (
       hasContent &&
-      !window.confirm(
-        "Autofill will replace some fields you've already filled. Continue?",
-      )
+      !(await confirm({ title: "Replace what you've filled in?", description: "Autofill replaces some fields you've already filled with what it finds on your website.", confirmLabel: "Autofill" }))
     ) {
       return;
     }
@@ -259,6 +259,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
+      {confirmDialog}
       {business && <input type="hidden" name="id" value={business.id} />}
 
       <section

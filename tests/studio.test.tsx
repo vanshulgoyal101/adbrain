@@ -11,6 +11,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Studio } from "@/components/studio";
 import type { Business, Creative } from "@/lib/types";
+// #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
+vi.mock("@/components/ui/confirm-dialog", () => ({
+  useConfirm: () => [async (options: { title: string; description?: string }) => window.confirm([options.title, options.description].filter(Boolean).join(" ")), null],
+}));
 
 const h = vi.hoisted(() => ({
   setCreativeStatus: vi.fn(),

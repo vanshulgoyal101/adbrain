@@ -1,5 +1,6 @@
 "use client";
 import { AD_FLOW, Stepper } from "@/components/ui/stepper";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 
 import Link from "next/link";
@@ -616,6 +617,7 @@ function CreativeCard({
   const [regenError, setRegenError] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [erroredUrl, setErroredUrl] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const approved = creative.status === "approved";
   const imgLoaded = loadedUrl === creative.image_url;
   const imgError = erroredUrl === creative.image_url;
@@ -658,8 +660,8 @@ function CreativeCard({
     });
   }
 
-  function remove() {
-    if (!window.confirm("Delete this ad? This can't be undone.")) return;
+  async function remove() {
+    if (!(await confirm({ title: "Delete this ad?", description: "This can't be undone.", confirmLabel: "Delete ad", tone: "danger" }))) return;
     setRegenError(null);
     startTransition(async () => {
       try {
@@ -679,6 +681,7 @@ function CreativeCard({
 
   return (
     <Card className="flex flex-col overflow-hidden rounded-md">
+      {confirmDialog}
       <div className="relative aspect-square max-h-[480px] bg-slate-100">
         {/* Behind the picture, not over it: a hidden image doesn't count as painted until JS runs (#360). */}
         {creative.image_url && !imgLoaded && !imgError && (
