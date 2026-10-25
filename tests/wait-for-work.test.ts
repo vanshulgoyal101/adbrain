@@ -101,6 +101,11 @@ describe("wait-for-work handoffs", () => {
     expect(waitingOnMe("QA: approved at e1f423c. → CTO: review (tenant boundary).", devops)).toBe(false);
   });
 
+  it("resumes an item whose last word is your own progress note without a handoff", () => {
+    expect(waitingOnMe("Dev 2: #537 is merged; #538 next.", matchers("dev2"))).toBe(true);
+    expect(waitingOnMe("Dev 2: ready at e34663c. → QA: review the tenant check.", matchers("dev2"))).toBe(false);
+  });
+
   it("ignores items parked on the owner or outside the team", () => {
     expect(waitingOnMe("CEO: please submit", devops, ["core", "waiting-owner"])).toBe(false);
   });
