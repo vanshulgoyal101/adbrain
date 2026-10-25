@@ -96,6 +96,7 @@ automatic Meta funding or approval for every proposed future funds model.
 | Gateway fees | Absorbed by AdBrain | Verify economics after fees, fee taxes, support, refunds and disputes |
 | Delivery funding | Operator pays Meta externally, manually or by bank/card arrangement | No automatic-funding proof before checkout; enforce each customer's paid advertising allowance inside AdBrain |
 | Proposed account model | Separate Solaride-owned customer ad accounts for future managed delivery | Legal relationship, capacity, consent, access, ownership disclosure and offboarding; not a live-checkout prerequisite |
+| WhatsApp number boundary | Managed ad accounts require #253: a managed customer's ads send chats only to their Page's own number or a number Meta verified for them, never another number on the shared parent's WhatsApp accounts | `whatsapp_number_bindings`; no binding by pick for managed accounts |
 
 The allocation is a restricted service obligation, not a general-purpose wallet,
 arbitrary forwarding service or proof of cash already at Meta. Operator-managed
