@@ -12,6 +12,8 @@ export interface CampaignInsights {
   cpl: number | null;
   conversations?: number;
   costPerConversation?: number | null;
+  /** #493: link clicks on a WhatsApp ad, i.e. people who opened the chat (vs `conversations`, who sent). */
+  whatsappOpens?: number;
   /** Meta returned no rows: nothing delivered in the requested period. */
   noDelivery?: true;
 }
@@ -59,7 +61,7 @@ export function decodeCampaignInsights(payload: unknown, destination: CampaignDe
     impressions: row?.impressions ?? 0,
     clicks: row?.clicks ?? 0,
     spend, leads, cpl: leads > 0 ? spend / leads : null,
-    ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null } : {}),
+    ...(destination === "whatsapp" ? { conversations, costPerConversation: conversations > 0 ? spend / conversations : null, whatsappOpens: actionCount(["link_click"]) } : {}),
     ...(row ? {} : { noDelivery: true as const }),
   };
 }
