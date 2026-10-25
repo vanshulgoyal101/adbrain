@@ -27,7 +27,8 @@ export const verdictSentence = (body) => body.split("\n")[0].split(/(?<=[.!?](?:
 
 // A verdict naming an earlier head with the same patch against the base also counts, so a clean
 // merge of the base into the PR needs no re-approval; migration hashes are still checked.
-export function qaApproval(comments, headSha, samePatch = () => false) {
+/** @param {(sha: string) => boolean} [samePatch] */
+export function qaApproval(comments, headSha, samePatch = (_sha) => false) {
   const head = headSha.slice(0, 7).toLowerCase();
   const namesHead = (c) => c.body.toLowerCase().includes(head)
     || (verdictSentence(c.body).toLowerCase().match(/\b[0-9a-f]{7,40}\b/g) ?? []).some((sha) => samePatch(sha));
