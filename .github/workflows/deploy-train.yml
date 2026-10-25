@@ -104,7 +104,12 @@ jobs:
             pr=${pr##*/}
           fi
           # A merge commit keeps next's history, so the next train needs no rebase.
-          gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"
+          # A just-created PR can briefly report its green checks as "expected" (#608); retry for 2 min.
+          for i in $(seq 1 6); do
+            gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha" && break
+            [ "$i" -lt 6 ] || exit 1
+            sleep 20
+          done
           echo "Promoted ${sha::7} via #$pr."
           gh workflow run production-drift.yml -R "$repo" --ref main || echo "::warning::drift check not dispatched"
       - name: Alert once when the train is stuck

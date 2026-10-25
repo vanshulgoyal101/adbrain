@@ -82,11 +82,13 @@ export async function sdkCompletion(
       const status = error.statusCode;
       const headers = error.responseHeaders;
       const retryAfter = Number(headers?.["retry-after"]);
+      // #449: out of credit (OpenRouter 402, or 403 "Key limit exceeded"); the router parks the key and tries free models.
+      const creditExhausted = status === 402 || (status === 403 && /key limit|credit/i.test(error.responseBody ?? ""));
       throw new LLMError(`${provider}: ${status ? `HTTP ${status}` : "provider request failed"}`, {
-        provider, status, providerFinalStatus: "unknown", code: status ? `HTTP_${status}` : "TRANSPORT",
+        provider, status, providerFinalStatus: "unknown", code: creditExhausted ? "CREDIT_EXHAUSTED" : status ? `HTTP_${status}` : "TRANSPORT",
         retryAfterMs: Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : undefined,
         providerRequestId: providerId(headers?.["x-request-id"] ?? headers?.["x-openrouter-request-id"] ?? headers?.["x-goog-request-id"]),
-        retryable: status === undefined || status === 429 || status >= 500 || status === 403 || (provider !== "google" && status === 401),
+        retryable: creditExhausted || status === undefined || status === 429 || status >= 500 || status === 403 || (provider !== "google" && status === 401),
       });
     }
     throw new LLMError(`${provider}: network or provider response error`, { provider, retryable: true, code: "TRANSPORT" });

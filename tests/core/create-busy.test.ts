@@ -153,9 +153,10 @@ describe("core: Create step 1 when the AI providers are busy (#410)", () => {
     expect(await response.json()).not.toHaveProperty("code", "AI_BUSY");
     expect(calls).toEqual(["groq", "groq", "google", "openrouter"]);
     expect(events().filter((event) => event.name === "ai.completion").map((event) => event.attributes.errorCode))
-      .toEqual(["LLM_HTTP_429", "LLM_HTTP_429", "LLM_HTTP_429", "LLM_HTTP_403"]);
+      // #449: the refused key is logged as out of credit, not a bare 403, so the alert names the cause.
+      .toEqual(["LLM_HTTP_429", "LLM_HTTP_429", "LLM_HTTP_429", "LLM_CREDIT_EXHAUSTED"]);
     expect(events().filter((event) => event.name === "creative.interview").map((event) => [event.outcome, event.attributes.errorCode]))
-      .toEqual([["failed", "ASSISTANT_HTTP_403"]]);
+      .toEqual([["failed", "ASSISTANT_CREDIT_EXHAUSTED"]]);
   });
 
   it("answers from the paid fallback and still logs the refused free-tier attempts", async () => {

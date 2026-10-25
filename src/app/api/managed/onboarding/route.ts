@@ -30,7 +30,7 @@ async function handleGET(request: NextRequest) {
     return fail(503, "UNAVAILABLE", "Business access could not be checked.");
   }
   const { data: row, error } = await createAdminClient().from("managed_meta_accounts")
-    .select("state, funding_state, page_id, child_business_id, ad_account_id, waba_id, phone_number_id, last_error")
+    .select("state, funding_state, page_id, child_business_id, ad_account_id, waba_id, phone_number_id, whatsapp_number_e164, last_error")
     .eq("business_id", actor.businessId).maybeSingle();
   if (error) return fail(503, "UNAVAILABLE", "Onboarding progress could not be read.");
   // Paid = captured payments net of refunds. Unreadable (payments not configured, reconciliation) counts as not yet.

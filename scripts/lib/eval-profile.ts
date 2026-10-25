@@ -8,16 +8,26 @@ export type EvalSettings = {
   imageModel: string;
   judge: "openrouter" | "google";
   judgeModel: string;
-  schedule: "parallel";
+  /** Concept calls at once: "serial" fits Groq's free tokens-per-minute. */
+  schedule: "serial" | "parallel";
+  /** The report this profile is compared with, and written by `--write-baseline`. */
+  baseline: string;
+  /** Cases run when `--cases` isn't given; null means every case. */
+  gateCases: string[] | null;
+  judgeByDefault: boolean;
+  /** Compare only the deterministic copy checks (see `compareSummaries`). */
+  deterministic: boolean;
 };
 
 /**
  * `paid`: production's models on OpenRouter (Haiku 5.5 + gpt-image), judged on OpenRouter.
- * `free`: what internal accounts get (#466): Gemini then Groq on the free keys, Pollinations images,
- * judged by the same Gemini model on Google directly, and no OpenRouter key at all.
+ * `free` ($0, the gate for generation changes; CTO, Oct 25): Gemini then Groq on the free keys,
+ * Pollinations images and no OpenRouter key at all. Its copy model is not production's Gemini
+ * model, so a run never spends production's 20-a-day free quota. Two cases (English, Hindi), no
+ * judge by default, compared on the deterministic copy checks against its own baseline (#418).
  */
 export function evalProfile(name: string, overrides: Record<string, string | undefined>): { settings: EvalSettings; env: Record<string, string> } {
-  const shared = { AD_DESIGN_OVERLAY: "true", CREATIVE_CONCEPT_SCHEDULE: "parallel", IMAGE_PROVIDER_FALLBACK: "none" };
+  const shared = { AD_DESIGN_OVERLAY: "true", IMAGE_PROVIDER_FALLBACK: "none" };
   if (name === "paid") {
     const settings: EvalSettings = {
       profile: "paid",
@@ -26,21 +36,23 @@ export function evalProfile(name: string, overrides: Record<string, string | und
       judge: "openrouter",
       judgeModel: overrides.EVAL_JUDGE_MODEL ?? "google/gemini-3.8-flash",
       schedule: "parallel",
+      baseline: "tests/eval/baseline.json", gateCases: null, judgeByDefault: true, deterministic: false,
     };
-    return { settings, env: { ...shared, CREATIVE_PROVIDER_ORDER: "openrouter", OPENROUTER_MODEL: settings.textModel,
+    return { settings, env: { ...shared, CREATIVE_CONCEPT_SCHEDULE: settings.schedule, CREATIVE_PROVIDER_ORDER: "openrouter", OPENROUTER_MODEL: settings.textModel,
       IMAGE_PROVIDER: "openrouter", OPENROUTER_IMAGE_MODEL: settings.imageModel } };
   }
   if (name === "free") {
     const pollinations = overrides.EVAL_IMAGE_MODEL ?? "flux";
     const settings: EvalSettings = {
       profile: "free",
-      textModel: overrides.EVAL_TEXT_MODEL ?? "gemini-3.6-flash",
+      textModel: overrides.EVAL_TEXT_MODEL ?? "gemini-3.8-flash",
       imageModel: `pollinations/${pollinations}`,
       judge: "google",
       judgeModel: overrides.EVAL_JUDGE_MODEL ?? "gemini-3.8-flash",
-      schedule: "parallel",
+      schedule: "serial",
+      baseline: "tests/eval/baseline-free.json", gateCases: ["cedar-ridge-en", "solaride-factory-hi"], judgeByDefault: false, deterministic: true,
     };
-    return { settings, env: { ...shared, CREATIVE_PROVIDER_ORDER: "google,groq", GEMINI_MODEL: settings.textModel,
+    return { settings, env: { ...shared, CREATIVE_CONCEPT_SCHEDULE: settings.schedule, CREATIVE_PROVIDER_ORDER: "google,groq", GEMINI_MODEL: settings.textModel,
       GROQ_MODEL: "qwen/qwen3.8-27b", IMAGE_PROVIDER: "pollinations", POLLINATIONS_MODEL: pollinations, OPENROUTER_API_KEYS: "" } };
   }
   throw new Error(`--profile must be paid or free, not ${name}.`);

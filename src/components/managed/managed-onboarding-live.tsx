@@ -12,6 +12,48 @@ import { clearOnboardingConnect, markOnboardingConnect } from "@/lib/managed/onb
 import { POPUP_FALLBACK_MS } from "@/components/meta-connect/meta-connect-dialog";
 
 const POLL_MS = 5_000;
+// Meta's Page settings → Linked accounts → WhatsApp (Meta sends the code to the number). Checked on QA's walk.
+const PAGE_WHATSAPP_SETTINGS = "https://www.facebook.com/settings/?tab=linked_whatsapp";
+const WHATSAPP_MESSAGES: Record<"not_linked" | "waiting_setup" | "taken" | "unavailable", string> = {
+  not_linked: "We don't see a WhatsApp number on your Page yet. Link it on Facebook, then check again.",
+  waiting_setup: "We'll be able to check as soon as your ad account is ready, usually within a minute.",
+  taken: "That WhatsApp number is already used by another AdBrain business. Link a different number to your Page.",
+  unavailable: "Your setup has stopped, so WhatsApp can't be linked right now. Contact AdBrain support.",
+};
+
+/** #524 v1: the owner links WhatsApp to their own Page on Facebook; AdBrain checks and records it. */
+function WhatsAppStep({ businessId, onLinked }: { businessId: string; onLinked: () => void }) {
+  const [checking, setChecking] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  async function check() {
+    setChecking(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/managed/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ businessId }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.ok) throw new Error(body?.error?.message ?? "We couldn't check your Page's WhatsApp just now. Try again.");
+      const result = body.data as { status: "linked"; masked: string } | { status: "not_linked" | "waiting_setup" | "taken" | "unavailable" };
+      if (result.status === "linked") {
+        setMessage({ text: `Linked: ${result.masked}`, error: false });
+        onLinked();
+      } else setMessage({ text: WHATSAPP_MESSAGES[result.status], error: result.status === "taken" || result.status === "unavailable" });
+    } catch (reason) {
+      setMessage({ text: reason instanceof Error ? reason.message : "Try again.", error: true });
+    } finally {
+      setChecking(false);
+    }
+  }
+  return (
+    <div className="space-y-3 text-sm text-slate-700">
+      <ol className="list-decimal space-y-1 pl-5">
+        <li><a href={PAGE_WHATSAPP_SETTINGS} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-700 underline underline-offset-4">Open your Page&apos;s WhatsApp settings on Facebook</a></li>
+        <li>Enter your WhatsApp Business number and the code WhatsApp sends you.</li>
+      </ol>
+      <Button variant="outline" onClick={() => void check()} disabled={checking}>{checking ? "Checking…" : "Check again"}</Button>
+      {message && <p role={message.error ? "alert" : "status"} className={message.error ? "text-red-700" : "text-slate-700"}>{message.text}</p>}
+    </div>
+  );
+}
 type Snapshot = { row: ManagedAccountProgressRow | null; paid: boolean };
 
 /** #526: the onboarding screen with live progress from the ledger, and the three owner steps wired in. */
@@ -110,7 +152,7 @@ export function ManagedOnboardingLive({ businessId, initialAttemptId }: { busine
         )}
       </div>
     ),
-    whatsapp: <p className="text-sm text-slate-600">This step opens here soon. Your ads can&apos;t start until it&apos;s done.</p>,
+    whatsapp: <WhatsAppStep businessId={businessId} onLinked={() => void refresh()} />,
   };
   return (
     <>

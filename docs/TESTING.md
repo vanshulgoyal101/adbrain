@@ -50,7 +50,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `seed:demo-clinic` | Writes demo data; use only on the approved target |
 | `generate:icons` | Regenerates local icon assets |
 | `eval:creative` | Sends fixture copy to Google judge model; consumes provider quota/cost |
-| `eval:create` | Paid Create eval gate (#418): frozen cases through the production pipeline on OpenRouter, blind judge, compare with `tests/eval/baseline.json` |
+| `eval:create` | Create eval gate (#418): frozen cases through the production pipeline on OpenRouter, blind judge, compare with `tests/eval/baseline.json`; `-- --profile free` is the $0 deterministic gate (`baseline-free.json`) |
 
 ### Production Core Smoke
 
@@ -144,6 +144,7 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Results refresh** (`results-refresh`): the scheduled results job (#258) against real insights and ad review reads from the live #157 run and a paused Solaride campaign, recorded read-only by `scripts/record-meta-results-fixtures.ts`: lifetime insights (`date_preset=maximum`, #404; the live run's 70 impressions, ₹10.69 and 1 chat), one result row per campaign per hour, GETs only, the 6-hour no-impressions flag, and a rejected-ad flag from a synthetic DISAPPROVED edit of the recorded ads response.
 - **Campaign stop** (`campaign-stop`): the paused-run settle check (#221) that the whole Meta tree is stopped, from two real Solaride campaigns (a fully PAUSED tree, and ACTIVE children under a paused campaign), recorded read-only by `scripts/record-meta-stop-fixtures.ts`.
 - **Launch gate** (`launch-validate`, #419): every object the launch code creates (campaign, ad set, creative, ad) for a lead-form and a WhatsApp campaign must equal a payload Meta accepted with `validate_only`. Recorded by [`record-meta-launch-validate.ts`](../scripts/record-meta-launch-validate.ts), which runs the real `createLeadCampaign`: ads are only validated, and the PAUSED campaign, empty ad set and creative it needs exist briefly and are deleted. A deliberate change to what we send Meta fails this test until the tape is re-recorded and Meta's answers reviewed.
+- **Managed provisioning walk** (`test:meta-db`, #521): a fixture tenant replays, as the service role on the real migrations, every write provisioning makes: Page link, lease, a failed child step and its resume, ad account, the child system user's encrypted token reference (and a re-mint), grant, release. The owner then reads their row and 7 step events.
 - **Meta call events** (`meta-call-events`, #451 L2): replays Meta's recorded Advantage+ refusal (subcode 1870189) through a real launch; every Graph call must log one `meta.graph` event with the endpoint template, status and `META_100_1870189`, and no token, ID or query value.
 - **Plan check** (`plan-check`, #419): `npx tsx scripts/plan-check.ts [--cost-per-result 69] [plan.json]` checks a planned campaign offline against Meta's new-advertiser guidance (Advantage+ audience and placements, one ad set, budget vs the ~50 results a week learning threshold, 4:5 and 9:16 images). With no file it checks the launch gate's payloads; it exits 1 when a rule fails. Every launch also runs it on the payloads it sent (`onPlanned`): `launch-validate` pins that the check sees exactly the accepted forms, and `story-placement` that it sees the creative each ad runs on (the single image when Meta refused the placement ad), never the token.
 - **WhatsApp** (`campaign-whatsapp`, `whatsapp-number`): Meta's real `validate_only` answers for the WhatsApp campaign, ad set and creative (#209), recorded with [`record-meta-whatsapp-adset.ts`](../scripts/record-meta-whatsapp-adset.ts), plus the Page and business WhatsApp number reads behind the button number (#235). The tape also holds Meta's acceptance of the #493 one-tap ask in English, for one city, in Hindi and in Punjabi ([`record-meta-whatsapp-fixtures.ts`](../scripts/record-meta-whatsapp-fixtures.ts), against a PAUSED ad set).
@@ -305,11 +306,19 @@ fewer full batches or saved ads, more invented claims or garbled text, judge sco
 0.25, more than ₹25 per run, or Create p90 over 60 s and slower than before. About $0.05 per case;
 `--cap-usd` (default 5) stops the run, and it refuses to start unless the shared OpenRouter key keeps
 $2 for production after the cap (#449). `--repeat N` runs each case N times; bake-offs set
-`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`. `--profile free` runs what internal
-accounts get (Gemini then Groq, Pollinations images, judged by the same Gemini model on Google) at
-$0 with OpenRouter switched off; it can't write the baseline. Free tiers are small (Gemini 20
-requests per day per model, Groq 6,000 tokens a minute, Pollinations ~1 image per 20–40 s), so a
-free run measures availability as much as quality (#418).
+`EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`.
+
+`--profile free` is the gate for generation changes while OpenRouter stays at its limit (CTO, Oct
+25; judged runs need a CEO-approved budget). At $0, with OpenRouter switched off: copy on
+`gemini-3.8-flash` (not production's Gemini model, so it never spends production's free quota) then
+Groq, one concept at a time; Pollinations images; no judge unless `--judge`. It runs the two gate
+cases (`cedar-ridge-en`, `solaride-factory-hi`) and compares only the deterministic copy checks with
+`tests/eval/baseline-free.json` (recorded after the next daily reset): copy saved (an ad whose free image failed
+still counts), first-try passes, offer in the first 125 characters, and script. Concepts no provider
+answered don't count; over a third of them makes the run inconclusive (exit 1, run again later), and
+such a run can't become the baseline. Free tiers are small (Gemini 20 requests per day per model,
+Groq 8,000 tokens a minute, Pollinations ~1 image per 20–40 s), so run it after the daily reset
+(07:00Z) and not twice in a row (#418).
 
 Baseline (2026-10-24, `8e21d29`, anthropic/claude-haiku-5.5 + openai/gpt-image-2.5-flare):
 full batches 71%, 17/21 ads, first try 71%, judge copy
