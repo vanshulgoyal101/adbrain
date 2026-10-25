@@ -272,6 +272,26 @@ const OBJECT_STOPWORDS = new Set(["a", "an", "the", "and", "or", "of", "for", "t
 const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? [];
 const stem = (word: string) => (word.length > 4 ? word.replace(/e?s$/, "") : word);
 
+// Nukta and candrabindu spellings vary ("विज़िट"/"विजिट", "जाँच"/"जांच"); compare without them.
+const indicKey = (word: string) => word.normalize("NFC").replace(/[\u093C\u0A3C]/g, "").replace(/\u0901/g, "\u0902");
+/**
+ * Offer words Hindi and Punjabi ads write as English loanwords or plain equivalents, so "फ्री साइट
+ * सर्वे" is the supplied "Free site survey" (#378, #418). An exact list: an unlisted word never matches.
+ */
+const INDIC_OFFER_WORDS = new Map(Object.entries({
+  "साइट": ["site"], "सर्वे": ["survey"], "सर्वेक्षण": ["survey"], "होम": ["home"], "घर": ["home"],
+  "विजिट": ["visit"], "इंस्टॉलेशन": ["installation"], "इंस्टालेशन": ["installation"], "स्थापना": ["installation"],
+  "कंसल्टेशन": ["consultation"], "परामर्श": ["consultation"], "सलाह": ["consultation", "advice"],
+  "चेकअप": ["checkup", "check"], "जांच": ["check", "checkup"], "डेमो": ["demo"], "ट्रायल": ["trial"],
+  "क्लास": ["class"], "कक्षा": ["class"], "सेशन": ["session"], "डिलीवरी": ["delivery"], "सर्विस": ["service"],
+  "सेवा": ["service"], "कोटेशन": ["quote", "quotation"], "एस्टीमेट": ["estimate"], "इंस्पेक्शन": ["inspection"],
+  "निरीक्षण": ["inspection"], "ऑडिट": ["audit"], "टेस्ट": ["test"], "काउंसलिंग": ["counselling", "counseling"],
+  "ਸਾਈਟ": ["site"], "ਸਰਵੇ": ["survey"], "ਘਰ": ["home"], "ਵਿਜਿਟ": ["visit"], "ਇੰਸਟਾਲੇਸ਼ਨ": ["installation"],
+  "ਸਲਾਹ": ["consultation", "advice"], "ਚੈਕਅਪ": ["checkup", "check"], "ਜਾਂਚ": ["check", "checkup"],
+  "ਡੈਮੋ": ["demo"], "ਟ੍ਰਾਇਲ": ["trial"], "ਕਲਾਸ": ["class"],
+}).map(([word, english]) => [indicKey(word), english]));
+const offerWords = (word: string) => INDIC_OFFER_WORDS.get(indicKey(word)) ?? [word];
+
 /**
  * Amounts and percentages are specific, so the token alone matches a fact. "Free", "no-cost" and
  * "guarantee" are not: the thing offered (the next words) must be in the fact too, so "FREE
@@ -283,7 +303,7 @@ function sameOffer(output: string, term: string, fact: string): boolean {
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const uses = [...output.matchAll(new RegExp(`(?<![\\p{L}\\p{M}-])${escaped}(?![\\p{L}\\p{M}])((?:[\\s,:-]+[\\p{L}\\p{M}\\p{N}]+){0,3})`, "giu"))];
   return uses.length > 0 && uses.every((use) => words(use[1]).filter((word) => !OBJECT_STOPWORDS.has(word)).slice(0, 2)
-    .some((word) => factWords.has(stem(word))));
+    .some((word) => offerWords(word).some((english) => factWords.has(stem(english)))));
 }
 
 export const editableCopySchema = z.object({
