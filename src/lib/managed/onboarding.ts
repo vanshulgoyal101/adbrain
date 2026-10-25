@@ -18,6 +18,8 @@ export type ManagedAccountProgressRow = {
   ad_account_id: string | null;
   waba_id: string | null;
   phone_number_id: string | null;
+  /** #524 v1: the number linked to the customer's Page (Meta-verified). */
+  whatsapp_number_e164?: string | null;
   last_error: string | null;
 };
 
@@ -41,7 +43,8 @@ export function onboardingProgress(row: ManagedAccountProgressRow | null, { paid
   const child = Boolean(row?.child_business_id);
   const account = Boolean(row?.ad_account_id);
   const funded = row ? FUNDED.includes(row.state) : false;
-  const whatsapp = row ? WHATSAPP.includes(row.state) : false;
+  // Recorded as soon as the Page's number is found, even while the ledger waits on funding (#524).
+  const whatsapp = row ? WHATSAPP.includes(row.state) || Boolean(row.whatsapp_number_e164) || Boolean(row.waba_id && row.phone_number_id) : false;
 
   const customer: Record<CustomerStep, StepStatus> = {
     pay: paid ? "done" : "current",

@@ -6,9 +6,13 @@ import type { MetaClient } from "./client";
  * number other than the Page's own must be one of these before an ad may send chats to it.
  */
 export async function boundWhatsAppNumbers(businessId: string): Promise<string[]> {
-  const { data, error } = await createAdminClient().from("whatsapp_number_bindings").select("phone_e164").eq("business_id", businessId);
+  const [{ data, error }, managed] = await Promise.all([
+    createAdminClient().from("whatsapp_number_bindings").select("phone_e164, source").eq("business_id", businessId),
+    isManagedBusiness(businessId),
+  ]);
   if (error) throw new Error("WhatsApp number bindings could not be read.");
-  return (data ?? []).map((row) => row.phone_e164);
+  // A managed business trusts only numbers Meta verified for it, even if it once picked one on its own connection (#524).
+  return (data ?? []).filter((row) => !managed || row.source !== "owner_pick").map((row) => row.phone_e164);
 }
 
 async function isManagedBusiness(businessId: string): Promise<boolean> {
@@ -25,9 +29,9 @@ async function isManagedBusiness(businessId: string): Promise<boolean> {
  * verified for it (Page link or Embedded Signup) can be bound.
  */
 export async function whatsappNumberForBusiness(businessId: string, meta: MetaClient, requested: string | null): Promise<string | null> {
-  const bound = await boundWhatsAppNumbers(businessId);
+  const [bound, managed] = await Promise.all([boundWhatsAppNumbers(businessId), isManagedBusiness(businessId)]);
   const number = await meta.getWhatsAppNumber(requested, bound);
-  if (number || !requested || await isManagedBusiness(businessId)) return number;
+  if (number || !requested || managed) return number;
   const { business } = await meta.whatsappNumbers();
   const picked = await meta.getWhatsAppNumber(requested, business);
   if (!picked || !business.includes(picked)) return picked;

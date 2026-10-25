@@ -29,6 +29,7 @@ const managedAccountsMigration = await readFile(join(root, "db/migrations/202610
 const provisionLeaseMigration = await readFile(join(root, "db/migrations/20261025_managed_provision_lease.sql"), "utf8");
 const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
+const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -1085,6 +1086,42 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyManagedWhatsAppPageLink(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Page WhatsApp'),($3,$4,'Other Page WhatsApp')", [business, owner, otherBusiness, other]);
+  const service = async (run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role service_role");
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: 2T WhatsApp v1: a Page-linked number completes whatsapp_linked; one active customer per number (#524)`, async () => {
+    await service(async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'7101'),($2,'7102')", [business, otherBusiness]);
+      for (const step of ["state='page_linked'", "state='child_created', child_business_id='7201'", "state='ad_account_created', ad_account_id='act_7301'", "state='funded', funding_state='card_attached'"]) {
+        await session.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [business]);
+      }
+      await session.query("savepoint s");
+      // Still refused with neither the Embedded Signup IDs nor a Page-linked number.
+      await assert.rejects(session.query("update public.managed_meta_accounts set state='whatsapp_linked' where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.managed_meta_accounts set whatsapp_number_e164='98765' where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await session.query("update public.managed_meta_accounts set whatsapp_number_e164='+919999990874', state='whatsapp_linked' where business_id=$1", [business]);
+      // Another customer can't record the same number.
+      await assert.rejects(session.query("update public.managed_meta_accounts set whatsapp_number_e164='+919999990874' where business_id=$1", [otherBusiness]), { code: "23505" });
+      await session.query("rollback to savepoint s");
+      // The other #519 checks that name whatsapp_linked are still there (a state needs its Page).
+      const checks = (await session.query("select count(*)::int as n from pg_constraint where conrelid='public.managed_meta_accounts'::regclass and contype='c' and pg_get_constraintdef(oid) like '%page_id IS NOT NULL%'")).rows[0].n;
+      assert.equal(checks, 1);
+    });
+  });
+}
+
 async function verifyWhatsAppBindings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -1860,6 +1897,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(managedSpendCapsMigration);
       await db.query(managedSpendCapsMigration);
       await verifyManagedSpendCaps(db,database);
+      await db.query(managedWhatsAppMigration);
+      await db.query(managedWhatsAppMigration);
+      await verifyManagedWhatsAppPageLink(db,database);
       await db.query(whatsappBindingsMigration);
       await db.query(whatsappBindingsMigration);
       await verifyWhatsAppBindings(db,database);
