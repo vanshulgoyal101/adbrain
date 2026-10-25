@@ -105,7 +105,7 @@ decimals or exponent notation; blank amounts are invalid, while unset amounts
 use their defaults. Invalid enabled verification configuration blocks collection.
 The approved maximum remains INR 10,000; this setting cannot raise that ceiling.
 
-The eligible pilot owner sees **Verification amount (INR)** in Billing before an
+The eligible pilot owner sees **Verification amount (₹)** in Billing before an
 order is saved. Enter rupees with at most two decimal places, choose **Update
 amount**, review the refreshed quote/terms, accept them and then choose **Pay**.
 The input accepts INR 1 through the configured verification maximum; with the
