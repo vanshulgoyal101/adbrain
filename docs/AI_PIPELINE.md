@@ -422,3 +422,23 @@ To add a provider: implement the existing interface, wire selection deliberately
 document required keys and formats/references, propagate deadlines, enforce media
 validation, record provenance/usage, and add failure/fallback tests. Do not add a
 hidden provider fallback to make a broken paid path appear successful.
+
+## When Paid Credit Runs Out (#449)
+
+OpenRouter (paid) can run out of credit: a 402, or a 403 "Key limit exceeded" once a key's total
+limit is spent. AdBrain treats either as `CREDIT_EXHAUSTED`, not as a generic refusal:
+
+- **Text:** that key is parked for 15 minutes, and the call is answered by the free providers
+  (Gemini, Groq) even when the routing order (for example Create's `CREATIVE_PROVIDER_ORDER`) lists
+  only OpenRouter. Free providers are added only after a credit failure; other failures behave as
+  before. Usage events record `LLM_CREDIT_EXHAUSTED`.
+- **Images:** a credit-exhausted OpenRouter image falls back to free Pollinations even when
+  `IMAGE_PROVIDER_FALLBACK` is `none`. Pollinations can't take product reference photos, so that
+  picture is made without them; the receipt records `fallbackFrom`. Only the credit refusal counts
+  as not charged (`providerFinalStatus: failed`); any other image failure stays `unknown`.
+- **Owner message:** if the free models can't help either, Create says plainly that AdBrain's paid
+  AI or image credit has run out and to try again shortly, instead of a generic failure.
+
+The core test `credit-exhausted` replays OpenRouter's real 402 (recorded Oct 25 with a request
+the key couldn't afford: refused before generating, usage unchanged).
+
