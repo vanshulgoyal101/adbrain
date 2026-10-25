@@ -95,6 +95,25 @@ jobs:
               -b "$(printf 'A live campaign needs attention: %s. The campaign shows a Needs attention badge in AdBrain with the reason.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$kind" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
+      - name: Managed accounts (2-Tier provisioning, #527)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 30 -o managed.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/managed-health") || code=000
+          [ "$code" = 404 ] && { echo "managed-health not deployed yet"; exit 0; }
+          # Public repo: states, minutes and opaque keys only.
+          echo "HTTP $code $(jq -c '{ok, accounts, byState, stuck: (.stuck // [] | length), error}' managed.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          for row in $(jq -r '.stuck[]? | "\(.state):\(.key):\(.minutes)"' managed.json 2>/dev/null); do
+            IFS=: read -r state key minutes <<<"$row"
+            [[ "$state" =~ ^[a-z_]+$ && "$key" =~ ^[a-f0-9]{12}$ && "$minutes" =~ ^[0-9]+$ ]] || continue
+            seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
+            [ "$seen" = 0 ] || continue
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l 2tier -l owner:dev2 -t "Managed account stuck: $state ($key)" \
+              -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done
+          [ "$code" = 200 ]
       - name: Alert on the second consecutive failure
         if: failure()
         env:

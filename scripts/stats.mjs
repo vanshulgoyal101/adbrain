@@ -19,6 +19,7 @@ export const SECTIONS = [
   { key: "failures", title: "Failures by step (AI calls, server errors, workflows)" },
   { key: "auth", title: "Sign-ins and sign-ups by method, and why sign-ins failed" },
   { key: "speed", title: "Speed of the busiest routes (successful requests, ms)" },
+  { key: "managed_accounts", title: "2-Tier managed accounts by state (#527)" },
   { key: "funnel", title: "Sign-up funnel (reached each step)" },
 ];
 
@@ -135,6 +136,11 @@ select attributes->>'route' as route, count(*)::int as n,
   percentile_disc(0.5) within group (order by duration_ms) as p50, percentile_disc(0.9) within group (order by duration_ms) as p90
 from ev where name = 'http.request' and attributes->>'status' like '2%' and attributes->>'route' not like '/api/cron/%'
 group by 1 order by n desc limit 10`;
+    case "managed_accounts":
+      return `select m.state, count(*)::int as accounts,
+  count(*) filter (where m.state not in ('ready', 'offboarded') and m.updated_at < now() - interval '30 minutes')::int as stuck_over_30_min
+from public.managed_meta_accounts m join public.businesses b on b.id = m.business_id
+where ${includeInternal ? "true" : customerFilterSql("b.owner_id", "b.id", emails)} group by m.state order by accounts desc`;
     case "funnel":
       return funnelSql(days, emails, { includeInternal });
     default:
