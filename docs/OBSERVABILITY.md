@@ -194,7 +194,10 @@ made before Oct 24 show none), and the last 5 Create runs with failed ads includ
 seconds from the first call's start to the last call's end. Campaign receipts (#451 L2): the last 5 launches
 (`campaign_operations`), each with that business's plan and prepare requests in the day before,
 the create request's status and time, its Meta calls (count, failed, ms, error codes; joined on
-the create request ID) and the first refresh or sync after it. Page-load timing in a
+the create request ID) and the first refresh or sync after it. Launch plan checks (#419 item
+2(a)): every launch records `campaign.plan_check` with Meta's new-advertiser rules its exact ad
+set and creative payloads didn't pass (`validationRules` such as `9-16-stories-reels-image:warn`;
+partial on a warning or failure), and stats counts launches per rule. Page-load timing in a
 real browser: `node scripts/perf-pages.mjs [--runs 5] [--pages /dashboard,/campaigns,/brand]`
 (TTFB, DOMContentLoaded and load p50/p90; read-only, signed in as the smoke account).
 
