@@ -153,7 +153,7 @@ async function main() {
   if (pr.state !== "OPEN") stop(`PR #${pr.number} is ${pr.state}.`);
 
   step(`Preflight PR #${pr.number} at ${head.slice(0, 7)} (read-only)`);
-  if (pr.mergeStateStatus === "DIRTY") stop(`PR #${pr.number} conflicts with main, so CI has not run on ${head.slice(0, 7)}. The author merges main; then QA approves the new head.`);
+  if (pr.mergeStateStatus === "DIRTY") stop(`PR #${pr.number} conflicts with ${base}, so CI has not run on ${head.slice(0, 7)}. The author merges ${base}; then QA approves the new head.`);
   const required = lines(gh("api", `repos/${repo}/branches/main/protection/required_status_checks`, "--jq", ".contexts[]"));
   const checks = lines(gh("api", "--paginate", `repos/${repo}/commits/${head}/check-runs`, "--jq", ".check_runs[]|[.name,.status,.conclusion,.completed_at]|@tsv")).map((l) => {
     const [name, status, conclusion, completedAt] = l.split("\t");
