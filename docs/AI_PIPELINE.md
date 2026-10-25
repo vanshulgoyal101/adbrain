@@ -54,7 +54,8 @@ Failed attempts log rule names only (`metadata.validationRules`, for example
 `unsupported-commercial-claim`, `repeated-question`, `schema:<path>`). The interview
 adds the term's class, never the term: `unsupported-commercial-claim:free`, `:percent`,
 `:currency` or `:guarantee` (#613). A Brand fact supports a term unless that term itself
-is negated ("no free survey"); a negation elsewhere ("Free survey, no obligation") doesn't count.
+is negated or withdrawn ("no free survey", "isn't free", "don't offer free", "Free survey no longer
+offered"); a negation about something else ("Free survey, no obligation") doesn't count.
 
 ### Campaign Interview
 
