@@ -1428,6 +1428,79 @@ async function verifyProvisionLease(db, database) {
   });
 }
 
+// #521 fixture tenant: the exact writes provisionManagedAccount and runManagedProvisioning make, in
+// order, as the service role, so the code and the ledger can't disagree on a real customer.
+async function verifyProvisioningWalk(db, database) {
+  const owner = randomUUID(), business = randomUUID(), lease = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Fixture tenant')", [business, owner]);
+  await check(`${database}: 2T provisioning walk: Page link, lease, failed child, resume, account, manager token, grant (#521)`, async () => {
+    const session = client(database);
+    await session.connect();
+    const q = (sql, values = []) => session.query(sql, values);
+    const row = async () => (await q("select state, child_business_id, ad_account_id, manager_user_id, manager_token_id, step_keys, last_error, provision_lease_id from public.managed_meta_accounts where business_id=$1", [business])).rows[0];
+    const event = (step, outcome, extra = {}) => q(`insert into public.managed_meta_account_events(business_id,step,outcome,request_id,idempotency_key,meta_object_id,error_code)
+      values ($1,$2,$3,$4,$5,$6,$7)`, [business, step, outcome, randomUUID(), extra.key ?? null, extra.object ?? null, extra.error ?? null]);
+    const token = async (subject) => {
+      const id = randomUUID();
+      await q(`select public.meta_token_insert($1,$2,$3,$4,'business_system_user',$5,$6,$7,'k1','v1',array['ads_management','business_management'],'[]'::jsonb,null,now(),null)`,
+        [id, business, owner, subject, "\\x00", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+      return id;
+    };
+    try {
+      await q("set role service_role");
+      // #537: the Page step inserts at requested, then links.
+      await q("insert into public.managed_meta_accounts(business_id,page_id,state) values ($1,'5210000000111','requested')", [business]);
+      await q("update public.managed_meta_accounts set page_id='5210000000111', state='page_linked' where business_id=$1", [business]);
+      await event("page", "succeeded", { object: "5210000000111" });
+      // #577: the run holds the lease before any Meta call.
+      assert.equal((await q("select public.managed_meta_account_claim($1,$2,300) as ok", [business, lease])).rows[0].ok, true);
+      // A lost child response: failed with a code, nothing recorded.
+      const childKey = `child:${business}`;
+      await event("child_business", "started", { key: childKey });
+      await q("update public.managed_meta_accounts set state='failed', last_error='META_TIMEOUT' where business_id=$1", [business]);
+      await event("child_business", "failed", { error: "META_TIMEOUT" });
+      // Resume: found by external id, recorded with its step key.
+      await q(`update public.managed_meta_accounts set state='child_created', child_business_id='7521000000001', step_keys=$2::jsonb, last_error=null where business_id=$1`,
+        [business, JSON.stringify({ child_business: childKey })]);
+      await event("child_business", "succeeded", { key: childKey, object: "7521000000001" });
+      const accountKey = `account:${business}`;
+      await q(`update public.managed_meta_accounts set state='ad_account_created', ad_account_id='act_8521000000001', step_keys=$2::jsonb, last_error=null where business_id=$1`,
+        [business, JSON.stringify({ child_business: childKey, ad_account: accountKey })]);
+      await event("ad_account", "succeeded", { key: accountKey, object: "act_8521000000001" });
+      // The child's own system user: token in the encrypted store, the ledger keeps only a reference.
+      const first = await token("6521000000009");
+      const managerKey = `manager:${business}`;
+      await q(`update public.managed_meta_accounts set manager_user_id='6521000000009', manager_token_id=$2, step_keys=$3::jsonb, last_error=null where business_id=$1`,
+        [business, first, JSON.stringify({ child_business: childKey, ad_account: accountKey, manager: managerKey })]);
+      await event("ad_account", "succeeded", { key: managerKey, object: "6521000000009" });
+      // A re-mint (old token revoked): the new reference is written, then the old token deleted.
+      const second = await token("6521000000009");
+      await q("update public.managed_meta_accounts set manager_token_id=$2 where business_id=$1", [business, second]);
+      assert.equal((await q("select public.meta_token_delete($1,$2) as ok", [first, business])).rows[0].ok, true);
+      const grantKey = `grant:${business}`;
+      await q(`update public.managed_meta_accounts set state='ad_account_created', step_keys=$2::jsonb, last_error=null where business_id=$1`,
+        [business, JSON.stringify({ child_business: childKey, ad_account: accountKey, manager: managerKey, grant: grantKey })]);
+      await event("ad_account", "succeeded", { key: grantKey, object: "act_8521000000001" });
+      assert.equal((await q("select public.managed_meta_account_release($1,$2) as ok", [business, lease])).rows[0].ok, true);
+      const done = await row();
+      assert.deepEqual({ ...done, step_keys: Object.keys(done.step_keys).sort() }, {
+        state: "ad_account_created", child_business_id: "7521000000001", ad_account_id: "act_8521000000001",
+        manager_user_id: "6521000000009", manager_token_id: second, step_keys: ["ad_account", "child_business", "grant", "manager"],
+        last_error: null, provision_lease_id: null,
+      });
+      // The owner sees their own progress and step log (#526 reads these).
+      await q("reset role");
+      await q("begin");
+      await q("set local role authenticated");
+      await q("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      assert.equal((await q("select state from public.managed_meta_accounts where business_id=$1", [business])).rows[0].state, "ad_account_created");
+      assert.equal((await q("select count(*)::int n from public.managed_meta_account_events where business_id=$1", [business])).rows[0].n, 7, "page, child started/failed/succeeded, account, manager, grant");
+      await q("rollback");
+    } finally { await session.end(); }
+  });
+}
+
 async function verifyAdvisorHardening(db, database) {
   await check(`${database}: advisor hardening reapplies cleanly and leaves the expected catalog (#359)`, async () => {
     await db.query(advisorsMigration);
@@ -1856,6 +1929,7 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(provisionLeaseMigration);
       await db.query(provisionLeaseMigration);
       await verifyProvisionLease(db,database);
+      await verifyProvisioningWalk(db,database);
       await verifyManagedAccountsTenantQA(db,database);
       await db.query(managedSpendCapsMigration);
       await db.query(managedSpendCapsMigration);
