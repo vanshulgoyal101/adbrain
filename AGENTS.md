@@ -47,7 +47,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
 - **When idle, wait briefly, then stop** (owner, Oct 24: no stale background
-	processes). Run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
+	processes). Run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|qa2|devops|cto|ceo>`
 	from a worktree on current `origin/main`, **in the foreground only**. It first
 	lists any item you own where someone else spoke last (said while you were busy),
 	then returns when something is labelled for you, someone comments on your issue

@@ -74,7 +74,7 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "devops", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "qa2", count: 0 }, { role: "devops", count: 0 }]);
   });
 });
 
@@ -115,6 +115,16 @@ describe("wait-for-work handoffs", () => {
     expect(waitingOnMe("CTO: → Dev 2: yours now.", dev)).toBe(false);
     expect(waitingOnMe("CTO: → DevOps: clear the claim.", dev)).toBe(false);
     expect(waitingOnMe("CTO: → Dev: yours, queue #1.", dev)).toBe(true);
+  });
+
+  it("keeps QA distinct from QA 2 (#575)", () => {
+    const qa = matchers("qa"), qa2 = matchers("qa2");
+    expect(qa.writtenByMe("QA 2: the #157 read is in")).toBe(false);
+    expect(qa2.writtenByMe("QA 2: the #157 read is in")).toBe(true);
+    expect(waitingOnMe("CTO: → QA 2: yours from now (#575).", qa)).toBe(false);
+    expect(waitingOnMe("CTO: → QA 2: yours from now (#575).", qa2)).toBe(true);
+    expect(waitingOnMe("Dev: → QA: review at a75ff5a.", qa)).toBe(true);
+    expect(waitingOnMe("Dev: → QA: review at a75ff5a.", qa2)).toBe(false);
   });
 });
 
