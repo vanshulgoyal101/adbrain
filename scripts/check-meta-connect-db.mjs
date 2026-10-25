@@ -27,6 +27,7 @@ const schedulerMigration = await readFile(join(root, "db/migrations/20261024_sch
 const advisorsMigration = await readFile(join(root, "db/migrations/20261024_security_advisors.sql"), "utf8");
 const managedAccountsMigration = await readFile(join(root, "db/migrations/20261025_managed_meta_accounts.sql"), "utf8");
 const provisionLeaseMigration = await readFile(join(root, "db/migrations/20261025_managed_provision_lease.sql"), "utf8");
+const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -1201,6 +1202,143 @@ async function verifyManagedAccounts(db, database) {
 
 // QA red checks for #527 T1: no two tenants share a Page or a WhatsApp number, an insert can't skip
 // the state machine, and an offboarding account can't be revived to ready.
+async function verifyManagedSpendCaps(db, database) {
+  const owner = randomUUID(), otherOwner = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, otherOwner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Capped child'),($3,$4,'Other tenant')", [business, owner, otherBusiness, otherOwner]);
+  await db.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'71001')", [business]);
+  for (const step of ["state='page_linked'", "state='child_created', child_business_id='72001'", "state='ad_account_created', ad_account_id='act_73001'"]) {
+    await db.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [business]);
+  }
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("set role service_role");
+      return (await session.query(sql, values)).rows[0];
+    } finally { await session.end(); }
+  };
+  const request = (token, tenant = business, account = "act_73001") =>
+    service("select public.managed_spend_cap_request($1,$2,$3,60) as claimed", [tenant, account, token]).then((row) => row.claimed);
+  const begin = (token) => service("select public.managed_spend_cap_begin('act_73001',$1,60) as ok", [token]).then((row) => row.ok);
+  const finish = (token, action, cap, room) =>
+    service("select public.managed_spend_cap_finish('act_73001',$1,$2,$3,$4,60) as again", [token, action, cap, room]).then((row) => row.again);
+  const state = () => service("select public.managed_spend_cap_state($1,'act_73001') as s", [business]).then((row) => row.s);
+  await check(`${database}: 2T spend caps: one writer per child ad account; an event during a pass makes it run again (#522)`, async () => {
+    const [a, b] = [randomUUID(), randomUUID()];
+    assert.equal(await request(a), true);
+    assert.equal(await request(b), false, "the lease is held");
+    assert.equal(await begin(a), true);
+    assert.equal(await begin(b), false, "only the holder writes");
+    assert.equal(await request(b), false, "a payment during the pass marks the limit stale");
+    assert.equal(await finish(a, "set", 33898, 33898), true, "the holder runs again with fresh figures");
+    assert.equal(await begin(a), true);
+    assert.deepEqual(await state(), { dirty: false, leased: true, action: null, capPaise: null, roomPaise: null }, "a pass in flight: nothing to activate on (review)");
+    assert.equal(await finish(a, "keep", 33898, 33898), false, "nothing new: the lease is released");
+    assert.deepEqual(await state(), { dirty: false, leased: false, action: "keep", capPaise: 33898, roomPaise: 33898 });
+    assert.equal(await request(b), true, "the next event takes the free lease");
+    assert.deepEqual(await state(), { dirty: true, leased: true, action: "keep", capPaise: 33898, roomPaise: 33898 });
+    await service("select public.managed_spend_cap_abandon('act_73001',$1)", [b]);
+    assert.deepEqual(await state(), { dirty: true, leased: false, action: null, capPaise: null, roomPaise: null }, "a failed pass leaves no decision to activate on");
+  });
+  await check(`${database}: 2T spend caps: of concurrent events exactly one claims the writer lease (#522)`, async () => {
+    const claims = await Promise.all(Array.from({ length: 6 }, () => request(randomUUID())));
+    assert.equal(claims.filter(Boolean).length, 1);
+    await db.query("update private.managed_spend_caps set lease_token=null, lease_until=null where ad_account_id='act_73001'");
+  });
+  await check(`${database}: 2T spend caps: an expired lease passes on; the old holder can't record a decision (#522)`, async () => {
+    const [stale, fresh] = [randomUUID(), randomUUID()];
+    assert.equal(await request(stale), true);
+    assert.equal(await begin(stale), true);
+    await db.query("update private.managed_spend_caps set lease_until=clock_timestamp()-interval '1 second' where ad_account_id='act_73001'");
+    assert.equal(await request(fresh), true);
+    await assert.rejects(finish(stale, "set", 50000, 50000), { code: "55000" });
+    assert.equal(await begin(stale), false);
+    assert.equal(await begin(fresh), true);
+    assert.equal(await finish(fresh, "freeze", 20000, 0), false);
+    assert.deepEqual(await state(), { dirty: false, leased: false, action: "freeze", capPaise: 20000, roomPaise: 0 });
+  });
+  await check(`${database}: 2T spend caps: only the tenant's own child account, valid decisions, service role only (#522)`, async () => {
+    await assert.rejects(request(randomUUID(), otherBusiness), { code: "42501" });
+    await assert.rejects(request(randomUUID(), business, "act_99999"), { code: "42501" });
+    const token = randomUUID();
+    assert.equal(await request(token), true);
+    assert.equal(await begin(token), true);
+    for (const [action, cap, room] of [["block", 1, 1], ["set", -1, 1], ["set", 1, -1], ["set", 0, 0]]) {
+      await assert.rejects(finish(token, action, cap, room), (error) => ["22023", "23514"].includes(error.code), `${action} ${cap} ${room}`);
+    }
+    await service("select public.managed_spend_cap_abandon('act_73001',$1)", [token]);
+    for (const role of ["anon", "authenticated"]) {
+      const session = client(database);
+      await session.connect();
+      try {
+        await session.query(`set role ${role}`);
+        if (role === "authenticated") await session.query("select set_config('request.jwt.claim.sub',$1,false)", [owner]);
+        for (const sql of ["select public.managed_spend_cap_request($1,'act_73001',gen_random_uuid(),60)", "select public.managed_spend_cap_state($1,'act_73001')",
+          "select public.managed_spend_cap_inputs($1,'act_73001','acc_spend_cap')", "select public.managed_spend_cap_mark_stale($1)",
+          "select public.managed_spend_cap_mark_payment_stale('acc_spend_cap','pay_x',$1::text)", "select * from public.managed_spend_cap_due(10) where $1::uuid is not null"]) {
+          await assert.rejects(session.query(sql, [business]), { code: "42501" }, `${role}: ${sql}`);
+        }
+        await assert.rejects(session.query("select 1 from private.managed_spend_caps"), { code: "42501" });
+      } finally { await session.end(); }
+    }
+  });
+  await check(`${database}: 2T spend caps: a payment, refund or dispute marks the limit stale before it is processed (QA #560)`, async () => {
+    const quote = { version: "inr-annual-total-v1", merchantDisplay: "Vanshul Goyal", currency: "INR", totalPaise: 1000000,
+      serviceAllocationPaise: 200000, metaAllocationPaise: 800000, additionalCustomerTaxPaise: 0,
+      metaTaxTreatment: "included-in-meta-allocation", gatewayFees: "absorbed-by-adbrain", automaticRenewal: false };
+    await db.query(`insert into private.production_payment_orders(id,business_id,user_id,request_key,account_id,key_id,quote,terms,terms_hash,provider_order_id)
+      values ($1,$2,$3,$4,'acc_spendcap','rzp_live_fixture',$5,$6,$7,'order_managedcap')`,
+      [randomUUID(), business, owner, randomUUID(), quote, { version: "operator-managed-v1", fundingMode: "operator_managed" }, "c".repeat(64)]);
+    const token = randomUUID();
+    assert.equal(await request(token), true);
+    assert.equal(await begin(token), true);
+    assert.equal(await finish(token, "set", 33898, 33898), false);
+    const target = { businessId: business, userId: owner };
+    assert.deepEqual(await service("select public.managed_spend_cap_mark_payment_stale('acc_spendcap','pay_managedcap','order_managedcap') as t").then((row) => row.t), target);
+    assert.equal((await state()).dirty, true, "the gate no longer allows activation on the pre-refund limit");
+    assert.deepEqual(await service("select public.managed_spend_cap_mark_stale($1) as t", [business]).then((row) => row.t), target);
+    assert.equal(await service("select public.managed_spend_cap_mark_payment_stale('acc_spendcap','pay_unknown',null) as t").then((row) => row.t), null);
+    assert.equal(await service("select public.managed_spend_cap_mark_stale($1) as t", [otherBusiness]).then((row) => row.t), null, "not managed");
+  });
+  await check(`${database}: 2T spend caps: the sweep visits stale limits first, then the oldest decision (QA #560)`, async () => {
+    const extra = [randomUUID(), randomUUID()];
+    for (const [index, id] of extra.entries()) {
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Swept child')", [id, owner]);
+      await db.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,$2)", [id, `7600${index}`]);
+      for (const step of ["state='page_linked'", `state='child_created', child_business_id='7700${index}'`, `state='ad_account_created', ad_account_id='act_7800${index}'`]) {
+        await db.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [id]);
+      }
+    }
+    const pass = async (tenant, account) => {
+      const token = randomUUID();
+      assert.equal(await request(token, tenant, account), true);
+      assert.equal(await service("select public.managed_spend_cap_begin($1,$2,60) as ok", [account, token]).then((row) => row.ok), true);
+      await service("select public.managed_spend_cap_finish($1,$2,'keep',1000,1000,60)", [account, token]);
+    };
+    await pass(extra[0], "act_78000");
+    await pass(extra[1], "act_78001");
+    // act_73001 is stale (marked above); act_78000 was decided before act_78001.
+    const due = async () => (await db.query("select business_id from public.managed_spend_cap_due(10)")).rows.map((row) => row.business_id);
+    assert.deepEqual((await due()).filter((id) => [business, ...extra].includes(id)), [business, extra[0], extra[1]]);
+    await pass(extra[0], "act_78000");
+    assert.deepEqual((await due()).filter((id) => [business, ...extra].includes(id)), [business, extra[1], extra[0]], "the next run starts where the last one stopped");
+  });
+  await check(`${database}: 2T spend caps: media this child account and the tenant's other accounts, per payment account (#522)`, async () => {
+    const costs = [["act_73001", "acc_spend_cap", 10000, 1800], ["act_73001", "acc_spend_cap", 2500, 1800], ["act_74001", "acc_spend_cap", 5000, 1800],
+      ["act_75001", "acc_other_payments", 7000, 1800]];
+    for (const [adAccount, account, media, bps] of costs) {
+      const campaign = randomUUID();
+      await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,200)", [campaign, business]);
+      await db.query(`insert into private.customer_ad_costs(campaign_id,business_id,account_id,ad_account_id,connection_generation,media_paise,tax_paise,tax_rate_bps,observed_at)
+        values ($1,$2,$3,$4,1,$5,0,$6,now())`, [campaign, business, account, adAccount, media, bps]);
+    }
+    const inputs = await service("select public.managed_spend_cap_inputs($1,'act_73001','acc_spend_cap') as i", [business]).then((row) => row.i);
+    assert.deepEqual(inputs, { mediaThisAccountPaise: 12500, mediaOtherAccountsPaise: 5000, taxRateBps: 1800 });
+    await assert.rejects(service("select public.managed_spend_cap_inputs($1,'act_73001','acc_spend_cap')", [otherBusiness]), { code: "42501" });
+  });
+}
+
 async function verifyManagedAccountsTenantQA(db, database) {
   const a = randomUUID(), b = randomUUID(), ownerA = randomUUID(), ownerB = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [ownerA, ownerB]);
@@ -1719,6 +1857,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(provisionLeaseMigration);
       await verifyProvisionLease(db,database);
       await verifyManagedAccountsTenantQA(db,database);
+      await db.query(managedSpendCapsMigration);
+      await db.query(managedSpendCapsMigration);
+      await verifyManagedSpendCaps(db,database);
       await db.query(whatsappBindingsMigration);
       await db.query(whatsappBindingsMigration);
       await verifyWhatsAppBindings(db,database);

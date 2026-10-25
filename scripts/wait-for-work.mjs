@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", qa: "QA", devops: "DevOps", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked"]);
 
@@ -28,8 +28,8 @@ const PARKED = new Set(["waiting-owner", "blocked"]);
 export function matchers(role) {
   const build = (r) => {
     const name = NAMES[r];
-    // "Dev" must not match "Dev 2" / "Dev 3"; "DevOps" never matches \bDev\b.
-    const notOther = r === "dev" ? "(?! ?[23])" : "";
+    // "Dev" must not match "Dev 2" / "Dev 3", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
+    const notOther = r === "dev" ? "(?! ?[23])" : r === "qa" ? "(?! ?2)" : "";
     return {
       writtenBy: new RegExp(`^[\\s*#>_\`-]*${name}\\b${notOther}`),
       addressedTo: new RegExp(`(?:^|[\\s>(*_-])${name}${notOther}\\*{0,2}\\s*[:,]|→\\s*\\**${name}\\b${notOther}|@${r}\\b`, "m"),
@@ -52,17 +52,32 @@ export function linkedIssues(title) {
 }
 
 /** True when an owned item's ball is in your court: nobody spoke yet, or the last word isn't yours and isn't a handoff to someone else. */
-export function waitingOnMe(lastBody, m, labels = []) {
+/** "Next read 2026-10-25T16:00Z" / "Next check 2026-10-26 14:24Z" in a comment: when a scheduled check is due (ms), else null. */
+export function snoozedUntil(body) {
+  const m = /\bnext (?:read|check)\b[^0-9\n]{0,12}(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2})?\s*Z/i.exec(body ?? "");
+  const t = m ? Date.parse(`${m[1]}T${m[2]}Z`) : NaN;
+  return Number.isNaN(t) ? null : t;
+}
+
+export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
   if (labels.some((l) => PARKED.has(l))) return false;
   if (lastBody == null) return true;
   // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
-  // idle workers otherwise slept with their queue unfinished (Oct 25).
-  if (m.writtenByMe(lastBody)) return !m.handedToOther(lastBody);
+  // idle workers otherwise slept with their queue unfinished (Oct 25). A scheduled check
+  // ("Next read <ISO time>Z") keeps it quiet until that time (QA 2's live-run reads, #575).
+  if (m.writtenByMe(lastBody)) {
+    const due = snoozedUntil(lastBody);
+    if (due !== null && now < due) { nextDue = Math.min(nextDue, due); return false; }
+    return !m.handedToOther(lastBody);
+  }
   if (m.addressedToMe(lastBody)) return true;
   return !m.handedToOther(lastBody);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "qa", "devops"];
+/** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
+let nextDue = Infinity;
+
+export const WORKERS = ["dev", "dev2", "dev3", "qa", "qa2", "reviewer", "devops"];
 export const MIN_QUEUE = 2;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
@@ -384,6 +399,7 @@ let warned = false;
 while (Date.now() < deadline) {
   exitIfOrphaned();
   try {
+    if (Date.now() >= nextDue) { nextDue = Infinity; const due = backlog(); if (due.length) report(due); }
     const found = findWork();
     if (found.length) report(found);
   } catch (error) {

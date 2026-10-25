@@ -216,6 +216,13 @@ async function withConnectionCredentials<Result>(
   if (managed) {
     const credentials = managedCredentials(managed);
     if (!credentials) throw new ConnectionAccessError("UNAVAILABLE", "Managed Meta credentials are unavailable.");
+    // #522: new delivery needs a current Meta spending limit with room on the child account.
+    if (options.purpose === "activate" && isManagedReady(managed)) {
+      const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
+      const gate = await managedSpendCapGate(context, managed).catch(() => "updating" as const);
+      if (gate === "no_room") throw new ConnectionAccessError("UNAVAILABLE", "Your managed ad account has no spending room left. Add funds to run ads.");
+      if (gate !== "allowed") throw new ConnectionAccessError("UNAVAILABLE", "Your managed ad account's spending limit is being updated. Try again in a minute.");
+    }
     return execute(credentials, connection);
   }
   const admin = createAdminClient();

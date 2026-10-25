@@ -26,11 +26,13 @@ label it for the owner instead of doing it.
 | Role | Owns | Hands off |
 | --- | --- | --- |
 | **CEO** | Priorities and target dates, money and budgets, decisions (`decision`), the owner's steps (Meta, Razorpay, sign-ins), this dispatch. Turns owner requests into issues. Checks weekly that skills are used | Building anything: implementation goes to the CTO or a worker |
-| **CTO** | Technical direction and designs, assigning and briefing issues, the worker table, labels, CI and production health, high-impact reviews, publishing `Lesson:` lines | Feature building (assign it); priority and money (CEO) |
+| **CTO** | Technical direction and designs, assigning and briefing issues, the worker table, labels, CI and production health, design calls and Meta-credential reviews, publishing `Lesson:` lines | Feature building (assign it); priority and money (CEO) |
 | **Dev** | Create: the assistant, interview, generation and its tests (`ad-assistant.tsx`, `interview.ts`), plus issues assigned to you | Migrations, config, money releases (DevOps); priority (CEO) |
 | **Dev 2** | Editing ads and image rendering, Meta App Review (#156), plus issues assigned to you | Same as Dev |
 | **Dev 3** | WhatsApp-first, first impression (homepage, sign-up), the live-run engineering (#157), plus issues assigned to you | Same as Dev |
-| **QA** | Independent review of high-risk changes (money, migration, tenant/auth), red tests, live-run reads, UX walks on phone and desktop | Fixing product code (send it to the owner Dev); routine low-risk PRs need no QA |
+| **QA** | Independent review of high-risk changes (money, migration, tenant/auth), red tests (live checks go to QA 2) | Fixing product code (send it to the owner Dev); routine low-risk PRs need no QA |
+| **QA 2** | Live checks: live-run reads and final reports (#157, #499), production smoke follow-up, phone and desktop walks, 2-Tier acceptance walks (#527) | Same as QA |
+| **Reviewer** | High-risk code review (money, migration, tenant/auth): `gh pr review <n> --comment --body "Reviewer review of <sha>: **approved**. …"`, accepted by `release.mjs` where the CTO's is; reviews in parallel with QA, within an hour | Design and priority calls (CTO, CEO); fixing code (the author) |
 | **DevOps** | Migrations, money/tenant/config releases, secrets and production settings, rollback, scheduler, CI and the production guard | Feature work; priority (CEO) |
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs

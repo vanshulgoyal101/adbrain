@@ -122,6 +122,15 @@ All automated production browser runs from the shared Mac come from one IP addre
   in paise; a different read-back, or one whose room exceeds what the customer has left (Meta's
   counter restarted), keeps campaigns paused, and 0 is never written. The Graph
   exchange is **provisional** (Meta's documented shape) until a managed account can be recorded.
+- **Managed limit follows the balance** (`managed-spend-cap-sync`, #522): through the real
+  `MetaClient` on the parent token, Solaride's recorded funding read (4,237 spent) gets a ₹338.98
+  limit with 29,661 room, written in rupees and read back; a held account with nothing spent has
+  its live campaign paused on Meta (recorded verified pause) before a ₹1 limit, with AdBrain's
+  campaign, reserve and audit updated. Derived exchanges (read-back, zero spend, one live campaign)
+  are marked in the test. `npm run test:meta-db` checks the writer lease on Postgres: one writer
+  of concurrent events, a rerun when an event lands mid-pass, an expired lease handed on, tenant
+  and role checks, media per ad account, a payment or refund marking the limit stale before it is
+  processed, and the sweep order (stale first, then oldest decision, so a cut-short run resumes).
 - **Managed campaigns** (`managed-campaign`, #525): the real recorded Solaride Prepare → PAUSED
   create → sync → pause tapes, run through `withMetaConnection` for a managed business whose
   ledger row points at that ad account and Page: every call AdBrain builds carries the parent

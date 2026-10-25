@@ -12,6 +12,8 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { managedAccountsEnabled } from "@/lib/meta/managed-account";
+import { sweepManagedSpendCaps } from "@/lib/managed/spend-cap-wiring";
 import {
   DEFAULT_SPEND_LIMITS,
   weeklySpendDecision,
@@ -31,14 +33,19 @@ export const maxDuration = 60;
  * opted-in weekly spend has reached the cap or cannot be verified. It also
  * pauses capped runs whose end time has passed, and settles paused runs that
  * still hold a reserve: once Meta confirms the stop and the spend has settled,
- * SQL records final evidence and releases the reserve (#221). It runs
+ * SQL records final evidence and releases the reserve (#221). Managed child ad accounts get their
+ * Meta spending limit refreshed from the customer's balance (#522). It runs
  * under the service-role client (no user session).
  *
  * Vercel Cron calls this with `Authorization: Bearer $CRON_SECRET`.
  */
 export const GET = observeRoute("/api/cron/enforce-spend", "GET", handleGET);
 
+/** Managed limits start no new refresh after this, leaving the rest of `maxDuration` to finish (QA #560). */
+const MANAGED_SWEEP_BUDGET_MS = 45_000;
+
 async function handleGET(request: Request) {
+  const startedAt = Date.now();
   const secret = getEnv().CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (request.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -196,5 +203,21 @@ async function handleGET(request: Request) {
     if (paused.length) swept.push({ businessId, paused });
   }
 
-  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept, unverified }, { status: incomplete ? 503 : 200 });
+  // #522: each managed child ad account's Meta spending limit follows its customer's balance, so
+  // holds from cost evidence and missed payment events are applied within one sweep.
+  let managedSpendCaps: Array<{ businessId: string; status: string }> = [];
+  if (managedAccountsEnabled()) {
+    try {
+      const sweep = await sweepManagedSpendCaps({
+        deadline: startedAt + MANAGED_SWEEP_BUDGET_MS,
+        context: (businessId) => requireScheduledBusiness(businessId, request),
+      });
+      if (sweep.incomplete) incomplete = true;
+      managedSpendCaps = sweep.results;
+    } catch {
+      incomplete = true;
+    }
+  }
+
+  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept, unverified, managedSpendCaps }, { status: incomplete ? 503 : 200 });
 }

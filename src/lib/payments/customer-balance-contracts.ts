@@ -4,6 +4,8 @@ export const customerPaiseSchema = z.number().int().nonnegative().max(Number.MAX
 export const customerBalanceSchema = z.object({
   businessId: z.uuid(), currency: z.literal("INR"), capturedPaise: customerPaiseSchema,
   refundedPaise: customerPaiseSchema, serviceAllocationPaise: customerPaiseSchema, advertisingAllocationPaise: customerPaiseSchema,
+  // The ad share refunded (`customer_ad_balance`); optional for older callers, required by the managed spending limit (#522).
+  advertisingRefundedPaise: customerPaiseSchema.optional(),
   mediaCostPaise: customerPaiseSchema, taxCostPaise: customerPaiseSchema, reservedPaise: customerPaiseSchema, remainingPaise: customerPaiseSchema,
   held: z.boolean(), reason: z.string().nullable(),
   reservations: z.array(z.object({ campaignId: z.uuid(), reservationId: z.uuid(), state: z.enum(["uncertain", "active", "paused", "closed"]) })).default([]),

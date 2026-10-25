@@ -9,6 +9,7 @@ import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } 
 import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
   quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
 import { createProductionPaymentClient } from "./razorpay-production";
+import { flagManagedSpendCap } from "@/lib/managed/spend-cap-wiring";
 import { capturedPaymentMatchesOrder, verifyRazorpayCheckoutSignature, verifyRazorpayWebhookSignature } from "./razorpay-verification";
 
 const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{1,100}$`));
@@ -150,6 +151,8 @@ function paymentService(config: Config, signal: AbortSignal) {
         ({ order, refunds, refundIds } = await recovery(order.id));
       }
     }
+    // A capture, refund or dispute changed the balance: a managed child account's Meta limit follows (#522).
+    await flagManagedSpendCap({ businessId: order.business_id });
     return { order, refunds, refundIds };
   }
   async function processEvent(event: z.infer<typeof eventSchema>) {
@@ -228,6 +231,8 @@ export async function handleProductionPayments(request: Request, action: Action)
         p_event_id: parsed(eventIdSchema, request.headers.get("x-razorpay-event-id")), p_payload_hash: createHash("sha256").update(raw).digest("hex"),
         p_payment_id: paymentId, p_provider_order_id: payload.payment?.entity.order_id ?? null, p_refund_id: payload.refund?.entity.id ?? null, p_kind: kind,
       }), eventSchema);
+      // QA #560: mark a managed limit stale on receipt, so a failed processing can't leave it current.
+      await flagManagedSpendCap({ paymentId: saved.payment_id, providerOrderId: saved.provider_order_id });
       try { await service.processEvent(saved); return paymentReply({ received: true, queued: false }); }
       catch { return paymentReply({ received: true, queued: true }, 202); }
     }
@@ -326,6 +331,8 @@ export async function handleProductionPayments(request: Request, action: Action)
         p_request_key: input.idempotencyKey, p_refund_id: randomUUID(), p_amount_paise: input.amountPaise, p_terms_hash: input.termsHash,
         p_approval_reference: input.approvalReference, p_reason: input.reason,
       }), z.object({ claimed: z.boolean(), refund: refundOperationSchema }));
+      // QA #560: the refund holds the balance from now on, whatever the provider answers next.
+      await flagManagedSpendCap({ businessId: recovered.order.business_id });
       if (!claimed.claimed) return paymentReply({ refund: claimed.refund });
       try {
         const refund = await createProductionPaymentClient(process.env, signal).createRefund(recovered.order.payment_id!, claimed.refund.id, claimed.refund.amount_paise);
