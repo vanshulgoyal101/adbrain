@@ -13,6 +13,15 @@ describe("PR reviews count as the latest word (#423)", () => {
     expect(waitingOnMe(latestWord(comments, reviews)!.body, matchers("devops"))).toBe(true);
     expect(latestWord([], [])).toBeNull();
   });
+
+  it("skips the advisory AI review bot, so a push doesn't wake the PR owner (#587)", () => {
+    const comments = [
+      { body: "DevOps: resolved at 07b2fec. → QA: please post a verdict", created_at: "2026-10-25T17:00:00Z", html_url: "c1" },
+      { body: "<!-- ai-review -->\n**AI review (advisory, not a verdict)**", created_at: "2026-10-25T17:05:00Z", html_url: "c2" },
+    ];
+    expect(latestWord(comments, [])?.url).toBe("c1");
+    expect(waitingOnMe(latestWord(comments, [])!.body, matchers("devops"))).toBe(false);
+  });
 });
 
 describe("restart-proof start (#384)", () => {
