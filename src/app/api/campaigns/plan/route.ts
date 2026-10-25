@@ -190,10 +190,12 @@ async function handlePOST(req: Request) {
         : error.status && error.status >= 500 ? "PROVIDER_SERVER"
           : error.status ? "PROVIDER_CLIENT" : "TRANSPORT"
         : "OTHER";
-    recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "failed", businessId: business.id,
+    // #612: an audience plan that falls back to default targeting still lets the owner launch: partial.
+    const fallsBack = Boolean(audienceDraft) && failureStage === "MODEL" && failureClass !== "ABORTED";
+    recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: fallsBack ? "partial" : "failed", businessId: business.id,
       attributes: { errorCode: `PLAN_${failureStage}_${failureClass}` } });
-    if (audienceDraft && failureStage === "MODEL" && failureClass !== "ABORTED") {
-      return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft) });
+    if (fallsBack) {
+      return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft!) });
     }
     return NextResponse.json({ error: "Could not prepare the campaign plan." }, { status: 502 });
   }
