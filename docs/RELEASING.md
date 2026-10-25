@@ -89,10 +89,14 @@ exclude entire test directories or suppress uninvestigated findings.
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
   and the schema tests all use it, so two migration PRs never conflict. Name a
   migration so it sorts after the ones it depends on.
-- **Code review (#423):** every PR gets an automatic, advisory Copilot review (repository
-  ruleset 'Copilot code review on every PR (advisory)', on open and each push; not a
-  required check, so low-risk PRs still auto-merge on green). Authors fix real findings in
-  the same PR. QA and CTO post high-risk verdicts as reviews, not comments:
+- **Code review (#423):** PRs touching high-risk paths (migrations; `src/lib/{meta,payments,managed,supabase,security}`;
+  `src/app/api/{auth,payments,meta,spend-limits}`; middleware) get one advisory AI review comment from
+  [ai-review.yml](../.github/workflows/ai-review.yml), on open and each push: free Groq
+  `openai/gpt-oss-120b` (production's planner uses another model, so it doesn't eat its rate
+  limit), $0, secret `GROQ_REVIEW_API_KEY`. The script runs from the base commit, so PR code
+  never runs with the key. It never fails or blocks, and a free-tier refusal leaves a 'skipped' note.
+  Authors fix real findings in the same PR. (The Copilot ruleset stays disabled: no premium quota.)
+  QA and CTO post high-risk verdicts as reviews, not comments:
   `gh pr review <n> --comment --body "QA verdict at <sha>: **approved**. …"` (or
   `CTO review of <sha>: **approved**`). `release.mjs` reads PR reviews and comments alike.
 - **Supabase advisors (#359):** run `node scripts/advisors.mjs` before and after

@@ -1,0 +1,51 @@
+name: AI review (advisory)
+on:
+  # High-risk paths only (#423). Advisory: it never fails, and isn't a required check.
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+    paths:
+      - "db/migrations/**"
+      - "src/lib/meta/**"
+      - "src/lib/payments/**"
+      - "src/lib/managed/**"
+      - "src/lib/supabase/**"
+      - "src/lib/security/**"
+      - "src/app/api/auth/**"
+      - "src/app/api/payments/**"
+      - "src/app/api/meta/**"
+      - "src/app/api/spend-limits/**"
+      - "src/middleware.ts"
+      - "src/proxy.ts"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The base commit's script reads the PR diff through the API; the PR's own code never runs with the key.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: scripts/ai-review.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Review high-risk changes
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROQ_REVIEW_API_KEY: ${{ secrets.GROQ_REVIEW_API_KEY }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          [ -f scripts/ai-review.mjs ] || { echo "Base branch has no ai-review script yet; skipped."; exit 0; }
+          node scripts/ai-review.mjs "$PR"
