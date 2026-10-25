@@ -1,0 +1,61 @@
+{
+  "recordedAt": "2026-10-24",
+  "note": "#493: Meta's insights answer for the live #157 WhatsApp campaign (read-only GET, date_preset=maximum). link_click = opened WhatsApp; messaging_conversation_started_7d = sent a message.",
+  "payload": {
+    "data": [
+      {
+        "impressions": "1910",
+        "clicks": "15",
+        "spend": "162.18",
+        "actions": [
+          {
+            "action_type": "link_click",
+            "value": "12"
+          },
+          {
+            "action_type": "post_reaction",
+            "value": "2"
+          },
+          {
+            "action_type": "onsite_conversion.total_messaging_connection",
+            "value": "1"
+          },
+          {
+            "action_type": "post_engagement",
+            "value": "14"
+          },
+          {
+            "action_type": "post_interaction_gross",
+            "value": "2"
+          },
+          {
+            "action_type": "page_engagement",
+            "value": "14"
+          },
+          {
+            "action_type": "post_interaction_net",
+            "value": "2"
+          },
+          {
+            "action_type": "onsite_conversion.messaging_user_depth_2_message_send",
+            "value": "1"
+          },
+          {
+            "action_type": "onsite_conversion.messaging_first_reply",
+            "value": "1"
+          },
+          {
+            "action_type": "onsite_conversion.post_net_like",
+            "value": "2"
+          },
+          {
+            "action_type": "onsite_conversion.messaging_conversation_started_7d",
+            "value": "1"
+          }
+        ],
+        "date_start": "2026-10-23",
+        "date_stop": "2026-10-24"
+      }
+    ]
+  }
+}

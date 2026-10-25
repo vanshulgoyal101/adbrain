@@ -144,4 +144,12 @@ describe("provisionManagedAccount (#521)", () => {
     expect(await run(db.store, retry.graph)).toMatchObject({ ok: true, state: "ad_account_created" });
     expect(retry.calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual(["act_8000000000001/assigned_users"]);
   });
+
+  it("refuses, and creates nothing, when a child unexpectedly has several ad accounts (QA #527 T3)", async () => {
+    const db = ledger({ business_id: business, state: "failed", page_id: "111", child_business_id: "7000000000001" });
+    const { graph, calls } = meta({ accounts: [{ id: "act_1", name: "a" }, { id: "act_2", name: "b" }] });
+    expect(await run(db.store, graph)).toEqual({ ok: false, code: "AD_ACCOUNT_AMBIGUOUS", retryable: false });
+    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+    expect(db.row()).toMatchObject({ state: "failed", last_error: "AD_ACCOUNT_AMBIGUOUS", ad_account_id: null });
+  });
 });

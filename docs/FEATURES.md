@@ -257,6 +257,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - The WhatsApp creation adapter uses `OUTCOME_ENGAGEMENT`, `CONVERSATIONS`, `WHATSAPP`,
   a recipient-bound promoted object and `wa.me` creative link. Campaigns, ad sets,
   and ads are created PAUSED; activation remains a separate confirmation.
+- A WhatsApp campaign's results say how many opened WhatsApp and how many messaged
+  ("12 opened WhatsApp, 1 messaged you": Meta `link_click` vs
+  `messaging_conversation_started_7d`, #493).
 - **WhatsApp ready?** (#493): on Campaigns, when setting up or running a WhatsApp
   campaign, a checklist for the owner's WhatsApp Business app: profile photo and
   name, greeting message, away message, reply within 5 minutes. AdBrain can't read

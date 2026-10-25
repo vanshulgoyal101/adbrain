@@ -22,12 +22,20 @@ export function reviewVerdicts(reviews) {
     .map((r) => ({ body: r.body, createdAt: r.submitted_at, url: r.html_url }));
 }
 
-export function qaApproval(comments, headSha) {
+/** A verdict's first sentence: later sentences ("…isn't blocked", "please merge") don't veto it (#554). */
+export const verdictSentence = (body) => body.split("\n")[0].split(/(?<=[.!?](?:\*\*)?)\s+(?=[A-Z`#(→])/)[0];
+
+// A verdict naming an earlier head with the same patch against the base also counts, so a clean
+// merge of the base into the PR needs no re-approval; migration hashes are still checked.
+/** @param {(sha: string) => boolean} [samePatch] */
+export function qaApproval(comments, headSha, samePatch = (_sha) => false) {
   const head = headSha.slice(0, 7).toLowerCase();
+  const namesHead = (c) => c.body.toLowerCase().includes(head)
+    || (verdictSentence(c.body).toLowerCase().match(/\b[0-9a-f]{7,40}\b/g) ?? []).some((sha) => samePatch(sha));
   const verdicts = comments
-    .filter((c) => /^[*_\s]*QA\b/.test(c.body) && c.body.toLowerCase().includes(head))
+    .filter((c) => /^[*_\s]*QA\b/.test(c.body) && namesHead(c))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const firstLine = (c) => c.body.split("\n")[0];
+  const firstLine = (c) => verdictSentence(c.body);
   const approves = (c) => /(?<![-\w])(re-)?(approved|accepted|fine to (merge|ship))\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
   const latest = verdicts.at(-1);
   if (!latest || !approves(latest)) return { approved: false, latest };
@@ -51,7 +59,8 @@ export function ctoReviews(comments) {
     const line = c.body.split("\n")[0];
     const sha = line.match(/^[*_\s]*CTO (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
     if (!sha) return [];
-    const approved = /\*\*approved\.?\*\*/i.test(line) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(line);
+    const verdict = verdictSentence(c.body);
+    const approved = /\*\*approved\.?\*\*/i.test(verdict) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(verdict);
     return [{ ...c, sha: sha.toLowerCase(), approved }];
   }).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -153,7 +162,7 @@ async function main() {
   if (pr.state !== "OPEN") stop(`PR #${pr.number} is ${pr.state}.`);
 
   step(`Preflight PR #${pr.number} at ${head.slice(0, 7)} (read-only)`);
-  if (pr.mergeStateStatus === "DIRTY") stop(`PR #${pr.number} conflicts with ${base}, so CI has not run on ${head.slice(0, 7)}. The author merges ${base}; then QA approves the new head.`);
+  if (pr.mergeStateStatus === "DIRTY") stop(`PR #${pr.number} conflicts with ${base}, so CI has not run on ${head.slice(0, 7)}. The author merges ${base}; a clean merge keeps QA's and the CTO's approvals (same patch).`);
   const required = lines(gh("api", `repos/${repo}/branches/main/protection/required_status_checks`, "--jq", ".contexts[]"));
   const checks = lines(gh("api", "--paginate", `repos/${repo}/commits/${head}/check-runs`, "--jq", ".check_runs[]|[.name,.status,.conclusion,.completed_at]|@tsv")).map((l) => {
     const [name, status, conclusion, completedAt] = l.split("\t");
@@ -168,25 +177,25 @@ async function main() {
     ...threads.flatMap((n) => ghJson("api", "--paginate", `repos/${repo}/issues/${n}/comments?per_page=100`, "--jq", "[.[]|{body,createdAt:.created_at,url:.html_url}]")),
     ...reviewVerdicts(ghJson("api", "--paginate", `repos/${repo}/pulls/${pr.number}/reviews?per_page=100`, "--jq", "[.[]|{body,state,submitted_at,html_url}]")),
   ];
-  const qa = qaApproval(comments, head);
+  const patchIds = new Map();
+  const patchId = (sha) => {
+    if (!patchIds.has(sha)) {
+      try {
+        const diff = gh("api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/${base}...${sha}`);
+        patchIds.set(sha, execFileSync("git", ["patch-id", "--stable"], { input: `${diff}\n`, encoding: "utf8" }).split(" ")[0] || null);
+      } catch {
+        patchIds.set(sha, null);
+      }
+    }
+    return patchIds.get(sha);
+  };
+  const samePatch = (sha) => head.startsWith(sha) || (patchId(sha) !== null && patchId(sha) === patchId(head));
+  const qa = qaApproval(comments, head, samePatch);
   if (qa.approved) console.log(`    QA approved ${head.slice(0, 7)}: ${qa.latest.url}`);
   else if (dry) console.log(`    QA has not approved ${head.slice(0, 7)} yet (latest QA verdict: ${qa.latest?.url ?? "none"}); continuing because --dry-run.`);
-  else stop(`No QA approval naming ${head.slice(0, 7)} (latest QA verdict: ${qa.latest?.url ?? "none"}). QA must approve this exact head.`);
+  else stop(`No QA approval naming ${head.slice(0, 7)} or a head with the same patch (latest QA verdict: ${qa.latest?.url ?? "none"}). QA must approve this head.`);
 
   if (names.length || files.some((f) => moneyPath.test(f.filename))) {
-    const patchIds = new Map();
-    const patchId = (sha) => {
-      if (!patchIds.has(sha)) {
-        try {
-          const diff = gh("api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/${base}...${sha}`);
-          patchIds.set(sha, execFileSync("git", ["patch-id", "--stable"], { input: `${diff}\n`, encoding: "utf8" }).split(" ")[0] || null);
-        } catch {
-          patchIds.set(sha, null);
-        }
-      }
-      return patchIds.get(sha);
-    };
-    const samePatch = (sha) => head.startsWith(sha) || (patchId(sha) !== null && patchId(sha) === patchId(head));
     const cto = ctoApproval(ctoReviews(comments), samePatch);
     const reviewed = cto.latest && !head.startsWith(cto.latest.sha) ? ` (reviewed ${cto.latest.sha}, same patch against main)` : "";
     if (cto.approved) console.log(`    CTO approved ${head.slice(0, 7)}${reviewed}: ${cto.latest.url}`);

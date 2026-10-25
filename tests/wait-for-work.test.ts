@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { boardRow, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -115,5 +115,15 @@ describe("wait-for-work handoffs", () => {
     expect(waitingOnMe("CTO: → Dev 2: yours now.", dev)).toBe(false);
     expect(waitingOnMe("CTO: → DevOps: clear the claim.", dev)).toBe(false);
     expect(waitingOnMe("CTO: → Dev: yours, queue #1.", dev)).toBe(true);
+  });
+});
+
+describe("team board row", () => {
+  const board = "## Worker queues (in order)\n\n| Worker | Work, in order |\n| --- | --- |\n| Everyone | When idle: wait. |\n| Dev | 1. #522. 2. #525. |\n| Dev 2 | 1. [#521](https://x/521) provisioning. |\n";
+  it("returns the worker's own row, not a prefix match, plus the Everyone row", () => {
+    expect(boardRow(board, "dev")).toBe("Everyone: When idle: wait.\nDev: 1. #522. 2. #525.");
+    expect(boardRow(board, "dev2")).toBe("Everyone: When idle: wait.\nDev 2: 1. [#521](https://x/521) provisioning.");
+    expect(boardRow(board, "qa")).toBe("Everyone: When idle: wait.");
+    expect(boardRow("no table", "dev")).toBeNull();
   });
 });

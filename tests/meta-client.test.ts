@@ -75,7 +75,7 @@ describe("MetaClient Page-token lookup", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ access_token: "page-token" }))
       .mockResolvedValueOnce(Response.json(page));
-    expect(await new MetaClient(creds).getWhatsAppNumber()).toBe(expected);
+    expect(await new MetaClient(creds).getWhatsAppNumber(null)).toBe(expected);
     expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 

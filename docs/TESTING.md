@@ -111,6 +111,9 @@ All automated production browser runs from the shared Mac come from one IP addre
   "no-cost first step (free site survey)" and "not a guaranteed saving" are no longer claims.
   The Hinglish factory ad saves 3/3 on the first try (#418): the Brand's own "SOLARIDE", "IIT/PEC"
   and a first line leading with "10,000 rupaye per kW" no longer fail `all-caps` or `offer-below-fold`.
+  A Hindi concept that writes "फ्री साइट सर्वे" without quoting the Brand or naming it in English is
+  cited with the Brand's "Free site survey" (#378, seen in the #418 $0 eval): Hindi and Punjabi offer
+  loanwords (साइट, सर्वे, विज़िट, …) match their English fact words from an exact list.
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
