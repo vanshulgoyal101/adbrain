@@ -5,12 +5,19 @@ import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({
   enabled: true,
   user: { id: "u1" } as { id: string } | null,
-  attempts: {} as Record<string, { business_id: string; discovered_assets: unknown; user: string }>,
+  attempts: {} as Record<string, { business_id: string; discovered_assets: unknown; user: string; expires_at: string }>,
+  owners: {} as Record<string, string>,
   row: null as Record<string, unknown> | null,
   inserts: [] as { table: string; values: unknown }[],
 }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ MANAGED_ACCOUNTS_ENABLED: state.enabled }) }));
 vi.mock("@/lib/meta/pilot-access", () => ({ canUseMetaConnect: () => true }));
+vi.mock("@/lib/meta/connection-access", () => ({
+  requireOwnedBusiness: async (businessId: string) => {
+    if (state.owners[businessId] !== state.user?.id) throw Object.assign(new Error("Business access is not allowed."), { code: "FORBIDDEN" });
+    return { businessId, userId: state.user!.id };
+  },
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: state.user } }) } }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -41,10 +48,12 @@ beforeEach(() => {
   state.user = { id: "u1" };
   state.row = null;
   state.inserts = [];
+  const later = new Date(Date.now() + 600_000).toISOString();
   state.attempts = {
-    [attemptId]: { business_id: "b1", discovered_assets: snapshot, user: "u1" },
-    [otherAttempt]: { business_id: "b2", discovered_assets: snapshot, user: "u2" },
+    [attemptId]: { business_id: "b1", discovered_assets: snapshot, user: "u1", expires_at: later },
+    [otherAttempt]: { business_id: "b2", discovered_assets: snapshot, user: "u2", expires_at: later },
   };
+  state.owners = { b1: "u1", b2: "u2" };
 });
 
 describe("/api/meta/managed/page (#523)", () => {
@@ -68,6 +77,21 @@ describe("/api/meta/managed/page (#523)", () => {
     expect((await POST(post({ attemptId: otherAttempt, pageId: "111" }))).status).toBe(404);
     state.user = null;
     expect((await GET(get(attemptId))).status).toBe(401);
+    expect(state.inserts).toEqual([]);
+  });
+
+  // QA (#537): an old attempt's Page rights may have been removed since, and businesses change hands.
+  it("refuses an expired attempt, and an attempt for a business the caller no longer owns", async () => {
+    const { GET, POST } = await import("@/app/api/meta/managed/page/route");
+    state.attempts[attemptId].expires_at = new Date(Date.now() - 1000).toISOString();
+    const expired = await POST(post({ attemptId, pageId: "111" }));
+    expect(expired.status).toBe(410);
+    expect((await expired.json()).error.code).toBe("ATTEMPT_EXPIRED");
+    expect((await GET(get(attemptId))).status).toBe(410);
+    state.attempts[attemptId].expires_at = new Date(Date.now() + 600_000).toISOString();
+    state.owners.b1 = "someone-else";
+    expect((await POST(post({ attemptId, pageId: "111" }))).status).toBe(404);
+    expect((await GET(get(attemptId))).status).toBe(404);
     expect(state.inserts).toEqual([]);
   });
 
