@@ -49,7 +49,7 @@ export interface TokenUsage {
 }
 
 /** Sanitized class of a failed provider attempt; never contains provider text. */
-export type LLMFailureCode = "TIMEOUT" | "DEADLINE" | "ABORTED" | "TRUNCATED" | "EMPTY" | "TRANSPORT" | "UNKNOWN" | `HTTP_${number}`;
+export type LLMFailureCode = "TIMEOUT" | "DEADLINE" | "ABORTED" | "TRUNCATED" | "EMPTY" | "TRANSPORT" | "UNKNOWN" | "CREDIT_EXHAUSTED" | `HTTP_${number}`;
 
 export interface ProviderAttempt {
   provider: string;
@@ -131,7 +131,7 @@ export class LLMError extends Error {
   }
 }
 
-export type ProviderFailureReason = "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "TIMEOUT" | "TRUNCATED" | "UNKNOWN" | "MIXED" | "COOLDOWN";
+export type ProviderFailureReason = "CREDIT_EXHAUSTED" | "RATE_LIMIT" | "PROVIDER_SERVER" | "PROVIDER_CLIENT" | "TRANSPORT" | "TIMEOUT" | "TRUNCATED" | "UNKNOWN" | "MIXED" | "COOLDOWN";
 
 export class AllLLMProvidersFailedError extends Error {
   constructor(readonly reason: ProviderFailureReason, providerCount: number) {

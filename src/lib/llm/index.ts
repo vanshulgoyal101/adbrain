@@ -38,6 +38,9 @@ const COOLDOWN_MS = 60_000;
 // beats falling through to a model that needs 60-90s.
 const RATE_LIMIT_WAIT_MS = 20_000;
 const cooldownUntil = new Map<string, number>();
+// #449: a key out of credit stays parked long enough not to slow every Create; the free models answer meanwhile.
+const CREDIT_COOLDOWN_MS = 15 * 60_000;
+const FREE_PROVIDERS = ["google", "groq"];
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
@@ -128,7 +131,8 @@ export async function complete(
   const result = await withCache(
     cacheKey(messages, options),
     options.cache,
-    () => callProviders(messages, options, registry),
+    () => callProviders(messages, options, registry,
+      buildRegistry("standard").filter(({ provider }) => FREE_PROVIDERS.includes(provider.name) && !registry.some((entry) => entry.provider.name === provider.name))),
   );
   const enriched = {
     ...result,
@@ -145,9 +149,12 @@ async function callProviders(
   messages: ChatMessage[],
   options: CompletionOptions,
   registry: RegisteredProvider[],
+  /** Free models tried only after a key ran out of credit (#449). */
+  creditFallback: RegisteredProvider[] = [],
 ): Promise<CompletionResult> {
   const failures: ProviderFailureReason[] = [];
   let terminal: LLMError | undefined;
+  let creditExhausted = false;
 
   for (const { provider, keys, model } of registry) {
     for (let round = 0; round < 2; round++) {
@@ -181,6 +188,12 @@ async function callProviders(
             recordUsage({ text: "", provider: provider.name, model, usage: err.usage });
           }
           options.signal?.throwIfAborted();
+          if (failure === "CREDIT_EXHAUSTED") {
+            creditExhausted = true;
+            cooldownUntil.set(coolKey, Date.now() + CREDIT_COOLDOWN_MS);
+            failures.push("CREDIT_EXHAUSTED");
+            continue;
+          }
           failures.push(failure === "TIMEOUT" ? "TIMEOUT" : failure === "TRUNCATED" ? "TRUNCATED"
             : err instanceof LLMError ? err.status === 429 ? "RATE_LIMIT"
               : err.status && err.status >= 500 ? "PROVIDER_SERVER"
@@ -209,6 +222,10 @@ async function callProviders(
     }
   }
 
+  // Out of credit (or parked for it): answer with a free model rather than fail (#449).
+  const parked = registry.some(({ provider, keys }) => provider.name === "openrouter"
+    && keys.every((_, idx) => (cooldownUntil.get(`${provider.name}:${idx}`) ?? 0) > Date.now()));
+  if ((creditExhausted || parked) && creditFallback.length) return callProviders(messages, options, creditFallback);
   if (terminal && failures.length === 1) throw terminal;
   throw new AllLLMProvidersFailedError(failures.length === 0 ? "COOLDOWN"
     : failures.every((reason) => reason === failures[0]) ? failures[0] : "MIXED", registry.length);

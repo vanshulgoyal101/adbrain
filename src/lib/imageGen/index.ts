@@ -81,7 +81,7 @@ async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): P
 export function imageFailureCode(error: unknown): string {
   if (error instanceof FreeImageBusyError) return "IMAGE_FREE_BUSY";
   if (error instanceof SafeFetchError) return error.code === "status" ? `IMAGE_HTTP_${error.status ?? "unknown"}` : `IMAGE_FETCH_${error.code.toUpperCase()}`;
-  if (error instanceof ImageProviderError) return "IMAGE_PROVIDER";
+  if (error instanceof ImageProviderError) return error.creditExhausted ? "IMAGE_CREDIT_EXHAUSTED" : "IMAGE_PROVIDER";
   if (error instanceof Error && error.name === "TimeoutError") return "IMAGE_TIMEOUT";
   if (error instanceof Error && error.name === "AbortError") return "IMAGE_ABORTED";
   // validateRaster and readBoundedResponse: the body was not a usable picture.
@@ -114,9 +114,12 @@ export async function generateImage(
       providerFinalStatus: error instanceof ImageProviderError ? error.providerFinalStatus : "unknown" });
     req.signal?.throwIfAborted();
     if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) throw error;
-    const fallback = getFallbackProvider();
+    // #449: out of credit means free pictures, even with no fallback configured (no product references there).
+    const credit = error instanceof ImageProviderError && error.creditExhausted;
+    const fallback = getFallbackProvider() ?? (credit ? getProvider("pollinations") : null);
     if (!fallback || fallback.name === provider.name) throw error;
-    const generated = await executeImage(fallback, req).catch((fallbackError: unknown) => {
+    const fallbackReq = fallback.name === "pollinations" ? { ...req, referenceImages: undefined } : req;
+    const generated = await executeImage(fallback, fallbackReq).catch((fallbackError: unknown) => {
       req.onAttempt?.({ provider: fallback.name, model: fallback.name, status: "error", errorCode: imageFailureCode(fallbackError),
         providerRequestId: fallbackError instanceof ImageProviderError ? fallbackError.providerRequestId : undefined,
         providerFinalStatus: fallbackError instanceof ImageProviderError ? fallbackError.providerFinalStatus : "unknown" });

@@ -1,4 +1,5 @@
 import { observeRoute, recordProductEvent, currentRequestId } from "@/lib/observability/logger";
+import { creativeFailureMessage } from "@/lib/creative/failure-message";
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { logEvent } from "@/lib/audit";
@@ -341,7 +342,7 @@ async function generate(req: Request, live?: LiveCreate) {
         await progress(recorded ? events.reduce((total, event) => total + event.usage.totalTokens, 0) : 0, false, unknown);
         failures.push({
           angle: angle.name,
-          error: "This creative could not be generated or saved. Check saved results before trying again.",
+          error: creativeFailureMessage(error),
         });
       },
     });
