@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { Download, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirm, confirmDialog] = useConfirm();
   const [notice, setNotice] = useState("");
   const serverLoaded = initialState !== null;
 
@@ -69,6 +71,7 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
   }
 
   return <section aria-labelledby="preferences-heading" className="space-y-4 border-t border-slate-200 pt-6">
+      {confirmDialog}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 id="preferences-heading" className="text-lg font-semibold text-slate-900">Remembered preferences</h2>
@@ -110,7 +113,8 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
           <Download className="h-4 w-4" /> Export preferences
         </button>
         <button type="button" disabled={busy} onClick={() => {
-          if (window.confirm("Forget all remembered preferences for this business?")) change("clear");
+          void confirm({ title: "Forget all preferences?", description: "AdBrain forgets everything it has learned about what this business likes and avoids.", confirmLabel: "Forget preferences", tone: "danger" })
+            .then((confirmed) => { if (confirmed) change("clear"); });
         }} className="text-red-700 underline">Forget all preferences</button>
       </div>}
     </>}

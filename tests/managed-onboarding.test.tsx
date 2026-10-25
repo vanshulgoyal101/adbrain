@@ -12,7 +12,7 @@ const row = (patch: Partial<ManagedAccountProgressRow>): ManagedAccountProgressR
 
 describe("<ManagedOnboarding> (#526)", () => {
   it("opens only the owner's current step and shows AdBrain's background work", () => {
-    render(<ManagedOnboarding progress={onboardingProgress(row({ state: "page_linked", funding_state: "card_attached", page_id: "1" }))} steps={steps} />);
+    render(<ManagedOnboarding progress={onboardingProgress(row({ state: "page_linked", funding_state: "card_attached", page_id: "1" }), { paid: true })} steps={steps} />);
     const yours = screen.getByRole("list", { name: "Your steps" });
     expect(within(yours).getAllByRole("listitem").map((item) => item.getAttribute("aria-current"))).toEqual([null, null, "step"]);
     expect(screen.getByRole("button", { name: "Link WhatsApp" })).toBeInTheDocument();
@@ -23,13 +23,13 @@ describe("<ManagedOnboarding> (#526)", () => {
   });
 
   it("says what stopped, in plain words, with Meta's code for support", () => {
-    render(<ManagedOnboarding progress={onboardingProgress(row({ state: "failed", funding_state: "card_attached", page_id: "1", child_business_id: "2", last_error: "meta.100.2446" }))} steps={steps} />);
+    render(<ManagedOnboarding progress={onboardingProgress(row({ state: "failed", funding_state: "card_attached", page_id: "1", child_business_id: "2", last_error: "meta.100.2446" }), { paid: true })} steps={steps} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Meta didn't create your ad account");
     expect(screen.getByRole("alert")).toHaveTextContent("meta.100.2446");
   });
 
   it("ends at 'Ready to advertise' with one next action", () => {
-    render(<ManagedOnboarding progress={onboardingProgress(row({ state: "ready", funding_state: "card_attached", page_id: "1", child_business_id: "2", ad_account_id: "act_3", waba_id: "4", phone_number_id: "5" }))} steps={steps} />);
+    render(<ManagedOnboarding progress={onboardingProgress(row({ state: "ready", funding_state: "card_attached", page_id: "1", child_business_id: "2", ad_account_id: "act_3", waba_id: "4", phone_number_id: "5" }), { paid: true })} steps={steps} />);
     expect(screen.getByRole("heading", { name: "Ready to advertise" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create ads" })).toHaveAttribute("href", "/create");
   });

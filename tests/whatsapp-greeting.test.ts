@@ -17,27 +17,27 @@ const run21Offer = [
 describe("whatsappGreeting (#209, #493)", () => {
   it("asks for one offer in the ad's language, a free offer first, naming the city when there is one", () => {
     expect(whatsappGreeting(solaride, run21Offer, ["Mohali"])).toEqual({
-      autofill: "Hi, I'm interested in the free site survey in Mohali.",
+      autofill: "Hi! I'd like a free site survey in Mohali.",
       greeting: "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.",
     });
   });
 
   it("leaves the city out when the campaign covers several, so nobody is sent the wrong one", () => {
     expect(whatsappGreeting(solaride, run21Offer, ["Chandigarh", "Panchkula", "Mohali"]).autofill)
-      .toBe("Hi, I'm interested in the free site survey.");
-    expect(whatsappGreeting(solaride, run21Offer).autofill).toBe("Hi, I'm interested in the free site survey.");
+      .toBe("Hi! I'd like a free site survey.");
+    expect(whatsappGreeting(solaride, run21Offer).autofill).toBe("Hi! I'd like a free site survey.");
   });
 
   it("uses the offer after its label and keeps names capitalised", () => {
     expect(whatsappGreeting({ name: "Acme", offers: ["Diwali offer: 10% off", "EMI"] }, ["Easy EMI and 10% off."], ["Jaipur"]).autofill)
-      .toBe("Hi, I'm interested in the 10% off in Jaipur.");
+      .toBe("Hi! I'd like the 10% off in Jaipur.");
     expect(whatsappGreeting({ name: "Acme", offers: ["PM Surya Ghar subsidy help"] }, ["PM Surya Ghar subsidy help from Acme"]).autofill)
-      .toBe("Hi, I'm interested in the PM Surya Ghar subsidy help.");
+      .toBe("Hi! I'd like the PM Surya Ghar subsidy help.");
   });
 
   it("names only the business when the ads cite no Brand offer", () => {
-    expect(whatsappGreeting(solaride, ["Clean energy for your home."]).autofill).toBe("Hi, I'd like to know more about Solaride.");
-    expect(whatsappGreeting({ name: "Acme", offers: null }, [], ["Jaipur"]).autofill).toBe("Hi, I'd like to know more about Acme in Jaipur.");
+    expect(whatsappGreeting(solaride, ["Clean energy for your home."]).autofill).toBe("Hi! I'd like to know more about Solaride.");
+    expect(whatsappGreeting({ name: "Acme", offers: null }, [], ["Jaipur"]).autofill).toBe("Hi! I'd like to know more about Acme in Jaipur.");
   });
 
   it("writes Hindi for a Devanagari ad and Punjabi for a Gurmukhi ad", () => {
@@ -54,14 +54,14 @@ describe("whatsappGreeting (#209, #493)", () => {
       autofill: "Namaste, mujhe Mohali mein Free site survey ke baare mein jaankari chahiye.",
       greeting: "Namaste! Solaride ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.",
     });
-    expect(whatsappGreeting(solaride, hinglish, [], ["English"]).autofill).toBe("Hi, I'm interested in the Free site survey.");
-    expect(whatsappGreeting(solaride, ["छत पर सोलर"], [], ["English"]).autofill).toBe("Hi, I'd like to know more about Solaride.");
+    expect(whatsappGreeting(solaride, hinglish, [], ["English"]).autofill).toBe("Hi! I'd like a Free site survey.");
+    expect(whatsappGreeting(solaride, ["छत पर सोलर"], [], ["English"]).autofill).toBe("Hi! I'd like to know more about Solaride.");
   });
 
   it("matches offers as whole words and ignores an empty label (QA, PR #218)", () => {
     const brand = { name: "Acme", offers: ["EMI", "Diwali offer:", ":"] };
-    expect(whatsappGreeting(brand, ["Premium panels."]).autofill).toBe("Hi, I'd like to know more about Acme.");
-    expect(whatsappGreeting(brand, ["Premium panels with a Diwali offer."]).autofill).toBe("Hi, I'm interested in the Diwali offer.");
+    expect(whatsappGreeting(brand, ["Premium panels."]).autofill).toBe("Hi! I'd like to know more about Acme.");
+    expect(whatsappGreeting(brand, ["Premium panels with a Diwali offer."]).autofill).toBe("Hi! I'd like the Diwali offer.");
   });
 
   it("stays within Meta's 300 characters", () => {
@@ -69,5 +69,12 @@ describe("whatsappGreeting (#209, #493)", () => {
     const result = whatsappGreeting({ name: long, offers: [] }, []);
     expect(result.autofill.length).toBeLessThanOrEqual(300);
     expect(result.greeting.length).toBeLessThanOrEqual(300);
+  });
+
+  // #493 (owner, Oct 25): the language is a per-campaign choice; default is the ad's own.
+  it("uses the campaign's chosen language over the ad's", () => {
+    expect(whatsappGreeting(solaride, ["घर की छत पर सोलर, Free site survey के साथ"], ["Mohali"], [], "en").autofill).toBe("Hi! I'd like a Free site survey in Mohali.");
+    expect(whatsappGreeting(solaride, run21Offer, [], ["English"], "hinglish").autofill).toBe("Namaste, mujhe free site survey ke baare mein jaankari chahiye.");
+    expect(whatsappGreeting(solaride, run21Offer, [], [], "ad").autofill).toBe("Hi! I'd like a free site survey.");
   });
 });

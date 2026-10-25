@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Link2, RefreshCw } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -24,10 +25,11 @@ export function MetaConnectionPanel({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   async function disconnect() {
     if (!businessId || disconnecting) return;
-    if (!window.confirm("Disconnect this Meta business? This does not pause ads already running in Meta.")) return;
+    if (!(await confirm({ title: "Disconnect this Meta business?", description: "This doesn't pause ads already running in Meta.", confirmLabel: "Disconnect", tone: "danger" }))) return;
     setDisconnecting(true);
     setDisconnectError(null);
     try {
@@ -50,6 +52,7 @@ export function MetaConnectionPanel({
 
   return (
     <Card>
+      {confirmDialog}
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Link2 className="h-5 w-5 text-blue-600" aria-hidden="true" />

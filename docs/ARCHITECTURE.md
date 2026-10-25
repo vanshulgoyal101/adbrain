@@ -87,7 +87,8 @@ current patterns with older framework recipes without checking them.
   (`META_PARENT_SYSTEM_TOKEN`), through the same generation, binding and capability checks;
   it never falls back to an OAuth connection. Reads, pause and delete work whenever the ad account
   and Page exist (any state, so spend can always be stopped); paused creation needs `state =
-  ready`, and activation also needs `funding_state` `card_attached` or `invoiced`. The ledger's ad
+  ready`, and activation also needs `funding_state` `card_attached` or `invoiced` and a current
+  Meta spending limit with room on the child account (`managedSpendCapGate`, #522). The ledger's ad
   account can't change once set, so its generation is 1 unless the ledger adds one; a Page change
   is caught by campaign bindings. A contract test pins these columns and values to #519's
   migration. Businesses without a managed row stay on their OAuth connection

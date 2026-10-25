@@ -64,6 +64,7 @@ export type ReviewFreshnessResult =
     };
 
 export interface CanonicalReviewPayload {
+  whatsappLanguage?: "en" | "hi" | "hinglish" | "pa";
   resolvedLocation?: ReviewDTO["resolvedLocation"];
   resolvedExcludedLocation?: ReviewDTO["resolvedExcludedLocation"];
   businessId: string;
@@ -129,6 +130,9 @@ export function buildCanonicalReviewPayload(
     leadFormId: input.draft.destination === "whatsapp" ? null : input.draft.leadFormId,
     destination: input.draft.destination ?? "instant_form",
     whatsappNumber: input.draft.destination === "whatsapp" ? input.whatsappNumber ?? null : null,
+    // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
+    ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
+      ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
     targeting: input.draft.targeting,

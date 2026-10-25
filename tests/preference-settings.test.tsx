@@ -4,6 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyOperatorQueue, PrivacyRequests } from "@/components/privacy-requests";
+// #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
+vi.mock("@/components/ui/confirm-dialog", () => ({
+  useConfirm: () => [async (options: { title: string; description?: string }) => window.confirm([options.title, options.description].filter(Boolean).join(" ")), null],
+}));
 
 const businessId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const saved = { enabled: true, epoch: 2, notes: [

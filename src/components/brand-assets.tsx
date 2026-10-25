@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import { Trash2, Upload } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
@@ -49,6 +50,7 @@ export function BrandAssets({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function onUpload(e: React.FormEvent) {
@@ -125,7 +127,7 @@ export function BrandAssets({
 
   async function remove(asset: BrandAsset) {
     if (uploading || deleting) return;
-    if (!window.confirm("Delete this asset?")) return;
+    if (!(await confirm({ title: "Delete this asset?", confirmLabel: "Delete asset", tone: "danger" }))) return;
     setError(null);
     setDeleting(true);
     try {
@@ -164,6 +166,7 @@ export function BrandAssets({
 
   return (
     <Card>
+      {confirmDialog}
       <CardHeader>
         <CardTitle>Brand assets</CardTitle>
       </CardHeader>

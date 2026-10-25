@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   readCampaignStopped: vi.fn(),
   settleCustomerCosts: vi.fn(),
   listSettlingBusinesses: vi.fn(),
+  sweepManaged: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -42,6 +43,7 @@ vi.mock("@/lib/payments/customer-balance", () => ({
   listSettlingBusinesses: mocks.listSettlingBusinesses,
 }));
 vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
+vi.mock("@/lib/managed/spend-cap-wiring", () => ({ sweepManagedSpendCaps: mocks.sweepManaged }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
   requireScheduledBusiness: mocks.requireScheduledBusiness,
@@ -98,6 +100,8 @@ beforeEach(() => {
   mocks.readCampaignStopped.mockResolvedValue(true);
   mocks.settleCustomerCosts.mockResolvedValue({ finalized: false });
   mocks.listSettlingBusinesses.mockResolvedValue([]);
+  mocks.sweepManaged.mockResolvedValue({ incomplete: false, results: [] });
+  vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "false");
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
   }).formatToParts(new Date());
@@ -123,6 +127,48 @@ beforeEach(() => {
   );
   mocks.updateCampaignStatus.mockResolvedValue(undefined);
   configureAdmin([boundCampaign]);
+});
+
+describe("managed child account spending limits on the sweep (#522, QA #560)", () => {
+  const sweep = async () => {
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const auth = { authorization: `Bearer ${"cron-secret"}` };
+    return GET(new Request("http://localhost/api/cron/enforce-spend", { headers: auth }));
+  };
+  beforeEach(() => {
+    configureAdmin([]);
+    vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
+    mocks.requireScheduledBusiness.mockImplementation(async (businessId: string) => ({ businessId, userId: `owner-${businessId}` }));
+  });
+
+  it("hands managed limits to the budgeted sweep, inside this run's 60 s, with the verified scheduler context", async () => {
+    const results = [{ businessId: "managed-1", status: "applied" }];
+    mocks.sweepManaged.mockImplementation(async (options: { deadline: number; context(id: string): Promise<unknown> }) => {
+      expect(await options.context("managed-1")).toEqual({ businessId: "managed-1", userId: "owner-managed-1" });
+      return { incomplete: false, results };
+    });
+    const started = Date.now();
+    const response = await sweep();
+    expect(response.status).toBe(200);
+    expect((await response.json()).managedSpendCaps).toEqual(results);
+    const { deadline } = mocks.sweepManaged.mock.calls[0][0];
+    expect(deadline).toBeGreaterThan(started);
+    expect(deadline).toBeLessThanOrEqual(started + 50_000);
+    expect(mocks.requireScheduledBusiness).toHaveBeenCalledWith("managed-1", expect.any(Request));
+  });
+
+  it("reports the run incomplete when the sweep deferred, failed or couldn't list accounts", async () => {
+    mocks.sweepManaged.mockResolvedValueOnce({ incomplete: true, results: [{ businessId: "managed-1", status: "deferred" }] });
+    expect((await sweep()).status).toBe(503);
+    mocks.sweepManaged.mockRejectedValueOnce(new Error("ledger down"));
+    expect((await sweep()).status).toBe(503);
+  });
+
+  it("never sweeps managed accounts with the flag off", async () => {
+    vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "false");
+    expect((await sweep()).status).toBe(200);
+    expect(mocks.sweepManaged).not.toHaveBeenCalled();
+  });
 });
 
 describe("scheduled spend binding boundary", () => {

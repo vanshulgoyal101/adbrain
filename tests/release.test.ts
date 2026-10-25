@@ -30,6 +30,18 @@ describe("QA approval", () => {
     expect(qaApproval([comment("QA: please approve c30aaba soon", "2026-10-23T12:56:00Z")], head).approved).toBe(false);
   });
 
+  it("carries a QA approval of an earlier head with the same patch, not of a different one", () => {
+    const same = (sha: string) => sha === "16dcfca";
+    const approvedEarlier = [comment("QA approved 16dcfca. Migration sha256 `40de9dc8`.", "2026-10-23T12:30:00Z")];
+    const carried = qaApproval(approvedEarlier, head, same);
+    expect(carried.approved).toBe(true);
+    expect(carried.text).toContain("40de9dc8");
+    expect(qaApproval(approvedEarlier, head, () => false).approved).toBe(false);
+    expect(qaApproval([...approvedEarlier, comment("QA: 16dcfca changes requested.", "2026-10-23T13:00:00Z")], head, same).approved).toBe(false);
+    // A sha mentioned after the verdict sentence doesn't make the comment a verdict on it.
+    expect(qaApproval([comment("QA approved 1234567. Earlier 16dcfca failed.", "2026-10-23T12:30:00Z")], head, same).approved).toBe(false);
+  });
+
   it("accepts QA's other approval wordings and refuses their negations", () => {
     const verdict = (body: string) => qaApproval([comment(body, "2026-10-23T15:52:35Z")], head).approved;
     expect(verdict("**QA review of c30aaba (tenant boundary): fine to merge for #157, with one follow-up.**")).toBe(true);
@@ -181,5 +193,14 @@ describe("Management API migration transaction", () => {
       const control = dry.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, "").match(/^\s*(begin|commit|rollback)\s*;/gim);
       expect(control?.map((line) => line.trim()), name).toEqual(["begin;", "rollback;"]);
     }
+  });
+});
+
+describe("Reviewer verdicts (#575)", () => {
+  it("count like the CTO's for money and migration PRs", () => {
+    const r = ctoReviews([{ body: "Reviewer review of c30aaba: **approved**. Migration sha256 40de9dc8.", createdAt: "2026-10-25T11:00:00Z", url: "u" }]);
+    expect(r).toHaveLength(1);
+    expect(ctoApproval(r, (sha: string) => sha === "c30aaba").approved).toBe(true);
+    expect(ctoReviews([{ body: "Dev: Reviewer review of c30aaba: **approved**.", createdAt: "2026-10-25T11:00:00Z", url: "u" }])).toHaveLength(0);
   });
 });

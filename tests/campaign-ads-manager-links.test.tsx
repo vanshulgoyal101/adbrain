@@ -181,6 +181,27 @@ describe("campaign Ads Manager links", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
+  it("saves the WhatsApp message language chosen for the campaign (#493)", async () => {
+    mocks.preflight.mockImplementation(async () => ({
+      draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
+      canCreatePaused: true, blockers: [], planHash: "a".repeat(64), currency: "INR",
+      perAdSetDailyBudgetRupees: 200, totalDailyBudgetRupees: 200, adSetCount: 1,
+      resolvedAreaLabel: "Jaipur", selected, destination: "whatsapp", whatsappNumber: "+919876543210",
+    }));
+    const first = view();
+    fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
+    const language = screen.getByLabelText("Message language");
+    expect(language).toHaveValue("ad");
+    fireEvent.change(language, { target: { value: "en" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    await screen.findByText(/Destination: WhatsApp chat/);
+    expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappLanguage: "en" });
+    first.unmount();
+    view();
+    await waitFor(() => expect(screen.getByLabelText("Message language")).toHaveValue("en"));
+  });
+
   it("saves, restores and submits a reviewed WhatsApp draft without a form", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
