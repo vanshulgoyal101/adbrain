@@ -141,7 +141,7 @@
   },
   {
     "method": "GET",
-    "path": "120253678786150526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "path": "120253678786150526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100&locale=en_US",
     "status": 200,
     "body": {
       "data": [
@@ -240,7 +240,7 @@
   },
   {
     "method": "GET",
-    "path": "120253164673180526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "path": "120253164673180526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100&locale=en_US",
     "status": 200,
     "body": {
       "data": [
