@@ -121,6 +121,17 @@ export function roleCard(markdown, role) {
   return `${NAMES[role]} owns: ${row.owns}. Hand off: ${handsOff}`;
 }
 
+/** Your row (and the Everyone row) from the pinned Team board issue's worker table. */
+export function boardRow(markdown, role) {
+  const rows = new Map();
+  for (const line of markdown.split("\n")) {
+    const m = /^\|\s*([^|]+?)\s*\|(.*)\|\s*$/.exec(line);
+    if (m) rows.set(m[1].replace(/\*/g, "").trim(), m[2].trim());
+  }
+  const out = ["Everyone", NAMES[role]].filter((w) => rows.has(w)).map((w) => `${w}: ${rows.get(w)}`);
+  return out.length ? out.join("\n") : null;
+}
+
 /** Worktrees for your issues with work not yet safe in GitHub. `trees`: [{ path, branch, dirty, ahead }]. */
 export function unsavedWork(trees, ownedNumbers) {
   return trees.filter((t) => (t.dirty > 0 || t.ahead > 0)
@@ -306,8 +317,13 @@ function backlog() {
 // #384: restart-proof start. GitHub and git are the memory: role card, in-flight work, unsaved local work.
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const card = (() => { try { return roleCard(readFileSync(join(repoRoot, "docs/ORCHESTRATION.md"), "utf8"), role); } catch { return null; } })();
+// The live priorities and queues are the pinned Team board issue (#580), edited without a PR.
+const BOARD_ISSUE = 580;
+const board = () => { try { return boardRow(api(`repos/${repo}/issues/${BOARD_ISSUE}`).body ?? "", role); } catch { return null; } };
 const report = (found) => {
   if (card) console.log(`Role: ${card}`);
+  const row = board();
+  if (row) console.log(`Team board #${BOARD_ISSUE} (your queue, in order):\n${row}`);
   console.log(`WORK for ${name} (${found.length}):\n- ${found.join("\n- ")}`);
   process.exit(0);
 };
