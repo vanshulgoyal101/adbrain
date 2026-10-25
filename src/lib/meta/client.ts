@@ -667,13 +667,15 @@ export class MetaClient {
   /**
    * The verified WhatsApp number for click-to-WhatsApp ads: the Page's linked number, or a
    * requested number on a WhatsApp Business Account owned by the ad account's own business
-   * (Meta accepts those for the Page even when the Page fields are empty, #157). A request may
-   * name the number by its mask ("+91 ••••• 4842", #235); it must match exactly one of those.
+   * (Meta accepts those for the Page even when the Page fields are empty, #157) that is also
+   * **bound to this AdBrain business** (#253): businesses can share one Meta business, so being
+   * on its WABAs alone doesn't make a number theirs. A request may name the number by its mask
+   * ("+91 ••••• 4842", #235); it must match exactly one of those.
    */
-  async getWhatsAppNumber(requested?: string | null): Promise<string | null> {
+  async getWhatsAppNumber(requested: string | null | undefined, bound: readonly string[] = []): Promise<string | null> {
     if (requested && maskedWhatsAppNumberPattern.test(requested)) {
       // #366: the Page and the business lookups are independent; together they save ~1 s of Prepare.
-      const [pageNumber, businessNumbers] = await Promise.all([this.pageWhatsAppNumber(), this.businessWhatsAppNumbers()]);
+      const [pageNumber, businessNumbers] = await Promise.all([this.pageWhatsAppNumber(), this.boundBusinessNumbers(bound)]);
       const matches = [...new Set([...(pageNumber ? [pageNumber] : []), ...businessNumbers])]
         .filter((number) => maskWhatsAppNumber(number) === requested);
       return matches.length === 1 ? matches[0] : null;
@@ -681,7 +683,14 @@ export class MetaClient {
     const pageNumber = await this.pageWhatsAppNumber();
     const wanted = requested ? normalizeWhatsAppNumber(requested) : null;
     if (!wanted || wanted === pageNumber) return pageNumber;
-    return (await this.businessWhatsAppNumbers()).includes(wanted) ? wanted : null;
+    return (await this.boundBusinessNumbers(bound)).includes(wanted) ? wanted : null;
+  }
+
+  /** The ad account business's WhatsApp numbers that are bound to this AdBrain business (#253). */
+  private async boundBusinessNumbers(bound: readonly string[]): Promise<string[]> {
+    const mine = new Set(bound.map((number) => normalizeWhatsAppNumber(number)).filter((number): number is string => number !== null));
+    if (mine.size === 0) return [];
+    return (await this.businessWhatsAppNumbers()).filter((number) => mine.has(number));
   }
 
   /** WhatsApp numbers usable for this Page's ads: the Page's own, and those on the ad account business's WABAs (#235). */
@@ -921,6 +930,8 @@ export class MetaClient {
     excludedLocation?: GeoTargeting;
     destination?: AdDestination;
     whatsappNumber?: string;
+    /** Numbers bound to this AdBrain business (#253); a non-Page number must be one of them. */
+    boundWhatsAppNumbers?: readonly string[];
     whatsappGreeting?: { autofill: string; greeting: string };
     phone?: string;
     variants?: AdSetVariant[];
@@ -957,7 +968,7 @@ export class MetaClient {
     if (requested === "instant_form" && !params.leadFormId) throw new MetaError("Choose an active lead form before creating ads.");
     if (requested === "whatsapp") {
       if (!params.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(params.whatsappNumber)) throw new MetaError("Review the Page-linked WhatsApp Business number before creating ads.");
-      if (await this.getWhatsAppNumber(params.whatsappNumber) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
+      if (await this.getWhatsAppNumber(params.whatsappNumber, params.boundWhatsAppNumbers ?? []) !== params.whatsappNumber) throw new MetaError("The Page-linked WhatsApp number changed. Review the campaign again.");
     }
 
     // Call ads need a phone number — fetch the page's if none was passed.

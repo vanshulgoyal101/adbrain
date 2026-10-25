@@ -58,7 +58,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	survive a chat restart. Restart a chat with one line: `You are <Role> on AdBrain. Run
 	node scripts/wait-for-work.mjs --me <role> and continue.` It prints your role card, your
 	in-flight work and any unsaved worktree. After 30 minutes
-	with nothing new it exits: stop there. Never end a turn with anything running in
+	with nothing new it exits: stop there (owner, Oct 25). Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable

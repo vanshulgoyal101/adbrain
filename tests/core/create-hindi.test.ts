@@ -152,6 +152,28 @@ describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
   // #418: the eval saved this goal 1 of 3. The recorded first replies were rejected for "SOLARIDE" (the
   // Brand's own spelling) and "IIT/PEC" as shouting, and for "free" below the fold although the
   // first line already leads with "10,000 rupaye per kW", which the ₹ pattern did not see.
+  // #378/#418: Gemini wrote "फ्री साइट सर्वे" without quoting the Brand or naming the offer in English,
+  // and the claim check compared only English words for the thing offered. Haiku always repeated "free
+  // site survey" in its English rationale, which hid this. Derived from a recorded Haiku reply: its
+  // "free" quote and the English sentences naming the offer (rationale, visual) removed.
+  it("cites the Brand's free site survey for a Hindi concept that states it without quoting it", async () => {
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { parseJSON } = await import("@/lib/llm");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const reply = recorded.replies.find((item) => item.phase === "concept" && item.language === "hi" && item.goal === "factory"
+      && item.content.normalize("NFC").includes("फ्री साइट सर्वे"))!;
+    const value = parseJSON<{ sourceQuotes: string[]; rationale: string; visual: { direction: string } }>(reply.content);
+    const withoutFree = (text: string) => text.split(/(?<=[.!?])\s+/).filter((sentence) => !/\bfree\b/i.test(sentence)).join(" ");
+    const uncited = { ...value, sourceQuotes: value.sourceQuotes.filter((quote) => !/free/i.test(quote)),
+      rationale: withoutFree(value.rationale), visual: { ...value.visual, direction: withoutFree(value.visual.direction) } };
+    expect(uncited.sourceQuotes.length).toBeLessThan(value.sourceQuotes.length);
+    expect(JSON.stringify(uncited)).not.toMatch(/\bfree\b/i);
+    const angle = AD_ANGLES.find((item) => item.name === reply.angle)!;
+    const result = validateConcept(uncited, { brand, brief: recorded.goals.hi.factory, angle, language: "Hindi in Devanagari script",
+      sourceFacts: [recorded.goals.hi.factory] });
+    expect(result).toMatchObject({ success: true, concept: { sourceQuotes: expect.arrayContaining(["Free site survey"]) } });
+  });
+
   it("saves the Hinglish factory ad 3/3 on the first try: the Brand's capitals and a spelled ₹ amount", async () => {
     const { saved, failed } = await create("hinglish", "factory");
     expect(failed).toEqual([]);

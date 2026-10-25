@@ -76,7 +76,8 @@ Routine steps never wait for the CEO or the CTO.
 5. **DevOps ships the rest**: anything with a migration, money, tenant/auth or
    config change. Label it `ready-to-ship` and `owner:devops`. DevOps applies
    migrations first, merges, smokes and closes. Money and tenant changes get
-   `owner:qa` first. QA's approval plus the CTO's review is enough to release; the
+   `owner:qa` first. **Tenant/auth-only** changes ship on QA's approval alone; **money,
+   migrations and Meta credential changes** need QA's approval plus the CTO's review. The
    CEO decides only prices, fees, refund rules, spend limits and who may approve
    money. DevOps also owns rollback when a production smoke fails.
 6. **A core failure found live** gets its own `core` `bug` issue with the exact
@@ -122,17 +123,10 @@ Routine steps never wait for the CEO or the CTO.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, label the issue `waiting-owner` and the
   CEO signs in.
-- **Paid budget.** Create runs: **no count limit** (owner, Oct 23: "as many as
-  you need"; runs 1-20 used by then). Run Create whenever the work needs it, not
-  in loops. Log `Create run N` with the saved count in
-  [#98](https://github.com/vanshulgoyal101/adbrain/issues/98). A run costs about
-  ₹10-20 in AI; if one costs far more, stop and post. The #98 model bake-off has
-  its own $1 cap.
-  No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 23, replaces
-  the Oct 22 ₹600): the owner added ₹1,000 to Solaride 101, which is ₹847 for ads
-  after GST, so the run is ₹280/day for 3 days (₹840). It is Solaride's first
-  watched run, capped on Meta, run by Dev 3 with QA's checklist on
-  [#157](https://github.com/vanshulgoyal101/adbrain/issues/157).
+- **Paid budget.** OpenRouter is capped ($9 total until the owner raises it, #449).
+  Internal tests run at about $0 (free providers, #466); paid Create only for real
+  customers and approved checks (CEO decides, e.g. #502's $0.15); log runs on #98.
+  No Meta ad spend except CEO-approved, Meta-capped runs (#157, #499).
 - **Access.** Production DB: Supabase Management API with `SUPABASE_TOKEN` from
   `/Users/vanshulgoyal/Development/copilot/arcade/.env` (parse into memory, never
   print), project `kmzuxrvfrwwpwmoovwcp`, `BEGIN READ ONLY` for checks. Vercel:
@@ -152,35 +146,25 @@ in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
 GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
 layout (#220).
 
-CEO priorities and targets (Oct 24, 10:50Z; owner: lean, high value only). Every
-open issue has a target; a miss gets one line on its issue with the new date. The
-CTO's queue map (#364) orders each worker's row to match.
+CEO priorities (Oct 25, 10:15Z; agreed with the CTO on #364). The CTO's queue map
+orders each worker's row to match.
 
-- **Top today: #408, skills used on every task** (CTO; owner: the single most
-  high-value thing). See Role cards → Skills first.
-- **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
-  (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
-  Facebook account, Submit). Meta then takes days to weeks. No outside sign-ups yet.
-- **Live run #157 (Dev 3, QA reads): ends Oct 26 14:24Z.** First real lead in; no
-  edits. Final report Oct 26, then the next Solaride run uses #333 and #334.
-- **Today, Oct 24:** #334 Advantage+ audience (Dev 2, PR #357); #281 auto-cite
-  (Dev); #376 part 1, phone dead space on the sign-up intro (Dev 3); #383 role
-  cards read by all; #270 after-number at 18:40Z (DevOps).
-- **Oct 25:** #300 bold + Indic image text (Dev 3, PR #358); #372 results to WhatsApp
-  (Dev 2); #371 Create learns from results (Dev, CTO design on the issue); #384
-  restart-proof roles (CTO); #390 dev speed, the biggest of its 3 causes (DevOps);
-  #274 scheduler 24 h check, then close (DevOps).
-- **Oct 26:** #333 9:16 ads (Dev 3); #387 live edit preview (Dev 2); #360 + #376
-  part 2 phone speed and Enquiries layout (Dev 2); #378 interview validation gap
-  (Dev); #379 internal accounts excluded from metrics (DevOps); #157 final report.
-- **By Oct 28:** #335 log real WhatsApp enquiries (Dev; migration → QA → DevOps);
-  #366 faster Prepare (Dev 3); #367 angle chip over the logo (Dev); #388 model
-  picks per task, then a review every 3 weeks (CTO; first review about Nov 14).
-- **Umbrellas, close when their slices are done:** #67 (snappier app), #51 (UI/UX
-  polish; QA's top 5 next). #364 is the CTO's standing queue map.
-- **Later (no date):** #178 (Razorpay webhook proof), #229 (email alerts), #253
-  (managed-account WhatsApp numbers), #296 (AI-answer visibility).
-- **Owner batch (CEO asks):** #156 sitting; #337 30-second share test on his phone.
+1. **P0 core:** Brand → Create → Review → Launch → Manage stays healthy; the deploy
+   train stays under 100 deploys/day and is never stuck (#564 now); production smoke on
+   every train.
+2. **P0 by Oct 26 14:24Z:** #157 final report and **#499 next Solaride run, PAUSED-ready**
+   (budget: ₹300/day × 3, cap ₹900, #502), carrying the **WhatsApp drop-off fix** (#493
+   one-tap prefill; #496 opened→messaged line). 20 opened WhatsApp → 2 chatted, so this is
+   the biggest lever. The owner tops up and activates after QA's verdict.
+3. **P1 2-Tier, AdBrain owns customer ad accounts (#518, #519–#527):** build and test
+   behind the flag now; end-to-end waits on Meta (#156 App Review, #517 Access
+   Verification, both submitted Oct 24). No customer is charged for ad money through
+   2-Tier until a CA confirms the GST treatment (owner/CEO).
+4. **P1 first outside customers:** concierge pilots once #156/#517 pass, on 2-Tier.
+5. **P2:** #403 design (owner's verdict on QA's after set), #418/#388 models and evals
+   at $0, #419 placement track, #423 targeted AI review, #378 AI reliability.
+6. **Later:** #528 offboarding, #178, #229, #296, #448 (Vercel token back after App
+   Review), #510 Google Ads (owner deprioritised Oct 24).
 - **Filter for new issues:** it must help a customer make and run ads today,
   make the product faster or clearer, or remove a real failure. Otherwise file
   it as `later`, or don't file it.
@@ -190,8 +174,8 @@ The CTO maintains the worker table below.
 | Worker | Work, in order |
 | --- | --- |
 | Everyone | **When idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground only (it first lists items you own where someone else spoke last; it gives up after 30 min; then stop) and continue with what it prints. **Every finished step names who acts next** (`→ DevOps: release`) and moves the `owner:` label; release-PR verdicts end with `→ DevOps`. Never leave anything running in the background. **Talk on the issue or PR;** hand off with the owner label plus one arrow line (`→ QA: ready at <sha>`), and sign your own comments with your role ([AGENTS.md](../AGENTS.md#worker-coordination)). No status or idle posts. Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. **Queue empty?** Take the next item in your row, then QA's #51 findings, then any unowned `core` issue in your area (add your label); only then `wait-for-work` |
-| QA | 1. [#527](https://github.com/vanshulgoyal101/adbrain/issues/527) 2-Tier red tests as pieces land; review [#519](https://github.com/vanshulgoyal101/adbrain/issues/519) (tenant) and [#522](https://github.com/vanshulgoyal101/adbrain/issues/522) (money). 2. [#499](https://github.com/vanshulgoyal101/adbrain/issues/499) verdict. 3. **[#157](https://github.com/vanshulgoyal101/adbrain/issues/157)** final read Oct 26. 4. [#474](https://github.com/vanshulgoyal101/adbrain/issues/474) |
-| Dev | 1. [#522](https://github.com/vanshulgoyal101/adbrain/issues/522) funding + per-customer spend cap (2-Tier). 2. [#525](https://github.com/vanshulgoyal101/adbrain/issues/525) campaigns on the managed account. 3. [#451](https://github.com/vanshulgoyal101/adbrain/issues/451), [#418](https://github.com/vanshulgoyal101/adbrain/issues/418)/[#388](https://github.com/vanshulgoyal101/adbrain/issues/388). You own `ad-assistant.tsx` and `interview.ts` |
-| DevOps | 1. [#520](https://github.com/vanshulgoyal101/adbrain/issues/520) parent system user token (owner step) + `MANAGED_ACCOUNTS_ENABLED`. 2. Release [#519](https://github.com/vanshulgoyal101/adbrain/issues/519). 3. [#527](https://github.com/vanshulgoyal101/adbrain/issues/527) alerts. 4. [#461](https://github.com/vanshulgoyal101/adbrain/issues/461), [#423](https://github.com/vanshulgoyal101/adbrain/issues/423), [#270](https://github.com/vanshulgoyal101/adbrain/issues/270). Parked: [#449](https://github.com/vanshulgoyal101/adbrain/issues/449), [#390](https://github.com/vanshulgoyal101/adbrain/issues/390) |
-| Dev 3 | 1. [#499](https://github.com/vanshulgoyal101/adbrain/issues/499) next Solaride run PAUSED by Oct 26. 2. [#524](https://github.com/vanshulgoyal101/adbrain/issues/524) ([#253](https://github.com/vanshulgoyal101/adbrain/issues/253) boundary first, then WhatsApp Embedded Signup). 3. [#526](https://github.com/vanshulgoyal101/adbrain/issues/526) onboarding flow. Then [#366](https://github.com/vanshulgoyal101/adbrain/issues/366), [#417](https://github.com/vanshulgoyal101/adbrain/issues/417) |
-| Dev 2 | 1. [#493](https://github.com/vanshulgoyal101/adbrain/issues/493) (next Solaride run, Oct 26). 2. [#519](https://github.com/vanshulgoyal101/adbrain/issues/519) managed-account ledger (migration). 3. [#523](https://github.com/vanshulgoyal101/adbrain/issues/523) customer Page. 4. [#521](https://github.com/vanshulgoyal101/adbrain/issues/521) provisioning. Then [#419](https://github.com/vanshulgoyal101/adbrain/issues/419), [#403](https://github.com/vanshulgoyal101/adbrain/issues/403). Lead for [#518](https://github.com/vanshulgoyal101/adbrain/issues/518) (2-Tier). Parked: [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) |
+| QA | 1. PR #560 verdict (money; blocks [#522](https://github.com/vanshulgoyal101/adbrain/issues/522)). 2. **[#157](https://github.com/vanshulgoyal101/adbrain/issues/157)** read + final report Oct 26 14:24Z. 3. [#499](https://github.com/vanshulgoyal101/adbrain/issues/499) verdict. 4. [#527](https://github.com/vanshulgoyal101/adbrain/issues/527) red tests. Post verdicts as PR reviews |
+| Dev | 1. [#522](https://github.com/vanshulgoyal101/adbrain/issues/522): answer QA on PR #560. 2. [#525](https://github.com/vanshulgoyal101/adbrain/issues/525) done-when on a fixture tenant (live after Meta approves). 3. [#419](https://github.com/vanshulgoyal101/adbrain/issues/419) adoptions. 4. [#418](https://github.com/vanshulgoyal101/adbrain/issues/418)/[#388](https://github.com/vanshulgoyal101/adbrain/issues/388) at \$0; close [#378](https://github.com/vanshulgoyal101/adbrain/issues/378) if no gap remains. You own `ad-assistant.tsx` and `interview.ts` |
+| DevOps | 1. Release #554 ([#253](https://github.com/vanshulgoyal101/adbrain/issues/253)) and #496 (both approved migrations). 2. PR #560 after QA. 3. [#423](https://github.com/vanshulgoyal101/adbrain/issues/423) targeted review. Parked: [#449](https://github.com/vanshulgoyal101/adbrain/issues/449), [#390](https://github.com/vanshulgoyal101/adbrain/issues/390) |
+| Dev 3 | 1. **[#499](https://github.com/vanshulgoyal101/adbrain/issues/499) next Solaride run PAUSED-ready by Oct 26 14:24Z** (budget A, [#502](https://github.com/vanshulgoyal101/adbrain/issues/502)). 2. [#524](https://github.com/vanshulgoyal101/adbrain/issues/524) WhatsApp Embedded Signup. 3. [#526](https://github.com/vanshulgoyal101/adbrain/issues/526) onboarding (mount #523's Page step). 4. [#403](https://github.com/vanshulgoyal101/adbrain/issues/403) S6 |
+| Dev 2 | 1. [#521](https://github.com/vanshulgoyal101/adbrain/issues/521) provisioning: red tests + documented-shape fixtures, ready to record. 2. [#523](https://github.com/vanshulgoyal101/adbrain/issues/523) 390 px walk with Dev 3's mount. 3. [#493](https://github.com/vanshulgoyal101/adbrain/issues/493) parts 2–3. Lead for [#518](https://github.com/vanshulgoyal101/adbrain/issues/518). Parked: [#156](https://github.com/vanshulgoyal101/adbrain/issues/156), [#517](https://github.com/vanshulgoyal101/adbrain/issues/517) (Meta reviewing) |

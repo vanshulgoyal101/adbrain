@@ -1835,6 +1835,12 @@ function BusinessCampaigns({
                         />
                       </div>
                     )}
+                    {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
+                      // #493: people reach WhatsApp and leave; show the drop-off plainly.
+                      <p className="text-sm text-slate-700">
+                        {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
+                      </p>
+                    )}
                     {r && (
                       <a
                         href={`https://wa.me/?text=${encodeURIComponent(campaignWhatsAppSummary(c, r))}`}

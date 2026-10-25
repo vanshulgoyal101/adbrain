@@ -67,6 +67,20 @@ describe("verdicts posted as PR reviews (#423)", () => {
   });
 });
 
+describe("verdicts are judged on their first sentence (#554)", () => {
+  it("doesn't veto an approval for a negative word in a later sentence", () => {
+    const cto = ctoReviews([comment("CTO review of c30aaba: **approved** (tenant). Migration sha256 37ac5598. Solaride's own number still works, so #499's next run isn't blocked.", "2026-10-25T10:01:13Z")]);
+    expect(cto).toHaveLength(1);
+    expect(cto[0].approved).toBe(true);
+    expect(qaApproval([comment("QA verdict at c30aaba: **approved**. Migration sha256 abc. → Dev: please merge to next.", "2026-10-25T10:00:00Z")], head).approved).toBe(true);
+  });
+
+  it("still vetoes inside the verdict sentence", () => {
+    expect(ctoReviews([comment("CTO review of c30aaba: **approved** but blocked on #533 landing first.", "2026-10-25T10:00:00Z")])[0].approved).toBe(false);
+    expect(qaApproval([comment("QA verdict at c30aaba: **approved**, please hold until #533 lands.", "2026-10-25T10:00:00Z")], head).approved).toBe(false);
+  });
+});
+
 describe("release inputs", () => {
   it("releases only added migrations, in filename order", () => {
     expect(releaseMigrations([

@@ -226,6 +226,11 @@ vi.mock("@/lib/meta/connection-access", () => ({
 }));
 vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClientForBusiness }));
 vi.mock("@/lib/audit", () => ({ logEvent: vi.fn() }));
+// #253's bindings have their own tests (whatsapp-bindings.test.ts); here the number is already bound.
+vi.mock("@/lib/meta/whatsapp-bindings", () => ({
+  boundWhatsAppNumbers: async () => ["+919876543210"],
+  whatsappNumberForBusiness: (_businessId: string, meta: { getWhatsAppNumber: (requested: string | null, bound: string[]) => Promise<string | null> }, requested: string | null) => meta.getWhatsAppNumber(requested, ["+919876543210"]),
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -316,7 +321,7 @@ describe("durable campaign create route", () => {
       expect(response.status).toBe(200);
       expect((await response.json()).data.state).toBe("succeeded");
       expect(create).toHaveBeenCalledOnce();
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, leadFormId: undefined, gender: "women",
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, boundWhatsAppNumbers: ["+919876543210"], leadFormId: undefined, gender: "women",
         // #493: one targeted city (the manual "Jaipur" place) is named in the one-tap ask.
         whatsappGreeting: { autofill: "Hi, I'd like to know more about Solaride in Jaipur.", greeting: expect.stringContaining("Solaride") } }));
     } else {
