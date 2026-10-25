@@ -217,6 +217,18 @@ errors become owner codes (`PAGE_ADMIN_REQUIRED`, `PAGE_IN_OTHER_BUSINESS`, `NOT
 documented shapes, marked provisional until App Review and Access Verification pass and real
 responses are recorded.
 
+Wiring (CTO decisions on #521): `POST /api/meta/managed/provision` runs it inside the business's
+ledger lease (`managed_meta_account_claim`, database time), so two runs never both create. The
+customer's own Facebook token (from their Connect attempt) creates the child; the parent system
+user's token provisions; each child's **own system user** manages its ad account: minted with
+`POST /{child}/access_token` (parent token), found with `GET /me` (child token), its token
+encrypted into `private.meta_tokens` (kind `business_system_user`) and referenced from the ledger
+by `manager_token_id` (same business only), then assigned to the ad account with its own token.
+One customer's token can't reach another's account. Every
+provisioning Graph call carries `appsecret_proof` (HMAC-SHA256 of its token with `META_APP_SECRET`;
+Meta rejects the child-token mint without it), so a missing secret is `NOT_CONFIGURED`. A token
+the ledger no longer references (replaced, or saved before a failed update) is deleted.
+
 ## Recovery and Destructive Actions
 
 | Situation | Safe action |

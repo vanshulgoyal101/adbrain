@@ -38,7 +38,9 @@ export interface GeneratedImage {
 
 export class ImageProviderError extends Error {
   constructor(message: string, public readonly providerRequestId?: string,
-    public readonly providerFinalStatus: "completed" | "failed" | "unknown" = "unknown") {
+    public readonly providerFinalStatus: "completed" | "failed" | "unknown" = "unknown",
+    /** #449: the paid key is out of credit (OpenRouter 402, or 403 "Key limit exceeded"). */
+    public readonly creditExhausted = false) {
     super(message);
     this.name = "ImageProviderError";
   }

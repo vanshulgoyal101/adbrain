@@ -139,7 +139,10 @@ export function createOpenRouterProvider(): ImageProvider {
       }
       const providerRequestId = boundedRequestId(payload.id) ?? headerRequestId;
       if (!response.ok) {
-        throw new ImageProviderError(`OpenRouter image HTTP ${response.status}: request failed`, providerRequestId);
+        const creditExhausted = response.status === 402 || (response.status === 403 && /key limit|credit/i.test(payload.error?.message ?? ""));
+        // Only a credit refusal is known to have generated nothing; any other failure may have been charged.
+        throw new ImageProviderError(`OpenRouter image HTTP ${response.status}: request failed`, providerRequestId,
+          creditExhausted ? "failed" : "unknown", creditExhausted);
       }
       const image = payload.data?.[0];
       if (!image?.b64_json) throw new ImageProviderError("OpenRouter returned no image.", providerRequestId);

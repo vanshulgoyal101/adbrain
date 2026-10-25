@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import launch from "./core/fixtures/meta/launch-validate.json";
-import { checkPlan } from "@/lib/campaign/plan-check";
+import { planCheckEvent, checkPlan } from "@/lib/campaign/plan-check";
 
 // #419: the plan check runs on the exact payloads Meta accepted for today's launch code.
 type Exchange = { destination: string; kind: string; form: Record<string, string> };
@@ -45,5 +45,18 @@ describe("plan check (#419)", () => {
   it("recognises a 9:16 placement creative", () => {
     const creative = { asset_feed_spec: JSON.stringify({ asset_customization_rules: [{ customization_spec: { instagram_positions: ["story", "reels"] } }] }) };
     expect(status(checkPlan({ ...planFor("whatsapp"), creatives: [creative] }), "9:16 Stories/Reels image").status).toBe("pass");
+  });
+
+  it("turns findings into a launch event: non-passing rules by name, nothing else (#419 2a)", () => {
+    const event = planCheckEvent([
+      { rule: "Advantage+ audience", status: "pass", detail: "On" },
+      { rule: "Budget vs learning phase", status: "unknown", detail: "No cost yet" },
+      { rule: "9:16 Stories/Reels image", status: "warn", detail: "None" },
+      { rule: "4:5 feed image", status: "fail", detail: "None" },
+    ], "whatsapp");
+    expect(event).toEqual({ outcome: "partial", attributes: { destination: "whatsapp", count: 4, failedCount: 1,
+      validationRules: ["budget-vs-learning-phase:unknown", "9-16-stories-reels-image:warn", "4-5-feed-image:fail"] } });
+    expect(planCheckEvent([{ rule: "One ad set", status: "pass", detail: "" }], "instant_form"))
+      .toEqual({ outcome: "success", attributes: { destination: "instant_form", count: 1, failedCount: 0, validationRules: [] } });
   });
 });

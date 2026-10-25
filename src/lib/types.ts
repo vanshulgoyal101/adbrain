@@ -715,6 +715,15 @@ export interface Database {
         Args: { p_operation_id: string; p_input: Json; p_request_hash: string };
         Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];
       };
+      // #521: one provisioning run per business (service role only, database time).
+      managed_meta_account_claim: {
+        Args: { p_business_id: string; p_lease_id: string; p_seconds: number };
+        Returns: boolean;
+      };
+      managed_meta_account_release: {
+        Args: { p_business_id: string; p_lease_id: string };
+        Returns: boolean;
+      };
       claim_next_campaign_job: {
         Args: Record<string, never>;
         Returns: Database["public"]["Tables"]["campaign_operations"]["Row"][];

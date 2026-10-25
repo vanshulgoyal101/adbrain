@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { checkPlan } from "@/lib/campaign/plan-check";
 import { MetaClient, placementCreativeSpec } from "@/lib/meta/client";
 import { renderStoryAd } from "@/lib/creative/story";
 import recorded from "./fixtures/meta/story-validate.json";
@@ -62,8 +63,10 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     });
     const fallbacks: string[] = [];
     let error: unknown;
+    let planned: { adSets: Record<string, string>[]; creatives: Record<string, string>[] } | undefined;
     await meta.createLeadCampaign({
       onStoryFallback: (stage, code) => fallbacks.push(`${stage}:${code}`),
+      onPlanned: (plan) => { planned = plan; },
       name: "Core #333", dailyBudgetRupees: 280, destination: params.destination,
       leadFormId: params.destination === "instant_form" ? "form-1" : undefined,
       whatsappNumber: params.destination === "whatsapp" ? "+919100000874" : undefined,
@@ -77,7 +80,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     });
     const forms = fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), form: Object.fromEntries(new URLSearchParams(String(init?.body))) }));
     const creatives = forms.filter((call) => call.url.includes("/adcreatives")).map((call) => call.form);
-    return { creative: creatives.at(-1)!, creatives, ads: forms.filter((call) => /\/ads(\?|$)/.test(call.url)).length, fallbacks, uploads: 1 + storyUpload.mock.calls.length, error };
+    return { creative: creatives.at(-1)!, creatives, ads: forms.filter((call) => /\/ads(\?|$)/.test(call.url)).length, fallbacks, uploads: 1 + storyUpload.mock.calls.length, error, planned };
   }
 
   it("uploads the 9:16 and switches a WhatsApp ad to placement images", async () => {
@@ -124,6 +127,21 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     expect(JSON.parse(creative.object_story_spec).link_data.image_hash).toBe(inputs.feedHash);
     expect(ads).toBe(2);
     expect(fallbacks).toEqual(["ad:100.1772103"]);
+  });
+
+  // #419 item 2(a): the plan check sees the creative each ad actually runs on, and never the token.
+  const withoutToken = (form: Record<string, string>) => Object.fromEntries(Object.entries(form).filter(([key]) => key !== "access_token"));
+  it("hands the plan check the placement creative behind the ad, so the 9:16 passes", async () => {
+    const { planned, creative } = await create({ destination: "whatsapp", storyImage: new Uint8Array([9]) });
+    expect(planned?.creatives).toEqual([withoutToken(creative)]);
+    expect(JSON.stringify(planned)).not.toContain("core-token");
+    expect(checkPlan(planned!).find((finding) => finding.rule === "9:16 Stories/Reels image")?.status).toBe("pass");
+  });
+
+  it("hands the plan check the single image when Meta refused the ad on the placement creative", async () => {
+    const { planned, creatives } = await create({ destination: "whatsapp", storyImage: new Uint8Array([9]), rejectPlacementAd: true });
+    expect(planned?.creatives).toEqual([withoutToken(creatives[1])]);
+    expect(checkPlan(planned!).find((finding) => finding.rule === "9:16 Stories/Reels image")?.status).toBe("warn");
   });
 
   it.each(["timeout", "5xx"] as const)("fails as before, with no second ad, when the placement ad hits a %s", async (failPlacementAd) => {
