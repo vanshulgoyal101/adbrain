@@ -100,6 +100,9 @@ exclude entire test directories or suppress uninvestigated findings.
   advisors (read-only) and exits 1 on any WARN or ERROR outside its reviewed
   `ACCEPTED` list. A new finding blocks the release until it is fixed or accepted
   in that list with a reason, through a PR.
+- **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
+  QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
+  a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required

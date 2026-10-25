@@ -30,6 +30,7 @@ export interface ManagedAccountStore {
   insert(values: { business_id: string; page_id: string; state: "requested" }): Promise<void>;
   update(values: { page_id: string; state: "page_linked" }): Promise<void>;
   event(values: { business_id: string; step: "page"; outcome: "succeeded"; meta_object_id: string; request_id?: string }): Promise<void>;
+  hasEvent(businessId: string, step: "page", metaObjectId: string): Promise<boolean>;
 }
 
 export type LinkPageResult =
@@ -47,7 +48,11 @@ export async function linkManagedPage(
 ): Promise<LinkPageResult> {
   if (!adminPages(input.snapshot).some((page) => page.id === input.pageId)) return { ok: false, code: "PAGE_NOT_ADMIN" };
   const row = await store.get(input.businessId);
-  if (row?.page_id === input.pageId && row.state !== "requested") return { ok: true, state: row.state, pageId: input.pageId };
+  if (row?.page_id === input.pageId && row.state !== "requested") {
+    // A retry after the event write failed: the row is linked, so only the missing log entry is added.
+    if (row.state === "page_linked" && !(await store.hasEvent(input.businessId, "page", input.pageId))) await logLinked(store, input);
+    return { ok: true, state: row.state, pageId: input.pageId };
+  }
   // Once the child business exists, its Page is part of it; changing it means offboarding.
   if (row && (row.child_business_id || !RELINKABLE.has(row.state))) return { ok: false, code: "PAGE_LOCKED" };
   try {
@@ -58,9 +63,13 @@ export async function linkManagedPage(
     if (isTaken(error)) return { ok: false, code: "PAGE_TAKEN" };
     throw error;
   }
-  await store.event({
+  await logLinked(store, input);
+  return { ok: true, state: "page_linked", pageId: input.pageId };
+}
+
+function logLinked(store: ManagedAccountStore, input: { businessId: string; pageId: string; requestId?: string }) {
+  return store.event({
     business_id: input.businessId, step: "page", outcome: "succeeded", meta_object_id: input.pageId,
     ...(input.requestId ? { request_id: input.requestId } : {}),
   });
-  return { ok: true, state: "page_linked", pageId: input.pageId };
 }

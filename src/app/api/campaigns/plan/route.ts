@@ -165,6 +165,20 @@ async function handlePOST(req: Request) {
         }]);
         failureStage = "MODEL";
       },
+      onProviderFailures: async (failures, attempt) => {
+        failureStage = "USAGE";
+        await persistLLMUsage(failures.map((failure) => ({
+          businessId: business.id, userId: user.id, requestId, route: "campaigns.plan",
+          provider: failure.provider, model: failure.model,
+          usage: failure.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          promptVersion: PLANNER_PROMPT_VERSION, latencyMs: failure.latencyMs,
+          attempt, maxTokens: 3000, temperature: 0.2,
+          status: "error", failure: failure.failure, errorCode: `LLM_${failure.failure ?? "UNKNOWN"}`,
+          providerRequestId: failure.providerRequestId, providerFinalStatus: failure.providerFinalStatus,
+          metadata: { audienceOnly: Boolean(audienceDraft) },
+        })));
+        failureStage = "MODEL";
+      },
     });
   } catch (error) {
     const failureClass = failureStage !== "MODEL" ? "OTHER"

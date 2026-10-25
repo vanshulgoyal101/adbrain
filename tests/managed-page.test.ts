@@ -24,6 +24,7 @@ function memory(row?: Record<string, unknown>) {
     },
     update: async (values) => { current = { ...current!, ...values }; },
     event: async (event) => { events.push(event); },
+    hasEvent: async (businessId, step, metaObjectId) => events.some((e) => e.business_id === businessId && e.step === step && e.meta_object_id === metaObjectId),
   };
   return { store, events, row: () => current };
 }
@@ -48,6 +49,14 @@ describe("managed Page (#523)", () => {
     db.store.insert = async () => { throw Object.assign(new Error("duplicate"), { code: "23505" }); };
     expect(await linkManagedPage(db.store, { businessId: "b1", pageId: "111", snapshot })).toEqual({ ok: false, code: "PAGE_TAKEN" });
     expect(db.events).toEqual([]);
+  });
+
+  it("logs the step on retry when the row was linked but the event write failed (QA #537)", async () => {
+    const db = memory({ business_id: "b1", state: "page_linked", page_id: "111", child_business_id: null });
+    expect(await linkManagedPage(db.store, { businessId: "b1", pageId: "111", snapshot, requestId: "r2" })).toMatchObject({ ok: true, state: "page_linked" });
+    expect(db.events).toEqual([{ business_id: "b1", step: "page", outcome: "succeeded", meta_object_id: "111", request_id: "r2" }]);
+    await linkManagedPage(db.store, { businessId: "b1", pageId: "111", snapshot });
+    expect(db.events).toHaveLength(1);
   });
 
   it("refuses a Page the customer doesn't administer", async () => {

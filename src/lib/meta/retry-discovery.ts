@@ -10,6 +10,12 @@ export async function retryConnectionDiscovery(attemptId: string, userId: string
     p_attempt_id: attemptId, p_user_id: userId, p_revision: revision,
   });
   if (error || !claimed) return null;
+  return runAttemptDiscovery(attemptId, userId);
+}
+
+/** Discover the Pages and ad accounts an attempt's token allows; the attempt must be `discovering` with a token. */
+export async function runAttemptDiscovery(attemptId: string, userId: string) {
+  const admin = createAdminClient();
   let credentialReady = false;
   try {
     const { data: attempts, error: attemptError } = await admin.rpc("meta_attempt_get", { p_attempt_id: attemptId, p_user_id: userId });

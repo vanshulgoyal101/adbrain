@@ -15,6 +15,7 @@ import { verifyMetaCapabilities } from "./capability-verification";
 import { canUseMetaConnect } from "./pilot-access";
 import { observeIdentity } from "@/lib/observability/context";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
 
@@ -89,9 +90,22 @@ export async function requireCampaignWorkerActor(operationId: string): Promise<A
 export async function getConnectionStatus(
   context: AuthorizedBusiness,
 ): Promise<ConnectionDTO> {
+  return (await loadConnection(context)).connection;
+}
+
+/** A managed business (#525) uses its managed account only, never an OAuth connection. */
+async function loadConnection(context: AuthorizedBusiness): Promise<{ connection: ConnectionDTO; managed: ManagedAccount | null }> {
   if (!isAuthorizedBusiness(context)) {
     throw new ConnectionAccessError("FORBIDDEN", "Authorized business context required.");
   }
+  const managed = await getManagedAccount(context.businessId).catch(() => {
+    throw new ConnectionAccessError("UNAVAILABLE", "Meta connection status is unavailable.");
+  });
+  if (managed) return { connection: managedConnection(context.businessId, managed), managed };
+  return { connection: await getOAuthConnectionStatus(context), managed: null };
+}
+
+async function getOAuthConnectionStatus(context: AuthorizedBusiness): Promise<ConnectionDTO> {
   const { data, error } = await createAdminClient()
     .from("meta_connections")
     .select("business_id, generation, authorization_status, meta_business_id, ad_account_id, page_id, account_name, page_name, currency, timezone_name, capabilities, last_checked_at")
@@ -162,7 +176,12 @@ async function withConnectionCredentials<Result>(
   if (!["pause", "delete", "read_insights", "read_leads"].includes(options.purpose) && !canUseMetaConnect(context.userId)) {
     throw new ConnectionAccessError("FORBIDDEN", "Meta publishing is not enabled for this account.");
   }
-  const connection = await getConnectionStatus(context);
+  const { connection, managed } = await loadConnection(context);
+  // A managed account can always be read and stopped once its ad account exists; new work needs it ready.
+  const startsDelivery = options.purpose === "create_paused" || options.purpose === "activate";
+  if (managed && (startsDelivery ? !isManagedReady(managed) : !hasManagedAssets(managed))) {
+    throw new ConnectionAccessError("UNAVAILABLE", "Your AdBrain-managed Meta account is still being set up.");
+  }
   if (connection.authorization !== "connected" || !connection.selected) {
     throw new ConnectionAccessError("UNAVAILABLE", "Meta is not connected for this business.");
   }
@@ -193,6 +212,11 @@ async function withConnectionCredentials<Result>(
       "UNAVAILABLE",
       capability.blockers[0]?.message ?? "Meta has not confirmed access for this operation.",
     );
+  }
+  if (managed) {
+    const credentials = managedCredentials(managed);
+    if (!credentials) throw new ConnectionAccessError("UNAVAILABLE", "Managed Meta credentials are unavailable.");
+    return execute(credentials, connection);
   }
   const admin = createAdminClient();
   const { data: connectionRow, error: connectionError } = await admin

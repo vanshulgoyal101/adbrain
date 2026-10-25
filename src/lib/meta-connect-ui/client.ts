@@ -125,6 +125,14 @@ export function createMetaConnectClient({
         signal,
       });
     },
+    change(businessId: string, intent: ConnectIntent, signal?: AbortSignal): Promise<AttemptDTO> {
+      return request("/api/meta/connections/change", attemptDtoSchema, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId, intent }),
+        signal,
+      });
+    },
     status(businessId: string, signal?: AbortSignal): Promise<ConnectionDTO> {
       return request(
         `/api/meta/connections/status?businessId=${encodeURIComponent(businessId)}`,

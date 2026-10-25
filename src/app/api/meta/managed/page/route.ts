@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canUseMetaConnect } from "@/lib/meta/pilot-access";
+import { requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { adminPages, linkManagedPage, META_PAGE_CREATE_URL, type ManagedAccountStore } from "@/lib/meta/managed-page";
 
 export const runtime = "nodejs";
@@ -29,6 +30,15 @@ async function ownedAttempt(attemptId: string) {
   const { data, error } = await createAdminClient().rpc("meta_attempt_get", { p_attempt_id: attemptId, p_user_id: user.id });
   const attempt = data?.[0];
   if (error || !attempt) return { ok: false as const, response: fail(404, "NOT_FOUND", "Connection attempt not found.") };
+  // As Connect does: an expired attempt's Page rights may be stale, and the business must still be the caller's.
+  if (new Date(attempt.expires_at).getTime() <= Date.now()) {
+    return { ok: false as const, response: fail(410, "ATTEMPT_EXPIRED", "This Facebook connection has expired. Connect Facebook again to choose your Page.") };
+  }
+  try {
+    await requireOwnedBusiness(attempt.business_id);
+  } catch {
+    return { ok: false as const, response: fail(404, "NOT_FOUND", "Connection attempt not found.") };
+  }
   return { ok: true as const, attempt: { businessId: attempt.business_id as string, snapshot: attempt.discovered_assets as unknown } };
 }
 
@@ -44,6 +54,12 @@ function store(businessId: string): ManagedAccountStore {
     insert: async (values) => { const { error } = await table().insert(values); if (error) throw Object.assign(new Error("Managed account could not be saved."), { code: error.code }); },
     update: async (values) => { const { error } = await table().update(values).eq("business_id", businessId); if (error) throw Object.assign(new Error("Managed account could not be saved."), { code: error.code }); },
     event: async (values) => { const { error } = await admin.from("managed_meta_account_events").insert(values); if (error) throw new Error("Managed account step could not be logged."); },
+    hasEvent: async (id, step, metaObjectId) => {
+      const { count, error } = await admin.from("managed_meta_account_events").select("id", { count: "exact", head: true })
+        .eq("business_id", id).eq("step", step).eq("meta_object_id", metaObjectId).eq("outcome", "succeeded");
+      if (error) throw new Error("Managed account steps could not be read.");
+      return (count ?? 0) > 0;
+    },
   };
 }
 

@@ -1,0 +1,111 @@
+/**
+ * #521 (2-Tier, #518): provision a managed customer under Solaride, walking #519's ledger:
+ * page_linked → child business → INR ad account. Each step looks up before it creates (Meta's
+ * `child_business_external_id`, and a deterministic ad account name), so a lost response is found
+ * on the next run and nothing is created twice. Failures leave the row `failed` with a code.
+ *
+ * Tokens per step (#521 design note): the child business is created with the customer's token,
+ * because Meta requires the caller to administer `shared_page_id` (error 1690138); the ad account
+ * with the parent system user's.
+ */
+
+export interface ProvisionGraph {
+  get<T>(path: string, token: string): Promise<T>;
+  post<T>(path: string, form: Record<string, string>, token: string): Promise<T>;
+}
+
+type Row = { business_id: string; state: string; page_id: string | null; child_business_id: string | null; ad_account_id: string | null; step_keys: unknown };
+
+export interface ProvisionStore {
+  get(businessId: string): Promise<Row | null>;
+  update(values: Partial<Pick<Row, "state" | "child_business_id" | "ad_account_id">> & { step_keys?: Record<string, string>; last_error?: string | null }): Promise<void>;
+  event(values: { business_id: string; step: "child_business" | "ad_account"; outcome: "started" | "succeeded" | "failed"; request_id?: string; idempotency_key?: string; meta_object_id?: string; error_code?: string }): Promise<void>;
+}
+
+export type ProvisionResult =
+  | { ok: true; state: string; childBusinessId: string; adAccountId: string }
+  | { ok: false; code: string; retryable: boolean };
+
+const INDIA_TIMEZONE_ID = "71";
+
+/** Meta failures → stable codes the owner screen explains (#518 research, external-api-error-contracts). */
+export function provisionErrorCode(error: unknown): { code: string; retryable: boolean } {
+  const value = (error ?? {}) as { name?: string; status?: number; code?: number; subcode?: number };
+  if (value.name === "TimeoutError" || value.name === "AbortError") return { code: "META_TIMEOUT", retryable: true };
+  if (value.subcode === 1690138) return { code: "PAGE_ADMIN_REQUIRED", retryable: false };
+  if (value.subcode === 2859040) return { code: "PAGE_OWNER_DISALLOWED", retryable: false };
+  if (value.code === 3918 || value.subcode === 3918) return { code: "PAGE_IN_OTHER_BUSINESS", retryable: false };
+  if (value.code !== undefined && [4, 17, 32, 613, 80004].includes(value.code)) return { code: "META_BUSY", retryable: true };
+  if (value.code !== undefined && [3, 10, 190, 200].includes(value.code)) return { code: "NOT_PERMITTED", retryable: false };
+  if (typeof value.status === "number" && value.status >= 500) return { code: "META_BUSY", retryable: true };
+  if (value.code !== undefined) return { code: `META_${value.code}${value.subcode ? `_${value.subcode}` : ""}`, retryable: false };
+  return { code: "META_NETWORK", retryable: true };
+}
+
+export async function provisionManagedAccount(input: {
+  businessId: string;
+  businessName: string;
+  parentBusinessId: string;
+  store: ProvisionStore;
+  graph: ProvisionGraph;
+  tokens: { customer: string; parent: string };
+  requestId?: string;
+}): Promise<ProvisionResult> {
+  const { businessId, store, graph, tokens, parentBusinessId, requestId } = input;
+  const row = await store.get(businessId);
+  if (!row?.page_id || !["page_linked", "child_created", "ad_account_created", "failed"].includes(row.state)) {
+    return { ok: false, code: "PAGE_NOT_LINKED", retryable: false };
+  }
+  const keys = row.step_keys && typeof row.step_keys === "object" && !Array.isArray(row.step_keys) ? { ...(row.step_keys as Record<string, string>) } : {};
+  let childId = row.child_business_id;
+  let adAccountId = row.ad_account_id;
+  let step: "child_business" | "ad_account" = "child_business";
+
+  try {
+    if (!childId) {
+      const key = `child:${businessId}`;
+      await store.event({ business_id: businessId, step, outcome: "started", request_id: requestId, idempotency_key: key });
+      const existing = await graph.get<{ data?: { id: string; child_business_external_id?: string }[] }>(
+        `${parentBusinessId}/owned_businesses?fields=id,child_business_external_id&limit=200`, tokens.parent);
+      childId = existing.data?.find((child) => child.child_business_external_id === businessId)?.id ?? null;
+      if (!childId) {
+        const created = await graph.post<{ id: string }>(`${parentBusinessId}/owned_businesses`, {
+          name: input.businessName.trim().slice(0, 100),
+          shared_page_id: row.page_id,
+          page_permitted_tasks: JSON.stringify(["ADVERTISE", "ANALYZE", "MESSAGING"]),
+          timezone_id: INDIA_TIMEZONE_ID,
+          child_business_external_id: businessId,
+        }, tokens.customer);
+        childId = created.id;
+      }
+      keys.child_business = key;
+      await store.update({ state: "child_created", child_business_id: childId, step_keys: keys, last_error: null });
+      await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: childId });
+    }
+
+    if (!adAccountId) {
+      step = "ad_account";
+      const key = `account:${businessId}`;
+      const name = `AdBrain ${businessId.slice(0, 8)} ${input.businessName.trim()}`.slice(0, 100);
+      await store.event({ business_id: businessId, step, outcome: "started", request_id: requestId, idempotency_key: key });
+      const existing = await graph.get<{ data?: { id: string; name?: string }[] }>(`${childId}/owned_ad_accounts?fields=id,name&limit=100`, tokens.parent);
+      adAccountId = existing.data?.find((account) => account.name === name)?.id ?? null;
+      if (!adAccountId) {
+        const created = await graph.post<{ id: string }>(`${childId}/adaccount`, {
+          name, currency: "INR", timezone_id: INDIA_TIMEZONE_ID, end_advertiser: row.page_id, media_agency: "NONE", partner: "NONE",
+        }, tokens.parent);
+        adAccountId = created.id;
+      }
+      adAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
+      keys.ad_account = key;
+      await store.update({ state: "ad_account_created", ad_account_id: adAccountId, step_keys: keys, last_error: null });
+      await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
+    }
+    return { ok: true, state: "ad_account_created", childBusinessId: childId, adAccountId };
+  } catch (error) {
+    const failure = provisionErrorCode(error);
+    await store.update({ state: "failed", last_error: failure.code });
+    await store.event({ business_id: businessId, step, outcome: "failed", request_id: requestId, error_code: failure.code });
+    return { ok: false, ...failure };
+  }
+}
