@@ -26,10 +26,31 @@ describe("<ManagedOnboardingLive> (#526)", () => {
     render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={null} />);
     fireEvent.click(await screen.findByRole("button", { name: "Sign in with Facebook" }));
     await waitFor(() => expect(popup.location.href).toBe("https://www.facebook.com/dialog/oauth"));
-    expect(sessionStorage.getItem(ONBOARDING_CONNECT_KEY)).toBe("1");
+    expect(Number(sessionStorage.getItem(ONBOARDING_CONNECT_KEY))).toBeGreaterThan(0);
     expect(m.start).toHaveBeenCalledWith(businessId, { kind: "setup" });
     act(() => { window.dispatchEvent(new MessageEvent("message", { origin: window.location.origin, source: popup, data: { type: "adbrain.meta.complete", attemptId } })); });
     expect(await screen.findByText(`Page step for ${attemptId}`)).toBeInTheDocument();
+    // The onboarding tab's own copy of the flag is gone, so a later ordinary Connect here isn't redirected.
+    expect(sessionStorage.getItem(ONBOARDING_CONNECT_KEY)).toBeNull();
+  });
+
+  it("offers 'Continue in this tab' when the popup never shows (#474)", async () => {
+    const popup = { location: { href: "" }, close: vi.fn() } as unknown as Window;
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    m.start.mockResolvedValue({ attemptId, authorizationUrl: "https://www.facebook.com/dialog/oauth", expiresAt: "2099-01-01T00:00:00.000Z" });
+    render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={null} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with Facebook" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue in this tab" }, { timeout: 5000 }));
+    expect(popup.close).toHaveBeenCalled();
+    expect(m.continueInTab).toHaveBeenCalledWith("https://www.facebook.com/dialog/oauth");
+  }, 10_000);
+
+  it("clears the flag when the owner leaves onboarding", async () => {
+    sessionStorage.setItem(ONBOARDING_CONNECT_KEY, String(Date.now()));
+    const view = render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={null} />);
+    await screen.findByRole("button", { name: "Sign in with Facebook" });
+    view.unmount();
+    expect(sessionStorage.getItem(ONBOARDING_CONNECT_KEY)).toBeNull();
   });
 
   it("ignores a completion message from any other window", async () => {
