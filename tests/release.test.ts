@@ -30,6 +30,18 @@ describe("QA approval", () => {
     expect(qaApproval([comment("QA: please approve c30aaba soon", "2026-10-23T12:56:00Z")], head).approved).toBe(false);
   });
 
+  it("carries a QA approval of an earlier head with the same patch, not of a different one", () => {
+    const same = (sha: string) => sha === "16dcfca";
+    const approvedEarlier = [comment("QA approved 16dcfca. Migration sha256 `40de9dc8`.", "2026-10-23T12:30:00Z")];
+    const carried = qaApproval(approvedEarlier, head, same);
+    expect(carried.approved).toBe(true);
+    expect(carried.text).toContain("40de9dc8");
+    expect(qaApproval(approvedEarlier, head, () => false).approved).toBe(false);
+    expect(qaApproval([...approvedEarlier, comment("QA: 16dcfca changes requested.", "2026-10-23T13:00:00Z")], head, same).approved).toBe(false);
+    // A sha mentioned after the verdict sentence doesn't make the comment a verdict on it.
+    expect(qaApproval([comment("QA approved 1234567. Earlier 16dcfca failed.", "2026-10-23T12:30:00Z")], head, same).approved).toBe(false);
+  });
+
   it("accepts QA's other approval wordings and refuses their negations", () => {
     const verdict = (body: string) => qaApproval([comment(body, "2026-10-23T15:52:35Z")], head).approved;
     expect(verdict("**QA review of c30aaba (tenant boundary): fine to merge for #157, with one follow-up.**")).toBe(true);
@@ -64,6 +76,20 @@ describe("verdicts posted as PR reviews (#423)", () => {
     expect(qaApproval(fromReview, head).approved).toBe(true);
     expect(qaApproval([...fromReview, comment("QA: c30aaba changes requested.", "2026-10-24T12:05:00Z")], head).approved).toBe(false);
     expect(ctoReviews(reviewVerdicts([review("CTO review of c30aaba: **approved**.", "2026-10-24T12:00:00Z")]))).toHaveLength(1);
+  });
+});
+
+describe("verdicts are judged on their first sentence (#554)", () => {
+  it("doesn't veto an approval for a negative word in a later sentence", () => {
+    const cto = ctoReviews([comment("CTO review of c30aaba: **approved** (tenant). Migration sha256 37ac5598. Solaride's own number still works, so #499's next run isn't blocked.", "2026-10-25T10:01:13Z")]);
+    expect(cto).toHaveLength(1);
+    expect(cto[0].approved).toBe(true);
+    expect(qaApproval([comment("QA verdict at c30aaba: **approved**. Migration sha256 abc. → Dev: please merge to next.", "2026-10-25T10:00:00Z")], head).approved).toBe(true);
+  });
+
+  it("still vetoes inside the verdict sentence", () => {
+    expect(ctoReviews([comment("CTO review of c30aaba: **approved** but blocked on #533 landing first.", "2026-10-25T10:00:00Z")])[0].approved).toBe(false);
+    expect(qaApproval([comment("QA verdict at c30aaba: **approved**, please hold until #533 lands.", "2026-10-25T10:00:00Z")], head).approved).toBe(false);
   });
 });
 

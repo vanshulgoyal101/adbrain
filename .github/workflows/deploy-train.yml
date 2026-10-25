@@ -41,8 +41,29 @@ jobs:
           # Count changed files, not commits: every train leaves a merge commit on main that changes nothing.
           behind=$(gh api "repos/$repo/compare/next...main" --jq '.files | length')
           if [ "$behind" -gt 0 ]; then
-            echo "main changes $behind file(s) next lacks: merge main into next first (a person's PR, so CI runs on it)." > "$RUNNER_TEMP/reason"
-            echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
+            # A migration or hotfix landed on main. Merge it into next by PR: its head is main's commit,
+            # which CI already checked on the push to main. Then dispatch CI on next's merged tree
+            # (a GITHUB_TOKEN merge triggers no workflows); the check loop below waits for it.
+            echo "main changes $behind file(s) next lacks; merging main into next."
+            msha=$(gh api "repos/$repo/commits/main" --jq .sha)
+            sync=$(gh pr list -R "$repo" --state open --base next --head main --json number --jq '.[0].number // empty')
+            if [ -z "$sync" ]; then
+              sync=$(gh pr create -R "$repo" --base next --head main --title "Train sync: main → next" \
+                --body "Automatic: brings migrations and hotfixes on main into next before the next train (#461).")
+              sync=${sync##*/}
+            fi
+            merged=""
+            for i in $(seq 1 20); do
+              if gh pr merge "$sync" -R "$repo" --merge --match-head-commit "$msha"; then merged=1; break; fi
+              if [ "$(gh pr view "$sync" -R "$repo" --json mergeable --jq .mergeable)" = "CONFLICTING" ]; then break; fi
+              sleep 30
+            done
+            if [ -z "$merged" ]; then
+              echo "Could not merge main into next (#$sync: conflict or main's checks not green). Fix #$sync or merge main into next by a person's PR." > "$RUNNER_TEMP/reason"
+              echo "::error::$(cat "$RUNNER_TEMP/reason")"; exit 1
+            fi
+            gh workflow run ci.yml -R "$repo" --ref next
+            sleep 20
           fi
           # At most one production deploy per GAP_MINUTES.
           last=$(gh pr list -R "$repo" --state merged --base main --head next --limit 1 --json mergedAt --jq '.[0].mergedAt // empty')
