@@ -19,6 +19,8 @@ export type PreflightLoaders = {
   findForm: (businessId: string, formId: string) => Promise<PreflightForm | null>;
   findWhatsAppNumber?: (actor: PreflightActor, requested?: string) => Promise<string | null>;
   findWebsite?: (actor: PreflightActor) => Promise<string | null>;
+  /** #419 2(b): the business's own cost per result for this kind of campaign, or null. */
+  findCostPerResult?: (actor: PreflightActor, destination: "instant_form" | "whatsapp") => Promise<number | null>;
   getConnection: (actor: PreflightActor) => Promise<PreflightConnection | null>;
   resolveGeo: (actor: PreflightActor, draft: DraftRecord) => Promise<PreflightGeo>;
   hash: (payload: string) => string;
@@ -49,7 +51,7 @@ export async function prepareCampaignReview(
     return { kind: "stale", draftVersion: draft.version };
   }
 
-  const [connection, creatives, form, geo, whatsappNumber, website] = await Promise.all([
+  const [connection, creatives, form, geo, whatsappNumber, website, costPerResultRupees] = await Promise.all([
     loaders.getConnection(input.actor),
     loaders.findCreatives(input.actor.businessId, draft.input.creativeIds),
     draft.input.destination !== "whatsapp" && draft.input.leadFormId
@@ -58,6 +60,8 @@ export async function prepareCampaignReview(
     loaders.resolveGeo(input.actor, draft),
     draft.input.destination === "whatsapp" ? loaders.findWhatsAppNumber?.(input.actor, draft.input.whatsappNumber) ?? Promise.resolve(null) : Promise.resolve(null),
     draft.input.destination !== "whatsapp" ? loaders.findWebsite?.(input.actor) : Promise.resolve(undefined),
+    // Only a warning depends on it: an unreadable history means no budget warning, never a failed review.
+    loaders.findCostPerResult?.(input.actor, draft.input.destination ?? "instant_form").catch(() => null) ?? Promise.resolve(null),
   ]);
 
   return {
@@ -73,6 +77,7 @@ export async function prepareCampaignReview(
       website,
       geo,
       hash: loaders.hash,
+      costPerResultRupees,
     }),
   };
 }

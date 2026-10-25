@@ -172,10 +172,15 @@ export function interviewResultIssues(result: InterviewResult, answers: Intervie
   return [...new Set(issues)];
 }
 
-function commercialClaimIssues(result: InterviewResult, input: InterviewInput): string[] {
+/**
+ * Commercial terms ("free", "10%", "₹500", "guaranteed") the output states but no owner answer or Brand
+ * fact supports. #613: an offer question's options are excluded: they are choices the owner must pick
+ * explicitly (allowRandom and aiCanDecide are forced off), and a picked option is the owner's own answer.
+ */
+function unsupportedTerms(result: InterviewResult, input: InterviewInput): string[] {
   const output = result.ready
     ? [result.brief, ...(result.recommendations ?? []).flatMap((item) => [item.label, item.prompt])].join("\n")
-    : result.question?.options?.join("\n") ?? "";
+    : result.question?.field === "offer" ? "" : result.question?.options?.join("\n") ?? "";
   const sources = [
     input.goal,
     input.referenceBrief ?? "",
@@ -188,10 +193,43 @@ function commercialClaimIssues(result: InterviewResult, input: InterviewInput): 
     .filter((match) => !negatedTerm(output, match.index, match[0])).map((match) => match[0]);
   // "No-cost" is the same offer as "free" (#378).
   const free = (term: string) => /^(?:free|no[- ]cost)$/i.test(term);
-  return [...new Set(terms)].filter((term) => !sources.some((source) =>
-    (source.toLowerCase().includes(term.toLowerCase()) || (free(term) && /free|no[- ]cost/i.test(source)) || spelledCurrency(term, source))
-      && !/\b(no|not|never|without|avoid)\b/i.test(source),
-  )).map((term) => `Unsupported commercial term: ${term}. Omit it; do not convert a creative suggestion into a business fact.`);
+  return [...new Set(terms)].filter((term) => !sources.some((source) => {
+    // #613: only a negation of the term itself ("no free survey") withdraws support, not one elsewhere
+    // in the fact ("Free site survey, no obligation").
+    const pattern = free(term) ? /free|no[- ]cost/gi : new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    return [...source.matchAll(pattern)].some((match) => !negatedTerm(source, match.index, match[0])
+      && !/\bavoid\s+(?:(?:a|an|any)\s+)?$/i.test(source.slice(Math.max(0, match.index - 16), match.index)))
+      || (spelledCurrency(term, source) && !/\b(no|not|never|without|avoid)\b/i.test(source));
+  }));
+}
+
+/** The term's class for logs (#613), never the term itself. */
+function claimClass(term: string): string {
+  if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
+  if (/^guaranteed?$/i.test(term)) return "guarantee";
+  return term.includes("%") ? "percent" : "currency";
+}
+
+function commercialClaimIssues(result: InterviewResult, input: InterviewInput): string[] {
+  return unsupportedTerms(result, input)
+    .map((term) => `Unsupported commercial term [${claimClass(term)}]: ${term}. Omit it; do not convert a creative suggestion into a business fact.`);
+}
+
+/**
+ * #613 last resort after a failed repair: drop only what states an unsupported term (question options,
+ * recommendations, brief sentences). Null when nothing usable remains; the caller re-validates everything.
+ */
+function withoutUnsupportedTerms(result: InterviewResult, terms: string[]): InterviewResult | null {
+  const states = (text: string) => terms.some((term) => new RegExp(`(?<![\\p{L}\\p{N}-])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text));
+  if (result.ready) {
+    if (!result.brief) return null;
+    const brief = (result.brief.match(/[^.!?\n]+[.!?]*\s*/g) ?? [result.brief]).filter((sentence) => !states(sentence)).join("").trim();
+    if (brief.length < 40) return null;
+    return { ...result, brief, ...(result.recommendations ? { recommendations: result.recommendations.filter((item) => !states(`${item.label}\n${item.prompt}`)) } : {}) };
+  }
+  if (!result.question?.options) return null;
+  const options = result.question.options.filter((option) => !states(option));
+  return { ...result, question: { ...result.question, options, ...(options.length < 2 ? { allowText: true } : {}) } };
 }
 
 function advisoryFactIssues(result: InterviewResult, input: InterviewInput): string[] {
@@ -248,6 +286,8 @@ const INTERVIEW_RULES: [string, string][] = [
 export function interviewValidationRules(issues: string[]): string[] {
   return [...new Set(issues.map((issue) => {
     const rule = INTERVIEW_RULES.find(([prefix]) => issue.startsWith(prefix));
+    const claim = rule?.[1] === "unsupported-commercial-claim" ? /^Unsupported commercial term \[(\w+)\]/.exec(issue) : null;
+    if (claim) return `${rule![1]}:${claim[1]}`;
     if (rule) return rule[1];
     const path = issue.split(": ", 1)[0];
     return issue.includes(": ") && /^[\w.]*$/.test(path) ? `schema:${path || "root"}` : "other";
@@ -349,6 +389,7 @@ export async function runInterview(
   const messages = buildInterviewMessages(input);
   const timeout = AbortSignal.timeout(45_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  let last: { result: InterviewResult; issues: string[] } | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     signal.throwIfAborted();
     let sawProviderAttempt = false;
@@ -395,18 +436,28 @@ export async function runInterview(
       ? [...interviewResultIssues(parsed.data, input.answers ?? []), ...commercialClaimIssues(parsed.data, input), ...advisoryFactIssues(parsed.data, input)]
       : parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
     await options.onAttempt?.(completion, attempt + 1, parsed.success && !issues.length, interviewValidationRules(issues));
-    if (parsed.success && !issues.length) {
-      if (!parsed.data.ready && parsed.data.question.field === "offer") {
-        parsed.data.question.allowRandom = false;
-        parsed.data.question.aiCanDecide = false;
-      }
-      if (parsed.data.ready && !parsed.data.language) parsed.data.language = ownerLanguage(input);
-      return parsed.data;
-    }
+    if (parsed.success && !issues.length) return finalize(parsed.data, input);
+    last = parsed.success ? { result: parsed.data, issues } : null;
     messages.push(
       { role: "assistant", content: completion.text.slice(0, 6000) },
       { role: "user", content: `Repair the response once. Return the complete JSON object.\n${issues.join("\n")}` },
     );
   }
+  // #613: the repair kept an unsupported term; drop just those parts if everything else holds.
+  if (last && last.issues.length && interviewValidationRules(last.issues).every((rule) => rule.startsWith("unsupported-commercial-claim"))) {
+    const cleaned = withoutUnsupportedTerms(last.result, unsupportedTerms(last.result, input));
+    if (cleaned && ![...interviewResultIssues(cleaned, input.answers ?? []), ...commercialClaimIssues(cleaned, input), ...advisoryFactIssues(cleaned, input)].length) {
+      return finalize(cleaned, input);
+    }
+  }
   throw new InterviewValidationError();
+}
+
+function finalize(result: InterviewResult, input: InterviewInput): InterviewResult {
+  if (!result.ready && result.question?.field === "offer") {
+    result.question.allowRandom = false;
+    result.question.aiCanDecide = false;
+  }
+  if (result.ready && !result.language) result.language = ownerLanguage(input);
+  return result;
 }

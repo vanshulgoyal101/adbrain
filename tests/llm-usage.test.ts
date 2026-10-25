@@ -111,8 +111,9 @@ describe("persistent quota accounting", () => {
       model: "m", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, requestId: "request",
       status: "error", errorCode: "CreativeValidationError", failure: "HTTP_402",
     }]);
+    // #614: the provider's failure wins over the wrapper's name, so a 402/429 isn't read as a validation failure.
     expect(insert).toHaveBeenCalledWith([expect.objectContaining({
-      error_code: "CreativeValidationError", metadata: expect.objectContaining({ failure: "HTTP_402" }),
+      error_code: "LLM_HTTP_402", metadata: expect.objectContaining({ failure: "HTTP_402" }),
     })]);
     expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({
       name: "ai.completion", outcome: "failed", attributes: expect.objectContaining({ errorCode: "LLM_HTTP_402" }),

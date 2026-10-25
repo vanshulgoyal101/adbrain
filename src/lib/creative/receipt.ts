@@ -154,7 +154,8 @@ export function failedVariantUsage(
     promptVersion: CONCEPT_VERSION,
     attempt: index + 1,
     status: entry.status ?? "error",
-    errorCode: error.name,
+    // #614: a provider failure keeps its own code; only a reply our checks rejected is a validation error.
+    errorCode: entry.failure ? `LLM_${entry.failure}` : error.name,
     ...(validation ? { metadata: { validationStage: validation.stage, validationRules: validation.rules } }
       : metadata && index === error.usage.length - 1 ? { metadata } : {}),
   }));

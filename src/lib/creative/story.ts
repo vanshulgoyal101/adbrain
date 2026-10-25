@@ -2,10 +2,9 @@ import sharp from "sharp";
 import { AD_FORMATS, type AdDesignSpec } from "./design";
 import { downloadImage } from "@/lib/imageGen";
 import { renderCompositeAd } from "./render";
-import { storedPictureDesign } from "./picture-words";
+import { hasStoryDesign, storedPictureDesign } from "./picture-words";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+export { hasStoryDesign };
 
 /**
  * The same ad laid out at 9:16 for Stories and Reels (#333): the saved design and photo, no AI call.
@@ -14,9 +13,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * Returns null for ads made before the design was saved, or without overlay text.
  */
 export async function renderStoryAd(generation: unknown): Promise<Uint8Array | null> {
-  if (!isRecord(generation) || generation.composition !== "overlay" || typeof generation.photoUrl !== "string") return null;
-  const design = storedPictureDesign(generation.design);
-  if (!design) return null;
+  if (!hasStoryDesign(generation)) return null;
+  const design = storedPictureDesign(generation.design)!;
   const { width, height } = AD_FORMATS.story;
   const photo = Buffer.from((await downloadImage(generation.photoUrl)).bytes);
   const backdrop = await sharp(photo).resize(width, height, { fit: "cover" }).blur(36).modulate({ brightness: 0.55 }).toBuffer();

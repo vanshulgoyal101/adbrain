@@ -2,6 +2,7 @@ import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
+import { reviewWarnings } from "@/lib/campaign/plan-check";
 
 export interface PreflightCreative {
   id: string;
@@ -12,6 +13,8 @@ export interface PreflightCreative {
   primaryText?: string | null;
   description?: string | null;
   cta?: string | null;
+  /** Its saved design can be laid out at 9:16 for Stories and Reels (#333). */
+  storyReady?: boolean;
 }
 
 export interface PreflightForm {
@@ -48,6 +51,8 @@ export interface PreflightInput {
   website?: string | null;
   geo: PreflightGeo;
   hash: (payload: string) => string;
+  /** The business's own cost per chat or lead for this kind of campaign (#419 2b); unknown when absent. */
+  costPerResultRupees?: number | null;
 }
 
 export type ReviewFreshnessInput = {
@@ -223,6 +228,11 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const payload = buildCanonicalReviewPayload(input);
   const creativeHash = input.hash(JSON.stringify(buildCreativeReviewPayload(input.creatives)));
   const planHash = blockers.length ? null : input.hash(canonicalJson(payload));
+  const planWarnings = reviewWarnings({
+    destination: draft.destination ?? "instant_form",
+    storyReady: input.creatives.length > 0 && input.creatives.every((creative) => creative.storyReady === true),
+    perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
+  });
 
   return {
     draftId: input.draftId,
@@ -243,6 +253,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     ...(input.geo.location ? { resolvedLocation: input.geo.location } : {}),
     ...(input.geo.excludedLocation ? { resolvedExcludedLocation: input.geo.excludedLocation } : {}),
     ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
+    ...(planWarnings.length ? { planWarnings } : {}),
   };
 }
 

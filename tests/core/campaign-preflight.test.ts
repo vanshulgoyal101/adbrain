@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { runPreflight } from "@/lib/campaign/preflight";
+import { REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 
 // Production launch for Cedar Ridge (no website) on Oct 21, operation d88f0502: Meta
 // created the campaign and ad set, then rejected the ad because a lead ad linked to
@@ -17,16 +18,18 @@ const draft = {
   },
 };
 
-function review(website: string | null | undefined, destination: "instant_form" | "whatsapp" = "instant_form") {
+function review(website: string | null | undefined, destination: "instant_form" | "whatsapp" = "instant_form",
+  extra: { storyReady?: boolean; costPerResultRupees?: number | null; dailyBudgetRupees?: number } = {}) {
   return runPreflight({
-    draft: { ...draft, destination },
+    draft: { ...draft, destination, ...(extra.dailyBudgetRupees ? { dailyBudgetRupees: extra.dailyBudgetRupees } : {}) },
     draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
     draftVersion: 2,
     connection: { generation: 1, canCreatePaused: true, selected: {
       metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101",
       pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
     } },
-    creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "New-Patient Exam with Posture Scan" }],
+    creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "New-Patient Exam with Posture Scan", storyReady: extra.storyReady }],
+    costPerResultRupees: extra.costPerResultRupees,
     form: { id: "1732372914636573", businessId, active: true },
     whatsappNumber: "+919876543210",
     website,
@@ -64,4 +67,17 @@ describe("core: launch preflight", () => {
   it("does not require a website for WhatsApp campaigns", () => {
     expect(review(null, "whatsapp").canCreatePaused).toBe(true);
   });
+
+  // #419 item 2(b), CTO Oct 25: warnings on Review, never a blocker or a change to the reviewed plan.
+  it("warns about a missing 9:16 and a budget below Meta's learning threshold without blocking or changing the plan", () => {
+    const plain = review(null, "whatsapp", { storyReady: true, costPerResultRupees: 10 });
+    expect(plain).not.toHaveProperty("planWarnings");
+    const warned = review(null, "whatsapp", { storyReady: false, costPerResultRupees: 69, dailyBudgetRupees: 200 });
+    expect(warned.planWarnings).toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);
+    expect(warned.canCreatePaused).toBe(true);
+    expect(warned.blockers).toEqual([]);
+    expect(warned.planHash).toBe(review(null, "whatsapp", { storyReady: true, costPerResultRupees: 10, dailyBudgetRupees: 200 }).planHash);
+    expect(review("https://cedarridgechiro.com").planWarnings).toEqual([REVIEW_WARNINGS.story]);
+  });
 });
+

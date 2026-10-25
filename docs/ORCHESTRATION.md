@@ -126,6 +126,13 @@ it up** (whichever is running). Each tick, at most every 10 minutes:
      one line to the owner via the CEO.
 3. At most one message per chat per 20 minutes. Then wait for the next tick (`wait-for-work --me ceo` or `--me cto`).
 
+### Ready pool (pull, don't wait)
+
+The CTO keeps 3+ briefed issues per lane labelled `ready` + `lane:<dev|qa|devops|review>`
+(why with evidence, do, done-when, files). Anyone in the lane with nothing actionable claims
+the oldest core one (`--add-label owner:<you> --remove-label ready`); `wait-for-work` offers
+it. QA's walks and the Reviewer's audits file their findings straight into the pool.
+
 ### Standing rules
 
 - **Worktrees.** Start one with `bash scripts/wt.sh <issue>`: a `work/issue-<n>`

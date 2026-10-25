@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardRow, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { readyPool, boardRow, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -168,5 +168,23 @@ describe("scheduled checks: Next read <time> (QA 2, #575)", () => {
     expect(waitingOnMe("Dev 3: → QA 2: gates please. Next read 2026-10-25T16:00Z.", qa2, [], Date.parse("2026-10-25T11:00Z"))).toBe(true);
     expect(snoozedUntil("QA 2: Next read ~16:00Z")).toBeNull();
     expect(snoozedUntil("QA 2: next check 2026-10-26 14:24Z")).toBe(Date.parse("2026-10-26T14:24Z"));
+  });
+});
+
+describe("ready pool (#573)", () => {
+  const issue = (number: number, ...labels: string[]) => ({ number, labels: labels.map((name) => ({ name })) });
+  const pool = [
+    issue(10, "ready", "lane:dev"),
+    issue(11, "ready", "lane:dev", "core"),
+    issue(12, "ready", "lane:dev", "owner:dev2"),
+    issue(13, "ready", "lane:qa"),
+    issue(14, "ready", "lane:dev", "blocked"),
+    issue(15, "lane:dev"),
+  ];
+  it("offers the lane's unclaimed items, core first, to every role in the lane", () => {
+    expect(readyPool(pool, "dev3").map((i) => i.number)).toEqual([11, 10]);
+    expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([13]);
+    expect(readyPool(pool, "devops")).toEqual([]);
+    expect(readyPool(pool, "cto")).toEqual([]);
   });
 });
