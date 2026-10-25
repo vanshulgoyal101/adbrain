@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Blocks until there is new work for one role, so an idle worker chat picks up quick handoffs.
-// Run it in the foreground only; it gives up after --max-min (default 120), and nothing is left running.
+// Run it in the foreground only; it gives up after --max-min (default 30), and nothing is left running.
 // It also never outlives its chat: it exits when its parent process is gone, and a second copy for
 // the same role exits at once.
-// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 120] [--poll-sec 90] [--since <ISO time>]
+// Usage: node scripts/wait-for-work.mjs --me dev2 [--max-min 30] [--poll-sec 90] [--since <ISO time>]
 // Exit 0 = work found (printed), 3 = nothing new before --max-min, 4 = another waiter for this role
 // is already running, 5 = the chat that started it is gone.
 // Restart-proof (#384): on start it prints your role card, everything labelled for you with its latest
@@ -166,7 +166,7 @@ async function main() {
 const { values } = parseArgs({
   options: {
     me: { type: "string" },
-    "max-min": { type: "string", default: "120" },
+    "max-min": { type: "string", default: "30" },
     "poll-sec": { type: "string", default: "90" },
     since: { type: "string" },
     repo: { type: "string", default: process.env.GH_REPO || "vanshulgoyal101/adbrain" },
