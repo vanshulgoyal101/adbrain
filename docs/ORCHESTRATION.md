@@ -118,13 +118,13 @@ it up** (whichever is running). Each tick, at most every 10 minutes:
 2. `list_sessions` maps roles to chats by title. For each `has-work` role:
    - chat **idle** → `send_message` (queue): "You are <Role>. Your next item: <first item>.
      Run `node scripts/wait-for-work.mjs --me <role>` when done."
-   - chat **in progress** but not updated for 20+ min and no waiter → it's stuck on a dead
-     shell: `send_message` (steer): "Stop waiting on the dead shell; pull origin/main and do
-     <first item>."
+   - chat **in progress** with no waiter: compare `get_session_context` (`digest`, last turn)
+     with the previous tick. If its text and tool calls haven't changed for 20+ min, it's stuck
+     on a dead shell: `send_message` (steer): "Stop waiting on the dead shell; pull origin/main
+     and do <first item>." (`modifiedAt` in `list_sessions` doesn't move while a chat works.)
    - chat **error** or **input needed** → same message once; if still stuck next tick,
      one line to the owner via the CEO.
-3. At most one message per chat per 20 minutes, and never to a chat updated in the last
-   5 minutes. Then wait for the next tick (`wait-for-work --me ceo` or `--me cto`).
+3. At most one message per chat per 20 minutes. Then wait for the next tick (`wait-for-work --me ceo` or `--me cto`).
 
 ### Standing rules
 
