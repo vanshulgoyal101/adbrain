@@ -7,7 +7,8 @@ import { recordProductEvent } from "@/lib/observability/logger";
 import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
 
 export interface LLMUsageEvent {
-  businessId: string;
+  /** Null before a business exists (Brand autofill on first setup): the ai.completion event only. */
+  businessId: string | null;
   userId: string;
   route: string;
   provider: string;
@@ -149,10 +150,12 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
       ...(usageErrorCode(event) ? { errorCode: usageErrorCode(event)! } : {}),
       ...validationRules(event.metadata) },
   });
+  const rows = events.filter((event): event is LLMUsageEvent & { businessId: string } => event.businessId !== null);
+  if (!rows.length) return true;
   try {
     const supabase = createAdminClient();
     const { error } = await supabase.from("llm_usage_events").insert(
-      events.map((event) => ({
+      rows.map((event) => ({
         business_id: event.businessId,
         user_id: event.userId,
         route: event.route,
