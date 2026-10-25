@@ -282,6 +282,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   upload, or a creative or ad Meta refuses fall back to the single 4:5 image and
   log `campaign.story_fallback`. Lead-form ads keep the single image. Meta's real
   answers are recorded by `scripts/record-meta-story-fixtures.ts`.
+- Every launch checks the payloads it sent against Meta's new-advertiser guidance
+  (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
+  images) and logs `campaign.plan_check` (#419); nothing is blocked or shown yet.
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
   pause, and activation safeguards. Stored results are lifetime insights (`date_preset=maximum`):
   Meta's default `last_30d` leaves out today, so a new campaign used to read ₹0 (#404). Refresh detects all-WhatsApp ad sets and

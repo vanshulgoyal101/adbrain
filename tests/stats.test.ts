@@ -11,7 +11,7 @@ describe("customer filter (#451)", () => {
 
 describe("npm run stats (#451)", () => {
   it("has the sections the CEO asked for", () => {
-    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "campaign_receipts", "business_days", "failures", "auth", "speed", "managed_accounts", "funnel"]);
+    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "campaign_receipts", "business_days", "failures", "auth", "speed", "plan_checks", "managed_accounts", "funnel"]);
   });
 
   it("gives a receipt for each of the last 20 ads: its own calls, and later changes to it (#451 L1)", () => {
@@ -34,6 +34,13 @@ describe("npm run stats (#451)", () => {
     for (const route of ["/api/campaigns/plan", "/api/campaigns/preflight", "/api/campaigns/create", "/api/campaigns/[id]/refresh"]) expect(sql).toContain(`'${route}'`);
     expect(sql).toContain("e.request_id = cr.request_id and e.name = 'meta.graph'");
     expect(sql).toContain("from public.campaign_operations o");
+  });
+
+  it("counts launches the plan check ran on, and which rules didn't pass (#419 2a)", () => {
+    const sql = sectionSql("plan_checks", 7, []);
+    expect(sql).toContain("name = 'campaign.plan_check'");
+    expect(sql).toContain("jsonb_array_elements_text(e.attributes->'validationRules')");
+    expect(sql).toContain("'all launches checked'");
   });
 
   it("shows managed accounts now, by state, customers only by default (#527)", () => {

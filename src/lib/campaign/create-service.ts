@@ -18,6 +18,7 @@ import { whatsappGreeting } from "./whatsapp-greeting";
 import { draftAreaNames } from "./draft-targeting";
 import { savedGenerationSettings } from "@/lib/creative/receipt";
 import { normalizeWebsite } from "@/lib/brand/validation";
+import { checkPlan, planCheckEvent } from "./plan-check";
 
 const STORY_RENDER_BUDGET_MS = 6_000;
 
@@ -116,6 +117,11 @@ export async function executeReviewedCampaign(input: {
             })) : undefined,
             onCheckpoint,
             onStoryFallback: storyFallback,
+            // #419 item 2(a): the exact payloads sent, checked against Meta's new-advertiser guidance.
+            onPlanned: (plan) => recordProductEvent({
+              kind: "workflow", name: "campaign.plan_check", businessId: actor.businessId,
+              ...planCheckEvent(checkPlan(plan), draft.input.destination ?? "instant_form"),
+            }),
           });
           return metaResult;
         });

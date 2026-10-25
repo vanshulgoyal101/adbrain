@@ -938,6 +938,8 @@ export class MetaClient {
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;
     /** A 9:16 couldn't be used and the ad fell back to the single 4:5 image (#333). */
     onStoryFallback?: (stage: "instagram" | "upload" | "creative" | "ad", errorCode: string) => void;
+    /** #419: the ad set forms sent and, per ad, the creative form it runs on, for the plan check. */
+    onPlanned?: (plan: { adSets: Record<string, string>[]; creatives: Record<string, string>[] }) => void;
   }): Promise<CreateCampaignResult> {
     const locations = params.variants?.length
       ? params.variants.map((variant) => variant.location ?? params.location)
@@ -1052,25 +1054,28 @@ export class MetaClient {
       interests: params.interests,
     }));
 
-    const makeAdSet = (dest: AdDestination, v: AdSetVariant, i: number) => {
+    const plannedAdSets: Record<string, string>[] = [];
+    const plannedCreatives: Record<string, string>[] = [];
+    const creativeForms = new Map<string, Record<string, string>>();
+    const makeAdSet = async (dest: AdDestination, v: AdSetVariant, i: number) => {
       const dp = destinationPlan(dest);
       const suffix =
         v.label ?? (variants.length > 1 ? `Ad set ${i + 1}` : "Ad set");
-      return this.graph<{ id: string }>(`${acct}/adsets`, {
-        method: "POST",
-        form: {
-          name: `${params.name} — ${suffix}`,
-          campaign_id: campaign.id,
-          status: "PAUSED",
-          daily_budget: String(Math.round(params.dailyBudgetRupees * 100)),
-          billing_event: "IMPRESSIONS",
-          optimization_goal: dp.optimizationGoal,
-          bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-          destination_type: dp.destinationType,
-          promoted_object: JSON.stringify({ page_id: this.creds.pageId, ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}) }),
-          targeting: targetingFor(v),
-        },
-      });
+      const form = {
+        name: `${params.name} — ${suffix}`,
+        campaign_id: campaign.id,
+        status: "PAUSED",
+        daily_budget: String(Math.round(params.dailyBudgetRupees * 100)),
+        billing_event: "IMPRESSIONS",
+        optimization_goal: dp.optimizationGoal,
+        bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+        destination_type: dp.destinationType,
+        promoted_object: JSON.stringify({ page_id: this.creds.pageId, ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}) }),
+        targeting: targetingFor(v),
+      };
+      const created = await this.graph<{ id: string }>(`${acct}/adsets`, { method: "POST", form });
+      plannedAdSets.push(form);
+      return created;
     };
 
     const destination = requested;
@@ -1127,7 +1132,11 @@ export class MetaClient {
             },
           }),
         };
-        const postCreative = (form: Record<string, string>) => this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
+        const postCreative = async (form: Record<string, string>) => {
+          const created = await this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
+          creativeForms.set(created.id, form);
+          return created;
+        };
         // A placement creative Meta refuses must not fail the campaign: fall back to the single image.
         const creative = placement
           ? await postCreative({
@@ -1146,15 +1155,20 @@ export class MetaClient {
           creativeIndex,
         });
 
-        const postAd = (creativeId: string) => this.graph<{ id: string }>(`${acct}/ads`, {
-          method: "POST",
-          form: {
-            name: c.headline.slice(0, 90) || "AdBrain ad",
-            adset_id: adSet.id,
-            status: "PAUSED",
-            creative: JSON.stringify({ creative_id: creativeId }),
-          },
-        });
+        const postAd = async (creativeId: string) => {
+          const created = await this.graph<{ id: string }>(`${acct}/ads`, {
+            method: "POST",
+            form: {
+              name: c.headline.slice(0, 90) || "AdBrain ad",
+              adset_id: adSet.id,
+              status: "PAUSED",
+              creative: JSON.stringify({ creative_id: creativeId }),
+            },
+          });
+          const runsOn = creativeForms.get(creativeId);
+          if (runsOn) plannedCreatives.push(runsOn);
+          return created;
+        };
         // If Meta still refuses the ad on a placement creative, make it with the single image instead.
         const ad = placement
           ? await postAd(creative.id).catch(async (error: unknown) => {
@@ -1175,6 +1189,8 @@ export class MetaClient {
       }
     }
 
+    // An observer only: a failing plan check never fails the launch.
+    try { params.onPlanned?.({ adSets: plannedAdSets, creatives: plannedCreatives }); } catch { /* ignored */ }
     return {
       campaignId: campaign.id,
       adSetId: adSetIds[0],
