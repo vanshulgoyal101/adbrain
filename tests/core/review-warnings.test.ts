@@ -3,7 +3,7 @@ import resultsTape from "./fixtures/meta/results.json";
 import launchTape from "./fixtures/meta/launch-validate.json";
 import evidenceFixture from "./fixtures/create/solaride-157-evidence.json";
 import { decodeCampaignInsights } from "@/lib/meta/insights";
-import { REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
+import { activationWarnings, REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 import { runPreflight } from "@/lib/campaign/preflight";
 import { hasStoryDesign } from "@/lib/creative/picture-words";
 
@@ -66,4 +66,24 @@ describe("core: Review warns from Meta's new-advertiser guidance, never blocks (
     expect(small.planWarnings).toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);
     for (const result of [recorded, small]) expect(result).toMatchObject({ canCreatePaused: true, blockers: [] });
   });
+
+  // #419 item 2: edits that restart Meta's learning, on the activation review, priced from the same
+  // recorded #157 chats. Never blocks; not part of the confirmation digest.
+  it("on activation, notes when a capped run's new ad set can't finish learning, and when a long pause restarts it", async () => {
+    const { getCostPerResult } = await import("@/lib/campaign/result-evidence-store");
+    const cost = await getCostPerResult("solaride", "whatsapp");
+    const now = Date.parse("2026-10-25T12:00:00Z");
+    const base = { dailyBudgetRupees: launchTape.inputs.dailyBudgetRupees, costPerResultRupees: cost, pausedAt: null, now };
+    // ₹280 × 3 days at ₹10.69 a chat is about 78 chats: enough to finish learning.
+    expect(activationWarnings({ ...base, capDays: 3 })).toEqual([]);
+    // ₹50 × 3 days is about 14 chats, under Meta's ~50.
+    expect(activationWarnings({ ...base, dailyBudgetRupees: 50, capDays: 3 })).toEqual([
+      "A capped run is a new ad set, so Meta's learning starts from zero: 3 days at about ₹10.69 a result buys about 14 results, under the ~50 it needs, so it will likely end while still learning",
+    ]);
+    expect(activationWarnings({ ...base, capDays: null, pausedAt: "2026-10-15T09:00:00Z" })).toEqual([
+      "Paused for 10 days: Meta restarts learning when a campaign resumes after 7 days or more; results may be slow at first",
+    ]);
+    expect(activationWarnings({ ...base, capDays: null, pausedAt: "2026-10-22T09:00:00Z" })).toEqual([]);
+  });
 });
+

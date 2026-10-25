@@ -20,6 +20,7 @@ import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-wri
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { isOperatorFunded } from "@/lib/payments/operator-funding";
 import { formatMoney } from "@/lib/format";
+import { getActivationLearning } from "@/lib/campaign/activation-learning";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
@@ -46,7 +47,7 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
     }
     await recheckMetaConnection(context, binding.metaConnectionGeneration);
     const operatorFunded = await isOperatorFunded(campaign.business_id);
-    const { delivery, funding } = await withMetaConnection(context, {
+    const [{ delivery, funding }, learning] = await Promise.all([withMetaConnection(context, {
       purpose: "activate",
       binding: { adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId },
       expectedGeneration: binding.metaConnectionGeneration,
@@ -55,8 +56,9 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
         dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children,
       }),
       funding: operatorFunded ? await meta.readAccountFunding() : null,
-    }));
-    return NextResponse.json({ delivery, ...(funding ? { funding } : {}) }, { headers: { "Cache-Control": "no-store" } });
+    })), getActivationLearning(campaign)]);
+    // #419 item 2: inputs for the learning-restart notes; not part of the confirmation digest.
+    return NextResponse.json({ delivery, ...(funding ? { funding } : {}), learning }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);

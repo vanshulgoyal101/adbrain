@@ -85,6 +85,7 @@ import {
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
+import { activationWarnings } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
@@ -270,6 +271,7 @@ function BusinessCampaigns({
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
   const [activationFunding, setActivationFunding] = useState<AccountFunding | null>(null);
   const [capDays, setCapDays] = useState(3);
+  const [activationLearning, setActivationLearning] = useState<{ costPerResultRupees: number | null; pausedAt: string | null; now: number } | null>(null);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
@@ -277,6 +279,10 @@ function BusinessCampaigns({
   // #245: an operator-funded business runs only capped, within Meta's account spending limit.
   const activationFunded = !activationFunding
     || (activationCapped && activationFunding.spendCapPaise > 0 && activationFunding.roomPaise >= activationCapPaise);
+  // #419 item 2: edits that restart Meta's learning (a capped run's new ad set, a long pause); never block.
+  const learningWarnings = activationReview && activationLearning && activationDelivery
+    ? activationWarnings({ capDays: activationCapped ? capDays : null, dailyBudgetRupees: activationReview.daily_budget ?? 0, ...activationLearning })
+    : [];
   const [prepareReview, setPrepareReview] = useState<PrepareReviewState | null>(null);
   // Ads edited from the picker (#280); the server reads the saved copy at launch.
   const [editedAds, setEditedAds] = useState<Record<string, Creative>>({});
@@ -1008,7 +1014,7 @@ function BusinessCampaigns({
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
-      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; error?: string };
+      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
       const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
@@ -1023,12 +1029,18 @@ function BusinessCampaigns({
       setActivationDigest(digest);
       setActivationDelivery(delivery);
       setActivationFunding(funding);
+      setActivationLearning({
+        costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
+        pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
+        now: Date.now(),
+      });
       setActivationReview(campaign);
       setConnectOpen(false);
     } catch (reason) {
       setActivationDigest(null);
       setActivationDelivery(null);
       setActivationFunding(null);
+      setActivationLearning(null);
       setActivationReview(null);
       setError(reason instanceof Error ? reason.message : "Activation review is unavailable.");
     }
@@ -1178,6 +1190,16 @@ function BusinessCampaigns({
                 : activationReady
                   ? <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>
                   : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
+            {learningWarnings.length ? (
+              <ul className="mt-2 space-y-1" aria-label="Before you activate">
+                {learningWarnings.map((warning) => (
+                  <li key={warning} className="flex items-start gap-1.5">
+                    <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>{warning}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
             <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!)}>Refresh review</Button>
           </div>}
