@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import { Plus, Save, Trash2 } from "lucide-react";
 import {
@@ -74,6 +75,7 @@ function InstructionEditor({
   const [content, setContent] = useState(instruction?.content ?? "");
   const [isActive, setIsActive] = useState(instruction?.is_active ?? true);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
   const [pending, startTransition] = useTransition();
 
   function save() {
@@ -99,12 +101,12 @@ function InstructionEditor({
     });
   }
 
-  function remove() {
+  async function remove() {
     if (!instruction) {
       onDone?.();
       return;
     }
-    if (!window.confirm(`Delete instruction “${instruction.title}”?`)) return;
+    if (!(await confirm({ title: `Delete instruction “${instruction.title}”?`, confirmLabel: "Delete instruction", tone: "danger" }))) return;
     setError(null);
     startTransition(async () => {
       try {
@@ -119,6 +121,7 @@ function InstructionEditor({
 
   return (
     <div className="rounded-lg border border-slate-200 p-4">
+      {confirmDialog}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <Input
