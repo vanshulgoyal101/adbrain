@@ -269,10 +269,11 @@ function BusinessCampaigns({
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectionIntent, setConnectionIntent] = useState<ConnectIntent>({ kind: "setup" });
   const [activationReview, setActivationReview] = useState<Campaign | null>(null);
-  // #662: the review opens above the campaign list; bring it on screen (a phone shows only the tapped card).
+  // #662: the review opens above the campaign list; each Resume brings it on screen (a phone shows only the tapped card).
+  const [reviewOpens, setReviewOpens] = useState(0);
   useEffect(() => {
-    if (activationReview) activationReviewRef.current?.scrollIntoView?.({ block: "start" });
-  }, [activationReview]);
+    if (reviewOpens) activationReviewRef.current?.scrollIntoView?.({ block: "start" });
+  }, [reviewOpens]);
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
@@ -1043,6 +1044,7 @@ function BusinessCampaigns({
         now: Date.now(),
       });
       setActivationReview(campaign);
+      if (!refreshing) setReviewOpens((opens) => opens + 1);
       setConnectOpen(false);
     } catch (reason) {
       setActivationDigest(null);

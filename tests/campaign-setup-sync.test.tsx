@@ -332,6 +332,56 @@ describe("campaign sync feedback", () => {
     expect(await card.findByRole("alert")).toHaveTextContent("Campaign budget changed in Meta. Refresh and review the budget before activation.");
   });
 
+  it("brings the review on screen each time Resume opens it, not on Refresh review; a failed Refresh review stays by the panel", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    const delivery = {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+      adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    };
+    let reviews = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
+      if (url === "/api/campaigns/campaign-1") return (reviews += 1) === 3
+        ? Response.json({ error: "Campaign budget changed in Meta. Refresh and review the budget before activation." }, { status: 409 })
+        : Response.json({ delivery });
+      return Response.json({ campaigns: [], nextCursor: null });
+    }));
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+      const resume = async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+        await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+      };
+      await resume();
+      await screen.findByRole("button", { name: "Request activation" });
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      // The owner scrolled back down to the card and tapped Resume again: the same review, brought back on screen.
+      await resume();
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
+      fireEvent.click(screen.getByRole("button", { name: "Refresh review" }));
+      expect(await screen.findByText("Campaign budget changed in Meta. Refresh and review the budget before activation.")).toBeInTheDocument();
+      expect(within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!).queryByRole("alert")).toBeNull();
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
+  });
+
+  it("keeps Pause on an active campaign AdBrain didn't launch, and shows a failed pause on its card", async () => {
+    const synced = { id: "campaign-9", business_id: business.id, name: "new year", status: "active", meta_campaign_id: "meta-9", meta_ad_account_id: "act_1", daily_budget: 500, raw: null } as unknown as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => url === "/api/campaigns/campaign-9" && init?.method === "PATCH"
+      ? Response.json({ error: "Meta did not confirm the pause. Pause the campaign in Ads Manager now." }, { status: 502 })
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[synced]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    const card = within(screen.getByRole("heading", { name: "new year" }).closest("article")!);
+    expect(card.queryByRole("link", { name: "Resume in Ads Manager" })).toBeNull();
+    fireEvent.click(card.getByRole("button", { name: "Pause" }));
+    expect(await card.findByRole("alert")).toHaveTextContent("Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
+  });
+
   it("shows a failed refresh on the campaign's card, and clears it on the next try", async () => {
     const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
     let fail = true;
