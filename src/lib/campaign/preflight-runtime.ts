@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
+import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
 import type { PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { createClient } from "@/lib/supabase/server";
 import { resolveDraftTargeting } from "./draft-targeting";
@@ -57,7 +58,7 @@ export function buildCampaignPreflightLoaders(
       const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;
       try {
-        return await withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => meta.getWhatsAppNumber(requested));
+        return await withMetaConnection(authorizedBusiness, { purpose: "create_paused" }, (meta) => whatsappNumberForBusiness(authorizedBusiness.businessId, meta, requested ?? null));
       } catch {
         return null;
       }

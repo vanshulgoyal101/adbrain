@@ -10,6 +10,7 @@ import { effectiveDailyBudget } from "./spend";
 import { savedCreativeDescription } from "@/lib/creative/concept";
 import { splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
+import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
 import type { Json } from "@/lib/types";
 import { saveCampaign } from "./trusted-write";
@@ -93,6 +94,8 @@ export async function executeReviewedCampaign(input: {
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
             destination: draft.input.destination ?? "instant_form", whatsappNumber: review.whatsappNumber ?? undefined,
+            // #253: the create step re-checks the number against this business's bindings.
+            ...(draft.input.destination === "whatsapp" ? { boundWhatsAppNumbers: await boundWhatsAppNumbers(actor.businessId) } : {}),
             ...(draft.input.destination === "whatsapp" ? {
               // #493: the ask names the city only when the campaign targets one (same areas as targeting).
               whatsappGreeting: whatsappGreeting(

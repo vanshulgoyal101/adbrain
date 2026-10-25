@@ -492,6 +492,22 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      whatsapp_number_bindings: {
+        Row: {
+          business_id: string;
+          phone_e164: string;
+          source: "owner_pick" | "embedded_signup" | "page_link";
+          waba_id: string | null;
+          phone_number_id: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["whatsapp_number_bindings"]["Row"], "created_at" | "waba_id" | "phone_number_id"> & {
+          waba_id?: string | null;
+          phone_number_id?: string | null;
+        };
+        Update: never;
+        Relationships: [];
+      };
       campaign_results: {
         Row: {
           destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";
