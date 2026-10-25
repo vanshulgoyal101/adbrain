@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardRow, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { boardRow, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -144,5 +144,20 @@ describe("Reviewer and QA 2 roles (#575)", () => {
     const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
     expect(low).toContain("qa2");
     expect(low).toContain("reviewer");
+  });
+});
+
+describe("scheduled checks: Next read <time> (QA 2, #575)", () => {
+  const qa2 = matchers("qa2");
+  const body = "QA 2: read at 10:57Z: safe. Next read 2026-10-25T16:00Z; final report after Oct 26 14:24Z.";
+  it("keeps your own scheduled item quiet until its time, then wakes you", () => {
+    expect(snoozedUntil(body)).toBe(Date.parse("2026-10-25T16:00Z"));
+    expect(waitingOnMe(body, qa2, [], Date.parse("2026-10-25T11:00Z"))).toBe(false);
+    expect(waitingOnMe(body, qa2, [], Date.parse("2026-10-25T16:01Z"))).toBe(true);
+  });
+  it("ignores the marker in someone else's comment, and unparseable times", () => {
+    expect(waitingOnMe("Dev 3: → QA 2: gates please. Next read 2026-10-25T16:00Z.", qa2, [], Date.parse("2026-10-25T11:00Z"))).toBe(true);
+    expect(snoozedUntil("QA 2: Next read ~16:00Z")).toBeNull();
+    expect(snoozedUntil("QA 2: next check 2026-10-26 14:24Z")).toBe(Date.parse("2026-10-26T14:24Z"));
   });
 });
