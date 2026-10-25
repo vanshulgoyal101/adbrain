@@ -63,6 +63,8 @@ export const draftInputSchema = z
     destination: z.enum(["instant_form", "whatsapp"]).optional(),
     /** WhatsApp button number when it differs from the Page's, in full or masked as AdBrain shows it ("+91 ••••• 4842"); verified against Meta at review. */
     whatsappNumber: z.union([z.string().regex(/^\+[1-9]\d{6,14}$/), z.string().regex(maskedWhatsAppNumberPattern)]).optional(),
+    /** #493: the language of the WhatsApp message the customer sends; "ad" (default) follows the ads. */
+    whatsappLanguage: z.enum(["ad", "en", "hi", "hinglish", "pa"]).optional(),
     targeting: targetingInputSchema,
     abTest: z.boolean(),
   })

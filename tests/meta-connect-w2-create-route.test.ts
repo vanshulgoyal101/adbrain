@@ -304,6 +304,18 @@ describe("durable campaign create route", () => {
     }));
   });
 
+  it("sends the campaign's chosen WhatsApp language (#493)", async () => {
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, whatsappLanguage: "hinglish" } });
+    const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => "+919876543210", createLeadCampaign: create, readActiveLeadForm: vi.fn(), resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    expect((await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewed.data.planHash, connectionGeneration, idempotencyKey }))).status).toBe(200);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      whatsappGreeting: expect.objectContaining({ autofill: "Namaste, mujhe Jaipur mein Solaride ke baare mein jaankari chahiye." }) }));
+  });
+
   it.each(["valid", "forged", "changed number", "missing number"])("checks the WhatsApp review before creation: %s", async (scenario) => {
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
     const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
@@ -323,7 +335,7 @@ describe("durable campaign create route", () => {
       expect(create).toHaveBeenCalledOnce();
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, boundWhatsAppNumbers: ["+919876543210"], leadFormId: undefined, gender: "women",
         // #493: one targeted city (the manual "Jaipur" place) is named in the one-tap ask.
-        whatsappGreeting: { autofill: "Hi, I'd like to know more about Solaride in Jaipur.", greeting: expect.stringContaining("Solaride") } }));
+        whatsappGreeting: { autofill: "Hi! I'd like to know more about Solaride in Jaipur.", greeting: expect.stringContaining("Solaride") } }));
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(create).not.toHaveBeenCalled();
