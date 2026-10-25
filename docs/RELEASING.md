@@ -150,16 +150,17 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   count as advisory only, and **holds only on Vercel's own answer**: if the newest
   production deploy failed within the last hour, it alerts once and retries after the hour.
   Avoid `vercel redeploy`/`deploy` from the CLI on a busy day; push or promote instead.
-  Direct merges to `main` only with `hotfix` or a migration; after one, merge `main` into
-  `next` by PR, because the train refuses while `main` has changes `next` lacks (train merge commits don't count).
+  Direct merges to `main` only with `hotfix` or a migration. The train then merges `main`
+  into `next` itself (a `Train sync: main → next` PR whose head is `main`'s CI-checked
+  commit), dispatches CI on the merged commit and promotes once it's green. Only a conflict
+  or red `main` stops it; then merge `main` into `next` by a person's PR.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
   with a PR to it; production keeps the last train.
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`
   to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs
   that add `db/migrations/` (released to `main` by DevOps with `release.mjs`).
 - Hotfix: DevOps or CTO opens the PR to `main` with the `hotfix` label. It's one deploy,
-  so use it for production breakage only. Then open a PR merging `main` into `next`
-  (or the same fix to `next`) so the next train doesn't lack it.
+  so use it for production breakage only. The next train merges it into `next`.
 
 ## Rollback and Incident Handling
 
