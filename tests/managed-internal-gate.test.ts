@@ -10,6 +10,7 @@ vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class extends Error {},
 }));
 vi.mock("@/lib/payments/customer-balance", () => ({ getCustomerBalance: async () => ({ capturedPaise: 0, refundedPaise: 0 }) }));
+vi.mock("@/lib/meta/managed-whatsapp", () => ({ checkManagedWhatsApp: async () => ({ status: "waiting_setup" }) }));
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "11111111-1111-4111-8111-111111111111" }) }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -53,6 +54,15 @@ describe("managed accounts for internal accounts only, until the flag is on (#52
     expect((await get()).status).toBe(404);
     m.user = internal;
     expect((await get()).status).toBe(200);
+  });
+
+  it("/api/managed/whatsapp is a 404 for a customer and checks for an internal account (#524)", async () => {
+    const { POST } = await import("@/app/api/managed/whatsapp/route");
+    const post = () => POST(new Request("http://localhost/api/managed/whatsapp", { method: "POST", body: JSON.stringify({ businessId }) }));
+    m.user = customer;
+    expect((await post()).status).toBe(404);
+    m.user = internal;
+    expect((await post()).status).not.toBe(404);
   });
 
   it("the attempt-based managed routes (Page, provision) refuse a customer and let an internal account through", async () => {
