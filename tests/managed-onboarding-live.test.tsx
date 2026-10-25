@@ -39,6 +39,23 @@ describe("<ManagedOnboardingLive> (#526)", () => {
     expect(screen.queryByText(`Page step for ${attemptId}`)).toBeNull();
   });
 
+  it("checks the Page's WhatsApp and says what to do next (#524)", async () => {
+    let whatsapp: unknown = { status: "not_linked" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/managed/whatsapp"
+      ? { ok: true, data: whatsapp }
+      : { ok: true, data: { row: { state: "page_linked", funding_state: "none", page_id: "1", child_business_id: null, ad_account_id: null, waba_id: null, phone_number_id: null, last_error: null }, paid: true } })));
+    render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={null} />);
+    expect(await screen.findByRole("link", { name: /WhatsApp settings on Facebook/ })).toHaveAttribute("target", "_blank");
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("We don't see a WhatsApp number on your Page yet");
+    whatsapp = { status: "taken" };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("already used by another AdBrain business");
+    whatsapp = { status: "linked", masked: "+91 ••••• 0874" };
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("Linked: +91 ••••• 0874")).toBeInTheDocument();
+  });
+
   it("opens the Page step directly when it returns from a same-tab sign-in", async () => {
     render(<ManagedOnboardingLive businessId={businessId} initialAttemptId={attemptId} />);
     expect(await screen.findByText(`Page step for ${attemptId}`)).toBeInTheDocument();
