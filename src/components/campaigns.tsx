@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -241,6 +242,7 @@ function BusinessCampaigns({
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
     ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
@@ -485,7 +487,7 @@ function BusinessCampaigns({
 
   async function removeDraft(draft: DraftDTO) {
     if (preparing || creating) return;
-    if (!window.confirm(`Remove saved draft "${draft.input.name}"?`)) return;
+    if (!(await askConfirm({ title: `Remove saved draft "${draft.input.name}"?`, confirmLabel: "Remove draft", tone: "danger" }))) return;
     setDraftBusy(draft.draftId);
     try {
       await createMetaConnectClient().deleteDraft(draft.draftId, draft.version);
@@ -507,14 +509,14 @@ function BusinessCampaigns({
     setShowComposer(true);
   }
 
-  function startNewCampaign() {
+  async function startNewCampaign() {
     if (preparing || creating) return;
     // needs_reconciliation is terminal on the server; a new campaign uses a new request, so only in-flight work stays locked.
     const reconciling = operation?.state === "needs_reconciliation";
     if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
-    if (!window.confirm(reconciling
-      ? "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you do not want it. Start a new campaign?"
-      : "Discard this campaign setup and start a new one? Saved drafts remain available.")) return;
+    if (!(await askConfirm(reconciling
+      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you don't want it.", confirmLabel: "Start new campaign" }
+      : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
     setError(null);
     preparedDraftRef.current = null;
     recoveryRef.current = null;
@@ -1075,11 +1077,7 @@ function BusinessCampaigns({
   }
 
   async function deleteCampaign(c: Campaign) {
-    if (
-      !window.confirm(
-        `Delete "${c.name ?? "this campaign"}"? This removes it from Meta and can't be undone.`,
-      )
-    ) {
+    if (!(await askConfirm({ title: `Delete "${c.name ?? "this campaign"}"?`, description: "This removes it from Meta and can't be undone.", confirmLabel: "Delete campaign", tone: "danger" }))) {
       return;
     }
     setDeletingId(c.id);
@@ -1102,6 +1100,7 @@ function BusinessCampaigns({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      {confirmDialog}
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} requested active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
           {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ export function PrivacyRequests({ initialRequests = null, initialOperatorAvailab
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [confirm, confirmDialog] = useConfirm();
   const serverLoaded = initialRequests !== null;
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export function PrivacyRequests({ initialRequests = null, initialOperatorAvailab
   }, [serverLoaded]);
 
   async function submit(kind: PrivacyRequest["kind"]) {
-    if (kind === "delete" && !window.confirm("Submit an account deletion request for operator review? No data will be deleted immediately.")) return;
+    if (kind === "delete" && !(await confirm({ title: "Request account deletion?", description: "An operator reviews the request. No data is deleted immediately.", confirmLabel: "Request deletion", tone: "danger" }))) return;
     setBusy(true); setError(""); setNotice("");
     try {
       const response = await fetch("/api/privacy-requests", {
@@ -51,6 +53,7 @@ export function PrivacyRequests({ initialRequests = null, initialOperatorAvailab
   }
 
   return <section aria-labelledby="privacy-requests-title" className="space-y-4 border-t border-slate-200 pt-6">
+      {confirmDialog}
     <div>
       <h2 id="privacy-requests-title" className="text-lg font-semibold text-slate-900">Privacy and data requests</h2>
       <p className="text-sm text-slate-600">Requests are reviewed by an operator; no full-account export or deletion happens automatically. <a href="/data-deletion" className="font-medium text-blue-700 underline">Data request details</a></p>

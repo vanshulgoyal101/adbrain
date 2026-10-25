@@ -4,6 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { Business, Campaign, CampaignResult } from "@/lib/types";
+// #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
+vi.mock("@/components/ui/confirm-dialog", () => ({
+  useConfirm: () => [async (options: { title: string; description?: string }) => window.confirm([options.title, options.description].filter(Boolean).join(" ")), null],
+}));
 
 // #403 S5: a Campaigns row at 390 px: 44 px actions, one "More" menu, and results (or why not) on every row.
 const mocks = vi.hoisted(() => ({ drafts: vi.fn(), status: vi.fn() }));
