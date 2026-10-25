@@ -130,6 +130,11 @@ function validationRules(metadata: LLMUsageEvent["metadata"]): { validationRules
   return names.length ? { validationRules: names } : {};
 }
 
+/** The recorded error code: the provider's own failure first (`LLM_HTTP_429`), else the caller's (#614). */
+export function usageErrorCode(event: Pick<LLMUsageEvent, "failure" | "errorCode">): string | null {
+  return event.failure ? `LLM_${event.failure}` : event.errorCode ?? null;
+}
+
 /** Best-effort persistence; callers admitting paid work can retain a hold on failure. */
 export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean> {
   if (!events.length) return true;
@@ -141,7 +146,7 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
       outputTokens: event.usage.completionTokens, totalTokens: event.usage.totalTokens,
       estimatedCostUsd: event.estimatedCostUsd ?? estimatedCost(event.model, event.usage),
       usageKind: event.usageKind ?? "text", attempt: event.attempt ?? 1, cacheHit: event.cacheHit ?? false,
-      ...(event.failure ? { errorCode: `LLM_${event.failure}` } : event.errorCode ? { errorCode: event.errorCode } : {}),
+      ...(usageErrorCode(event) ? { errorCode: usageErrorCode(event)! } : {}),
       ...validationRules(event.metadata) },
   });
   try {
@@ -168,7 +173,9 @@ export async function persistLLMUsage(events: LLMUsageEvent[]): Promise<boolean>
         latency_ms: event.latencyMs ?? null,
         attempt: event.attempt ?? 1,
         status: event.status ?? "success",
-        error_code: event.errorCode ?? null,
+        // #614: a provider failure (HTTP 429/403, timeout…) keeps its own code even inside a creative
+        // error, so a rate limit is never read as a validation failure (same rule as the product event).
+        error_code: usageErrorCode(event),
         image_width: event.imageWidth ?? null,
         image_height: event.imageHeight ?? null,
         metadata: {
