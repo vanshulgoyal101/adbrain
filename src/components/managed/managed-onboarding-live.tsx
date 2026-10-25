@@ -8,7 +8,8 @@ import { ManagedPageStep } from "@/components/managed-page-step";
 import { createMetaConnectClient } from "@/lib/meta-connect-ui/client";
 import { continueInTab } from "@/lib/meta-connect-ui/navigate";
 import { onboardingProgress, type ManagedAccountProgressRow } from "@/lib/managed/onboarding";
-import { ONBOARDING_CONNECT_KEY } from "@/lib/managed/onboarding-connect";
+import { clearOnboardingConnect, markOnboardingConnect } from "@/lib/managed/onboarding-connect";
+import { POPUP_FALLBACK_MS } from "@/components/meta-connect/meta-connect-dialog";
 
 const POLL_MS = 5_000;
 // Meta's Page settings → Linked accounts → WhatsApp (Meta sends the code to the number). Checked on QA's walk.
@@ -62,6 +63,8 @@ export function ManagedOnboardingLive({ businessId, initialAttemptId }: { busine
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
+  const [inTabUrl, setInTabUrl] = useState<string | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -89,26 +92,37 @@ export function ManagedOnboardingLive({ businessId, initialAttemptId }: { busine
     const onMessage = (event: MessageEvent) => {
       const data = event.data as { type?: unknown; attemptId?: unknown };
       if (event.origin !== window.location.origin || event.source !== popupRef.current || data?.type !== "adbrain.meta.complete" || typeof data.attemptId !== "string") return;
+      clearOnboardingConnect(window.sessionStorage);
+      if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
+      setInTabUrl(null);
       setAttemptId(data.attemptId);
       setConnecting(false);
     };
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      // Leaving onboarding: a later ordinary Connect in this tab must not come back here.
+      clearOnboardingConnect(window.sessionStorage);
+      if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
+    };
   }, []);
 
   async function signInWithFacebook() {
     setConnecting(true);
     setConnectError(null);
-    window.sessionStorage.setItem(ONBOARDING_CONNECT_KEY, "1");
+    markOnboardingConnect(window.sessionStorage);
     const popup = window.open("/connect/meta/waiting", "adbrain-meta-connect", "popup,width=520,height=720");
     popupRef.current = popup;
     try {
       const started = await createMetaConnectClient().start(businessId, { kind: "setup" });
-      if (popup) popup.location.href = started.authorizationUrl;
-      else continueInTab(started.authorizationUrl);
+      if (popup) {
+        popup.location.href = started.authorizationUrl;
+        // #474: some browsers hand back a popup that never shows; offer the same tab after a moment.
+        fallbackTimerRef.current = window.setTimeout(() => setInTabUrl(started.authorizationUrl), POPUP_FALLBACK_MS);
+      } else continueInTab(started.authorizationUrl);
     } catch (reason) {
       popup?.close();
-      window.sessionStorage.removeItem(ONBOARDING_CONNECT_KEY);
+      clearOnboardingConnect(window.sessionStorage);
       setConnecting(false);
       setConnectError(reason instanceof Error ? reason.message : "Facebook sign-in couldn't start. Try again.");
     }
@@ -128,6 +142,13 @@ export function ManagedOnboardingLive({ businessId, initialAttemptId }: { busine
         <p className="text-sm text-slate-600">Sign in with the Facebook account that manages your business Page.</p>
         <Button onClick={() => void signInWithFacebook()} disabled={connecting}>{connecting ? "Waiting for Facebook…" : "Sign in with Facebook"}</Button>
         {connectError && <p role="alert" className="text-sm text-red-700">{connectError}</p>}
+        {inTabUrl && connecting && (
+          <p className="text-sm text-slate-700">
+            Popup didn&apos;t open?{" "}
+            <button type="button" className="font-medium text-blue-700 underline underline-offset-4"
+              onClick={() => { popupRef.current?.close(); continueInTab(inTabUrl); }}>Continue in this tab</button>
+          </p>
+        )}
       </div>
     ),
     whatsapp: <WhatsAppStep businessId={businessId} onLinked={() => void refresh()} />,
