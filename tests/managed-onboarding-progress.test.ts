@@ -25,6 +25,12 @@ describe("2-Tier onboarding progress from the ledger (#526)", () => {
     expect(accountMade.background).toEqual({ childBusiness: "done", adAccount: "done", funding: "working" });
   });
 
+  it("counts WhatsApp as done once the Page-linked number is recorded, before funding (#524)", () => {
+    const progress = onboardingProgress(row({ state: "ad_account_created", page_id: "1", child_business_id: "2", ad_account_id: "act_3", whatsapp_number_e164: "+919999990874" }), { paid: true });
+    expect(progress.customer.whatsapp).toBe("done");
+    expect(progress.ready).toBe(false);
+  });
+
   it("is ready only when the ledger says ready", () => {
     const linked = { funding_state: "card_attached" as const, page_id: "1", child_business_id: "2", ad_account_id: "act_3", waba_id: "4", phone_number_id: "5" };
     const whatsapp = onboardingProgress(row({ ...linked, state: "whatsapp_linked" }), { paid: true });

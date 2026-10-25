@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
 import type { MetaClient } from "@/lib/meta/client";
 
-const db = vi.hoisted(() => ({ bound: [] as string[], managed: false, upserts: [] as unknown[] }));
+const db = vi.hoisted(() => ({ bound: [] as string[], sources: {} as Record<string, string>, managed: false, upserts: [] as unknown[] }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => ({
       select: () => ({
         eq: () => table === "whatsapp_number_bindings"
-          ? Promise.resolve({ data: db.bound.map((phone_e164) => ({ phone_e164 })), error: null })
+          ? Promise.resolve({ data: db.bound.map((phone_e164) => ({ phone_e164, source: db.sources[phone_e164] ?? "owner_pick" })), error: null })
           : { maybeSingle: async () => ({ data: db.managed ? { business_id: "b" } : null, error: null }) },
       }),
       upsert: async (row: unknown) => { db.upserts.push(row); return { error: null }; },
@@ -26,7 +26,7 @@ const meta = {
   whatsappNumbers: async () => ({ page, business: [own, other] }),
 } as unknown as MetaClient;
 
-beforeEach(() => { db.bound = []; db.managed = false; db.upserts = []; });
+beforeEach(() => { db.bound = []; db.sources = {}; db.managed = false; db.upserts = []; });
 
 describe("WhatsApp number bindings (#253)", () => {
   it("passes the Page's own number and already-bound numbers without writing", async () => {
@@ -44,6 +44,15 @@ describe("WhatsApp number bindings (#253)", () => {
   it("never binds by pick for a managed (2-Tier) business: the parent's WABAs hold other customers' numbers", async () => {
     db.managed = true;
     expect(await whatsappNumberForBusiness("b", meta, other)).toBeNull();
+    expect(db.upserts).toEqual([]);
+  });
+
+  it("makes a managed business ignore a number it once picked on its own connection; a Page-linked one still counts (#524)", async () => {
+    db.managed = true;
+    db.bound = [own, other];
+    db.sources = { [other]: "page_link" };
+    expect(await whatsappNumberForBusiness("b", meta, own)).toBeNull();
+    expect(await whatsappNumberForBusiness("b", meta, other)).toBe(other);
     expect(db.upserts).toEqual([]);
   });
 
