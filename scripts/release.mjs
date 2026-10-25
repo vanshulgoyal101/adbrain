@@ -42,6 +42,15 @@ export function qaApproval(comments, headSha, samePatch = /** @type {(sha: strin
   return { approved: true, latest, text: verdicts.filter(approves).map((c) => c.body.toLowerCase()).join("\n") };
 }
 
+/**
+ * A diff's changed lines in order, per file, without context or hunk positions. Equal for two heads whose
+ * own edits are byte-identical even when a merge of the base moved the surrounding lines (git patch-id differs; #567).
+ */
+export function changedLines(diff) {
+  const out = diff.split("\n").filter((l) => l.startsWith("diff --git ") || (/^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)));
+  return out.some((l) => !l.startsWith("diff --git ")) ? out.join("\n") : "";
+}
+
 export function releaseMigrations(files) {
   const migrations = files.filter((f) => /^db\/migrations\/[^/]+\.sql$/.test(f.filename));
   const changed = migrations.filter((f) => f.status !== "added");
@@ -178,19 +187,24 @@ async function main() {
     ...threads.flatMap((n) => ghJson("api", "--paginate", `repos/${repo}/issues/${n}/comments?per_page=100`, "--jq", "[.[]|{body,createdAt:.created_at,url:.html_url}]")),
     ...reviewVerdicts(ghJson("api", "--paginate", `repos/${repo}/pulls/${pr.number}/reviews?per_page=100`, "--jq", "[.[]|{body,state,submitted_at,html_url}]")),
   ];
-  const patchIds = new Map();
-  const patchId = (sha) => {
-    if (!patchIds.has(sha)) {
+  const patches = new Map();
+  const patchOf = (sha) => {
+    if (!patches.has(sha)) {
       try {
         const diff = gh("api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/${base}...${sha}`);
-        patchIds.set(sha, execFileSync("git", ["patch-id", "--stable"], { input: `${diff}\n`, encoding: "utf8" }).split(" ")[0] || null);
+        const id = execFileSync("git", ["patch-id", "--stable"], { input: `${diff}\n`, encoding: "utf8" }).split(" ")[0] || null;
+        patches.set(sha, { id, lines: changedLines(diff) });
       } catch {
-        patchIds.set(sha, null);
+        patches.set(sha, null);
       }
     }
-    return patchIds.get(sha);
+    return patches.get(sha);
   };
-  const samePatch = (sha) => head.startsWith(sha) || (patchId(sha) !== null && patchId(sha) === patchId(head));
+  const samePatch = (sha) => {
+    if (head.startsWith(sha)) return true;
+    const [old, now] = [patchOf(sha), patchOf(head)];
+    return Boolean(old && now && ((old.id && old.id === now.id) || (old.lines !== "" && old.lines === now.lines)));
+  };
   const qa = qaApproval(comments, head, samePatch);
   if (qa.approved) console.log(`    QA approved ${head.slice(0, 7)}: ${qa.latest.url}`);
   else if (dry) console.log(`    QA has not approved ${head.slice(0, 7)} yet (latest QA verdict: ${qa.latest?.url ?? "none"}); continuing because --dry-run.`);
