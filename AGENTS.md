@@ -57,8 +57,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	done and what's next, and push the branch. If it isn't in GitHub or git, it doesn't
 	survive a chat restart. Restart a chat with one line: `You are <Role> on AdBrain. Run
 	node scripts/wait-for-work.mjs --me <role> and continue.` It prints your role card, your
-	in-flight work and any unsaved worktree. After 30 minutes
-	with nothing new it exits: stop there. Never end a turn with anything running in
+	in-flight work and any unsaved worktree. After 2 hours
+	with nothing new it exits: stop there (Oct 25: 30 minutes ended chats that were
+	only waiting on a review). Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable
