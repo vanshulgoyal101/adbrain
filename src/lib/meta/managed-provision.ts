@@ -29,11 +29,37 @@ export type ProvisionResult =
   | { ok: false; code: string; retryable: boolean };
 
 const INDIA_TIMEZONE_ID = "71";
+const MAX_CHILD_PAGES = 50;
+
+/** A lookup that can't prove the child doesn't exist: stop rather than risk a second one (QA #527 T3). */
+class LookupError extends Error {
+  constructor(readonly code: "CHILD_LOOKUP_UNVERIFIED" | "CHILD_LOOKUP_INCOMPLETE" | "AD_ACCOUNT_AMBIGUOUS") { super(code); }
+}
+
+type ChildPage = { data?: { id: string; child_business_external_id?: string }[]; paging?: { next?: string; cursors?: { after?: string } } };
+
+/** Every child of the parent (all pages); fails closed if any child doesn't say whose it is. */
+async function findChild(graph: ProvisionGraph, parentBusinessId: string, businessId: string, token: string): Promise<string | null> {
+  const base = `${parentBusinessId}/owned_businesses?fields=id,child_business_external_id&limit=200`;
+  let path: string | null = base;
+  for (let page = 0; path; page++) {
+    if (page >= MAX_CHILD_PAGES) throw new LookupError("CHILD_LOOKUP_INCOMPLETE");
+    const answer: ChildPage = await graph.get<ChildPage>(path, token);
+    for (const child of answer.data ?? []) {
+      if (!child.child_business_external_id) throw new LookupError("CHILD_LOOKUP_UNVERIFIED");
+      if (child.child_business_external_id === businessId) return child.id;
+    }
+    const after = answer.paging?.next ? answer.paging.cursors?.after : undefined;
+    path = after ? `${base}&after=${encodeURIComponent(after)}` : null;
+  }
+  return null;
+}
 const MANAGER_TASKS = ["MANAGE", "ADVERTISE", "ANALYZE"];
 
 /** Meta failures → stable codes the owner screen explains (#518 research, external-api-error-contracts). */
 export function provisionErrorCode(error: unknown): { code: string; retryable: boolean } {
   const value = (error ?? {}) as { name?: string; status?: number; code?: number; subcode?: number };
+  if (error instanceof LookupError) return { code: error.code, retryable: false };
   if (value.name === "TimeoutError" || value.name === "AbortError") return { code: "META_TIMEOUT", retryable: true };
   if (value.subcode === 1690138) return { code: "PAGE_ADMIN_REQUIRED", retryable: false };
   if (value.subcode === 2859040) return { code: "PAGE_OWNER_DISALLOWED", retryable: false };
@@ -69,9 +95,7 @@ export async function provisionManagedAccount(input: {
     if (!childId) {
       const key = `child:${businessId}`;
       await store.event({ business_id: businessId, step, outcome: "started", request_id: requestId, idempotency_key: key });
-      const existing = await graph.get<{ data?: { id: string; child_business_external_id?: string }[] }>(
-        `${parentBusinessId}/owned_businesses?fields=id,child_business_external_id&limit=200`, tokens.parent);
-      childId = existing.data?.find((child) => child.child_business_external_id === businessId)?.id ?? null;
+      childId = await findChild(graph, parentBusinessId, businessId, tokens.parent);
       if (!childId) {
         const created = await graph.post<{ id: string }>(`${parentBusinessId}/owned_businesses`, {
           name: input.businessName.trim().slice(0, 100),
@@ -92,8 +116,11 @@ export async function provisionManagedAccount(input: {
       const key = `account:${businessId}`;
       const name = `AdBrain ${businessId.slice(0, 8)} ${input.businessName.trim()}`.slice(0, 100);
       await store.event({ business_id: businessId, step, outcome: "started", request_id: requestId, idempotency_key: key });
+      // A child belongs to one customer: its only ad account is ours (even after a rename); several is unexpected.
       const existing = await graph.get<{ data?: { id: string; name?: string }[] }>(`${childId}/owned_ad_accounts?fields=id,name&limit=100`, tokens.parent);
-      adAccountId = existing.data?.find((account) => account.name === name)?.id ?? null;
+      const owned = existing.data ?? [];
+      if (owned.length > 1) throw new LookupError("AD_ACCOUNT_AMBIGUOUS");
+      adAccountId = owned[0]?.id ?? null;
       if (!adAccountId) {
         const created = await graph.post<{ id: string }>(`${childId}/adaccount`, {
           name, currency: "INR", timezone_id: INDIA_TIMEZONE_ID, end_advertiser: row.page_id, media_agency: "NONE", partner: "NONE",
