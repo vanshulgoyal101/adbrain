@@ -68,6 +68,10 @@ async function findChild(graph: ProvisionGraph, parentBusinessId: string, busine
   return null;
 }
 const MANAGER_TASKS = ["MANAGE", "ADVERTISE", "ANALYZE"];
+/** #624: campaigns run on the child token, so it needs the Page and lead reads too (Meta OBO guide, step 2). */
+export const MANAGER_SCOPE = "ads_management,business_management,pages_read_engagement,pages_manage_ads,pages_show_list,leads_retrieval";
+/** The tasks the customer shared with the child business (child creation's page_permitted_tasks). */
+const PAGE_TASKS = ["ADVERTISE", "ANALYZE", "MESSAGING"];
 
 /** Meta failures → stable codes the owner screen explains (#518 research, external-api-error-contracts). */
 export function provisionErrorCode(error: unknown): { code: string; retryable: boolean } {
@@ -113,7 +117,7 @@ export async function provisionManagedAccount(input: {
         const created = await graph.post<{ id: string }>(`${parentBusinessId}/owned_businesses`, {
           name: input.businessName.trim().slice(0, 100),
           shared_page_id: row.page_id,
-          page_permitted_tasks: JSON.stringify(["ADVERTISE", "ANALYZE", "MESSAGING"]),
+          page_permitted_tasks: JSON.stringify(PAGE_TASKS),
           timezone_id: INDIA_TIMEZONE_ID,
           child_business_external_id: businessId,
         }, tokens.customer);
@@ -149,11 +153,12 @@ export async function provisionManagedAccount(input: {
     // The child's own system user: reuse the stored one, mint (with the parent token) only if absent or its token is gone.
     let managerUserId = row.manager_user_id ?? null;
     let managerToken = row.manager_token_id && managerUserId ? await input.manager.load(row.manager_token_id) : null;
-    if (!managerToken || !managerUserId) {
+    // A token minted before the scope grew (#624) can't read the Page: mint again.
+    if (!managerToken || !managerUserId || keys.manager_scope !== MANAGER_SCOPE) {
       step = "ad_account";
       const key = `manager:${businessId}`;
       const minted = await graph.post<{ access_token?: string }>(`${childId}/access_token`, {
-        id: childId, app_id: input.manager.appId, scope: "ads_management,business_management",
+        id: childId, app_id: input.manager.appId, scope: MANAGER_SCOPE,
       }, tokens.parent);
       if (!minted.access_token) throw new LookupError("MANAGER_TOKEN_MISSING");
       // Meta's guide reads the system user from /me with the child token.
@@ -163,6 +168,7 @@ export async function provisionManagedAccount(input: {
       managerToken = minted.access_token;
       const tokenId = await input.manager.save(managerToken, managerUserId);
       keys.manager = key;
+      keys.manager_scope = MANAGER_SCOPE;
       try {
         await store.update({ manager_user_id: managerUserId, manager_token_id: tokenId, step_keys: keys, last_error: null });
       } catch (error) {
@@ -186,6 +192,22 @@ export async function provisionManagedAccount(input: {
       keys.grant = key;
       await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
+    }
+
+    // #624: the child token runs the campaigns, so its system user needs the shared Page (Meta OBO guide, step 4).
+    if (!keys.page_grant) {
+      step = "ad_account";
+      const key = `page:${businessId}`;
+      const pageId = row.page_id!;
+      const assigned = await graph.get<{ data?: { id: string; tasks?: string[] }[] }>(
+        `${pageId}/assigned_users?business=${encodeURIComponent(childId)}&fields=id,tasks`, managerToken);
+      const granted = assigned.data?.some((user) => user.id === managerUserId && PAGE_TASKS.every((task) => user.tasks?.includes(task)));
+      if (!granted) {
+        await graph.post(`${pageId}/assigned_users`, { user: managerUserId, tasks: JSON.stringify(PAGE_TASKS), business: childId }, managerToken);
+      }
+      keys.page_grant = key;
+      await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });
+      await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: pageId });
     }
     return { ok: true, state: "ad_account_created", childBusinessId: childId, adAccountId };
   } catch (error) {

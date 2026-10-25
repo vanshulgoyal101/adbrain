@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CHILD_TOKEN_KEY, childTokenRpc } from "./helpers/managed-child-token";
 
-// #525: a managed business (2-Tier child) runs on the parent system user's token with its own
-// child ad account and Page; everyone else stays on their OAuth connection. Behind the flag.
+// #525: a managed business (2-Tier child) runs on its child's own system-user token (#624) with its
+// own child ad account and Page; everyone else stays on their OAuth connection. Behind the flag.
 const mocks = vi.hoisted(() => ({ getUser: vi.fn(), adminFrom: vi.fn(), adminRpc: vi.fn(), managedFilters: [] as [string, unknown][], spendCapGate: vi.fn() }));
 vi.mock("@/lib/managed/spend-cap-wiring", () => ({ managedSpendCapGate: mocks.spendCapGate }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -17,7 +18,9 @@ const ready = {
   business_id: "business-1", state: "ready", child_business_id: "2000000000000001", ad_account_id: "act_3000000000000001",
   page_id: "4000000000000001", funding_state: "card_attached", generation: 3, waba_id: null, phone_number_id: null,
   step_keys: {}, last_error: null, created_at: "2026-10-25T00:00:00Z", updated_at: "2026-10-25T00:00:00Z",
+  manager_user_id: "6100000000000001", manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000001",
 };
+const CHILD = "child-system-token";
 let managedRows: Record<string, unknown>[] = [];
 let oauthRow: Record<string, unknown> | null = null;
 
@@ -25,13 +28,18 @@ beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
   mocks.managedFilters = [];
-  managedRows = [ready, { ...ready, business_id: "business-2", ad_account_id: "act_9", page_id: "9" }];
+  managedRows = [ready, { ...ready, business_id: "business-2", ad_account_id: "act_9", page_id: "9", manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000002" }];
   oauthRow = null;
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://core-test.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");
   vi.stubEnv("META_CONNECT_ROLLOUT", "enabled");
   vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
   vi.stubEnv("META_PARENT_SYSTEM_TOKEN", "parent-system-token");
+  vi.stubEnv("META_TOKEN_ENCRYPTION_KEY", CHILD_TOKEN_KEY);
+  mocks.adminRpc.mockImplementation(childTokenRpc({
+    [ready.manager_token_id]: { businessId: "business-1", token: CHILD },
+    "0c8e5f4a-1b2c-4d3e-8f9a-000000000002": { businessId: "business-2", token: "other-child-token" },
+  }));
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   mocks.spendCapGate.mockResolvedValue("allowed");
   mocks.adminFrom.mockImplementation((table: string) => {
@@ -57,14 +65,14 @@ async function run(options: Parameters<typeof import("@/lib/meta/connection-acce
 const tables = () => mocks.adminFrom.mock.calls.map(([table]) => table);
 
 describe("Meta credentials for a managed business (#525)", () => {
-  it("uses the child ad account and Page with the parent token, and never reads an OAuth token", async () => {
+  it("uses the child ad account and Page with the child's own token, and never reads an OAuth token", async () => {
     const { creds, connection } = await run({ purpose: "create_paused" });
-    expect(creds).toEqual({ adAccountId: "act_3000000000000001", pageId: "4000000000000001", accessToken: "parent-system-token" });
+    expect(creds).toEqual({ adAccountId: "act_3000000000000001", pageId: "4000000000000001", accessToken: CHILD });
     expect(connection).toMatchObject({ businessId: "business-1", generation: 3, authorization: "connected",
       selected: { metaBusinessId: "2000000000000001", adAccountId: "act_3000000000000001", pageId: "4000000000000001", currency: "INR" } });
     expect(mocks.managedFilters).toContainEqual(["business_id", "business-1"]);
     expect(tables()).not.toContain("meta_connections");
-    expect(mocks.adminRpc).not.toHaveBeenCalled();
+    expect(mocks.adminRpc.mock.calls).toEqual([["meta_token_get", { p_token_id: ready.manager_token_id, p_business_id: "business-1" }]]);
   });
 
   it("never falls back to an OAuth connection while the managed account is being set up", async () => {
@@ -105,7 +113,7 @@ describe("Meta credentials for a managed business (#525)", () => {
     managedRows = [{ ...ready, state }];
     const binding = { adAccountId: ready.ad_account_id, pageId: ready.page_id };
     await expect(run({ purpose: "pause", expectedGeneration: 3, binding })).resolves.toMatchObject({
-      creds: { adAccountId: ready.ad_account_id, accessToken: "parent-system-token" } });
+      creds: { adAccountId: ready.ad_account_id, accessToken: CHILD } });
     await expect(run({ purpose: "read_insights" })).resolves.toBeTruthy();
     await expect(run({ purpose: "create_paused" })).rejects.toThrow(/being set up|not available/);
   });
@@ -135,10 +143,15 @@ describe("Meta credentials for a managed business (#525)", () => {
     await expect(run({ purpose: "pause", expectedGeneration: 3, binding: { adAccountId: ready.ad_account_id, pageId: ready.page_id } })).resolves.toBeTruthy();
   });
 
-  it("is unavailable without the parent token instead of using any other credential", async () => {
-    vi.stubEnv("META_PARENT_SYSTEM_TOKEN", "");
+  it("is unavailable without its own child token, never using the parent's or another business's (#624)", async () => {
+    managedRows = [{ ...ready, manager_token_id: null }];
     await expect(run({ purpose: "read_insights" })).rejects.toThrow(/unavailable/i);
     expect(mocks.adminRpc).not.toHaveBeenCalled();
+    managedRows = [{ ...ready, manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000002" }];
+    await expect(run({ purpose: "pause", expectedGeneration: 3, binding: { adAccountId: ready.ad_account_id, pageId: ready.page_id } })).rejects.toThrow(/unavailable/i);
+    vi.stubEnv("META_PARENT_SYSTEM_TOKEN", "");
+    managedRows = [ready];
+    await expect(run({ purpose: "read_insights" })).resolves.toMatchObject({ creds: { accessToken: CHILD } });
   });
 
   it("leaves a business without a managed account on its OAuth connection", async () => {
@@ -155,9 +168,9 @@ describe("Meta credentials for a managed business (#525)", () => {
 
   it("resolves the same credentials for geo search and other direct callers", async () => {
     const { resolveMetaCredentials } = await import("@/lib/meta/credentials");
-    await expect(resolveMetaCredentials("business-1")).resolves.toEqual({ adAccountId: ready.ad_account_id, pageId: ready.page_id, accessToken: "parent-system-token" });
+    await expect(resolveMetaCredentials("business-1")).resolves.toEqual({ adAccountId: ready.ad_account_id, pageId: ready.page_id, accessToken: CHILD });
     managedRows = [{ ...ready, state: "page_linked", child_business_id: null, ad_account_id: null }];
     await expect(resolveMetaCredentials("business-1")).resolves.toBeNull();
-    expect(mocks.adminRpc).not.toHaveBeenCalled();
+    expect(mocks.adminRpc).toHaveBeenCalledTimes(1);
   });
 });
