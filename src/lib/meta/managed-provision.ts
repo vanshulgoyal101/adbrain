@@ -6,7 +6,9 @@
  *
  * Tokens per step (#521 design note): the child business is created with the customer's token,
  * because Meta requires the caller to administer `shared_page_id` (error 1690138); the ad account
- * with the parent system user's.
+ * with the parent system user's. Then the managing system user is assigned to the ad account
+ * (Meta's setup-cbm: "Add the System User as an Admin to the New Ad Account"); which system user
+ * (the child's, per setup-cbm, or the parent's) is injected as `manager`.
  */
 
 export interface ProvisionGraph {
@@ -27,6 +29,7 @@ export type ProvisionResult =
   | { ok: false; code: string; retryable: boolean };
 
 const INDIA_TIMEZONE_ID = "71";
+const MANAGER_TASKS = ["MANAGE", "ADVERTISE", "ANALYZE"];
 
 /** Meta failures → stable codes the owner screen explains (#518 research, external-api-error-contracts). */
 export function provisionErrorCode(error: unknown): { code: string; retryable: boolean } {
@@ -49,6 +52,7 @@ export async function provisionManagedAccount(input: {
   store: ProvisionStore;
   graph: ProvisionGraph;
   tokens: { customer: string; parent: string };
+  manager: { userId: string; token: string };
   requestId?: string;
 }): Promise<ProvisionResult> {
   const { businessId, store, graph, tokens, parentBusinessId, requestId } = input;
@@ -99,6 +103,20 @@ export async function provisionManagedAccount(input: {
       adAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
       keys.ad_account = key;
       await store.update({ state: "ad_account_created", ad_account_id: adAccountId, step_keys: keys, last_error: null });
+      await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
+    }
+
+    if (!keys.grant) {
+      step = "ad_account";
+      const key = `grant:${businessId}`;
+      const assigned = await graph.get<{ data?: { id: string; tasks?: string[] }[] }>(
+        `${adAccountId}/assigned_users?business=${encodeURIComponent(childId)}&fields=id,tasks`, input.manager.token);
+      const granted = assigned.data?.some((user) => user.id === input.manager.userId && MANAGER_TASKS.every((task) => user.tasks?.includes(task)));
+      if (!granted) {
+        await graph.post(`${adAccountId}/assigned_users`, { user: input.manager.userId, tasks: JSON.stringify(MANAGER_TASKS), business: childId }, input.manager.token);
+      }
+      keys.grant = key;
+      await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
     }
     return { ok: true, state: "ad_account_created", childBusinessId: childId, adAccountId };
