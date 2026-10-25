@@ -41,14 +41,14 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.use
 async function mountCheckout() {
   const rendered = render(<TestCheckout businessId={businessId} />);
   fireEvent.load(screen.getByTestId("checkout-script"));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Pay INR 10,000 (test)" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Pay ₹10,000 (test)" })).toBeEnabled());
   return rendered;
 }
 
 describe("test checkout", () => {
   it("opens only a server-defined test order and verifies callback capture", async () => {
     await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     expect(options).toMatchObject({ key: "rzp_test_fixture", order_id: "order_fixture", amount: 1_000_000, retry: { enabled: false } });
     expect(options.config.display).toEqual({
@@ -60,7 +60,7 @@ describe("test checkout", () => {
     act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "a".repeat(64) }));
     await screen.findByText("Test payment confirmed");
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ orderId, paymentId: "pay_fixture", signature: "a".repeat(64), providerOrderId: "order_fixture" });
-    expect(screen.getByText("INR 0")).toBeInTheDocument();
+    expect(screen.getByText("₹0")).toBeInTheDocument();
     expect(JSON.parse(sessionStorage.getItem(storageKey)!)).not.toHaveProperty("proof");
     act(() => {
       options.modal.ondismiss();
@@ -72,7 +72,7 @@ describe("test checkout", () => {
 
   it("retains one order after dismissal and reload without reopening checkout", async () => {
     const view = await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     act(() => options.modal.ondismiss());
     expect(screen.getByText(/Checkout closed/)).toBeInTheDocument();
@@ -81,12 +81,12 @@ describe("test checkout", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[1][0]).toContain(`orderId=${orderId}`);
     expect(opened).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: /Pay INR/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pay ₹/ })).not.toBeInTheDocument();
   });
 
   it("recovers a callback after verification disconnects and the page reloads", async () => {
     const view = await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     fetchMock.mockRejectedValueOnce(new Error("Disconnected after capture"));
     act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "a".repeat(64) }));
@@ -102,7 +102,7 @@ describe("test checkout", () => {
 
   it("keeps a failure or mismatched callback from claiming success", async () => {
     await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     act(() => paymentFailed());
     expect(screen.getByText(/Razorpay reported a failed attempt/)).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("test checkout", () => {
     sessionStorage.setItem(storageKey, "not valid JSON");
     render(<TestCheckout businessId={businessId} />);
     await screen.findByText(/Saved payment details are unavailable/);
-    expect(screen.queryByRole("button", { name: /Pay INR/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pay ₹/ })).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -127,7 +127,7 @@ describe("test checkout", () => {
 
   it("ignores callbacks after unmount", async () => {
     const view = await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     view.unmount();
     options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "a".repeat(64) });
@@ -138,7 +138,7 @@ describe("test checkout", () => {
   it("reuses the same key after an interrupted create", async () => {
     fetchMock.mockRejectedValueOnce(new Error("Network disconnected"));
     await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await screen.findByText(/Checkout could not be opened/);
     const first = JSON.parse(fetchMock.mock.calls[0][1].body);
     fireEvent.click(screen.getByRole("button", { name: "Check payment status" }));
@@ -150,7 +150,7 @@ describe("test checkout", () => {
   it("blocks live checkout keys and malformed amounts", async () => {
     fetchMock.mockResolvedValue(Response.json({ ...createdOrder, checkout: { ...createdOrder.checkout, key: "rzp_live_fixture" } }));
     await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await screen.findByText(/Checkout could not be opened/);
     expect(opened).not.toHaveBeenCalled();
   });
@@ -158,7 +158,7 @@ describe("test checkout", () => {
   it("does not call the API when recovery storage cannot be written", async () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage blocked"); });
     await mountCheckout();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000 (test)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000 (test)" }));
     await screen.findByText(/Checkout could not be opened/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -197,9 +197,9 @@ describe("production checkout with synthetic responses", () => {
   it("requires accepted terms and uses only the live server order", async () => {
     await mountLive();
     fireEvent.click(screen.getByRole("checkbox"));
-    expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     expect(screen.getByText(OPERATOR_MANAGED_POLICY.serviceScope)).toBeInTheDocument();
     expect(screen.getByText(OPERATOR_MANAGED_POLICY.refundTerms)).toBeInTheDocument();
@@ -208,7 +208,7 @@ describe("production checkout with synthetic responses", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ businessId, termsHash: livePolicy.hash, acceptTerms: true });
     act(() => options.handler({ razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) }));
     await screen.findByText("Payment confirmed");
-    expect(screen.queryByRole("button", { name: /Pay INR/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pay ₹/ })).not.toBeInTheDocument();
     expect(screen.getByText("Payment receipt")).toBeInTheDocument();
     expect(screen.getByText("This receipt is not a tax invoice. Payment confirmation does not authorize ad activation.")).toBeInTheDocument();
   });
@@ -228,7 +228,7 @@ describe("production checkout with synthetic responses", () => {
     expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
     fireEvent.load(screen.getByTestId("checkout-script"));
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     expect(options).toMatchObject({ amount: 1_000, description: "AdBrain payment verification" });
   });
@@ -244,20 +244,20 @@ describe("production checkout with synthetic responses", () => {
     await screen.findByText("Ready for payment");
     fireEvent.load(screen.getByTestId("checkout-script"));
     fireEvent.click(screen.getByRole("checkbox"));
-    const input = screen.getByRole("spinbutton", { name: "Verification amount (INR)" });
+    const input = screen.getByRole("spinbutton", { name: "Verification amount (₹)" });
     expect(input).toHaveValue(10);
     fireEvent.change(input, { target: { value: "5.25" } });
     expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByRole("checkbox")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Pay INR 10" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay ₹10" })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
     await screen.findByText("Amount updated.");
     expect(fetchMock.mock.calls[1][0]).toContain("verificationAmountPaise=525");
     expect(fetchMock.mock.calls[1][1].method).toBe("GET");
-    expect(screen.getByRole("button", { name: "Pay INR 5.25" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay ₹5.25" })).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 5.25" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹5.25" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toMatchObject({ verificationAmountPaise: 525, termsHash: updated.policy.hash, acceptTerms: true });
     expect(options).toMatchObject({ amount: 525 });
@@ -269,11 +269,11 @@ describe("production checkout with synthetic responses", () => {
       verificationAmountRange: { minPaise: 100, maxPaise: 1000 }, orders: [] }));
     render(<ProductionCheckout businessId={businessId} />);
     await screen.findByText("Ready for payment");
-    const input = screen.getByRole("spinbutton", { name: "Verification amount (INR)" });
+    const input = screen.getByRole("spinbutton", { name: "Verification amount (₹)" });
     for (const value of ["0", "10.01", "1.234", "1e3"]) {
       fireEvent.change(input, { target: { value } });
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
-      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Enter an amount from INR 1 to INR 10"));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Enter an amount from ₹1 to ₹10"));
       await waitFor(() => expect(input).toBeEnabled());
     }
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -281,13 +281,13 @@ describe("production checkout with synthetic responses", () => {
     fireEvent.change(input, { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
     await screen.findByText("Quote unavailable");
-    expect(screen.getByRole("button", { name: "Pay INR 10" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay ₹10" })).toBeDisabled();
     expect(opened).not.toHaveBeenCalled();
   });
 
   it("keeps amount entry unavailable for the normal annual package", async () => {
     await mountLive();
-    expect(screen.queryByRole("spinbutton", { name: "Verification amount (INR)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Verification amount (₹)" })).not.toBeInTheDocument();
   });
 
   describe("custom annual amount (#212)", () => {
@@ -313,19 +313,19 @@ describe("production checkout with synthetic responses", () => {
 
     it("takes an amount, shows the 80% ad money and 20% service split, and creates the order for that amount", async () => {
       await mountAnnual();
-      const input = screen.getByRole("spinbutton", { name: "Amount to pay (INR)" });
+      const input = screen.getByRole("spinbutton", { name: "Amount to pay (₹)" });
       expect(input).toHaveValue(10_000);
-      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("8,000.00");
-      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("2,000.00");
+      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("₹8,000");
+      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("₹2,000");
       fireEvent.change(input, { target: { value: "1250" } });
-      expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
       await screen.findByText("Amount updated.");
       expect(fetchMock.mock.calls.at(-1)![0]).toContain("amountPaise=125000");
-      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("1,000.00");
-      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("250.00");
+      expect(screen.getByText("Ad money, including Meta GST (80%)").nextSibling).toHaveTextContent("₹1,000");
+      expect(screen.getByText("AdBrain service (20%)").nextSibling).toHaveTextContent("₹250");
       fireEvent.click(screen.getByRole("checkbox"));
-      fireEvent.click(screen.getByRole("button", { name: "Pay INR 1,250" }));
+      fireEvent.click(screen.getByRole("button", { name: "Pay ₹1,250" }));
       await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
       expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toMatchObject({ amountPaise: 125_000, termsHash: "b".repeat(64), acceptTerms: true });
       expect(options).toMatchObject({ amount: 125_000 });
@@ -334,21 +334,21 @@ describe("production checkout with synthetic responses", () => {
 
     it.each(["0", "5", "499.99", "10000.01", "20000", "1e3"])("rejects %s before asking the server for a quote", async value => {
       await mountAnnual();
-      fireEvent.change(screen.getByRole("spinbutton", { name: "Amount to pay (INR)" }), { target: { value } });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "Amount to pay (₹)" }), { target: { value } });
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
-      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Enter an amount from INR 500 to INR 10000"));
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Enter an amount from ₹500 to ₹10,000"));
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it("says a new amount replaces an unpaid request and never offers to pay the replaced one", async () => {
       await mountAnnual([liveOrder]);
       expect(screen.getByRole("button", { name: "Continue saved checkout" })).toBeInTheDocument();
-      fireEvent.change(screen.getByRole("spinbutton", { name: "Amount to pay (INR)" }), { target: { value: "1250" } });
+      fireEvent.change(screen.getByRole("spinbutton", { name: "Amount to pay (₹)" }), { target: { value: "1250" } });
       fireEvent.click(screen.getByRole("button", { name: "Update amount" }));
       await screen.findByText("Amount updated.");
-      expect(screen.getByText(/replaces your unpaid request for .*10,000\.00/)).toBeInTheDocument();
+      expect(screen.getByText(/replaces your unpaid request for .*10,000/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Pay INR 1,250" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Pay ₹1,250" })).toBeInTheDocument();
     });
 
     it("lists a replaced order as replaced with no Pay button", async () => {
@@ -357,21 +357,21 @@ describe("production checkout with synthetic responses", () => {
       render(<ProductionCheckout businessId={businessId} />);
       await screen.findByText("Ready for payment");
       fireEvent.click(screen.getByText("Previous payments"));
-      expect(screen.getByText(/Ad money: .*10,000\.00 - Replaced by a newer payment request/)).toBeVisible();
+      expect(screen.getByText(/Ad money: .*10,000 - Replaced by a newer payment request/)).toBeVisible();
       expect(screen.queryByRole("button", { name: "Continue saved checkout" })).not.toBeInTheDocument();
     });
 
     it("lets the customer pay again after a payment is captured and keeps the earlier one in history", async () => {
       await mountAnnual([captured]);
       expect(screen.getByText("Payment confirmed")).toBeInTheDocument();
-      expect(screen.queryByRole("spinbutton", { name: "Amount to pay (INR)" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("spinbutton", { name: "Amount to pay (₹)" })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Add more ad money" }));
       expect(screen.getByText("Ready for payment")).toBeInTheDocument();
-      expect(screen.getByRole("spinbutton", { name: "Amount to pay (INR)" })).toBeInTheDocument();
+      expect(screen.getByRole("spinbutton", { name: "Amount to pay (₹)" })).toBeInTheDocument();
       fireEvent.click(screen.getByText("Previous payments"));
-      expect(screen.getByText(/Captured: .*10,000\.00/)).toBeVisible();
+      expect(screen.getByText(/Captured: .*10,000/)).toBeVisible();
       fireEvent.click(screen.getByRole("checkbox"));
-      fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+      fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
       await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
       expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toMatchObject({ amountPaise: 1_000_000 });
     });
@@ -385,10 +385,10 @@ describe("production checkout with synthetic responses", () => {
     render(<ProductionCheckout businessId={businessId} />);
     await screen.findByText("Ready for payment");
     expect(screen.getByRole("heading", { name: "Ad money" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
     fireEvent.click(screen.getByText("Previous payments"));
-    expect(screen.getByText(/Captured: .*10\.00\. Verified refunds: .*2\.50\./)).toBeVisible();
-    expect(screen.getByText(/Payment verification: .*10\.00 - Partially refunded/)).toBeVisible();
+    expect(screen.getByText(/Captured: .*10\. Verified refunds: .*2\.50\./)).toBeVisible();
+    expect(screen.getByText(/Payment verification: .*10 - Partially refunded/)).toBeVisible();
     expect(opened).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -403,7 +403,7 @@ describe("production checkout with synthetic responses", () => {
   });
   it("does not reopen checkout after dismissal and reload", async () => {
     const view = await mountLive();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     act(() => options.modal.ondismiss());
     expect(screen.getByText("Checkout closed. Payment status is unconfirmed.")).toBeInTheDocument();
@@ -421,7 +421,7 @@ describe("production checkout with synthetic responses", () => {
   });
   it("QA recovers a lost verification response on reload without reopening checkout or replaying callbacks", async () => {
     const view = await mountLive();
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     fetchMock.mockRejectedValueOnce(new Error("Synthetic verification response lost"));
     const proof = { razorpay_order_id: "order_fixture", razorpay_payment_id: "pay_fixture", razorpay_signature: "b".repeat(64) };
@@ -454,13 +454,13 @@ describe("production checkout with synthetic responses", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check payment status" }));
     await screen.findByText("Updated synthetic invoice terms");
     expect(screen.getByRole("checkbox")).not.toBeChecked();
-    expect(screen.getByRole("button", { name: "Pay INR 10,000" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pay ₹10,000" })).toBeDisabled();
     expect(fetchMock.mock.calls.every(([, requestOptions]) => requestOptions.method === "GET")).toBe(true);
     expect(opened).not.toHaveBeenCalled();
 
     fetchMock.mockImplementation(async () => Response.json(liveOrder));
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
     await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     const [, createRequest] = fetchMock.mock.calls.find(([path, requestOptions]) => path.endsWith("orders") && requestOptions.method === "POST")!;
     expect(JSON.parse(createRequest.body)).toMatchObject({ termsHash: "b".repeat(64), acceptTerms: true });
@@ -476,7 +476,7 @@ describe("production checkout with synthetic responses", () => {
   it("blocks a new provider operation when browser recovery storage cannot be written", async () => {
     await mountLive();
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
-    fireEvent.click(screen.getByRole("button", { name: "Pay INR 10,000" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pay ₹10,000" }));
     await screen.findByText("Storage unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(opened).not.toHaveBeenCalled();

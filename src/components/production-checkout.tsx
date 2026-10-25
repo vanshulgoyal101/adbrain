@@ -37,7 +37,8 @@ const statusLabels: Record<Order["status"], string> = {
   review_required: "Review required", refund_pending: "Refund pending", partially_refunded: "Partially refunded", refunded: "Refunded",
   superseded: "Replaced by a newer payment request",
 };
-const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
+// #403: exact like a receipt, but no ".00" on whole rupees ("₹10,000", "₹12,345.67").
+const money = (paise: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: paise % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 }).format(paise / 100);
 
 export function ProductionCheckout({ businessId }: { businessId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
@@ -209,14 +210,14 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
       {!verification && <p className="text-sm text-slate-600">Pay any amount from ₹500. 80% goes to your ads (including Meta&apos;s GST) and 20% is AdBrain&apos;s service fee. Top up any time.</p>}
       {range && (verification || !order || order.status === "created") && <div className="flex flex-wrap items-end gap-3">
         <div className="w-40 max-w-full space-y-1">
-          <Label htmlFor={amountId}>{verification ? "Verification amount (INR)" : "Amount to pay (INR)"}</Label>
+          <Label htmlFor={amountId}>{verification ? "Verification amount (₹)" : "Amount to pay (₹)"}</Label>
           <Input id={amountId} type="number" inputMode="decimal" min={range.minPaise / 100} max={range.maxPaise / 100} step="0.01"
             value={amountDraft} disabled={working || checkoutOpen || (verification && (amountLocked || Boolean(order)))}
             onChange={event => { setAmountDraft(event.target.value); setAcceptedTermsHash(null); setNotice(null); }} />
         </div>
         <Button type="button" data-product-event="payment.quote" variant="outline" disabled={!amountChanged || working || checkoutOpen || (verification && (amountLocked || Boolean(order)))} onClick={() => void perform(async signal => {
           if (!enteredAmount.success || enteredAmount.data < range.minPaise || enteredAmount.data > range.maxPaise) {
-            throw new Error(`Enter an amount from INR ${range.minPaise / 100} to INR ${range.maxPaise / 100}, with at most two decimal places.`);
+            throw new Error(`Enter an amount from ${money(range.minPaise)} to ${money(range.maxPaise)}, with at most two decimal places.`);
           }
           await load(signal, verification ? { verification: enteredAmount.data } : { annual: enteredAmount.data });
           setNotice("Amount updated.");
@@ -255,7 +256,7 @@ export function ProductionCheckout({ businessId }: { businessId: string }) {
         onChange={event => setAcceptedTermsHash(event.target.checked ? policy?.hash ?? null : null)} disabled={working || checkoutOpen || amountChanged} />I accept the service, invoice and refund terms.</label>}
       <div className="flex flex-wrap gap-2">
         {canPay && <Button data-product-event="payment.checkout" onClick={() => void pay()} disabled={!accepted || !scriptReady || scriptFailed || working || checkoutOpen || amountChanged} className="h-auto min-h-11 whitespace-normal">
-          <CreditCard size={16} aria-hidden="true" />{order ? "Continue saved checkout" : `Pay INR ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format((displayedQuote?.totalPaise ?? 0) / 100)}`}</Button>}
+          <CreditCard size={16} aria-hidden="true" />{order ? "Continue saved checkout" : `Pay ${money(displayedQuote?.totalPaise ?? 0)}`}</Button>}
         <Button variant="outline" onClick={() => void checkStatus()} disabled={working || checkoutOpen} className="h-auto min-h-11 whitespace-normal">
           <RefreshCw size={16} aria-hidden="true" />Check payment status</Button>
         {order && !verification && ["captured", "partially_refunded", "refunded"].includes(order.status) && <Button data-product-event="payment.checkout" disabled={working || checkoutOpen} className="h-auto min-h-11 whitespace-normal"
