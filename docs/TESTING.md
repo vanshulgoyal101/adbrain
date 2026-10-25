@@ -114,6 +114,11 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
+- **Managed spending limit** (`managed-spend-cap`, #522): a ₹500 annual-quote customer's child
+  ad account gets a ₹338.98 limit (₹400 ad share net of 18% GST), written in rupees and read back
+  in paise; a different read-back, or one whose room exceeds what the customer has left (Meta's
+  counter restarted), keeps campaigns paused, and 0 is never written. The Graph
+  exchange is **provisional** (Meta's documented shape) until a managed account can be recorded.
 - **Managed campaigns** (`managed-campaign`, #525): the real recorded Solaride Prepare → PAUSED
   create → sync → pause tapes, run through `withMetaConnection` for a managed business whose
   ledger row points at that ad account and Page: every call AdBrain builds carries the parent

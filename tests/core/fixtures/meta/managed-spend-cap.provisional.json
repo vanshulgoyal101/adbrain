@@ -1,0 +1,9 @@
+{
+  "source": "PROVISIONAL (#522): the documented shape from Meta's Ad Account reference, not a recording. Update writes spend_cap in the currency's standard denomination (338.98 = ₹338.98); reads return it in basic units (paise). Replace with a recording from a managed child ad account once Access Verification (#517) and App Review (#156) pass.",
+  "adAccountId": "act_120000000000001",
+  "exchanges": [
+    { "method": "POST", "path": "act_120000000000001", "form": { "spend_cap": "338.98" }, "status": 200, "body": { "success": true } },
+    { "method": "GET", "path": "act_120000000000001?fields=id%2Cspend_cap%2Camount_spent%2Cis_prepay_account%2Ccurrency", "status": 200,
+      "body": { "id": "act_120000000000001", "spend_cap": "33898", "amount_spent": "0", "is_prepay_account": false, "currency": "INR" } }
+  ]
+}
