@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 import { prepareCampaignReview, type PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { DraftRecord } from "@/lib/campaign/draft-store";
 
@@ -58,6 +59,22 @@ function loaders(overrides: Partial<PreflightLoaders> = {}): PreflightLoaders {
 }
 
 describe("campaign preflight orchestration", () => {
+  it("gives Review the business's own cost per result for this kind of campaign (#419 2b)", async () => {
+    const asked: string[] = [];
+    const result = await prepareCampaignReview(loaders({
+      findCostPerResult: async (_actor, destination) => { asked.push(destination); return 1000; },
+    }), { actor, draftId: draft.id, requestedDraftVersion: draft.version, now: "2026-09-08T10:00:00.000Z" });
+    expect(asked).toEqual([draft.input.destination ?? "instant_form"]);
+    expect(result.kind === "review" && result.review.planWarnings).toContain(REVIEW_WARNINGS.budget);
+  });
+
+  it("still reviews the plan when the cost per result can't be read, without a budget warning (#419 2b)", async () => {
+    const result = await prepareCampaignReview(loaders({ findCostPerResult: async () => { throw new Error("results unavailable"); } }),
+      { actor, draftId: draft.id, requestedDraftVersion: draft.version, now: "2026-09-08T10:00:00.000Z" });
+    expect(result.kind).toBe("review");
+    expect(result.kind === "review" && (result.review.planWarnings ?? [])).not.toContain(REVIEW_WARNINGS.budget);
+  });
+
   it("does not load forms for WhatsApp, even when an old form ID remains", async () => {
     const result = await prepareCampaignReview(loaders({
       findDraft: async () => ({ ...draft, input: { ...draft.input, destination: "whatsapp" } }),

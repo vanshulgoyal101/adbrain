@@ -10,6 +10,8 @@ const access = vi.hoisted(() => ({
   })),
 }));
 vi.mock("@/lib/meta/connection-access", () => access);
+const evidence = vi.hoisted(() => ({ getCostPerResult: vi.fn(async () => 69) }));
+vi.mock("@/lib/campaign/result-evidence-store", () => evidence);
 
 import { buildCampaignPreflightLoaders } from "@/lib/campaign/preflight-runtime";
 
@@ -33,3 +35,20 @@ describe("preflight loaders (#366)", () => {
     expect(access.getConnectionStatus).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("preflight loaders for the Review warnings (#419 2b)", () => {
+  it("marks a creative 9:16-ready from its saved overlay design, and reads the business's own cost per result", async () => {
+    const design = { format: "portrait", width: 1080, height: 1350, brandName: "Solaride", logoUrl: null, headline: "Cut your bill", subhead: "Free site survey",
+      benefits: [], phone: null, contactLine: null, ctaLabel: "Contact Us", primaryColor: "#1d3a2e", ctaTextColor: "#ffffff", fontFamily: "sans-serif", layout: "top" };
+    const rows = [
+      { id: "c1", business_id: "b1", status: "approved", image_url: "https://x/1.png", headline: "A", primary_text: "a", cta: null, generation: { composition: "overlay", photoUrl: "https://x/p.png", design } },
+      { id: "c2", business_id: "b1", status: "approved", image_url: "https://x/2.png", headline: "B", primary_text: "b", cta: null, generation: { composition: "image-only" } },
+    ];
+    const query = { select: () => query, in: () => query, eq: async () => ({ data: rows }) };
+    const loaders = buildCampaignPreflightLoaders({ from: () => query } as never, actor);
+    expect((await loaders.findCreatives("b1", ["c1", "c2"])).map((creative) => creative.storyReady)).toEqual([true, false]);
+    expect(await loaders.findCostPerResult?.(actor, "whatsapp")).toBe(69);
+    expect(evidence.getCostPerResult).toHaveBeenCalledWith("b1", "whatsapp");
+  });
+});
+

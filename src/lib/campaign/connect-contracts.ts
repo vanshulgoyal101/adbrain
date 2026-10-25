@@ -117,6 +117,8 @@ export const reviewDtoSchema = z.object({
   resolvedExcludedLocation: resolvedGeoSchema.optional(),
   audienceInterests: z.array(z.object({ id: z.string().regex(/^\d+$/), name: boundedText(200) })).max(5).optional(),
   selected: selectedAssetsSchema.nullable(),
+  /** #419 2(b): non-blocking notes from Meta's new-advertiser guidance; never part of the plan hash. */
+  planWarnings: z.array(boundedText(200)).max(5).optional(),
 });
 export type ReviewDTO = z.infer<typeof reviewDtoSchema>;
 
