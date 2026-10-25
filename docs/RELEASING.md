@@ -89,10 +89,14 @@ exclude entire test directories or suppress uninvestigated findings.
   filename order, with its exact text. `npm run db:push`, `npm run test:meta-db`
   and the schema tests all use it, so two migration PRs never conflict. Name a
   migration so it sorts after the ones it depends on.
-- **Code review (#423):** every PR gets an automatic, advisory Copilot review (repository
-  ruleset 'Copilot code review on every PR (advisory)', on open and each push; not a
-  required check, so low-risk PRs still auto-merge on green). Authors fix real findings in
-  the same PR. QA and CTO post high-risk verdicts as reviews, not comments:
+- **Code review (#423):** PRs touching high-risk paths (migrations; `src/lib/{meta,payments,managed,supabase,security}`;
+  `src/app/api/{auth,payments,meta,spend-limits}`; middleware) get one advisory AI review comment from
+  [ai-review.yml](../.github/workflows/ai-review.yml), on open and each push: free Groq
+  `openai/gpt-oss-120b` (production's planner uses another model, so it doesn't eat its rate
+  limit), $0, secret `GROQ_REVIEW_API_KEY`. The script runs from the base commit, so PR code
+  never runs with the key. It never fails or blocks, and a free-tier refusal leaves a 'skipped' note.
+  Authors fix real findings in the same PR. (The Copilot ruleset stays disabled: no premium quota.)
+  QA and CTO post high-risk verdicts as reviews, not comments:
   `gh pr review <n> --comment --body "QA verdict at <sha>: **approved**. …"` (or
   `CTO review of <sha>: **approved**`). `release.mjs` reads PR reviews and comments alike.
 - **Supabase advisors (#359):** run `node scripts/advisors.mjs` before and after
@@ -106,8 +110,9 @@ exclude entire test directories or suppress uninvestigated findings.
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required
-  checks are green on its head, the latest QA verdict naming that head approves it
-  and names each new migration's sha256, and the PR only adds migrations. A PR with
+  checks are green on its head, the latest QA verdict naming that head (or an earlier
+  head with the same `git patch-id` against the base, so a clean merge of `main` needs no
+  re-approval) approves it and names each new migration's sha256, and the PR only adds migrations. A PR with
   a migration or money code (payments, spend, activation or budget) also needs the
   CTO (#259): the latest `CTO review of <sha>: **approved**` of that head, or of an
   earlier head whose patch against main has the same `git patch-id`. The
@@ -150,16 +155,17 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   count as advisory only, and **holds only on Vercel's own answer**: if the newest
   production deploy failed within the last hour, it alerts once and retries after the hour.
   Avoid `vercel redeploy`/`deploy` from the CLI on a busy day; push or promote instead.
-  Direct merges to `main` only with `hotfix` or a migration; after one, merge `main` into
-  `next` by PR, because the train refuses while `main` has changes `next` lacks (train merge commits don't count).
+  Direct merges to `main` only with `hotfix` or a migration. The train then merges `main`
+  into `next` itself (a `Train sync: main → next` PR whose head is `main`'s CI-checked
+  commit), dispatches CI on the merged commit and promotes once it's green. Only a conflict
+  or red `main` stops it; then merge `main` into `next` by a person's PR.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
   with a PR to it; production keeps the last train.
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`
   to `next`, except the train itself, PRs labelled `hotfix` or `ready-to-ship`, and PRs
   that add `db/migrations/` (released to `main` by DevOps with `release.mjs`).
 - Hotfix: DevOps or CTO opens the PR to `main` with the `hotfix` label. It's one deploy,
-  so use it for production breakage only. Then open a PR merging `main` into `next`
-  (or the same fix to `next`) so the next train doesn't lack it.
+  so use it for production breakage only. The next train merges it into `next`.
 
 ## Rollback and Incident Handling
 

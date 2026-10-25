@@ -77,7 +77,7 @@ async function handleGET(request: Request) {
         leads: insights.leads,
         spend: insights.spend,
         cpl: insights.cpl,
-        ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null } : {}),
+        ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null, whatsapp_opens: insights.whatsappOpens ?? null } : {}),
       });
       if (resultError) throw new Error("Result storage unavailable.");
       const assessed = assessCampaignHealth({

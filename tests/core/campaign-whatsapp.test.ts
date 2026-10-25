@@ -58,13 +58,14 @@ describe("core: WhatsApp Prepare payload against Meta's recorded validate_only a
   });
 
   // #493: 7 opened WhatsApp from #157 and 1 sent. The ask is now one short sentence in the ad's language.
-  it("Meta accepted the English, one-city, Hindi and Punjabi asks, and today's code writes exactly those", () => {
-    expect(recorded.greeting.autofill).toBe("Hi, I'm interested in the free site survey.");
+  it("Meta accepted the English, one-city, Hindi, Punjabi and Hinglish asks, and today's code writes exactly those", () => {
+    expect(recorded.greeting.autofill).toBe("Hi! I'd like a free site survey.");
     const copy = [approved.headline, approved.primary_text];
     const today = {
       "one-city": whatsappGreeting(solaride, copy, ["Mohali"]),
       hindi: whatsappGreeting(solaride, ["छत पर सोलर, Free site survey के साथ"], ["Mohali"]),
       punjabi: whatsappGreeting(solaride, ["ਛੱਤ 'ਤੇ ਸੋਲਰ, Free site survey ਨਾਲ"], ["Mohali"]),
+      hinglish: whatsappGreeting(solaride, copy, ["Mohali"], [], "hinglish"),
     };
     expect(today).toEqual(recorded.variants);
     for (const label of Object.keys(today) as (keyof typeof today)[]) {

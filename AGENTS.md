@@ -47,18 +47,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	No separate receipt or manifest project for ordinary committed work. Report local,
 	CI and production evidence honestly. A board update cannot wake a stopped chat.
 - **When idle, wait briefly, then stop** (owner, Oct 24: no stale background
-	processes). Run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|devops|cto|ceo>`
+	processes). Run `node scripts/wait-for-work.mjs --me <dev|dev2|dev3|qa|qa2|reviewer|devops|cto|ceo>`
 	from a worktree on current `origin/main`, **in the foreground only**. It first
 	lists any item you own where someone else spoke last (said while you were busy),
 	then returns when something is labelled for you, someone comments on your issue
 	or a PR whose title names it, or someone addresses you (`→ QA:`, `→ CEO`). Do the
-	work, then wait again. Before waiting, finish your worker-table row in order.
+	work, then wait again. Before waiting, finish your row on the [Team board](https://github.com/vanshulgoyal101/adbrain/issues/580) in order.
+	A scheduled check (live-run reads) ends your comment with `Next read 2026-10-25T16:00Z`:
+	the item stays quiet until then, and the waiter wakes you when it's due.
 	**Restart-proof:** end each work step with the issue's latest comment saying what's
 	done and what's next, and push the branch. If it isn't in GitHub or git, it doesn't
 	survive a chat restart. Restart a chat with one line: `You are <Role> on AdBrain. Run
 	node scripts/wait-for-work.mjs --me <role> and continue.` It prints your role card, your
 	in-flight work and any unsaved worktree. After 30 minutes
-	with nothing new it exits: stop there. Never end a turn with anything running in
+	with nothing new it exits: stop there (owner, Oct 25). Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable

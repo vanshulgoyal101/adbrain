@@ -8,7 +8,10 @@ export type ManagedWhatsAppCheck =
   | { status: "linked"; masked: string }
   | { status: "not_linked" }
   | { status: "waiting_setup" }
-  | { status: "taken" };
+  | { status: "taken" }
+  | { status: "unavailable" };
+
+const STOPPED_STATES = ["failed", "offboarding", "offboarded"];
 
 /**
  * #524 v1 (Page-linked WhatsApp): read the number the customer linked to their own Page (Meta
@@ -17,6 +20,7 @@ export type ManagedWhatsAppCheck =
  */
 export async function checkManagedWhatsApp(businessId: string): Promise<ManagedWhatsAppCheck> {
   const account = await getManagedAccount(businessId);
+  if (account && STOPPED_STATES.includes(account.state)) return { status: "unavailable" };
   const credentials = account ? managedCredentials(account) : null;
   if (!account || !credentials) return { status: "waiting_setup" };
   const number = await new MetaClient(credentials).getWhatsAppNumber(null);
@@ -24,6 +28,9 @@ export async function checkManagedWhatsApp(businessId: string): Promise<ManagedW
 
   // The ledger is new in #519 and not yet in the generated database types.
   const database = createAdminClient() as unknown as SupabaseClient;
+  const current = await database.from("managed_meta_accounts").select("whatsapp_number_e164").eq("business_id", businessId).maybeSingle();
+  if (current.error) throw new Error("The WhatsApp number could not be read.");
+  const previous = (current.data as { whatsapp_number_e164?: string | null } | null)?.whatsapp_number_e164 ?? null;
   const { error } = await database.from("managed_meta_accounts")
     .update({ whatsapp_number_e164: number, ...(account.state === "funded" ? { state: "whatsapp_linked" } : {}) })
     .eq("business_id", businessId);
@@ -33,7 +40,15 @@ export async function checkManagedWhatsApp(businessId: string): Promise<ManagedW
   const bound = await database.from("whatsapp_number_bindings")
     .upsert({ business_id: businessId, phone_e164: number, source: "page_link" }, { onConflict: "business_id,phone_e164", ignoreDuplicates: true });
   if (bound.error) throw new Error("The WhatsApp number could not be bound.");
-  await database.from("managed_meta_account_events")
-    .insert({ business_id: businessId, step: "whatsapp", outcome: "succeeded", meta_object_id: credentials.pageId });
+  // A re-linked Page: the old number is no longer this customer's, and the ledger's unique index has
+  // freed it for others, so its page_link binding must go too (QA and Reviewer on #585).
+  const stale = await database.from("whatsapp_number_bindings")
+    .delete().eq("business_id", businessId).eq("source", "page_link").neq("phone_e164", number);
+  if (stale.error) throw new Error("The previous WhatsApp number could not be unbound.");
+  if (previous !== number) {
+    const event = await database.from("managed_meta_account_events")
+      .insert({ business_id: businessId, step: "whatsapp", outcome: "succeeded", meta_object_id: credentials.pageId });
+    if (event.error) throw new Error("The WhatsApp step could not be logged.");
+  }
   return { status: "linked", masked: maskWhatsAppNumber(number) };
 }

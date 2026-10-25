@@ -14,10 +14,11 @@ import { POPUP_FALLBACK_MS } from "@/components/meta-connect/meta-connect-dialog
 const POLL_MS = 5_000;
 // Meta's Page settings → Linked accounts → WhatsApp (Meta sends the code to the number). Checked on QA's walk.
 const PAGE_WHATSAPP_SETTINGS = "https://www.facebook.com/settings/?tab=linked_whatsapp";
-const WHATSAPP_MESSAGES: Record<"not_linked" | "waiting_setup" | "taken", string> = {
+const WHATSAPP_MESSAGES: Record<"not_linked" | "waiting_setup" | "taken" | "unavailable", string> = {
   not_linked: "We don't see a WhatsApp number on your Page yet. Link it on Facebook, then check again.",
   waiting_setup: "We'll be able to check as soon as your ad account is ready, usually within a minute.",
   taken: "That WhatsApp number is already used by another AdBrain business. Link a different number to your Page.",
+  unavailable: "Your setup has stopped, so WhatsApp can't be linked right now. Contact AdBrain support.",
 };
 
 /** #524 v1: the owner links WhatsApp to their own Page on Facebook; AdBrain checks and records it. */
@@ -31,11 +32,11 @@ function WhatsAppStep({ businessId, onLinked }: { businessId: string; onLinked: 
       const response = await fetch("/api/managed/whatsapp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ businessId }) });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.ok) throw new Error(body?.error?.message ?? "We couldn't check your Page's WhatsApp just now. Try again.");
-      const result = body.data as { status: "linked"; masked: string } | { status: "not_linked" | "waiting_setup" | "taken" };
+      const result = body.data as { status: "linked"; masked: string } | { status: "not_linked" | "waiting_setup" | "taken" | "unavailable" };
       if (result.status === "linked") {
         setMessage({ text: `Linked: ${result.masked}`, error: false });
         onLinked();
-      } else setMessage({ text: WHATSAPP_MESSAGES[result.status], error: result.status === "taken" });
+      } else setMessage({ text: WHATSAPP_MESSAGES[result.status], error: result.status === "taken" || result.status === "unavailable" });
     } catch (reason) {
       setMessage({ text: reason instanceof Error ? reason.message : "Try again.", error: true });
     } finally {

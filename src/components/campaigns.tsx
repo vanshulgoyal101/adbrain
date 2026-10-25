@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
+import type { WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -128,6 +129,7 @@ type ComposerSetup = {
   budget: number;
   destination: "instant_form" | "whatsapp";
   whatsappNumber: string;
+  whatsappLanguage?: WhatsAppLanguage;
   leadFormId: string;
   name: string;
   targeting: TargetingValue;
@@ -218,6 +220,7 @@ function BusinessCampaigns({
   const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
+  const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
@@ -311,8 +314,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -348,6 +351,7 @@ function BusinessCampaigns({
     setDestination(input.destination ?? "instant_form");
     // The form names numbers by their mask; a full number from an older draft shows as its mask.
     setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
+    setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
     setCreationMode("manual");
@@ -535,6 +539,7 @@ function BusinessCampaigns({
     setLeadFormId("");
     setDestination(indiaBased && whatsappOptions.length ? "whatsapp" : "instant_form");
     setWhatsAppNumber("");
+    setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
     setShowComposer(true);
     if (creationMode === "guided") focusOnOpenRef.current = true;
@@ -666,6 +671,7 @@ function BusinessCampaigns({
       leadFormId: destination === "whatsapp" ? null : leadFormId || null,
       destination,
       ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
+      ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
     };
@@ -1547,6 +1553,22 @@ function BusinessCampaigns({
                         : connectedForDraft && !whatsappStatus ? "Checking your WhatsApp numbers..." : "AdBrain checks your WhatsApp number when you prepare the review."}
                     </p>}
                   </div>}
+                  {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
+                    <Label htmlFor="whatsapp-language">Message language</Label>
+                    <select
+                      id="whatsapp-language"
+                      value={whatsappLanguage}
+                      onChange={(e) => { setWhatsAppLanguage(e.target.value as WhatsAppLanguage); if (!unresolvedRecovery()) setPrepareReview(null); }}
+                      className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                    >
+                      <option value="ad">Same as the ad</option>
+                      <option value="en">English</option>
+                      <option value="hi">Hindi (हिंदी)</option>
+                      <option value="hinglish">Hinglish</option>
+                      <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                    </select>
+                    <p className="text-xs text-slate-500">The short message a customer sends you in one tap.</p>
+                  </div>}
                 </div>
 
                 <div className="-mt-2 flex flex-wrap items-center gap-2">
@@ -1834,6 +1856,12 @@ function BusinessCampaigns({
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
+                    )}
+                    {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
+                      // #493: people reach WhatsApp and leave; show the drop-off plainly.
+                      <p className="text-sm text-slate-700">
+                        {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
+                      </p>
                     )}
                     {r && (
                       <a

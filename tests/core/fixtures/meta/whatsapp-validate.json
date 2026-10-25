@@ -1,12 +1,12 @@
 {
-  "recordedAt": "2026-10-24T16:32:38.352Z",
+  "recordedAt": "2026-10-25T11:32:39.604Z",
   "greeting": {
-    "autofill": "Hi, I'm interested in the free site survey.",
+    "autofill": "Hi! I'd like a free site survey.",
     "greeting": "Hi! Thanks for messaging Solaride. Send this message and we'll reply here."
   },
   "variants": {
     "one-city": {
-      "autofill": "Hi, I'm interested in the free site survey in Mohali.",
+      "autofill": "Hi! I'd like a free site survey in Mohali.",
       "greeting": "Hi! Thanks for messaging Solaride. Send this message and we'll reply here."
     },
     "hindi": {
@@ -16,6 +16,10 @@
     "punjabi": {
       "autofill": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ Mohali ਵਿੱਚ Free site survey ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।",
       "greeting": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Solaride ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।"
+    },
+    "hinglish": {
+      "autofill": "Namaste, mujhe Mohali mein free site survey ke baare mein jaankari chahiye.",
+      "greeting": "Namaste! Solaride ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge."
     }
   },
   "tape": [
@@ -40,7 +44,7 @@
       "path": "act_2398686420592052/adsets",
       "form": {
         "name": "AdBrain #209 validate",
-        "campaign_id": "120253256980050526",
+        "campaign_id": "120240969992630526",
         "status": "PAUSED",
         "daily_budget": "28000",
         "billing_event": "IMPRESSIONS",
@@ -57,11 +61,11 @@
           "message": "Invalid parameter",
           "type": "OAuthException",
           "code": 100,
-          "error_subcode": 1885760,
+          "error_subcode": 1885621,
           "is_transient": false,
-          "error_user_title": "विज्ञापन डिलीवरी के विकल्पों को चुनने के लिए किया गया ऑप्टिमाइज़ेशन एक समान होना चाहिए",
-          "error_user_msg": "अगर सबसे कम कॉस्ट को कैंपेन में बोली लगाने की स्ट्रेटेजी के रूप में उपयोग किया गया है, तो सभी विज्ञापन डिलीवरी के लिए एक जैसे ऑप्टिमाइज़ेशन का उपयोग करना ज़रूरी है. विज्ञापन डिलीवरी के ऑप्टिमाइज़ेशन को बदलने के लिए, कैंपेन को डुप्लिकेट करें. इसके बाद, पब्लिश करने से पहले हर विज्ञापन सेट के लिए विज्ञापन डिलीवरी के ऑप्टिमाइज़ेशन को बदलें.",
-          "fbtrace_id": "AY4VxvVZqp-ZFXlHIh42h8Z"
+          "error_user_title": "Can't Set Ad Set and Campaign Budget",
+          "error_user_msg": "You can only set an ad set budget or a campaign budget.",
+          "fbtrace_id": "AF5XrUW9yOiPESlzNTVsNS8"
         }
       }
     },
@@ -70,7 +74,7 @@
       "path": "act_2398686420592052/adsets",
       "form": {
         "name": "AdBrain #209 validate",
-        "campaign_id": "120253256980050526",
+        "campaign_id": "120240969992630526",
         "status": "PAUSED",
         "daily_budget": "28000",
         "billing_event": "IMPRESSIONS",
@@ -87,11 +91,11 @@
           "message": "Invalid parameter",
           "type": "OAuthException",
           "code": 100,
-          "error_subcode": 1885760,
+          "error_subcode": 1885621,
           "is_transient": false,
-          "error_user_title": "विज्ञापन डिलीवरी के विकल्पों को चुनने के लिए किया गया ऑप्टिमाइज़ेशन एक समान होना चाहिए",
-          "error_user_msg": "अगर सबसे कम कॉस्ट को कैंपेन में बोली लगाने की स्ट्रेटेजी के रूप में उपयोग किया गया है, तो सभी विज्ञापन डिलीवरी के लिए एक जैसे ऑप्टिमाइज़ेशन का उपयोग करना ज़रूरी है. विज्ञापन डिलीवरी के ऑप्टिमाइज़ेशन को बदलने के लिए, कैंपेन को डुप्लिकेट करें. इसके बाद, पब्लिश करने से पहले हर विज्ञापन सेट के लिए विज्ञापन डिलीवरी के ऑप्टिमाइज़ेशन को बदलें.",
-          "fbtrace_id": "ABOaSjYHTi4ZqVms8-KLW28"
+          "error_user_title": "Can't Set Ad Set and Campaign Budget",
+          "error_user_msg": "You can only set an ad set budget or a campaign budget.",
+          "fbtrace_id": "AwqQGzXI7-o2Dn_cL6HEBHu"
         }
       }
     },
@@ -103,7 +107,7 @@
         "adset_id": "120240969992670526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'm interested in the free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
       },
       "status": 200,
       "body": {
@@ -118,7 +122,7 @@
         "adset_id": "120240969992670526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://api.whatsapp.com/send\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://api.whatsapp.com/send\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'm interested in the free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://api.whatsapp.com/send\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://api.whatsapp.com/send\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
       },
       "status": 200,
       "body": {
@@ -133,7 +137,7 @@
         "adset_id": "120240969992670526",
         "status": "PAUSED",
         "execution_options": "[\"validate_only\"]",
-        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'm interested in the free site survey in Mohali.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free site survey in Mohali.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\"}}}"
       },
       "status": 200,
       "body": {
@@ -169,7 +173,22 @@
       "body": {
         "success": true
       }
+    },
+    {
+      "name": "ad-wa-me-hinglish",
+      "path": "act_2398686420592052/ads",
+      "form": {
+        "name": "AdBrain #493 validate",
+        "adset_id": "120240969992670526",
+        "status": "PAUSED",
+        "execution_options": "[\"validate_only\"]",
+        "creative": "{\"object_story_spec\":{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"dc5dc017c79bc1433abb782eaf8c0294\",\"message\":\"Unsure if your roof can take solar? Diwali offer: 10% off rooftop solar installation from Solaride.\\nFree site survey first, plus PM Surya Ghar subsidy help from our team.\\nMessage Solaride on WhatsApp to book your free site survey.\",\"name\":\"Wondering Whether Your Roof Is Ready?\",\"description\":\"Solaride checks your roof before any work starts. Send a WhatsApp message to book your visit.\",\"link\":\"https://wa.me/91XXXXXX0874\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/91XXXXXX0874\"}},\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Namaste, mujhe Mohali mein free site survey ke baare mein jaankari chahiye.\\\"},\\\"text\\\":\\\"Namaste! Solaride ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.\\\"}}}\"}}}"
+      },
+      "status": 200,
+      "body": {
+        "success": true
+      }
     }
   ],
-  "note": "#493: re-recorded against the PAUSED 'WhatsApp | Jan' ad set (never the live #157 ad). adset-* are refused (1885621, campaign budget) as on Oct 23; only the ads matter here."
+  "note": "#493: re-recorded Oct 25 against the PAUSED 'WhatsApp | Jan' ad set (never the live #157 ad). adset-* are refused (1885621, campaign budget) as before; only the ads matter here. Includes the owner's short English ask and the per-campaign Hinglish choice."
 }

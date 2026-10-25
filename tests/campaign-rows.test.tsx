@@ -63,4 +63,12 @@ describe("Campaigns rows (#403 S5)", () => {
     expect(within(activeRow).queryByText(/No results yet/)).toBeNull();
     expect(within(activeRow).getByText("1,200")).toBeInTheDocument();
   });
+
+  it("shows how many opened WhatsApp and how many messaged (#493)", async () => {
+    const whatsapp = { ...active, id: "campaign-3", name: "Solar WhatsApp", raw: { destination: "whatsapp" } } as unknown as Campaign;
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[whatsapp]} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999"
+      initialResults={{ [whatsapp.id]: { ...result, destination: "whatsapp", leads: 0, cpl: null, conversations: 1, cost_per_conversation: 162, whatsapp_opens: 12 } as CampaignResult }} />);
+    const row = (await screen.findByRole("heading", { name: "Solar WhatsApp" })).closest("article") as HTMLElement;
+    expect(within(row).getByText("12 opened WhatsApp, 1 messaged you")).toBeInTheDocument();
+  });
 });

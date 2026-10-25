@@ -26,11 +26,13 @@ label it for the owner instead of doing it.
 | Role | Owns | Hands off |
 | --- | --- | --- |
 | **CEO** | Priorities and target dates, money and budgets, decisions (`decision`), the owner's steps (Meta, Razorpay, sign-ins), this dispatch. Turns owner requests into issues. Checks weekly that skills are used | Building anything: implementation goes to the CTO or a worker |
-| **CTO** | Technical direction and designs, assigning and briefing issues, the worker table, labels, CI and production health, high-impact reviews, publishing `Lesson:` lines | Feature building (assign it); priority and money (CEO) |
+| **CTO** | Technical direction and designs, assigning and briefing issues, the worker table, labels, CI and production health, design calls and Meta-credential reviews, publishing `Lesson:` lines | Feature building (assign it); priority and money (CEO) |
 | **Dev** | Create: the assistant, interview, generation and its tests (`ad-assistant.tsx`, `interview.ts`), plus issues assigned to you | Migrations, config, money releases (DevOps); priority (CEO) |
 | **Dev 2** | Editing ads and image rendering, Meta App Review (#156), plus issues assigned to you | Same as Dev |
 | **Dev 3** | WhatsApp-first, first impression (homepage, sign-up), the live-run engineering (#157), plus issues assigned to you | Same as Dev |
-| **QA** | Independent review of high-risk changes (money, migration, tenant/auth), red tests, live-run reads, UX walks on phone and desktop | Fixing product code (send it to the owner Dev); routine low-risk PRs need no QA |
+| **QA** | Independent review of high-risk changes (money, migration, tenant/auth), red tests (live checks go to QA 2) | Fixing product code (send it to the owner Dev); routine low-risk PRs need no QA |
+| **QA 2** | Live checks: live-run reads and final reports (#157, #499), production smoke follow-up, phone and desktop walks, 2-Tier acceptance walks (#527) | Same as QA |
+| **Reviewer** | High-risk code review (money, migration, tenant/auth): `gh pr review <n> --comment --body "Reviewer review of <sha>: **approved**. …"`, accepted by `release.mjs` where the CTO's is; reviews in parallel with QA, within an hour | Design and priority calls (CTO, CEO); fixing code (the author) |
 | **DevOps** | Migrations, money/tenant/config releases, secrets and production settings, rollback, scheduler, CI and the production guard | Feature work; priority (CEO) |
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
@@ -76,7 +78,8 @@ Routine steps never wait for the CEO or the CTO.
 5. **DevOps ships the rest**: anything with a migration, money, tenant/auth or
    config change. Label it `ready-to-ship` and `owner:devops`. DevOps applies
    migrations first, merges, smokes and closes. Money and tenant changes get
-   `owner:qa` first. QA's approval plus the CTO's review is enough to release; the
+   `owner:qa` first. **Tenant/auth-only** changes ship on QA's approval alone; **money,
+   migrations and Meta credential changes** need QA's approval plus the CTO's review. The
    CEO decides only prices, fees, refund rules, spend limits and who may approve
    money. DevOps also owns rollback when a production smoke fails.
 6. **A core failure found live** gets its own `core` `bug` issue with the exact
@@ -84,13 +87,15 @@ Routine steps never wait for the CEO or the CTO.
    per problem; do not bury new failures in long comment threads.
 7. **The CEO** (coordinator chat) sets priority and the milestone, approves budgets
    and money, handles the owner's steps (Meta, Razorpay, browser sign-in) and
-   maintains this file except the worker table. **The CEO delegates, not builds**
+   maintains this file and the priorities on the [Team board](https://github.com/vanshulgoyal101/adbrain/issues/580). **The CEO delegates, not builds**
    (owner, Oct 24): an owner request becomes an issue with done-criteria, labelled
    for its owner (`owner:cto` to slot, or a worker directly), and tracked to done.
-8. **The CTO** turns priorities into work: owns the worker table under "Now",
+8. **The CTO** turns priorities into work: owns the worker table on the Team board (#580),
    assigns and briefs issues, keeps labels honest, closes or parks stale issues,
    watches CI and production health, reviews high-impact diffs and publishes
-   `Lesson:` lines. **Queues never run dry:** every worker keeps at least 2
+   `Lesson:` lines. Weekly it posts `npm run team-metrics` (PR lead time, handoff
+   latency, idle gaps, workflow failures) on #364 and fixes the worst number.
+   **Queues never run dry:** every worker keeps at least 2
    actionable items (not `waiting-owner`, `blocked` or `decision`), each traceable
    to a line in the CEO priorities below; `wait-for-work --me cto` reports any
    worker that drops below 2, and the CTO refills that row the same hour. At the
@@ -122,17 +127,10 @@ Routine steps never wait for the CEO or the CTO.
   Background tabs do not render; use a page-local frame flush or call the same API
   the UI calls. If the session expires, label the issue `waiting-owner` and the
   CEO signs in.
-- **Paid budget.** Create runs: **no count limit** (owner, Oct 23: "as many as
-  you need"; runs 1-20 used by then). Run Create whenever the work needs it, not
-  in loops. Log `Create run N` with the saved count in
-  [#98](https://github.com/vanshulgoyal101/adbrain/issues/98). A run costs about
-  ₹10-20 in AI; if one costs far more, stop and post. The #98 model bake-off has
-  its own $1 cap.
-  No Meta ad spend: campaigns stay PAUSED. One exception (owner, Oct 23, replaces
-  the Oct 22 ₹600): the owner added ₹1,000 to Solaride 101, which is ₹847 for ads
-  after GST, so the run is ₹280/day for 3 days (₹840). It is Solaride's first
-  watched run, capped on Meta, run by Dev 3 with QA's checklist on
-  [#157](https://github.com/vanshulgoyal101/adbrain/issues/157).
+- **Paid budget.** OpenRouter is capped ($9 total until the owner raises it, #449).
+  Internal tests run at about $0 (free providers, #466); paid Create only for real
+  customers and approved checks (CEO decides, e.g. #502's $0.15); log runs on #98.
+  No Meta ad spend except CEO-approved, Meta-capped runs (#157, #499).
 - **Access.** Production DB: Supabase Management API with `SUPABASE_TOKEN` from
   `/Users/vanshulgoyal/Development/copilot/arcade/.env` (parse into memory, never
   print), project `kmzuxrvfrwwpwmoovwcp`, `BEGIN READ ONLY` for checks. Vercel:
@@ -144,54 +142,9 @@ Routine steps never wait for the CEO or the CTO.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### Now (October 23): the first watched run on Solaride
+### Now
 
-Done October 22: offer in the first 125 characters (#194), the owner's own photo
-in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
-#185 and capped activation (PR193). Done October 23: capped runs reserve cap +
-GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
-layout (#220).
-
-CEO priorities and targets (Oct 24, 10:50Z; owner: lean, high value only). Every
-open issue has a target; a miss gets one line on its issue with the new date. The
-CTO's queue map (#364) orders each worker's row to match.
-
-- **Top today: #408, skills used on every task** (CTO; owner: the single most
-  high-value thing). See Role cards → Skills first.
-- **Gate for every outside customer: #156 Meta App Review. Submit today, Oct 24**
-  (Dev 2 + owner sitting: confirm Data handling, record screencasts with a no-role
-  Facebook account, Submit). Meta then takes days to weeks. No outside sign-ups yet.
-- **Live run #157 (Dev 3, QA reads): ends Oct 26 14:24Z.** First real lead in; no
-  edits. Final report Oct 26, then the next Solaride run uses #333 and #334.
-- **Today, Oct 24:** #334 Advantage+ audience (Dev 2, PR #357); #281 auto-cite
-  (Dev); #376 part 1, phone dead space on the sign-up intro (Dev 3); #383 role
-  cards read by all; #270 after-number at 18:40Z (DevOps).
-- **Oct 25:** #300 bold + Indic image text (Dev 3, PR #358); #372 results to WhatsApp
-  (Dev 2); #371 Create learns from results (Dev, CTO design on the issue); #384
-  restart-proof roles (CTO); #390 dev speed, the biggest of its 3 causes (DevOps);
-  #274 scheduler 24 h check, then close (DevOps).
-- **Oct 26:** #333 9:16 ads (Dev 3); #387 live edit preview (Dev 2); #360 + #376
-  part 2 phone speed and Enquiries layout (Dev 2); #378 interview validation gap
-  (Dev); #379 internal accounts excluded from metrics (DevOps); #157 final report.
-- **By Oct 28:** #335 log real WhatsApp enquiries (Dev; migration → QA → DevOps);
-  #366 faster Prepare (Dev 3); #367 angle chip over the logo (Dev); #388 model
-  picks per task, then a review every 3 weeks (CTO; first review about Nov 14).
-- **Umbrellas, close when their slices are done:** #67 (snappier app), #51 (UI/UX
-  polish; QA's top 5 next). #364 is the CTO's standing queue map.
-- **Later (no date):** #178 (Razorpay webhook proof), #229 (email alerts), #253
-  (managed-account WhatsApp numbers), #296 (AI-answer visibility).
-- **Owner batch (CEO asks):** #156 sitting; #337 30-second share test on his phone.
-- **Filter for new issues:** it must help a customer make and run ads today,
-  make the product faster or clearer, or remove a real failure. Otherwise file
-  it as `later`, or don't file it.
-
-The CTO maintains the worker table below.
-
-| Worker | Work, in order |
-| --- | --- |
-| Everyone | **When idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground only (it first lists items you own where someone else spoke last; it gives up after 30 min; then stop) and continue with what it prints. **Every finished step names who acts next** (`→ DevOps: release`) and moves the `owner:` label; release-PR verdicts end with `→ DevOps`. Never leave anything running in the background. **Talk on the issue or PR;** hand off with the owner label plus one arrow line (`→ QA: ready at <sha>`), and sign your own comments with your role ([AGENTS.md](../AGENTS.md#worker-coordination)). No status or idle posts. Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. **Queue empty?** Take the next item in your row, then QA's #51 findings, then any unowned `core` issue in your area (add your label); only then `wait-for-work` |
-| QA | 1. [#527](https://github.com/vanshulgoyal101/adbrain/issues/527) 2-Tier red tests as pieces land; review [#519](https://github.com/vanshulgoyal101/adbrain/issues/519) (tenant) and [#522](https://github.com/vanshulgoyal101/adbrain/issues/522) (money). 2. [#499](https://github.com/vanshulgoyal101/adbrain/issues/499) verdict. 3. **[#157](https://github.com/vanshulgoyal101/adbrain/issues/157)** final read Oct 26. 4. [#474](https://github.com/vanshulgoyal101/adbrain/issues/474) |
-| Dev | 1. [#522](https://github.com/vanshulgoyal101/adbrain/issues/522) funding + per-customer spend cap (2-Tier). 2. [#525](https://github.com/vanshulgoyal101/adbrain/issues/525) campaigns on the managed account. 3. [#451](https://github.com/vanshulgoyal101/adbrain/issues/451), [#418](https://github.com/vanshulgoyal101/adbrain/issues/418)/[#388](https://github.com/vanshulgoyal101/adbrain/issues/388). You own `ad-assistant.tsx` and `interview.ts` |
-| DevOps | 1. [#520](https://github.com/vanshulgoyal101/adbrain/issues/520) parent system user token (owner step) + `MANAGED_ACCOUNTS_ENABLED`. 2. Release [#519](https://github.com/vanshulgoyal101/adbrain/issues/519). 3. [#527](https://github.com/vanshulgoyal101/adbrain/issues/527) alerts. 4. [#461](https://github.com/vanshulgoyal101/adbrain/issues/461), [#423](https://github.com/vanshulgoyal101/adbrain/issues/423), [#270](https://github.com/vanshulgoyal101/adbrain/issues/270). Parked: [#449](https://github.com/vanshulgoyal101/adbrain/issues/449), [#390](https://github.com/vanshulgoyal101/adbrain/issues/390) |
-| Dev 3 | 1. [#499](https://github.com/vanshulgoyal101/adbrain/issues/499) next Solaride run PAUSED by Oct 26. 2. [#524](https://github.com/vanshulgoyal101/adbrain/issues/524) ([#253](https://github.com/vanshulgoyal101/adbrain/issues/253) boundary first, then WhatsApp Embedded Signup). 3. [#526](https://github.com/vanshulgoyal101/adbrain/issues/526) onboarding flow. Then [#366](https://github.com/vanshulgoyal101/adbrain/issues/366), [#417](https://github.com/vanshulgoyal101/adbrain/issues/417) |
-| Dev 2 | 1. [#493](https://github.com/vanshulgoyal101/adbrain/issues/493) (next Solaride run, Oct 26). 2. [#519](https://github.com/vanshulgoyal101/adbrain/issues/519) managed-account ledger (migration). 3. [#523](https://github.com/vanshulgoyal101/adbrain/issues/523) customer Page. 4. [#521](https://github.com/vanshulgoyal101/adbrain/issues/521) provisioning. Then [#419](https://github.com/vanshulgoyal101/adbrain/issues/419), [#403](https://github.com/vanshulgoyal101/adbrain/issues/403). Lead for [#518](https://github.com/vanshulgoyal101/adbrain/issues/518) (2-Tier). Parked: [#156](https://github.com/vanshulgoyal101/adbrain/issues/156) |
+**Live priorities and worker queues: the pinned [Team board #580](https://github.com/vanshulgoyal101/adbrain/issues/580).**
+The CEO edits its priorities and the CTO its worker table directly in the issue body
+(no PR, CI or deploy); `wait-for-work` prints your row on every wake. Discuss changes
+on #364.
