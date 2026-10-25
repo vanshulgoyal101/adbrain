@@ -294,6 +294,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   ad set that learns from zero (with the business's cost per result, only when its days buy under
   ~50 results), and resuming a campaign paused 7 or more days ago by the owner or by AdBrain's
   spend auto-pause (from the audit log; a pause made in Meta isn't seen).
+- Only campaigns AdBrain launched can be resumed from their card. A paused campaign that was
+  synced from Meta (or stored before AdBrain kept its ad sets and ads) shows "Resume in Ads
+  Manager" with the reason instead (#662). A card action's error (review, pause, refresh,
+  delete) shows on that card, and an opened activation review scrolls into view.
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
   pause, and activation safeguards. Stored results are lifetime insights (`date_preset=maximum`):
   Meta's default `last_30d` leaves out today, so a new campaign used to read ₹0 (#404). Refresh detects all-WhatsApp ad sets and

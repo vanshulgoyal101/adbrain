@@ -17,7 +17,12 @@ vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => null }));
 vi.mock("@/lib/meta-connect-ui/client", () => ({ createMetaConnectClient: () => mocks, MetaConnectClientError: class extends Error {} }));
 
 const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-1", name: "Solar installer", locations: ["Jaipur"] } as Business;
-const paused = { id: "campaign-1", name: "Rooftop solar", status: "paused", daily_budget: 280, meta_campaign_id: "120252972379040526", meta_ad_account_id: "act_999" } as Campaign;
+// Launched by AdBrain: its ad sets and ads on record, so it can be resumed here (#662).
+const paused = {
+  id: "campaign-1", name: "Rooftop solar", status: "paused", daily_budget: 280, meta_campaign_id: "120252972379040526", meta_ad_account_id: "act_999",
+  meta_page_id: "page_1", meta_connection_generation: 1, meta_adset_id: "set-1", meta_ad_ids: ["ad-1"],
+  raw: { source: "campaign_operation", metaResult: { campaignId: "120252972379040526", adSetIds: ["set-1"], adIds: ["ad-1"] } },
+} as unknown as Campaign;
 const active = { ...paused, id: "campaign-2", name: "Solar EMI", status: "active" } as Campaign;
 const result = { impressions: 1200, clicks: 40, leads: 3, cpl: 93, spend: 280 } as CampaignResult;
 

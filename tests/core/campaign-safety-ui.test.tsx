@@ -18,9 +18,12 @@ vi.mock("@/lib/meta-connect-ui/client", () => ({
 
 type Ad = Parameters<typeof adReviewState>[0];
 const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-1", name: "Solaride", locations: ["Delhi"] } as Business;
+// The #157 campaign as AdBrain stored its launch: its recorded ad set and ad (safety fixtures), bound to the account.
 const launched = {
   id: "c1", business_id: business.id, name: "First lead campaign", status: "paused", daily_budget: 200, objective: "leads",
-  meta_campaign_id: "120253654207670526", meta_ad_ids: [], creative_ids: [],
+  meta_campaign_id: "120253654207670526", meta_adset_id: "120253654208240526", meta_ad_ids: ["120253654209040526"], creative_ids: [],
+  meta_ad_account_id: "act_2398686420592052", meta_page_id: "885223068001054", meta_connection_generation: 1,
+  raw: { source: "campaign_operation", metaResult: { campaignId: "120253654207670526", adSetIds: ["120253654208240526"], adIds: ["120253654209040526"] } },
 } as unknown as Campaign;
 
 function showAfterRefresh(ads: Ad[]) {
@@ -63,10 +66,12 @@ describe("core: Campaigns shows Meta's ad review status (#157)", () => {
 
 describe("Campaigns: a campaign with no spend says so once (#173)", () => {
   it.each([
-    ["paused", "Paused — nothing has spent. Resume when you're ready."],
-    ["active", "Waiting for Meta to start delivery."],
-  ])("a %s zero-spend card shows exactly one no-spend message after Refresh results", async (status, message) => {
-    const campaign = { ...launched, status } as Campaign;
+    ["paused", { status: "paused" }, "Paused — nothing has spent. Resume when you're ready."],
+    ["active", { status: "active" }, "Waiting for Meta to start delivery."],
+    // #662: a synced campaign can't be resumed here, so the card doesn't invite it.
+    ["synced paused", { status: "paused", raw: null }, "Paused — nothing has spent."],
+  ])("a %s zero-spend card shows exactly one no-spend message after Refresh results", async (_case, change, message) => {
+    const campaign = { ...launched, ...change } as Campaign;
     const result = { id: "r1", campaign_id: "c1", impressions: 0, clicks: 0, leads: 0, spend: 0, cpl: null };
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input).endsWith("/refresh")
       ? Response.json({
