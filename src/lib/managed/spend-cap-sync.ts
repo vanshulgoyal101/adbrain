@@ -16,7 +16,8 @@ export const META_GST_RATE_BPS = 1800;
 export const STOP_SPEND_CAP_PAISE = 100;
 const MAX_PASSES = 5;
 
-export interface SpendCapBalance { advertisingAllocationPaise: number; advertisingRefundedPaise: number; held: boolean }
+/** `advertisingRefundedPaise` missing means the refunds are unknown: refused, never read as none. */
+export interface SpendCapBalance { advertisingAllocationPaise: number; advertisingRefundedPaise: number | undefined; held: boolean }
 
 export interface SpendCapMeta {
   readAccountFunding(): Promise<{ spendCapPaise: number; amountSpentPaise: number }>;
@@ -29,8 +30,8 @@ export interface SpendCapSyncDeps {
   store: SpendCapStore;
   meta: SpendCapMeta;
   balance(): Promise<SpendCapBalance>;
-  /** Bookkeeping after "stop" paused campaigns on Meta (AdBrain status, reservations, audit). */
-  onStopped?(metaCampaignIds: string[], reason: "held" | "no_allowance"): Promise<void>;
+  /** AdBrain's side of "stop" (campaign status, reserves, audit); idempotent, run on every stop pass. */
+  onStopped?(reason: "held" | "no_allowance"): Promise<void>;
 }
 
 export type SpendCapSyncResult =
@@ -77,7 +78,7 @@ async function applyOnce(target: { businessId: string; adAccountId: string }, de
     deps.balance(), deps.store.inputs(target.businessId, target.adAccountId), deps.meta.readAccountFunding(),
   ]);
   // Assuming no refund would overstate the allowance: a balance without the figure is refused.
-  if (!Number.isSafeInteger(balance.advertisingRefundedPaise)) throw new SpendCapInputError();
+  if (balance.advertisingRefundedPaise === undefined || !Number.isSafeInteger(balance.advertisingRefundedPaise)) throw new SpendCapInputError();
   const decision = childSpendCap({
     advertisingAllocationPaise: balance.advertisingAllocationPaise,
     advertisingRefundedPaise: balance.advertisingRefundedPaise,
@@ -99,8 +100,8 @@ async function applyOnce(target: { businessId: string; adAccountId: string }, de
     case "stop": {
       // Pausing is what stops delivery; the lower limit is defence in depth, and the last decision
       // (no room) keeps anything from activating whether or not Meta accepts it.
-      const paused = await deps.meta.pauseActiveCampaigns();
-      if (paused.length) await deps.onStopped?.(paused, decision.reason);
+      await deps.meta.pauseActiveCampaigns();
+      await deps.onStopped?.(decision.reason);
       const lowered = await deps.meta.setAccountSpendCap(STOP_SPEND_CAP_PAISE, STOP_SPEND_CAP_PAISE).then(() => true, (error: unknown) => {
         if (error instanceof MetaError) return false;
         throw error;
