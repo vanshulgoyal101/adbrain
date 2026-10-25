@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // #525: a managed business (2-Tier child) runs on the parent system user's token with its own
 // child ad account and Page; everyone else stays on their OAuth connection. Behind the flag.
-const mocks = vi.hoisted(() => ({ getUser: vi.fn(), adminFrom: vi.fn(), adminRpc: vi.fn(), managedFilters: [] as [string, unknown][] }));
+const mocks = vi.hoisted(() => ({ getUser: vi.fn(), adminFrom: vi.fn(), adminRpc: vi.fn(), managedFilters: [] as [string, unknown][], spendCapGate: vi.fn() }));
+vi.mock("@/lib/managed/spend-cap-wiring", () => ({ managedSpendCapGate: mocks.spendCapGate }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: mocks.getUser },
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
   vi.stubEnv("META_PARENT_SYSTEM_TOKEN", "parent-system-token");
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
+  mocks.spendCapGate.mockResolvedValue("allowed");
   mocks.adminFrom.mockImplementation((table: string) => {
     if (table === "managed_meta_accounts") {
       const query = {
@@ -80,6 +82,23 @@ describe("Meta credentials for a managed business (#525)", () => {
     await expect(run({ purpose: "activate" })).rejects.toThrow(/funded/);
     managedRows = [{ ...ready, funding_state: "invoiced" }];
     await expect(run({ purpose: "activate" })).resolves.toBeTruthy();
+  });
+
+  it.each([["no_room", /no spending room left/], ["updating", /being updated/]] as const)(
+    "activates only when the child account's spending limit has room: %s blocks it, not create or pause (#522)", async (gate, message) => {
+      mocks.spendCapGate.mockResolvedValue(gate);
+      const binding = { adAccountId: ready.ad_account_id, pageId: ready.page_id };
+      await expect(run({ purpose: "activate" })).rejects.toThrow(message);
+      await expect(run({ purpose: "create_paused" })).resolves.toBeTruthy();
+      await expect(run({ purpose: "pause", expectedGeneration: 3, binding })).resolves.toBeTruthy();
+      expect(mocks.spendCapGate).toHaveBeenCalledOnce();
+      expect(mocks.spendCapGate).toHaveBeenCalledWith(expect.objectContaining({ businessId: "business-1", userId: "user-1" }),
+        expect.objectContaining({ business_id: "business-1", ad_account_id: ready.ad_account_id }));
+    });
+
+  it("keeps activation closed when the spending limit can't be verified (#522)", async () => {
+    mocks.spendCapGate.mockRejectedValue(new Error("Meta is unavailable."));
+    await expect(run({ purpose: "activate" })).rejects.toThrow(/being updated/);
   });
 
   it.each(["failed", "offboarding", "whatsapp_linked", "funded"])("can still stop and read a %s account that has an ad account, but not create on it (QA)", async (state) => {

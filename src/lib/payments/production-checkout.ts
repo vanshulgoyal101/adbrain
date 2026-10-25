@@ -9,6 +9,7 @@ import { CheckoutRequestError, paymentJsonBody, paymentReply, readPaymentBody } 
 import { getProductionCollectionPolicy, getProductionPaymentConfig, productionPaymentPolicySchema, ProductionPaymentError,
   quoteForPaymentPolicy, type PaymentSubject } from "./production-config";
 import { createProductionPaymentClient } from "./razorpay-production";
+import { scheduleManagedSpendCapSync } from "@/lib/managed/spend-cap-wiring";
 import { capturedPaymentMatchesOrder, verifyRazorpayCheckoutSignature, verifyRazorpayWebhookSignature } from "./razorpay-verification";
 
 const identifier = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{1,100}$`));
@@ -150,6 +151,8 @@ function paymentService(config: Config, signal: AbortSignal) {
         ({ order, refunds, refundIds } = await recovery(order.id));
       }
     }
+    // A capture, refund or dispute changed the balance: a managed child account's Meta limit follows (#522).
+    scheduleManagedSpendCapSync({ businessId: order.business_id, userId: order.user_id });
     return { order, refunds, refundIds };
   }
   async function processEvent(event: z.infer<typeof eventSchema>) {
