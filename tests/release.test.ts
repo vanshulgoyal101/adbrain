@@ -195,3 +195,12 @@ describe("Management API migration transaction", () => {
     }
   });
 });
+
+describe("Reviewer verdicts (#575)", () => {
+  it("count like the CTO's for money and migration PRs", () => {
+    const r = ctoReviews([{ body: "Reviewer review of c30aaba: **approved**. Migration sha256 40de9dc8.", createdAt: "2026-10-25T11:00:00Z", url: "u" }]);
+    expect(r).toHaveLength(1);
+    expect(ctoApproval(r, (sha: string) => sha === "c30aaba").approved).toBe(true);
+    expect(ctoReviews([{ body: "Dev: Reviewer review of c30aaba: **approved**.", createdAt: "2026-10-25T11:00:00Z", url: "u" }])).toHaveLength(0);
+  });
+});
