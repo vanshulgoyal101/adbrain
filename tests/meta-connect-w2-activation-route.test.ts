@@ -5,6 +5,7 @@ import { CampaignDeliveryError } from "@/lib/meta/client";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
+  getActivationLearning: vi.fn(),
   requireOwnedBusiness: vi.fn(),
   withMetaConnection: vi.fn(),
   metaClientForBusiness: vi.fn(),
@@ -96,6 +97,7 @@ vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
   observeCustomerCosts: mocks.observeCustomerCosts,
 }));
 vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
+vi.mock("@/lib/campaign/activation-learning", () => ({ getActivationLearning: mocks.getActivationLearning }));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {
@@ -133,6 +135,7 @@ beforeEach(() => {
   mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
   mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
+  mocks.getActivationLearning.mockResolvedValue({ costPerResultRupees: null, pausedAt: null });
   mocks.deleteCampaign.mockResolvedValue({ error: null });
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business-1", userId: "user-1" });
@@ -156,10 +159,15 @@ describe("campaign activation generation fence", () => {
 
   it("returns a tenant-scoped, read-only child review without reserving funds", async () => {
     const { GET } = await import("@/app/api/campaigns/[id]/route");
+    mocks.getActivationLearning.mockResolvedValueOnce({ costPerResultRupees: 10.69, pausedAt: "2026-10-15T09:00:00Z" });
     const response = await GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect((await response.json()).delivery).toEqual(reviewedDelivery);
+    const body = await response.json();
+    expect(body.delivery).toEqual(reviewedDelivery);
+    // #419 item 2: the learning-restart inputs ride along, outside the confirmation digest.
+    expect(body.learning).toEqual({ costPerResultRupees: 10.69, pausedAt: "2026-10-15T09:00:00Z" });
+    expect(mocks.getActivationLearning).toHaveBeenCalledWith(expect.objectContaining({ id: "campaign-1", business_id: "business-1", status: "paused" }));
     expect(mocks.readCampaignDelivery).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"], cappedAdSetIds: [] });
     expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
@@ -710,9 +718,10 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     it("shows the live Meta funding in the review only for an operator-funded business", async () => {
       const { GET } = await import("@/app/api/campaigns/[id]/route");
       const review = () => GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
-      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: roomy });
+      const learning = { costPerResultRupees: null, pausedAt: null };
+      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: roomy, learning });
       mocks.isOperatorFunded.mockResolvedValue(false);
-      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery });
+      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, learning });
       expect(mocks.readAccountFunding).toHaveBeenCalledTimes(1);
     });
   });

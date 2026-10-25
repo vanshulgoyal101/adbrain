@@ -105,7 +105,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |
-| GET | `/api/campaigns/[id]` | Path ID -> `{delivery}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation |
+| GET | `/api/campaigns/[id]` | Path ID -> `{delivery,funding?,learning}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation. `learning` (`costPerResultRupees`, `pausedAt`, either null) feeds the learning-restart notes (#419) and is not part of the digest |
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery,pause}` | Live Meta mutation (pause: campaign, ad sets and ads) + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
