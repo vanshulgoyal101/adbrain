@@ -158,5 +158,5 @@ export async function downloadImage(
     return validateRaster(Buffer.from(match[1], "base64"));
   }
   const res = await fetchPublicUrl(url, { signal, timeoutMs: 30_000 });
-  return validateRaster(await readBoundedResponse(res));
+  return validateRaster(await readBoundedResponse(res), { trimWatermark: new URL(url).hostname === "image.pollinations.ai" });
 }
