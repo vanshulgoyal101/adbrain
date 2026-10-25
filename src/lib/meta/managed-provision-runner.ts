@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/types";
@@ -18,7 +18,7 @@ import {
  * system-user token is stored encrypted in `private.meta_tokens` and referenced from the ledger.
  */
 export interface RunnerDeps {
-  config: { parentToken: string; parentBusinessId: string; appId: string };
+  config: { parentToken: string; parentBusinessId: string; appId: string; appSecret: string };
   claim(leaseId: string): Promise<boolean>;
   release(leaseId: string): Promise<boolean>;
   businessName(): Promise<string>;
@@ -36,8 +36,11 @@ export async function runManagedProvisioning(
   input: { businessId: string; customerTokenId: string | null; requestId?: string },
   deps: RunnerDeps,
 ): Promise<ProvisionResult> {
-  if (!deps.config.parentToken || !deps.config.appId) return { ok: false, code: "NOT_CONFIGURED", retryable: false };
+  // Meta rejects the child-token mint without appsecret_proof (Business On Behalf Of, step 2).
+  if (!deps.config.parentToken || !deps.config.appId || !deps.config.appSecret) return { ok: false, code: "NOT_CONFIGURED", retryable: false };
   if (!input.customerTokenId) return { ok: false, code: "CUSTOMER_REAUTH_REQUIRED", retryable: false };
+  // No ledger row means the Page step hasn't happened; don't report it as a run in progress.
+  if (!(await deps.store.get(input.businessId))) return { ok: false, code: "PAGE_NOT_LINKED", retryable: false };
   const leaseId = randomUUID();
   if (!(await deps.claim(leaseId))) return { ok: false, code: "PROVISIONING_IN_PROGRESS", retryable: true };
   try {
@@ -58,13 +61,18 @@ export async function runManagedProvisioning(
   }
 }
 
-/** Graph calls with the token in a header (never the URL); Meta failures carry status/code/subcode only. */
-export function graphClient(fetchImpl: typeof fetch = fetch): ProvisionGraph {
+/**
+ * Graph calls with the token in a header (never the URL) and `appsecret_proof` (HMAC of that token
+ * with the app secret) on every call; Meta failures carry status/code/subcode only.
+ */
+export function graphClient(appSecret: string, fetchImpl: typeof fetch = fetch): ProvisionGraph {
   async function call<T>(method: "GET" | "POST", path: string, token: string, form?: Record<string, string>): Promise<T> {
-    const response = await fetchImpl(`${GRAPH}/${path}`, {
+    const proof = createHmac("sha256", appSecret).update(token).digest("hex");
+    const url = form ? `${GRAPH}/${path}` : `${GRAPH}/${path}${path.includes("?") ? "&" : "?"}appsecret_proof=${proof}`;
+    const response = await fetchImpl(url, {
       method,
       headers: { Authorization: `Bearer ${token}`, ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) },
-      body: form ? new URLSearchParams(form) : undefined,
+      body: form ? new URLSearchParams({ ...form, appsecret_proof: proof }) : undefined,
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
@@ -97,8 +105,12 @@ export function runnerDeps(businessId: string, userId: string): RunnerDeps {
   const table = () => admin.from("managed_meta_accounts");
   const fail = (what: string, error: { code?: string } | null) => Object.assign(new Error(`Managed account ${what} failed.`), { code: error?.code });
   return {
-    config: { parentToken: env.META_PARENT_SYSTEM_TOKEN, parentBusinessId: env.META_PARENT_BUSINESS_ID, appId: env.META_APP_ID },
-    claim: async (leaseId) => (await admin.rpc("managed_meta_account_claim", { p_business_id: businessId, p_lease_id: leaseId, p_seconds: LEASE_SECONDS })).data === true,
+    config: { parentToken: env.META_PARENT_SYSTEM_TOKEN, parentBusinessId: env.META_PARENT_BUSINESS_ID, appId: env.META_APP_ID, appSecret: env.META_APP_SECRET },
+    claim: async (leaseId) => {
+      const { data, error } = await admin.rpc("managed_meta_account_claim", { p_business_id: businessId, p_lease_id: leaseId, p_seconds: LEASE_SECONDS });
+      if (error) throw fail("lease", error);
+      return data === true;
+    },
     release: async (leaseId) => (await admin.rpc("managed_meta_account_release", { p_business_id: businessId, p_lease_id: leaseId })).data === true,
     businessName: async () => {
       const { data, error } = await admin.from("businesses").select("name").eq("id", businessId).maybeSingle();
@@ -131,8 +143,9 @@ export function runnerDeps(businessId: string, userId: string): RunnerDeps {
         return tokenId;
       },
       load: (tokenId) => readToken(admin, tokenId, businessId),
+      remove: async (tokenId) => { await admin.rpc("meta_token_delete", { p_token_id: tokenId, p_business_id: businessId }); },
     },
-    graph: graphClient(),
+    graph: graphClient(env.META_APP_SECRET),
     provision: provisionManagedAccount,
   };
 }

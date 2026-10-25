@@ -27,6 +27,8 @@ export interface ManagerTokens {
   appId: string;
   save(token: string, systemUserId: string): Promise<string>;
   load(tokenId: string): Promise<string | null>;
+  /** Best effort: delete a token row the ledger no longer references. */
+  remove(tokenId: string): Promise<void>;
 }
 
 export interface ProvisionStore {
@@ -44,7 +46,7 @@ const MAX_CHILD_PAGES = 50;
 
 /** A lookup that can't prove the child doesn't exist: stop rather than risk a second one (QA #527 T3). */
 class LookupError extends Error {
-  constructor(readonly code: "CHILD_LOOKUP_UNVERIFIED" | "CHILD_LOOKUP_INCOMPLETE" | "AD_ACCOUNT_AMBIGUOUS" | "MANAGER_TOKEN_MISSING" | "MANAGER_USER_AMBIGUOUS") { super(code); }
+  constructor(readonly code: "CHILD_LOOKUP_UNVERIFIED" | "CHILD_LOOKUP_INCOMPLETE" | "AD_ACCOUNT_AMBIGUOUS" | "MANAGER_TOKEN_MISSING") { super(code); }
 }
 
 type ChildPage = { data?: { id: string; child_business_external_id?: string }[]; paging?: { next?: string; cursors?: { after?: string } } };
@@ -154,13 +156,21 @@ export async function provisionManagedAccount(input: {
         id: childId, app_id: input.manager.appId, scope: "ads_management,business_management",
       }, tokens.parent);
       if (!minted.access_token) throw new LookupError("MANAGER_TOKEN_MISSING");
-      const users = await graph.get<{ data?: { id: string }[] }>(`${childId}/system_users?fields=id&limit=10`, minted.access_token);
-      if ((users.data ?? []).length !== 1) throw new LookupError("MANAGER_USER_AMBIGUOUS");
-      managerUserId = users.data![0].id;
+      // Meta's guide reads the system user from /me with the child token.
+      const me = await graph.get<{ id?: string }>("me?fields=id", minted.access_token);
+      if (!me.id) throw new LookupError("MANAGER_TOKEN_MISSING");
+      managerUserId = me.id;
       managerToken = minted.access_token;
       const tokenId = await input.manager.save(managerToken, managerUserId);
       keys.manager = key;
-      await store.update({ manager_user_id: managerUserId, manager_token_id: tokenId, step_keys: keys, last_error: null });
+      try {
+        await store.update({ manager_user_id: managerUserId, manager_token_id: tokenId, step_keys: keys, last_error: null });
+      } catch (error) {
+        await input.manager.remove(tokenId).catch(() => undefined);
+        throw error;
+      }
+      // The replaced token (revoked, expired or unreadable) is no longer referenced.
+      if (row.manager_token_id && row.manager_token_id !== tokenId) await input.manager.remove(row.manager_token_id).catch(() => undefined);
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: managerUserId });
     }
 

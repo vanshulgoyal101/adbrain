@@ -34,7 +34,7 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
       if (path.startsWith(`${PARENT}/owned_businesses`)) return (children.length ? { data: children } : recordedLookup.body) as never;
       if (path.includes("/owned_ad_accounts")) return { data: accounts } as never;
       if (path.startsWith("act_8000000000001/assigned_users")) return { data: assigned } as never;
-      if (path.startsWith("7000000000001/system_users")) return { data: [{ id: "6100000000009" }] } as never;
+      if (path.startsWith("me?")) return { id: "6100000000009" } as never;
       throw new Error(`unexpected GET ${path}`);
     },
     post: async (path, form, token) => {
@@ -64,14 +64,16 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
 const tokens = { customer: "customer-token", parent: "parent-token" };
 const vault = new Map<string, string>();
 const saved: { token: string; userId: string }[] = [];
+const removed: string[] = [];
 const manager: ManagerTokens = {
   appId: "2286157145462990",
   save: async (token, userId) => { saved.push({ token, userId }); const id = `00000000-0000-4000-8000-00000000000${saved.length}`; vault.set(id, token); return id; },
   load: async (tokenId) => vault.get(tokenId) ?? null,
+  remove: async (tokenId) => { removed.push(tokenId); vault.delete(tokenId); },
 };
 const run = (store: ProvisionStore, graph: ProvisionGraph) =>
   provisionManagedAccount({ businessId: business, businessName: "Solaride Mohali", parentBusinessId: PARENT, store, graph, tokens, manager, requestId: "r1" });
-beforeEach(() => { vault.clear(); saved.length = 0; });
+beforeEach(() => { vault.clear(); saved.length = 0; removed.length = 0; });
 
 describe("provisionManagedAccount (#521)", () => {
   it("creates the child business with the customer's Page, then its INR ad account, recording each step", async () => {
@@ -172,7 +174,8 @@ describe("provisionManagedAccount (#521)", () => {
     expect(await run(db.store, graph)).toMatchObject({ ok: true });
     const mint = calls.find((c) => c.path === "7000000000001/access_token")!;
     expect(mint).toMatchObject({ method: "POST", token: "parent-token", form: { id: "7000000000001", app_id: "2286157145462990", scope: "ads_management,business_management" } });
-    expect(calls.find((c) => c.path.startsWith("7000000000001/system_users"))!.token).toBe("child-token");
+    // Meta's guide reads the system user from /me with the child token (no ambiguity if the customer adds others).
+    expect(calls.find((c) => c.path.startsWith("me?"))!.token).toBe("child-token");
     expect(saved).toEqual([{ token: "child-token", userId: "6100000000009" }]);
     expect(db.row()).toMatchObject({ manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000001" });
     expect(JSON.stringify(db.row())).not.toContain("child-token");
@@ -193,5 +196,16 @@ describe("provisionManagedAccount (#521)", () => {
     expect(await run(db.store, gone.graph)).toMatchObject({ ok: true });
     expect(gone.calls.filter((c) => c.path.endsWith("/access_token"))).toHaveLength(1);
     expect(db.row()).toMatchObject({ manager_token_id: "00000000-0000-4000-8000-000000000001" });
+    // The replaced (revoked or expired) token's encrypted row is deleted once the new reference is written.
+    expect(removed).toEqual(["00000000-0000-4000-8000-000000000009"]);
+  });
+
+  it("deletes a just-saved token when the ledger can't reference it (no orphaned secrets)", async () => {
+    const db = ledger({ business_id: business, state: "ad_account_created", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001", step_keys: { child_business: "x", ad_account: "y" } });
+    const update = db.store.update;
+    db.store.update = async (values) => { if ("manager_token_id" in values) throw new Error("store down"); return update(values); };
+    const { graph } = meta();
+    expect(await run(db.store, graph)).toMatchObject({ ok: false });
+    expect(removed).toEqual(["00000000-0000-4000-8000-000000000001"]);
   });
 });
