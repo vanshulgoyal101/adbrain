@@ -40,6 +40,12 @@ export const productEventSchema = z.object({
     validationRules: z.array(z.string().regex(/^[a-zA-Z0-9_.:*/[\]-]{1,80}$/)).max(12).optional(),
     action: z.enum(productActions).optional(),
     viewport: viewportSchema.optional(),
+    /** #615: Meta's error code, subcode, user title, trace id and Graph edge (ids replaced); never tokens or bodies. */
+    metaCode: z.number().int().optional(),
+    metaSubcode: z.number().int().optional(),
+    metaUserTitle: z.string().max(160).optional(),
+    fbtraceId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+    metaPath: label.optional(),
   }),
 });
 

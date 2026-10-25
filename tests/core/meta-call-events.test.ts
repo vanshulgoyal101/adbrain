@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/advantage-audience-validate.json";
 import launchTape from "./fixtures/meta/launch-validate.json";
+import refusal from "./fixtures/meta/safety/switch-daily-to-lifetime.json";
 import type { ProductEventInput } from "@/lib/observability/events";
 
 // #451 L2: every Graph call leaves one product event (endpoint template, method, status, Meta
@@ -14,6 +15,8 @@ vi.mock("@/lib/security/ssrf", () => ({
 
 const { MetaClient, MetaError } = await import("@/lib/meta/client");
 const { graphEndpoint } = await import("@/lib/meta/graph-event");
+const { metaErrorAttributes } = await import("@/lib/meta/connection-access");
+const { sanitizeProductEvent } = await import("@/lib/observability/events");
 
 type Exchange = { name: string; status: number; body: unknown };
 const answer = (name: string) => {
@@ -64,6 +67,26 @@ describe("core: Meta call events (#451 L2)", () => {
       expect(event.durationMs).toBeGreaterThanOrEqual(0);
       expect(JSON.stringify(event)).not.toMatch(/secret-token|ACCOUNT|PAGE|LEAD_FORM|TEMP_CAMPAIGN|\?/);
     }
+  });
+
+  it("#615: a refused Graph call puts Meta's code, subcode, title, trace and edge on the workflow event", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(refusal[0].body, { status: refusal[0].status }));
+    const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "secret-token" });
+    const error = await meta.searchGeoLocations("Jaipur").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MetaError);
+    const attributes = metaErrorAttributes(error);
+    expect(attributes).toEqual({
+      status: 400, metaCode: 100, metaSubcode: 1885257, metaUserTitle: "पुनरावर्ती बजट होना चाहिए",
+      fbtraceId: "AFGjRhez9OHYdi2kMyeU9Y9", metaPath: "search",
+    });
+    const event = sanitizeProductEvent({
+      version: 1, eventId: crypto.randomUUID(), requestId: crypto.randomUUID(), occurredAt: new Date().toISOString(),
+      kind: "workflow", name: "meta.create_paused", outcome: "failed", userId: null, businessId: null,
+      attributes: { provider: "meta", errorCode: "META_OPERATION_FAILED", ...attributes },
+    });
+    expect(event?.attributes).toMatchObject(attributes);
+    expect(JSON.stringify(event)).not.toMatch(/secret-token|ACCOUNT|PAGE|Jaipur/);
+    expect(metaErrorAttributes(new Error("plain"))).toEqual({});
   });
 
   it("a network failure is logged as failed without a status", async () => {
