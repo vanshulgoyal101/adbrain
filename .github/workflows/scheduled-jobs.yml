@@ -114,6 +114,22 @@ jobs:
               -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
+      - name: OpenRouter credit (#449)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 30 -o credit.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/llm-credit") || code=000
+          [ "$code" = 404 ] && { echo "llm-credit not deployed yet"; exit 0; }
+          echo "HTTP $code $(jq -c '{ok, minRemainingUsd, thresholdUsd, low, failed: ([.keys[]? | select(.error)] | length)}' credit.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          # Advisory: OpenRouter being unreachable must not fail the scheduler.
+          [ "$(jq -r '.low' credit.json 2>/dev/null)" = true ] || exit 0
+          title="OpenRouter credit low"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = 0 ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l decision -t "$title" \
+            -b "$(printf 'An OpenRouter key has $%s left (alert under $%s, #449). Paid Create models (images, Haiku concepts) stop when it runs out.\n\n→ CEO: ask the owner whether to raise the key limit (OpenRouter settings → Keys).\nRun: %s/%s/actions/runs/%s\n' "$(jq -r '.minRemainingUsd' credit.json)" "$(jq -r '.thresholdUsd' credit.json)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
       - name: Alert on the second consecutive failure
         if: failure()
         env:
