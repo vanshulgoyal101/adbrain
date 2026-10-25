@@ -1,11 +1,8 @@
 import { observeRoute, currentRequestId, recordProductEvent } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { getEnv } from "@/lib/env";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { canUseMetaConnect } from "@/lib/meta/pilot-access";
-import { requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { managedFail as fail, ownedManagedAttempt as ownedAttempt } from "@/lib/meta/managed-attempt";
 import { adminPages, linkManagedPage, META_PAGE_CREATE_URL, type ManagedAccountStore } from "@/lib/meta/managed-page";
 
 export const runtime = "nodejs";
@@ -16,31 +13,6 @@ export const POST = observeRoute("/api/meta/managed/page", "POST", handlePOST);
 
 const uuid = z.string().uuid();
 const postSchema = z.object({ attemptId: uuid, pageId: z.string().regex(/^[0-9]{1,24}$/) });
-
-function fail(status: number, code: string, message: string) {
-  return NextResponse.json({ ok: false, error: { code, message, retryable: status >= 500 }, requestId: currentRequestId() }, { status });
-}
-
-async function ownedAttempt(attemptId: string) {
-  if (!getEnv().MANAGED_ACCOUNTS_ENABLED) return { ok: false as const, response: fail(404, "NOT_ENABLED", "Managed accounts are not enabled.") };
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, response: fail(401, "UNAUTHENTICATED", "Sign in required.") };
-  if (!canUseMetaConnect(user.id)) return { ok: false as const, response: fail(403, "FORBIDDEN", "Meta connection is not enabled for this account.") };
-  const { data, error } = await createAdminClient().rpc("meta_attempt_get", { p_attempt_id: attemptId, p_user_id: user.id });
-  const attempt = data?.[0];
-  if (error || !attempt) return { ok: false as const, response: fail(404, "NOT_FOUND", "Connection attempt not found.") };
-  // As Connect does: an expired attempt's Page rights may be stale, and the business must still be the caller's.
-  if (new Date(attempt.expires_at).getTime() <= Date.now()) {
-    return { ok: false as const, response: fail(410, "ATTEMPT_EXPIRED", "This Facebook connection has expired. Connect Facebook again to choose your Page.") };
-  }
-  try {
-    await requireOwnedBusiness(attempt.business_id);
-  } catch {
-    return { ok: false as const, response: fail(404, "NOT_FOUND", "Connection attempt not found.") };
-  }
-  return { ok: true as const, attempt: { businessId: attempt.business_id as string, snapshot: attempt.discovered_assets as unknown } };
-}
 
 function store(businessId: string): ManagedAccountStore {
   const admin = createAdminClient();

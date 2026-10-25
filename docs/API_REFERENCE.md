@@ -133,6 +133,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/meta/connections/attempts/[id]/retry` | `revision` -> envelope attempt | Retry eligible failed discovery |
 | GET | `/api/meta/managed/page` | `attemptId` -> envelope `{pages, createUrl, linked}` | #523 2-Tier: Pages the owner administers from that attempt's discovery; off unless `MANAGED_ACCOUNTS_ENABLED` |
 | POST | `/api/meta/managed/page` | `{attemptId, pageId}` -> envelope `{state, pageId}` | #523: link an admin Page (`page_linked` in `managed_meta_accounts`); `PAGE_NOT_ADMIN` / `PAGE_LOCKED` / `PAGE_TAKEN` 409 |
+| POST | `/api/meta/managed/provision` | `{attemptId}` -> envelope `{state, adAccountId}` | #521 2-Tier: create the caller's child business, INR ad account and its manager; owner-worded 409/503 codes; off unless `MANAGED_ACCOUNTS_ENABLED` |
 | GET | `/api/managed/onboarding` | `businessId` -> envelope `{row, paid}` | #526 2-Tier onboarding progress (owner's `managed_meta_accounts` row; `paid` = captured payments net of refunds, unreadable counts as not paid); off unless `MANAGED_ACCOUNTS_ENABLED`. Polled every 5 s by `/onboarding` |
 | POST | `/api/meta/connections/attempts/[id]/select` | Pair/revision/confirmation -> envelope result | Commit verified connection |
 | POST | `/api/meta/connections/recheck` | Business/optional generation -> envelope connection | Live capability recheck |
@@ -822,6 +823,15 @@ reaches `page_linked` and a `page` step is logged. Another Page can be chosen un
 business exists (`PAGE_LOCKED` after); a Page another active business uses is `PAGE_TAKEN`
 (#533 unique index). New rows start at `requested`, then move to `page_linked`. A Page created on Meta appears after the attempt's
 discovery retry (`/api/meta/connections/attempts/[id]/retry`).
+
+### Managed Provisioning (#521, 2-Tier)
+
+`POST /api/meta/managed/provision` `{attemptId}`: same attempt checks as the Managed Page route
+(the caller's own, unexpired attempt; business still theirs; flag on). Runs provisioning for that
+business inside its ledger lease (`PROVISIONING_IN_PROGRESS` 409 while another run holds it) with
+the attempt's own Facebook token. Owner-worded errors: 409 for what the owner must do
+(`CUSTOMER_REAUTH_REQUIRED`, `PAGE_NOT_LINKED`, `PAGE_ADMIN_REQUIRED`, `PAGE_IN_OTHER_BUSINESS`, …),
+503 for Meta being busy or the feature not configured. `maxDuration` 60 s.
 
 ## Jobs and Telemetry
 
