@@ -205,8 +205,11 @@ Solaride, tracked in `managed_meta_accounts` (#519). The customer links a Page t
 (#523). [`provisionManagedAccount`](../src/lib/meta/managed-provision.ts) (#521) then creates the
 child business (`POST /{parent}/owned_businesses` with `shared_page_id`, `page_permitted_tasks`,
 timezone 71 and `child_business_external_id` = the AdBrain business ID) and its INR ad account
-(`POST /{child}/adaccount`, `end_advertiser` = the Page). Every step reads before it creates
-(the external ID; a deterministic account name), so a lost response never creates twice. Meta
+(`POST /{child}/adaccount`, `end_advertiser` = the Page), then assigns the managing system user
+to it (`POST /{act}/assigned_users`, MANAGE/ADVERTISE/ANALYZE, `business` = the child; checked
+first with `GET /{act}/assigned_users?business=`). Every step reads before it creates (the
+external ID; a deterministic account name; the existing assignment), so a lost response never
+creates twice, and a failed grant retries only the grant. Meta
 errors become owner codes (`PAGE_ADMIN_REQUIRED`, `PAGE_IN_OTHER_BUSINESS`, `NOT_PERMITTED`,
 `META_BUSY`, `META_TIMEOUT`) and leave the row `failed` to resume. Its tests use Meta's
 documented shapes, marked provisional until App Review and Access Verification pass and real

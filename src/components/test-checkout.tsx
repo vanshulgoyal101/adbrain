@@ -226,8 +226,8 @@ export function TestCheckout({ businessId }: { businessId: string }) {
       </div>
       <p className="text-sm text-slate-600">Test money only. No advertising or service is purchased.</p>
       <dl className="grid grid-cols-2 gap-4 text-sm">
-        <div><dt className="text-slate-500">Test amount</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-slate-950">INR 10,000</dd></div>
-        <div><dt className="text-slate-500">Advertising credit</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-slate-950">INR 0</dd></div>
+        <div><dt className="text-slate-500">Test amount</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-slate-950">₹10,000</dd></div>
+        <div><dt className="text-slate-500">Advertising credit</dt><dd className="mt-1 text-xl font-semibold tabular-nums text-slate-950">₹0</dd></div>
       </dl>
       <p role="status" aria-live="polite" className="flex min-h-6 items-center gap-2 text-sm font-medium text-slate-800">
         {phase === "captured" ? <CheckCircle2 size={18} className="text-emerald-700" aria-hidden="true" /> : working ? <Spinner /> : <ShieldCheck size={18} aria-hidden="true" />}{status}
@@ -237,7 +237,7 @@ export function TestCheckout({ businessId }: { businessId: string }) {
       {scriptFailed && <Alert variant="error">Razorpay Checkout could not load. Your saved order is unchanged.</Alert>}
       <div className="flex flex-wrap gap-2">
         {phase === "ready" && !recovery?.opened && <Button onClick={() => void pay()} disabled={!scriptReady || scriptFailed} className="h-auto min-h-11 whitespace-normal">
-          <CreditCard size={16} className="shrink-0" aria-hidden="true" />{scriptReady ? "Pay INR 10,000 (test)" : "Loading checkout"}
+          <CreditCard size={16} className="shrink-0" aria-hidden="true" />{scriptReady ? "Pay ₹10,000 (test)" : "Loading checkout"}
         </Button>}
         {recovery && phase !== "captured" && <button ref={payButton} type="button" disabled={working}
           onClick={() => void checkStatus()} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">

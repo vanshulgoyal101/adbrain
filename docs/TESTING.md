@@ -72,7 +72,7 @@ All automated production browser runs from the shared Mac come from one IP addre
 
 ### Core Regression Gate
 
-`npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time:
+`npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time. While no virtual timer is pending, `settleInVirtualTime` waits for real IO (sharp decoding on its thread pool) and reports a stall only after 5 s of real time (`replay-clock`, #449):
 
 - **Create** (`create-route`, `create-concept`): three ads saved from production run 4 through the production provider order, validator repair, OpenRouter overload falling back to Gemini without trying OpenRouter's other keys, and run 4's recorded OpenRouter and image latencies fitting the 270 s route deadline. Recorded and gold-labelled `evals/creative` concepts must be accepted or rejected as graded.
 - **Create interview** (`create-interview`, #284): real Solaride interview replies recorded by
@@ -114,6 +114,11 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
+- **Managed spending limit** (`managed-spend-cap`, #522): a ₹500 annual-quote customer's child
+  ad account gets a ₹338.98 limit (₹400 ad share net of 18% GST), written in rupees and read back
+  in paise; a different read-back, or one whose room exceeds what the customer has left (Meta's
+  counter restarted), keeps campaigns paused, and 0 is never written. The Graph
+  exchange is **provisional** (Meta's documented shape) until a managed account can be recorded.
 - **Managed campaigns** (`managed-campaign`, #525): the real recorded Solaride Prepare → PAUSED
   create → sync → pause tapes, run through `withMetaConnection` for a managed business whose
   ledger row points at that ad account and Page: every call AdBrain builds carries the parent

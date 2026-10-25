@@ -55,7 +55,9 @@ export function linkedIssues(title) {
 export function waitingOnMe(lastBody, m, labels = []) {
   if (labels.some((l) => PARKED.has(l))) return false;
   if (lastBody == null) return true;
-  if (m.writtenByMe(lastBody)) return false;
+  // Your own last word without a handoff (no "→ Role") means the item is still yours to continue;
+  // idle workers otherwise slept with their queue unfinished (Oct 25).
+  if (m.writtenByMe(lastBody)) return !m.handedToOther(lastBody);
   if (m.addressedToMe(lastBody)) return true;
   return !m.handedToOther(lastBody);
 }

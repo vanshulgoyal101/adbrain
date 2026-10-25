@@ -1,5 +1,8 @@
 import { vi } from "vitest";
 
+// Captured before a test starts the virtual clock: real IO (sharp's thread pool) is waited for in real time.
+const realSetTimeout = globalThis.setTimeout;
+
 /** Shared helpers for the core regression gate (`npm run test:core`). */
 
 export function requestUrl(input: RequestInfo | URL): string {
@@ -68,20 +71,24 @@ export function useVirtualDeadlines() {
 /**
  * Advances the virtual clock timer by timer until `promise` settles. Import the
  * code under test before starting the clock: module loading is real IO.
+ * With no virtual timer pending, real IO may still be running (sharp decodes on its
+ * thread pool, slower on a busy CI runner), so a stall is `stallAfterMs` of real time.
  */
-export async function settleInVirtualTime<T>(promise: Promise<T>, limitMs = 600_000): Promise<T> {
+export async function settleInVirtualTime<T>(promise: Promise<T>, limitMs = 600_000, stallAfterMs = 5_000): Promise<T> {
   const startedAt = Date.now();
   let settled = false;
-  let idleRounds = 0;
+  let idleSince: number | undefined;
   promise.then(() => { settled = true; }, () => { settled = true; });
   while (!settled) {
     for (let i = 0; i < 5 && !settled; i++) await new Promise<void>((resolve) => setImmediate(resolve));
     if (settled) break;
     if (!vi.getTimerCount()) {
-      if (++idleRounds > 200) throw new Error("Core replay stalled with no pending timers.");
+      idleSince ??= performance.now();
+      if (performance.now() - idleSince > stallAfterMs) throw new Error("Core replay stalled with no pending timers.");
+      await new Promise<void>((resolve) => realSetTimeout(resolve, 1));
       continue;
     }
-    idleRounds = 0;
+    idleSince = undefined;
     await vi.advanceTimersToNextTimerAsync();
     if (Date.now() - startedAt > limitMs) throw new Error(`Core replay exceeded ${limitMs} ms of virtual time.`);
   }
