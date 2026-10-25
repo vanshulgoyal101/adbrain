@@ -66,10 +66,11 @@ function replay(...exchanges: Exchange[]) {
 }
 
 function memoryStore(inputs: { mediaThisAccountPaise: number }) {
-  let state: SpendCapState = { dirty: true, action: null, capPaise: null, roomPaise: null };
+  let state: SpendCapState = { dirty: true, leased: false, action: null, capPaise: null, roomPaise: null };
   const store: SpendCapStore & { state(): Promise<SpendCapState> } = {
     request: async () => true, begin: async () => true, abandon: async () => {},
-    finish: async (_account, _token, decision) => { state = { dirty: false, ...decision }; return false; },
+    markStale: async () => null, markPaymentStale: async () => null, due: async () => [],
+    finish: async (_account, _token, decision) => { state = { dirty: false, leased: false, ...decision }; return false; },
     inputs: async () => ({ ...inputs, mediaOtherAccountsPaise: 0, taxRateBps: 1800 }),
     state: async () => state,
   };
@@ -104,7 +105,7 @@ describe("core: a managed customer's child ad account limit follows their balanc
     expect(sent).toEqual([`GET ${funding.path}`, `POST ${ACCOUNT} spend_cap=338.98`, `GET ${funding.path}`]);
     expect(pending).toEqual([]);
     expect([...tokens]).toEqual([PARENT_TOKEN]);
-    expect(await store.state()).toEqual({ dirty: false, action: "set", capPaise: 33_898, roomPaise: 29_661 });
+    expect(await store.state()).toEqual({ dirty: false, leased: false, action: "set", capPaise: 33_898, roomPaise: 29_661 });
   });
 
   it("stops a held account with nothing spent: pauses its campaign on Meta first, then lowers the limit, then records it", async () => {
@@ -127,6 +128,6 @@ describe("core: a managed customer's child ad account limit follows their balanc
     expect(pending).toEqual([]);
     expect(mocks.campaignUpdates).toEqual([{ status: "paused" }]);
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: BUSINESS, userId: OWNER }, CAMPAIGN_ROW, "a3c0d9a2-1f2b-4c3d-9e4f-5a6b7c8d9e0f", "paused");
-    expect(await store.state()).toEqual({ dirty: false, action: "stop", capPaise: 100, roomPaise: 0 });
+    expect(await store.state()).toEqual({ dirty: false, leased: false, action: "stop", capPaise: 100, roomPaise: 0 });
   });
 });

@@ -118,9 +118,54 @@ declare current private.managed_spend_caps;
 begin
   perform private.managed_spend_cap_owned(p_business_id, p_ad_account_id);
   select * into current from private.managed_spend_caps where ad_account_id = p_ad_account_id;
-  return jsonb_build_object('dirty', coalesce(current.dirty, true), 'action', current.action,
+  return jsonb_build_object('dirty', coalesce(current.dirty, true),
+    'leased', coalesce(current.lease_until > clock_timestamp(), false), 'action', current.action,
     'capPaise', current.cap_paise, 'roomPaise', current.room_paise);
 end;
+$$;
+
+-- A payment, refund or dispute changed a business's balance: mark its child account's limit stale
+-- at once, before the event is processed (QA #560), so activation waits for a fresh limit and the
+-- sweep visits it first. Returns the business and its owner when it has a managed child account.
+create or replace function public.managed_spend_cap_mark_stale(p_business_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare target jsonb;
+begin
+  select jsonb_build_object('businessId', business.id, 'userId', business.owner_id) into target
+    from public.managed_meta_accounts managed join public.businesses business on business.id = managed.business_id
+    where managed.business_id = p_business_id and managed.ad_account_id is not null and managed.state <> 'offboarded';
+  if target is null then return null; end if;
+  insert into private.managed_spend_caps(ad_account_id, business_id)
+    select ad_account_id, business_id from public.managed_meta_accounts where business_id = p_business_id
+    on conflict (ad_account_id) do update set dirty = true;
+  return target;
+end;
+$$;
+
+-- The same for a payment event, before AdBrain knows its order: matched by payment or provider order.
+create or replace function public.managed_spend_cap_mark_payment_stale(p_account_id text, p_payment_id text, p_provider_order_id text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare business uuid;
+begin
+  select payment.business_id into business from private.production_payment_orders payment
+    where payment.account_id = p_account_id
+      and (payment.payment_id = p_payment_id or (p_provider_order_id is not null and payment.provider_order_id = p_provider_order_id))
+    -- A payment or provider order belongs to one order, so to one business.
+    order by payment.id limit 1;
+  if business is null then return null; end if;
+  return public.managed_spend_cap_mark_stale(business);
+end;
+$$;
+
+-- The sweep's order: stale limits first, then the oldest decision, so a run cut short by its time
+-- budget is picked up where it stopped.
+create or replace function public.managed_spend_cap_due(p_limit integer)
+returns table(business_id uuid) language sql stable security definer set search_path = '' as $$
+  select managed.business_id from public.managed_meta_accounts managed
+    left join private.managed_spend_caps cap on cap.ad_account_id = managed.ad_account_id
+    where managed.ad_account_id is not null and managed.state <> 'offboarded'
+    order by coalesce(cap.dirty, true) desc, cap.decided_at asc nulls first, managed.business_id
+    limit least(greatest(coalesce(p_limit, 0), 0), 1000);
 $$;
 
 -- AdBrain's attributed media for this tenant under one payment account: on the child account,
@@ -147,12 +192,18 @@ revoke all on function public.managed_spend_cap_request(uuid, text, uuid, intege
   public.managed_spend_cap_finish(text, uuid, text, bigint, bigint, integer),
   public.managed_spend_cap_abandon(text, uuid),
   public.managed_spend_cap_state(uuid, text),
-  public.managed_spend_cap_inputs(uuid, text, text) from public, anon, authenticated;
+  public.managed_spend_cap_inputs(uuid, text, text),
+  public.managed_spend_cap_mark_stale(uuid),
+  public.managed_spend_cap_mark_payment_stale(text, text, text),
+  public.managed_spend_cap_due(integer) from public, anon, authenticated;
 grant execute on function public.managed_spend_cap_request(uuid, text, uuid, integer),
   public.managed_spend_cap_begin(text, uuid, integer),
   public.managed_spend_cap_finish(text, uuid, text, bigint, bigint, integer),
   public.managed_spend_cap_abandon(text, uuid),
   public.managed_spend_cap_state(uuid, text),
-  public.managed_spend_cap_inputs(uuid, text, text) to service_role;
+  public.managed_spend_cap_inputs(uuid, text, text),
+  public.managed_spend_cap_mark_stale(uuid),
+  public.managed_spend_cap_mark_payment_stale(text, text, text),
+  public.managed_spend_cap_due(integer) to service_role;
 
 commit;

@@ -14,7 +14,9 @@ export const SPEND_CAP_LEASE_SECONDS = 120;
 
 export type RecordedSpendCapDecision = { action: "set" | "keep" | "freeze" | "stop"; capPaise: number; roomPaise: number };
 export interface SpendCapInputs { mediaThisAccountPaise: number; mediaOtherAccountsPaise: number; taxRateBps: number }
-export interface SpendCapState { dirty: boolean; action: RecordedSpendCapDecision["action"] | null; capPaise: number | null; roomPaise: number | null }
+/** `leased`: a pass is running now; it will see any newer event before it releases the lease. */
+export interface SpendCapState { dirty: boolean; leased: boolean; action: RecordedSpendCapDecision["action"] | null; capPaise: number | null; roomPaise: number | null }
+export type SpendCapTarget = { businessId: string; userId: string };
 
 export interface SpendCapStore {
   /** Marks the limit stale and claims the writer lease if free. True: the caller writes. */
@@ -27,6 +29,12 @@ export interface SpendCapStore {
   abandon(adAccountId: string, token: string): Promise<void>;
   inputs(businessId: string, adAccountId: string): Promise<SpendCapInputs>;
   state(businessId: string, adAccountId: string): Promise<SpendCapState>;
+  /** Marks a business's child account limit stale; its owner when it is managed, else null. */
+  markStale(businessId: string): Promise<SpendCapTarget | null>;
+  /** The same for a payment event, by payment or provider order, before AdBrain has processed it. */
+  markPaymentStale(paymentId: string, providerOrderId: string | null): Promise<SpendCapTarget | null>;
+  /** Managed businesses in sweep order: stale limits first, then the oldest decision. */
+  due(limit: number): Promise<string[]>;
 }
 
 export class SpendCapLeaseLostError extends Error {
@@ -50,12 +58,16 @@ type SpendCapDatabase = Database & { public: { Functions: {
   managed_spend_cap_abandon: { Args: { p_ad_account_id: string; p_token: string }; Returns: undefined };
   managed_spend_cap_state: { Args: { p_business_id: string; p_ad_account_id: string }; Returns: unknown };
   managed_spend_cap_inputs: { Args: { p_business_id: string; p_ad_account_id: string; p_account_id: string }; Returns: unknown };
+  managed_spend_cap_mark_stale: { Args: { p_business_id: string }; Returns: unknown };
+  managed_spend_cap_mark_payment_stale: { Args: { p_account_id: string; p_payment_id: string; p_provider_order_id: string | null }; Returns: unknown };
+  managed_spend_cap_due: { Args: { p_limit: number }; Returns: unknown };
 } } };
 
 const paise = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const inputsSchema = z.object({ mediaThisAccountPaise: paise, mediaOtherAccountsPaise: paise, taxRateBps: z.number().int().min(0).max(10_000) });
+const targetSchema = z.object({ businessId: z.uuid(), userId: z.uuid() }).nullable();
 const stateSchema = z.object({
-  dirty: z.boolean(), action: z.enum(["set", "keep", "freeze", "stop"]).nullable(), capPaise: paise.nullable(), roomPaise: paise.nullable(),
+  dirty: z.boolean(), leased: z.boolean(), action: z.enum(["set", "keep", "freeze", "stop"]).nullable(), capPaise: paise.nullable(), roomPaise: paise.nullable(),
 });
 
 async function call<Schema extends z.ZodType>(query: PromiseLike<{ data: unknown; error: { code?: string } | null }>, schema: Schema) {
@@ -84,5 +96,11 @@ export function supabaseSpendCapStore(): SpendCapStore {
       p_business_id: businessId, p_ad_account_id: adAccountId, p_account_id: getProductionPaymentConfig().accountId,
     }), inputsSchema),
     state: (businessId, adAccountId) => call(database.rpc("managed_spend_cap_state", { p_business_id: businessId, p_ad_account_id: adAccountId }), stateSchema),
+    markStale: (businessId) => call(database.rpc("managed_spend_cap_mark_stale", { p_business_id: businessId }), targetSchema),
+    markPaymentStale: (paymentId, providerOrderId) => call(database.rpc("managed_spend_cap_mark_payment_stale", {
+      p_account_id: getProductionPaymentConfig().accountId, p_payment_id: paymentId, p_provider_order_id: providerOrderId,
+    }), targetSchema),
+    due: async (limit) => (await call(database.rpc("managed_spend_cap_due", { p_limit: limit }), z.array(z.object({ business_id: z.uuid() }))))
+      .map((row) => row.business_id),
   };
 }

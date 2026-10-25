@@ -33,7 +33,10 @@ function memoryStore(inputs = { mediaThisAccountPaise: 0, mediaOtherAccountsPais
       Object.assign(row, { dirty: true, token: null, decision: null });
     },
     async inputs() { return inputs; },
-    async state() { return { dirty: row.dirty, action: row.decision?.action ?? null, capPaise: row.decision?.capPaise ?? null, roomPaise: row.decision?.roomPaise ?? null }; },
+    async state() { return { dirty: row.dirty, leased: row.token !== null, action: row.decision?.action ?? null, capPaise: row.decision?.capPaise ?? null, roomPaise: row.decision?.roomPaise ?? null }; },
+    async markStale() { row.dirty = true; return null; },
+    async markPaymentStale() { row.dirty = true; return null; },
+    async due() { return []; },
   };
   return store;
 }
@@ -68,7 +71,7 @@ describe("syncChildSpendCap (#522 wiring)", () => {
     expect(result).toEqual({ status: "applied", decision: { action: "set", capPaise: 33_898, roomPaise: 33_898 }, passes: 1 });
     expect(meta.setAccountSpendCap).toHaveBeenCalledExactlyOnceWith(33_898, 33_898);
     expect(writes).toEqual([33_898]);
-    expect(await store.state(target.businessId, target.adAccountId)).toEqual({ dirty: false, action: "set", capPaise: 33_898, roomPaise: 33_898 });
+    expect(await store.state(target.businessId, target.adAccountId)).toEqual({ dirty: false, leased: false, action: "set", capPaise: 33_898, roomPaise: 33_898 });
   });
 
   it("lowers the limit after a refund, counting what Meta already spent", async () => {

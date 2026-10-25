@@ -126,7 +126,8 @@ All automated production browser runs from the shared Mac come from one IP addre
   campaign, reserve and audit updated. Derived exchanges (read-back, zero spend, one live campaign)
   are marked in the test. `npm run test:meta-db` checks the writer lease on Postgres: one writer
   of concurrent events, a rerun when an event lands mid-pass, an expired lease handed on, tenant
-  and role checks, and media per ad account.
+  and role checks, media per ad account, a payment or refund marking the limit stale before it is
+  processed, and the sweep order (stale first, then oldest decision, so a cut-short run resumes).
 - **Managed campaigns** (`managed-campaign`, #525): the real recorded Solaride Prepare → PAUSED
   create → sync → pause tapes, run through `withMetaConnection` for a managed business whose
   ledger row points at that ad account and Page: every call AdBrain builds carries the parent

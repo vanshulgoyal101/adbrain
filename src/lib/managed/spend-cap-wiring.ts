@@ -94,7 +94,27 @@ export async function syncManagedSpendCap(actor: Actor, store: SpendCapStore = s
   return result;
 }
 
-/** After a payment, refund or dispute changed the balance: refresh the limit once the response is sent. */
+/**
+ * A payment, refund or dispute may have changed a business's balance (QA #560): mark its child
+ * account's limit stale now, inside the request and before the event is processed, so activation
+ * waits for a fresh limit and the sweep visits it first even if processing then fails; then refresh
+ * the limit after the response. Never fails the payment request.
+ */
+export async function flagManagedSpendCap(
+  event: { businessId: string } | { paymentId: string; providerOrderId: string | null },
+  store: SpendCapStore = supabaseSpendCapStore(),
+): Promise<void> {
+  if (!managedAccountsEnabled()) return;
+  try {
+    const target = "businessId" in event ? await store.markStale(event.businessId)
+      : await store.markPaymentStale(event.paymentId, event.providerOrderId);
+    if (target) scheduleManagedSpendCapSync(target);
+  } catch {
+    console.warn(JSON.stringify({ source: "adbrain.managed", code: "SPEND_CAP_MARK_FAILED" }));
+  }
+}
+
+/** Refresh the limit once the response is sent. */
 export function scheduleManagedSpendCapSync(actor: Actor): void {
   if (!managedAccountsEnabled()) return;
   try {
@@ -115,6 +135,8 @@ export type ManagedActivationGate = "allowed" | "no_room" | "updating";
  */
 export async function managedSpendCapGate(actor: Actor, account: ManagedAsset, store: SpendCapStore = supabaseSpendCapStore()): Promise<ManagedActivationGate> {
   let state = await store.state(actor.businessId, account.ad_account_id);
+  // A pass is running and will see any newer event before it releases: wait for it (QA #560).
+  if ((state.dirty || !state.action) && state.leased) return "updating";
   if (state.dirty || !state.action) {
     await syncManagedSpendCap(actor, store);
     state = await store.state(actor.businessId, account.ad_account_id);
@@ -123,10 +145,41 @@ export async function managedSpendCapGate(actor: Actor, account: ManagedAsset, s
   return (state.action === "set" || state.action === "keep") && (state.roomPaise ?? 0) > 0 ? "allowed" : "no_room";
 }
 
-/** Managed businesses with a child ad account whose limit the sweep refreshes. */
-export async function listManagedSpendCapBusinesses(): Promise<string[]> {
-  const { data, error } = await createAdminClient().from("managed_meta_accounts").select("business_id")
-    .not("ad_account_id", "is", null).neq("state", "offboarded").order("business_id").limit(500);
-  if (error || !data) throw new Error("Managed accounts could not be listed.");
-  return data.map((row) => row.business_id);
+const SWEEP_CONCURRENCY = 3;
+/** More than a run can refresh within its budget; the rest come first next run (`due` order). */
+const SWEEP_BATCH = 100;
+
+/**
+ * Refreshes managed child account limits in `due` order (stale first, then the oldest decision), a
+ * few at a time, starting none after `deadline`. Accounts not reached are "deferred" and the run is
+ * incomplete; they lead the next run (QA #560).
+ */
+export async function sweepManagedSpendCaps(options: {
+  deadline: number;
+  context(businessId: string): Promise<Actor>;
+  sync?: (actor: Actor) => Promise<ManagedSpendCapResult>;
+  store?: SpendCapStore;
+}): Promise<{ incomplete: boolean; results: Array<{ businessId: string; status: string }> }> {
+  const store = options.store ?? supabaseSpendCapStore();
+  const sync = options.sync ?? ((actor: Actor) => syncManagedSpendCap(actor, store));
+  const queue = await store.due(SWEEP_BATCH);
+  const status = new Map<string, string>();
+  let incomplete = false;
+  let next = 0;
+  const worker = async () => {
+    while (next < queue.length && Date.now() < options.deadline) {
+      const businessId = queue[next++];
+      try {
+        const result = await sync(await options.context(businessId));
+        if (result.status === "busy") incomplete = true;
+        status.set(businessId, result.status);
+      } catch {
+        incomplete = true;
+        status.set(businessId, "failed");
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: SWEEP_CONCURRENCY }, worker));
+  if (next < queue.length) incomplete = true;
+  return { incomplete, results: queue.map((businessId) => ({ businessId, status: status.get(businessId) ?? "deferred" })) };
 }

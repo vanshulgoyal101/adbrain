@@ -32,15 +32,18 @@ const ready = { business_id: actor.businessId, state: "ready", child_business_id
   page_id: "4000000000000001", funding_state: "card_attached", generation: 1 };
 const balance = { advertisingAllocationPaise: 40_000, advertisingRefundedPaise: 0, held: false, reservations: [] };
 
-function memoryStore(state: SpendCapState = { dirty: true, action: null, capPaise: null, roomPaise: null }) {
+function memoryStore(state: SpendCapState = { dirty: true, leased: false, action: null, capPaise: null, roomPaise: null }) {
   const store: SpendCapStore & { current: SpendCapState } = {
     current: state,
-    request: vi.fn(async () => { store.current = { ...store.current, dirty: true }; return true; }),
-    begin: vi.fn(async () => { store.current = { dirty: false, action: null, capPaise: null, roomPaise: null }; return true; }),
-    finish: vi.fn(async (_account, _token, decision) => { store.current = { dirty: false, ...decision }; return false; }),
-    abandon: vi.fn(async () => { store.current = { dirty: true, action: null, capPaise: null, roomPaise: null }; }),
+    request: vi.fn(async () => { store.current = { ...store.current, dirty: true, leased: true }; return true; }),
+    begin: vi.fn(async () => { store.current = { dirty: false, leased: true, action: null, capPaise: null, roomPaise: null }; return true; }),
+    finish: vi.fn(async (_account, _token, decision) => { store.current = { dirty: false, leased: false, ...decision }; return false; }),
+    abandon: vi.fn(async () => { store.current = { dirty: true, leased: false, action: null, capPaise: null, roomPaise: null }; }),
     inputs: vi.fn(async () => ({ mediaThisAccountPaise: 0, mediaOtherAccountsPaise: 0, taxRateBps: 1800 })),
     state: vi.fn(async () => store.current),
+    markStale: vi.fn(async (businessId: string) => { store.current = { ...store.current, dirty: true }; return { businessId, userId: actor.userId }; }),
+    markPaymentStale: vi.fn(async () => { store.current = { ...store.current, dirty: true }; return actor; }),
+    due: vi.fn(async () => [] as string[]),
   };
   return store;
 }
@@ -135,7 +138,7 @@ describe("syncManagedSpendCap (#522)", () => {
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(actor, "campaign-1", "a3c0d9a2-1f2b-4c3d-9e4f-5a6b7c8d9e0f", "paused");
     expect(mocks.adminRpc).toHaveBeenCalledWith("append_verified_audit_event", expect.objectContaining({
       p_system_actor: "worker", p_action: "spend.auto_paused", p_entity_id: "campaign-1", p_meta_object_id: "120330000000000001" }));
-    expect(store.current).toEqual({ dirty: false, action: "stop", capPaise: 100, roomPaise: 0 });
+    expect(store.current).toEqual({ dirty: false, leased: false, action: "stop", capPaise: 100, roomPaise: 0 });
   });
 
   it("refuses to cap from a balance that doesn't say how much ad share was refunded", async () => {
@@ -151,20 +154,20 @@ describe("managedSpendCapGate (#522, QA #527 T4)", () => {
   const account = ready as never;
   it("allows activation on a current limit with room, without another Meta call", async () => {
     const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
-    expect(await managedSpendCapGate(actor, account, memoryStore({ dirty: false, action: "set", capPaise: 33_898, roomPaise: 33_898 }))).toBe("allowed");
+    expect(await managedSpendCapGate(actor, account, memoryStore({ dirty: false, leased: false, action: "set", capPaise: 33_898, roomPaise: 33_898 }))).toBe("allowed");
     expect(mocks.clients).toHaveLength(0);
   });
 
   it.each([
-    [{ dirty: false, action: "stop", capPaise: 100, roomPaise: 0 }],
-    [{ dirty: false, action: "freeze", capPaise: 20_000, roomPaise: 0 }],
+    [{ dirty: false, leased: false, action: "stop", capPaise: 100, roomPaise: 0 }],
+    [{ dirty: false, leased: false, action: "freeze", capPaise: 20_000, roomPaise: 0 }],
   ] as const)("blocks activation when the last decision left no room: %j", async (state) => {
     const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
     expect(await managedSpendCapGate(actor, account, memoryStore(state))).toBe("no_room");
   });
 
   it("refreshes a stale limit first, then decides on the fresh one", async () => {
-    const store = memoryStore({ dirty: true, action: "set", capPaise: 33_898, roomPaise: 33_898 });
+    const store = memoryStore({ dirty: true, leased: false, action: "set", capPaise: 33_898, roomPaise: 33_898 });
     mocks.getCustomerBalance.mockResolvedValue({ ...balance, held: true });
     const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
     expect(await managedSpendCapGate(actor, account, store)).toBe("no_room");
@@ -173,17 +176,90 @@ describe("managedSpendCapGate (#522, QA #527 T4)", () => {
 
   it("blocks while another writer's pass is in flight, or died before recording its decision (review)", async () => {
     // Postgres clears the last decision when a pass begins (scripts/check-meta-connect-db.mjs).
-    const store = memoryStore({ dirty: false, action: null, capPaise: null, roomPaise: null });
+    const store = memoryStore({ dirty: false, leased: false, action: null, capPaise: null, roomPaise: null });
     store.request = vi.fn(async () => false);
     const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
     expect(await managedSpendCapGate(actor, account, store)).toBe("updating");
   });
 
-  it("blocks while another writer is still applying a payment or refund", async () => {
-    const store = memoryStore({ dirty: true, action: "set", capPaise: 33_898, roomPaise: 33_898 });
-    store.request = vi.fn(async () => false);
+  it.each([
+    [{ dirty: true, leased: true, action: "set", capPaise: 33_898, roomPaise: 33_898 }],
+    [{ dirty: false, leased: true, action: null, capPaise: null, roomPaise: null }],
+  ] as const)("waits for a pass in flight without marking the limit stale again (QA #560 nit): %j", async (state) => {
+    const store = memoryStore(state);
     const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
     expect(await managedSpendCapGate(actor, account, store)).toBe("updating");
+    expect(store.request).not.toHaveBeenCalled();
+    expect(mocks.getManagedAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe("flagManagedSpendCap (QA #560: every money event marks the limit stale first)", () => {
+  it("marks the limit stale while the request is still running, then refreshes it after the response", async () => {
+    const store = memoryStore({ dirty: false, leased: false, action: "set", capPaise: 33_898, roomPaise: 33_898 });
+    const { flagManagedSpendCap } = await import("@/lib/managed/spend-cap-wiring");
+    await flagManagedSpendCap({ paymentId: "pay_1", providerOrderId: "order_1" }, store);
+    expect(store.markPaymentStale).toHaveBeenCalledWith("pay_1", "order_1");
+    expect(store.current.dirty).toBe(true);
+    expect(mocks.after).toHaveBeenCalledOnce();
+    await flagManagedSpendCap({ businessId: actor.businessId }, store);
+    expect(store.markStale).toHaveBeenCalledWith(actor.businessId);
+  });
+
+  it("does nothing for a business that isn't managed, or with the flag off", async () => {
+    const store = memoryStore();
+    store.markStale = vi.fn(async () => null);
+    const { flagManagedSpendCap } = await import("@/lib/managed/spend-cap-wiring");
+    await flagManagedSpendCap({ businessId: actor.businessId }, store);
+    expect(mocks.after).not.toHaveBeenCalled();
+    vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "false");
+    await flagManagedSpendCap({ businessId: actor.businessId }, store);
+    expect(store.markStale).toHaveBeenCalledOnce();
+  });
+
+  it("never fails the payment request when the mark can't be written", async () => {
+    const store = memoryStore();
+    store.markPaymentStale = vi.fn(async () => { throw new Error("database unavailable"); });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { flagManagedSpendCap } = await import("@/lib/managed/spend-cap-wiring");
+    await expect(flagManagedSpendCap({ paymentId: "pay_1", providerOrderId: null }, store)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("SPEND_CAP_MARK_FAILED"));
+    warn.mockRestore();
+  });
+});
+
+describe("sweepManagedSpendCaps (QA #560: reaches every account at scale)", () => {
+  it("visits stale and oldest limits first, a few at a time, and defers the rest past its time budget", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const store = memoryStore();
+    store.due = vi.fn(async () => ["b1", "b2", "b3", "b4", "b5"]);
+    const started: string[] = [];
+    const sync = vi.fn(async (context: { businessId: string }) => {
+      started.push(context.businessId);
+      vi.setSystemTime(Date.now() + 30_000);
+      return { status: "applied" as const, decision: { action: "keep" as const, capPaise: 1, roomPaise: 1 }, passes: 1 };
+    });
+    const { sweepManagedSpendCaps } = await import("@/lib/managed/spend-cap-wiring");
+    const result = await sweepManagedSpendCaps({ deadline: Date.now() + 45_000, context: async (businessId) => ({ businessId, userId: "owner" }), sync, store });
+    vi.useRealTimers();
+    expect(started).toEqual(["b1", "b2", "b3"]);
+    expect(result.incomplete).toBe(true);
+    expect(result.results).toEqual([
+      { businessId: "b1", status: "applied" }, { businessId: "b2", status: "applied" }, { businessId: "b3", status: "applied" },
+      { businessId: "b4", status: "deferred" }, { businessId: "b5", status: "deferred" },
+    ]);
+  });
+
+  it("reports a failed or busy account as incomplete and carries on with the others", async () => {
+    const store = memoryStore();
+    store.due = vi.fn(async () => ["b1", "b2", "b3"]);
+    const sync = vi.fn(async (context: { businessId: string }) => {
+      if (context.businessId === "b1") throw new Error("Meta is unavailable.");
+      return context.businessId === "b2" ? { status: "busy" as const } : { status: "queued" as const };
+    });
+    const { sweepManagedSpendCaps } = await import("@/lib/managed/spend-cap-wiring");
+    const result = await sweepManagedSpendCaps({ deadline: Date.now() + 45_000, context: async (businessId) => ({ businessId, userId: "owner" }), sync, store });
+    expect(result).toEqual({ incomplete: true, results: [{ businessId: "b1", status: "failed" }, { businessId: "b2", status: "busy" }, { businessId: "b3", status: "queued" }] });
   });
 });
 

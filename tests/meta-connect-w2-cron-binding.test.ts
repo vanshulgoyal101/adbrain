@@ -14,8 +14,7 @@ const mocks = vi.hoisted(() => ({
   readCampaignStopped: vi.fn(),
   settleCustomerCosts: vi.fn(),
   listSettlingBusinesses: vi.fn(),
-  listManaged: vi.fn(),
-  syncManaged: vi.fn(),
+  sweepManaged: vi.fn(),
   failedTable: "",
   failedPageAfter: "",
   updateError: null as { message: string } | null,
@@ -44,7 +43,7 @@ vi.mock("@/lib/payments/customer-balance", () => ({
   listSettlingBusinesses: mocks.listSettlingBusinesses,
 }));
 vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
-vi.mock("@/lib/managed/spend-cap-wiring", () => ({ listManagedSpendCapBusinesses: mocks.listManaged, syncManagedSpendCap: mocks.syncManaged }));
+vi.mock("@/lib/managed/spend-cap-wiring", () => ({ sweepManagedSpendCaps: mocks.sweepManaged }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
   requireScheduledBusiness: mocks.requireScheduledBusiness,
@@ -101,7 +100,7 @@ beforeEach(() => {
   mocks.readCampaignStopped.mockResolvedValue(true);
   mocks.settleCustomerCosts.mockResolvedValue({ finalized: false });
   mocks.listSettlingBusinesses.mockResolvedValue([]);
-  mocks.listManaged.mockResolvedValue([]);
+  mocks.sweepManaged.mockResolvedValue({ incomplete: false, results: [] });
   vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "false");
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
@@ -130,7 +129,7 @@ beforeEach(() => {
   configureAdmin([boundCampaign]);
 });
 
-describe("managed child account spending limits on the sweep (#522)", () => {
+describe("managed child account spending limits on the sweep (#522, QA #560)", () => {
   const sweep = async () => {
     const { GET } = await import("@/app/api/cron/enforce-spend/route");
     const auth = { authorization: `Bearer ${"cron-secret"}` };
@@ -139,37 +138,36 @@ describe("managed child account spending limits on the sweep (#522)", () => {
   beforeEach(() => {
     configureAdmin([]);
     vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
-    mocks.listManaged.mockResolvedValue(["managed-1", "managed-2"]);
     mocks.requireScheduledBusiness.mockImplementation(async (businessId: string) => ({ businessId, userId: `owner-${businessId}` }));
-    mocks.syncManaged.mockResolvedValue({ status: "applied", decision: { action: "keep", capPaise: 33_898, roomPaise: 33_898 }, passes: 1 });
   });
 
-  it("refreshes every managed child account's limit through the verified scheduler context", async () => {
+  it("hands managed limits to the budgeted sweep, inside this run's 60 s, with the verified scheduler context", async () => {
+    const results = [{ businessId: "managed-1", status: "applied" }];
+    mocks.sweepManaged.mockImplementation(async (options: { deadline: number; context(id: string): Promise<unknown> }) => {
+      expect(await options.context("managed-1")).toEqual({ businessId: "managed-1", userId: "owner-managed-1" });
+      return { incomplete: false, results };
+    });
+    const started = Date.now();
     const response = await sweep();
     expect(response.status).toBe(200);
-    expect(mocks.syncManaged.mock.calls).toEqual([[{ businessId: "managed-1", userId: "owner-managed-1" }], [{ businessId: "managed-2", userId: "owner-managed-2" }]]);
-    expect((await response.json()).managedSpendCaps).toEqual([{ businessId: "managed-1", status: "applied" }, { businessId: "managed-2", status: "applied" }]);
+    expect((await response.json()).managedSpendCaps).toEqual(results);
+    const { deadline } = mocks.sweepManaged.mock.calls[0][0];
+    expect(deadline).toBeGreaterThan(started);
+    expect(deadline).toBeLessThanOrEqual(started + 50_000);
+    expect(mocks.requireScheduledBusiness).toHaveBeenCalledWith("managed-1", expect.any(Request));
   });
 
-  it("reports the sweep incomplete when a limit can't be refreshed, and still refreshes the others", async () => {
-    mocks.syncManaged.mockRejectedValueOnce(new Error("Meta is unavailable."));
-    const response = await sweep();
-    expect(response.status).toBe(503);
-    expect(mocks.syncManaged).toHaveBeenCalledTimes(2);
-    expect((await response.json()).managedSpendCaps).toEqual([{ businessId: "managed-1", status: "failed" }, { businessId: "managed-2", status: "applied" }]);
-  });
-
-  it("reports the sweep incomplete when events keep a limit busy or the list can't be read", async () => {
-    mocks.syncManaged.mockResolvedValueOnce({ status: "busy" });
+  it("reports the run incomplete when the sweep deferred, failed or couldn't list accounts", async () => {
+    mocks.sweepManaged.mockResolvedValueOnce({ incomplete: true, results: [{ businessId: "managed-1", status: "deferred" }] });
     expect((await sweep()).status).toBe(503);
-    mocks.listManaged.mockRejectedValueOnce(new Error("ledger down"));
+    mocks.sweepManaged.mockRejectedValueOnce(new Error("ledger down"));
     expect((await sweep()).status).toBe(503);
   });
 
-  it("never reads managed accounts with the flag off", async () => {
+  it("never sweeps managed accounts with the flag off", async () => {
     vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "false");
     expect((await sweep()).status).toBe(200);
-    expect(mocks.listManaged).not.toHaveBeenCalled();
+    expect(mocks.sweepManaged).not.toHaveBeenCalled();
   });
 });
 

@@ -12,7 +12,7 @@ import { createAnnualPaymentQuote, type ProductionPaymentQuote } from "@/lib/pay
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), getUser: vi.fn(), own: vi.fn(), rateLimit: vi.fn(), createOrder: vi.fn(), fetchOrder: vi.fn(),
   findOrder: vi.fn(), fetchPayment: vi.fn(), fetchOrderPayments: vi.fn(), createRefund: vi.fn(), fetchRefund: vi.fn(), fetchRefunds: vi.fn(),
   scheduleSpendCap: vi.fn() }));
-vi.mock("@/lib/managed/spend-cap-wiring", () => ({ scheduleManagedSpendCapSync: mocks.scheduleSpendCap }));
+vi.mock("@/lib/managed/spend-cap-wiring", () => ({ flagManagedSpendCap: mocks.scheduleSpendCap }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser } }) }));
 vi.mock("@/lib/meta/connection-access", async importOriginal => ({
@@ -372,7 +372,7 @@ describe("live checkout service with synthetic provider evidence", () => {
   });
   it("refreshes a managed customer's Meta spending limit after a capture (#522)", async () => {
     expect((await verify(callback())).status).toBe(200);
-    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ businessId, userId });
+    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ businessId });
   });
   it("does not interpret authorization as capture", async () => {
     mocks.fetchPayment.mockResolvedValue({ ...payment, captured: false, status: "authorized" });
@@ -461,6 +461,9 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(events).toHaveLength(1);
     expect(mocks.rpc.mock.invocationCallOrder[0]).toBeLessThan(mocks.fetchPayment.mock.invocationCallOrder[0]);
     expect(mocks.getUser).not.toHaveBeenCalled();
+    // QA #560: the managed limit is marked stale on receipt, even though processing failed.
+    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ paymentId: "pay_fixture", providerOrderId: expect.anything() });
+    expect(mocks.scheduleSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.fetchPayment.mock.invocationCallOrder[0]);
   });
   it("does not acknowledge events when durable storage fails", async () => {
     storageFailure = "production_payment_event_receive";
@@ -472,7 +475,7 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(response.status).toBe(200);
     expect(saved.review_required).toBe(true);
     // A dispute holds the balance: the managed child account's limit follows (#522).
-    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ businessId, userId });
+    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ businessId });
   });
   it("requires persisted operator authority before financial recovery/refund actions", async () => {
     expect((await operator(request("operator", { action: "refund", orderId }))).status).toBe(403);
@@ -489,7 +492,23 @@ describe("live checkout service with synthetic provider evidence", () => {
     expect(mocks.rpc.mock.invocationCallOrder[claim]).toBeLessThan(mocks.createRefund.mock.invocationCallOrder[0]);
     expect(mocks.createRefund).toHaveBeenCalledWith("pay_fixture", businessId, 10000);
     expect((await response.json()).refunds).toContainEqual(expect.objectContaining({ state: "processed", provider_refund_id: "rfnd_fixture" }));
-    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ businessId, userId });
+    expect(mocks.scheduleSpendCap).toHaveBeenCalledWith({ businessId });
+  });
+  it("marks the managed limit stale when a refund is claimed, even if reading it back fails (QA #560)", async () => {
+    operatorAllowed = true;
+    vi.stubEnv("PAYMENTS_LIVE_REFUNDS_ENABLED", "true");
+    mocks.createRefund.mockImplementation(async () => {
+      mocks.fetchPayment.mockRejectedValue(new Error("provider outage after the refund"));
+      return { id: "rfnd_fixture", entity: "refund", payment_id: "pay_fixture", receipt: businessId, amount: 10000, currency: "INR", status: "processed" };
+    });
+    const response = await operator(request("operator", { action: "refund", orderId, idempotencyKey: businessId,
+      approvalReference: userId, termsHash: saved.terms_hash, reason: "Synthetic approved refund", amountPaise: 10000 }));
+    expect(response.status).toBe(503);
+    const claim = mocks.rpc.mock.calls.findIndex(([name]) => name === "production_payment_refund_claim");
+    const flagged = mocks.scheduleSpendCap.mock.calls.findIndex(([target]) => target.businessId === businessId);
+    expect(flagged).toBeGreaterThanOrEqual(0);
+    expect(mocks.scheduleSpendCap.mock.invocationCallOrder.at(-1)).toBeGreaterThan(mocks.rpc.mock.invocationCallOrder[claim]);
+    expect(mocks.scheduleSpendCap.mock.invocationCallOrder.at(-1)).toBeLessThan(mocks.createRefund.mock.invocationCallOrder[0]);
   });
   it("does not retry an uncertain refund under its persisted identity", async () => {
     operatorAllowed = true;

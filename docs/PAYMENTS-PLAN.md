@@ -236,10 +236,13 @@ guards to enable production or reinterpret existing test captures as real money.
   lowered to the smallest Meta accepts, so an older limit can't stay usable after a refund or hold.
   Meta takes the limit in rupees and reports it in paise; the write is read back, and fails closed
   if Meta's room (limit − amount spent) exceeds what the customer has left (a reset counter).
-  Wiring (`src/lib/managed/spend-cap-sync.ts`, `spend-cap-wiring.ts`): every payment capture,
-  refund or dispute the payment service observes schedules a refresh after the response, the
-  15-minute `enforce-spend` sweep refreshes every managed child account (holds from cost evidence,
-  missed events), and activation refreshes a stale limit first. Writes are serialized per child ad
+  Wiring (`src/lib/managed/spend-cap-sync.ts`, `spend-cap-wiring.ts`): a received payment webhook,
+  a claimed refund and every observed capture, refund or dispute first mark the child account's
+  limit stale inside the request (before processing, so a failure later can't leave it current),
+  then refresh it after the response. The 15-minute `enforce-spend` sweep refreshes managed child
+  accounts stale first, then oldest decision, three at a time, starting none after 45 s; the rest
+  are reported deferred and lead the next run. Activation refreshes a stale limit first, or waits
+  while a pass is running. Writes are serialized per child ad
   account by a writer lease in `private.managed_spend_caps`: an event that finds the lease taken
   marks the limit stale, and the holder runs again with fresh figures before releasing, so a
   stale, higher limit never lands last. "Stop" pauses every active campaign on the child, then
