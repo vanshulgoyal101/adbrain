@@ -77,6 +77,21 @@ export function waitingOnMe(lastBody, m, labels = [], now = Date.now()) {
 /** Earliest scheduled check seen this run; the wait loop rechecks the backlog when it passes. */
 let nextDue = Infinity;
 
+/** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
+export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review" };
+
+/** The lane's unclaimed ready issues, core first, oldest first; at most `max`. */
+export function readyPool(issues, role, max = 3) {
+  const lane = LANES[role];
+  if (!lane) return [];
+  const names = (i) => (i.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
+  return issues
+    .filter((i) => !i.pull_request && names(i).includes("ready") && names(i).includes(`lane:${lane}`)
+      && !names(i).some((n) => n.startsWith("owner:") || PARKED.has(n) || n === "decision"))
+    .sort((a, b) => Number(names(b).includes("core")) - Number(names(a).includes("core")) || a.number - b.number)
+    .slice(0, max);
+}
+
 export const WORKERS = ["dev", "dev2", "dev3", "qa", "qa2", "reviewer", "devops"];
 export const MIN_QUEUE = 2;
 
@@ -328,6 +343,12 @@ function backlog() {
     const last = latestWord(comments, reviews);
     if (waitingOnMe(last?.body ?? null, m, (item.labels ?? []).map(l => l.name))) {
       found.push(last ? `#${item.number} is waiting on you${withSkills(item)}: "${brief(last.body)}" ${last.url}` : `#${item.number} is yours and not started${withSkills(item)}: ${item.title}`);
+    }
+  }
+  // Nothing of yours is actionable: pull the next briefed item from your lane instead of idling.
+  if (!found.length) {
+    for (const item of readyPool(openIssues(), role, 1)) {
+      found.push(`#${item.number} from the ready pool${withSkills(item)}: ${item.title}. Claim it first: gh issue edit ${item.number} --add-label owner:${role} --remove-label ready`);
     }
   }
   return found;
