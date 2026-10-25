@@ -82,7 +82,7 @@ describe("core: Create never gets stuck on a non-answer (#284)", () => {
     const repaired = recorded.rejectedUnderV2.replies[0].content;
     const fetch = replay([reply, repaired]);
     const { attempts } = await interview(recorded.rejectedUnderV2.replies[0].turn === "non-answer" ? [recorded.nonAnswer] : []);
-    expect(attempts).toEqual([{ valid: false, rules: ["unsupported-commercial-claim"] }, { valid: true, rules: [] }]);
+    expect(attempts).toEqual([{ valid: false, rules: ["unsupported-commercial-claim:currency"] }, { valid: true, rules: [] }]);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

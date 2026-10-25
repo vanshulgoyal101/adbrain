@@ -51,7 +51,10 @@ campaign ran one ad. The wording is fixed in code: under 5 results "early: based
 chats", 5–19 "so far", 20+ plain, none "₹X spent, no chats yet". Without results the
 prompt is unchanged. The concept fact check never sees past results.
 Failed attempts log rule names only (`metadata.validationRules`, for example
-`unsupported-commercial-claim`, `repeated-question`, `schema:<path>`).
+`unsupported-commercial-claim`, `repeated-question`, `schema:<path>`). The interview
+adds the term's class, never the term: `unsupported-commercial-claim:free`, `:percent`,
+`:currency` or `:guarantee` (#613). A Brand fact supports a term unless that term itself
+is negated ("no free survey"); a negation elsewhere ("Free survey, no obligation") doesn't count.
 
 ### Campaign Interview
 

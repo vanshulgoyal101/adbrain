@@ -193,15 +193,26 @@ function unsupportedTerms(result: InterviewResult, input: InterviewInput): strin
     .filter((match) => !negatedTerm(output, match.index, match[0])).map((match) => match[0]);
   // "No-cost" is the same offer as "free" (#378).
   const free = (term: string) => /^(?:free|no[- ]cost)$/i.test(term);
-  return [...new Set(terms)].filter((term) => !sources.some((source) =>
-    (source.toLowerCase().includes(term.toLowerCase()) || (free(term) && /free|no[- ]cost/i.test(source)) || spelledCurrency(term, source))
-      && !/\b(no|not|never|without|avoid)\b/i.test(source),
-  ));
+  return [...new Set(terms)].filter((term) => !sources.some((source) => {
+    // #613: only a negation of the term itself ("no free survey") withdraws support, not one elsewhere
+    // in the fact ("Free site survey, no obligation").
+    const pattern = free(term) ? /free|no[- ]cost/gi : new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    return [...source.matchAll(pattern)].some((match) => !negatedTerm(source, match.index, match[0])
+      && !/\bavoid\s+(?:(?:a|an|any)\s+)?$/i.test(source.slice(Math.max(0, match.index - 16), match.index)))
+      || (spelledCurrency(term, source) && !/\b(no|not|never|without|avoid)\b/i.test(source));
+  }));
+}
+
+/** The term's class for logs (#613), never the term itself. */
+function claimClass(term: string): string {
+  if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
+  if (/^guaranteed?$/i.test(term)) return "guarantee";
+  return term.includes("%") ? "percent" : "currency";
 }
 
 function commercialClaimIssues(result: InterviewResult, input: InterviewInput): string[] {
   return unsupportedTerms(result, input)
-    .map((term) => `Unsupported commercial term: ${term}. Omit it; do not convert a creative suggestion into a business fact.`);
+    .map((term) => `Unsupported commercial term [${claimClass(term)}]: ${term}. Omit it; do not convert a creative suggestion into a business fact.`);
 }
 
 /**
@@ -275,6 +286,8 @@ const INTERVIEW_RULES: [string, string][] = [
 export function interviewValidationRules(issues: string[]): string[] {
   return [...new Set(issues.map((issue) => {
     const rule = INTERVIEW_RULES.find(([prefix]) => issue.startsWith(prefix));
+    const claim = rule?.[1] === "unsupported-commercial-claim" ? /^Unsupported commercial term \[(\w+)\]/.exec(issue) : null;
+    if (claim) return `${rule![1]}:${claim[1]}`;
     if (rule) return rule[1];
     const path = issue.split(": ", 1)[0];
     return issue.includes(": ") && /^[\w.]*$/.test(path) ? `schema:${path || "root"}` : "other";
@@ -431,7 +444,7 @@ export async function runInterview(
     );
   }
   // #613: the repair kept an unsupported term; drop just those parts if everything else holds.
-  if (last && last.issues.length && interviewValidationRules(last.issues).every((rule) => rule === "unsupported-commercial-claim")) {
+  if (last && last.issues.length && interviewValidationRules(last.issues).every((rule) => rule.startsWith("unsupported-commercial-claim"))) {
     const cleaned = withoutUnsupportedTerms(last.result, unsupportedTerms(last.result, input));
     if (cleaned && ![...interviewResultIssues(cleaned, input.answers ?? []), ...commercialClaimIssues(cleaned, input), ...advisoryFactIssues(cleaned, input)].length) {
       return finalize(cleaned, input);
