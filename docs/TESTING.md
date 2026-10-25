@@ -79,6 +79,12 @@ All automated production browser runs from the shared Mac come from one IP addre
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the
   assistant asks for the offer again instead of failing, and the replies the old claim check
   rejected for "₹10,000" against "10,000 rupees" now pass. Failed attempts name their rule.
+- **Brand autofill** (`brand-autofill`, #650): Solaride's real home page and the real Groq
+  extraction reply, recorded by `scripts/record-brand-autofill-fixtures.ts`, drive the real route:
+  description, vertical, USPs and languages come from the reply, the phone from the page's `tel:`
+  link, and no offer is invented. Unsafe URLs (metadata IP, localhost, private ranges, `file:`,
+  credentials) are refused before any fetch; a provider outage or a non-JSON reply gives the
+  documented 502, and every attempt, a cache hit included, is a `brand.autofill` usage row.
 - **Internal accounts make free images** (`internal-free-providers`, #449, #466): an internal
   account's concept (the recorded Cedar Ridge reply) comes from Haiku like a customer's, and its
   image from Pollinations without references. Three images run one at a time, waiting out

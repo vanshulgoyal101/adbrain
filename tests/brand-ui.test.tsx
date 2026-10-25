@@ -304,6 +304,21 @@ describe("<BrandAssets> persistence", () => {
 });
 
 describe("<BrandForm> autofill", () => {
+  it("sends the business id once the business exists, so its AI usage is logged on it, and none on first setup (#650)", async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ extraction: {} }) });
+    global.fetch = fetch as typeof global.fetch;
+    const saved = business();
+    const { unmount } = render(<BrandForm business={saved} />);
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ url: saved.website, businessId: saved.id });
+    unmount();
+    render(<BrandForm business={null} />);
+    fireEvent.change(document.querySelector('input[name="website"]')!, { target: { value: "solaride.in" } });
+    fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ url: "solaride.in" });
+  });
   it("says in plain words what a new business's website filled and what is still missing (#169)", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
