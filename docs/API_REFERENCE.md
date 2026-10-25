@@ -815,7 +815,7 @@ remains active for the contextual signed/bound flow.
 
 ### Managed Page (#523, 2-Tier)
 
-Off (404 `NOT_ENABLED`) unless `MANAGED_ACCOUNTS_ENABLED`. Signed-in, Meta-connect users only; the
+Off (404 `NOT_ENABLED`) unless `MANAGED_ACCOUNTS_ENABLED`, except for internal accounts (#523: `managedAccountsEnabledFor`; the same gate covers `/onboarding`, `/api/managed/*` and provision). Signed-in, Meta-connect users only; the
 `attemptId` must be the caller's own connection attempt (else 404). `GET` returns the Pages from
 that attempt's discovery where the owner has Meta's `MANAGE` task (Meta requires Page admin for a
 child business's `shared_page_id`), Meta's Page creator URL (Pages can't be created by API), and

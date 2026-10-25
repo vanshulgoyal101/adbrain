@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
+import { managedAccountsEnabledFor } from "@/lib/meta/managed-account";
 import { currentRequestId } from "@/lib/observability/logger";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,9 +17,9 @@ export type ManagedAttempt = { businessId: string; userId: string; snapshot: unk
  * managed accounts on, signed in, the attempt is theirs and not expired, and they still own its business.
  */
 export async function ownedManagedAttempt(attemptId: string): Promise<{ ok: true; attempt: ManagedAttempt } | { ok: false; response: NextResponse }> {
-  if (!getEnv().MANAGED_ACCOUNTS_ENABLED) return { ok: false, response: managedFail(404, "NOT_ENABLED", "Managed accounts are not enabled.") };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!managedAccountsEnabledFor(user)) return { ok: false, response: managedFail(404, "NOT_ENABLED", "Managed accounts are not enabled.") };
   if (!user) return { ok: false, response: managedFail(401, "UNAUTHENTICATED", "Sign in required.") };
   if (!canUseMetaConnect(user.id)) return { ok: false, response: managedFail(403, "FORBIDDEN", "Meta connection is not enabled for this account.") };
   const { data, error } = await createAdminClient().rpc("meta_attempt_get", { p_attempt_id: attemptId, p_user_id: user.id });

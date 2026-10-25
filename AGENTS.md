@@ -55,6 +55,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	work, then wait again. Before waiting, finish your row on the [Team board](https://github.com/vanshulgoyal101/adbrain/issues/580) in order.
 	A scheduled check (live-run reads) ends your comment with `Next read 2026-10-25T16:00Z`:
 	the item stays quiet until then, and the waiter wakes you when it's due.
+	**Never idle with briefed work around (pull, don't wait):** when nothing you own is
+	actionable, the waiter offers the oldest `ready` issue in your lane (`lane:dev`,
+	`lane:qa`, `lane:devops`, `lane:review`; core first). Claim it with the printed command
+	and start. While a PR waits for review, pull the next item instead of waiting on it.
 	**Restart-proof:** end each work step with the issue's latest comment saying what's
 	done and what's next, and push the branch. If it isn't in GitHub or git, it doesn't
 	survive a chat restart. Restart a chat with one line: `You are <Role> on AdBrain. Run

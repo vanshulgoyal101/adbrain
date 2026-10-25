@@ -62,7 +62,10 @@ The stream includes:
 - Creative batch success/partial/failure counts.
 - AI completion provider/model, tokens, estimated cost, attempt, cache status
   and reported latency. Existing `llm_usage_events` remains the detailed ledger.
-- Authorized Meta operation purpose, duration, outcome and safe error category.
+- Authorized Meta operation purpose, duration, outcome and safe error category. When Meta refused
+  the call (#615), the `meta.<purpose>` event also carries `status`, `metaCode`, `metaSubcode`,
+  `metaUserTitle`, `fbtraceId` and `metaPath` (the endpoint template), never tokens or bodies.
+  `meta.create_paused` covers every pre-launch read too (lead forms, interests, WhatsApp numbers).
 - Every Meta Graph call (#451 L2): `meta.graph`, `kind=system`, with the endpoint as a template
   (`act_[id]/adsets`, `[id]/insights`, `search`; no IDs, query values or token), method, HTTP
   status, entity type, latency and, on failure, `META_<code>_<subcode>` (or `META_HTTP_<status>`,
@@ -181,6 +184,16 @@ starting Google happen in the browser, which reports them to `POST /api/auth/out
 shows them in its auth section, including signed-out failures.
 
 ## Reading It (#451)
+
+**Learning ledger (#588).** Every launch writes a settings snapshot to `campaign_learnings`
+(destination, WhatsApp prefill text and language, areas, ages, Advantage+ audience, formats,
+budget, creatives with angle and models), best effort: a ledger failure logs
+`campaign.learning_snapshot` and never fails the launch. QA 2 records the hypothesis a run tests
+and its verdict with `npm run learnings -- set <meta campaign id> --hypothesis "…" --verdict "…"`
+(and `--snapshot file.json` for runs launched before the ledger, e.g. #157); that's a production
+data write with the service-role key, no lead data. `npm run stats -- --include-internal learnings`
+compares the last 10 launches side by side with their latest results (opened → chats, cost per chat).
+Name sections after `--` to print only those.
 
 `npm run stats [-- --days 7] [-- --include-internal]` prints, from production (read-only,
 real customers only by default): AI calls, tokens and estimated USD by model; Create runs

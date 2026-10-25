@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MetaClient, type MetaCredentials } from "./client";
+import { MetaClient, MetaError, type MetaCredentials } from "./client";
 import {
   capabilitiesSchema,
   type AttemptDTO,
@@ -160,9 +160,23 @@ export async function withMetaConnection<Result>(
   } catch (error) {
     recordProductEvent({ kind: "workflow", name: `meta.${options.purpose}`, outcome: error instanceof ConnectionAccessError ? "rejected" : "failed",
       businessId: isAuthorizedBusiness(context) ? context.businessId : undefined,
-      durationMs: Math.round(performance.now() - started), attributes: { provider: "meta", errorCode: error instanceof ConnectionAccessError ? error.code : "META_OPERATION_FAILED" } });
+      durationMs: Math.round(performance.now() - started), attributes: { provider: "meta", errorCode: error instanceof ConnectionAccessError ? error.code : "META_OPERATION_FAILED", ...metaErrorAttributes(error) } });
     throw error;
   }
+}
+
+/** #615: Meta's reason for a failure, so META_OPERATION_FAILED is diagnosable from product_events. */
+export function metaErrorAttributes(error: unknown) {
+  if (!(error instanceof MetaError)) return {};
+  const fbtraceId = error.details?.fbtraceId;
+  return {
+    ...(error.status && error.status >= 100 && error.status <= 599 ? { status: error.status } : {}),
+    ...(Number.isInteger(error.code) ? { metaCode: error.code } : {}),
+    ...(Number.isInteger(error.subcode) ? { metaSubcode: error.subcode } : {}),
+    ...(error.details?.userTitle ? { metaUserTitle: error.details.userTitle.slice(0, 160) } : {}),
+    ...(fbtraceId && /^[A-Za-z0-9_-]{1,64}$/.test(fbtraceId) ? { fbtraceId } : {}),
+    ...(error.details?.path && /^[a-zA-Z0-9_.:/[\]-]{1,160}$/.test(error.details.path) ? { metaPath: error.details.path } : {}),
+  };
 }
 
 async function withConnectionCredentials<Result>(

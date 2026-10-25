@@ -207,7 +207,7 @@ lower cost.
 | `META_APP_ID`, `META_APP_SECRET` | Empty | Server-side OAuth app credentials |
 | `META_LOGIN_CONFIG_ID` | Empty | Optional Facebook Login for Business configuration |
 | `META_TOKEN_ENCRYPTION_KEY` | Empty | Base64 32-byte encryption key for token store |
-| `MANAGED_ACCOUNTS_ENABLED` | `false` | 2-Tier managed accounts (#518): `true`/`1` turns on provisioning child businesses under the parent. Off until provisioning ships |
+| `MANAGED_ACCOUNTS_ENABLED` | `false` | 2-Tier managed accounts (#518): `true`/`1` turns on provisioning child businesses under the parent. Off until provisioning ships. While off, internal accounts (`internal-accounts.json`, #379) still get the managed screens and routes (`/onboarding`, `/api/managed/*`, `/api/meta/managed/*`) for QA walks and concierge pilots (#523); background work (credential routing, spend caps, crons) follows the flag only |
 | `META_PARENT_BUSINESS_ID` | `1158100643072508` | The 2-Tier parent business (Solaride) |
 | `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |

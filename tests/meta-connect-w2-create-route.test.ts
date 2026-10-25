@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   metaClientForBusiness: vi.fn(),
   draftRow: null as Record<string, unknown> | null,
+  learnings: [] as Record<string, unknown>[],
   existingOperation: null as Record<string, unknown> | null,
   creativeReads: 0,
   changeCreativeBeforeExecution: false,
@@ -201,6 +202,9 @@ vi.mock("@/lib/supabase/server", () => ({
           select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: "Solaride", website: "https://example.com", locations: ["Jaipur"], offers: [] }, error: null }) }) }),
         };
       }
+      if (table === "campaign_learnings") {
+        return { upsert: async (row: Record<string, unknown>) => { mocks.learnings.push(row); return { error: null }; } };
+      }
       if (table === "campaigns") {
         return {
           insert: () => ({ select: () => ({ single: async () => ({ data: { id: "11111111-1111-4111-8111-111111111111" }, error: null }) }) }),
@@ -317,6 +321,7 @@ describe("durable campaign create route", () => {
   });
 
   it.each(["valid", "forged", "changed number", "missing number"])("checks the WhatsApp review before creation: %s", async (scenario) => {
+    mocks.learnings = [];
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
     const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
     const forms = vi.fn().mockRejectedValue(new Error("WhatsApp must not load forms"));
@@ -336,6 +341,12 @@ describe("durable campaign create route", () => {
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ destination: "whatsapp", whatsappNumber, boundWhatsAppNumbers: ["+919876543210"], leadFormId: undefined, gender: "women",
         // #493: one targeted city (the manual "Jaipur" place) is named in the one-tap ask.
         whatsappGreeting: { autofill: "Hi! I'd like to know more about Solaride in Jaipur.", greeting: expect.stringContaining("Solaride") } }));
+      // #588: the learning ledger records exactly what this launch sent.
+      expect(mocks.learnings).toEqual([expect.objectContaining({ campaign_id: "11111111-1111-4111-8111-111111111111", business_id: businessId,
+        snapshot: expect.objectContaining({ destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", formats: ["4:5"],
+          whatsapp: expect.objectContaining({ prefill: "Hi! I'd like to know more about Solaride in Jaipur." }),
+          audience: expect.objectContaining({ areas: ["Jaipur"], gender: "women", advantageAudience: true }),
+          creatives: [expect.objectContaining({ id: creativeId })] }) })]);
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);
       expect(create).not.toHaveBeenCalled();

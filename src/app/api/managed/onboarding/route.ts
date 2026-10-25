@@ -1,7 +1,8 @@
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { getEnv } from "@/lib/env";
+import { managedAccountsEnabledFor } from "@/lib/meta/managed-account";
+import { createClient } from "@/lib/supabase/server";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { getCustomerBalance } from "@/lib/payments/customer-balance";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,7 +16,8 @@ export const GET = observeRoute("/api/managed/onboarding", "GET", handleGET);
 
 /** #526: the owner's onboarding progress: their managed-account ledger row and whether they have paid. */
 async function handleGET(request: NextRequest) {
-  if (!getEnv().MANAGED_ACCOUNTS_ENABLED) return fail(404, "NOT_ENABLED", "Managed accounts are not enabled.");
+  const { data: { user } } = await (await createClient()).auth.getUser();
+  if (!managedAccountsEnabledFor(user)) return fail(404, "NOT_ENABLED", "Managed accounts are not enabled.");
   const businessId = z.uuid().safeParse(request.nextUrl.searchParams.get("businessId"));
   if (!businessId.success) return fail(400, "INVALID_INPUT", "A business is required.");
   let actor;

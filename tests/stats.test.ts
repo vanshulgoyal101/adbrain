@@ -11,7 +11,7 @@ describe("customer filter (#451)", () => {
 
 describe("npm run stats (#451)", () => {
   it("has the sections the CEO asked for", () => {
-    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "campaign_receipts", "business_days", "failures", "auth", "speed", "plan_checks", "managed_accounts", "funnel"]);
+    expect(SECTIONS.map(({ key }) => key)).toEqual(["ai_by_model", "create_runs", "ad_receipts", "run_receipts", "campaign_receipts", "business_days", "failures", "auth", "speed", "plan_checks", "learnings", "managed_accounts", "funnel"]);
   });
 
   it("gives a receipt for each of the last 20 ads: its own calls, and later changes to it (#451 L1)", () => {
@@ -51,8 +51,18 @@ describe("npm run stats (#451)", () => {
     expect(sectionSql("managed_accounts", 7, [], { includeInternal: true })).not.toContain("auth.users u where");
   });
 
+  it("compares the last 10 launches from the learning ledger with their latest results, customers only by default (#588)", () => {
+    const sql = sectionSql("learnings", 7, []);
+    expect(sql).toContain("from public.campaign_learnings l");
+    expect(sql).toContain("distinct on (campaign_id)");
+    expect(sql).toContain("open_to_chat_pct");
+    expect(sql).not.toContain("make_interval");
+    expect(sql).toContain("not in (select u.id from auth.users u where ");
+    expect(sectionSql("learnings", 7, [], { includeInternal: true })).not.toContain("auth.users u where");
+  });
+
   it("filters every event section to customers by default and opts in to everyone", () => {
-    for (const { key } of SECTIONS.filter(({ key }) => key !== "funnel" && key !== "managed_accounts")) {
+    for (const { key } of SECTIONS.filter(({ key }) => !["funnel", "managed_accounts", "learnings"].includes(key))) {
       const sql = sectionSql(key, 7, []);
       expect(sql, key).toContain("make_interval(days => 7)");
       expect(sql, key).toContain("not in (select u.id from auth.users u where ");

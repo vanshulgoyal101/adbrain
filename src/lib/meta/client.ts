@@ -157,13 +157,18 @@ export class MetaError extends Error {
     readonly status?: number,
     readonly code?: number,
     readonly subcode?: number,
+    /** #615: Meta's own diagnosis for telemetry; never tokens or request bodies. */
+    readonly details?: MetaErrorDetails,
   ) {
     super(message);
     this.name = "MetaError";
   }
 }
 
-type GraphErrorBody = { message?: string; error_user_msg?: string; code?: number; error_subcode?: number };
+export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
+
+type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
+
 
 const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
@@ -345,9 +350,12 @@ export function adSetTargeting(params: {
     ...(params.ageMin !== hardMin || params.ageMax !== 65 ? { age_range: [params.ageMin, params.ageMax] } : {}),
     ...(params.gender === "men" ? { genders: [1] } : params.gender === "women" ? { genders: [2] } : {}),
     ...(params.interests?.length ? { flexible_spec: [{ interests: params.interests }] } : {}),
-    targeting_automation: { advantage_audience: 1 },
+    targeting_automation: { advantage_audience: ADVANTAGE_AUDIENCE ? 1 : 0 },
   };
 }
+
+/** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
+export const ADVANTAGE_AUDIENCE = true;
 
 /** A short, loggable code for a failed Graph call: Meta's code/subcode, else the HTTP status. */
 export function metaErrorCode(error: unknown): string {
@@ -631,7 +639,8 @@ export class MetaClient {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
-      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode);
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
+        { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) });
     }
     return { status: res.status, body: json as unknown };
   }
