@@ -104,7 +104,7 @@ async function handlePOST(
   }
 
   const [summary, enforcement] = await Promise.all([
-    summarizeInsights(campaign.objective, insights),
+    summarizeInsights(campaign.name ?? "Your campaign", insights),
     enforceAutoPauseWithStatus(campaign.business_id),
     logEvent({
       businessId: campaign.business_id,
