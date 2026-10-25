@@ -70,7 +70,9 @@ The stream includes:
   (`act_[id]/adsets`, `[id]/insights`, `search`; no IDs, query values or token), method, HTTP
   status, entity type, latency and, on failure, `META_<code>_<subcode>` (or `META_HTTP_<status>`,
   `META_TIMEOUT`, `META_NETWORK`). Meta's 4xx refusals are `rejected`; 5xx, throttling and network
-  errors are `failed`. Calls inside a request share its request ID; a context keeps at most 100
+  errors are `failed`. Calls inside a request share its request ID. Outside one (a page render's
+  Meta reads), each `withMetaConnection` run gets its own request ID and business, shared with its
+  `meta.<purpose>` event (#615). A context keeps at most 100
   events, so a long cron run logs its first 100 calls to the database (all to the log stream).
 - Audit/usage persistence failures and product-log persistence health warnings.
 - Authenticated page views and browser error/rejection categories on the eight

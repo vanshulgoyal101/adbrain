@@ -14,7 +14,7 @@ import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import { verifyMetaCapabilities } from "./capability-verification";
 import { canUseMetaConnect } from "./pilot-access";
 import { observeIdentity } from "@/lib/observability/context";
-import { recordProductEvent } from "@/lib/observability/logger";
+import { recordProductEvent, withEventScope } from "@/lib/observability/logger";
 import { getManagedAccount, hasManagedAssets, isManagedReady, managedConnection, managedCredentials, type ManagedAccount } from "./managed-account";
 
 const authorizedBusinessBrand = Symbol("authorized-business");
@@ -149,6 +149,16 @@ export async function withMetaConnection<Result>(
     expectedGeneration?: number;
     signal?: AbortSignal;
   },
+  execute: (client: MetaClient, connection: ConnectionDTO) => Promise<Result>,
+): Promise<Result> {
+  return isAuthorizedBusiness(context)
+    ? withEventScope(context.businessId, () => runMetaConnection(context, options, execute))
+    : runMetaConnection(context, options, execute);
+}
+
+async function runMetaConnection<Result>(
+  context: AuthorizedBusiness,
+  options: Parameters<typeof withMetaConnection>[1],
   execute: (client: MetaClient, connection: ConnectionDTO) => Promise<Result>,
 ): Promise<Result> {
   const started = performance.now();
