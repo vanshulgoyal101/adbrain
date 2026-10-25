@@ -22,15 +22,17 @@ function ledger(row: Record<string, unknown>) {
   return { store, events, row: () => current };
 }
 
-function meta(options: { children?: { id: string; child_business_external_id?: string }[]; accounts?: { id: string; name: string }[]; failChildWith?: object; loseChildResponse?: boolean } = {}) {
+function meta(options: { children?: { id: string; child_business_external_id?: string }[]; accounts?: { id: string; name: string }[]; failChildWith?: object; loseChildResponse?: boolean; assigned?: { id: string; tasks?: string[] }[]; failGrantWith?: object } = {}) {
   const children = [...(options.children ?? [])];
   const accounts = [...(options.accounts ?? [])];
+  const assigned = [...(options.assigned ?? [])];
   const calls: { method: string; path: string; form?: Record<string, string>; token: string }[] = [];
   const graph: ProvisionGraph = {
     get: async (path, token) => {
       calls.push({ method: "GET", path, token });
       if (path.startsWith(`${PARENT}/owned_businesses`)) return (children.length ? { data: children } : recordedLookup.body) as never;
       if (path.includes("/owned_ad_accounts")) return { data: accounts } as never;
+      if (path.startsWith("act_8000000000001/assigned_users")) return { data: assigned } as never;
       throw new Error(`unexpected GET ${path}`);
     },
     post: async (path, form, token) => {
@@ -40,6 +42,11 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
         children.push({ id: "7000000000001", child_business_external_id: form.child_business_external_id });
         if (options.loseChildResponse) throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
         return { id: "7000000000001" } as never;
+      }
+      if (path === "act_8000000000001/assigned_users") {
+        if (options.failGrantWith) throw options.failGrantWith;
+        assigned.push({ id: form.user, tasks: JSON.parse(form.tasks) });
+        return { success: true } as never;
       }
       if (path === "7000000000001/adaccount") {
         accounts.push({ id: "act_8000000000001", name: form.name });
@@ -52,8 +59,9 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
 }
 
 const tokens = { customer: "customer-token", parent: "parent-token" };
+const manager = { userId: "6100000000009", token: "manager-token" };
 const run = (store: ProvisionStore, graph: ProvisionGraph) =>
-  provisionManagedAccount({ businessId: business, businessName: "Solaride Mohali", parentBusinessId: PARENT, store, graph, tokens, requestId: "r1" });
+  provisionManagedAccount({ businessId: business, businessName: "Solaride Mohali", parentBusinessId: PARENT, store, graph, tokens, manager, requestId: "r1" });
 
 describe("provisionManagedAccount (#521)", () => {
   it("creates the child business with the customer's Page, then its INR ad account, recording each step", async () => {
@@ -71,6 +79,7 @@ describe("provisionManagedAccount (#521)", () => {
     expect(db.events.map((e) => [e.step, e.outcome, e.meta_object_id])).toEqual([
       ["child_business", "started", undefined], ["child_business", "succeeded", "7000000000001"],
       ["ad_account", "started", undefined], ["ad_account", "succeeded", "act_8000000000001"],
+      ["ad_account", "succeeded", "act_8000000000001"],
     ]);
   });
 
@@ -89,7 +98,7 @@ describe("provisionManagedAccount (#521)", () => {
     const db = ledger({ business_id: business, state: "child_created", page_id: "111", child_business_id: "7000000000001" });
     const { graph, calls } = meta({ accounts: [{ id: "act_8000000000001", name: `AdBrain ${business.slice(0, 8)} Solaride Mohali` }] });
     expect(await run(db.store, graph)).toMatchObject({ ok: true, adAccountId: "act_8000000000001" });
-    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+    expect(calls.filter((c) => c.method === "POST" && c.path.endsWith("/adaccount"))).toEqual([]);
   });
 
   it("turns Meta's 'you must be an admin of that Page' into an honest owner code", async () => {
@@ -105,5 +114,34 @@ describe("provisionManagedAccount (#521)", () => {
     const { graph, calls } = meta();
     expect(await run(db.store, graph)).toEqual({ ok: false, code: "PAGE_NOT_LINKED", retryable: false });
     expect(calls).toEqual([]);
+  });
+
+  // Meta's setup-cbm: "Add the System User as an Admin to the New Ad Account" (assigned_users).
+  it("assigns the managing system user to the new ad account, once", async () => {
+    const db = ledger({ business_id: business, state: "page_linked", page_id: "111" });
+    const { graph, calls } = meta();
+    expect(await run(db.store, graph)).toMatchObject({ ok: true });
+    const grant = calls.find((c) => c.method === "POST" && c.path === "act_8000000000001/assigned_users")!;
+    expect(grant.form).toEqual({ user: "6100000000009", tasks: JSON.stringify(["MANAGE", "ADVERTISE", "ANALYZE"]), business: "7000000000001" });
+    expect(grant.token).toBe("manager-token");
+    expect(calls.find((c) => c.method === "GET" && c.path.startsWith("act_8000000000001/assigned_users"))!.path).toContain("business=7000000000001");
+    expect(db.row()).toMatchObject({ step_keys: expect.objectContaining({ grant: `grant:${business}` }) });
+
+    const again = meta({ assigned: [{ id: "6100000000009", tasks: ["MANAGE", "ADVERTISE", "ANALYZE"] }] });
+    const db2 = ledger({ business_id: business, state: "failed", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001", step_keys: { child_business: "x", ad_account: "y" } });
+    expect(await run(db2.store, again.graph)).toMatchObject({ ok: true, state: "ad_account_created" });
+    expect(again.calls.filter((c) => c.method === "POST")).toEqual([]);
+  });
+
+  it("a failed grant keeps the ad account and retries only the grant", async () => {
+    const db = ledger({ business_id: business, state: "page_linked", page_id: "111" });
+    const failing = meta({ failGrantWith: Object.assign(new Error("busy"), { status: 500, code: 2 }) });
+    expect(await run(db.store, failing.graph)).toMatchObject({ ok: false, code: "META_BUSY", retryable: true });
+    expect(db.row()).toMatchObject({ state: "failed", ad_account_id: "act_8000000000001", last_error: "META_BUSY" });
+    expect(db.events.at(-1)).toMatchObject({ step: "ad_account", outcome: "failed", error_code: "META_BUSY" });
+
+    const retry = meta({ accounts: [{ id: "act_8000000000001", name: "x" }] });
+    expect(await run(db.store, retry.graph)).toMatchObject({ ok: true, state: "ad_account_created" });
+    expect(retry.calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual(["act_8000000000001/assigned_users"]);
   });
 });
