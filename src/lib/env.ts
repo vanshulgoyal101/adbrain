@@ -80,11 +80,13 @@ const schema = z.object({
   META_APP_ID: z.string().optional().default(""),
   META_APP_SECRET: z.string().optional().default(""),
   META_LOGIN_CONFIG_ID: z.string().optional().default(""),
-  META_SYSTEM_USER_TOKEN: z.string().optional().default(""),
-  META_AD_ACCOUNT_ID: z.string().optional().default(""),
-  META_PAGE_ID: z.string().optional().default(""),
   // Base64-encoded 32-byte key for server-only Meta token encryption.
   META_TOKEN_ENCRYPTION_KEY: z.string().optional().default(""),
+  // 2-Tier managed accounts (#518, #520): Solaride is the parent business; its system user's
+  // token provisions child businesses. Off until provisioning ships; the token is Sensitive in Vercel.
+  MANAGED_ACCOUNTS_ENABLED: z.string().optional().default("false").transform((v) => v === "true" || v === "1"),
+  META_PARENT_BUSINESS_ID: z.string().regex(/^\d+$/).optional().default("1158100643072508"),
+  META_PARENT_SYSTEM_TOKEN: z.string().optional().default(""),
 
   // Internal traffic runner (for Meta review call-volume generation)
   TRAFFIC_GENERATOR_MAX_ROUNDS: z.coerce

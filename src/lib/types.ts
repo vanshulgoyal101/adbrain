@@ -440,6 +440,58 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["campaign_operations"]["Insert"]>;
         Relationships: [];
       };
+      // #519 (2-Tier): service-role writes only; owners read their own row. Never tokens.
+      managed_meta_accounts: {
+        Row: {
+          business_id: string;
+          state: "requested" | "page_linked" | "child_created" | "ad_account_created" | "funded" | "whatsapp_linked" | "ready" | "failed" | "offboarding" | "offboarded";
+          page_id: string | null;
+          child_business_id: string | null;
+          ad_account_id: string | null;
+          waba_id: string | null;
+          phone_number_id: string | null;
+          funding_state: "none" | "card_attached" | "invoiced" | "failed";
+          step_keys: Json;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          business_id: string;
+          state?: Database["public"]["Tables"]["managed_meta_accounts"]["Row"]["state"];
+          page_id?: string | null;
+          child_business_id?: string | null;
+          ad_account_id?: string | null;
+          waba_id?: string | null;
+          phone_number_id?: string | null;
+          funding_state?: Database["public"]["Tables"]["managed_meta_accounts"]["Row"]["funding_state"];
+          step_keys?: Json;
+          last_error?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["managed_meta_accounts"]["Insert"]>;
+        Relationships: [];
+      };
+      managed_meta_account_events: {
+        Row: {
+          id: number;
+          business_id: string;
+          step: "page" | "child_business" | "ad_account" | "funding" | "whatsapp" | "offboard";
+          outcome: "started" | "succeeded" | "failed" | "reconciled";
+          request_id: string | null;
+          idempotency_key: string | null;
+          meta_object_id: string | null;
+          error_code: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["managed_meta_account_events"]["Row"], "id" | "created_at" | "request_id" | "idempotency_key" | "meta_object_id" | "error_code"> & {
+          request_id?: string | null;
+          idempotency_key?: string | null;
+          meta_object_id?: string | null;
+          error_code?: string | null;
+        };
+        Update: never;
+        Relationships: [];
+      };
       campaign_results: {
         Row: {
           destination?: "instant_form" | "whatsapp" | "call" | "mixed" | "unknown";

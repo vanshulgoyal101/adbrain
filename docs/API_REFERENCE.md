@@ -127,6 +127,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", numbers: [{masked, source: "page" \| "business"}]} \| {state: "not_linked" \| "unavailable"}` | Owned business only; read-only Graph; numbers leave the server masked ("+91 ••••• 4842"); 20 per 5 min (#235) |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
+| POST | `/api/meta/connections/change` | Business/intent -> envelope attempt (or 409 `REAUTH_REQUIRED`) | 'Change': lists the pairs the saved grant allows, no new Facebook login; commit via `select` |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
 | GET | `/api/meta/connections/attempts/[id]` | Path ID -> envelope attempt | Poll owned attempt |
 | POST | `/api/meta/connections/attempts/[id]/retry` | `revision` -> envelope attempt | Retry eligible failed discovery |
@@ -155,6 +156,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/cron/refresh-results` | Cron Bearer auth | Hourly per active campaign: Meta insights and ad review (read-only), one result row and `raw.health` flags; `{ok,refreshed,skipped,failed,hasMore,alerts:[{kind,key}]}`, never pauses (#258) |
 | GET | `/api/cron/payment-health` | Cron Bearer auth | Razorpay webhook counts for the live account (`events7d`, `unprocessed`, `capturedWithoutEvent`); `ok:false` when a capture lacks its webhook event; read-only |
 | GET | `/api/cron/scheduler-health` | Cron Bearer auth | Read-only watchdog (#274): per job (`enforce-spend`, `sync-leads` every 15 min; `refresh-results` must succeed hourly) minutes since the last run and last successful run, from logged `http.request` events; `overdue` after twice the interval without a success; `ok:false` when any job is overdue |
+| GET | `/api/cron/meta-parent-health` | Cron Bearer auth | Read-only 2-Tier parent token check (#520): `GET /me` and the parent business with `META_PARENT_SYSTEM_TOKEN`; `{ok:true, configured:false}` when unset, `{configured, enabled, ok, businessVerified}` when it works, 503 with a Meta `errorCode` only when refused |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
 ### Configurable Live Payments

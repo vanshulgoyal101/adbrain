@@ -25,6 +25,7 @@ const operatorFundedMigration = await readFile(join(root, "db/migrations/2026102
 const manualEnquiryMigration = await readFile(join(root, "db/migrations/20261024_manual_whatsapp_enquiries.sql"), "utf8");
 const schedulerMigration = await readFile(join(root, "db/migrations/20261024_scheduler_pg_cron.sql"), "utf8");
 const advisorsMigration = await readFile(join(root, "db/migrations/20261024_security_advisors.sql"), "utf8");
+const managedAccountsMigration = await readFile(join(root, "db/migrations/20261025_managed_meta_accounts.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -1081,6 +1082,128 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyManagedAccounts(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Managed'),($3,$4,'Other managed')", [business, owner, otherBusiness, other]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: 2T managed accounts: owners read only their own row and events; only the service role writes (#519)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'111'),($2,'222')", [business, otherBusiness]);
+      await session.query("insert into public.managed_meta_account_events(business_id,step,outcome,meta_object_id) values ($1,'page','succeeded','111'),($2,'page','succeeded','222')", [business, otherBusiness]);
+      await session.query("update public.managed_meta_accounts set state='page_linked' where business_id=$1", [business]);
+      await session.query("commit");
+    });
+    await as("authenticated", owner, async (session) => {
+      assert.deepEqual((await session.query("select business_id,state from public.managed_meta_accounts")).rows, [{ business_id: business, state: "page_linked" }]);
+      assert.deepEqual((await session.query("select business_id from public.managed_meta_account_events")).rows, [{ business_id: business }]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.managed_meta_accounts set state='ready' where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.managed_meta_accounts(business_id) values ($1)", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.managed_meta_account_events(business_id,step,outcome) values ($1,'page','started')", [business]), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.deepEqual((await session.query("select business_id from public.managed_meta_accounts")).rows, [{ business_id: otherBusiness }]);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.managed_meta_accounts"), { code: "42501" });
+    });
+  });
+  await check(`${database}: 2T managed accounts: the state machine, fixed IDs and append-only events (#519)`, async () => {
+    const update = (sql, values) => as("service_role", null, (session) => session.query(sql, values));
+    // Skipping a step, or reaching a state without its Meta IDs, is refused.
+    await assert.rejects(update("update public.managed_meta_accounts set state='ready' where business_id=$1", [business]), { code: "23514" });
+    await assert.rejects(update("update public.managed_meta_accounts set state='child_created' where business_id=$1", [business]), { code: "23514" });
+    await assert.rejects(update("update public.managed_meta_accounts set state='funded', child_business_id='333', ad_account_id='act_444' where business_id=$1", [business]), { code: "23514" });
+    await as("service_role", null, async (session) => {
+      for (const step of ["state='child_created', child_business_id='333'", "state='ad_account_created', ad_account_id='act_444'",
+        "state='funded', funding_state='card_attached'", "state='ready'"]) {
+        await session.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [business]);
+      }
+      const row = (await session.query("select state, created_at < updated_at or created_at = updated_at as clock from public.managed_meta_accounts where business_id=$1", [business])).rows[0];
+      assert.deepEqual(row, { state: "ready", clock: true });
+      await session.query("savepoint s");
+      // A tenant's child business and ad account can never be re-pointed, nor shared with another tenant.
+      await assert.rejects(session.query("update public.managed_meta_accounts set ad_account_id='act_555' where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.managed_meta_accounts set child_business_id=null where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.managed_meta_accounts set child_business_id='333' where business_id=$1", [otherBusiness]), { code: "23505" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.managed_meta_accounts set last_error='token=EAAB secret value' where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query(`update public.managed_meta_accounts set step_keys='{"child_business":"EAAB token with spaces"}' where business_id=$1`, [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await session.query(`update public.managed_meta_accounts set step_keys='{"child_business":"b1-child-2026-10-25"}' where business_id=$1`, [business]);
+      await assert.rejects(session.query("update public.managed_meta_account_events set outcome='failed' where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("delete from public.managed_meta_account_events where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await session.query("update public.managed_meta_accounts set state='offboarding' where business_id=$1", [business]);
+      await session.query("update public.managed_meta_accounts set state='offboarded' where business_id=$1", [business]);
+      await assert.rejects(session.query("update public.managed_meta_accounts set state='ready' where business_id=$1", [business]), { code: "23514" });
+    });
+    // A business can't be deleted while its managed account exists (its ad account could still spend).
+    // restrict_violation (23001) or foreign_key_violation (23503), depending on the Postgres build.
+    await assert.rejects(db.query("delete from public.businesses where id=$1", [business]), (error) => ["23001", "23503"].includes(error.code));
+  });
+}
+
+// QA red checks for #527 T1: no two tenants share a Page or a WhatsApp number, an insert can't skip
+// the state machine, and an offboarding account can't be revived to ready.
+async function verifyManagedAccountsTenantQA(db, database) {
+  const a = randomUUID(), b = randomUUID(), ownerA = randomUUID(), ownerB = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [ownerA, ownerB]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'QA tenant A'),($3,$4,'QA tenant B')", [a, ownerA, b, ownerB]);
+  const asService = async (run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role service_role");
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: 2T QA: two tenants can't share a Page or a WhatsApp number (#527 T1, #253)`, async () => {
+    await asService(async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id,phone_number_id) values ($1,'90001','91001')", [a]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'90001')", [b]), { code: "23505" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.managed_meta_accounts(business_id,page_id,phone_number_id) values ($1,'90002','91001')", [b]), { code: "23505" });
+    });
+  });
+  await check(`${database}: 2T QA: a new managed account starts at requested; an insert can't skip the state machine (#527 T1)`, async () => {
+    await asService(async (session) => {
+      await assert.rejects(session.query(`insert into public.managed_meta_accounts(business_id,state,page_id,child_business_id,ad_account_id,funding_state)
+        values ($1,'ready','90003','90004','act_90005','card_attached')`, [a]), { code: "23514" });
+    });
+  });
+  await check(`${database}: 2T QA: an offboarding account can't be revived to ready through failed (#527 T1)`, async () => {
+    await asService(async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'90006')", [a]);
+      for (const step of ["state='page_linked'", "state='child_created', child_business_id='90007'", "state='ad_account_created', ad_account_id='act_90008'",
+        "state='funded', funding_state='card_attached'", "state='ready'", "state='offboarding'"]) {
+        await session.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [a]);
+      }
+      await session.query("savepoint s");
+      await session.query("update public.managed_meta_accounts set state='failed' where business_id=$1", [a]).catch(() => session.query("rollback to savepoint s"));
+      await assert.rejects(session.query("update public.managed_meta_accounts set state='ready' where business_id=$1", [a]), { code: "23514" });
+    });
+  });
+}
+
 async function verifyAdvisorHardening(db, database) {
   await check(`${database}: advisor hardening reapplies cleanly and leaves the expected catalog (#359)`, async () => {
     await db.query(advisorsMigration);
@@ -1503,6 +1626,10 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(schedulerMigration);
       await db.query(schedulerMigration);
       await verifyScheduler(db,database);
+      await db.query(managedAccountsMigration);
+      await db.query(managedAccountsMigration);
+      await verifyManagedAccounts(db,database);
+      await verifyManagedAccountsTenantQA(db,database);
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       return;
     }

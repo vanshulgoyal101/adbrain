@@ -198,6 +198,20 @@ The [lead sync migration](../db/migrations/20260926_lead_sync_progress.sql) adds
 service role; the [follow-up migration](../db/migrations/20260926_lead_follow_up.sql)
 adds the follow-up columns and `get_lead_page`. Both are in the fresh schema.
 
+## Managed Accounts (2-Tier, #518)
+
+Behind `MANAGED_ACCOUNTS_ENABLED`. AdBrain provisions each customer a child business under
+Solaride, tracked in `managed_meta_accounts` (#519). The customer links a Page they administer
+(#523). [`provisionManagedAccount`](../src/lib/meta/managed-provision.ts) (#521) then creates the
+child business (`POST /{parent}/owned_businesses` with `shared_page_id`, `page_permitted_tasks`,
+timezone 71 and `child_business_external_id` = the AdBrain business ID) and its INR ad account
+(`POST /{child}/adaccount`, `end_advertiser` = the Page). Every step reads before it creates
+(the external ID; a deterministic account name), so a lost response never creates twice. Meta
+errors become owner codes (`PAGE_ADMIN_REQUIRED`, `PAGE_IN_OTHER_BUSINESS`, `NOT_PERMITTED`,
+`META_BUSY`, `META_TIMEOUT`) and leave the row `failed` to resume. Its tests use Meta's
+documented shapes, marked provisional until App Review and Access Verification pass and real
+responses are recorded.
+
 ## Recovery and Destructive Actions
 
 | Situation | Safe action |

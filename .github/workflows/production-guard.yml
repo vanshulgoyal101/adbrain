@@ -78,6 +78,21 @@ jobs:
           smoke | tee smoke.txt && exit 0
           sleep 60
           smoke | tee smoke.txt
+      - name: 2-Tier parent token (#520)
+        id: parent
+        if: steps.smoke.outcome == 'success'
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "CRON_SECRET not set; parent token check skipped"; exit 0; }
+          code=$(curl -sS --max-time 30 -o parent.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" https://adbrain.vanshul.com/api/cron/meta-parent-health) || code=000
+          # Codes only (public repo): never the token or Meta's message.
+          summary=$(jq -c '{ok, configured, enabled, errorCode}' parent.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')
+          echo "HTTP $code $summary"
+          [ "$code" = 404 ] && { echo "Route not deployed yet; skipped"; exit 0; }
+          [ "$code" = 200 ] && exit 0
+          echo "FAIL 2-Tier parent token: HTTP $code $summary" | tee -a smoke.txt
+          exit 1
       - name: Roll production back
         if: failure() && steps.smoke.outcome == 'failure' && steps.install.outputs.deps != 'missing' && (github.event_name == 'deployment_status' || inputs.drill) && env.VERCEL_TOKEN != ''
         run: node scripts/production-guard.mjs rollback "$SHA" 2>&1 | tee rollback.txt

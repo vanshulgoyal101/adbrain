@@ -23,7 +23,7 @@ not isolation.
 | Classification | Variables | Handling |
 | --- | --- | --- |
 | Public application configuration | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`, public feature flags | Browser-visible; the public Supabase key is safe only with correct RLS |
-| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
+| Privileged backend secret | `SUPABASE_SERVICE_ROLE_KEY`, `META_TOKEN_ENCRYPTION_KEY`, `META_PARENT_SYSTEM_TOKEN`, `CRON_SECRET` | Server/process only; never use public prefixes or expose through diagnostics |
 | Provider secret | All four `*_API_KEYS` pools, `META_APP_SECRET`, `META_SYSTEM_USER_TOKEN`, `FALAI_API_KEY`, `OPENAI_API_KEY`, Razorpay key/webhook secrets | Can grant paid/external access; least privilege and target-specific storage |
 | Identifier or policy | Model names, provider order, Meta app/config/account/Page IDs, Razorpay key/account IDs, limits and rollout values | Not secrets, but keep tenant/account details out of examples |
 | Login/test fixture material | `DEV_LOGIN_PASSWORD`, `DEMO_USER_PASSWORD`, `ADBRAIN_REVIEWER_PASSWORD` and their emails | Passwords are secrets; emails may be personal data; use synthetic examples |
@@ -207,10 +207,12 @@ lower cost.
 | `META_APP_ID`, `META_APP_SECRET` | Empty | Server-side OAuth app credentials |
 | `META_LOGIN_CONFIG_ID` | Empty | Optional Facebook Login for Business configuration |
 | `META_TOKEN_ENCRYPTION_KEY` | Empty | Base64 32-byte encryption key for token store |
+| `MANAGED_ACCOUNTS_ENABLED` | `false` | 2-Tier managed accounts (#518): `true`/`1` turns on provisioning child businesses under the parent. Off until provisioning ships |
+| `META_PARENT_BUSINESS_ID` | `1158100643072508` | The 2-Tier parent business (Solaride) |
+| `META_PARENT_SYSTEM_TOKEN` | Empty | Privileged secret (Vercel Sensitive): the parent's 'AdBrain provisioning' system-user token. Checked read-only after each deploy (`/api/cron/meta-parent-health`); rotation in OPERATIONS |
 | `META_CONNECT_ROLLOUT` | Unset | `disabled`, `pilot`, `enabled`; unset allows nonproduction only |
 | `META_CONNECT_PILOT_USER_ID` | Unset | Exact app user allowed in pilot mode |
-| `META_SYSTEM_USER_TOKEN` | Empty | Legacy/internal credential, not tenant publishing fallback |
-| `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | Empty | Legacy/internal assets, not a default binding for all owners |
+| `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID` | Empty | **Local fixture recording only** (`.env.local`, read by `scripts/lib/meta-env.ts`). The app doesn't read them (#520), and they aren't set in Vercel |
 
 Rollout variables are read directly, outside `getEnv()`. Unknown values deny
 access; unset production rollout denies access. Register
