@@ -36,6 +36,12 @@ Options that mean "I'll type my own" (custom, other, type below) are dropped and
 text box is kept. An answer that adds no fact (such a chip, skip, not sure) does not
 count as a repeat, so the question can be asked again. A currency amount such as
 "₹10,000" is supported by "10,000 rupees" or "Rs 10000" in a source (#284).
+Options on an `offer` question are proposals the owner picks or rejects, so they skip the
+commercial-claim check; the AI can't pick one for the owner (`allowRandom` and
+`aiCanDecide` are off). When the repair still states an unsupported term and that is
+the only failure, the sentences, recommendations or options with the term are dropped
+and the result is re-checked; it is returned only if every check passes and the brief
+keeps at least 40 characters (#613).
 Past results (#371): when the business has a campaign with stored results from the last
 60 days and spend above zero, the interview gets a `PAST RESULTS` block after the
 reference brief (the cheapest campaign per result and the weakest, built in
