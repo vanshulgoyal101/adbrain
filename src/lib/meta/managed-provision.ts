@@ -6,9 +6,10 @@
  *
  * Tokens per step (#521 design note): the child business is created with the customer's token,
  * because Meta requires the caller to administer `shared_page_id` (error 1690138); the ad account
- * with the parent system user's. Then the managing system user is assigned to the ad account
- * (Meta's setup-cbm: "Add the System User as an Admin to the New Ad Account"); which system user
- * (the child's, per setup-cbm, or the parent's) is injected as `manager`.
+ * with the parent system user's. Then (CTO decision 1, Meta's setup-cbm) the child's own system
+ * user is minted with the parent token, its token stored encrypted (never in the ledger), and that
+ * user is assigned to the ad account with its own token, so one customer's token can't reach
+ * another's account.
  */
 
 export interface ProvisionGraph {
@@ -16,11 +17,21 @@ export interface ProvisionGraph {
   post<T>(path: string, form: Record<string, string>, token: string): Promise<T>;
 }
 
-type Row = { business_id: string; state: string; page_id: string | null; child_business_id: string | null; ad_account_id: string | null; step_keys: unknown };
+type Row = {
+  business_id: string; state: string; page_id: string | null; child_business_id: string | null; ad_account_id: string | null; step_keys: unknown;
+  manager_user_id?: string | null; manager_token_id?: string | null;
+};
+
+/** The child system user's token goes to the encrypted token store; the ledger keeps only its id. */
+export interface ManagerTokens {
+  appId: string;
+  save(token: string, systemUserId: string): Promise<string>;
+  load(tokenId: string): Promise<string | null>;
+}
 
 export interface ProvisionStore {
   get(businessId: string): Promise<Row | null>;
-  update(values: Partial<Pick<Row, "state" | "child_business_id" | "ad_account_id">> & { step_keys?: Record<string, string>; last_error?: string | null }): Promise<void>;
+  update(values: Partial<Pick<Row, "state" | "child_business_id" | "ad_account_id" | "manager_user_id" | "manager_token_id">> & { step_keys?: Record<string, string>; last_error?: string | null }): Promise<void>;
   event(values: { business_id: string; step: "child_business" | "ad_account"; outcome: "started" | "succeeded" | "failed"; request_id?: string; idempotency_key?: string; meta_object_id?: string; error_code?: string }): Promise<void>;
 }
 
@@ -33,7 +44,7 @@ const MAX_CHILD_PAGES = 50;
 
 /** A lookup that can't prove the child doesn't exist: stop rather than risk a second one (QA #527 T3). */
 class LookupError extends Error {
-  constructor(readonly code: "CHILD_LOOKUP_UNVERIFIED" | "CHILD_LOOKUP_INCOMPLETE" | "AD_ACCOUNT_AMBIGUOUS") { super(code); }
+  constructor(readonly code: "CHILD_LOOKUP_UNVERIFIED" | "CHILD_LOOKUP_INCOMPLETE" | "AD_ACCOUNT_AMBIGUOUS" | "MANAGER_TOKEN_MISSING" | "MANAGER_USER_AMBIGUOUS") { super(code); }
 }
 
 type ChildPage = { data?: { id: string; child_business_external_id?: string }[]; paging?: { next?: string; cursors?: { after?: string } } };
@@ -78,7 +89,7 @@ export async function provisionManagedAccount(input: {
   store: ProvisionStore;
   graph: ProvisionGraph;
   tokens: { customer: string; parent: string };
-  manager: { userId: string; token: string };
+  manager: ManagerTokens;
   requestId?: string;
 }): Promise<ProvisionResult> {
   const { businessId, store, graph, tokens, parentBusinessId, requestId } = input;
@@ -133,14 +144,34 @@ export async function provisionManagedAccount(input: {
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
     }
 
+    // The child's own system user: reuse the stored one, mint (with the parent token) only if absent or its token is gone.
+    let managerUserId = row.manager_user_id ?? null;
+    let managerToken = row.manager_token_id && managerUserId ? await input.manager.load(row.manager_token_id) : null;
+    if (!managerToken || !managerUserId) {
+      step = "ad_account";
+      const key = `manager:${businessId}`;
+      const minted = await graph.post<{ access_token?: string }>(`${childId}/access_token`, {
+        id: childId, app_id: input.manager.appId, scope: "ads_management,business_management",
+      }, tokens.parent);
+      if (!minted.access_token) throw new LookupError("MANAGER_TOKEN_MISSING");
+      const users = await graph.get<{ data?: { id: string }[] }>(`${childId}/system_users?fields=id&limit=10`, minted.access_token);
+      if ((users.data ?? []).length !== 1) throw new LookupError("MANAGER_USER_AMBIGUOUS");
+      managerUserId = users.data![0].id;
+      managerToken = minted.access_token;
+      const tokenId = await input.manager.save(managerToken, managerUserId);
+      keys.manager = key;
+      await store.update({ manager_user_id: managerUserId, manager_token_id: tokenId, step_keys: keys, last_error: null });
+      await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: managerUserId });
+    }
+
     if (!keys.grant) {
       step = "ad_account";
       const key = `grant:${businessId}`;
       const assigned = await graph.get<{ data?: { id: string; tasks?: string[] }[] }>(
-        `${adAccountId}/assigned_users?business=${encodeURIComponent(childId)}&fields=id,tasks`, input.manager.token);
-      const granted = assigned.data?.some((user) => user.id === input.manager.userId && MANAGER_TASKS.every((task) => user.tasks?.includes(task)));
+        `${adAccountId}/assigned_users?business=${encodeURIComponent(childId)}&fields=id,tasks`, managerToken);
+      const granted = assigned.data?.some((user) => user.id === managerUserId && MANAGER_TASKS.every((task) => user.tasks?.includes(task)));
       if (!granted) {
-        await graph.post(`${adAccountId}/assigned_users`, { user: input.manager.userId, tasks: JSON.stringify(MANAGER_TASKS), business: childId }, input.manager.token);
+        await graph.post(`${adAccountId}/assigned_users`, { user: managerUserId, tasks: JSON.stringify(MANAGER_TASKS), business: childId }, managerToken);
       }
       keys.grant = key;
       await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });

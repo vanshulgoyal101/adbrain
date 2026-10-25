@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { provisionManagedAccount, type ProvisionGraph, type ProvisionStore } from "@/lib/meta/managed-provision";
+import { beforeEach } from "vitest";
+import { provisionManagedAccount, type ManagerTokens, type ProvisionGraph, type ProvisionStore } from "@/lib/meta/managed-provision";
 import recordedLookup from "./core/fixtures/meta/parent-owned-businesses.json";
 
 // #521 (2-Tier). The child lookup uses Meta's recorded answer for Solaride (no children yet);
@@ -33,6 +34,7 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
       if (path.startsWith(`${PARENT}/owned_businesses`)) return (children.length ? { data: children } : recordedLookup.body) as never;
       if (path.includes("/owned_ad_accounts")) return { data: accounts } as never;
       if (path.startsWith("act_8000000000001/assigned_users")) return { data: assigned } as never;
+      if (path.startsWith("7000000000001/system_users")) return { data: [{ id: "6100000000009" }] } as never;
       throw new Error(`unexpected GET ${path}`);
     },
     post: async (path, form, token) => {
@@ -43,6 +45,7 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
         if (options.loseChildResponse) throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
         return { id: "7000000000001" } as never;
       }
+      if (path === "7000000000001/access_token") return { access_token: "child-token" } as never;
       if (path === "act_8000000000001/assigned_users") {
         if (options.failGrantWith) throw options.failGrantWith;
         assigned.push({ id: form.user, tasks: JSON.parse(form.tasks) });
@@ -59,9 +62,16 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
 }
 
 const tokens = { customer: "customer-token", parent: "parent-token" };
-const manager = { userId: "6100000000009", token: "manager-token" };
+const vault = new Map<string, string>();
+const saved: { token: string; userId: string }[] = [];
+const manager: ManagerTokens = {
+  appId: "2286157145462990",
+  save: async (token, userId) => { saved.push({ token, userId }); const id = `00000000-0000-4000-8000-00000000000${saved.length}`; vault.set(id, token); return id; },
+  load: async (tokenId) => vault.get(tokenId) ?? null,
+};
 const run = (store: ProvisionStore, graph: ProvisionGraph) =>
   provisionManagedAccount({ businessId: business, businessName: "Solaride Mohali", parentBusinessId: PARENT, store, graph, tokens, manager, requestId: "r1" });
+beforeEach(() => { vault.clear(); saved.length = 0; });
 
 describe("provisionManagedAccount (#521)", () => {
   it("creates the child business with the customer's Page, then its INR ad account, recording each step", async () => {
@@ -79,7 +89,7 @@ describe("provisionManagedAccount (#521)", () => {
     expect(db.events.map((e) => [e.step, e.outcome, e.meta_object_id])).toEqual([
       ["child_business", "started", undefined], ["child_business", "succeeded", "7000000000001"],
       ["ad_account", "started", undefined], ["ad_account", "succeeded", "act_8000000000001"],
-      ["ad_account", "succeeded", "act_8000000000001"],
+      ["ad_account", "succeeded", "6100000000009"], ["ad_account", "succeeded", "act_8000000000001"],
     ]);
   });
 
@@ -123,12 +133,14 @@ describe("provisionManagedAccount (#521)", () => {
     expect(await run(db.store, graph)).toMatchObject({ ok: true });
     const grant = calls.find((c) => c.method === "POST" && c.path === "act_8000000000001/assigned_users")!;
     expect(grant.form).toEqual({ user: "6100000000009", tasks: JSON.stringify(["MANAGE", "ADVERTISE", "ANALYZE"]), business: "7000000000001" });
-    expect(grant.token).toBe("manager-token");
+    expect(grant.token).toBe("child-token");
     expect(calls.find((c) => c.method === "GET" && c.path.startsWith("act_8000000000001/assigned_users"))!.path).toContain("business=7000000000001");
     expect(db.row()).toMatchObject({ step_keys: expect.objectContaining({ grant: `grant:${business}` }) });
 
     const again = meta({ assigned: [{ id: "6100000000009", tasks: ["MANAGE", "ADVERTISE", "ANALYZE"] }] });
-    const db2 = ledger({ business_id: business, state: "failed", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001", step_keys: { child_business: "x", ad_account: "y" } });
+    vault.set("00000000-0000-4000-8000-000000000009", "child-token");
+    const db2 = ledger({ business_id: business, state: "failed", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001",
+      manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000009", step_keys: { child_business: "x", ad_account: "y", manager: "z" } });
     expect(await run(db2.store, again.graph)).toMatchObject({ ok: true, state: "ad_account_created" });
     expect(again.calls.filter((c) => c.method === "POST")).toEqual([]);
   });
@@ -151,5 +163,35 @@ describe("provisionManagedAccount (#521)", () => {
     expect(await run(db.store, graph)).toEqual({ ok: false, code: "AD_ACCOUNT_AMBIGUOUS", retryable: false });
     expect(calls.filter((c) => c.method === "POST")).toEqual([]);
     expect(db.row()).toMatchObject({ state: "failed", last_error: "AD_ACCOUNT_AMBIGUOUS", ad_account_id: null });
+  });
+
+  // CTO decision 1 (#521): each child's own system user manages its ad account (Meta's setup-cbm).
+  it("mints the child's system-user token with the parent token, stores it encrypted, and grants with it", async () => {
+    const db = ledger({ business_id: business, state: "page_linked", page_id: "111" });
+    const { graph, calls } = meta();
+    expect(await run(db.store, graph)).toMatchObject({ ok: true });
+    const mint = calls.find((c) => c.path === "7000000000001/access_token")!;
+    expect(mint).toMatchObject({ method: "POST", token: "parent-token", form: { id: "7000000000001", app_id: "2286157145462990", scope: "ads_management,business_management" } });
+    expect(calls.find((c) => c.path.startsWith("7000000000001/system_users"))!.token).toBe("child-token");
+    expect(saved).toEqual([{ token: "child-token", userId: "6100000000009" }]);
+    expect(db.row()).toMatchObject({ manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000001" });
+    expect(JSON.stringify(db.row())).not.toContain("child-token");
+    expect(JSON.stringify(db.events)).not.toContain("child-token");
+  });
+
+  it("reuses the stored manager on resume, and mints again only if its token is gone", async () => {
+    const stored = { business_id: business, state: "failed", page_id: "111", child_business_id: "7000000000001", ad_account_id: "act_8000000000001",
+      manager_user_id: "6100000000009", manager_token_id: "00000000-0000-4000-8000-000000000009", step_keys: { child_business: "x", ad_account: "y", manager: "z" } };
+    vault.set("00000000-0000-4000-8000-000000000009", "child-token");
+    const reuse = meta();
+    expect(await run(ledger(stored).store, reuse.graph)).toMatchObject({ ok: true });
+    expect(reuse.calls.filter((c) => c.path.endsWith("/access_token"))).toEqual([]);
+
+    vault.clear();
+    const gone = meta();
+    const db = ledger(stored);
+    expect(await run(db.store, gone.graph)).toMatchObject({ ok: true });
+    expect(gone.calls.filter((c) => c.path.endsWith("/access_token"))).toHaveLength(1);
+    expect(db.row()).toMatchObject({ manager_token_id: "00000000-0000-4000-8000-000000000001" });
   });
 });

@@ -32,6 +32,7 @@ function meta(options: { pages?: Child[][]; accounts?: { id: string; name: strin
       }
       if (path.includes("/owned_ad_accounts")) return { data: options.accounts ?? [] } as never;
       if (path.includes("/assigned_users")) return { data: [] } as never;
+      if (path.includes("/system_users")) return { data: [{ id: "6100000000009" }] } as never;
       throw new Error(`unexpected GET ${path}`);
     },
     post: async (path, form) => {
@@ -39,6 +40,7 @@ function meta(options: { pages?: Child[][]; accounts?: { id: string; name: strin
       if (path === `${PARENT}/owned_businesses`) return { id: "7000000000999" } as never;
       if (path.endsWith("/adaccount")) return { id: `act_8000000000999`, name: form.name } as never;
       if (path.endsWith("/assigned_users")) return { success: true } as never;
+      if (path.endsWith("/access_token")) return { access_token: "child-token" } as never;
       throw new Error(`unexpected POST ${path}`);
     },
   };
@@ -47,7 +49,7 @@ function meta(options: { pages?: Child[][]; accounts?: { id: string; name: strin
 
 const tokens = { customer: "customer-token", parent: "parent-token" };
 const run = (store: ProvisionStore, graph: ProvisionGraph, businessName = "Solaride Mohali") =>
-  provisionManagedAccount({ businessId: business, businessName, parentBusinessId: PARENT, store, graph, tokens, manager: { userId: "6100000000009", token: "manager-token" }, requestId: "r1" });
+  provisionManagedAccount({ businessId: business, businessName, parentBusinessId: PARENT, store, graph, tokens, manager: { appId: "2286157145462990", save: async () => "00000000-0000-4000-8000-000000000001", load: async () => null }, requestId: "r1" });
 
 const others = (count: number, from = 0): Child[] =>
   Array.from({ length: count }, (_, i) => ({ id: String(7100000000000 + from + i), child_business_external_id: `other-${from + i}` }));
