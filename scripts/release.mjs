@@ -22,12 +22,15 @@ export function reviewVerdicts(reviews) {
     .map((r) => ({ body: r.body, createdAt: r.submitted_at, url: r.html_url }));
 }
 
+/** A verdict's first sentence: later sentences ("…isn't blocked", "please merge") don't veto it (#554). */
+export const verdictSentence = (body) => body.split("\n")[0].split(/(?<=[.!?](?:\*\*)?)\s+(?=[A-Z`#(→])/)[0];
+
 export function qaApproval(comments, headSha) {
   const head = headSha.slice(0, 7).toLowerCase();
   const verdicts = comments
     .filter((c) => /^[*_\s]*QA\b/.test(c.body) && c.body.toLowerCase().includes(head))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const firstLine = (c) => c.body.split("\n")[0];
+  const firstLine = (c) => verdictSentence(c.body);
   const approves = (c) => /(?<![-\w])(re-)?(approved|accepted|fine to (merge|ship))\b/i.test(firstLine(c)) && !negative.test(firstLine(c));
   const latest = verdicts.at(-1);
   if (!latest || !approves(latest)) return { approved: false, latest };
@@ -51,7 +54,8 @@ export function ctoReviews(comments) {
     const line = c.body.split("\n")[0];
     const sha = line.match(/^[*_\s]*CTO (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
     if (!sha) return [];
-    const approved = /\*\*approved\.?\*\*/i.test(line) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(line);
+    const verdict = verdictSentence(c.body);
+    const approved = /\*\*approved\.?\*\*/i.test(verdict) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(verdict);
     return [{ ...c, sha: sha.toLowerCase(), approved }];
   }).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
