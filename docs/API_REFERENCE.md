@@ -133,6 +133,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/meta/connections/attempts/[id]/retry` | `revision` -> envelope attempt | Retry eligible failed discovery |
 | GET | `/api/meta/managed/page` | `attemptId` -> envelope `{pages, createUrl, linked}` | #523 2-Tier: Pages the owner administers from that attempt's discovery; off unless `MANAGED_ACCOUNTS_ENABLED` |
 | POST | `/api/meta/managed/page` | `{attemptId, pageId}` -> envelope `{state, pageId}` | #523: link an admin Page (`page_linked` in `managed_meta_accounts`); `PAGE_NOT_ADMIN` / `PAGE_LOCKED` / `PAGE_TAKEN` 409 |
+| GET | `/api/managed/onboarding` | `businessId` -> envelope `{row, paid}` | #526 2-Tier onboarding progress (owner's `managed_meta_accounts` row; `paid` = captured payments net of refunds, unreadable counts as not paid); off unless `MANAGED_ACCOUNTS_ENABLED`. Polled every 5 s by `/onboarding` |
 | POST | `/api/meta/connections/attempts/[id]/select` | Pair/revision/confirmation -> envelope result | Commit verified connection |
 | POST | `/api/meta/connections/recheck` | Business/optional generation -> envelope connection | Live capability recheck |
 | POST | `/api/meta/disconnect` | Explicit business, or legacy empty body -> `{ok:true}` | Disconnect stored binding, not running ads |

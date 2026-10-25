@@ -5,16 +5,24 @@ import { CheckCircle2, ExternalLink, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MetaConnectDialog } from "./meta-connect-dialog";
 import type { AttemptDTO } from "@/lib/meta/connect-contracts";
+import { ONBOARDING_CONNECT_KEY } from "@/lib/managed/onboarding-connect";
 
 export function MetaConnectCompletion({ attempt }: { attempt: AttemptDTO }) {
   const [connected, setConnected] = useState(attempt.state === "connected" && attempt.connection?.authorization === "connected");
   const [dialogOpen, setDialogOpen] = useState(attempt.state !== "connected");
   useEffect(() => {
-    if (!window.opener || window.opener === window) return;
-    window.opener.postMessage(
-      { type: "adbrain.meta.complete", attemptId: attempt.attemptId },
-      window.location.origin,
-    );
+    // #526: a connect started from onboarding goes back there; the Page step uses this attempt.
+    const fromOnboarding = window.sessionStorage.getItem(ONBOARDING_CONNECT_KEY) === "1";
+    if (fromOnboarding) window.sessionStorage.removeItem(ONBOARDING_CONNECT_KEY);
+    if (window.opener && window.opener !== window) {
+      window.opener.postMessage(
+        { type: "adbrain.meta.complete", attemptId: attempt.attemptId },
+        window.location.origin,
+      );
+      if (fromOnboarding) window.close();
+      return;
+    }
+    if (fromOnboarding) window.location.replace(`/onboarding?attemptId=${encodeURIComponent(attempt.attemptId)}`);
   }, [attempt.attemptId]);
 
   const destination =
