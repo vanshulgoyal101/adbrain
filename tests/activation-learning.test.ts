@@ -42,7 +42,7 @@ describe("getActivationLearning (#419 item 2)", () => {
     expect(mocks.calls).toEqual([
       ["from", "audit_log"], ["select", "action, created_at"],
       ["eq", "business_id", "business-1"], ["eq", "entity_type", "campaign"], ["eq", "entity_id", "campaign-1"],
-      ["in", "action", ["campaign.pause", "campaign.resume"]], ["order", "created_at", { ascending: false }], ["limit", 1],
+      ["in", "action", ["campaign.pause", "spend.auto_paused", "campaign.resume"]], ["order", "created_at", { ascending: false }], ["limit", 1],
     ]);
   });
 
@@ -54,6 +54,12 @@ describe("getActivationLearning (#419 item 2)", () => {
     mocks.calls = [];
     expect((await getActivationLearning({ ...paused, status: "active" })).pausedAt).toBeNull();
     expect(mocks.calls).toEqual([]);
+  });
+
+  it("counts AdBrain's own automatic pauses (spend cap, capped run end, managed account stop)", async () => {
+    mocks.rows = [{ action: "spend.auto_paused", created_at: "2026-10-03T09:00:00Z" }];
+    const { getActivationLearning } = await import("@/lib/campaign/activation-learning");
+    expect((await getActivationLearning(paused)).pausedAt).toBe("2026-10-03T09:00:00Z");
   });
 
   it("fails soft: a read error means no warning, never a broken review", async () => {

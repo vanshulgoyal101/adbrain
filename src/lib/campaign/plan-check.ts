@@ -155,7 +155,7 @@ export function activationWarnings(input: {
     if (!(cost && cost > 0)) return ["A capped run is a new ad set, so Meta's learning starts from zero; results may be slow at first"];
     const results = Math.floor((input.dailyBudgetRupees * input.capDays) / cost);
     return results < LEARNING_EVENTS_PER_WEEK
-      ? [`A capped run is a new ad set, so Meta's learning starts from zero: ${input.capDays} ${input.capDays === 1 ? "day" : "days"} at about ${formatMoney(cost)} a result buys about ${results} results, under the ~${LEARNING_EVENTS_PER_WEEK} it needs, so it will likely end while still learning`]
+      ? [`A capped run is a new ad set, so Meta's learning starts from zero: ${input.capDays} ${input.capDays === 1 ? "day" : "days"} at about ${formatMoney(cost)} a result buys about ${results} ${results === 1 ? "result" : "results"}, under the ~${LEARNING_EVENTS_PER_WEEK} it needs, so it will likely end while still learning`]
       : [];
   }
   const paused = input.pausedAt ? Date.parse(input.pausedAt) : Number.NaN;

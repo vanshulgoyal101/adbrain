@@ -14,15 +14,18 @@ async function quietly<T>(read: () => Promise<T>): Promise<T | null> {
   }
 }
 
+/** The owner's pause and AdBrain's own (spend cap, capped run end, managed account stop). */
+const PAUSES = ["campaign.pause", "spend.auto_paused"];
+
 /** When AdBrain last paused this campaign, if that is its latest pause or resume (owner's session, RLS). */
 async function lastPausedAt(businessId: string, campaignId: string): Promise<string | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("audit_log").select("action, created_at")
     .eq("business_id", businessId).eq("entity_type", "campaign").eq("entity_id", campaignId)
-    .in("action", ["campaign.pause", "campaign.resume"])
+    .in("action", [...PAUSES, "campaign.resume"])
     .order("created_at", { ascending: false }).limit(1);
   const last = error ? null : data?.[0];
-  return last?.action === "campaign.pause" ? last.created_at : null;
+  return last && PAUSES.includes(last.action) ? last.created_at : null;
 }
 
 /**

@@ -90,6 +90,10 @@ describe("plan check (#419)", () => {
       expect(activationWarnings({ capDays: 3, dailyBudgetRupees: 280, costPerResultRupees: 69, pausedAt: null, now })).toEqual([
         "A capped run is a new ad set, so Meta's learning starts from zero: 3 days at about ₹69 a result buys about 12 results, under the ~50 it needs, so it will likely end while still learning",
       ]);
+      // ₹200 for 1 day at ₹150 a lead: "1 result", not "1 results".
+      expect(activationWarnings({ capDays: 1, dailyBudgetRupees: 200, costPerResultRupees: 150, pausedAt: null, now })).toEqual([
+        "A capped run is a new ad set, so Meta's learning starts from zero: 1 day at about ₹150 a result buys about 1 result, under the ~50 it needs, so it will likely end while still learning",
+      ]);
       // ₹500 a day for 7 days at ₹69 is about 50: enough to finish learning, so no note.
       expect(activationWarnings({ capDays: 7, dailyBudgetRupees: 500, costPerResultRupees: 69, pausedAt: null, now })).toEqual([]);
       for (const cost of [null, undefined, 0]) {
