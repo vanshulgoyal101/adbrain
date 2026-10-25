@@ -28,7 +28,7 @@ export const verdictSentence = (body) => body.split("\n")[0].split(/(?<=[.!?](?:
 // A verdict naming an earlier head with the same patch against the base also counts, so a clean
 // merge of the base into the PR needs no re-approval; migration hashes are still checked.
 /** @param {(sha: string) => boolean} [samePatch] */
-export function qaApproval(comments, headSha, samePatch = (_sha) => false) {
+export function qaApproval(comments, headSha, samePatch = /** @type {(sha: string) => boolean} */ (() => false)) {
   const head = headSha.slice(0, 7).toLowerCase();
   const namesHead = (c) => c.body.toLowerCase().includes(head)
     || (verdictSentence(c.body).toLowerCase().match(/\b[0-9a-f]{7,40}\b/g) ?? []).some((sha) => samePatch(sha));
@@ -53,11 +53,12 @@ export function releaseMigrations(files) {
 // lib/managed: 2-Tier child spend caps set from the customer's allowance (#522).
 export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget))/;
 
-// "CTO review of <sha>" or "CTO post-release review of <sha>"; in "<old> → <new>" the last sha is the one reviewed.
+// "CTO review of <sha>", "CTO post-release review of <sha>" or the Reviewer's "Reviewer review of <sha>" (#575);
+// in "<old> → <new>" the last sha is the one reviewed.
 export function ctoReviews(comments) {
   return comments.flatMap((c) => {
     const line = c.body.split("\n")[0];
-    const sha = line.match(/^[*_\s]*CTO (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
+    const sha = line.match(/^[*_\s]*(?:CTO|Reviewer) (?:post-release )?review of (?:[0-9a-f]{7,40}\s*(?:→|->)\s*)*([0-9a-f]{7,40})\b/i)?.[1];
     if (!sha) return [];
     const verdict = verdictSentence(c.body);
     const approved = /\*\*approved\.?\*\*/i.test(verdict) && !/\b(not approved|changes requested|request(ed)? changes|withdrawn|blocked)\b/i.test(verdict);
@@ -200,7 +201,7 @@ async function main() {
     const reviewed = cto.latest && !head.startsWith(cto.latest.sha) ? ` (reviewed ${cto.latest.sha}, same patch against main)` : "";
     if (cto.approved) console.log(`    CTO approved ${head.slice(0, 7)}${reviewed}: ${cto.latest.url}`);
     else if (dry) console.log(`    CTO has not approved ${head.slice(0, 7)} yet (latest CTO review: ${cto.latest?.url ?? "none"}); continuing because --dry-run.`);
-    else stop(`Money or migration PR without a CTO review approving ${head.slice(0, 7)} or a head with the same patch (latest: ${cto.latest?.url ?? "none"}). Dispatch item 5 needs QA plus the CTO.`);
+    else stop(`Money or migration PR without a Reviewer or CTO review approving ${head.slice(0, 7)} or a head with the same patch (latest: ${cto.latest?.url ?? "none"}). Dispatch item 5 needs QA plus the Reviewer or the CTO.`);
   }
 
   const migrations = [];
