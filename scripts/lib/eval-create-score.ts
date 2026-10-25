@@ -37,6 +37,11 @@ export type Summary = {
   fullBatchRate: number;
   adsSaved: number;
   adsExpected: number;
+  /** Ads whose copy passed every check, even if the image then failed (free images often do). */
+  conceptsSaved?: number;
+  conceptsExpected?: number;
+  /** Concepts no provider answered (free-tier limits): capacity, not copy quality. */
+  providerFailures?: number;
   firstTryRate: number;
   offerInFoldRate: number;
   scriptRate: number;
@@ -100,6 +105,9 @@ export function summarize(cases: CaseResult[]): Summary {
     fullBatchRate: round(rate(cases.map((result) => result.saved >= result.expected))),
     adsSaved: ads.length,
     adsExpected: cases.reduce((sum, result) => sum + result.expected, 0),
+    conceptsSaved: ads.length + cases.reduce((sum, result) => sum + result.failures.filter((failure) => failure.stage === "image").length, 0),
+    conceptsExpected: cases.reduce((sum, result) => sum + result.expected, 0),
+    providerFailures: cases.reduce((sum, result) => sum + result.failures.filter((failure) => failure.stage === "provider").length, 0),
     firstTryRate: round(rate(ads.map((ad) => ad.firstTry))),
     offerInFoldRate: round(rate(ads.flatMap((ad) => (ad.offerInFold === null ? [] : [ad.offerInFold])))),
     scriptRate: round(rate(ads.map((ad) => ad.scriptOk))),
@@ -115,7 +123,18 @@ export function summarize(cases: CaseResult[]): Summary {
   };
 }
 
-export type CompareOptions = { inrPerUsd?: number; maxInrPerRun?: number; wallBudgetMs?: number };
+/** Why a run can't gate (or be a baseline): over a third of its concepts hit provider limits; else null. */
+export function inconclusive(summary: Summary): string | null {
+  const limited = summary.providerFailures ?? 0;
+  const expected = summary.conceptsExpected ?? summary.adsExpected;
+  return limited * 3 > expected ? `inconclusive: ${limited} of ${expected} concepts hit free-tier provider limits; run again later` : null;
+}
+
+/**
+ * `deterministic`: a $0 run (#418, CTO Oct 25) is gated on the copy checks alone: copy saved, first-try
+ * passes, offer in the fold and script. Judge scores, cost, latency and free-image failures don't count.
+ */
+export type CompareOptions = { inrPerUsd?: number; maxInrPerRun?: number; wallBudgetMs?: number; deterministic?: boolean };
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -126,6 +145,17 @@ export function compareSummaries(before: Summary, after: Summary, options: Compa
   const lower = (label: string, was: number, now: number, tolerance = 0) => {
     if (now < was - tolerance) regressions.push(`${label} ${percent(was)} → ${percent(now)}`);
   };
+  if (options.deterministic) {
+    const expected = (summary: Summary) => summary.conceptsExpected ?? summary.adsExpected;
+    const limitedRun = inconclusive(after);
+    if (limitedRun) return { verdict: "fail" as const, regressions: [limitedRun] };
+    const copySaved = (summary: Summary) => (summary.conceptsSaved ?? summary.adsSaved) / ((expected(summary) - (summary.providerFailures ?? 0)) || 1);
+    lower("copy saved", copySaved(before), copySaved(after));
+    lower("first-try passes", before.firstTryRate, after.firstTryRate, 0.1);
+    lower("offer in the first 125 characters", before.offerInFoldRate, after.offerInFoldRate);
+    lower("post text in the chosen script", before.scriptRate, after.scriptRate);
+    return { verdict: regressions.length ? "fail" as const : "pass" as const, regressions };
+  }
   lower("full batches", before.fullBatchRate, after.fullBatchRate);
   lower("ads saved", before.adsSaved / (before.adsExpected || 1), after.adsSaved / (after.adsExpected || 1));
   lower("first-try passes", before.firstTryRate, after.firstTryRate, 0.1);

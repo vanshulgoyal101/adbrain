@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareSummaries, offerInFold, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
+import { compareSummaries, inconclusive, offerInFold, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
 
 const ad = (overrides: Partial<CaseResult["ads"][number]> = {}): CaseResult["ads"][number] => ({
   angle: "offer", headline: "Book your $49 exam", primaryText: "New-patient exam for $49.\nBook today.", cta: "BOOK_NOW",
@@ -63,4 +63,45 @@ describe("Create eval scoring (#418)", () => {
     const after = summarize([run("a", undefined, { wallMs: 70_000 }), run("b", undefined, { wallMs: 75_000 })]);
     expect(compareSummaries(before, after).regressions).toEqual(["Create p90 75 s is over the 60 s budget (was 40 s)"]);
   });
+
+  // #418, CTO Oct 25: deterministic checks at $0 gate the next generation change.
+  it("counts copy that passed even when its free image failed", () => {
+    const summary = summarize([run("a", [ad(), ad()], { saved: 2, failures: [{ angle: "problem", stage: "image", rules: [] }] }),
+      run("b", [ad()], { saved: 1, failures: [{ angle: "offer", stage: "concept", rules: ["unsupported-commercial-claim"] }, { angle: "value", stage: "image", rules: [] }] })]);
+    expect(summary).toMatchObject({ conceptsSaved: 5, conceptsExpected: 6, adsSaved: 3 });
+  });
+
+  it("gates a $0 run on deterministic copy checks only: no judge, cost, latency or free-image noise", () => {
+    const before = summarize([run("a"), run("b")]);
+    const noisy = summarize([
+      run("a", [ad({ judge: undefined, costUsd: 0 }), ad({ judge: undefined, costUsd: 0 })], { saved: 2, wallMs: 190_000, costUsd: 0,
+        failures: [{ angle: "problem", stage: "image", rules: [] }] }),
+      run("b", [ad({ judge: undefined, costUsd: 0 }), ad({ judge: undefined, costUsd: 0 }), ad({ judge: undefined, costUsd: 0 })], { wallMs: 100_000, costUsd: 0 }),
+    ]);
+    expect(compareSummaries(before, noisy, { deterministic: true })).toEqual({ verdict: "pass", regressions: [] });
+    expect(compareSummaries(before, noisy).verdict).toBe("fail");
+    const worse = summarize([
+      run("a", [ad({ firstTry: false, offerInFold: false }), ad({ scriptOk: false })], { saved: 2, failures: [{ angle: "offer", stage: "concept", rules: ["offer-below-fold"] }] }),
+      run("b"),
+    ]);
+    expect(compareSummaries(before, worse, { deterministic: true }).regressions).toEqual([
+      "copy saved 100% → 83%", "first-try passes 100% → 80%", "offer in the first 125 characters 100% → 80%", "post text in the chosen script 100% → 80%",
+    ]);
+  });
+
+  it("leaves free-tier provider failures out of copy saved, and calls a run with too many inconclusive", () => {
+    const before = summarize([run("a"), run("b")]);
+    const provider = { angle: "value", stage: "provider", rules: ["other"] };
+    const oneLimited = summarize([run("a", [ad(), ad()], { saved: 2, failures: [provider] }), run("b")]);
+    expect(oneLimited).toMatchObject({ conceptsSaved: 5, providerFailures: 1 });
+    expect(compareSummaries(before, oneLimited, { deterministic: true })).toEqual({ verdict: "pass", regressions: [] });
+    const limited = summarize([run("a", [ad()], { saved: 1, failures: [provider, provider] }), run("b", [ad()], { saved: 1, failures: [provider, provider] })]);
+    expect(compareSummaries(before, limited, { deterministic: true }).regressions).toEqual([
+      "inconclusive: 4 of 6 concepts hit free-tier provider limits; run again later",
+    ]);
+    // The same rule keeps an inconclusive run from becoming the baseline.
+    expect(inconclusive(limited)).toBe("inconclusive: 4 of 6 concepts hit free-tier provider limits; run again later");
+    expect(inconclusive(oneLimited)).toBeNull();
+  });
 });
+

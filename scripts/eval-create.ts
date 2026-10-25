@@ -7,12 +7,13 @@
  *
  * --profile paid (default): production's models on OpenRouter, about $0.05 per case plus judge calls;
  * stops before --cap-usd (default 5), never touches the free Groq/Gemini keys (#410).
- * --profile free: what internal accounts get (#466): Gemini then Groq, Pollinations images, judged
- * by the same Gemini model on Google directly. $0; OpenRouter is switched off for the run.
+ * --profile free: the $0 gate for generation changes (CTO, Oct 25): Gemini then Groq on the free keys,
+ * Pollinations images, OpenRouter switched off. Runs the two gate cases (English, Hindi) with no judge
+ * (--judge adds it) and compares only the deterministic copy checks with tests/eval/baseline-free.json.
  *
- *   npx tsx --env-file=.env.local scripts/eval-create.ts [--profile free] [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge]
+ *   npx tsx --env-file=.env.local scripts/eval-create.ts [--profile free] [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge | --judge]
  *
- * Without --write-baseline it compares with tests/eval/baseline.json and exits 1 when a customer
+ * Without --write-baseline it compares with its profile's baseline and exits 1 when a customer
  * would see something worse (the upgrade-only gate). Bake-off: set EVAL_TEXT_MODEL,
  * EVAL_IMAGE_MODEL or EVAL_JUDGE_MODEL. Report and rendered ads go to /tmp/adbrain-eval/<time>/.
  */
@@ -23,7 +24,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import type { BrandContext } from "@/lib/templates/ads";
 import {
-  compareSummaries, expectedScript, offerInFold, summarize, textScript,
+  compareSummaries, expectedScript, inconclusive, offerInFold, summarize, textScript,
   type AdResult, type CaseResult, type JudgeScore,
 } from "./lib/eval-create-score";
 import { evalProfile } from "./lib/eval-profile";
@@ -41,7 +42,7 @@ Object.assign(process.env, profileEnv);
 const FREE = settings.profile === "free";
 
 const ROOT = process.cwd();
-const BASELINE = join(ROOT, "tests/eval/baseline.json");
+const BASELINE = join(ROOT, settings.baseline);
 const CAP_USD = Number(option("cap-usd") ?? 5);
 const REPEAT = Math.max(1, Number(option("repeat") ?? 1));
 if (!FREE && !OPENROUTER_KEY) throw new Error("Set OPENROUTER_API_KEYS (run with --env-file=.env.local).");
@@ -49,7 +50,7 @@ if (FREE && !GOOGLE_KEY) throw new Error("Set GOOGLE_AI_API_KEYS (run with --env
 
 type EvalCase = { id: string; language: string; source: string; brand: BrandContext; brief: string; sourceFacts: string[]; offerTerms: string[] };
 const allCases = (JSON.parse(readFileSync(join(ROOT, "tests/eval/cases.json"), "utf8")) as { cases: EvalCase[] }).cases;
-const only = option("cases")?.split(",");
+const only = option("cases")?.split(",") ?? settings.gateCases ?? undefined;
 const cases = only ? allCases.filter((item) => only.includes(item.id)) : allCases;
 
 const COPY_RUBRIC = `5 = specific, on-brand, clear CTA, no clichés, sounds human.
@@ -177,7 +178,7 @@ async function main() {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = option("out") ?? join("/tmp/adbrain-eval", stamp);
   mkdirSync(outDir, { recursive: true });
-  const judging = !flag("no-judge");
+  const judging = flag("judge") || (settings.judgeByDefault && !flag("no-judge"));
   const judgeCalibration = judging ? await calibrateJudge() : null;
   if (judgeCalibration) console.log(`judge ${judgeCalibration.model}: MAE ${judgeCalibration.mae} on ${judgeCalibration.cases} gold ads${judgeCalibration.mae > 0.15 ? " (above 0.15: do not trust its scores)" : ""}`);
 
@@ -237,17 +238,22 @@ async function main() {
   console.log(`\n${JSON.stringify(summary, null, 2)}\nspent $${spentUsd.toFixed(3)} (cap $${CAP_USD}); report and ads in ${outDir}`);
 
   if (flag("write-baseline")) {
-    if (FREE) throw new Error("The baseline is production's paid profile; a free run only compares against it.");
-    if (only || results.length < allCases.length * REPEAT) throw new Error("A baseline needs every case, every repeat; run without --cases and under the cap.");
+    const expected = settings.gateCases ?? allCases.map((item) => item.id);
+    if (option("cases") || results.length < expected.length * REPEAT) throw new Error("A baseline needs every gate case, every repeat; run without --cases and under the cap.");
+    const limitedRun = inconclusive(summary);
+    if (limitedRun) throw new Error(`Not a baseline: ${limitedRun}.`);
     writeFileSync(BASELINE, `${JSON.stringify(report, null, 2)}\n`);
     console.log(`baseline written to ${BASELINE}`);
     return;
   }
-  if (!existsSync(BASELINE)) return;
+  if (!existsSync(BASELINE)) {
+    console.log(`\nNo baseline at ${settings.baseline} yet: record one with --write-baseline.`);
+    return;
+  }
   const baseline = JSON.parse(readFileSync(BASELINE, "utf8")) as typeof report;
   const ids = new Set(results.map((result) => result.id));
   const before = only ? summarize(baseline.cases.filter((result) => ids.has(result.id))) : baseline.summary;
-  const { verdict, regressions } = compareSummaries(before, summary);
+  const { verdict, regressions } = compareSummaries(before, summary, { deterministic: settings.deterministic });
   console.log(`\nvs baseline ${baseline.commit} (${baseline.settings.textModel}, ${baseline.settings.imageModel}): ${verdict.toUpperCase()}`);
   for (const line of regressions) console.log(`  worse: ${line}`);
   if (verdict === "fail") process.exitCode = 1;
