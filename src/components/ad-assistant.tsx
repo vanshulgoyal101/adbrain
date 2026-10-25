@@ -43,9 +43,13 @@ type Answer = InterviewAnswer;
 type PreparedBrief = { brief: string; language?: string; recommendations?: { label: string; prompt: string }[] };
 type Turn =
   | { role: "user"; text: string }
-  | { role: "assistant"; text: string }
+  | { role: "assistant"; text: string; progress?: boolean }
   | { role: "question"; question: Question }
-  | { role: "result"; creatives: Creative[] };
+  // `missing` ads failed and can be made again from the same brief (#634).
+  | { role: "result"; creatives: Creative[]; missing?: number; brief?: string; language?: string };
+
+const FULL_BATCH = 3;
+const withoutProgress = (turns: Turn[]) => turns.filter((turn) => !(turn.role === "assistant" && turn.progress));
 
 const RANDOM_ANSWER = "Surprise me — pick a fun, on-brand option.";
 const AI_ANSWER = "Let the AI decide the best option based on the brand.";
@@ -59,6 +63,8 @@ interface Draft {
   prepared?: PreparedBrief;
   recentGoals?: string[];
   generationId?: string;
+  /** How many ads `generationId` asked for: 3, or fewer when making the missing ones (#634). */
+  generationCount?: number;
   referenceBrief?: string;
   language?: CreateLanguageId;
   languagePicked?: boolean;
@@ -94,6 +100,7 @@ function readDraft(businessId: string): Draft | null {
       } : undefined,
       recentGoals: Array.isArray(d.recentGoals) ? d.recentGoals.filter((item): item is string => typeof item === "string").slice(-6) : [],
       generationId: typeof d.generationId === "string" && /^[0-9a-f-]{36}$/i.test(d.generationId) ? d.generationId : undefined,
+      generationCount: Number.isInteger(d.generationCount) && d.generationCount! >= 1 && d.generationCount! <= FULL_BATCH ? d.generationCount : undefined,
       referenceBrief: typeof d.referenceBrief === "string" ? d.referenceBrief.slice(0, 2000) : undefined,
       language: isCreateLanguage(d.language) ? d.language : undefined,
       languagePicked: d.languagePicked === true,
@@ -136,13 +143,14 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
   const [error, setError] = useState<string | null>(null);
   // Remembers the last network action so an error can be retried in place.
   const [lastAction, setLastAction] = useState<
-    { type: "step"; answers: Answer[] } | { type: "generate"; brief: string; language?: string } | null
+    { type: "step"; answers: Answer[] } | { type: "generate"; brief: string; language?: string; count?: number } | null
   >(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followConversationRef = useRef(true);
   const resultCountRef = useRef(0);
   const inFlightRef = useRef(false);
   const [generationId, setGenerationId] = useState<string | null>(null);
+  const [generationCount, setGenerationCount] = useState(FULL_BATCH);
   const [live, setLive] = useState<LiveAd[] | null>(null);
 
   // Restore after mount (never during SSR) so server and client markup agree.
@@ -164,13 +172,14 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
       setRecentGoals(saved.recentGoals ?? []);
       setReferenceBrief(saved.referenceBrief);
       setGenerationId(saved.generationId ?? null);
+      setGenerationCount(saved.generationCount ?? FULL_BATCH);
       // Older drafts kept only the interview's language on the prepared brief.
       const savedLanguage = saved.language ?? (isCreateLanguage(saved.prepared?.language) ? saved.prepared.language : undefined);
       if (savedLanguage) setLanguage(savedLanguage);
       setLanguagePicked(saved.languagePicked === true);
       if (saved.generationId && saved.phase !== "done" && saved.prepared) {
         setPhase("chat");
-        setLastAction({ type: "generate", ...saved.prepared });
+        setLastAction({ type: "generate", ...saved.prepared, count: saved.generationCount });
         setError("An earlier generation may still be processing. Check for saved results before starting another.");
       } else if (saved.started && saved.phase === "chat" && saved.turns.at(-1)?.role === "user") {
         setLastAction({ type: "step", answers: saved.answers });
@@ -194,11 +203,12 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
       prepared,
       recentGoals,
       generationId: generationId ?? undefined,
+      generationCount,
       referenceBrief,
       language,
       languagePicked,
     });
-  }, [restored, business.id, goal, started, turns, answers, phase, prepared, recentGoals, referenceBrief, generationId, language, languagePicked]);
+  }, [restored, business.id, goal, started, turns, answers, phase, prepared, recentGoals, referenceBrief, generationId, generationCount, language, languagePicked]);
 
   useLayoutEffect(() => {
     const node = scrollRef.current;
@@ -292,40 +302,57 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
     }
   }
 
-  async function generate(brief: string, language?: string) {
+  // A full batch adds a result; making the missing ones adds to the last result (#634).
+  function showResult(creatives: Creative[], count: number, brief?: string, language?: string, final = true) {
+    // While a generation is still running, the rest may yet arrive; don't offer to remake them.
+    const missing = final ? Math.max(0, count - creatives.length) : 0;
+    setTurns((t) => {
+      const settled = withoutProgress(t);
+      const index = count < FULL_BATCH ? settled.findLastIndex((turn) => turn.role === "result") : -1;
+      if (index < 0) return [...settled, { role: "result", creatives, missing, brief, language }];
+      return settled.map((turn, i) => (i === index && turn.role === "result"
+        ? { ...turn, creatives: [...turn.creatives, ...creatives], missing }
+        : turn));
+    });
+    setPhase("done");
+  }
+
+  async function generate(brief: string, language?: string, count = FULL_BATCH, fresh = false) {
     if (inFlightRef.current) return;
     const ownsLock = !inFlightRef.current;
     if (ownsLock) inFlightRef.current = true;
     setPhase("generating");
     setError(null);
-    setLastAction({ type: "generate", brief, language });
-    if (generationId) {
+    setLastAction({ type: "generate", brief, language, count });
+    if (generationId && !fresh) {
       try {
-        const recovered = await recoverPersistedGeneration(generationId);
+        const recovered = await recoverPersistedGeneration(generationId, count, brief, language);
         if (!recovered) {
           setError("No saved ads found yet. Check again shortly or open Review. No new ads were started.");
           setPhase("chat");
         }
       } finally {
+        setTurns(withoutProgress);
         if (ownsLock) inFlightRef.current = false;
       }
       return;
     }
     const newGenerationId = crypto.randomUUID();
     setGenerationId(newGenerationId);
-    writeDraft(business.id, { goal, started, turns, answers, phase: "chat", prepared: { ...prepared, brief, language }, recentGoals, generationId: newGenerationId, referenceBrief, language: isCreateLanguage(language) ? language : undefined, languagePicked });
+    setGenerationCount(count);
+    writeDraft(business.id, { goal, started, turns, answers, phase: "chat", prepared: { ...prepared, brief, language }, recentGoals, generationId: newGenerationId, generationCount: count, referenceBrief, language: isCreateLanguage(language) ? language : undefined, languagePicked });
     setTurns((t) => [
-      ...t,
-      { role: "assistant", text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
+      ...withoutProgress(t),
+      { role: "assistant", progress: true, text: "Creating your campaign images and copy. This can take a few minutes. Keep this page open; nothing will be published." },
     ]);
-    let slots: LiveAd[] = Array.from({ length: 3 }, () => ({ stage: "starting" as const }));
+    let slots: LiveAd[] = Array.from({ length: count }, () => ({ stage: "starting" as const }));
     setLive(slots);
     try {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
-          businessId: business.id, brief, count: 3, language, generationId: newGenerationId,
+          businessId: business.id, brief, count, language, generationId: newGenerationId,
           sourceFacts: [goal.trim().slice(0, 500), ...answers
             .filter((answer) => !(answer.options ?? []).includes(answer.answer) && answer.answer !== AI_ANSWER && answer.answer !== RANDOM_ANSWER)
             .map((answer) => answer.answer.trim().slice(0, 500))].filter(Boolean).slice(0, 12),
@@ -341,7 +368,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
       };
       if (status < 200 || status >= 300) {
         if (status >= 500 || status === 408) {
-          const recovered = await recoverPersistedGeneration(newGenerationId);
+          const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
           if (recovered) return;
           setError("We can't confirm your ads were saved yet. Check again shortly or open Review. No new ads were started.");
           setPhase("chat");
@@ -356,31 +383,31 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
         return;
       }
       if (!data.creatives?.length) {
-        const recovered = await recoverPersistedGeneration(newGenerationId);
+        const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
         if (recovered) return;
         setError("Your ads finished, but none came back here. Open Review to see what was saved.");
         setPhase("chat");
         return;
       }
-      setTurns((t) => [...t, { role: "result", creatives: withLiveEdits(orderBySlots(slots, data.creatives!)) }]);
-      setPhase("done");
+      showResult(withLiveEdits(orderBySlots(slots, data.creatives!)), count, brief, language);
     } catch {
-      const recovered = await recoverPersistedGeneration(newGenerationId);
+      const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
       if (!recovered) {
         setError("Your ads are still being made, or the server stopped responding. Open Review shortly; don't try again yet, because finished ads may already be saved.");
         setPhase("chat");
       }
     } finally {
       setLive(null);
+      setTurns(withoutProgress);
       if (ownsLock) inFlightRef.current = false;
     }
   }
 
-  async function recoverPersistedGeneration(generationId: string): Promise<boolean> {
+  async function recoverPersistedGeneration(generationId: string, count: number, brief: string, language?: string): Promise<boolean> {
     for (let attempt = 0; attempt < 15; attempt += 1) {
       try {
         const res = await fetch(
-          `/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=3`,
+          `/api/creatives/generate?businessId=${encodeURIComponent(business.id)}&generationId=${encodeURIComponent(generationId)}&expectedCount=${count}`,
           { cache: "no-store" },
         );
         if (res.status === 429) {
@@ -394,8 +421,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
             creatives?: Creative[];
           };
           if (data.creatives?.length) {
-            setTurns((t) => [...t, { role: "result", creatives: withLiveEdits(data.creatives!) }]);
-            setPhase("done");
+            showResult(withLiveEdits(data.creatives!), count, brief, language, data.status !== "partial" && data.status !== "processing");
             if (data.status === "partial") {
               setError("Some ads finished while we reconnected. See them in Review; no duplicate ads were started.");
             }
@@ -421,10 +447,20 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
     return false;
   }
 
+  const lastResultIndex = turns.findLastIndex((turn) => turn.role === "result");
+
+  function makeMissing() {
+    const result = turns[lastResultIndex];
+    if (result?.role !== "result" || !result.missing || loading || phase === "generating") return;
+    const brief = (result.brief ?? prepared?.brief ?? "").trim();
+    if (!brief) return;
+    generate(brief, result.brief ? result.language : language, Math.min(result.missing, FULL_BATCH), true);
+  }
+
   function retry() {
     if (!lastAction || loading) return;
     if (lastAction.type === "step") step(lastAction.answers);
-    else generate(lastAction.brief, lastAction.language);
+    else generate(lastAction.brief, lastAction.language, lastAction.count);
   }
 
   function changeAnswer() {
@@ -584,6 +620,7 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
               onAnswer={answer}
               onStatus={setResultStatus}
               onEdited={setResultCopy}
+              onMakeMissing={i === lastResultIndex && phase !== "generating" && !loading ? makeMissing : undefined}
               brand={business}
             />
           ))}
@@ -677,6 +714,7 @@ function TurnView({
   onAnswer,
   onStatus,
   onEdited,
+  onMakeMissing,
   brand,
 }: {
   turn: Turn;
@@ -687,6 +725,7 @@ function TurnView({
   onAnswer: (q: Question, text: string, displayText?: string) => void;
   onStatus: (id: string, status: "draft" | "approved") => void;
   onEdited: (creative: Creative) => void;
+  onMakeMissing?: () => void;
   brand: Business;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -723,6 +762,18 @@ function TurnView({
             <ResultCard key={c.id} creative={c} brand={brand} onStatus={(status) => onStatus(c.id, status)} onEdited={onEdited} />
           ))}
         </div>
+        {!!turn.missing && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span className="min-w-0 flex-1">
+              {turn.missing} of {turn.creatives.length + turn.missing} ads couldn&apos;t be made this time.
+            </span>
+            {onMakeMissing && (
+              <Button size="sm" variant="outline" onClick={onMakeMissing}>
+                <RotateCcw className="h-4 w-4" /> Make {turn.missing === 1 ? "1 more ad" : `${turn.missing} more ads`}
+              </Button>
+            )}
+          </div>
+        )}
         <p className="text-xs text-slate-500">
           Tap <span className="font-medium">Use this ad</span> on the ones you like — that
           approves them for launch. Use <span className="font-medium">Edit</span> to change the

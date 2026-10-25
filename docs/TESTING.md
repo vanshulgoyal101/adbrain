@@ -82,7 +82,8 @@ All automated production browser runs from the shared Mac come from one IP addre
 - **Internal accounts make free images** (`internal-free-providers`, #449, #466): an internal
   account's concept (the recorded Cedar Ridge reply) comes from Haiku like a customer's, and its
   image from Pollinations without references. Three images run one at a time, waiting out
-  Pollinations' recorded 402 Retry-After; a Pollinations that stays busy fails after about 90 s,
+  Pollinations' recorded 402 Retry-After (at least 15 s, since its 45 s free limit says
+  Retry-After: 1, and a fast 404 counts as busy, #634); a Pollinations that stays busy fails after about 90 s,
   and one that is down fails at once, never reaching the paid image model. The reviewer, the owner
   and customers keep the paid images.
 - **Create when the AI is busy** (`create-busy`, #410): through the production order

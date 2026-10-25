@@ -111,8 +111,28 @@ describe("core: internal accounts write on Haiku and make free images (#449, #46
     expect(pictures.map((picture) => picture.provider)).toEqual(["pollinations", "pollinations", "pollinations"]);
     expect(stats.maxConcurrentImages).toBe(1);
     expect(calls.filter((call) => call === "image.pollinations.ai/prompt")).toHaveLength(5);
-    // 5 requests of 2 s each, plus two 8 s Retry-After waits.
-    expect(Date.now() - clock.startedAt).toBe(26_000);
+    // 5 requests of 2 s each, plus two waits raised from the 8 s Retry-After to the 15 s floor (#634).
+    expect(Date.now() - clock.startedAt).toBe(40_000);
+  });
+
+  // #634: Pollinations' recorded free-tier answer (Oct 25) says Retry-After: 1 but allows one image
+  // per 45 s per address. Production saw a fast 404 in the same spot, so a 404 is treated as busy too.
+  it.each([
+    ["402 FREE_LIMIT with Retry-After: 1", () => Response.json({ status: 402, success: false, error: { code: "FREE_LIMIT",
+      message: "Free limit reached: 1 image every 45 seconds per IP. Retry after 1s" } }, { status: 402, headers: { "retry-after": "1" } })],
+    ["404", () => new Response("Not Found", { status: 404 })],
+  ])("makes three internal images past Pollinations' 45 s free limit without hammering it (%s)", async (_case, limited) => {
+    let lastImageAt = -Infinity;
+    const { calls } = network({ pollinations: () => {
+      if (Date.now() - lastImageAt < 45_000) return limited();
+      lastImageAt = Date.now();
+      return undefined;
+    } });
+    const { generateImage } = await import("@/lib/imageGen");
+    useVirtualDeadlines();
+    const pictures = await settleInVirtualTime(asUser(INTERNAL, () => Promise.all([generateImage(image), generateImage(image), generateImage(image)])));
+    expect(pictures.map((picture) => picture.provider)).toEqual(["pollinations", "pollinations", "pollinations"]);
+    expect(calls.filter((call) => call === "image.pollinations.ai/prompt").length).toBeLessThanOrEqual(9);
   });
 
   it("fails an internal image clearly once Pollinations stays busy for about 90 s, never trying the paid model", async () => {
