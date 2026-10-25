@@ -30,8 +30,8 @@ vi.mock("@/lib/meta/client", async (importOriginal) => {
 
 const actor = { businessId: "7d2a5b1f-6b54-4d66-8c2a-4a8b4a1d3b21", userId: "6c1f4f0e-5a43-4c55-9b1f-3f7a3f0c2a10" };
 const ready = { business_id: actor.businessId, state: "ready", child_business_id: "2000000000000001", ad_account_id: "act_3000000000000001",
-  page_id: "4000000000000001", funding_state: "card_attached", generation: 1, manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000001" };
-const childToken = childTokenRpc({ "0c8e5f4a-1b2c-4d3e-8f9a-000000000001": { businessId: actor.businessId, token: "child-system-token" } });
+  page_id: "4000000000000001", funding_state: "card_attached", generation: 1, manager_token_id: "00000000-0000-4000-8000-000000000621" };
+const childToken = childTokenRpc({ "00000000-0000-4000-8000-000000000621": { businessId: actor.businessId, token: "child-system-token" } });
 const balance = { advertisingAllocationPaise: 40_000, advertisingRefundedPaise: 0, held: false, reservations: [] };
 
 function memoryStore(state: SpendCapState = { dirty: true, leased: false, action: null, capPaise: null, roomPaise: null }) {

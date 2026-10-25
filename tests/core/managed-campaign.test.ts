@@ -33,18 +33,18 @@ vi.mock("@/lib/supabase/admin", () => ({
 const BUSINESS = "6f0c2a10-5a43-4c55-9b1f-3f7a3f0c8c1f";
 const PARENT_TOKEN = "parent-system-user-token";
 const CHILD_TOKEN = "child-system-user-token";
-const TOKEN_ID = "0c8e5f4a-1b2c-4d3e-8f9a-0b1c2d3e4f5a";
+const CHILD_ROW_ID = "00000000-0000-4000-8000-000000000624";
 const KEY = Buffer.alloc(32, 7).toString("base64");
 let LEDGER: Record<string, unknown>;
 const BASE_LEDGER = {
   business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: "act_2398686420592052",
-  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: TOKEN_ID,
+  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID,
 };
 async function storedChildToken(overrides: Record<string, unknown> = {}) {
   const { encryptMetaToken } = await import("@/lib/meta/token-store");
-  const sealed = encryptMetaToken(CHILD_TOKEN, { tokenId: TOKEN_ID, businessId: BUSINESS });
-  mocks.rpc.mockImplementation(async (name: string, args: Record<string, string>) => name === "meta_token_get" && args.p_token_id === TOKEN_ID && args.p_business_id === BUSINESS
-    ? { data: [{ id: TOKEN_ID, business_id: BUSINESS, ciphertext: sealed.ciphertext, nonce: sealed.nonce, auth_tag: sealed.authTag, key_id: sealed.keyId,
+  const sealed = encryptMetaToken(CHILD_TOKEN, { tokenId: CHILD_ROW_ID, businessId: BUSINESS });
+  mocks.rpc.mockImplementation(async (name: string, args: Record<string, string>) => name === "meta_token_get" && args.p_token_id === CHILD_ROW_ID && args.p_business_id === BUSINESS
+    ? { data: [{ id: CHILD_ROW_ID, business_id: BUSINESS, ciphertext: sealed.ciphertext, nonce: sealed.nonce, auth_tag: sealed.authTag, key_id: sealed.keyId,
       format_version: sealed.formatVersion, revoked_at: null, expires_at: null, data_access_expires_at: null, ...overrides }], error: null }
     : { data: [], error: null });
 }
@@ -117,7 +117,7 @@ describe("core: a managed customer's campaign runs on their child account (#525)
     expect([...tape.tokens].filter((token) => token !== "REDACTED")).toEqual([CHILD_TOKEN]);
     expect(tape.posts.every((path) => path.startsWith(`${LEDGER.ad_account_id}/`))).toBe(true);
     expect(mocks.tables).not.toContain("meta_connections");
-    expect(mocks.rpc.mock.calls.map(([name, args]) => [name, args])).toEqual([["meta_token_get", { p_token_id: TOKEN_ID, p_business_id: BUSINESS }]]);
+    expect(mocks.rpc.mock.calls.map(([name, args]) => [name, args])).toEqual([["meta_token_get", { p_token_id: CHILD_ROW_ID, p_business_id: BUSINESS }]]);
   });
 
   it("syncs and pauses through the same binding checks as an OAuth customer", async () => {

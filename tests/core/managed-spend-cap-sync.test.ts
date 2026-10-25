@@ -37,10 +37,10 @@ const OWNER = "8c1f4f0e-5a43-4c55-9b1f-3f7a3f0c2a10";
 const CAMPAIGN_ROW = "0b8f4c1e-2d3a-4b5c-8d9e-0f1a2b3c4d5e";
 const PARENT_TOKEN = "parent-system-user-token";
 const CHILD_TOKEN = "child-system-user-token";
-const TOKEN_ID = "0c8e5f4a-1b2c-4d3e-8f9a-0b1c2d3e4f5a";
+const CHILD_ROW_ID = "00000000-0000-4000-8000-000000000624";
 const ACCOUNT = "act_2398686420592052";
 const LEDGER = { business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: ACCOUNT,
-  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: TOKEN_ID };
+  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID };
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 const funding = (fundingTape as Exchange[])[0];
 const fundingBody = funding.body as Record<string, unknown>;
@@ -83,7 +83,7 @@ function memoryStore(inputs: { mediaThisAccountPaise: number }) {
 beforeEach(() => {
   vi.resetModules();
   mocks.campaignUpdates.length = 0;
-  const childToken = childTokenRpc({ [TOKEN_ID]: { businessId: BUSINESS, token: CHILD_TOKEN } });
+  const childToken = childTokenRpc({ [CHILD_ROW_ID]: { businessId: BUSINESS, token: CHILD_TOKEN } });
   mocks.rpc.mockImplementation(async (name: string, args: Record<string, string>) => name === "meta_token_get" ? childToken(name, args) : { data: null, error: null });
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: "https://core-test.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",

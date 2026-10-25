@@ -18,7 +18,7 @@ const ready = {
   business_id: "business-1", state: "ready", child_business_id: "2000000000000001", ad_account_id: "act_3000000000000001",
   page_id: "4000000000000001", funding_state: "card_attached", generation: 3, waba_id: null, phone_number_id: null,
   step_keys: {}, last_error: null, created_at: "2026-10-25T00:00:00Z", updated_at: "2026-10-25T00:00:00Z",
-  manager_user_id: "6100000000000001", manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000001",
+  manager_user_id: "6100000000000001", manager_token_id: "00000000-0000-4000-8000-000000000621",
 };
 const CHILD = "child-system-token";
 let managedRows: Record<string, unknown>[] = [];
@@ -28,7 +28,7 @@ beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
   mocks.managedFilters = [];
-  managedRows = [ready, { ...ready, business_id: "business-2", ad_account_id: "act_9", page_id: "9", manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000002" }];
+  managedRows = [ready, { ...ready, business_id: "business-2", ad_account_id: "act_9", page_id: "9", manager_token_id: "00000000-0000-4000-8000-000000000622" }];
   oauthRow = null;
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://core-test.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon");
@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.stubEnv("META_TOKEN_ENCRYPTION_KEY", CHILD_TOKEN_KEY);
   mocks.adminRpc.mockImplementation(childTokenRpc({
     [ready.manager_token_id]: { businessId: "business-1", token: CHILD },
-    "0c8e5f4a-1b2c-4d3e-8f9a-000000000002": { businessId: "business-2", token: "other-child-token" },
+    "00000000-0000-4000-8000-000000000622": { businessId: "business-2", token: "other-child-token" },
   }));
   mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   mocks.spendCapGate.mockResolvedValue("allowed");
@@ -147,7 +147,7 @@ describe("Meta credentials for a managed business (#525)", () => {
     managedRows = [{ ...ready, manager_token_id: null }];
     await expect(run({ purpose: "read_insights" })).rejects.toThrow(/unavailable/i);
     expect(mocks.adminRpc).not.toHaveBeenCalled();
-    managedRows = [{ ...ready, manager_token_id: "0c8e5f4a-1b2c-4d3e-8f9a-000000000002" }];
+    managedRows = [{ ...ready, manager_token_id: "00000000-0000-4000-8000-000000000622" }];
     await expect(run({ purpose: "pause", expectedGeneration: 3, binding: { adAccountId: ready.ad_account_id, pageId: ready.page_id } })).rejects.toThrow(/unavailable/i);
     vi.stubEnv("META_PARENT_SYSTEM_TOKEN", "");
     managedRows = [ready];
