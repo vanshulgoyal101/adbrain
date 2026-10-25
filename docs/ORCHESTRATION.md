@@ -113,7 +113,7 @@ Routine steps never wait for the CEO or the CTO.
 Chats can't wake themselves, but one chat can message another (`list_sessions`,
 `get_session_context`, `send_message`). The **CEO chat supervises and the CTO chat backs
 it up** (whichever is running). Each tick, at most every 10 minutes:
-1. `npm run -s team-status` lists each role as `waiting` (its waiter runs: healthy),
+1. `npm run team-status` lists each role as `waiting` (its waiter runs: healthy),
    `has-work`, `no-work` or `error` (read-only; `wait-for-work --probe` takes no lock).
 2. `list_sessions` maps roles to chats by title. For each `has-work` role:
    - chat **idle** → `send_message` (queue): "You are <Role>. Your next item: <first item>.
