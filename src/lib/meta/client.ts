@@ -1,4 +1,3 @@
-import { getEnv } from "@/lib/env";
 import { z } from "zod";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
@@ -551,32 +550,6 @@ export function geoItemsToTargeting(
 /** True when a targeting spec has at least one place. */
 export function hasGeo(geo: GeoTargeting | undefined): boolean {
   return !!(geo?.cities?.length || geo?.regions?.length || geo?.countries?.length);
-}
-
-/** Read the single-tenant Meta credentials from the environment. */
-export function getMetaCredentialsFromEnv(): MetaCredentials | null {
-  const env = getEnv();
-  if (
-    !env.META_SYSTEM_USER_TOKEN ||
-    !env.META_AD_ACCOUNT_ID ||
-    !env.META_PAGE_ID
-  ) {
-    return null;
-  }
-  return {
-    adAccountId: env.META_AD_ACCOUNT_ID,
-    pageId: env.META_PAGE_ID,
-    accessToken: env.META_SYSTEM_USER_TOKEN,
-  };
-}
-
-export function isMetaConfigured(): boolean {
-  return getMetaCredentialsFromEnv() !== null;
-}
-
-export function metaClientFromEnv(): MetaClient | null {
-  const creds = getMetaCredentialsFromEnv();
-  return creds ? new MetaClient(creds) : null;
 }
 
 /**

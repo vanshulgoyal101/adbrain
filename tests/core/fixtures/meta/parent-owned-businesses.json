@@ -1,0 +1,6 @@
+{
+  "recordedAt": "2026-10-25",
+  "note": "#521: Meta's real answer to GET /{parent}/owned_businesses?fields=id,name,child_business_external_id&limit=200 with the parent system-user token (read-only; Solaride has no child businesses yet). No IDs or token.",
+  "status": 200,
+  "body": { "data": [] }
+}

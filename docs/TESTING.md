@@ -37,7 +37,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
 | `test:coverage` | V8 coverage, two thread workers, threshold gate and artifacts |
 | `test:core` | Offline core regression gate (`tests/core`); no network, credentials or provider cost |
-| `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas |
+| `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas. On macOS set `LC_ALL=en_US.UTF-8`, or Postgres 17 stops with "postmaster became multithreaded during startup" |
 | `test:workspace-browser` | Playwright suite; explicitly loads `.env.local` if present, can access real accounts |
 | `smoke:core` | Headless production browser smoke; default signs in, views five pages, suppresses automatic sync and telemetry writes, then prepares one campaign review without sending it and deletes that draft. Opt-in flags below mutate production. |
 | `test:workspace-ux` | Workspace audit script; also loads `.env.local`, not an automatically isolated test |
@@ -119,6 +119,11 @@ All automated production browser runs from the shared Mac come from one IP addre
   in paise; a different read-back, or one whose room exceeds what the customer has left (Meta's
   counter restarted), keeps campaigns paused, and 0 is never written. The Graph
   exchange is **provisional** (Meta's documented shape) until a managed account can be recorded.
+- **Managed campaigns** (`managed-campaign`, #525): the real recorded Solaride Prepare → PAUSED
+  create → sync → pause tapes, run through `withMetaConnection` for a managed business whose
+  ledger row points at that ad account and Page: every call AdBrain builds carries the parent
+  token, posts go only to the child ad account, no OAuth row or token is read, and a pause bound
+  to another account is refused.
 - **Operator funding** (`operator-funding`): the real Solaride ad account read (`spend_cap` 88983, `amount_spent` 4237 paise after the owner's ₹1,000 top-up) that gates an operator-funded capped activation (#245), recorded read-only by `scripts/record-meta-funding-fixtures.ts`.
 - **Prepare speed** (`prepare-speed`, #271): real Tricity geo searches recorded with the previous one-at-a-time resolver resolve identically when searched together, and the recorded Solaride lead-form read is served from cache for ten minutes per business, Page and connection (fresh, reconnect and expiry re-read Meta).
   Preflight's form check stays uncached and reads only the chosen form, recorded read-only by

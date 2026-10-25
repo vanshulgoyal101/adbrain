@@ -1,5 +1,5 @@
 import { complete, parseJSON, type ChatMessage, type CompletionResult } from "@/lib/llm";
-import { LLMError } from "@/lib/llm/types";
+import { LLMError, type ProviderAttempt } from "@/lib/llm/types";
 import { z } from "zod";
 import { plannerPlanSchema } from "@/lib/campaign/planner-draft";
 import type { BrandContext } from "@/lib/templates/ads";
@@ -224,7 +224,12 @@ If you need more info, return:
 
 export async function runPlanner(
   input: PlannerInput,
-  options: { signal?: AbortSignal; onCompletion?: (completion: CompletionResult, valid: boolean, attempt?: number) => Promise<void> } = {},
+  options: {
+    signal?: AbortSignal;
+    onCompletion?: (completion: CompletionResult, valid: boolean, attempt?: number) => Promise<void>;
+    /** Providers that failed before one answered, or before the planner gave up (#378). */
+    onProviderFailures?: (failures: ProviderAttempt[], attempt: number) => Promise<void>;
+  } = {},
 ): Promise<PlannerLLMResult> {
   const timeout = AbortSignal.timeout(45_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
@@ -240,6 +245,10 @@ export async function runPlanner(
   const attempts = state.questionLimit === 0 ? 1 : 2;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     signal.throwIfAborted();
+    const failures: ProviderAttempt[] = [];
+    const reportFailures = async () => {
+      if (failures.length) await options.onProviderFailures?.(failures, attempt);
+    };
     // The standard reasoning model needs 30-90s per plan, beyond the 45s planner limit.
     const completion = await complete(messages, {
       routing: "budget", task: "campaign planner", attemptTimeoutMs: 20_000,
@@ -247,12 +256,16 @@ export async function runPlanner(
       thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, extraProviders: ["openrouter"],
       json: true, responseSchema: plannerResultSchema, cache: false, signal,
       promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000,
+      onAttempt: (entry) => { if (entry.status === "error") failures.push(entry); },
     }).catch(async (error: unknown) => {
-      if (error instanceof LLMError && error.model && error.usage) {
+      // A failure seen as a provider attempt is reported (with its usage) below; record it once.
+      if (!failures.length && error instanceof LLMError && error.model && error.usage) {
         await options.onCompletion?.({ text: "", provider: error.provider, model: error.model, usage: error.usage }, false, attempt);
       }
+      await reportFailures();
       throw error;
     });
+    await reportFailures();
     let value: unknown;
     try { value = parseJSON<unknown>(completion.text); } catch { value = null; }
     const reply = value as { plan?: Record<string, unknown> } | null;

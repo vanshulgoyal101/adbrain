@@ -42,7 +42,8 @@ export function releaseMigrations(files) {
 }
 
 // Money code (dispatch item 5): these PRs, like migrations, need the CTO's review as well as QA's (#259).
-export const moneyPath = /^src\/(lib\/payments\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget))/;
+// lib/managed: 2-Tier child spend caps set from the customer's allowance (#522).
+export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget))/;
 
 // "CTO review of <sha>" or "CTO post-release review of <sha>"; in "<old> → <new>" the last sha is the one reviewed.
 export function ctoReviews(comments) {
@@ -134,13 +135,16 @@ async function main() {
   if (!/^\d+$/.test(values.pr ?? "")) stop("Usage: node scripts/release.mjs --pr <number> [--dry-run]");
   const dry = values["dry-run"];
   const pr = ghJson("pr", "view", values.pr, "-R", repo, "--json", "number,state,baseRefName,headRefOid,mergeCommit,mergeStateStatus,url,closingIssuesReferences");
-  if (pr.baseRefName !== "main") stop(`PR #${pr.number} targets ${pr.baseRefName}, not main.`);
+  // Migrations release to main; tenant and money code without one can go to next and ride the deploy train (#461).
+  const base = pr.baseRefName;
+  if (base !== "main" && base !== "next") stop(`PR #${pr.number} targets ${base}, not main or next.`);
   const head = pr.headRefOid;
   const files = lines(gh("api", "--paginate", `repos/${repo}/pulls/${pr.number}/files`, "--jq", ".[]|[.filename,.status]|@tsv")).map((l) => {
     const [filename, status] = l.split("\t");
     return { filename, status };
   });
   const names = releaseMigrations(files).map((path) => path.split("/").pop());
+  if (base === "next" && names.length) stop(`PR #${pr.number} adds a migration; retarget it to main (migrations release to main).`);
 
   if (pr.state === "MERGED") {
     step(`PR #${pr.number} is already merged as ${pr.mergeCommit.oid.slice(0, 7)}; checking the production guard only.`);
@@ -174,7 +178,7 @@ async function main() {
     const patchId = (sha) => {
       if (!patchIds.has(sha)) {
         try {
-          const diff = gh("api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/main...${sha}`);
+          const diff = gh("api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/compare/${base}...${sha}`);
           patchIds.set(sha, execFileSync("git", ["patch-id", "--stable"], { input: `${diff}\n`, encoding: "utf8" }).split(" ")[0] || null);
         } catch {
           patchIds.set(sha, null);
@@ -248,6 +252,15 @@ async function main() {
 }
 
 async function finish(pr, head, mergeSha, names, rows, qaUrl) {
+  if (pr.baseRefName === "next") {
+    step("Receipt (paste into the issue)");
+    console.log([
+      `DevOps release of PR #${pr.number} at ${head.slice(0, 7)} into next. No migration.`,
+      `Merged as ${mergeSha.slice(0, 7)}; it goes live on the next deploy train (within about 30 min), and that train's production guard smokes it.${qaUrl ? ` QA approval: ${qaUrl}.` : ""}`,
+      "No payment, refund or ad activation by this release.",
+    ].join("\n"));
+    return;
+  }
   step(`Wait for the production guard on ${mergeSha.slice(0, 7)}`);
   const guard = await waitForGuard(mergeSha);
   const via = guard.sha === mergeSha ? "" : ` on ${guard.sha.slice(0, 7)}, which contains it,`;
