@@ -506,6 +506,7 @@ export interface Database {
           cpl: number | null;
           conversations?: number | null;
           cost_per_conversation?: number | null;
+          whatsapp_opens?: number | null;
           fetched_at: string;
         };
         Insert: {
@@ -521,6 +522,7 @@ export interface Database {
           cpl?: number | null;
           conversations?: number | null;
           cost_per_conversation?: number | null;
+          whatsapp_opens?: number | null;
           fetched_at?: string;
         };
         Update: Partial<
