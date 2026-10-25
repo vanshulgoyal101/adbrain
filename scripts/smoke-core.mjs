@@ -90,8 +90,7 @@ try {
       }
     }
     if (campaignSetup && request.method() === "POST" && url.origin === origin) {
-      // #497: Review starts a background plan; when it is still running (cold start), Prepare plans again.
-      // Both are read-only (no Meta write), so allow two.
+      // #497: choosing an ad starts a background plan, and Prepare may plan again. Both are read-only.
       if (url.pathname === "/api/campaigns/plan" && planCount++ < 2) return route.continue();
       if (url.pathname === "/api/campaign-drafts" && draftCount++ === 0) {
         const response = await route.fetch();
@@ -171,6 +170,8 @@ try {
         const ads = await page.locator("#campaign-composer button[aria-pressed]").count();
         throw new Error(`No selectable approved ad (setup ${await toggle.getAttribute("aria-expanded") === "true" ? "open" : "closed"}, ${ads} ads shown)`);
       }
+      // Choosing the ad starts #497's background plan, so open the read-only setup allowances first (#531).
+      campaignSetup = true;
       await creative.click();
       await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
       await page.locator("#budget").fill("350");
@@ -178,7 +179,6 @@ try {
       const leadForm = await form.locator('option:not([value=""])').first().getAttribute("value", { timeout: 30_000 }).catch(() => null);
       assert.ok(leadForm, `No lead form loaded (${(await form.locator("option").first().innerText().catch(() => "no lead form field")).trim()})`);
       await form.selectOption(leadForm);
-      campaignSetup = true;
       const preflight = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/preflight" && response.request().method() === "POST", { timeout: 90_000 });
       preflight.catch(() => undefined);
       await page.getByRole("button", { name: "Prepare campaign review" }).click();
@@ -283,6 +283,8 @@ try {
       if (await open.isVisible()) await open.click();
       const creative = page.locator('#campaign-composer button[aria-pressed="false"]').first();
       await creative.waitFor({ state: "visible" });
+      // Choosing the ad starts #497's background plan, so open the read-only setup allowances first (#531).
+      campaignSetup = true;
       await creative.click();
       await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill(name);
       await page.locator("#budget").fill("350");

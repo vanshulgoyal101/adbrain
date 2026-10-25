@@ -1,10 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MetaClient, type MetaCredentials } from "./client";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
+import { getManagedAccount, isManagedReady, managedCredentials, type ManagedAccount } from "./managed-account";
 
 /** Non-sensitive view of a business's Meta connection, safe to send to the UI. */
 export interface MetaConnection {
-  source: "oauth" | "env" | "none";
+  source: "oauth" | "env" | "managed" | "none";
   /** An OAuth connection exists but no ad account / page has been chosen yet. */
   pending: boolean;
   /** A complete connection ready to run campaigns. */
@@ -74,6 +75,9 @@ export async function resolveMetaCredentials(
   _db?: unknown,
 ): Promise<MetaCredentials | null> {
   void _db;
+  // A managed business (#525) never falls back to an OAuth connection.
+  const managed = await getManagedAccount(businessId);
+  if (managed) return managedCredentials(managed);
   const row = await getConnectionRow(businessId);
   const accessToken = row ? await getEncryptedToken(row) : null;
   if (
@@ -105,6 +109,18 @@ export async function metaClientForBusiness(
 export async function getMetaConnection(
   businessId: string,
 ): Promise<MetaConnection> {
+  // The page still renders when the ledger can't be read; Meta calls stay closed elsewhere.
+  let managed: ManagedAccount | null;
+  try {
+    managed = await getManagedAccount(businessId);
+  } catch {
+    return { source: "managed", pending: false, ready: false, adAccountId: null, pageId: null, tokenExpiresAt: null, expired: false, scopes: [] };
+  }
+  if (managed) {
+    const ready = isManagedReady(managed);
+    return { source: "managed", pending: !ready, ready: ready && managedCredentials(managed) !== null,
+      adAccountId: managed.ad_account_id, pageId: managed.page_id, tokenExpiresAt: null, expired: false, scopes: [] };
+  }
   const row = await getConnectionRow(businessId);
   const accessToken = row ? await getEncryptedToken(row) : null;
 
