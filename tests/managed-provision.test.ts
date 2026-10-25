@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { provisionManagedAccount, type ProvisionGraph, type ProvisionStore } from "@/lib/meta/managed-provision";
+import recordedLookup from "./core/fixtures/meta/parent-owned-businesses.json";
 
-// #521 (2-Tier). PROVISIONAL: response shapes follow Meta's docs (owned_businesses, adaccount);
-// replace with recorded responses once App Review (#156) and Access Verification (#517) pass.
+// #521 (2-Tier). The child lookup uses Meta's recorded answer for Solaride (no children yet);
+// the creates are PROVISIONAL (Meta's documented shapes) until App Review (#156) and Access
+// Verification (#517) pass and they can be recorded.
 const PARENT = "9000000000001";
 const business = "11111111-1111-4111-8111-111111111111";
 
@@ -27,7 +29,7 @@ function meta(options: { children?: { id: string; child_business_external_id?: s
   const graph: ProvisionGraph = {
     get: async (path, token) => {
       calls.push({ method: "GET", path, token });
-      if (path.startsWith(`${PARENT}/owned_businesses`)) return { data: children } as never;
+      if (path.startsWith(`${PARENT}/owned_businesses`)) return (children.length ? { data: children } : recordedLookup.body) as never;
       if (path.includes("/owned_ad_accounts")) return { data: accounts } as never;
       throw new Error(`unexpected GET ${path}`);
     },
