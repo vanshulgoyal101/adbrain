@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
@@ -27,6 +27,11 @@ const recommended: DraftInput["targeting"] = {
   audience: { interestNames: ["Solar energy"], rationale: "Test local solar interest against the current offer." },
 };
 const selected = { adAccountId: "act_1", accountName: "Solar account", pageId: "page_1", pageName: "Solar Page", currency: "INR", timezoneName: "Asia/Kolkata", metaBusinessId: null };
+// What AdBrain stores when it launches a campaign: its ad sets and ads, and the Meta account it's bound to (#662).
+const launched = {
+  meta_adset_id: "set-1", meta_ad_ids: ["ad-1"], meta_ad_account_id: "act_1", meta_page_id: "page_1", meta_connection_generation: 1,
+  raw: { source: "campaign_operation", metaResult: { campaignId: "meta-1", adSetIds: ["set-1"], adIds: ["ad-1"] } },
+};
 let saved: DraftDTO;
 
 function view(metaReady = false) {
@@ -189,7 +194,7 @@ describe("unsaved campaign setup", () => {
 });
 describe("campaign sync feedback", () => {
   it("shows the intended audience, budget, destination and creative before activation", async () => {
-    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
       if (url === "/api/campaigns/campaign-1") return Response.json({ delivery: {
@@ -199,10 +204,15 @@ describe("campaign sync feedback", () => {
       }, learning: { costPerResultRupees: 69, pausedAt: new Date(Date.now() - 10.5 * 86_400_000).toISOString() } });
       return Response.json({ campaigns: [], nextCursor: null });
     }));
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
     expect(await screen.findByText(/Targeting:.*"IN"/)).toBeInTheDocument();
+    // #662: the review opens above the list, so it's brought on screen on a phone.
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     // #419 item 2: resuming after AdBrain paused it 10 days ago restarts Meta's learning; a note, not a block.
     expect(screen.getByRole("list", { name: "Before you activate" })).toHaveTextContent("Paused for 10 days: Meta restarts learning");
     expect(screen.getByText(/Ad set set-1:.*₹500.*destination ON_AD/)).toBeInTheDocument();
@@ -212,7 +222,7 @@ describe("campaign sync feedback", () => {
   });
 
   it("offers a capped run when every reviewed child is paused, and sends the approved days with a digest covering them (#157)", async () => {
-    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
     const delivery = {
       campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
       adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
@@ -253,7 +263,7 @@ describe("campaign sync feedback", () => {
   });
 
   it("reviews funds without a cap when the reviewed children are already active (#208)", async () => {
-    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
       if (url === "/api/campaigns/campaign-1") return Response.json({ delivery: {
@@ -274,7 +284,7 @@ describe("campaign sync feedback", () => {
   });
 
   it("shows Meta's room against the cap for an operator-funded business instead of the AdBrain balance (#245)", async () => {
-    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500 } as Campaign;
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
     const delivery = {
       campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
       adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
@@ -294,6 +304,47 @@ describe("campaign sync feedback", () => {
     expect(screen.getByText("Funded on Meta: ₹2,000.00 room for a ₹2,500.00 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
+  });
+
+  // #662 (QA, 390 px): a synced campaign's Resume could never work and failed off-screen.
+  it("sends a paused campaign AdBrain didn't launch to Ads Manager, with the reason on its card", async () => {
+    const synced = { id: "campaign-9", business_id: business.id, name: "new year", status: "paused", meta_campaign_id: "meta-9", meta_ad_account_id: "act_1", daily_budget: 500, raw: null } as unknown as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[synced]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    const card = within(screen.getByRole("heading", { name: "new year" }).closest("article")!);
+    expect(card.queryByRole("button", { name: "Resume" })).toBeNull();
+    const link = card.getByRole("link", { name: "Resume in Ads Manager" });
+    expect(link).toHaveAttribute("href", expect.stringContaining("selected_campaign_ids=meta-9"));
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.className).toMatch(/\bh-11\b/);
+    expect(card.getByText("AdBrain can only resume campaigns it launched. Resume this one in Ads Manager.")).toBeInTheDocument();
+  });
+
+  it("shows a failed activation review on the campaign's card, where the owner tapped Resume", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/campaigns/campaign-1"
+      ? Response.json({ error: "Campaign budget changed in Meta. Refresh and review the budget before activation." }, { status: 409 })
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    const card = within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!);
+    expect(await card.findByRole("alert")).toHaveTextContent("Campaign budget changed in Meta. Refresh and review the budget before activation.");
+  });
+
+  it("shows a failed refresh on the campaign's card, and clears it on the next try", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/campaigns/campaign-1/refresh"
+      ? fail ? Response.json({ error: "Meta is busy. Try again in a minute." }, { status: 503 }) : Response.json({})
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    const card = within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!);
+    fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
+    expect(await card.findByRole("alert")).toHaveTextContent("Meta is busy. Try again in a minute.");
+    fail = false;
+    fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
+    await waitFor(() => expect(card.queryByRole("alert")).toBeNull());
   });
 
   it("labels the stored active state as a request, not confirmed delivery", () => {

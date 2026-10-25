@@ -84,7 +84,7 @@ import {
   spendHealth,
 } from "@/lib/campaign/budget";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
-import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema } from "@/lib/campaign/activation";
+import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySnapshotSchema, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
 import { activationWarnings } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
@@ -246,6 +246,9 @@ function BusinessCampaigns({
   const [creating, setCreating] = useState(false);
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #662: a card action's failure shows on that card, where the owner tapped (the page banner is off-screen on a phone).
+  const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
+  const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
@@ -266,6 +269,10 @@ function BusinessCampaigns({
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectionIntent, setConnectionIntent] = useState<ConnectIntent>({ kind: "setup" });
   const [activationReview, setActivationReview] = useState<Campaign | null>(null);
+  // #662: the review opens above the campaign list; bring it on screen (a phone shows only the tapped card).
+  useEffect(() => {
+    if (activationReview) activationReviewRef.current?.scrollIntoView?.({ block: "start" });
+  }, [activationReview]);
   const [reviewConnection, setReviewConnection] = useState<ConnectionDTO | null>(null);
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
@@ -964,6 +971,7 @@ function BusinessCampaigns({
   async function refresh(id: string) {
     setRefreshingId(id);
     setError(null);
+    setCardError(null);
     try {
       const res = await fetch(`/api/campaigns/${id}/refresh`, {
         method: "POST",
@@ -979,12 +987,12 @@ function BusinessCampaigns({
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
         if (data.review) setReviews((p) => ({ ...p, [id]: data.review! }));
-        if (data.protectionConfirmed === false) setError("Results refreshed, but spend protection could not be verified. Check campaign delivery in Meta.");
+        if (data.protectionConfirmed === false) setCardError({ id, message: "Results refreshed, but spend protection could not be verified. Check campaign delivery in Meta." });
       } else {
-        setError(data.error ?? "Couldn't refresh results.");
+        setCardError({ id, message: data.error ?? "Couldn't refresh results." });
       }
     } catch {
-      setError("Couldn't refresh results — check your connection.");
+      setCardError({ id, message: "Couldn't refresh results — check your connection." });
     } finally {
       setRefreshingId(null);
     }
@@ -1011,7 +1019,7 @@ function BusinessCampaigns({
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
-  async function openActivationReview(campaign: Campaign, connection: ConnectionDTO) {
+  async function openActivationReview(campaign: Campaign, connection: ConnectionDTO, refreshing = false) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
       const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
@@ -1042,11 +1050,15 @@ function BusinessCampaigns({
       setActivationFunding(null);
       setActivationLearning(null);
       setActivationReview(null);
-      setError(reason instanceof Error ? reason.message : "Activation review is unavailable.");
+      const message = reason instanceof Error ? reason.message : "Activation review is unavailable.";
+      // Resume was tapped on the card; Refresh review on the panel at the top, next to the page banner.
+      if (refreshing) setError(message);
+      else setCardError({ id: campaign.id, message });
     }
   }
 
   async function setCampaignStatus(c: Campaign, next: "active" | "paused", confirmed = false) {
+    setCardError(null);
     if (next === "active" && !confirmed) {
       setConnectionIntent({ kind: "review_activation", campaignId: c.id });
       setConnectOpen(true);
@@ -1059,6 +1071,8 @@ function BusinessCampaigns({
     const reviewedDays = next === "active" && activationCapped ? capDays : undefined;
     const reviewedDigest = reviewedDays ? await buildActivationDigest(c, reviewConnection!, activationDelivery!, reviewedDays) : activationDigest;
     const reviewedConnection = reviewConnection;
+    // Activation is confirmed from the review panel at the top; a pause is tapped on the card.
+    const fail = (message: string) => confirmed ? setError(message) : setCardError({ id: c.id, message });
     setStatusChangingId(c.id);
     setError(null);
     try {
@@ -1086,10 +1100,10 @@ function BusinessCampaigns({
         }
       } else {
         const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Couldn't update the campaign.");
+        fail(data.error ?? "Couldn't update the campaign.");
       }
     } catch {
-      setError("Couldn't update the campaign — check your connection.");
+      fail("Couldn't update the campaign — check your connection.");
     } finally {
       setStatusChangingId(null);
     }
@@ -1101,16 +1115,17 @@ function BusinessCampaigns({
     }
     setDeletingId(c.id);
     setError(null);
+    setCardError(null);
     try {
       const res = await fetch(`/api/campaigns/${c.id}`, { method: "DELETE" });
       if (res.ok) {
         setCampaigns((prev) => prev.filter((x) => x.id !== c.id));
       } else {
         const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Couldn't delete the campaign.");
+        setCardError({ id: c.id, message: data.error ?? "Couldn't delete the campaign." });
       }
     } catch {
-      setError("Couldn't delete the campaign — check your connection.");
+      setCardError({ id: c.id, message: "Couldn't delete the campaign — check your connection." });
     } finally {
       setDeletingId(null);
     }
@@ -1149,6 +1164,7 @@ function BusinessCampaigns({
         </div>
       )}
       {activationReview && (
+        <div ref={activationReviewRef} className="scroll-mt-4">
         <Alert variant="warning">
           <span className="block">
             Review {activationReview.name ?? "this campaign"} before it can run. {activationCapped
@@ -1201,7 +1217,7 @@ function BusinessCampaigns({
               </ul>
             ) : null}
             <a href={adsLink(activationReview)} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-medium underline">Open campaign in Meta</a>
-            <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!)}>Refresh review</Button>
+            <Button variant="ghost" size="sm" onClick={() => void openActivationReview(activationReview, reviewConnection!, true)}>Refresh review</Button>
           </div>}
           <Button
             size="sm"
@@ -1216,6 +1232,7 @@ function BusinessCampaigns({
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setActivationReview(null)}>Cancel</Button>
         </Alert>
+        </div>
       )}
       {recoveryPending && !operation && !sendingNew && (
         <Alert variant="warning">
@@ -1795,6 +1812,8 @@ function BusinessCampaigns({
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
               const attention = campaignAttention(c);
+              // #662: only a campaign AdBrain launched can be reviewed and resumed here.
+              const resumeElsewhere = c.status === "paused" && !!c.meta_campaign_id && !reviewableCampaign(c);
               return (
                 <article key={c.id} aria-labelledby={`campaign-${c.id}-name`} className="flex flex-col gap-3 border-b border-slate-200 py-5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1819,7 +1838,13 @@ function BusinessCampaigns({
                             ? formatPerDay(c.daily_budget)
                             : c.objective}
                         </span>
-                        {c.meta_campaign_id &&
+                        {resumeElsewhere ? (
+                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                            Resume in Ads Manager
+                          </a>
+                        ) : c.meta_campaign_id &&
                           (c.status === "active" || c.status === "paused") && (
                             <Button
                               variant="outline"
@@ -1881,6 +1906,8 @@ function BusinessCampaigns({
                       </div>
                     </div>
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
+                    {resumeElsewhere ? <p className="text-sm text-slate-600">{RESUME_IN_ADS_MANAGER}</p> : null}
+                    {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">{cardError.message}</p> : null}
                     {!r && (
                       <p className="text-sm text-slate-500">
                         No results yet.{c.meta_campaign_id ? " Refresh results to get Meta's latest numbers." : ""}
@@ -1921,7 +1948,7 @@ function BusinessCampaigns({
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                        {c.status === "paused" ? "Paused — nothing has spent. Resume when you're ready."
+                        {c.status === "paused" ? `Paused — nothing has spent.${resumeElsewhere ? "" : " Resume when you're ready."}`
                           : c.status === "active" ? "Waiting for Meta to start delivery."
                           : "Nothing has spent yet."}
                       </p>

@@ -1,3 +1,4 @@
+import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
 import type { CampaignDeliverySnapshot } from "@/lib/meta/client";
 import type { Campaign } from "@/lib/types";
@@ -60,6 +61,27 @@ export function intendedCampaignChildren(campaign: Pick<Campaign, "meta_campaign
     || adIds.some(id => !campaign.meta_ad_ids.includes(id))
     || cappedAdSetIds.includes(adSetIds[0]) || cappedAdSetIds.some(id => !adSetIds.includes(id))) return null;
   return { adSetIds, adIds, cappedAdSetIds };
+}
+
+/** #662: why a campaign card offers Ads Manager instead of Resume. */
+export const RESUME_IN_ADS_MANAGER = "AdBrain can only resume campaigns it launched. Resume this one in Ads Manager.";
+
+/**
+ * #662: what an activation review reads, or null when AdBrain can't review this campaign: it must
+ * have launched it (its ad sets and ads on record) and the campaign must be bound to a Meta account,
+ * Page and connection with a budget. Synced and older rows aren't, so they're resumed in Ads
+ * Manager. The card and `GET /api/campaigns/[id]` share this check.
+ */
+export function reviewableCampaign(campaign: Pick<Campaign, "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw" | "daily_budget"
+  | "meta_ad_account_id" | "meta_page_id" | "meta_connection_generation">) {
+  const children = intendedCampaignChildren(campaign);
+  const binding = readStoredCampaignBinding(campaign);
+  if (!campaign.meta_campaign_id || !children || !binding.metaAdAccountId || !binding.metaPageId
+    || binding.metaConnectionGeneration === null || campaign.daily_budget === null || !Number.isFinite(campaign.daily_budget)) return null;
+  return {
+    metaCampaignId: campaign.meta_campaign_id, adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId,
+    generation: binding.metaConnectionGeneration, dailyBudgetRupees: campaign.daily_budget, children,
+  };
 }
 
 export function activationConfirmationPayload(
