@@ -127,6 +127,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/geo-search` | `q` -> `{results}` | Provider search |
 | GET | `/api/meta/whatsapp` | `businessId` -> `{state: "ready", numbers: [{masked, source: "page" \| "business"}]} \| {state: "not_linked" \| "unavailable"}` | Owned business only; read-only Graph; numbers leave the server masked ("+91 ••••• 4842"); 20 per 5 min (#235) |
 | POST | `/api/meta/connections/start` | Business/intent -> envelope authorization URL | New connection attempt/cookie |
+| POST | `/api/meta/connections/change` | Business/intent -> envelope attempt (or 409 `REAUTH_REQUIRED`) | 'Change': lists the pairs the saved grant allows, no new Facebook login; commit via `select` |
 | GET | `/api/meta/connections/status` | `businessId` -> envelope connection | Current binding/capabilities |
 | GET | `/api/meta/connections/attempts/[id]` | Path ID -> envelope attempt | Poll owned attempt |
 | POST | `/api/meta/connections/attempts/[id]/retry` | `revision` -> envelope attempt | Retry eligible failed discovery |
