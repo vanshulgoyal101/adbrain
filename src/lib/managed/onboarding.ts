@@ -1,7 +1,9 @@
 /**
  * #526 (2-Tier): where a new owner is in onboarding, read from their `managed_meta_accounts` row
- * (#519/#533). The owner does three things (pay, Page, WhatsApp); AdBrain does three in the
- * background (child business, ad account, funding). Pure, so the screen and its tests agree.
+ * (#519/#533) and whether they have paid (captured payments net of refunds, `customer_ad_balance`).
+ * The owner does three things (pay, Page, WhatsApp); AdBrain does three in the background (child
+ * business, ad account, funding: `funding_state` is the child account's payment setup, not the
+ * owner's payment). Pure, so the screen and its tests agree.
  */
 export type ManagedAccountState =
   | "requested" | "page_linked" | "child_created" | "ad_account_created" | "funded"
@@ -34,8 +36,7 @@ export type OnboardingProgress = {
 const FUNDED: ManagedAccountState[] = ["funded", "whatsapp_linked", "ready"];
 const WHATSAPP: ManagedAccountState[] = ["whatsapp_linked", "ready"];
 
-export function onboardingProgress(row: ManagedAccountProgressRow | null): OnboardingProgress {
-  const paid = row?.funding_state === "card_attached" || row?.funding_state === "invoiced";
+export function onboardingProgress(row: ManagedAccountProgressRow | null, { paid }: { paid: boolean }): OnboardingProgress {
   const page = Boolean(row?.page_id);
   const child = Boolean(row?.child_business_id);
   const account = Boolean(row?.ad_account_id);
@@ -54,7 +55,7 @@ export function onboardingProgress(row: ManagedAccountProgressRow | null): Onboa
   };
 
   let failed: OnboardingProgress["failed"] = null;
-  if (row?.funding_state === "failed") failed = { step: "pay", code: row.last_error };
+  if (row?.funding_state === "failed") failed = { step: "funding", code: row.last_error };
   else if (row?.state === "failed") {
     // The first unfinished step, in the order the ledger moves through them.
     const order: [CustomerStep | BackgroundStep, boolean][] = [
