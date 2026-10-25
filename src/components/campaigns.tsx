@@ -1212,7 +1212,8 @@ function BusinessCampaigns({
       )}
       {prepareReview && (
         <section ref={reviewPanelRef} tabIndex={-1} aria-label="Campaign review result" className="scroll-mt-24 outline-none">
-        <Alert variant={prepareReview.status === "ready" ? "success" : prepareReview.status === "blocked" ? "error" : "warning"}>
+        {/* #637: preflight answers 200 with blockers, so a blocked review must not read as success. */}
+        <Alert variant={prepareReview.status === "ready" ? (prepareReview.review.canCreatePaused ? "success" : "warning") : prepareReview.status === "blocked" ? "error" : "warning"}>
           {prepareReview.status === "checking" && "Checking the saved campaign draft before review."}
           {prepareReview.status === "blocked" && (
             <>
@@ -1221,7 +1222,22 @@ function BusinessCampaigns({
           )}
           {prepareReview.status === "ready" && (
             <>
-              <span className="block font-medium">Campaign review</span>
+              <span className="block font-medium">
+                {prepareReview.review.canCreatePaused ? "Campaign review"
+                  : prepareReview.review.blockers.length ? `Fix ${prepareReview.review.blockers.length} ${prepareReview.review.blockers.length === 1 ? "item" : "items"} before sending to Meta`
+                  : "This campaign can't be sent to Meta yet"}
+              </span>
+              {prepareReview.review.blockers.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 text-sm font-normal">
+                  {prepareReview.review.blockers.map((blocker) => <li key={`${blocker.code}:${blocker.message}`}>
+                    {blocker.message}
+                    {blocker.action?.kind === "open_brand" && <> <Link href="/brand" className="font-medium underline underline-offset-4">Open Brand Brain</Link></>}
+                  </li>)}
+                </ul>
+              )}
+              {!prepareReview.review.canCreatePaused && (
+                <span className="mt-2 block text-sm font-normal">Send to Meta (paused) appears once this is fixed. Then prepare the review again.</span>
+              )}
               <span className="mt-2 block text-sm font-normal">
                 Account: {prepareReview.review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"} · Page: {prepareReview.review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} · Currency: {prepareReview.review.currency}
                 <br />
@@ -1235,14 +1251,6 @@ function BusinessCampaigns({
                 <br />
                 Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.
               </span>
-              {prepareReview.review.blockers.length > 0 && (
-                <ul className="mt-2 list-disc pl-5 text-sm font-normal">
-                  {prepareReview.review.blockers.map((blocker) => <li key={`${blocker.code}:${blocker.message}`}>
-                    {blocker.message}
-                    {blocker.action?.kind === "open_brand" && <> <Link href="/brand" className="font-medium underline underline-offset-4">Open Brand Brain</Link></>}
-                  </li>)}
-                </ul>
-              )}
               {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}
               {prepareReview.review.planWarnings?.length ? (
                 <ul className="mt-2 space-y-1 text-sm font-normal" aria-label="Before you send">
