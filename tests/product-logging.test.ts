@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { observeAction, observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeAction, observeRoute, recordProductEvent, withEventScope } from "@/lib/observability/logger";
 import { observeIdentity } from "@/lib/observability/context";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "11111111-1111-4111-8111-111111111111" } }, error: null }) } }) }));
@@ -12,6 +12,35 @@ vi.mock("@/lib/observability/store", () => ({ persistProductEvents: persistence.
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("request product logging", () => {
+  it("groups a page render's Meta events under one request and business, then persists them once (#615)", async () => {
+    vi.stubEnv("PRODUCT_LOGGING_DATABASE_ENABLED", "true");
+    persistence.callbacks.length = 0;
+    persistence.persist.mockReset();
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    await expect(withEventScope(businessId, async () => {
+      recordProductEvent({ kind: "system", name: "meta.graph", outcome: "failed", attributes: { route: "[id]/owned_whatsapp_business_accounts", method: "GET", status: 403 } });
+      recordProductEvent({ kind: "workflow", name: "meta.create_paused", outcome: "failed", businessId, attributes: { provider: "meta" } });
+      throw new Error("refused");
+    })).rejects.toThrow("refused");
+    const [graph, workflow] = log.mock.calls.map((call) => JSON.parse(call[0]));
+    expect(graph).toMatchObject({ name: "meta.graph", businessId, requestId: workflow.requestId });
+    expect(persistence.callbacks).toHaveLength(1);
+    await persistence.callbacks[0]();
+    expect(persistence.persist.mock.calls[0][0].map((event: { name: string }) => event.name)).toEqual(["meta.graph", "meta.create_paused"]);
+  });
+
+  it("leaves an active request's context alone (#615)", async () => {
+    persistence.callbacks.length = 0;
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    await observeRoute("/api/meta/status", "GET", async () => {
+      await withEventScope(businessId, async () => recordProductEvent({ kind: "system", name: "meta.graph", outcome: "success", attributes: { route: "[id]", method: "GET" } }));
+      return new Response(null, { status: 204 });
+    })();
+    const [graph, request] = log.mock.calls.map((call) => JSON.parse(call[0]));
+    expect(graph.requestId).toBe(request.requestId);
+    expect(graph.businessId).toBeNull();
+  });
+
   it("flushes after failed requests and contains persistence errors", async () => {
     vi.stubEnv("PRODUCT_LOGGING_DATABASE_ENABLED", "true");
     persistence.callbacks.length = 0;

@@ -52,6 +52,22 @@ function schedulePersistence(context: EventContext): void {
   }
 }
 
+/**
+ * #615: work that may run outside a request (a page render's Meta reads) gets its own context for the
+ * business, so its events share one request ID and are persisted together. Inside a request: unchanged.
+ */
+export function withEventScope<Result>(businessId: string, work: () => Promise<Result>): Promise<Result> {
+  if (eventContext.getStore()) return work();
+  const context = { ...newEventContext(), businessId };
+  return eventContext.run(context, async () => {
+    try {
+      return await work();
+    } finally {
+      schedulePersistence(context);
+    }
+  });
+}
+
 export function observeRoute<Arguments extends unknown[], Result extends Response>(
   route: string,
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS",

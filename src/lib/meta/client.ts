@@ -724,7 +724,12 @@ export class MetaClient {
     if (!businessId || !/^\d+$/.test(businessId)) return [];
     const wabas = await this.graph<{ data?: { phone_numbers?: { data?: { display_phone_number?: string }[] } }[]; paging?: { next?: string } }>(
       `${businessId}/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100`,
-    );
+    ).catch((error: unknown) => {
+      // #615: a token without WhatsApp access on this business gets 403 code 200 (or 10); that means
+      // "no business numbers we can use", not a failed Meta read. Every other error still throws.
+      if (error instanceof MetaError && error.status === 403 && (error.code === 200 || error.code === 10)) return { data: [] };
+      throw error;
+    });
     return [...new Set((wabas.data ?? []).flatMap((waba) => waba.phone_numbers?.data ?? [])
       .map((phone) => normalizeWhatsAppNumber(phone.display_phone_number ?? ""))
       .filter((number): number is string => number !== null))];
