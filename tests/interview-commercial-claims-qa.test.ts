@@ -21,6 +21,16 @@ describe("QA #613: commercial terms the Brand states are supported", () => {
       .resolves.toMatchObject({ ready: true });
   });
 
+  it("still refuses 'free' when the Brand negates the term itself, and logs only the term's class", async () => {
+    vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Free survey." }));
+    for (const offer of ["No free surveys; paid site visit", "We avoid free offers", "Site survey is not free"]) {
+      const rules: string[][] = [];
+      await expect(runInterview({ brand: brand([offer]), goal: "Get more site survey bookings" },
+        { onAttempt: async (_c, _a, _v, r = []) => { rules.push(r); } })).rejects.toBeInstanceOf(InterviewValidationError);
+      expect(rules, offer).toEqual([["unsupported-commercial-claim:free"], ["unsupported-commercial-claim:free"]]);
+    }
+  });
+
   it("still refuses a commercial claim nothing supports", async () => {
     vi.mocked(complete).mockResolvedValue(reply({ ready: true, brief: "Promise guaranteed savings on every bill." }));
     await expect(runInterview({ brand: brand(["Free site survey"]), goal: "Get more site survey bookings" }))

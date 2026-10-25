@@ -28,7 +28,7 @@ describe("core: Create's assistant on a Brand with no offers (#613)", () => {
     const rules: string[][] = [];
     const result = await runInterview(input, { onAttempt: async (_c, _a, _v, r = []) => { rules.push(r); } });
     expect(complete).toHaveBeenCalledTimes(2);
-    expect(rules).toEqual([["unsupported-commercial-claim"], ["unsupported-commercial-claim"]]);
+    expect(rules).toEqual([["unsupported-commercial-claim:free"], ["unsupported-commercial-claim:free"]]);
     expect(result.ready).toBe(true);
     const brief = (result as { brief: string }).brief;
     expect(brief).not.toMatch(/\bfree\b/i);

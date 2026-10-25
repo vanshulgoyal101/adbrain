@@ -27,7 +27,7 @@ async function main() {
   })();
   const replies: { run: number; attempt: number; valid: boolean; rules: string[]; provider: string; model: string; content: string }[] = [];
   const want = Number(wantArg ?? 2);
-  for (let run = 0; run < Number(runsArg ?? 8) && replies.filter((reply) => reply.rules.includes("unsupported-commercial-claim")).length < want; run++) {
+  for (let run = 0; run < Number(runsArg ?? 8) && replies.filter((reply) => reply.rules.some((rule) => rule.startsWith("unsupported-commercial-claim"))).length < want; run++) {
     const result = await runInterview({ brand: brand as BrandContext, goal: CLAIM_GOAL, answers: [] }, {
       onAttempt: async (completion, attempt, valid, rules = []) => {
         replies.push({ run, attempt, valid, rules, provider: completion.provider, model: completion.model, content: completion.text });
@@ -39,7 +39,7 @@ async function main() {
     recordedAt: new Date().toISOString(), note: "#613: real interview replies for a Brand with no offers (free providers, budget routing).",
     brand, goal: CLAIM_GOAL, replies,
   }, null, 2)}\n`);
-  console.log(`replies ${replies.length}, rejected for claims ${replies.filter((reply) => reply.rules.includes("unsupported-commercial-claim")).length}`);
+  console.log(`replies ${replies.length}, rejected for claims ${replies.filter((reply) => reply.rules.some((rule) => rule.startsWith("unsupported-commercial-claim"))).length}`);
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });
