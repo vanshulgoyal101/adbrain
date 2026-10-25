@@ -70,7 +70,7 @@ export async function syncManagedSpendCap(actor: Actor, store: SpendCapStore = s
   if (!managedAccountsEnabled()) return { status: "disabled" };
   const account = await getManagedAccount(actor.businessId);
   if (!account || !hasManagedAssets(account)) return { status: "unmanaged" };
-  const credentials = managedCredentials(account);
+  const credentials = await managedCredentials(account);
   if (!credentials) throw new Error("Managed Meta credentials are unavailable.");
   const client = new MetaClient(credentials);
   const meta: SpendCapMeta = {

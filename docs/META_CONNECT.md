@@ -223,8 +223,11 @@ customer's own Facebook token (from their Connect attempt) creates the child; th
 user's token provisions; each child's **own system user** manages its ad account: minted with
 `POST /{child}/access_token` (parent token), found with `GET /me` (child token), its token
 encrypted into `private.meta_tokens` (kind `business_system_user`) and referenced from the ledger
-by `manager_token_id` (same business only), then assigned to the ad account with its own token.
-One customer's token can't reach another's account. Every
+by `manager_token_id` (same business only), then assigned to the ad account and the shared Page
+(`ADVERTISE`, `ANALYZE`, `MESSAGING`: the tasks shared with the child) with its own token. It is
+minted with `ads_management,business_management,pages_read_engagement,pages_manage_ads,pages_show_list,leads_retrieval`
+because campaigns, sync, spend caps and the WhatsApp check run on it (#624); a token stored before
+that scope (no `step_keys.manager_scope`) is minted again. One customer's token can't reach another's account. Every
 provisioning Graph call carries `appsecret_proof` (HMAC-SHA256 of its token with `META_APP_SECRET`;
 Meta rejects the child-token mint without it), so a missing secret is `NOT_CONFIGURED`. A token
 the ledger no longer references (replaced, or saved before a failed update) is deleted.
