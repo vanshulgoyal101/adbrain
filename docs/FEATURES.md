@@ -284,7 +284,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   answers are recorded by `scripts/record-meta-story-fixtures.ts`.
 - Every launch checks the payloads it sent against Meta's new-advertiser guidance
   (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
-  images) and logs `campaign.plan_check` (#419); nothing is blocked or shown yet.
+  images) and logs `campaign.plan_check` (#419). Review shows two plain, non-blocking warnings
+  when they apply (#419 2b): "No 9:16 ad" when no ad will get one (lead-form ads, or WhatsApp ads
+  without a saved design), and "Budget is below what Meta needs to learn" when the per-ad-set budget
+  buys under ~50 results a week at the business's own cost per result over its last 60 days of
+  stored results (no history, no budget warning). Neither changes the reviewed plan or the send.
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
   pause, and activation safeguards. Stored results are lifetime insights (`date_preset=maximum`):
   Meta's default `last_30d` leaves out today, so a new campaign used to read ₹0 (#404). Refresh detects all-WhatsApp ad sets and

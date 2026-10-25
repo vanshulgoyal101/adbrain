@@ -43,6 +43,13 @@ export function rupees(value: number): string {
 
 const costPerResult = (campaign: EvidenceCampaign) => (campaign.results > 0 ? campaign.spend / campaign.results : null);
 
+/** #419 2(b): the business's pooled cost per chat or lead for one kind of campaign; null before any result. */
+export function costPerResultFrom(campaigns: Pick<EvidenceCampaign, "destination" | "spend" | "results">[], destination: EvidenceCampaign["destination"]): number | null {
+  const same = campaigns.filter((campaign) => campaign.destination === destination);
+  const results = same.reduce((sum, campaign) => sum + campaign.results, 0);
+  return results > 0 ? same.reduce((sum, campaign) => sum + campaign.spend, 0) / results : null;
+}
+
 /** "1 chat at ₹7.78 (early: based on 1 chat)", "6 leads at ₹20 each (so far)", "₹120 spent, no chats yet". */
 export function resultSummary(campaign: EvidenceCampaign): string {
   const cost = costPerResult(campaign);

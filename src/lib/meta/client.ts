@@ -157,13 +157,18 @@ export class MetaError extends Error {
     readonly status?: number,
     readonly code?: number,
     readonly subcode?: number,
+    /** #615: Meta's own diagnosis for telemetry; never tokens or request bodies. */
+    readonly details?: MetaErrorDetails,
   ) {
     super(message);
     this.name = "MetaError";
   }
 }
 
-type GraphErrorBody = { message?: string; error_user_msg?: string; code?: number; error_subcode?: number };
+export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
+
+type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
+
 
 const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
@@ -634,7 +639,8 @@ export class MetaClient {
     const json = await res.json().catch(() => ({}));
     if (!res.ok || (json as { error?: unknown }).error) {
       const err = (json as { error?: GraphErrorBody }).error;
-      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode);
+      throw new MetaError(metaErrorMessage(err, res.status), res.status, err?.code, err?.error_subcode,
+        { userTitle: err?.error_user_title, fbtraceId: err?.fbtrace_id, path: graphEndpoint(path) });
     }
     return { status: res.status, body: json as unknown };
   }
@@ -718,7 +724,12 @@ export class MetaClient {
     if (!businessId || !/^\d+$/.test(businessId)) return [];
     const wabas = await this.graph<{ data?: { phone_numbers?: { data?: { display_phone_number?: string }[] } }[]; paging?: { next?: string } }>(
       `${businessId}/owned_whatsapp_business_accounts?fields=phone_numbers{display_phone_number}&limit=100`,
-    );
+    ).catch((error: unknown) => {
+      // #615: a token without WhatsApp access on this business gets 403 code 200 (or 10); that means
+      // "no business numbers we can use", not a failed Meta read. Every other error still throws.
+      if (error instanceof MetaError && error.status === 403 && (error.code === 200 || error.code === 10)) return { data: [] };
+      throw error;
+    });
     return [...new Set((wabas.data ?? []).flatMap((waba) => waba.phone_numbers?.data ?? [])
       .map((phone) => normalizeWhatsAppNumber(phone.display_phone_number ?? ""))
       .filter((number): number is string => number !== null))];
@@ -1608,11 +1619,12 @@ export class MetaClient {
     };
   }
 
-  /** Meta's review state for every ad in the campaign. */
+  /** Meta's review state for every ad in the campaign, with its reasons in English. */
   async readAdReview(campaignId: string): Promise<AdReview[]> {
     await this.verifyCampaignBinding(campaignId);
+    // ad_review_feedback follows the token user's Facebook language unless a locale is given (#635).
     const ads = await this.graph<{ data?: Array<{ id: string; effective_status?: string; ad_review_feedback?: unknown; issues_info?: unknown }>; paging?: { next?: string } }>(
-      `${encodeURIComponent(campaignId)}/ads?fields=id,status,effective_status,configured_status,ad_review_feedback,issues_info&limit=100`,
+      `${encodeURIComponent(campaignId)}/ads?fields=id,status,effective_status,configured_status,ad_review_feedback,issues_info&limit=100&locale=en_US`,
     );
     if (!Array.isArray(ads.data) || ads.paging?.next) throw new MetaError("Ad review status could not be read completely.");
     return ads.data.map(adReviewState);

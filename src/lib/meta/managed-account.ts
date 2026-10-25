@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MetaCredentials } from "./client";
 import { decryptMetaToken, fromPostgresBytea } from "./token-store";
@@ -43,6 +44,16 @@ export class ManagedAccountError extends Error {
 export function managedAccountsEnabled(): boolean {
   const value = process.env.MANAGED_ACCOUNTS_ENABLED;
   return value === "true" || value === "1";
+}
+
+/**
+ * #523 (CTO): the managed screens and routes for this signed-in user: everyone once
+ * MANAGED_ACCOUNTS_ENABLED is on, and before that internal accounts only (#379), for QA walks and
+ * concierge pilots. Background work with no signed-in user (credential routing, spend caps, crons)
+ * still follows the global flag.
+ */
+export function managedAccountsEnabledFor(user: AccountIdentity): boolean {
+  return managedAccountsEnabled() || isInternalUser(user);
 }
 
 /** The business's own managed account, or null when managed accounts are off or it has none. */

@@ -41,6 +41,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** The overlay spec saved in a creative's generation receipt, or null for older ads. */
+/** Whether the ad can be laid out at 9:16 (`renderStoryAd`, #333): an overlay ad with its photo and saved design. */
+export function hasStoryDesign(generation: unknown): generation is Record<string, unknown> & { photoUrl: string } {
+  if (typeof generation !== "object" || generation === null || Array.isArray(generation)) return false;
+  const record = generation as Record<string, unknown>;
+  return record.composition === "overlay" && typeof record.photoUrl === "string" && storedPictureDesign(record.design) !== null;
+}
+
 export function storedPictureDesign(value: unknown): AdDesignSpec | null {
   const stored = storedDesignSchema.safeParse(value);
   return stored.success ? { ...stored.data, backgroundUrl: null } : null;

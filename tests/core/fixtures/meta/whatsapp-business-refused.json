@@ -1,0 +1,12 @@
+{
+  "note": "#615: real read-only GET of the business WABA edge with a token lacking WhatsApp access on it (Oct 26). Meta refuses with HTTP 403, code 200. IDs and fbtrace_id replaced.",
+  "status": 403,
+  "body": {
+    "error": {
+      "message": "(#200) You do not have permission to access this field.",
+      "type": "OAuthException",
+      "code": 200,
+      "fbtrace_id": "AScrubbedTrace000000000"
+    }
+  }
+}

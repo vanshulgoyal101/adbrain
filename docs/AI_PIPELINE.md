@@ -36,6 +36,12 @@ Options that mean "I'll type my own" (custom, other, type below) are dropped and
 text box is kept. An answer that adds no fact (such a chip, skip, not sure) does not
 count as a repeat, so the question can be asked again. A currency amount such as
 "₹10,000" is supported by "10,000 rupees" or "Rs 10000" in a source (#284).
+Options on an `offer` question are proposals the owner picks or rejects, so they skip the
+commercial-claim check; the AI can't pick one for the owner (`allowRandom` and
+`aiCanDecide` are off). When the repair still states an unsupported term and that is
+the only failure, the sentences, recommendations or options with the term are dropped
+and the result is re-checked; it is returned only if every check passes and the brief
+keeps at least 40 characters (#613).
 Past results (#371): when the business has a campaign with stored results from the last
 60 days and spend above zero, the interview gets a `PAST RESULTS` block after the
 reference brief (the cheapest campaign per result and the weakest, built in
@@ -45,7 +51,10 @@ campaign ran one ad. The wording is fixed in code: under 5 results "early: based
 chats", 5–19 "so far", 20+ plain, none "₹X spent, no chats yet". Without results the
 prompt is unchanged. The concept fact check never sees past results.
 Failed attempts log rule names only (`metadata.validationRules`, for example
-`unsupported-commercial-claim`, `repeated-question`, `schema:<path>`).
+`unsupported-commercial-claim`, `repeated-question`, `schema:<path>`). The interview
+adds the term's class, never the term: `unsupported-commercial-claim:free`, `:percent`,
+`:currency` or `:guarantee` (#613). A Brand fact supports a term unless that term itself
+is negated ("no free survey"); a negation elsewhere ("Free survey, no obligation") doesn't count.
 
 ### Campaign Interview
 
@@ -293,9 +302,10 @@ Internal accounts (team, owner, test; [internal-accounts.json](../src/lib/intern
 write on the same models as customers (Haiku text is about $0.006 a Create, and the free text
 tiers allow 20 Gemini requests a day) but make their images on free Pollinations, without
 reference images and never falling back to the paid image model (#449, #466). Pollinations answers
-402/429/503 with Retry-After past about one image per 20–40 s per address, so free images run one
-at a time per server instance, wait out Retry-After (10 s when absent) and fail with "Free test
-images are busy" after about 90 s. The request's verified Supabase user decides; requests without
+402/429/503 past its free limit of one image per 45 s per address, while its Retry-After says 1 s;
+from production it also answered a fast 404 in the same spot (#634). So free images run one at a
+time per server instance, treat 402/404/429/503 as busy, wait the longer of Retry-After and 15 s,
+and fail with "Free test images are busy" after about 90 s. The request's verified Supabase user decides; requests without
 one (cron, workers) are billed as customers. Exceptions are listed by user id in
 `exemptFromFreeProviders`, each with its reason: the Meta App Review reviewer (until #156 is
 decided) and the owner, whose Solaride is a real advertiser (#466).

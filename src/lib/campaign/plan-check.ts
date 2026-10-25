@@ -108,3 +108,28 @@ export function planCheckEvent(findings: PlanFinding[], destination: string) {
     },
   };
 }
+
+/** #419 item 2(b), CTO Oct 25: shown on Review when they apply; never block a launch. */
+export const REVIEW_WARNINGS = {
+  story: "No 9:16 ad: Reels and Stories placements will crop or skip it",
+  budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
+} as const;
+
+/**
+ * The Review warnings for a planned campaign. A 9:16 is made only for WhatsApp ads with a saved
+ * design (#333). The budget warning needs the business's own cost per result; without one it says
+ * nothing rather than guess.
+ */
+export function reviewWarnings(input: {
+  destination: "instant_form" | "whatsapp";
+  storyReady: boolean;
+  perAdSetDailyBudgetRupees: number;
+  costPerResultRupees?: number | null;
+}): string[] {
+  const warnings: string[] = [];
+  if (!(input.destination === "whatsapp" && input.storyReady)) warnings.push(REVIEW_WARNINGS.story);
+  const cost = input.costPerResultRupees;
+  if (cost && cost > 0 && (input.perAdSetDailyBudgetRupees * 7) / cost < LEARNING_EVENTS_PER_WEEK) warnings.push(REVIEW_WARNINGS.budget);
+  return warnings;
+}
+

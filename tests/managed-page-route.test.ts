@@ -44,7 +44,7 @@ const post = (body: unknown) => new NextRequest("http://localhost/api/meta/manag
 const get = (id: string) => new NextRequest(`http://localhost/api/meta/managed/page?attemptId=${id}`);
 
 beforeEach(() => {
-  state.enabled = true;
+  state.enabled = true; vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
   state.user = { id: "u1" };
   state.row = null;
   state.inserts = [];
@@ -58,7 +58,7 @@ beforeEach(() => {
 
 describe("/api/meta/managed/page (#523)", () => {
   it("is off unless managed accounts are enabled", async () => {
-    state.enabled = false;
+    state.enabled = false; vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "false");
     const { GET, POST } = await import("@/app/api/meta/managed/page/route");
     expect((await GET(get(attemptId))).status).toBe(404);
     expect((await POST(post({ attemptId, pageId: "111" }))).status).toBe(404);

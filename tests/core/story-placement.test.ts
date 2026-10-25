@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkPlan } from "@/lib/campaign/plan-check";
 import { MetaClient, placementCreativeSpec } from "@/lib/meta/client";
-import { renderStoryAd } from "@/lib/creative/story";
+import { hasStoryDesign, renderStoryAd } from "@/lib/creative/story";
 import recorded from "./fixtures/meta/story-validate.json";
 
 // story-validate.json: Meta's real validate_only answers (scripts/record-meta-story-fixtures.ts, #333).
@@ -160,5 +160,10 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     expect(await sharp(Buffer.from(story!)).metadata()).toMatchObject({ width: 1080, height: 1920 });
     expect(await renderStoryAd({ composition: "image-only", photoUrl: photo, design })).toBeNull();
     expect(await renderStoryAd({ composition: "overlay", photoUrl: photo })).toBeNull();
+    // #419 2(b): Review predicts the 9:16 with the same test, without rendering.
+    expect(hasStoryDesign({ composition: "overlay", photoUrl: photo, design })).toBe(true);
+    expect(hasStoryDesign({ composition: "image-only", photoUrl: photo, design })).toBe(false);
+    expect(hasStoryDesign({ composition: "overlay", photoUrl: photo })).toBe(false);
+    expect(hasStoryDesign(null)).toBe(false);
   }, 30_000); // a full-size blur and render; slow when the core suite runs in parallel
 });

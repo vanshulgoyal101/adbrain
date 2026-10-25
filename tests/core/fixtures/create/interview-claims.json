@@ -1,0 +1,68 @@
+{
+  "recordedAt": "2026-10-25T18:55:25.978Z",
+  "note": "#613: real interview replies for a Brand with no offers (free providers, budget routing).",
+  "brand": {
+    "name": "Solaride",
+    "vertical": "solar energy",
+    "description": "SOLARIDE provides rooftop solar panel installation, system design, and subsidy guidance for homes, businesses, and farms across North India.",
+    "brand_voice": "professional, inspiring, community-focused",
+    "target_audience": "residential, commercial, industrial, and agricultural sectors in North India",
+    "usps": [
+      "Offices in Mohali and Hisar serving all of North India",
+      "Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh",
+      "Founder's 4,000 KM solo cycling journey for clean energy awareness",
+      "250KW+ solar installations and 300+ tonnes CO2 offset annually"
+    ],
+    "offers": [],
+    "languages": [
+      "English"
+    ],
+    "locations": [
+      "Mohali",
+      "Hisar"
+    ]
+  },
+  "goal": "Get more homeowners in Mohali to enquire about rooftop solar this month.",
+  "replies": [
+    {
+      "run": 0,
+      "attempt": 1,
+      "valid": false,
+      "rules": [
+        "unsupported-commercial-claim"
+      ],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A bright, high-resolution close-up of a modern, clean rooftop in Mohali with sleek black solar panels reflecting the clear blue sky, visually anchored by a subtle, high-contrast 'Mohali' location badge to establish local trust. The image should feel professional, inspiring, and community-focused, highlighting the seamless integration of the technology into a residential setting. The copy hook will open with a direct, relatable question about monthly electricity bills, immediately followed by a clear call-to-action to 'Enquire Now' for a free rooftop assessment. The tone is professional yet approachable, leveraging the local presence in Mohali to build instant credibility with homeowners.\",\n  \"language\": \"en\",\n  \"angleId\": \"trust\",\n  \"recommendations\": [\n    {\n      \"label\": \"Financial Savings Focus\",\n      \"prompt\": \"Create a version that focuses on the financial aspect, showing a homeowner looking relieved while holding a low electricity bill, with copy emphasizing the long-term savings on their monthly power costs.\"\n    },\n    {\n      \"label\": \"Local Expertise & Trust\",\n      \"prompt\": \"Create a version featuring the local Mohali office or a professional engineer in a hard hat, with copy highlighting the local support and engineering expertise available specifically for Mohali residents.\"\n    },\n    {\n      \"label\": \"Eco-Friendly Aspiration\",\n      \"prompt\": \"Create a version that focuses on the environmental impact, showing a green, leafy residential area with solar panels, and copy that appeals to the homeowner's desire to reduce their carbon footprint and contribute to a cleaner North India.\"\n    }\n  ]\n}"
+    },
+    {
+      "run": 0,
+      "attempt": 2,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": true,\n  \"brief\": \"A bright, high-resolution close-up of a modern, clean rooftop in Mohali with sleek black solar panels reflecting the clear blue sky, visually anchored by a subtle, high-contrast 'Mohali' location badge to establish local trust. The image should feel professional, inspiring, and community-focused, highlighting the seamless integration of the technology into a residential setting. The copy hook will open with a direct, relatable question about monthly electricity bills, immediately followed by a clear call-to-action to 'Enquire Now' for a rooftop assessment. The tone is professional yet approachable, leveraging the local presence in Mohali to build instant credibility with homeowners.\",\n  \"language\": \"en\",\n  \"angleId\": \"trust\",\n  \"recommendations\": [\n    {\n      \"label\": \"Financial Savings Focus\",\n      \"prompt\": \"Create a version that focuses on the financial aspect, showing a homeowner looking relieved while holding a low electricity bill, with copy emphasizing the long-term savings on their monthly power costs.\"\n    },\n    {\n      \"label\": \"Local Expertise & Trust\",\n      \"prompt\": \"Create a version featuring the local Mohali office or a professional engineer in a hard hat, with copy highlighting the local support and engineering expertise available specifically for Mohali residents.\"\n    },\n    {\n      \"label\": \"Eco-Friendly Aspiration\",\n      \"prompt\": \"Create a version that focuses on the environmental impact, showing a green, leafy residential area with solar panels, and copy that appeals to the homeowner's desire to reduce their carbon footprint and contribute to a cleaner North India.\"\n    }\n  ]\n}"
+    },
+    {
+      "run": 1,
+      "attempt": 1,
+      "valid": false,
+      "rules": [
+        "unsupported-commercial-claim"
+      ],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": false,\n  \"question\": {\n    \"id\": \"q1_offer\",\n    \"field\": \"offer\",\n    \"question\": \"Do you have a specific incentive or offer for homeowners in Mohali this month (e.g., free home survey, design consultation, or a specific subsidy assistance package)?\",\n    \"help\": \"Selecting 'No' means the ad will focus on the value of the system and trust in your local team without promising a specific discount or free service.\",\n    \"options\": [\n      \"Free Home Solar Survey\",\n      \"Free System Design Consultation\",\n      \"No, focus on savings and trust\"\n    ],\n    \"allowText\": true,\n    \"allowRandom\": false,\n    \"aiCanDecide\": false\n  }\n}"
+    },
+    {
+      "run": 1,
+      "attempt": 2,
+      "valid": true,
+      "rules": [],
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "content": "{\n  \"ready\": false,\n  \"question\": {\n    \"id\": \"q1_offer\",\n    \"field\": \"offer\",\n    \"question\": \"Do you have a specific incentive or offer for homeowners in Mohali this month (e.g., a home survey, design consultation, or subsidy assistance package)?\",\n    \"help\": \"Selecting 'No' means the ad will focus on the value of the system and trust in your local team without promising a specific discount or service.\",\n    \"options\": [\n      \"Home Solar Survey\",\n      \"System Design Consultation\",\n      \"No, focus on savings and trust\"\n    ],\n    \"allowText\": true,\n    \"allowRandom\": false,\n    \"aiCanDecide\": false\n  }\n}"
+    }
+  ]
+}

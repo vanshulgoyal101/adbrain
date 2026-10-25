@@ -40,8 +40,11 @@ async function executeImage(provider: ImageProvider, req: ImageRequest): Promise
 
 // Pollinations answers 402/429/503 with Retry-After past about one image per 20–40 s per address
 // (measured Oct 24), so free images run one at a time per server instance and wait it out (#466).
+// Its free tier allows one image per 45 s per address but says Retry-After: 1 (Oct 25, #634), so
+// waits are at least 15 s instead of a request every second.
 const FREE_IMAGE_WAIT_CAP_MS = 90_000;
-const FREE_IMAGE_DEFAULT_WAIT_MS = 10_000;
+const FREE_IMAGE_DEFAULT_WAIT_MS = 15_000;
+const FREE_IMAGE_MIN_WAIT_MS = 15_000;
 let freeImageQueue: Promise<unknown> = Promise.resolve();
 
 export class FreeImageBusyError extends Error {
@@ -64,9 +67,10 @@ async function freeImageWithRetry(provider: ImageProvider, req: ImageRequest): P
     try {
       return await executeImage(provider, req);
     } catch (error) {
-      const busy = error instanceof SafeFetchError && error.code === "status" && [402, 429, 503].includes(error.status ?? 0);
+      // Production's fast 404s came only while another free image had just finished (#634).
+      const busy = error instanceof SafeFetchError && error.code === "status" && [402, 404, 429, 503].includes(error.status ?? 0);
       if (!busy) throw error;
-      const wait = Math.max(1_000, error.retryAfterMs ?? FREE_IMAGE_DEFAULT_WAIT_MS);
+      const wait = Math.max(FREE_IMAGE_MIN_WAIT_MS, error.retryAfterMs ?? FREE_IMAGE_DEFAULT_WAIT_MS);
       if (Date.now() - started + wait > FREE_IMAGE_WAIT_CAP_MS) throw new FreeImageBusyError();
       await new Promise<void>((resolve, reject) => {
         const onAbort = () => { clearTimeout(timer); reject(req.signal?.reason); };

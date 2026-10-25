@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/whatsapp-number.json";
 import adSetCheck from "./fixtures/meta/whatsapp-adset-validate.json";
+import refused from "./fixtures/meta/whatsapp-business-refused.json";
 
 // #157: Solaride's Page has no published WhatsApp number, but its Meta business owns two
 // WhatsApp Business Accounts whose numbers Meta accepts for the Page's WhatsApp ad sets
@@ -129,5 +130,32 @@ describe("core: WhatsApp button number against recorded Graph reads (#157)", () 
     release();
     expect(await result).toBe("+919999994842");
   });
-});
 
+  it("keeps the Page's number and the status card when Meta refuses the business's WhatsApp accounts (#615)", async () => {
+    // Recorded: a token without WhatsApp access on the business edge gets HTTP 403, code 200.
+    expect(refused).toMatchObject({ status: 403, body: { error: { code: 200, type: "OAuthException" } } });
+    const tape: { path: string; status: number; body: unknown }[] = structuredClone(recorded.tape).map((entry) => entry.path.includes("owned_whatsapp_business_accounts")
+      ? { ...entry, status: refused.status, body: refused.body } : entry);
+    const page = tape.find((entry) => entry.path.startsWith(`${creds.pageId}?fields=id,has_whatsapp_business_number`))!;
+    page.body = { ...(page.body as object), has_whatsapp_business_number: true, whatsapp_number: "+91 99999 91111" };
+    replay(tape);
+    expect(await new MetaClient(creds).whatsappNumbers()).toEqual({ page: "+919999991111", business: [] });
+    vi.restoreAllMocks();
+    replay(tape);
+    // A bound business number can't be confirmed, so it isn't used; the Page's own still is.
+    expect(await new MetaClient(creds).getWhatsAppNumber("+919999994842", both)).toBeNull();
+    vi.restoreAllMocks();
+    replay(tape);
+    access.requireOwnedBusiness.mockResolvedValue({});
+    access.getConnectionStatus.mockResolvedValue({ selected: {}, capabilities: { canCreatePaused: { state: "available" } } });
+    access.withMetaConnection.mockImplementation((_context, _options, run: (meta: MetaClient) => unknown) => run(new MetaClient(creds)));
+    expect(await readWhatsAppStatus("11111111-1111-4111-8111-111111111111")).toEqual({ state: "ready", numbers: [{ masked: "+91 ••••• 1111", source: "page" }] });
+  });
+
+  it("still fails the read on any other Meta error, such as an expired token (#615)", async () => {
+    const tape = recorded.tape.map((entry) => entry.path.includes("owned_whatsapp_business_accounts")
+      ? { ...entry, status: 400, body: { error: { message: "Error validating access token", type: "OAuthException", code: 190 } } } : entry);
+    replay(tape);
+    await expect(new MetaClient(creds).whatsappNumbers()).rejects.toMatchObject({ code: 190 });
+  });
+});

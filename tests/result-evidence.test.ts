@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   openingLine, pastResultsBlock, pickResultEvidence, resultSummary, toEvidenceCampaign, type EvidenceCampaign,
 } from "@/lib/campaign/result-evidence";
+import { costPerResultFrom } from "@/lib/campaign/result-evidence";
 
 const ad = (headline: string, extra: Partial<EvidenceCampaign["ads"][number]> = {}) => ({
   headline, offerLine: null, angle: "Special offer / incentive", language: "English", format: "portrait", brief: `Brief for ${headline}`, ...extra,
@@ -85,3 +86,17 @@ describe("the old brief behind 'More like this' (#371)", () => {
     expect(briefWithoutOffers("Only 50% off today!")).toBe("");
   });
 });
+
+describe("cost per result for the Review budget warning (#419 2b)", () => {
+  const campaign = (destination: "whatsapp" | "instant_form", spend: number, results: number) => ({ name: "c", destination, spend, results, impressions: 100, days: 3, ads: [] });
+  it("pools the business's spend and results for the same kind of campaign", () => {
+    expect(costPerResultFrom([campaign("whatsapp", 100, 2), campaign("whatsapp", 38, 0), campaign("instant_form", 500, 50)], "whatsapp")).toBe(69);
+    expect(costPerResultFrom([campaign("instant_form", 500, 50)], "instant_form")).toBe(10);
+  });
+  it("knows nothing until a campaign of that kind has a result", () => {
+    expect(costPerResultFrom([campaign("whatsapp", 120, 0)], "whatsapp")).toBeNull();
+    expect(costPerResultFrom([campaign("instant_form", 500, 50)], "whatsapp")).toBeNull();
+    expect(costPerResultFrom([], "whatsapp")).toBeNull();
+  });
+});
+
