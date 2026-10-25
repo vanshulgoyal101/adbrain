@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { managementMigrationSql, migrationChecksum } from "../scripts/database-migrations.mjs";
-import { ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy } from "../scripts/release.mjs";
+import { changedLines, ctoApproval, ctoReviews, failingChecks, moneyPath, qaApproval, releaseMigrations, reviewVerdicts, smokeCounts, supersededBy } from "../scripts/release.mjs";
 
 const head = "c30aabaf55338d92d4f0ac9ca01eac027190aceb";
 const comment = (body: string, createdAt: string) => ({ body, createdAt, url: `https://example.test/${createdAt}` });
@@ -202,5 +202,15 @@ describe("Reviewer verdicts (#575)", () => {
     expect(r).toHaveLength(1);
     expect(ctoApproval(r, (sha: string) => sha === "c30aaba").approved).toBe(true);
     expect(ctoReviews([{ body: "Dev: Reviewer review of c30aaba: **approved**.", createdAt: "2026-10-25T11:00:00Z", url: "u" }])).toHaveLength(0);
+  });
+});
+
+describe("same changes despite moved context (#567)", () => {
+  const diff = (at: number, ctx: string) => `diff --git a/x.sql b/x.sql\n--- a/x.sql\n+++ b/x.sql\n@@ -${at},3 +${at},4 @@\n ${ctx}\n+create table lease (id int);\n-drop view v;\n`;
+  it("matches edits whose surrounding lines moved, not different edits or empty diffs", () => {
+    expect(changedLines(diff(10, "a"))).toBe(changedLines(diff(42, "b")));
+    expect(changedLines(diff(10, "a"))).not.toBe(changedLines(diff(10, "a").replace("lease", "leases")));
+    expect(changedLines(diff(10, "a"))).not.toBe(changedLines(diff(10, "a").replace("+create table lease (id int);\n-drop view v;", "-drop view v;\n+create table lease (id int);")));
+    expect(changedLines("")).toBe("");
   });
 });
