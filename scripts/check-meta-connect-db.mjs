@@ -28,6 +28,7 @@ const advisorsMigration = await readFile(join(root, "db/migrations/20261024_secu
 const managedAccountsMigration = await readFile(join(root, "db/migrations/20261025_managed_meta_accounts.sql"), "utf8");
 const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
+const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -1084,6 +1085,45 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyCampaignLearnings(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Learns'),($3,$4,'Other learns')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300),($3,$4,300)", [campaign, business, otherCampaign, otherBusiness]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: learning ledger: owners read only their own; only the service role writes; bounded text (#588)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query(`insert into public.campaign_learnings(campaign_id,business_id,snapshot,hypothesis) values ($1,$2,'{"destination":"whatsapp"}','English prefill beats Hinglish'),($3,$4,'{}',null)`, [campaign, business, otherCampaign, otherBusiness]);
+      await session.query("update public.campaign_learnings set verdict='Pending' where campaign_id=$1", [campaign]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.campaign_learnings set snapshot='[]' where campaign_id=$1", [campaign]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.campaign_learnings set verdict=repeat('x', 501) where campaign_id=$1", [campaign]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await session.query("commit");
+    });
+    await as("authenticated", owner, async (session) => {
+      assert.deepEqual((await session.query("select campaign_id, verdict from public.campaign_learnings")).rows, [{ campaign_id: campaign, verdict: "Pending" }]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.campaign_learnings set verdict='Mine' where campaign_id=$1", [campaign]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.campaign_learnings(campaign_id,business_id) values ($1,$2)", [otherCampaign, business]), { code: "42501" });
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.campaign_learnings"), { code: "42501" });
+    });
+  });
+}
+
 async function verifyWhatsAppBindings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -1812,6 +1852,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(whatsappBindingsMigration);
       await db.query(whatsappBindingsMigration);
       await verifyWhatsAppBindings(db,database);
+      await db.query(learningsMigration);
+      await db.query(learningsMigration);
+      await verifyCampaignLearnings(db,database);
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       return;
     }

@@ -182,6 +182,16 @@ shows them in its auth section, including signed-out failures.
 
 ## Reading It (#451)
 
+**Learning ledger (#588).** Every launch writes a settings snapshot to `campaign_learnings`
+(destination, WhatsApp prefill text and language, areas, ages, Advantage+ audience, formats,
+budget, creatives with angle and models), best effort: a ledger failure logs
+`campaign.learning_snapshot` and never fails the launch. QA 2 records the hypothesis a run tests
+and its verdict with `npm run learnings -- set <meta campaign id> --hypothesis "…" --verdict "…"`
+(and `--snapshot file.json` for runs launched before the ledger, e.g. #157); that's a production
+data write with the service-role key, no lead data. `npm run stats -- --include-internal learnings`
+compares the last 10 launches side by side with their latest results (opened → chats, cost per chat).
+Name sections after `--` to print only those.
+
 `npm run stats [-- --days 7] [-- --include-internal]` prints, from production (read-only,
 real customers only by default): AI calls, tokens and estimated USD by model; Create runs
 (cost, tokens, AI calls, retries and AI seconds per run, cost per saved ad); AI cost per

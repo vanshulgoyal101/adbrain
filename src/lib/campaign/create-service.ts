@@ -18,6 +18,9 @@ import { whatsappGreeting } from "./whatsapp-greeting";
 import { draftAreaNames } from "./draft-targeting";
 import { savedGenerationSettings } from "@/lib/creative/receipt";
 import { normalizeWebsite } from "@/lib/brand/validation";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const STORY_RENDER_BUDGET_MS = 6_000;
 
@@ -32,6 +35,7 @@ export async function executeReviewedCampaign(input: {
 }) {
   const { database, operationDatabase, actor, draft, review, operation, signal } = input;
   let metaResult: CreateCampaignResult | null = null;
+  let launchSnapshot: ReturnType<typeof buildLaunchSnapshot> | null = null;
   let checkpointState = operation;
   const checkpoint = createOperationCheckpoint(operationDatabase, operation);
   const onCheckpoint = async (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => {
@@ -57,7 +61,7 @@ export async function executeReviewedCampaign(input: {
           if (businessError || !business) throw new OperationPhaseError("Business could not be loaded before execution.", { transmitted: false });
           const location = review.resolvedLocation!;
           const excludedLocation = review.resolvedExcludedLocation;
-          const { data: creatives, error: creativeError } = await database.from("creatives").select("id, image_url, headline, primary_text, cta, generation")
+          const { data: creatives, error: creativeError } = await database.from("creatives").select("id, image_url, headline, primary_text, cta, generation, angle")
             .in("id", draft.input.creativeIds).eq("business_id", actor.businessId).eq("status", "approved");
           if (creativeError) throw new OperationPhaseError("Creatives could not be loaded before execution.", { transmitted: false });
           const byId = new Map((creatives ?? []).map(creative => [creative.id, creative]));
@@ -90,22 +94,22 @@ export async function executeReviewedCampaign(input: {
               }),
             ]).finally(() => clearTimeout(storyTimer))
             : noStories;
+          // #493: the ask names the city only when the campaign targets one (same areas as targeting).
+          const areas = draftAreaNames(draft.input, business.locations ?? []);
+          const prefill = draft.input.destination === "whatsapp" ? whatsappGreeting(
+            business,
+            creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""]),
+            areas,
+            creativeInputs.map(creative => savedGenerationSettings(creative.generation).language),
+            draft.input.whatsappLanguage ?? "ad",
+          ) : null;
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
             destination: draft.input.destination ?? "instant_form", whatsappNumber: review.whatsappNumber ?? undefined,
             // #253: the create step re-checks the number against this business's bindings.
             ...(draft.input.destination === "whatsapp" ? { boundWhatsAppNumbers: await boundWhatsAppNumbers(actor.businessId) } : {}),
-            ...(draft.input.destination === "whatsapp" ? {
-              // #493: the ask names the city only when the campaign targets one (same areas as targeting).
-              whatsappGreeting: whatsappGreeting(
-                business,
-                creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""]),
-                draftAreaNames(draft.input, business.locations ?? []),
-                creativeInputs.map(creative => savedGenerationSettings(creative.generation).language),
-                draft.input.whatsappLanguage ?? "ad",
-              ),
-            } : {}),
+            ...(prefill ? { whatsappGreeting: prefill } : {}),
             // Brands saved before #470 may hold a bare domain; Meta needs a full link.
             link: normalizeWebsite(business.website) ?? "https://facebook.com",
             creatives: creativeInputs.map((creative, index) => ({ imageUrl: creative.image_url!, headline: creative.headline!, message: creative.primary_text ?? "", description: savedCreativeDescription(creative.generation), cta: creative.cta, storyImage: storyImages[index] })),
@@ -116,6 +120,16 @@ export async function executeReviewedCampaign(input: {
             })) : undefined,
             onCheckpoint,
             onStoryFallback: storyFallback,
+          });
+          // #588: what this launch tried, for the learning ledger (saved once the campaign row exists).
+          launchSnapshot = buildLaunchSnapshot({
+            destination: metaResult.destination, objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
+            dailyBudgetRupees: draft.input.dailyBudgetRupees, adSetCount: metaResult.adSetIds.length || 1, abTest: Boolean(draft.input.abTest),
+            areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
+            interests: (review.audienceInterests ?? []).map(interest => interest.name),
+            whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill,
+            storyFormat: storyImages.some(Boolean),
+            creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
           });
           return metaResult;
         });
@@ -139,7 +153,11 @@ export async function executeReviewedCampaign(input: {
         meta_connection_generation: review.connectionGeneration, creative_ids: draft.input.creativeIds,
         raw: { source: "campaign_operation", metaResult } as unknown as Json,
       }, undefined, operationDatabase);
-      return error || !campaign ? null : { ...current, campaignId: campaign.id };
+      if (error || !campaign) return null;
+      if (launchSnapshot && !(await saveLaunchSnapshot(createAdminClient() as unknown as SupabaseClient, { campaignId: campaign.id, businessId: actor.businessId, snapshot: launchSnapshot }))) {
+        recordProductEvent({ kind: "workflow", name: "campaign.learning_snapshot", outcome: "failed", businessId: actor.businessId });
+      }
+      return { ...current, campaignId: campaign.id };
     },
   });
 }
