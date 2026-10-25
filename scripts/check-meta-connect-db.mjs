@@ -26,6 +26,7 @@ const manualEnquiryMigration = await readFile(join(root, "db/migrations/20261024
 const schedulerMigration = await readFile(join(root, "db/migrations/20261024_scheduler_pg_cron.sql"), "utf8");
 const advisorsMigration = await readFile(join(root, "db/migrations/20261024_security_advisors.sql"), "utf8");
 const managedAccountsMigration = await readFile(join(root, "db/migrations/20261025_managed_meta_accounts.sql"), "utf8");
+const provisionLeaseMigration = await readFile(join(root, "db/migrations/20261025_managed_provision_lease.sql"), "utf8");
 const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1380,6 +1381,53 @@ async function verifyManagedAccountsTenantQA(db, database) {
   });
 }
 
+async function verifyProvisionLease(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Lease'),($3,$4,'Other lease')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.managed_meta_accounts(business_id) values ($1),($2)", [business, otherBusiness]);
+  const token = async (businessId, by) => (await db.query(`insert into private.meta_tokens(business_id,authorized_by,subject_id,token_kind,ciphertext,nonce,auth_tag,key_id)
+    values ($1,$2,'6100000000009','business_system_user','\\x00',decode(repeat('00',12),'hex'),decode(repeat('00',16),'hex'),'k1') returning id`, [businessId, by])).rows[0].id;
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]; }
+    finally { await session.end(); }
+  };
+  await check(`${database}: 2T provisioning lease: one run per business, claimed with database time (#521)`, async () => {
+    const a = randomUUID(), b = randomUUID();
+    const claim = (lease, seconds = 120) => service("select public.managed_meta_account_claim($1,$2,$3) as ok", [business, lease, seconds]).then((row) => row.ok);
+    const release = (lease) => service("select public.managed_meta_account_release($1,$2) as ok", [business, lease]).then((row) => row.ok);
+    assert.equal(await claim(a), true);
+    assert.equal(await claim(b), false, "a second run waits while the lease is held");
+    assert.equal(await claim(a), true, "the holder can extend its own lease");
+    assert.equal(await release(b), false, "only the holder releases");
+    assert.equal(await release(a), true);
+    assert.equal(await claim(b), true);
+    await db.query("update public.managed_meta_accounts set provision_lease_until = now() - interval '1 second' where business_id=$1", [business]);
+    assert.equal(await claim(a), true, "an expired lease can be taken over");
+    assert.equal(await service("select public.managed_meta_account_claim($1,$2,120) as ok", [otherBusiness, b]).then((row) => row.ok), true, "leases are per business");
+    await assert.rejects(db.query("update public.managed_meta_accounts set provision_lease_id = null where business_id=$1", [business]), { code: "23514" });
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role authenticated");
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      await assert.rejects(session.query("select public.managed_meta_account_claim($1,$2,120)", [business, randomUUID()]), { code: "42501" });
+    } finally { await session.query("rollback"); await session.end(); }
+  });
+  await check(`${database}: 2T manager token: a reference into the encrypted store, same business only (#521)`, async () => {
+    const mine = await token(business, owner), theirs = await token(otherBusiness, other);
+    await service("update public.managed_meta_accounts set manager_user_id='6100000000009', manager_token_id=$2 where business_id=$1 returning 1 as ok", [business, mine]);
+    await assert.rejects(service("update public.managed_meta_accounts set manager_token_id=$2 where business_id=$1 returning 1 as ok", [business, theirs]), { code: "23503" });
+    await assert.rejects(service("update public.managed_meta_accounts set manager_user_id='not-an-id' where business_id=$1 returning 1 as ok", [business]), { code: "23514" });
+    await db.query("delete from private.meta_tokens where id=$1", [mine]);
+    assert.deepEqual((await db.query("select manager_token_id, manager_user_id from public.managed_meta_accounts where business_id=$1", [business])).rows,
+      [{ manager_token_id: null, manager_user_id: "6100000000009" }], "deleting the token clears only the reference");
+  });
+}
+
 async function verifyAdvisorHardening(db, database) {
   await check(`${database}: advisor hardening reapplies cleanly and leaves the expected catalog (#359)`, async () => {
     await db.query(advisorsMigration);
@@ -1805,6 +1853,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(managedAccountsMigration);
       await db.query(managedAccountsMigration);
       await verifyManagedAccounts(db,database);
+      await db.query(provisionLeaseMigration);
+      await db.query(provisionLeaseMigration);
+      await verifyProvisionLease(db,database);
       await verifyManagedAccountsTenantQA(db,database);
       await db.query(managedSpendCapsMigration);
       await db.query(managedSpendCapsMigration);
