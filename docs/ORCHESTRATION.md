@@ -85,10 +85,10 @@ Routine steps never wait for the CEO or the CTO.
    per problem; do not bury new failures in long comment threads.
 7. **The CEO** (coordinator chat) sets priority and the milestone, approves budgets
    and money, handles the owner's steps (Meta, Razorpay, browser sign-in) and
-   maintains this file except the worker table. **The CEO delegates, not builds**
+   maintains this file and the priorities on the [Team board](https://github.com/vanshulgoyal101/adbrain/issues/580). **The CEO delegates, not builds**
    (owner, Oct 24): an owner request becomes an issue with done-criteria, labelled
    for its owner (`owner:cto` to slot, or a worker directly), and tracked to done.
-8. **The CTO** turns priorities into work: owns the worker table under "Now",
+8. **The CTO** turns priorities into work: owns the worker table on the Team board (#580),
    assigns and briefs issues, keeps labels honest, closes or parks stale issues,
    watches CI and production health, reviews high-impact diffs and publishes
    `Lesson:` lines. **Queues never run dry:** every worker keeps at least 2
@@ -138,44 +138,9 @@ Routine steps never wait for the CEO or the CTO.
 - **Never** force-push, bypass branch protection, print secrets, activate ad
   delivery, charge or refund without approval, or touch the #54 Sep 29 held request.
 
-### Now (October 23): the first watched run on Solaride
+### Now
 
-Done October 22: offer in the first 125 characters (#194), the owner's own photo
-in an ad (#195), capped campaigns resume and sync (#197), #202, #177, #181,
-#185 and capped activation (PR193). Done October 23: capped runs reserve cap +
-GST (#208), custom amounts and top-ups (#212), phone big and bold (#215), phone
-layout (#220).
-
-CEO priorities (Oct 25, 10:15Z; agreed with the CTO on #364). The CTO's queue map
-orders each worker's row to match.
-
-1. **P0 core:** Brand → Create → Review → Launch → Manage stays healthy; the deploy
-   train stays under 100 deploys/day and is never stuck (#564 now); production smoke on
-   every train.
-2. **P0 by Oct 26 14:24Z:** #157 final report and **#499 next Solaride run, PAUSED-ready**
-   (budget: ₹300/day × 3, cap ₹900, #502), carrying the **WhatsApp drop-off fix** (#493
-   one-tap prefill; #496 opened→messaged line). 20 opened WhatsApp → 2 chatted, so this is
-   the biggest lever. The owner tops up and activates after QA's verdict.
-3. **P1 2-Tier, AdBrain owns customer ad accounts (#518, #519–#527):** build and test
-   behind the flag now; end-to-end waits on Meta (#156 App Review, #517 Access
-   Verification, both submitted Oct 24). No customer is charged for ad money through
-   2-Tier until a CA confirms the GST treatment (owner/CEO).
-4. **P1 first outside customers:** concierge pilots once #156/#517 pass, on 2-Tier.
-5. **P2:** #403 design (owner's verdict on QA's after set), #418/#388 models and evals
-   at $0, #419 placement track, #423 targeted AI review, #378 AI reliability.
-6. **Later:** #528 offboarding, #178, #229, #296, #448 (Vercel token back after App
-   Review), #510 Google Ads (owner deprioritised Oct 24).
-- **Filter for new issues:** it must help a customer make and run ads today,
-  make the product faster or clearer, or remove a real failure. Otherwise file
-  it as `later`, or don't file it.
-
-The CTO maintains the worker table below.
-
-| Worker | Work, in order |
-| --- | --- |
-| Everyone | **When idle:** run `node scripts/wait-for-work.mjs --me <you>` in the foreground only (it first lists items you own where someone else spoke last; it gives up after 30 min; then stop) and continue with what it prints. **Every finished step names who acts next** (`→ DevOps: release`) and moves the `owner:` label; release-PR verdicts end with `→ DevOps`. Never leave anything running in the background. **Talk on the issue or PR;** hand off with the owner label plus one arrow line (`→ QA: ready at <sha>`), and sign your own comments with your role ([AGENTS.md](../AGENTS.md#worker-coordination)). No status or idle posts. Technical calls and reviews: `owner:cto`. Owner steps: `waiting-owner` (the CEO asks him). Money PRs ship on QA approval plus the CTO's review. **Queue empty?** Take the next item in your row, then QA's #51 findings, then any unowned `core` issue in your area (add your label); only then `wait-for-work` |
-| QA | 1. PR #560 verdict (money; blocks [#522](https://github.com/vanshulgoyal101/adbrain/issues/522)). 2. **[#157](https://github.com/vanshulgoyal101/adbrain/issues/157)** read + final report Oct 26 14:24Z. 3. [#499](https://github.com/vanshulgoyal101/adbrain/issues/499) verdict. 4. [#527](https://github.com/vanshulgoyal101/adbrain/issues/527) red tests. Post verdicts as PR reviews |
-| Dev | 1. [#522](https://github.com/vanshulgoyal101/adbrain/issues/522): answer QA on PR #560. 2. [#525](https://github.com/vanshulgoyal101/adbrain/issues/525) done-when on a fixture tenant (live after Meta approves). 3. [#419](https://github.com/vanshulgoyal101/adbrain/issues/419) adoptions. 4. [#418](https://github.com/vanshulgoyal101/adbrain/issues/418)/[#388](https://github.com/vanshulgoyal101/adbrain/issues/388) at \$0; close [#378](https://github.com/vanshulgoyal101/adbrain/issues/378) if no gap remains. You own `ad-assistant.tsx` and `interview.ts` |
-| DevOps | 1. Release #554 ([#253](https://github.com/vanshulgoyal101/adbrain/issues/253)) and #496 (both approved migrations). 2. PR #560 after QA. 3. [#423](https://github.com/vanshulgoyal101/adbrain/issues/423) targeted review. Parked: [#449](https://github.com/vanshulgoyal101/adbrain/issues/449), [#390](https://github.com/vanshulgoyal101/adbrain/issues/390) |
-| Dev 3 | 1. **[#499](https://github.com/vanshulgoyal101/adbrain/issues/499) next Solaride run PAUSED-ready by Oct 26 14:24Z** (budget A, [#502](https://github.com/vanshulgoyal101/adbrain/issues/502)). 2. [#524](https://github.com/vanshulgoyal101/adbrain/issues/524) WhatsApp Embedded Signup. 3. [#526](https://github.com/vanshulgoyal101/adbrain/issues/526) onboarding (mount #523's Page step). 4. [#403](https://github.com/vanshulgoyal101/adbrain/issues/403) S6 |
-| Dev 2 | 1. [#521](https://github.com/vanshulgoyal101/adbrain/issues/521) provisioning: red tests + documented-shape fixtures, ready to record. 2. [#523](https://github.com/vanshulgoyal101/adbrain/issues/523) 390 px walk with Dev 3's mount. 3. [#493](https://github.com/vanshulgoyal101/adbrain/issues/493) parts 2–3. Lead for [#518](https://github.com/vanshulgoyal101/adbrain/issues/518). Parked: [#156](https://github.com/vanshulgoyal101/adbrain/issues/156), [#517](https://github.com/vanshulgoyal101/adbrain/issues/517) (Meta reviewing) |
+**Live priorities and worker queues: the pinned [Team board #580](https://github.com/vanshulgoyal101/adbrain/issues/580).**
+The CEO edits its priorities and the CTO its worker table directly in the issue body
+(no PR, CI or deploy); `wait-for-work` prints your row on every wake. Discuss changes
+on #364.
