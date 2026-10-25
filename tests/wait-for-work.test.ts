@@ -74,7 +74,7 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "devops", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "qa2", count: 0 }, { role: "reviewer", count: 0 }, { role: "devops", count: 0 }]);
   });
 });
 
@@ -125,5 +125,24 @@ describe("team board row", () => {
     expect(boardRow(board, "dev2")).toBe("Everyone: When idle: wait.\nDev 2: 1. [#521](https://x/521) provisioning.");
     expect(boardRow(board, "qa")).toBe("Everyone: When idle: wait.");
     expect(boardRow("no table", "dev")).toBeNull();
+    expect(boardRow("| QA | review |\n| QA 2 | walk |", "qa2")).toBe("QA 2: walk");
+  });
+});
+
+describe("Reviewer and QA 2 roles (#575)", () => {
+  it("keeps QA distinct from QA 2, and routes Reviewer handoffs", () => {
+    const qa = matchers("qa");
+    const qa2 = matchers("qa2");
+    expect(qa.writtenByMe("QA 2: #157 read at 10:00Z")).toBe(false);
+    expect(qa2.writtenByMe("QA 2: #157 read at 10:00Z")).toBe(true);
+    expect(waitingOnMe("CTO: → QA 2: walk the run.", qa)).toBe(false);
+    expect(waitingOnMe("CTO: → QA 2: walk the run.", qa2)).toBe(true);
+    expect(waitingOnMe("Dev: → QA: red test please.", qa2)).toBe(false);
+    expect(waitingOnMe("DevOps: → Reviewer: review of abc1234 please.", matchers("reviewer"))).toBe(true);
+  });
+  it("counts their queues", () => {
+    const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
+    expect(low).toContain("qa2");
+    expect(low).toContain("reviewer");
   });
 });
