@@ -114,7 +114,7 @@ All automated production browser runs from the shared Mac come from one IP addre
   A Hindi concept that writes "फ्री साइट सर्वे" without quoting the Brand or naming it in English is
   cited with the Brand's "Free site survey" (#378, seen in the #418 $0 eval): Hindi and Punjabi offer
   loanwords (साइट, सर्वे, विज़िट, …) match their English fact words from an exact list.
-- **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit.
+- **Prepare** (`campaign-prepare`, `campaign-prepare-transport`): the recorded Groq plan, planner handoffs, provider failure, and a hang that falls back at the 45 s planner deadline inside the route's 60 s limit. #612: every free provider answering 429 still ends in a plan on the paid last resort; after a burst that parked every provider, the next Prepare waits out the shortest cooldown (≤ 20 s) and plans with AI targeting; an audience plan that falls back to default targeting is logged `partial`, not `failed`, since the owner can still launch.
 - **Campaign** (`campaign-meta`): lead form, location and interests, launch entirely PAUSED, read-back, sync and pause against recorded Graph responses.
 - **Cost evidence** (`cost-evidence`): lifetime spend read for customer cost evidence (#216) from two real Solaride campaigns, one never delivered (₹0) and one with ₹32.63, recorded read-only by `scripts/record-meta-spend-fixtures.ts`.
 - **Managed spending limit** (`managed-spend-cap`, #522): a ₹500 annual-quote customer's child
