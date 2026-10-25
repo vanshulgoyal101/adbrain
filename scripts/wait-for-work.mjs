@@ -80,7 +80,12 @@ let nextDue = Infinity;
 /** Ready-pool lane per role: briefed, unowned issues labelled `ready` + `lane:<lane>` (#573). */
 export const LANES = { dev: "dev", dev2: "dev", dev3: "dev", qa: "qa", qa2: "qa", devops: "devops", reviewer: "review" };
 
-/** The lane's unclaimed ready issues, core first, oldest first; at most `max`. */
+/**
+ * The lane's unclaimed ready issues, core first, oldest first; at most `max`.
+ * @param {Array<{ number: number, title?: string, pull_request?: unknown, labels?: Array<string | { name: string }> }>} issues
+ * @param {string} role
+ * @param {number} [max]
+ */
 export function readyPool(issues, role, max = 3) {
   const lane = LANES[role];
   if (!lane) return [];
