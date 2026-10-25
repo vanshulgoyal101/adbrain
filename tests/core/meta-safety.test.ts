@@ -5,6 +5,7 @@ import switchDailyToLifetime from "./fixtures/meta/safety/switch-daily-to-lifeti
 import adsetLifetimeBudget from "./fixtures/meta/safety/adset-lifetime-budget.json";
 import reviewNewAd from "./fixtures/meta/safety/review-new-ad.json";
 import reviewAccountExamples from "./fixtures/meta/safety/review-account-examples.json";
+import reviewRejectedLocale from "./fixtures/meta/safety/review-rejected-locale.json";
 import pauseAll from "./fixtures/meta/safety/pause-all.json";
 import insights from "./fixtures/meta/safety/insights.json";
 import statusRateLimit from "./fixtures/meta/safety/status-rate-limit.json";
@@ -103,6 +104,17 @@ describe("core: first-activation safety against recorded Graph responses (#157)"
     expect(rejected.reasons[0]).toContain("Meta");
     expect(reviews.filter(review => ["PAUSED", "CAMPAIGN_PAUSED"].includes(review.effectiveStatus!)).map(review => review.state))
       .toEqual(["approved", "approved"]);
+  });
+
+  // #635: the test account's Facebook is in Hindi; both answers were recorded for the same ad (Oct 25).
+  it("review: a rejected ad's reason reads in English even when the token user's Facebook is in Hindi", async () => {
+    const tape = replay(reviewRejectedLocale as Exchange[]);
+    const [review] = await new MetaClient(creds).readAdReview("120253256980050526");
+    expect(review).toMatchObject({ adId: "120253256980040526", state: "rejected", effectiveStatus: "DISAPPROVED" });
+    expect(review.reasons).toEqual([expect.stringContaining("It looks like your ad contains content that is not allowed on Meta’s Advertising platforms.")]);
+    expect(review.reasons.join(" ")).not.toMatch(/[\u0900-\u097F]/);
+    // The recorded read without a locale (Hindi) stays unused.
+    expect(tape.pending.map(exchange => exchange.path)).toEqual([expect.not.stringContaining("locale=")]);
   });
 
   it("pause: one call pauses campaign, ad set and ad, reads all three back, and never writes anything but PAUSED", async () => {

@@ -133,3 +133,34 @@ export function reviewWarnings(input: {
   return warnings;
 }
 
+
+/** Meta restarts learning when an ad set resumes after a pause of this many days or more. */
+export const LEARNING_RESET_PAUSE_DAYS = 7;
+
+/**
+ * #419 item 2: the edits AdBrain itself makes that restart Meta's learning, shown on the activation
+ * review; never block. A capped run copies the ads into a new ad set, which learns from zero; with
+ * the business's own cost per result, it warns only when the run can't reach ~50 results. Resuming
+ * after a long pause restarts learning too (`pausedAt` is AdBrain's own record of the pause).
+ */
+export function activationWarnings(input: {
+  capDays?: number | null;
+  dailyBudgetRupees: number;
+  costPerResultRupees?: number | null;
+  pausedAt?: string | null;
+  now: number;
+}): string[] {
+  const cost = input.costPerResultRupees;
+  if (input.capDays) {
+    if (!(cost && cost > 0)) return ["A capped run is a new ad set, so Meta's learning starts from zero; results may be slow at first"];
+    const results = Math.floor((input.dailyBudgetRupees * input.capDays) / cost);
+    return results < LEARNING_EVENTS_PER_WEEK
+      ? [`A capped run is a new ad set, so Meta's learning starts from zero: ${input.capDays} ${input.capDays === 1 ? "day" : "days"} at about ${formatMoney(cost)} a result buys about ${results} ${results === 1 ? "result" : "results"}, under the ~${LEARNING_EVENTS_PER_WEEK} it needs, so it will likely end while still learning`]
+      : [];
+  }
+  const paused = input.pausedAt ? Date.parse(input.pausedAt) : Number.NaN;
+  const days = Math.floor((input.now - paused) / 86_400_000);
+  return days >= LEARNING_RESET_PAUSE_DAYS
+    ? [`Paused for ${days} days: Meta restarts learning when a campaign resumes after ${LEARNING_RESET_PAUSE_DAYS} days or more; results may be slow at first`]
+    : [];
+}

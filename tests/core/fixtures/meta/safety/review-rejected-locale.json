@@ -1,0 +1,86 @@
+[
+  {
+    "method": "GET",
+    "path": "120253256980050526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253256980050526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253256980060526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFFjNHpZAOHpsVWFtZAV9uWVBocWgxQnYwSTVIQXdPb0RmRmEyOTEwSGIwQ0hhMnE2bURodVRndHFQbTBwREo2ZAU9CaWt0bW9hX05yYmdScFM1RTRGUHV3",
+          "after": "QVFIVFFjNHpZAOHpsVWFtZAV9uWVBocWgxQnYwSTVIQXdPb0RmRmEyOTEwSGIwQ0hhMnE2bURodVRndHFQbTBwREo2ZAU9CaWt0bW9hX05yYmdScFM1RTRGUHV3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253256980040526",
+          "status": "PAUSED",
+          "effective_status": "DISAPPROVED",
+          "configured_status": "PAUSED",
+          "ad_review_feedback": {
+            "global": {
+              "Lead Ads": " It looks like your ad contains content that is not allowed on Meta’s Advertising platforms. This goes against our Advertising Standards, Community Standards or Terms of Service. Visit Business Support Home to understand why your ad was removed and how to fix it."
+            }
+          }
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHBpRVRDUy1UWDdKb0EteWV0MlZAYa052TmowemV6NFY4cjBQblczQnQtWlNvNWlzUTZA0SXNILWtCRDJBTzFUdjlSbDJ4QlBENTdWNG94emtmU2QxZAVlR",
+          "after": "QVFIVHBpRVRDUy1UWDdKb0EteWV0MlZAYa052TmowemV6NFY4cjBQblczQnQtWlNvNWlzUTZA0SXNILWtCRDJBTzFUdjlSbDJ4QlBENTdWNG94emtmU2QxZAVlR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253256980050526/ads?fields=id%2Cstatus%2Ceffective_status%2Cconfigured_status%2Cad_review_feedback%2Cissues_info&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253256980040526",
+          "status": "PAUSED",
+          "effective_status": "DISAPPROVED",
+          "configured_status": "PAUSED",
+          "ad_review_feedback": {
+            "global": {
+              "लीड विज्ञापन": " लगता है कि आपके विज्ञापन में ऐसा कंटेंट शामिल है, जिसे Meta के विज्ञापन प्लेटफ़ॉर्म पर दिखाने की परमिशन नहीं है. यह हमारे विज्ञापन स्टैंडर्ड, कम्युनिटी स्टैंडर्ड या सेवा की शर्तों का उल्लंघन करता है. इस बारे में जानने कि आपका विज्ञापन क्यों हटाया गया है और उसे कैसे ठीक करें, इसके लिए बिज़नेस सपोर्ट होम पर जाएँ."
+            }
+          }
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHBpRVRDUy1UWDdKb0EteWV0MlZAYa052TmowemV6NFY4cjBQblczQnQtWlNvNWlzUTZA0SXNILWtCRDJBTzFUdjlSbDJ4QlBENTdWNG94emtmU2QxZAVlR",
+          "after": "QVFIVHBpRVRDUy1UWDdKb0EteWV0MlZAYa052TmowemV6NFY4cjBQblczQnQtWlNvNWlzUTZA0SXNILWtCRDJBTzFUdjlSbDJ4QlBENTdWNG94emtmU2QxZAVlR"
+        }
+      }
+    }
+  }
+]

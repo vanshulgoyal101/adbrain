@@ -289,6 +289,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   without a saved design), and "Budget is below what Meta needs to learn" when the per-ad-set budget
   buys under ~50 results a week at the business's own cost per result over its last 60 days of
   stored results (no history, no budget warning). Neither changes the reviewed plan or the send.
+  The activation review notes the edits AdBrain makes that restart Meta's learning (#419 item 2),
+  also never blocking and outside the confirmation digest: a capped run copies the ads into a new
+  ad set that learns from zero (with the business's cost per result, only when its days buy under
+  ~50 results), and resuming a campaign paused 7 or more days ago by the owner or by AdBrain's
+  spend auto-pause (from the audit log; a pause made in Meta isn't seen).
 - Existing WhatsApp campaigns use the same account/Page-bound import, refresh,
   pause, and activation safeguards. Stored results are lifetime insights (`date_preset=maximum`):
   Meta's default `last_30d` leaves out today, so a new campaign used to read ₹0 (#404). Refresh detects all-WhatsApp ad sets and

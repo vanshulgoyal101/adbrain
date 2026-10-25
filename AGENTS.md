@@ -19,6 +19,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Communication** (Oct 23; #74 is closed). Work talk lives on its issue or PR.
 	Hand off with the label plus one line addressed to the next owner with an arrow
 	(`→ QA: ready at <sha>`), five lines at most; long evidence goes in the PR.
+	New issues and PRs follow the [work](.github/ISSUE_TEMPLATE/work.md) and
+	[PR](.github/pull_request_template.md) templates: why, do, done-when, files, risk,
+	next owner.
 	**Every comment that finishes your part names who acts next** (`→ DevOps: release`,
 	`→ Dev: yours`), and a verdict on a release PR always ends with `→ DevOps`. Move the
 	`owner:` label to whoever acts next. Start PR titles with the issue number (`#274 …`)

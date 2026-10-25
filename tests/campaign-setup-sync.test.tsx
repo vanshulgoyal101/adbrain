@@ -196,13 +196,15 @@ describe("campaign sync feedback", () => {
         campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED" },
         adSets: [{ id: "set-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: { geo_locations: { countries: ["IN"] } } }],
         ads: [{ id: "ad-1", status: "ACTIVE", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
-      } });
+      }, learning: { costPerResultRupees: 69, pausedAt: new Date(Date.now() - 10.5 * 86_400_000).toISOString() } });
       return Response.json({ campaigns: [], nextCursor: null });
     }));
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
     expect(await screen.findByText(/Targeting:.*"IN"/)).toBeInTheDocument();
+    // #419 item 2: resuming after AdBrain paused it 10 days ago restarts Meta's learning; a note, not a block.
+    expect(screen.getByRole("list", { name: "Before you activate" })).toHaveTextContent("Paused for 10 days: Meta restarts learning");
     expect(screen.getByText(/Ad set set-1:.*₹500.*destination ON_AD/)).toBeInTheDocument();
     expect(screen.getByText(/Ad ad-1 .*creative creative-1/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request activation" })).toBeEnabled();
@@ -219,7 +221,7 @@ describe("campaign sync feedback", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (url.startsWith("/api/payments/customer-balance")) return Response.json({});
       if (url === "/api/campaigns/campaign-1" && init?.method === "PATCH") return Response.json({ ok: true, status: "active" });
-      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery });
+      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery, learning: { costPerResultRupees: 69, pausedAt: null } });
       return Response.json({ campaigns: [], nextCursor: null });
     }));
     const connection = { authorization: "connected", selected, generation: 1 } as ConnectionDTO;
@@ -227,8 +229,11 @@ describe("campaign sync feedback", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected(connection); });
     expect(await screen.findByText(/Total limit on Meta: ₹1,500 over 3 days/)).toBeInTheDocument();
+    // #419 item 2: the copy is a new ad set; ₹500 × 3 days at ₹69 a chat is about 21, under Meta's ~50.
+    expect(screen.getByText(/new ad set.*3 days at about ₹69 a result buys about 21 results/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "2" } });
     expect(screen.getByText(/Total limit on Meta: ₹1,000 over 2 days/)).toBeInTheDocument();
+    expect(screen.getByText(/2 days at about ₹69 a result buys about 14 results/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Approve total and activate" }));
     await screen.findByText(/₹1,000 total limit on Meta for 2 days/);
     const [, init] = vi.mocked(fetch).mock.calls.find(([, call]) => call?.method === "PATCH")!;
@@ -262,6 +267,7 @@ describe("campaign sync feedback", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
     await screen.findByRole("button", { name: "Request activation" });
+    expect(screen.queryByRole("list", { name: "Before you activate" })).toBeNull();
     const funds = vi.mocked(fetch).mock.calls.map(([url]) => String(url)).find(url => url.startsWith("/api/payments/customer-balance"));
     expect(funds).toBeDefined();
     expect(funds).not.toContain("capDays");

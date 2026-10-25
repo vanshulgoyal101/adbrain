@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StrictMode } from "react";
 import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
@@ -614,6 +614,13 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     expect(await screen.findByRole("link", { name: "Open Brand Brain" })).toHaveAttribute("href", "/brand");
     expect(screen.getByText(websiteMessage)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
+    // #637: a blocked review is a warning that names what to fix, not a success card.
+    const review = screen.getByRole("region", { name: "Campaign review result" });
+    expect(within(review).getByText("Fix 1 item before sending to Meta")).toBeInTheDocument();
+    expect(within(review).queryByText("Campaign review")).toBeNull();
+    expect(review.firstElementChild).toHaveClass("bg-amber-50");
+    expect(review.firstElementChild).not.toHaveClass("bg-blue-50");
+    expect(within(review).getByText(/Send to Meta \(paused\) appears once this is fixed/)).toBeInTheDocument();
   });
 
   it("shows the owner's own send as sending, not as a locked previous request", async () => {

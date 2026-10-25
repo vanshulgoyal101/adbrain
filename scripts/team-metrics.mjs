@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Team speed metrics (read-only, gh): PR lead time, handoff latency, idle gaps, workflow time.
+// Team speed metrics (read-only, gh): DORA's four keys and active hours per role (#620), PR lead
+// time, handoff latency, idle gaps, workflow time.
 // Usage: npm run team-metrics [-- --hours 168]. The CTO posts the weekly result on #364.
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
+import { activeHours, changeFailureRate, deployFrequency, leadTimes, timeToRestore } from "./lib/team-metrics.mjs";
 const R = "vanshulgoyal101/adbrain";
 const { values } = parseArgs({ options: { hours: { type: "string", default: "168" } } });
 const hours = Number(values.hours);
@@ -13,7 +15,8 @@ const med = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) =>
 const p90 = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length * 0.9)]; };
 const min = (ms) => Math.round(ms / 60000);
 // PRs
-const prs = api(`repos/${R}/pulls?state=closed&per_page=100&sort=updated&direction=desc`).filter(p => p.merged_at && p.merged_at > since && !/^Deploy train/.test(p.title));
+const merged = api(`repos/${R}/pulls?state=closed&per_page=100&sort=updated&direction=desc`).filter(p => p.merged_at && p.merged_at > since);
+const prs = merged.filter(p => !/^Deploy train/.test(p.title));
 const lead = prs.map(p => Date.parse(p.merged_at) - Date.parse(p.created_at));
 const byKind = {}; for (const p of prs) { const k = /worker table|docs:/i.test(p.title) ? "docs" : /migration|db:/i.test(p.title) ? "migration" : "code"; (byKind[k] ??= []).push(Date.parse(p.merged_at) - Date.parse(p.created_at)); }
 console.log(`PRs merged (${hours}h, excl. trains): ${prs.length}; lead time median ${min(med(lead))} min, p90 ${min(p90(lead))} min`);
@@ -44,3 +47,18 @@ const runs = api(`repos/${R}/actions/runs?created=>${since.slice(0,10)}&per_page
 const byWf = {}; for (const r of runs) (byWf[r.name] ??= []).push(Date.parse(r.updated_at) - Date.parse(r.run_started_at ?? r.created_at));
 console.log("Workflow wall time (median min / runs / failures):");
 for (const [k, v] of Object.entries(byWf)) { const f = runs.filter(x => x.name === k && x.conclusion === "failure").length; console.log(`  ${k}: ${(med(v) / 60000).toFixed(1)} / ${v.length} / ${f}`); }
+// DORA four keys (#620): deploys are merges to main; failures and restores come from the production guard's smoke.
+const mainMerges = merged.filter(p => p.base?.ref === "main");
+const guard = api(`repos/${R}/actions/workflows/production-guard.yml/runs?created=>${since.slice(0, 10)}&per_page=100`).filter(x => x.created_at > since);
+const freq = deployFrequency(mainMerges, hours);
+const lt = leadTimes(merged, mainMerges);
+const cfr = changeFailureRate(guard);
+const ttr = timeToRestore(guard);
+console.log(`DORA (${hours}h):`);
+console.log(`  Deploy frequency: ${freq.deploys} merges to main (${freq.perDay}/day)`);
+console.log(`  Lead time, PR open → production: median ${min(med(lt.times) ?? 0)} min, p90 ${min(p90(lt.times) ?? 0)} min (n=${lt.times.length}, not shipped yet ${lt.pending})`);
+console.log(`  Change-failure rate: ${cfr.failures} of ${cfr.deploys} production smokes failed (${Math.round(cfr.rate * 100)}%)`);
+console.log(`  Time to restore: median ${min(med(ttr.times) ?? 0)} min, p90 ${min(p90(ttr.times) ?? 0)} min (n=${ttr.times.length}, open ${ttr.open})`);
+const active = activeHours(sorted);
+console.log(`Active hours per role (distinct hours with a post): ${Object.keys(roles).map(r => `${r} ${active[r] ?? 0}`).join(", ")}`);
+
