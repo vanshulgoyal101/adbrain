@@ -299,9 +299,10 @@ Internal accounts (team, owner, test; [internal-accounts.json](../src/lib/intern
 write on the same models as customers (Haiku text is about $0.006 a Create, and the free text
 tiers allow 20 Gemini requests a day) but make their images on free Pollinations, without
 reference images and never falling back to the paid image model (#449, #466). Pollinations answers
-402/429/503 with Retry-After past about one image per 20–40 s per address, so free images run one
-at a time per server instance, wait out Retry-After (10 s when absent) and fail with "Free test
-images are busy" after about 90 s. The request's verified Supabase user decides; requests without
+402/429/503 past its free limit of one image per 45 s per address, while its Retry-After says 1 s;
+from production it also answered a fast 404 in the same spot (#634). So free images run one at a
+time per server instance, treat 402/404/429/503 as busy, wait the longer of Retry-After and 15 s,
+and fail with "Free test images are busy" after about 90 s. The request's verified Supabase user decides; requests without
 one (cron, workers) are billed as customers. Exceptions are listed by user id in
 `exemptFromFreeProviders`, each with its reason: the Meta App Review reviewer (until #156 is
 decided) and the owner, whose Solaride is a real advertiser (#466).
