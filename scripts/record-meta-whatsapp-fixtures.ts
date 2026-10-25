@@ -50,6 +50,8 @@ const variants = {
   "one-city": whatsappGreeting(brand, [approved.headline, approved.primary_text], ["Mohali"]),
   hindi: whatsappGreeting(brand, ["छत पर सोलर, Free site survey के साथ"], ["Mohali"]),
   punjabi: whatsappGreeting(brand, ["ਛੱਤ 'ਤੇ ਸੋਲਰ, Free site survey ਨਾਲ"], ["Mohali"]),
+  // #493: the per-campaign language choice; Hinglish on an English ad.
+  hinglish: whatsappGreeting(brand, [approved.headline, approved.primary_text], ["Mohali"], [], "hinglish"),
 };
 const targeting = JSON.stringify({ geo_locations: { cities: [{ key: "1021145" }, { key: "2676092" }, { key: "1035473" }], location_types: ["home", "recent"] }, age_min: 25, age_max: 55, targeting_automation: { advantage_audience: 0 } });
 

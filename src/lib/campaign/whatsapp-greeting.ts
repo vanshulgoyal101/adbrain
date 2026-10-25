@@ -13,6 +13,9 @@ function offerPhrase(offer: string): string {
 }
 
 type Language = "en" | "hi" | "pa" | "hinglish";
+/** A campaign's choice for its WhatsApp message (#493): "ad" follows the ads' own language. */
+export type WhatsAppLanguage = "ad" | Language;
+export const WHATSAPP_LANGUAGES: readonly WhatsAppLanguage[] = ["ad", "en", "hi", "hinglish", "pa"];
 
 const TEXT: Record<Language, {
   offer: (offer: string, city: string | null) => string;
@@ -20,8 +23,9 @@ const TEXT: Record<Language, {
   greeting: (name: string) => string;
 }> = {
   en: {
-    offer: (offer, city) => `Hi, I'm interested in the ${offer}${city ? ` in ${city}` : ""}.`,
-    business: (name, city) => `Hi, I'd like to know more about ${name}${city ? ` in ${city}` : ""}.`,
+    // Short, simple English (owner, Oct 25): "Hi! I'd like a free site survey."
+    offer: (offer, city) => `Hi! I'd like ${/^free\b/i.test(offer) ? "a" : "the"} ${offer}${city ? ` in ${city}` : ""}.`,
+    business: (name, city) => `Hi! I'd like to know more about ${name}${city ? ` in ${city}` : ""}.`,
     greeting: (name) => `Hi! Thanks for messaging ${name}. Send this message and we'll reply here.`,
   },
   hi: {
@@ -64,10 +68,12 @@ export function whatsappGreeting(
   areas: string[] = [],
   /** The ads' stored language (`generation.design.language`); the script decides when there is none. */
   adLanguages: (string | null | undefined)[] = [],
+  /** The campaign's choice; "ad" (default) follows the ads. */
+  chosen: WhatsAppLanguage = "ad",
 ): WhatsAppGreeting {
   const name = brand.name.trim();
   const copy = adCopy.join(" ");
-  const language: Language = languageFrom(adLanguages)
+  const language: Language = (chosen !== "ad" ? chosen : null) ?? languageFrom(adLanguages)
     ?? (/\p{Script=Devanagari}/u.test(copy) ? "hi" : /\p{Script=Gurmukhi}/u.test(copy) ? "pa" : "en");
   const rank = (offer: string) => (/^free\b/i.test(offer) ? 2 : /\d/.test(offer) ? 1 : 0);
   const offer = (brand.offers ?? [])

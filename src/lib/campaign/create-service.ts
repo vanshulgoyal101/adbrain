@@ -103,6 +103,7 @@ export async function executeReviewedCampaign(input: {
                 creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""]),
                 draftAreaNames(draft.input, business.locations ?? []),
                 creativeInputs.map(creative => savedGenerationSettings(creative.generation).language),
+                draft.input.whatsappLanguage ?? "ad",
               ),
             } : {}),
             // Brands saved before #470 may hold a bare domain; Meta needs a full link.

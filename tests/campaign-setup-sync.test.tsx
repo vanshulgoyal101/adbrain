@@ -5,6 +5,10 @@ import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, Creative } from "@/lib/types";
 import type { ConnectionDTO } from "@/lib/meta/connect-contracts";
+// #403 S6: the confirm dialog has its own tests (confirm-dialog.test.tsx); here window.confirm stands in for the owner's answer.
+vi.mock("@/components/ui/confirm-dialog", () => ({
+  useConfirm: () => [async (options: { title: string; description?: string }) => window.confirm([options.title, options.description].filter(Boolean).join(" ")), null],
+}));
 
 const mocks = vi.hoisted(() => ({
   drafts: vi.fn(), draft: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), status: vi.fn(), preflight: vi.fn(), createCampaign: vi.fn(), operationForRequest: vi.fn(),
@@ -92,7 +96,7 @@ describe("unsaved campaign setup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
     expect(screen.getByLabelText("Campaign goal")).toHaveValue("Unsent changes");
     fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
-    expect(screen.getByLabelText("Campaign goal")).toHaveValue("");
+    await waitFor(() => expect(screen.getByLabelText("Campaign goal")).toHaveValue(""));
     expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /^Saved first setup/ })).toBeInTheDocument();
     expect(confirm).toHaveBeenCalledTimes(2);
@@ -138,10 +142,11 @@ describe("unsaved campaign setup", () => {
     await screen.findByText("Campaign creation needs reconciliation. Do not retry the create operation.");
     expect(screen.getByText(/Meta only partly created this campaign/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Start a new campaign" }));
-    expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining("Meta only partly created the last campaign"));
+    await waitFor(() => expect(confirm).toHaveBeenLastCalledWith(expect.stringContaining("Meta only partly created the last campaign")));
     expect(screen.getByRole("button", { name: creative.headline! })).toHaveAttribute("aria-pressed", "true");
     expect(sessionStorage.length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Start a new campaign" })).not.toBeInTheDocument());
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(screen.queryByText("Resolve the current campaign operation before starting another campaign.")).not.toBeInTheDocument();
     expect(screen.queryByText("Campaign creation needs reconciliation. Do not retry the create operation.")).not.toBeInTheDocument();

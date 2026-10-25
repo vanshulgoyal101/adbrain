@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
+import type { WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -128,6 +130,7 @@ type ComposerSetup = {
   budget: number;
   destination: "instant_form" | "whatsapp";
   whatsappNumber: string;
+  whatsappLanguage?: WhatsAppLanguage;
   leadFormId: string;
   name: string;
   targeting: TargetingValue;
@@ -218,6 +221,7 @@ function BusinessCampaigns({
   const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
+  const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
   const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
@@ -241,6 +245,7 @@ function BusinessCampaigns({
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
     ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
@@ -311,8 +316,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -348,6 +353,7 @@ function BusinessCampaigns({
     setDestination(input.destination ?? "instant_form");
     // The form names numbers by their mask; a full number from an older draft shows as its mask.
     setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
+    setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
     setCreationMode("manual");
@@ -485,7 +491,7 @@ function BusinessCampaigns({
 
   async function removeDraft(draft: DraftDTO) {
     if (preparing || creating) return;
-    if (!window.confirm(`Remove saved draft "${draft.input.name}"?`)) return;
+    if (!(await askConfirm({ title: `Remove saved draft "${draft.input.name}"?`, confirmLabel: "Remove draft", tone: "danger" }))) return;
     setDraftBusy(draft.draftId);
     try {
       await createMetaConnectClient().deleteDraft(draft.draftId, draft.version);
@@ -507,14 +513,14 @@ function BusinessCampaigns({
     setShowComposer(true);
   }
 
-  function startNewCampaign() {
+  async function startNewCampaign() {
     if (preparing || creating) return;
     // needs_reconciliation is terminal on the server; a new campaign uses a new request, so only in-flight work stays locked.
     const reconciling = operation?.state === "needs_reconciliation";
     if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
-    if (!window.confirm(reconciling
-      ? "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you do not want it. Start a new campaign?"
-      : "Discard this campaign setup and start a new one? Saved drafts remain available.")) return;
+    if (!(await askConfirm(reconciling
+      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you don't want it.", confirmLabel: "Start new campaign" }
+      : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
     setError(null);
     preparedDraftRef.current = null;
     recoveryRef.current = null;
@@ -535,6 +541,7 @@ function BusinessCampaigns({
     setLeadFormId("");
     setDestination(indiaBased && whatsappOptions.length ? "whatsapp" : "instant_form");
     setWhatsAppNumber("");
+    setWhatsAppLanguage("ad");
     destinationChosenRef.current = false;
     setShowComposer(true);
     if (creationMode === "guided") focusOnOpenRef.current = true;
@@ -666,6 +673,7 @@ function BusinessCampaigns({
       leadFormId: destination === "whatsapp" ? null : leadFormId || null,
       destination,
       ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
+      ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
     };
@@ -1075,11 +1083,7 @@ function BusinessCampaigns({
   }
 
   async function deleteCampaign(c: Campaign) {
-    if (
-      !window.confirm(
-        `Delete "${c.name ?? "this campaign"}"? This removes it from Meta and can't be undone.`,
-      )
-    ) {
+    if (!(await askConfirm({ title: `Delete "${c.name ?? "this campaign"}"?`, description: "This removes it from Meta and can't be undone.", confirmLabel: "Delete campaign", tone: "danger" }))) {
       return;
     }
     setDeletingId(c.id);
@@ -1102,6 +1106,7 @@ function BusinessCampaigns({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      {confirmDialog}
         <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} requested active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
           {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
@@ -1546,6 +1551,22 @@ function BusinessCampaigns({
                         ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Brand Brain</Link> shows how to link one.</>
                         : connectedForDraft && !whatsappStatus ? "Checking your WhatsApp numbers..." : "AdBrain checks your WhatsApp number when you prepare the review."}
                     </p>}
+                  </div>}
+                  {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
+                    <Label htmlFor="whatsapp-language">Message language</Label>
+                    <select
+                      id="whatsapp-language"
+                      value={whatsappLanguage}
+                      onChange={(e) => { setWhatsAppLanguage(e.target.value as WhatsAppLanguage); if (!unresolvedRecovery()) setPrepareReview(null); }}
+                      className="h-11 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
+                    >
+                      <option value="ad">Same as the ad</option>
+                      <option value="en">English</option>
+                      <option value="hi">Hindi (हिंदी)</option>
+                      <option value="hinglish">Hinglish</option>
+                      <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                    </select>
+                    <p className="text-xs text-slate-500">The short message a customer sends you in one tap.</p>
                   </div>}
                 </div>
 
