@@ -5,6 +5,8 @@ on:
     branches: [main, next]
   pull_request:
     branches: [main, next]
+  # The deploy train dispatches CI on next after merging main into it.
+  workflow_dispatch:
 
 jobs:
   # All jobs run in parallel; build, test, core and secrets are required.
