@@ -91,7 +91,9 @@ Routine steps never wait for the CEO or the CTO.
 8. **The CTO** turns priorities into work: owns the worker table on the Team board (#580),
    assigns and briefs issues, keeps labels honest, closes or parks stale issues,
    watches CI and production health, reviews high-impact diffs and publishes
-   `Lesson:` lines. **Queues never run dry:** every worker keeps at least 2
+   `Lesson:` lines. Weekly it posts `npm run team-metrics` (PR lead time, handoff
+   latency, idle gaps, workflow failures) on #364 and fixes the worst number.
+   **Queues never run dry:** every worker keeps at least 2
    actionable items (not `waiting-owner`, `blocked` or `decision`), each traceable
    to a line in the CEO priorities below; `wait-for-work --me cto` reports any
    worker that drops below 2, and the CTO refills that row the same hour. At the
