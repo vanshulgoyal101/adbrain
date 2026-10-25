@@ -265,10 +265,13 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   name, greeting message, away message, reply within 5 minutes. AdBrain can't read
   these, so the owner ticks them; ticks are kept on that device per business.
 - Each WhatsApp creative carries a `page_welcome_message` built from Brand facts
-  (#209, #493): a short greeting asking the customer to send, and one pre-typed
-  ask in the ads' language (their saved language, else Devanagari → Hindi,
-  Gurmukhi → Punjabi, else English) that names one offer the ads mention (a free
-  offer first) and the city when the campaign targets exactly one.
+  (#209, #493): a short greeting asking the customer to send, and one short
+  pre-typed ask ("Hi! I'd like a free site survey.") naming one offer the ads
+  mention (a free offer first) and the city when the campaign targets exactly
+  one. Its language is a per-campaign choice in setup (**Message language**): Same
+  as the ad (default: the ads' saved language, else Devanagari → Hindi, Gurmukhi →
+  Punjabi, else English), English, Hindi, Hinglish or Punjabi. The choice is part
+  of the reviewed plan.
 - Stories and Reels get a 9:16 version of each WhatsApp ad (#333): Prepare lays out
   the saved design and photo at 1080×1920 (no AI call; text kept out of the
   Stories safe zones) and sends both images through `asset_feed_spec` placement
