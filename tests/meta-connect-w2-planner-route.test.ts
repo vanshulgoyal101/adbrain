@@ -197,6 +197,23 @@ describe("guided planner route", () => {
     expect(mocks.runPlanner).not.toHaveBeenCalled();
   });
 
+  it("records why each provider failed before the fallback answered (#378)", async () => {
+    mocks.runPlanner.mockImplementationOnce(async (_input, options) => {
+      await options.onProviderFailures([{ provider: "groq", model: "qwen", status: "error", failure: "HTTP_429", latencyMs: 900,
+        providerRequestId: "req_1", providerFinalStatus: "unknown" }], 1);
+      return { ready: false, questions: [{ id: "budget", topic: "budget", type: "text", question: "Daily budget?" }] };
+    });
+    const { POST } = await import("@/app/api/campaigns/plan/route");
+    expect((await POST(post())).status).toBe(200);
+    expect(mocks.persist).toHaveBeenCalledExactlyOnceWith([{
+      businessId: business.id, userId: expect.any(String), requestId: expect.any(String), route: "campaigns.plan",
+      provider: "groq", model: "qwen", usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      promptVersion: expect.any(String), latencyMs: 900, attempt: 1, maxTokens: 3000, temperature: 0.2,
+      status: "error", failure: "HTTP_429", errorCode: "LLM_HTTP_429", providerRequestId: "req_1", providerFinalStatus: "unknown",
+      metadata: { audienceOnly: false },
+    }]);
+  });
+
   it("records usage even for invalid planner output without storing prompt text", async () => {
     mocks.runPlanner.mockImplementationOnce(async (_input, options) => {
       await options.onCompletion({ provider: "test", model: "test", usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } }, false);

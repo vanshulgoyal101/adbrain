@@ -19,6 +19,33 @@ describe("planner response validation", () => {
     expect(onCompletion).toHaveBeenCalledExactlyOnceWith({ text: "", provider: "google", model: "gemini-3.6-flash", usage }, false, 1);
     expect(complete).toHaveBeenCalledTimes(1);
   });
+  it("reports each provider that failed before the fallback answered (#378)", async () => {
+    const rateLimited = { provider: "groq", model: "qwen", status: "error" as const, failure: "HTTP_429" as const, latencyMs: 900, providerFinalStatus: "unknown" as const };
+    const slow = { provider: "google", model: "gemini-3.6-flash", status: "error" as const, failure: "TIMEOUT" as const, latencyMs: 5000, providerFinalStatus: "unknown" as const };
+    vi.mocked(complete).mockImplementation(async (_messages, options) => {
+      options?.onAttempt?.(rateLimited);
+      options?.onAttempt?.(slow);
+      options?.onAttempt?.({ provider: "openrouter", model: "haiku", status: "success", latencyMs: 7000, providerFinalStatus: "unknown" });
+      return { text: JSON.stringify({ ready: false, questions: [question] }), provider: "openrouter", model: "haiku" };
+    });
+    const onProviderFailures = vi.fn();
+    expect(await runPlanner(input, { onProviderFailures })).toMatchObject({ questions: [question] });
+    expect(onProviderFailures).toHaveBeenCalledExactlyOnceWith([rateLimited, slow], 1);
+  });
+  it("reports provider failures when every provider fails, without recording the last one twice (#378)", async () => {
+    const usage = { promptTokens: 8, completionTokens: 2, totalTokens: 17 };
+    const failure = new LLMError("Output token budget exhausted", { provider: "google", model: "gemini-3.6-flash", usage, retryable: false });
+    const attempt = { provider: "google", model: "gemini-3.6-flash", status: "error" as const, failure: "TRUNCATED" as const, usage, latencyMs: 4000, providerFinalStatus: "unknown" as const };
+    vi.mocked(complete).mockImplementation(async (_messages, options) => {
+      options?.onAttempt?.(attempt);
+      throw failure;
+    });
+    const onCompletion = vi.fn();
+    const onProviderFailures = vi.fn();
+    await expect(runPlanner(input, { onCompletion, onProviderFailures })).rejects.toBe(failure);
+    expect(onProviderFailures).toHaveBeenCalledExactlyOnceWith([attempt], 1);
+    expect(onCompletion).not.toHaveBeenCalled();
+  });
   it.each([
     { ready: false, questions: [] },
     { ready: false, questions: [{ ...question, type: "single" }] },
