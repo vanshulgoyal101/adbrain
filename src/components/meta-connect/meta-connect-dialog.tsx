@@ -14,8 +14,11 @@ import {
   MetaConnectClientError,
   type MetaConnectClient,
 } from "@/lib/meta-connect-ui/client";
+import { continueInTab } from "@/lib/meta-connect-ui/navigate";
 
 const defaultClient = createMetaConnectClient();
+/** How long the popup may stay silent before we offer to continue in this tab (#474). */
+export const POPUP_FALLBACK_MS = 3000;
 
 type DialogView = "loading" | "disconnected" | "selection" | "recovery" | "connected";
 
@@ -91,6 +94,8 @@ export function MetaConnectDialog({
   const [attempt, setAttempt] = useState<AttemptDTO | null>(null);
   const [selectedPairId, setSelectedPairId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inTabUrl, setInTabUrl] = useState<string | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
   const onConnectedRef = useRef(onConnected);
   onConnectedRef.current = onConnected;
 
@@ -167,6 +172,7 @@ export function MetaConnectDialog({
       ) {
         return;
       }
+      clearInTabFallback();
       void refreshAttempt(data.attemptId as string);
     };
     window.addEventListener("message", handleMessage);
@@ -198,7 +204,18 @@ export function MetaConnectDialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  function clearInTabFallback() {
+    if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
+    fallbackTimerRef.current = null;
+    setInTabUrl(null);
+  }
+
+  useEffect(() => () => {
+    if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
+  }, []);
+
   function close() {
+    clearInTabFallback();
     requestRef.current?.abort();
     popupRef.current = null;
     if (dialogRef.current?.open) {
@@ -217,6 +234,7 @@ export function MetaConnectDialog({
       const next = await client.attempt(attemptId, controller.signal);
       if (attemptRef.current !== attemptId || controller.signal.aborted) return null;
       setAttempt(next);
+      if (next.state !== "authorizing") clearInTabFallback();
       if (next.state === "connected" && isConnected(next.connection)) {
         setConnection(next.connection);
         setView("connected");
@@ -272,6 +290,7 @@ export function MetaConnectDialog({
   }
 
   async function startConnection() {
+    clearInTabFallback();
     setError(null);
     setAttempt(null);
     setSelectedPairId(null);
@@ -286,8 +305,13 @@ export function MetaConnectDialog({
       attemptRef.current = started.attemptId;
       if (popup) {
         popup.location.href = started.authorizationUrl;
+        // Some browsers hand back a popup that never shows; offer the same-tab path after a moment.
+        fallbackTimerRef.current = window.setTimeout(() => {
+          fallbackTimerRef.current = null;
+          if (attemptRef.current === started.attemptId) setInTabUrl(started.authorizationUrl);
+        }, POPUP_FALLBACK_MS);
       } else {
-        window.location.assign(started.authorizationUrl);
+        continueInTab(started.authorizationUrl);
         return;
       }
       setView("loading");
@@ -301,6 +325,35 @@ export function MetaConnectDialog({
       );
       setView("recovery");
     }
+  }
+
+  /** 'Change': choose another Page / ad account the saved Facebook grant allows, without a new login. */
+  async function changeSelection() {
+    clearInTabFallback();
+    setError(null);
+    setSelectedPairId(null);
+    setView("loading");
+    try {
+      const changeIntent = (await onBeforeStart?.()) ?? intent;
+      const controller = new AbortController();
+      requestRef.current?.abort();
+      requestRef.current = controller;
+      const next = await client.change(businessId, changeIntent, controller.signal);
+      if (controller.signal.aborted) return;
+      attemptRef.current = next.attemptId;
+      setAttempt(next);
+      setView(next.state === "selection_required" ? "selection" : "recovery");
+    } catch (reason: unknown) {
+      setAttempt(null);
+      setError(reason instanceof Error ? reason.message : "We could not load your Meta Pages and ad accounts.");
+      setView("recovery");
+    }
+  }
+
+  function continueInThisTab() {
+    if (!inTabUrl) return;
+    popupRef.current?.close();
+    continueInTab(inTabUrl);
   }
 
   async function selectCandidate() {
@@ -404,6 +457,14 @@ export function MetaConnectDialog({
       <div className="space-y-5 px-6 py-5">
         {view === "loading" && <Loader2 className="h-5 w-5 animate-spin text-blue-600" aria-label="Checking connection" />}
         {error && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+        {inTabUrl && (view === "loading" || view === "recovery") && (
+          <p className="text-sm text-slate-700">
+            Popup didn&apos;t open?{" "}
+            <button type="button" onClick={continueInThisTab} className="font-medium text-blue-700 underline underline-offset-4">
+              Continue in this tab
+            </button>
+          </p>
+        )}
         {view === "disconnected" && <Button onClick={() => void startConnection()}>Connect Business</Button>}
         {view === "selection" && attempt && (
           <div className="space-y-3">
@@ -418,9 +479,12 @@ export function MetaConnectDialog({
             {requiresReplacementConfirmation && (
               <p className="text-sm text-amber-800">This changes the saved account and Page for this workspace.</p>
             )}
-            <Button disabled={!selectedPairId} onClick={() => void selectCandidate()}>
-              {requiresReplacementConfirmation ? "Confirm replacement" : "Use selected business"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!selectedPairId} onClick={() => void selectCandidate()}>
+                {requiresReplacementConfirmation ? "Confirm replacement" : "Use selected business"}
+              </Button>
+              <Button variant="quiet" onClick={() => void startConnection()}>Use another Facebook account</Button>
+            </div>
           </div>
         )}
         {view === "connected" && selected && (
@@ -451,7 +515,7 @@ export function MetaConnectDialog({
               >
                 {intent.kind === "review_activation" ? "Review activation" : "Continue to review"}
               </Button>
-              <Button variant="ghost" onClick={() => void startConnection()}><RefreshCw className="h-4 w-4" aria-hidden="true" />Change</Button>
+              <Button variant="ghost" onClick={() => void changeSelection()}><RefreshCw className="h-4 w-4" aria-hidden="true" />Change</Button>
             </div>
           </div>
         )}
