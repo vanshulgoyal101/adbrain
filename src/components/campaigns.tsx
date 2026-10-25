@@ -23,6 +23,7 @@ import {
   Save,
   MoreHorizontal,
   Trash2,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
@@ -1242,6 +1243,17 @@ function BusinessCampaigns({
                   </li>)}
                 </ul>
               )}
+              {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}
+              {prepareReview.review.planWarnings?.length ? (
+                <ul className="mt-2 space-y-1 text-sm font-normal" aria-label="Before you send">
+                  {prepareReview.review.planWarnings.map((warning) => (
+                    <li key={warning} className="flex items-start gap-1.5">
+                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>{warning}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {prepareReview.review.canCreatePaused && prepareReview.review.planHash && !operation && (!recoveryPending || sendingNew) && (
                   <Button size="sm" data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>

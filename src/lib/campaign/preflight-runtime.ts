@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { hasStoryDesign } from "@/lib/creative/picture-words";
+import { getCostPerResult } from "@/lib/campaign/result-evidence-store";
 import { getConnectionStatus, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { draftRecordFromRow } from "@/lib/campaign/draft-store";
 import { whatsappNumberForBusiness } from "@/lib/meta/whatsapp-bindings";
@@ -42,8 +44,10 @@ export function buildCampaignPreflightLoaders(
         primaryText: creative.primary_text,
         description: savedCreativeDescription(creative.generation),
         cta: creative.cta,
+        storyReady: hasStoryDesign(creative.generation),
       }));
     },
+    findCostPerResult: (actor, destination) => getCostPerResult(actor.businessId, destination),
     findForm: async (businessId, formId) => {
       const connection = await status();
       if (connection.capabilities.canCreatePaused.state !== "available") return null;

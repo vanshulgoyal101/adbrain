@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import launch from "./core/fixtures/meta/launch-validate.json";
-import { planCheckEvent, checkPlan } from "@/lib/campaign/plan-check";
+import { planCheckEvent, checkPlan, reviewWarnings, REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 
 // #419: the plan check runs on the exact payloads Meta accepted for today's launch code.
 type Exchange = { destination: string; kind: string; form: Record<string, string> };
@@ -59,4 +59,25 @@ describe("plan check (#419)", () => {
     expect(planCheckEvent([{ rule: "One ad set", status: "pass", detail: "" }], "instant_form"))
       .toEqual({ outcome: "success", attributes: { destination: "instant_form", count: 1, failedCount: 0, validationRules: [] } });
   });
+
+  // #419 item 2(b), CTO Oct 25: plain, non-blocking warnings on Review.
+  it("warns on Review when no ad will get a 9:16, and when the budget can't reach Meta's learning threshold", () => {
+    expect(REVIEW_WARNINGS).toEqual({
+      story: "No 9:16 ad: Reels and Stories placements will crop or skip it",
+      budget: "Budget is below what Meta needs to learn (about 50 results a week); results may be slow",
+    });
+    // ₹280 a day at ₹69 a chat is about 28 chats a week (#157).
+    expect(reviewWarnings({ destination: "whatsapp", storyReady: false, perAdSetDailyBudgetRupees: 280, costPerResultRupees: 69 }))
+      .toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);
+    expect(reviewWarnings({ destination: "whatsapp", storyReady: true, perAdSetDailyBudgetRupees: 500, costPerResultRupees: 69 })).toEqual([]);
+    // Lead-form ads never get a 9:16 today (#333 is WhatsApp only).
+    expect(reviewWarnings({ destination: "instant_form", storyReady: true, perAdSetDailyBudgetRupees: 500, costPerResultRupees: null })).toEqual([REVIEW_WARNINGS.story]);
+  });
+
+  it("says nothing about the budget without the business's own cost per result", () => {
+    for (const cost of [null, undefined, 0]) {
+      expect(reviewWarnings({ destination: "whatsapp", storyReady: true, perAdSetDailyBudgetRupees: 50, costPerResultRupees: cost })).toEqual([]);
+    }
+  });
 });
+

@@ -55,6 +55,18 @@ beforeEach(() => {
 });
 
 describe("campaign Ads Manager links", () => {
+  it("shows Meta's new-advertiser warnings on Review without blocking the send (#419 2b)", async () => {
+    const warnings = ["No 9:16 ad: Reels and Stories placements will crop or skip it",
+      "Budget is below what Meta needs to learn (about 50 results a week); results may be slow"];
+    const base = mocks.preflight.getMockImplementation()!;
+    mocks.preflight.mockImplementation(async (...args: unknown[]) => ({ ...(await (base as (...a: unknown[]) => Promise<object>)(...args)), planWarnings: warnings }));
+    view();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    for (const warning of warnings) expect(await screen.findByText(warning)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send to Meta (paused)" })).toBeEnabled();
+  });
+
   it("unmounts the planner when switching to manual setup or closing the composer", () => {
     view();
     expect(screen.queryByTestId("guided-campaign-chat")).toBeNull();
