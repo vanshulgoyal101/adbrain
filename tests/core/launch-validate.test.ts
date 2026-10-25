@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/launch-validate.json";
 import { MetaClient, type AdDestination } from "@/lib/meta/client";
+import { checkPlan, type PlannedCampaign } from "@/lib/campaign/plan-check";
 
 // #419 gate: every object AdBrain's launch code creates (campaign, ad set, creative, ad, for
 // lead-form and WhatsApp campaigns) must be a payload Meta accepted with validate_only.
@@ -18,7 +19,7 @@ const inputs = recorded.inputs;
 const KINDS = ["campaigns", "adsets", "adcreatives", "ads"];
 const IDS: Record<string, string> = { campaigns: "CAMPAIGN", adsets: "ADSET", adcreatives: "CREATIVE", ads: "AD" };
 
-async function launch(destination: AdDestination) {
+async function launch(destination: AdDestination, onPlanned?: (plan: Omit<PlannedCampaign, "costPerResultRupees">) => void) {
   const sent: { kind: string; form: Record<string, string> }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -45,6 +46,7 @@ async function launch(destination: AdDestination) {
     ...(destination === "whatsapp"
       ? { whatsappNumber: inputs.phone, whatsappGreeting: inputs.whatsappGreeting }
       : { leadFormId: "LEAD_FORM" }),
+    onPlanned,
   });
   vi.restoreAllMocks();
   return sent;
@@ -68,5 +70,20 @@ describe("core: launch payloads Meta accepted with validate_only (#419)", () => 
     sent.forEach((s, i) => {
       expect(s.form, `${destination} ${s.kind} changed: re-record with scripts/record-meta-launch-validate.ts`).toEqual(accepted[i].form);
     });
+  });
+
+  // #419 item 2(a): every launch checks the payloads it sent against new-advertiser guidance.
+  it.each(["instant_form", "whatsapp"] as const)("hands the %s plan check exactly the ad set and creative payloads Meta accepted", async (destination) => {
+    let planned: Omit<PlannedCampaign, "costPerResultRupees"> | undefined;
+    await launch(destination, (plan) => { planned = plan; });
+    const accepted = tape.filter((e) => e.destination === destination);
+    expect(planned).toEqual({
+      adSets: accepted.filter((e) => e.kind === "adsets").map((e) => e.form),
+      creatives: accepted.filter((e) => e.kind === "adcreatives").map((e) => e.form),
+    });
+    expect(checkPlan(planned!).map((finding) => [finding.rule, finding.status])).toEqual([
+      ["Advantage+ audience", "pass"], ["Advantage+ placements", "pass"], ["One ad set", "pass"],
+      ["Budget vs learning phase", "unknown"], ["4:5 feed image", "pass"], ["9:16 Stories/Reels image", "warn"],
+    ]);
   });
 });

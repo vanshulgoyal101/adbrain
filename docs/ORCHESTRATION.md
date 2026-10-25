@@ -108,6 +108,24 @@ Routine steps never wait for the CEO or the CTO.
    calls as `decision` issues. On a conflict, money and priority
    follow the CEO; the technical approach follows the CTO.
 
+### Supervisor: waking idle and stuck chats (#573 A1)
+
+Chats can't wake themselves, but one chat can message another (`list_sessions`,
+`get_session_context`, `send_message`). The **CEO chat supervises and the CTO chat backs
+it up** (whichever is running). Each tick, at most every 10 minutes:
+1. `npm run team-status` lists each role as `waiting` (its waiter runs: healthy),
+   `has-work`, `no-work` or `error` (read-only; `wait-for-work --probe` takes no lock).
+2. `list_sessions` maps roles to chats by title. For each `has-work` role:
+   - chat **idle** → `send_message` (queue): "You are <Role>. Your next item: <first item>.
+     Run `node scripts/wait-for-work.mjs --me <role>` when done."
+   - chat **in progress** with no waiter: compare `get_session_context` (`digest`, last turn)
+     with the previous tick. If its text and tool calls haven't changed for 20+ min, it's stuck
+     on a dead shell: `send_message` (steer): "Stop waiting on the dead shell; pull origin/main
+     and do <first item>." (`modifiedAt` in `list_sessions` doesn't move while a chat works.)
+   - chat **error** or **input needed** → same message once; if still stuck next tick,
+     one line to the owner via the CEO.
+3. At most one message per chat per 20 minutes. Then wait for the next tick (`wait-for-work --me ceo` or `--me cto`).
+
 ### Standing rules
 
 - **Worktrees.** Start one with `bash scripts/wt.sh <issue>`: a `work/issue-<n>`

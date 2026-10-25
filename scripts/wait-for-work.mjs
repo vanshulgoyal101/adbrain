@@ -194,6 +194,8 @@ const { values } = parseArgs({
     me: { type: "string" },
     "max-min": { type: "string", default: "30" },
     "poll-sec": { type: "string", default: "90" },
+    // #573: the supervisor's read-only check; never takes the role's lock, so a chat starting its waiter isn't refused.
+    probe: { type: "boolean", default: false },
     since: { type: "string" },
     repo: { type: "string", default: process.env.GH_REPO || "vanshulgoyal101/adbrain" },
   },
@@ -214,7 +216,8 @@ if (Number.isInteger(holder) && holder !== process.pid && alive(holder)) {
   console.error(`Another waiter for ${name} is already running (pid ${holder}). Not starting a second one.`);
   process.exit(4);
 }
-writeFileSync(lock, String(process.pid));
+if (values.probe) values["max-min"] = "0";
+else writeFileSync(lock, String(process.pid));
 const release = () => { try { if (readFileSync(lock, "utf8") === String(process.pid)) rmSync(lock); } catch { /* already gone */ } };
 process.on("exit", release);
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => process.exit(130));

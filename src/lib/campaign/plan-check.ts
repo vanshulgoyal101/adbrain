@@ -90,3 +90,21 @@ export function checkPlan(plan: PlannedCampaign): PlanFinding[] {
   });
   return findings;
 }
+
+const ruleSlug = (rule: string) => rule.toLowerCase().replace(/\+/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/**
+ * #419 item 2(a): the launch's plan check as a product event. Rules that didn't pass, by name and
+ * status (never details or payloads); a warning or failure makes it partial, an unknown doesn't.
+ */
+export function planCheckEvent(findings: PlanFinding[], destination: string) {
+  return {
+    outcome: findings.some((finding) => finding.status === "warn" || finding.status === "fail") ? "partial" as const : "success" as const,
+    attributes: {
+      ...(destination === "instant_form" || destination === "whatsapp" ? { destination: destination as "instant_form" | "whatsapp" } : {}),
+      count: findings.length,
+      failedCount: findings.filter((finding) => finding.status === "fail").length,
+      validationRules: findings.filter((finding) => finding.status !== "pass").map((finding) => `${ruleSlug(finding.rule)}:${finding.status}`),
+    },
+  };
+}

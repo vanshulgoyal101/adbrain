@@ -18,6 +18,7 @@ import { whatsappGreeting } from "./whatsapp-greeting";
 import { draftAreaNames } from "./draft-targeting";
 import { savedGenerationSettings } from "@/lib/creative/receipt";
 import { normalizeWebsite } from "@/lib/brand/validation";
+import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -120,6 +121,11 @@ export async function executeReviewedCampaign(input: {
             })) : undefined,
             onCheckpoint,
             onStoryFallback: storyFallback,
+            // #419 item 2(a): the exact payloads sent, checked against Meta's new-advertiser guidance.
+            onPlanned: (plan) => recordProductEvent({
+              kind: "workflow", name: "campaign.plan_check", businessId: actor.businessId,
+              ...planCheckEvent(checkPlan(plan), draft.input.destination ?? "instant_form"),
+            }),
           });
           // #588: what this launch tried, for the learning ledger (saved once the campaign row exists).
           launchSnapshot = buildLaunchSnapshot({

@@ -26,9 +26,11 @@ const manualEnquiryMigration = await readFile(join(root, "db/migrations/20261024
 const schedulerMigration = await readFile(join(root, "db/migrations/20261024_scheduler_pg_cron.sql"), "utf8");
 const advisorsMigration = await readFile(join(root, "db/migrations/20261024_security_advisors.sql"), "utf8");
 const managedAccountsMigration = await readFile(join(root, "db/migrations/20261025_managed_meta_accounts.sql"), "utf8");
+const provisionLeaseMigration = await readFile(join(root, "db/migrations/20261025_managed_provision_lease.sql"), "utf8");
 const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
+const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
 const directory = await mkdtemp(join(tmpdir(), "adbrain-pg-"));
@@ -1085,6 +1087,42 @@ async function verifyCappedRunBound(db, database) {
   });
 }
 
+async function verifyManagedWhatsAppPageLink(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Page WhatsApp'),($3,$4,'Other Page WhatsApp')", [business, owner, otherBusiness, other]);
+  const service = async (run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role service_role");
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: 2T WhatsApp v1: a Page-linked number completes whatsapp_linked; one active customer per number (#524)`, async () => {
+    await service(async (session) => {
+      await session.query("insert into public.managed_meta_accounts(business_id,page_id) values ($1,'7101'),($2,'7102')", [business, otherBusiness]);
+      for (const step of ["state='page_linked'", "state='child_created', child_business_id='7201'", "state='ad_account_created', ad_account_id='act_7301'", "state='funded', funding_state='card_attached'"]) {
+        await session.query(`update public.managed_meta_accounts set ${step} where business_id=$1`, [business]);
+      }
+      await session.query("savepoint s");
+      // Still refused with neither the Embedded Signup IDs nor a Page-linked number.
+      await assert.rejects(session.query("update public.managed_meta_accounts set state='whatsapp_linked' where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.managed_meta_accounts set whatsapp_number_e164='98765' where business_id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await session.query("update public.managed_meta_accounts set whatsapp_number_e164='+919999990874', state='whatsapp_linked' where business_id=$1", [business]);
+      // Another customer can't record the same number.
+      await assert.rejects(session.query("update public.managed_meta_accounts set whatsapp_number_e164='+919999990874' where business_id=$1", [otherBusiness]), { code: "23505" });
+      await session.query("rollback to savepoint s");
+      // The other #519 checks that name whatsapp_linked are still there (a state needs its Page).
+      const checks = (await session.query("select count(*)::int as n from pg_constraint where conrelid='public.managed_meta_accounts'::regclass and contype='c' and pg_get_constraintdef(oid) like '%page_id IS NOT NULL%'")).rows[0].n;
+      assert.equal(checks, 1);
+    });
+  });
+}
+
 async function verifyCampaignLearnings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -1417,6 +1455,126 @@ async function verifyManagedAccountsTenantQA(db, database) {
       await session.query("update public.managed_meta_accounts set state='failed' where business_id=$1", [a]).catch(() => session.query("rollback to savepoint s"));
       await assert.rejects(session.query("update public.managed_meta_accounts set state='ready' where business_id=$1", [a]), { code: "23514" });
     });
+  });
+}
+
+async function verifyProvisionLease(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Lease'),($3,$4,'Other lease')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.managed_meta_accounts(business_id) values ($1),($2)", [business, otherBusiness]);
+  const token = async (businessId, by) => (await db.query(`insert into private.meta_tokens(business_id,authorized_by,subject_id,token_kind,ciphertext,nonce,auth_tag,key_id)
+    values ($1,$2,'6100000000009','business_system_user','\\x00',decode(repeat('00',12),'hex'),decode(repeat('00',16),'hex'),'k1') returning id`, [businessId, by])).rows[0].id;
+  const service = async (sql, values) => {
+    const session = client(database);
+    await session.connect();
+    try { await session.query("set role service_role"); return (await session.query(sql, values)).rows[0]; }
+    finally { await session.end(); }
+  };
+  await check(`${database}: 2T provisioning lease: one run per business, claimed with database time (#521)`, async () => {
+    const a = randomUUID(), b = randomUUID();
+    const claim = (lease, seconds = 120) => service("select public.managed_meta_account_claim($1,$2,$3) as ok", [business, lease, seconds]).then((row) => row.ok);
+    const release = (lease) => service("select public.managed_meta_account_release($1,$2) as ok", [business, lease]).then((row) => row.ok);
+    assert.equal(await claim(a), true);
+    assert.equal(await claim(b), false, "a second run waits while the lease is held");
+    assert.equal(await claim(a), true, "the holder can extend its own lease");
+    assert.equal(await release(b), false, "only the holder releases");
+    assert.equal(await release(a), true);
+    assert.equal(await claim(b), true);
+    await db.query("update public.managed_meta_accounts set provision_lease_until = now() - interval '1 second' where business_id=$1", [business]);
+    assert.equal(await claim(a), true, "an expired lease can be taken over");
+    assert.equal(await service("select public.managed_meta_account_claim($1,$2,120) as ok", [otherBusiness, b]).then((row) => row.ok), true, "leases are per business");
+    await assert.rejects(db.query("update public.managed_meta_accounts set provision_lease_id = null where business_id=$1", [business]), { code: "23514" });
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role authenticated");
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      await assert.rejects(session.query("select public.managed_meta_account_claim($1,$2,120)", [business, randomUUID()]), { code: "42501" });
+    } finally { await session.query("rollback"); await session.end(); }
+  });
+  await check(`${database}: 2T manager token: a reference into the encrypted store, same business only (#521)`, async () => {
+    const mine = await token(business, owner), theirs = await token(otherBusiness, other);
+    await service("update public.managed_meta_accounts set manager_user_id='6100000000009', manager_token_id=$2 where business_id=$1 returning 1 as ok", [business, mine]);
+    await assert.rejects(service("update public.managed_meta_accounts set manager_token_id=$2 where business_id=$1 returning 1 as ok", [business, theirs]), { code: "23503" });
+    await assert.rejects(service("update public.managed_meta_accounts set manager_user_id='not-an-id' where business_id=$1 returning 1 as ok", [business]), { code: "23514" });
+    await db.query("delete from private.meta_tokens where id=$1", [mine]);
+    assert.deepEqual((await db.query("select manager_token_id, manager_user_id from public.managed_meta_accounts where business_id=$1", [business])).rows,
+      [{ manager_token_id: null, manager_user_id: "6100000000009" }], "deleting the token clears only the reference");
+  });
+}
+
+// #521 fixture tenant: the exact writes provisionManagedAccount and runManagedProvisioning make, in
+// order, as the service role, so the code and the ledger can't disagree on a real customer.
+async function verifyProvisioningWalk(db, database) {
+  const owner = randomUUID(), business = randomUUID(), lease = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Fixture tenant')", [business, owner]);
+  await check(`${database}: 2T provisioning walk: Page link, lease, failed child, resume, account, manager token, grant (#521)`, async () => {
+    const session = client(database);
+    await session.connect();
+    const q = (sql, values = []) => session.query(sql, values);
+    const row = async () => (await q("select state, child_business_id, ad_account_id, manager_user_id, manager_token_id, step_keys, last_error, provision_lease_id from public.managed_meta_accounts where business_id=$1", [business])).rows[0];
+    const event = (step, outcome, extra = {}) => q(`insert into public.managed_meta_account_events(business_id,step,outcome,request_id,idempotency_key,meta_object_id,error_code)
+      values ($1,$2,$3,$4,$5,$6,$7)`, [business, step, outcome, randomUUID(), extra.key ?? null, extra.object ?? null, extra.error ?? null]);
+    const token = async (subject) => {
+      const id = randomUUID();
+      await q(`select public.meta_token_insert($1,$2,$3,$4,'business_system_user',$5,$6,$7,'k1','v1',array['ads_management','business_management'],'[]'::jsonb,null,now(),null)`,
+        [id, business, owner, subject, "\\x00", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+      return id;
+    };
+    try {
+      await q("set role service_role");
+      // #537: the Page step inserts at requested, then links.
+      await q("insert into public.managed_meta_accounts(business_id,page_id,state) values ($1,'5210000000111','requested')", [business]);
+      await q("update public.managed_meta_accounts set page_id='5210000000111', state='page_linked' where business_id=$1", [business]);
+      await event("page", "succeeded", { object: "5210000000111" });
+      // #577: the run holds the lease before any Meta call.
+      assert.equal((await q("select public.managed_meta_account_claim($1,$2,300) as ok", [business, lease])).rows[0].ok, true);
+      // A lost child response: failed with a code, nothing recorded.
+      const childKey = `child:${business}`;
+      await event("child_business", "started", { key: childKey });
+      await q("update public.managed_meta_accounts set state='failed', last_error='META_TIMEOUT' where business_id=$1", [business]);
+      await event("child_business", "failed", { error: "META_TIMEOUT" });
+      // Resume: found by external id, recorded with its step key.
+      await q(`update public.managed_meta_accounts set state='child_created', child_business_id='7521000000001', step_keys=$2::jsonb, last_error=null where business_id=$1`,
+        [business, JSON.stringify({ child_business: childKey })]);
+      await event("child_business", "succeeded", { key: childKey, object: "7521000000001" });
+      const accountKey = `account:${business}`;
+      await q(`update public.managed_meta_accounts set state='ad_account_created', ad_account_id='act_8521000000001', step_keys=$2::jsonb, last_error=null where business_id=$1`,
+        [business, JSON.stringify({ child_business: childKey, ad_account: accountKey })]);
+      await event("ad_account", "succeeded", { key: accountKey, object: "act_8521000000001" });
+      // The child's own system user: token in the encrypted store, the ledger keeps only a reference.
+      const first = await token("6521000000009");
+      const managerKey = `manager:${business}`;
+      await q(`update public.managed_meta_accounts set manager_user_id='6521000000009', manager_token_id=$2, step_keys=$3::jsonb, last_error=null where business_id=$1`,
+        [business, first, JSON.stringify({ child_business: childKey, ad_account: accountKey, manager: managerKey })]);
+      await event("ad_account", "succeeded", { key: managerKey, object: "6521000000009" });
+      // A re-mint (old token revoked): the new reference is written, then the old token deleted.
+      const second = await token("6521000000009");
+      await q("update public.managed_meta_accounts set manager_token_id=$2 where business_id=$1", [business, second]);
+      assert.equal((await q("select public.meta_token_delete($1,$2) as ok", [first, business])).rows[0].ok, true);
+      const grantKey = `grant:${business}`;
+      await q(`update public.managed_meta_accounts set state='ad_account_created', step_keys=$2::jsonb, last_error=null where business_id=$1`,
+        [business, JSON.stringify({ child_business: childKey, ad_account: accountKey, manager: managerKey, grant: grantKey })]);
+      await event("ad_account", "succeeded", { key: grantKey, object: "act_8521000000001" });
+      assert.equal((await q("select public.managed_meta_account_release($1,$2) as ok", [business, lease])).rows[0].ok, true);
+      const done = await row();
+      assert.deepEqual({ ...done, step_keys: Object.keys(done.step_keys).sort() }, {
+        state: "ad_account_created", child_business_id: "7521000000001", ad_account_id: "act_8521000000001",
+        manager_user_id: "6521000000009", manager_token_id: second, step_keys: ["ad_account", "child_business", "grant", "manager"],
+        last_error: null, provision_lease_id: null,
+      });
+      // The owner sees their own progress and step log (#526 reads these).
+      await q("reset role");
+      await q("begin");
+      await q("set local role authenticated");
+      await q("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      assert.equal((await q("select state from public.managed_meta_accounts where business_id=$1", [business])).rows[0].state, "ad_account_created");
+      assert.equal((await q("select count(*)::int n from public.managed_meta_account_events where business_id=$1", [business])).rows[0].n, 7, "page, child started/failed/succeeded, account, manager, grant");
+      await q("rollback");
+    } finally { await session.end(); }
   });
 }
 
@@ -1845,10 +2003,17 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(managedAccountsMigration);
       await db.query(managedAccountsMigration);
       await verifyManagedAccounts(db,database);
+      await db.query(provisionLeaseMigration);
+      await db.query(provisionLeaseMigration);
+      await verifyProvisionLease(db,database);
+      await verifyProvisioningWalk(db,database);
       await verifyManagedAccountsTenantQA(db,database);
       await db.query(managedSpendCapsMigration);
       await db.query(managedSpendCapsMigration);
       await verifyManagedSpendCaps(db,database);
+      await db.query(managedWhatsAppMigration);
+      await db.query(managedWhatsAppMigration);
+      await verifyManagedWhatsAppPageLink(db,database);
       await db.query(whatsappBindingsMigration);
       await db.query(whatsappBindingsMigration);
       await verifyWhatsAppBindings(db,database);
