@@ -368,9 +368,9 @@ A failed image attempt's usage row and `ai.completion` event carry a short reaso
 busy past ~90 s), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,
 `IMAGE_TIMEOUT`, `IMAGE_PROVIDER` or `IMAGE_OTHER` (#451).
 
-Create's assistant also logs each provider attempt the router gave up on as
-`ai.completion` failed with `errorCode` `LLM_HTTP_429`, `LLM_TIMEOUT` and so on,
-even when a fallback then answers. When none answers, a `creative.interview`
+Create's assistant and the campaign planner (`campaigns.plan`, #378) also log each
+provider attempt the router gave up on as `ai.completion` failed with `errorCode`
+`LLM_HTTP_429`, `LLM_TIMEOUT` and so on, even when a fallback then answers. When none answers, a `creative.interview`
 workflow event records `ASSISTANT_EXHAUSTED_<reason>` and the owner gets a 503
 "busy" (#410); a refused key or request records `ASSISTANT_HTTP_401`/`_403`/`_400`
 and stays a 500 (#449). Refusals per provider and hour:
