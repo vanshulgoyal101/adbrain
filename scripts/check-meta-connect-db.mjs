@@ -1194,6 +1194,7 @@ async function verifyManagedSpendCaps(db, database) {
     assert.equal(await request(b), false, "a payment during the pass marks the limit stale");
     assert.equal(await finish(a, "set", 33898, 33898), true, "the holder runs again with fresh figures");
     assert.equal(await begin(a), true);
+    assert.deepEqual(await state(), { dirty: false, action: null, capPaise: null, roomPaise: null }, "a pass in flight: nothing to activate on (review)");
     assert.equal(await finish(a, "keep", 33898, 33898), false, "nothing new: the lease is released");
     assert.deepEqual(await state(), { dirty: false, action: "keep", capPaise: 33898, roomPaise: 33898 });
     assert.equal(await request(b), true, "the next event takes the free lease");

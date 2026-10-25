@@ -236,7 +236,18 @@ guards to enable production or reinterpret existing test captures as real money.
   lowered to the smallest Meta accepts, so an older limit can't stay usable after a refund or hold.
   Meta takes the limit in rupees and reports it in paise; the write is read back, and fails closed
   if Meta's room (limit − amount spent) exceeds what the customer has left (a reset counter).
-  Wiring must serialize limit writes per child account so a stale, higher limit never lands last.
+  Wiring (`src/lib/managed/spend-cap-sync.ts`, `spend-cap-wiring.ts`): every payment capture,
+  refund or dispute the payment service observes schedules a refresh after the response, the
+  15-minute `enforce-spend` sweep refreshes every managed child account (holds from cost evidence,
+  missed events), and activation refreshes a stale limit first. Writes are serialized per child ad
+  account by a writer lease in `private.managed_spend_caps`: an event that finds the lease taken
+  marks the limit stale, and the holder runs again with fresh figures before releasing, so a
+  stale, higher limit never lands last. "Stop" pauses every active campaign on the child, then
+  tries a ₹1 limit even if a campaign couldn't be paused (that one can still spend), then marks
+  AdBrain's campaigns paused with their reserve and an audit event; any failure fails the pass.
+  Meta's real minimum is recorded by #527, and a refusal leaves the campaigns paused. Activation
+  needs the last decision to be set or keep with room and nothing newer pending: a pass clears the
+  decision when it starts and a failed pass leaves none, so nothing activates on an old limit.
 - Paused-run settle (#221): a paused or finished funded run no longer blocks
   the next run until an operator acts. The `enforce-spend` sweep also visits
   businesses with a paused reservation. It first confirms on Meta that the

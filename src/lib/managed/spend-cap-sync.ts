@@ -49,19 +49,18 @@ export async function syncChildSpendCap(
   const { store } = deps;
   if (!await store.request(target.businessId, target.adAccountId, token)) return { status: "queued" };
   for (let pass = 1; pass <= MAX_PASSES; pass += 1) {
-    if (!await store.begin(target.adAccountId, token)) return { status: "queued" };
     let applied: { decision: ChildSpendCapDecision; record: RecordedSpendCapDecision };
-    try {
-      applied = await applyOnce(target, deps);
-    } catch (error) {
-      await store.abandon(target.adAccountId, token).catch(() => {});
-      throw error;
-    }
     let again: boolean;
     try {
+      if (!await store.begin(target.adAccountId, token)) return { status: "queued" };
+      applied = await applyOnce(target, deps);
       again = await store.finish(target.adAccountId, token, applied.record);
     } catch (error) {
-      if (!(error instanceof SpendCapLeaseLostError)) throw error;
+      if (!(error instanceof SpendCapLeaseLostError)) {
+        // Fail closed: free the lease, keep the limit stale and leave no decision to activate on.
+        await store.abandon(target.adAccountId, token).catch(() => {});
+        throw error;
+      }
       // Another writer took over mid-pass. Mark the limit stale so the latest figures are written
       // last: by that writer, or by this one if the lease is free again.
       if (!await store.request(target.businessId, target.adAccountId, token)) return { status: "queued" };
@@ -99,13 +98,17 @@ async function applyOnce(target: { businessId: string; adAccountId: string }, de
       return { decision, record: { action: "freeze", capPaise: decision.capPaise, roomPaise: 0 } as const };
     case "stop": {
       // Pausing is what stops delivery; the lower limit is defence in depth, and the last decision
-      // (no room) keeps anything from activating whether or not Meta accepts it.
-      await deps.meta.pauseActiveCampaigns();
-      await deps.onStopped?.(decision.reason);
+      // (no room) keeps anything from activating whether or not Meta accepts it. The limit is
+      // lowered even when a campaign couldn't be paused, since that one can still spend; then the
+      // pass fails so it is retried and nothing activates meanwhile.
+      let failure: unknown = null;
+      const paused = await deps.meta.pauseActiveCampaigns().then(() => true, (error: unknown) => { failure = error; return false; });
       const lowered = await deps.meta.setAccountSpendCap(STOP_SPEND_CAP_PAISE, STOP_SPEND_CAP_PAISE).then(() => true, (error: unknown) => {
-        if (error instanceof MetaError) return false;
-        throw error;
+        if (!(error instanceof MetaError)) failure ??= error;
+        return false;
       });
+      if (paused) await deps.onStopped?.(decision.reason).catch((error: unknown) => { failure ??= error; });
+      if (failure) throw failure;
       return { decision, record: { action: "stop", capPaise: lowered ? STOP_SPEND_CAP_PAISE : funding.spendCapPaise, roomPaise: 0 } as const };
     }
   }

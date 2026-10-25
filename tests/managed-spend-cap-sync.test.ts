@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MetaError } from "@/lib/meta/client";
-import { SpendCapLeaseLostError, type RecordedSpendCapDecision, type SpendCapStore } from "@/lib/managed/spend-cap-store";
+import { SpendCapLeaseLostError, SpendCapStoreError, type RecordedSpendCapDecision, type SpendCapStore } from "@/lib/managed/spend-cap-store";
 import { STOP_SPEND_CAP_PAISE, syncChildSpendCap, type SpendCapBalance, type SpendCapMeta } from "@/lib/managed/spend-cap-sync";
 
 // #522 wiring: the decision (#534) applied with one writer per child ad account. The in-memory store
@@ -19,7 +19,7 @@ function memoryStore(inputs = { mediaThisAccountPaise: 0, mediaOtherAccountsPais
     },
     async begin(_adAccountId, token) {
       if (row.token !== token) return false;
-      row.dirty = false;
+      Object.assign(row, { dirty: false, decision: null });
       return true;
     },
     async finish(_adAccountId, token, decision) {
@@ -125,6 +125,33 @@ describe("syncChildSpendCap (#522 wiring)", () => {
     expect(result).toMatchObject({ status: "applied", decision: { action: "stop", reason: "no_allowance" } });
     expect(meta.pauseActiveCampaigns).toHaveBeenCalledOnce();
     expect(store.row.decision).toEqual({ action: "stop", capPaise: 33_898, roomPaise: 0 });
+  });
+
+  it("still lowers the limit when a campaign can't be paused, then fails the pass so nothing activates (review)", async () => {
+    const store = memoryStore();
+    const { meta, writes } = metaAccount({ spendCapPaise: 33_898, amountSpentPaise: 0 });
+    vi.mocked(meta.pauseActiveCampaigns).mockRejectedValueOnce(new MetaError("Meta refused to pause a campaign."));
+    await expect(syncChildSpendCap(target, { store, meta, balance: async () => ({ ...paid, held: true }) })).rejects.toThrow("refused to pause");
+    expect(writes).toEqual([STOP_SPEND_CAP_PAISE]);
+    expect(store.row).toMatchObject({ dirty: true, token: null, decision: null });
+  });
+
+  it("still lowers the limit when AdBrain's bookkeeping fails after the pause (review)", async () => {
+    const store = memoryStore();
+    const { meta, writes } = metaAccount({ spendCapPaise: 33_898, amountSpentPaise: 0 });
+    const onStopped = vi.fn(async () => { throw new Error("database unavailable"); });
+    await expect(syncChildSpendCap(target, { store, meta, onStopped, balance: async () => ({ ...paid, held: true }) })).rejects.toThrow("database unavailable");
+    expect(writes).toEqual([STOP_SPEND_CAP_PAISE]);
+    expect(store.row).toMatchObject({ token: null, decision: null });
+  });
+
+  it("abandons the pass when its decision can't be recorded, so an old one isn't left to activate on (review)", async () => {
+    const store = memoryStore();
+    const { meta } = metaAccount({ spendCapPaise: 0, amountSpentPaise: 0 });
+    store.row.decision = { action: "set", capPaise: 50_000, roomPaise: 50_000 };
+    store.finish = vi.fn(async () => { throw new SpendCapStoreError(); });
+    await expect(syncChildSpendCap(target, { store, meta, balance: async () => paid })).rejects.toThrow(SpendCapStoreError);
+    expect(store.row).toMatchObject({ dirty: true, token: null, decision: null });
   });
 
   it("freezes a held account that has spent at what it spent", async () => {

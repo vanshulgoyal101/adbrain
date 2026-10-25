@@ -59,7 +59,8 @@ begin
 end;
 $$;
 
--- Starts a pass for the lease holder: clears the stale mark. False: the lease was lost.
+-- Starts a pass for the lease holder: clears the stale mark and the last decision, so nothing
+-- activates on an old decision while the pass runs or after it dies unfinished. False: the lease was lost.
 create or replace function public.managed_spend_cap_begin(p_ad_account_id text, p_token uuid, p_lease_seconds integer)
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare ok boolean;
@@ -68,7 +69,8 @@ begin
     raise exception 'Invalid spending limit lease' using errcode = '22023';
   end if;
   update private.managed_spend_caps
-    set dirty = false, lease_until = clock_timestamp() + make_interval(secs => p_lease_seconds)
+    set dirty = false, lease_until = clock_timestamp() + make_interval(secs => p_lease_seconds),
+      action = null, cap_paise = null, room_paise = null, decided_at = null
     where ad_account_id = p_ad_account_id and lease_token = p_token and lease_until > clock_timestamp()
     returning true into ok;
   return coalesce(ok, false);

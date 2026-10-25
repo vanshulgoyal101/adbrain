@@ -36,7 +36,7 @@ function memoryStore(state: SpendCapState = { dirty: true, action: null, capPais
   const store: SpendCapStore & { current: SpendCapState } = {
     current: state,
     request: vi.fn(async () => { store.current = { ...store.current, dirty: true }; return true; }),
-    begin: vi.fn(async () => { store.current = { ...store.current, dirty: false }; return true; }),
+    begin: vi.fn(async () => { store.current = { dirty: false, action: null, capPaise: null, roomPaise: null }; return true; }),
     finish: vi.fn(async (_account, _token, decision) => { store.current = { dirty: false, ...decision }; return false; }),
     abandon: vi.fn(async () => { store.current = { dirty: true, action: null, capPaise: null, roomPaise: null }; }),
     inputs: vi.fn(async () => ({ mediaThisAccountPaise: 0, mediaOtherAccountsPaise: 0, taxRateBps: 1800 })),
@@ -169,6 +169,14 @@ describe("managedSpendCapGate (#522, QA #527 T4)", () => {
     const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
     expect(await managedSpendCapGate(actor, account, store)).toBe("no_room");
     expect(store.request).toHaveBeenCalledOnce();
+  });
+
+  it("blocks while another writer's pass is in flight, or died before recording its decision (review)", async () => {
+    // Postgres clears the last decision when a pass begins (scripts/check-meta-connect-db.mjs).
+    const store = memoryStore({ dirty: false, action: null, capPaise: null, roomPaise: null });
+    store.request = vi.fn(async () => false);
+    const { managedSpendCapGate } = await import("@/lib/managed/spend-cap-wiring");
+    expect(await managedSpendCapGate(actor, account, store)).toBe("updating");
   });
 
   it("blocks while another writer is still applying a payment or refund", async () => {
