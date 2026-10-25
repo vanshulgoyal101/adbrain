@@ -453,6 +453,11 @@ export interface Database {
           funding_state: "none" | "card_attached" | "invoiced" | "failed";
           step_keys: Json;
           last_error: string | null;
+          /** #521: the child's own system user, and a reference to its token in the encrypted store (never the token). */
+          manager_user_id: string | null;
+          manager_token_id: string | null;
+          provision_lease_id: string | null;
+          provision_lease_until: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -467,6 +472,8 @@ export interface Database {
           funding_state?: Database["public"]["Tables"]["managed_meta_accounts"]["Row"]["funding_state"];
           step_keys?: Json;
           last_error?: string | null;
+          manager_user_id?: string | null;
+          manager_token_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["managed_meta_accounts"]["Insert"]>;
         Relationships: [];
