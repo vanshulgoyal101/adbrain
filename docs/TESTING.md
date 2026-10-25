@@ -37,7 +37,7 @@ tools beyond Node; inspect their prerequisites before executing.
 | `test:watch` | Persistent Vitest watcher; stop it when finished |
 | `test:coverage` | V8 coverage, two thread workers, threshold gate and artifacts |
 | `test:core` | Offline core regression gate (`tests/core`); no network, credentials or provider cost |
-| `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas |
+| `test:meta-db` | Temporary local PostgreSQL cluster with synthetic auth/storage schemas. On macOS set `LC_ALL=en_US.UTF-8`, or Postgres 17 stops with "postmaster became multithreaded during startup" |
 | `test:workspace-browser` | Playwright suite; explicitly loads `.env.local` if present, can access real accounts |
 | `smoke:core` | Headless production browser smoke; default signs in, views five pages, suppresses automatic sync and telemetry writes, then prepares one campaign review without sending it and deletes that draft. Opt-in flags below mutate production. |
 | `test:workspace-ux` | Workspace audit script; also loads `.env.local`, not an automatically isolated test |
