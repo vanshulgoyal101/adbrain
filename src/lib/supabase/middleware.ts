@@ -15,6 +15,7 @@ const PROTECTED_PREFIXES = [
   "/assets",
   "/create",
   "/settings",
+  "/onboarding",
 ];
 
 /**
