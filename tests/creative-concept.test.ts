@@ -274,6 +274,24 @@ describe("creative concept contract", () => {
     expect(buildConceptMessages(hindi)[0].content).not.toContain("Latin script only");
   });
 
+  // #378/#418: the $0 eval's Hindi Solaride concept wrote "फ्री साइट सर्वे" for the supplied
+  // "Free site survey" and was rejected: the offered thing was compared in English words only.
+  it.each([
+    ["फ्री साइट सर्वे बुक करें: अपनी छत पर सोलर लगवाएं।", "Free site survey"],
+    ["मुफ्त सर्वे के लिए आज ही कॉल करें, छत पर सोलर लगवाएं।", "Free site survey"],
+    ["ਮੁਫ਼ਤ ਸਾਈਟ ਸਰਵੇ ਬੁੱਕ ਕਰੋ: ਆਪਣੀ ਛੱਤ ਤੇ ਸੋਲਰ ਲਗਵਾਓ।", "Free site survey"],
+    ["फ्री होम विज़िट बुक करें: अपनी छत पर सोलर लगवाएं।", "Free home visit"],
+  ])("cites a supplied free offer the Indic copy states in loanwords: %s (#378)", (primary_text, offer) => {
+    const result = validateConcept({ ...concept, primary_text }, { ...input, language: "Hindi in Devanagari script", brand: { ...input.brand, offers: [offer] } });
+    expect(result).toMatchObject({ success: true, concept: { sourceQuotes: expect.arrayContaining([offer]) } });
+  });
+
+  it("still rejects a free offer in loanwords that the Brand never supplied (#378)", () => {
+    const result = validateConcept({ ...concept, primary_text: "फ्री इंस्टॉलेशन पाएं: अपनी छत पर सोलर लगवाएं।" },
+      { ...input, language: "Hindi in Devanagari script", brand: { ...input.brand, offers: ["Free site survey"] } });
+    expect(result.success ? [] : result.issues).toContainEqual(expect.stringContaining("unsupported-commercial-claim"));
+  });
+
   // Recorded Solaride replies (tests/core/fixtures/create/solaride-hindi.json).
   const factory = "फ़ैक्टरी मालिकों के लिए विज्ञापन: 31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत 10,000 रुपये प्रति किलोवाट से ज़्यादा बढ़ जाएगी।";
   const hindiRules = (value: Record<string, unknown>, extra: Partial<typeof input> & { sourceFacts?: string[]; recentCopy?: { headline: string; primary_text: string }[] } = {}) => {
