@@ -106,8 +106,9 @@ exclude entire test directories or suppress uninvestigated findings.
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required
-  checks are green on its head, the latest QA verdict naming that head approves it
-  and names each new migration's sha256, and the PR only adds migrations. A PR with
+  checks are green on its head, the latest QA verdict naming that head (or an earlier
+  head with the same `git patch-id` against the base, so a clean merge of `main` needs no
+  re-approval) approves it and names each new migration's sha256, and the PR only adds migrations. A PR with
   a migration or money code (payments, spend, activation or budget) also needs the
   CTO (#259): the latest `CTO review of <sha>: **approved**` of that head, or of an
   earlier head whose patch against main has the same `git patch-id`. The
