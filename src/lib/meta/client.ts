@@ -345,9 +345,12 @@ export function adSetTargeting(params: {
     ...(params.ageMin !== hardMin || params.ageMax !== 65 ? { age_range: [params.ageMin, params.ageMax] } : {}),
     ...(params.gender === "men" ? { genders: [1] } : params.gender === "women" ? { genders: [2] } : {}),
     ...(params.interests?.length ? { flexible_spec: [{ interests: params.interests }] } : {}),
-    targeting_automation: { advantage_audience: 1 },
+    targeting_automation: { advantage_audience: ADVANTAGE_AUDIENCE ? 1 : 0 },
   };
 }
+
+/** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
+export const ADVANTAGE_AUDIENCE = true;
 
 /** A short, loggable code for a failed Graph call: Meta's code/subcode, else the HTTP status. */
 export function metaErrorCode(error: unknown): string {

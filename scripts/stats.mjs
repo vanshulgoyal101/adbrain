@@ -1,5 +1,5 @@
 // What happened on the platform, in one command (#451). Read-only.
-//   npm run stats [-- --days 7] [-- --include-internal]
+//   npm run stats [-- --days 7] [-- --include-internal] [-- learnings funnel …]  (only those sections)
 // Real customers only by default (scripts/lib/internal-accounts.mjs). Sources: llm_usage_events
 // (every AI call: model, tokens, estimated USD) and product_events (requests, workflows, failures).
 import { realpathSync } from "node:fs";
@@ -20,6 +20,7 @@ export const SECTIONS = [
   { key: "auth", title: "Sign-ins and sign-ups by method, and why sign-ins failed" },
   { key: "speed", title: "Speed of the busiest routes (successful requests, ms)" },
   { key: "plan_checks", title: "Launch plan checks: Meta new-advertiser rules that didn't pass (#419)" },
+  { key: "learnings", title: "Learning ledger: the last 10 launches side by side (settings at launch, latest results, hypothesis and verdict)" },
   { key: "managed_accounts", title: "2-Tier managed accounts by state (#527)" },
   { key: "funnel", title: "Sign-up funnel (reached each step)" },
 ];
@@ -149,6 +150,20 @@ order by launches desc limit 15`;
   count(*) filter (where m.state not in ('ready', 'offboarded') and m.updated_at < now() - interval '30 minutes')::int as stuck_over_30_min
 from public.managed_meta_accounts m join public.businesses b on b.id = m.business_id
 where ${includeInternal ? "true" : customerFilterSql("b.owner_id", "b.id", emails)} group by m.state order by accounts desc`;
+    // #588: not limited by --days; comparing runs (e.g. #157's Hinglish prefill vs #499's English one) spans weeks.
+    case "learnings":
+      return `with r as (select distinct on (campaign_id) * from public.campaign_results order by campaign_id, fetched_at desc)
+select to_char(l.created_at, 'MM-DD') as launched, left(coalesce(c.name, '-'), 32) as campaign, l.snapshot->>'destination' as destination,
+  l.snapshot->'whatsapp'->>'language' as prefill_lang, left(l.snapshot->'whatsapp'->>'prefill', 40) as prefill,
+  l.snapshot->'audience'->>'advantageAudience' as adv_audience, l.snapshot->'formats' as formats,
+  (l.snapshot->'budget'->>'dailyRupees')::numeric as daily_inr, r.spend, r.impressions,
+  round(r.spend / nullif(r.impressions, 0) * 1000, 2) as cpm, r.whatsapp_opens as opened, r.conversations as chats,
+  round(100.0 * r.conversations / nullif(r.whatsapp_opens, 0), 1) as open_to_chat_pct, r.cost_per_conversation as inr_per_chat,
+  left(l.hypothesis, 50) as hypothesis, left(l.verdict, 50) as verdict
+from public.campaign_learnings l join public.campaigns c on c.id = l.campaign_id join public.businesses b on b.id = l.business_id
+left join r on r.campaign_id = c.id
+where ${includeInternal ? "true" : customerFilterSql("b.owner_id", "b.id", emails)}
+order by l.created_at desc limit 10`;
     case "funnel":
       return funnelSql(days, emails, { includeInternal });
     default:
@@ -166,12 +181,14 @@ export function renderSection({ title }, rows) {
 }
 
 async function main() {
-  const { values } = parseArgs({ options: { days: { type: "string", default: "7" }, "include-internal": { type: "boolean", default: false } } });
+  const { values, positionals } = parseArgs({ options: { days: { type: "string", default: "7" }, "include-internal": { type: "boolean", default: false } }, allowPositionals: true });
+  const unknown = positionals.filter((key) => !SECTIONS.some((section) => section.key === key));
+  if (unknown.length) throw new Error(`Unknown section ${unknown.join(", ")}. Sections: ${SECTIONS.map((section) => section.key).join(", ")}.`);
   const days = Number(values.days);
   const includeInternal = values["include-internal"];
   const emails = await localInternalEmails();
   console.log(`AdBrain stats, last ${days} days, ${includeInternal ? "everyone" : "real customers only"} (USD are provider estimates)\n`);
-  for (const section of SECTIONS) {
+  for (const section of SECTIONS.filter(({ key }) => !positionals.length || positionals.includes(key))) {
     const rows = await readOnlyQuery(sectionSql(section.key, days, emails, { includeInternal }));
     const shown = section.key === "funnel" ? summarize(rows).totals.map(([step, users]) => ({ step, users })) : rows;
     console.log(`${renderSection(section, shown)}\n`);
