@@ -38,10 +38,10 @@ export default async function CampaignsPage({
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain and generate some creatives first.
+              Set up your business and generate some creatives first.
             </p>
             <Link href="/brand">
-              <Button>Go to Brand Brain</Button>
+              <Button>Set up your business</Button>
             </Link>
           </CardContent>
         </Card>

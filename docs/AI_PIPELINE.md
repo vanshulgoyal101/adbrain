@@ -112,7 +112,7 @@ not conversation text. These are source claims, not deployed conversation result
 The `campaign.plan` event is `success` for a ready plan, `partial` when it falls
 back (`PLAN_AUDIENCE_NO_META_INTERESTS`, questions, a failed interest lookup) and
 `failed` otherwise; `count` and `failedCount` are the suggested and unresolved
-interest counts, never the names (#686). A concept whose `visual.direction` shows an empty scene
+interest counts, never the names (#686); `durationMs` is Prepare's end-to-end time (#821). A concept whose `visual.direction` shows an empty scene
 (an empty or bare space, a reception or waiting room) with no person, team or product is
 refused as `no-subject` before any image is paid for, and repaired once ([visual-rules.ts](../src/lib/creative/visual-rules.ts), #760). The `creative.batch` event carries the
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
@@ -179,6 +179,8 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    - Case and spacing variants of a CTA or `textPlacement` are mapped, and `left` becomes `center`.
    - An empty or over-long `supportingText` becomes null, and empty quotes are dropped.
    - A quote that differs from a fact only in case is stored as the fact's exact text.
+   - A quote that only adds a leading "the", "a" or "an" to a fact (20+ characters after it) is
+     stored as the fact's own words (#713).
    - Primary text written as one paragraph over 125 characters is split into
      sentence lines (words unchanged), because Meta shows about 125 characters on
      mobile before "See more" (#194).

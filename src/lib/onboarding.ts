@@ -23,7 +23,7 @@ export function onboardingSteps(state: OnboardingState): OnboardingStep[] {
   return [
     {
       id: "brand",
-      title: "Set up your Brand Brain",
+      title: "Set up your business",
       hint: "Add your business once — voice, offers, and areas.",
       href: "/brand",
       done: state.hasBrand,

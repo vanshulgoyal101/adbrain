@@ -1,3 +1,4 @@
+import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { MetaConnectionPanel } from "@/components/meta-connection";
@@ -14,7 +15,7 @@ import {
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
 
-export const metadata = { title: "Brand Brain" };
+export const metadata = { title: OWNER_WORDS.business };
 
 export default async function BrandPage() {
   const business = await getPrimaryBusiness();
@@ -29,7 +30,7 @@ export default async function BrandPage() {
   return (
     <div>
       <PageHeader
-        title="Brand Brain"
+        title={OWNER_WORDS.business}
         description={
           <p>
           Your business memory for every ad. Keep the essentials here once, and
@@ -91,7 +92,7 @@ export default async function BrandPage() {
         </div>
       )}
       <nav
-        aria-label="Brand Brain sections"
+        aria-label="Business sections"
         className="mt-5 flex gap-2 overflow-x-auto border-y border-slate-200/80 py-2 text-sm"
       >
         {[

@@ -130,7 +130,7 @@ describe("<Nav>", () => {
     const expected: [string, string][] = [
       ["Home", "/dashboard"],
       ["Create", "/create"],
-      ["Brand Brain", "/brand"],
+      ["Your business", "/brand"],
       ["Review", "/studio"],
       ["Campaigns", "/campaigns"],
       ["Enquiries", "/leads"],
@@ -185,5 +185,30 @@ describe("<Nav>", () => {
       "aria-label",
       "Workspace navigation",
     );
+  });
+});
+
+describe("Help on WhatsApp (#796)", () => {
+  it("builds the chat link from the support number, pre-typed with the business, and hides it without a number", async () => {
+    const { supportWhatsAppUrl } = await import("@/lib/support");
+    expect(supportWhatsAppUrl("+91 70097 64842", "Solaride")).toBe("https://wa.me/917009764842?text=AdBrain%20help%3A%20Solaride");
+    expect(supportWhatsAppUrl("", "Solaride")).toBeNull();
+    expect(supportWhatsAppUrl("12345", "Solaride")).toBeNull();
+    expect(supportWhatsAppUrl("917009764842", null)).toContain("my%20workspace");
+  });
+
+  it("shows the link in the sidebar and the phone menu only when a number is set", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ count: 0 })));
+    const url = "https://wa.me/917009764842?text=AdBrain%20help%3A%20Fixture";
+    const view = render(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business" supportUrl={url}><p>Workspace</p></WorkspaceShell>);
+    const links = screen.getAllByRole("link", { name: "Help on WhatsApp", hidden: true });
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", url);
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
+    view.rerender(<WorkspaceShell email={null} businessName="Fixture" ownerId="owner" businessId="business"><p>Workspace</p></WorkspaceShell>);
+    expect(screen.queryByRole("link", { name: "Help on WhatsApp", hidden: true })).toBeNull();
   });
 });

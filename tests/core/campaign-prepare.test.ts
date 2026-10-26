@@ -171,7 +171,7 @@ describe("core: Prepare audience", () => {
   it("logs each Prepare outcome with interest counts on the recorded Graph search", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const planEvents = () => info.mock.calls.map(([entry]) => String(entry)).filter((entry) => entry.includes('"name":"campaign.plan"'))
-      .map((entry) => JSON.parse(entry) as { outcome: string; attributes: Record<string, unknown> });
+      .map((entry) => JSON.parse(entry) as { outcome: string; durationMs?: number; attributes: Record<string, unknown> });
     const reply = (interests: string[]) => mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan: { ...plannerPlan, interests } }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
 
     reply(["Chiropractic", "Sports medicine", "Posture", "Physical therapy", "Wellness"]);
@@ -188,6 +188,8 @@ describe("core: Prepare audience", () => {
       { outcome: "partial", count: 2, failedCount: 2, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" },
       { outcome: "partial", count: 2, failedCount: undefined, errorCode: "PLAN_AUDIENCE_INTEREST_LOOKUP_FAILED" },
     ]);
+    // #821: every outcome carries Prepare's end-to-end time for the scoreboard's p90 < 8 s.
+    for (const event of planEvents()) expect(Number.isInteger(event.durationMs) && event.durationMs! >= 0, JSON.stringify(event)).toBe(true);
   });
 
   // #686: the planner names interests the way Meta does (recorded Groq reply on production's Cedar Ridge

@@ -83,7 +83,7 @@ export function MetaConnectionPanel({
             Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.
           </p>
         )}
-        {!businessId && <Alert variant="warning">Set up your Brand Brain before connecting Meta.</Alert>}
+        {!businessId && <Alert variant="warning">Set up your business before connecting Meta.</Alert>}
         {businessId && !oauthConfigured && (
           <Alert variant="warning">Meta connection is not configured on this server yet.</Alert>
         )}
