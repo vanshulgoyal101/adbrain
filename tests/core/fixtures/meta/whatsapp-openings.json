@@ -1,0 +1,79 @@
+{
+  "recordedAt": "2026-10-26T11:51:14.329Z",
+  "openings": {
+    "prefill": {
+      "greeting": "Hi! Thanks for messaging Solaride. Send this message and we'll reply here.",
+      "autofill": "Hi! I'd like a free solar site survey."
+    },
+    "call": {
+      "greeting": "Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.",
+      "autofill": "Can I get more info on this",
+      "callButton": true
+    },
+    "ice_breakers": {
+      "greeting": "Hi! Thanks for messaging Solaride.",
+      "autofill": "",
+      "iceBreakers": [
+        "Free site survey",
+        "Price for my home",
+        "Call me back"
+      ]
+    }
+  },
+  "tape": [
+    {
+      "opening": "prefill",
+      "shape": "placement",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"autofill_message\",\"message\":{\"autofill_message\":{\"content\":\"Hi! I'd like a free solar site survey.\"},\"text\":\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\"}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "prefill",
+      "shape": "single",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"autofill_message\",\"message\":{\"autofill_message\":{\"content\":\"Hi! I'd like a free solar site survey.\"},\"text\":\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\"}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "call",
+      "shape": "placement",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"autofill_message\",\"message\":{\"autofill_message\":{\"content\":\"Can I get more info on this\"},\"text\":\"Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.\",\"automated_greeting_message_cta\":{\"type\":\"call\"}}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "call",
+      "shape": "single",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"autofill_message\",\"message\":{\"autofill_message\":{\"content\":\"Can I get more info on this\"},\"text\":\"Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.\",\"automated_greeting_message_cta\":{\"type\":\"call\"}}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "ice_breakers",
+      "shape": "placement",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"Hi! Thanks for messaging Solaride.\",\"ice_breakers\":[{\"title\":\"Free site survey\"},{\"title\":\"Price for my home\"},{\"title\":\"Call me back\"}]}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    {
+      "opening": "ice_breakers",
+      "shape": "single",
+      "welcome": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"ice_breakers\",\"message\":{\"text\":\"Hi! Thanks for messaging Solaride.\",\"ice_breakers\":[{\"title\":\"Free site survey\"},{\"title\":\"Price for my home\"},{\"title\":\"Call me back\"}]}}}",
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    }
+  ]
+}

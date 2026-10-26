@@ -12,9 +12,9 @@ import { LEGAL_LINKS } from "@/lib/legal-links";
 import styles from "./workspace-shell.module.css";
 
 const sections: Record<string, string> = {
-  dashboard: "Overview", create: "Create", studio: "Review",
+  dashboard: "Home", create: "Create ads", studio: "Review",
   campaigns: "Campaigns", leads: "Enquiries", brand: OWNER_WORDS.business,
-  assets: "Brand assets", settings: "Settings",
+  assets: "Assets", settings: "Settings",
 };
 
 function readViewedAt(key: string): string | null {
@@ -82,16 +82,16 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
 
   const identity = <Link href="/brand" className={styles.business}>
     <span className={styles.businessIcon}><Building2 size={17} aria-hidden="true" /></span>
-    <span><strong>{businessName || "Your workspace"}</strong><small>{businessName ? "Business workspace" : "Set up your business"}</small></span>
+    <span><strong>{businessName || OWNER_WORDS.business}</strong><small>{businessName ? OWNER_WORDS.business : "Set up your business"}</small></span>
     <ChevronRight size={14} aria-hidden="true" />
   </Link>;
 
-  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} /><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined}>{email || "Your account"}</span></div><SignOutButton /></div>;
+  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} /><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined}>{email || "Your account"}</span></div><SignOutButton /><nav aria-label="Legal" className={styles.legal}>{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{link.label}</Link>)}</nav></div>;
 
   return <SupportLinkProvider url={supportUrl}><div className={styles.shell}>
     <a className={styles.skip} href="#workspace-main">Skip to workspace</a>
     <aside className={styles.sidebar} aria-label="Main sidebar">
-      <Link href="/dashboard" className={styles.logo}><Brain size={23} aria-hidden="true" />AdBrain</Link>
+      <Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link>
       {identity}
       <Nav unseenCount={unseenCount} />
       {account}
@@ -99,18 +99,17 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     <div className={styles.body}>
       <header className={styles.header}>
         <button className={styles.menu} type="button" title="Open navigation" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => drawer.current?.showModal()}><Menu size={21} aria-hidden="true" /></button>
-        {/* #403: the page's own H1 names it on wider screens; phones keep the name here. */}
+        {/* #847: phones only. On wider screens the sidebar holds Create ads and the H1 names the page. */}
         <div className={styles.breadcrumb}><strong>{section}</strong></div>
-        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create"><Plus size={16} aria-hidden="true" /><span>Create ads</span></Link>}
+        {!pathname.startsWith("/create") && <Link className={styles.create} href="/create" aria-label="Create ads" title="Create ads"><Plus size={20} aria-hidden="true" /></Link>}
       </header>
       <main id="workspace-main" tabIndex={-1} className={styles.main}>{children}</main>
-      <footer className={styles.footer}><span>AdBrain workspace</span><nav aria-label="Legal">{LEGAL_LINKS.map(link => <Link key={link.href} href={link.href} prefetch={false}>{link.label}</Link>)}</nav></footer>
     </div>
     <dialog ref={drawer} className={styles.drawer} aria-label="Workspace menu" onClick={event => {
       if (event.target === event.currentTarget || (event.target instanceof Element && event.target.closest("a"))) drawer.current?.close();
     }}>
       <div className={styles.drawerBody}>
-        <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={23} aria-hidden="true" />AdBrain</Link><button type="button" title="Close navigation" aria-label="Close navigation" onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
+        <div className={styles.drawerHeading}><Link href="/dashboard" className={styles.logo}><Brain size={20} aria-hidden="true" />AdBrain</Link><button type="button" title="Close navigation" aria-label="Close navigation" onClick={() => drawer.current?.close()}><X size={21} aria-hidden="true" /></button></div>
         {identity}<Nav unseenCount={unseenCount} />{account}
       </div>
     </dialog>

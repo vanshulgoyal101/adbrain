@@ -30,7 +30,7 @@ export default async function OpengraphImage() {
               width: 72,
               height: 72,
               borderRadius: 18,
-              background: "#2563eb",
+              background: "#13784a",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -41,7 +41,7 @@ export default async function OpengraphImage() {
           >
             <img src={`data:image/png;base64,${icon.toString("base64")}`} alt="" width={72} height={72} />
           </div>
-          <div style={{ fontSize: 40, fontWeight: 800, color: "#0f172a" }}>
+          <div style={{ fontSize: 40, fontWeight: 800, color: "#1b2420" }}>
             {siteConfig.name}
           </div>
         </div>
@@ -52,13 +52,13 @@ export default async function OpengraphImage() {
               fontSize: 68,
               fontWeight: 800,
               lineHeight: 1.05,
-              color: "#0f172a",
+              color: "#1b2420",
               maxWidth: 900,
             }}
           >
             Marketing for your next customer.
           </div>
-          <div style={{ fontSize: 32, color: "#475569", maxWidth: 880 }}>
+          <div style={{ fontSize: 32, color: "#5a6660", maxWidth: 880 }}>
             Your brand. Your message. Your next campaign.
           </div>
         </div>
@@ -69,9 +69,9 @@ export default async function OpengraphImage() {
               key={t}
               style={{
                 fontSize: 26,
-                color: "#1d4ed8",
+                color: "#0f6440",
                 background: "#ffffff",
-                border: "2px solid #bfdbfe",
+                border: "2px solid #a8dcbc",
                 borderRadius: 999,
                 padding: "10px 24px",
               }}

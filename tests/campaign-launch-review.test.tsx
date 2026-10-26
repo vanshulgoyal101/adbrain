@@ -9,7 +9,7 @@ describe("<CampaignLaunchReview>", () => {
       <CampaignLaunchReview
         selectedCount={0}
         budget={0}
-        audience="AdBrain decides from your Brand Brain"
+        audience="AdBrain decides from your business details"
       />,
     );
     expect(screen.getByText("Select an ad")).toBeInTheDocument();

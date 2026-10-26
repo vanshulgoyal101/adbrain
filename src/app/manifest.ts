@@ -10,7 +10,7 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",
-    theme_color: "#2563eb",
+    theme_color: "#ffffff",
     icons: [
       // Chrome's install prompt rejects SVG — PNG at 192/512 is required.
       { src: asset("/icon-192.png"), sizes: "192x192", type: "image/png", purpose: "any" },

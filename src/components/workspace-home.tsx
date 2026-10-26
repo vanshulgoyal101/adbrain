@@ -1,22 +1,17 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Building2,
-  CheckCircle2,
-  ImageIcon,
-  Plus,
-} from "lucide-react";
+import { Building2, CheckCircle2, ChevronRight, ImageIcon } from "lucide-react";
 import { SpendStatusBanner } from "@/components/spend-status";
-import { buildWorkQueue, missingBrandContext } from "@/lib/work-queue";
+import { buildWorkQueue } from "@/lib/work-queue";
 import { describeAuditEvent } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { homeResults } from "@/lib/campaign/home-results";
 import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
+import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
 
 export interface WorkspaceHomeProps {
   business: Business | null;
@@ -32,9 +27,11 @@ export interface WorkspaceHomeProps {
   now?: number;
 }
 
-const actionClass =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800";
+const primaryClass =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover";
+const linkClass = "font-medium text-blue-700 hover:underline";
 
+/** #847 "calm by default": three figures, one next step, campaigns and the latest ads. */
 export function WorkspaceHome({
   business,
   creatives,
@@ -48,41 +45,20 @@ export function WorkspaceHome({
   now,
 }: WorkspaceHomeProps) {
   const summary = business ? homeResults(campaigns, results) : null;
-  const queue = buildWorkQueue({ business, creatives, campaigns, metaReady });
-  const drafts = creatives.filter(
-    (creative) => creative.status === "draft",
-  ).length;
-  const approved = creatives.filter(
-    (creative) => creative.status === "approved",
-  ).length;
-  const active = campaigns.filter(
-    (campaign) => campaign.status === "active",
-  ).length;
+  const [next, ...later] = buildWorkQueue({ business, creatives, campaigns, metaReady });
+  const places = business?.locations.length ? business.locations.join(", ") : null;
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-6">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-slate-500">
-            Home / {business ? "Advertising workspace" : "New workspace"}
-          </p>
-          <h1 className="mt-2 break-words text-3xl font-semibold text-slate-950">
-            {business?.name ?? "Welcome to AdBrain"}
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            {business
-              ? `${business.vertical || "Local business"}${business.locations.length ? ` / ${business.locations.join(", ")}` : ""}`
-              : "Start with the business behind your ads."}
-          </p>
-        </div>
-        <Link href={business ? "/create" : "/brand"} className={actionClass}>
-          {business ? (
-            <Plus size={17} aria-hidden="true" />
-          ) : (
-            <Building2 size={17} aria-hidden="true" />
-          )}
-          {business ? "Create an ad" : "Set up your business"}
-        </Link>
+      <header className="min-w-0">
+        <h1 className="break-words text-2xl font-semibold tracking-[-0.01em] text-slate-950">
+          {business?.name ?? "Welcome to AdBrain"}
+        </h1>
+        <p className="mt-1 text-xs text-slate-500">
+          {business
+            ? [business.vertical || "Local business", places].filter(Boolean).join(" · ")
+            : "Start with the business behind your ads."}
+        </p>
       </header>
 
       {spendStatus ?? (spend && (spend.status === "approaching" || spend.status === "over") && (
@@ -90,271 +66,141 @@ export function WorkspaceHome({
       ))}
 
       {summary && (
-        <section aria-labelledby="results-title" className="border-b border-slate-200 pb-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="results-title" className="text-lg font-semibold text-slate-900">Results so far</h2>
-            <p className="text-xs text-slate-500">
-              Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
-              <Link href="/campaigns" className="font-medium text-blue-700 hover:underline">See campaigns</Link>
-            </p>
-          </div>
-          <dl className="mt-3 grid grid-cols-3 divide-x divide-slate-200">
+        <section aria-labelledby="results-title">
+          <h2 id="results-title" className="sr-only">Results so far</h2>
+          <dl className="grid grid-cols-3 gap-4 sm:flex sm:gap-16">
             {[
               { label: "Enquiries", value: String(summary.enquiries) },
               { label: "Spent", value: formatMoney(summary.spend) },
-              { label: "Per enquiry", value: summary.perEnquiry === null ? "Not yet" : formatMoney(summary.perEnquiry) },
+              { label: "Per enquiry", value: summary.perEnquiry === null ? null : formatMoney(summary.perEnquiry) },
             ].map((metric) => (
-              <div key={metric.label} className="min-w-0 px-4 first:pl-0">
-                <dt className="text-xs text-slate-500">{metric.label}</dt>
-                <dd className="mt-1 break-words text-2xl font-semibold text-slate-950">{metric.value}</dd>
+              <div key={metric.label} className="flex min-w-0 flex-col-reverse">
+                <dt className="mt-1 text-xs text-slate-600">{metric.label}</dt>
+                <dd className="break-words text-4xl font-medium tracking-[-0.02em] text-slate-950">
+                  {metric.value ?? <span className="text-slate-400" aria-label="Not yet">—</span>}
+                </dd>
               </div>
             ))}
           </dl>
+          <p className="mt-3 text-xs text-slate-500">
+            Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
+            <Link href="/campaigns" className={linkClass}>See campaigns</Link>
+          </p>
         </section>
       )}
 
-      {business && (
-        <dl className="grid grid-cols-2 divide-x divide-slate-200 border-b border-slate-200 pb-6 lg:grid-cols-4">
-          {[
-            {
-              label: "Awaiting review",
-              value: drafts,
-              href: "/studio?status=draft",
-            },
-            {
-              label: "Approved ads",
-              value: approved,
-              href: "/studio?status=approved",
-            },
-            { label: "Active campaigns", value: active, href: "/campaigns" },
-            {
-              label: "Meta connection",
-              value: metaReady ? "Connected" : "Needs setup",
-              href: "/settings",
-            },
-          ].map((metric) => (
-            <div key={metric.label} className="min-w-0 px-4 py-3 first:pl-0">
-              <dt className="text-xs text-slate-500">{metric.label}</dt>
-              <dd className="mt-2">
-                <Link
-                  href={metric.href}
-                  className="break-words text-xl font-semibold text-slate-900 hover:text-blue-700"
-                >
-                  {metric.value}
-                </Link>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-
-      <section aria-labelledby="work-title">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 id="work-title" className="text-lg font-semibold text-slate-900">
-            Next up
-          </h2>
-          <span className="text-xs text-slate-500">
-            {queue.length} {queue.length === 1 ? "action" : "actions"}
-          </span>
-        </div>
-        {queue.length ? (
-          <ol className="divide-y divide-slate-200 border-y border-slate-200">
-            {queue.map((item, index) => (
-              <li
-                key={item.id}
-                className="flex flex-wrap items-center gap-4 py-5"
-              >
-                <span
-                  aria-hidden="true"
-                  className={`text-xs font-semibold ${item.tone === "attention" ? "text-amber-700" : "text-slate-400"}`}
-                >
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <div className="min-w-0 flex-1 basis-48">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    {item.title}
-                  </h3>
-                  <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                    {item.detail}
+      <div className={business ? "grid gap-x-12 gap-y-8 xl:grid-cols-[minmax(0,1fr)_360px]" : undefined}>
+        <div className="min-w-0 space-y-8">
+          <section aria-labelledby="work-title">
+            <h2 id="work-title" className="sr-only">Next step</h2>
+            {next ? (
+              <>
+                <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-slate-950">{next.title}</h3>
+                    <p className="mt-1 max-w-xl text-sm text-slate-600">{next.detail}</p>
+                  </div>
+                  <Link href={next.href} className={primaryClass}>
+                    {next.href === "/brand" && !business && <Building2 size={17} aria-hidden="true" />}
+                    {business ? next.action : "Set up your business"}
+                  </Link>
+                </div>
+                {later.length > 0 && (
+                  <ul className="divide-y divide-slate-200 px-4 sm:px-6">
+                    {later.slice(0, 1).map((item) => (
+                      <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-4 py-3 text-sm">
+                        <span className={item.tone === "attention" ? "text-slate-900" : "text-slate-600"}>{item.title}</span>
+                        <Link href={item.href} className={`${linkClass} inline-flex min-h-11 items-center`}>{item.action}</Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 sm:p-6">
+                <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-950">You&apos;re up to date</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Nothing is waiting for you. <Link href="/leads" className={linkClass}>See enquiries</Link>
                   </p>
                 </div>
-                <Link
-                  href={item.href}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50"
-                >
-                  {item.action}
-                  <ArrowRight size={16} aria-hidden="true" />
-                </Link>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className="flex items-start gap-3 border-y border-slate-200 py-6">
-            <CheckCircle2
-              size={20}
-              className="shrink-0 text-emerald-700"
-              aria-hidden="true"
-            />
-            <div>
-              <h3 className="font-medium text-slate-900">
-                No pending review tasks
-              </h3>
-              <p className="mt-1 text-sm text-slate-600">
-                Check your campaigns and results for the latest performance.
-              </p>
-              <Link
-                href="/leads"
-                className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700"
-              >
-                Open results <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {business && (
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.6fr)_minmax(240px,1fr)]">
-          <section aria-labelledby="campaigns-title" className="min-w-0">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2
-                id="campaigns-title"
-                className="text-lg font-semibold text-slate-900"
-              >
-                Campaigns
-              </h2>
-              <Link
-                href="/campaigns"
-                className="text-sm font-medium text-blue-700"
-              >
-                View all
-              </Link>
-            </div>
-            {campaigns.length ? (
-              <ul className="divide-y divide-slate-200 border-y border-slate-200">
-                {campaigns.slice(0, 5).map((campaign) => (
-                  <li
-                    key={campaign.id}
-                    className="flex items-center justify-between gap-4 py-4"
-                  >
-                    <div className="min-w-0">
-                      <Link
-                        href="/campaigns"
-                        className="break-words text-sm font-semibold text-slate-900 hover:text-blue-700"
-                      >
-                        {campaign.name || "Untitled campaign"}
-                      </Link>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {formatDate(campaign.created_at)}
-                      </p>
-                      {campaignAttention(campaign) ? (
-                        <p className="mt-1 text-xs font-medium text-red-800">
-                          Needs attention: {campaignAttention(campaign)}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span
-                      className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${campaign.status === "active" ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-700"}`}
-                    >
-                      {campaign.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="border-y border-slate-200 py-8">
-                <p className="text-sm font-medium text-slate-900">
-                  No campaigns yet
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Approved ads can be exported or used in a new paused campaign.
-                </p>
               </div>
             )}
           </section>
-          <section aria-labelledby="context-title">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2
-                id="context-title"
-                className="text-lg font-semibold text-slate-900"
-              >
-                Brand context
-              </h2>
-              <Link href="/brand" className="text-sm font-medium text-blue-700">
-                Edit brand
-              </Link>
-            </div>
-            <dl className="divide-y divide-slate-200 border-y border-slate-200 text-sm">
-              {[
-                { label: "Voice", value: business.brand_voice },
-                { label: "Audience", value: business.target_audience },
-              ].map((field) => (
-                <div key={field.label} className="py-3">
-                  <dt className="text-xs text-slate-500">{field.label}</dt>
-                  <dd className="mt-1 break-words text-slate-800">
-                    {field.value?.trim() || "Not added"}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-3 text-xs text-slate-500">
-              {missingBrandContext(business).length
-                ? "Some brand context is missing."
-                : "Description, voice, audience, and service areas saved."}
-            </p>
-          </section>
-        </div>
-      )}
 
-      {creatives.length > 0 && (
-        <section aria-labelledby="creatives-title">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2
-              id="creatives-title"
-              className="text-lg font-semibold text-slate-900"
-            >
-              Recent creative
-            </h2>
-            <Link href="/studio" className="text-sm font-medium text-blue-700">
-              Review all
-            </Link>
-          </div>
-          <ul className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {creatives.slice(0, 4).map((creative) => (
-              <li key={creative.id} className="min-w-0">
-                <Link
-                  href={`/studio?creative=${encodeURIComponent(creative.id)}`}
-                  className="group block"
-                >
-                  <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                    {creative.image_url ? (
-                      <img
-                        src={creativeThumbnailUrl(creative.image_url)}
-                        alt={creative.headline || "Ad creative"}
-                        className="h-full w-full object-contain"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <ImageIcon
-                        className="text-slate-400"
-                        aria-label="No image"
-                      />
-                    )}
-                  </div>
-                  <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-900 group-hover:text-blue-700">
-                    {creative.headline || "Untitled ad"}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {creative.status === "approved"
-                      ? "Approved"
-                      : "Needs review"}
-                  </p>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+          {business && (
+            <section aria-labelledby="campaigns-title" className="min-w-0">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="campaigns-title" className="text-lg font-semibold text-slate-950">Campaigns</h2>
+                {campaigns.length > 0 && (
+                  <Link href="/campaigns" className={linkClass}>
+                    See all {campaigns.length}
+                  </Link>
+                )}
+              </div>
+              {campaigns.length ? (
+                <ul className="mt-2 divide-y divide-slate-200 border-b border-slate-200">
+                  {campaigns.slice(0, 3).map((campaign) => {
+                    const status = CAMPAIGN_STATUS[campaign.status] ?? CAMPAIGN_STATUS.draft;
+                    const attention = campaignAttention(campaign);
+                    return (
+                      <li key={campaign.id} className="py-3 sm:flex sm:items-center sm:justify-between sm:gap-6">
+                        <div className="min-w-0">
+                          <Link href="/campaigns" className="block truncate text-sm font-medium text-slate-950 hover:text-blue-700">
+                            {campaign.name || "Untitled campaign"}
+                          </Link>
+                          {attention && <p className="mt-1 text-xs font-medium text-danger">Needs attention: {attention}</p>}
+                        </div>
+                        <p className="mt-1 flex shrink-0 gap-x-4 text-xs text-slate-600 sm:mt-0">
+                          <Status tone={status.tone}>{status.label}</Status>
+                          {campaign.daily_budget != null && <span className="sm:w-24 sm:text-right">{formatPerDay(campaign.daily_budget)}</span>}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600">
+                  No campaigns yet. Approved ads become a paused campaign you check before anything spends.
+                </p>
+              )}
+            </section>
+          )}
+        </div>
+
+        {creatives.length > 0 && (
+          <section aria-labelledby="creatives-title" className="min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="creatives-title" className="text-lg font-semibold text-slate-950">Latest ads</h2>
+              <Link href="/studio" className={linkClass}>Review all</Link>
+            </div>
+            <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
+              {creatives.slice(0, 4).map((creative) => (
+                <li key={creative.id} className="min-w-0">
+                  <Link href={`/studio?creative=${encodeURIComponent(creative.id)}`} aria-label={`${creative.headline || "Untitled ad"}: ${creative.status === "approved" ? "approved" : "needs review"}`} className="group block">
+                    <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md bg-slate-100">
+                      {creative.image_url ? (
+                        <img
+                          src={creativeThumbnailUrl(creative.image_url)}
+                          alt={creative.headline || "Ad"}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <ImageIcon className="text-slate-400" aria-label="No image" />
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-xs text-slate-600 group-hover:text-blue-700">
+                      {creative.status === "approved" ? "Approved" : "Needs review"}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
 
       {activity ?? <RecentActivity audit={audit} />}
     </div>
@@ -364,12 +210,15 @@ export function WorkspaceHome({
 export function RecentActivity({ audit }: { audit: AuditLog[] }) {
   if (!audit.length) return null;
   return (
-    <section aria-labelledby="activity-title">
-      <h2 id="activity-title" className="mb-3 text-lg font-semibold text-slate-900">Recent activity</h2>
-      <ul className="divide-y divide-slate-200 border-t border-slate-200">
+    <details className="group border-t border-slate-200 pt-2">
+      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-950 [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
+        <span id="activity-title">Recent activity</span>
+      </summary>
+      <ul aria-labelledby="activity-title" className="divide-y divide-slate-200">
         {audit.map((event) => (
           <li key={event.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm">
-            <span className="text-slate-700">
+            <span className="text-slate-600">
               {describeAuditEvent(event.action, event.reason)}
               {event.authority !== "server" && <span className="ml-2 text-xs text-slate-500">Unverified legacy event</span>}
             </span>
@@ -377,6 +226,6 @@ export function RecentActivity({ audit }: { audit: AuditLog[] }) {
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   );
 }

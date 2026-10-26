@@ -2,7 +2,7 @@
 import { takePendingIdea } from "@/lib/ideas/pending";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
-import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -29,7 +29,7 @@ import { Textarea } from "@/components/ui/input";
 import { useMounted } from "@/lib/use-mounted";
 import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/interview";
 import { isWriteYourOwnOption } from "@/lib/creative/interview-options";
-import { creativeFollowUps, creativeRecommendations } from "@/lib/creative/recommendations";
+import { creativeFollowUps, creativeRecommendations, hasCreateFacts } from "@/lib/creative/recommendations";
 import { CREATE_LANGUAGES, defaultAdLanguage, type CreateLanguageId } from "@/lib/languages";
 import type { OpeningLine } from "@/lib/campaign/result-evidence";
 import type { Business, Creative } from "@/lib/types";
@@ -161,6 +161,10 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
   const [stillMaking, setStillMaking] = useState(0);
   const movedOnRef = useRef(false);
   const useSavedRef = useRef<(() => void) | null>(null);
+  // #858: an unedited suggestion chip on a Brand with offer, area and phone skips the brief review.
+  const chipGoalRef = useRef<string | null>(null);
+  const quickStartRef = useRef(false);
+  const [quickBrief, setQuickBrief] = useState<string | null>(null);
 
   // Restore after mount (never during SSR) so server and client markup agree.
   const mounted = useMounted();
@@ -274,6 +278,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     setLoading(true);
     setError(null);
     setLastAction({ type: "step", answers: nextAnswers });
+    let quick: { brief: string; language: CreateLanguageId } | null = null;
     try {
       const res = await fetch("/api/creatives/assistant", {
         method: "POST",
@@ -298,7 +303,12 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
         if (!languagePicked && isCreateLanguage(data.language)) setLanguage(data.language);
         setPhase("review");
         setLastAction(null);
+        if (quickStartRef.current && nextAnswers.length === 0) {
+          quick = { brief: data.brief.trim(), language: !languagePicked && isCreateLanguage(data.language) ? data.language : language };
+        }
+        quickStartRef.current = false;
       } else if (data.question) {
+        quickStartRef.current = false;
         setTurns((t) => [...t, { role: "question", question: data.question! }]);
       } else {
         setError("The assistant had trouble. Please try again.");
@@ -308,6 +318,10 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     } finally {
       setLoading(false);
       inFlightRef.current = false;
+    }
+    if (quick?.brief) {
+      setQuickBrief(quick.brief);
+      generate(quick.brief, quick.language);
     }
   }
 
@@ -535,6 +549,8 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     if (loading) return;
     const g = goal.trim();
     if (!g) return;
+    quickStartRef.current = chipGoalRef.current?.trim() === g && hasCreateFacts(business);
+    setQuickBrief(null);
     followConversationRef.current = true;
     setStarted(true);
     setError(null);
@@ -562,6 +578,16 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     setPrepared(undefined);
     setReferenceBrief(nextReference);
     setGoal(nextGoal);
+    setQuickBrief(null);
+    chipGoalRef.current = null;
+  }
+
+  function editQuickBrief() {
+    if (phase === "generating" || loading) return;
+    setQuickBrief(null);
+    // A new batch from the edited brief, not a recovery of the one just made.
+    setGenerationId(null);
+    setPhase("review");
   }
 
   if (!started) {
@@ -613,7 +639,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => setGoal(s.prompt)}
+                    onClick={() => { setGoal(s.prompt); chipGoalRef.current = s.prompt; }}
                     className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-600 hover:text-blue-700"
                   >
                     {s.label}<ArrowRight size={15} aria-hidden="true" />
@@ -651,8 +677,8 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
           className="scrollbar-stable flex flex-col gap-3 pr-1 lg:max-h-[62vh] lg:overflow-y-scroll"
         >
           {turns.map((turn, i) => (
+            <Fragment key={i}>
             <TurnView
-              key={i}
               turn={turn}
               active={activeQuestion === (turn.role === "question" ? turn.question : null)}
               disabled={loading || phase !== "chat"}
@@ -664,6 +690,19 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
               onMakeMissing={i === lastResultIndex && phase !== "generating" && !loading ? makeMissing : undefined}
               brand={business}
             />
+            {i === 0 && quickBrief && (
+              <details className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">
+                <summary className="flex min-h-11 cursor-pointer items-center font-medium text-slate-800">What I&apos;ll write about · Edit</summary>
+                <p className="mt-1 whitespace-pre-line">{quickBrief}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Button size="sm" variant="outline" onClick={editQuickBrief} disabled={phase === "generating" || loading}>
+                    <Pencil className="h-4 w-4" /> Edit brief
+                  </Button>
+                  {phase === "generating" && <span className="text-xs text-slate-500">You can edit it once these ads are ready.</span>}
+                </div>
+              </details>
+            )}
+            </Fragment>
           ))}
 
           {phase === "generating" && live ? (

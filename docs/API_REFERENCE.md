@@ -359,7 +359,7 @@ Example interview input for a synthetic business:
 | `sourceFacts` | Optional array of up to 12 explicit user-authored facts, each up to 2000 characters (6000 combined); never copy an AI-generated brief or advisory preferences here |
 | `format` | `portrait` (default), `square`, `story`, `landscape` |
 
-Example paid-generation input, submitted only after brief review and authorization:
+Example paid-generation input, submitted after the owner starts Create (after the brief review, or straight from an unedited suggestion on a complete Brand, #858):
 
 ```json
 {

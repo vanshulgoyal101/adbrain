@@ -69,20 +69,34 @@
   --color-blue-800: #0d5034;
   --color-blue-900: #0b412b;
   --color-blue-950: #062617;
+  /* #847 "calm by default": app type is 13 meta, 15 body, 17 section, 24 page title, 32 figures. */
   --text-xs: 0.8125rem;
   --text-xs--line-height: 1.4;
   --text-sm: 0.9375rem;
   --text-sm--line-height: 1.5;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5;
   --text-lg: 1.0625rem;
-  --text-lg--line-height: 1.5;
-  --text-xl: 1.25rem;
-  --text-xl--line-height: 1.35;
-  --text-2xl: 1.625rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.0625rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.5rem;
   --text-2xl--line-height: 1.25;
-  --font-weight-semibold: 650;
+  --text-3xl: 1.5rem;
+  --text-3xl--line-height: 1.25;
+  --text-4xl: 2rem;
+  --text-4xl--line-height: 1.1;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 600;
+  /* Radius 10 everywhere; 8 for small insets, skeleton lines and counters. */
+  --radius: 8px;
+  --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 10px;
-  --shadow-xs: 0 1px 2px rgb(16 24 20 / 0.06);
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
+  /* Flat surfaces: cards and buttons have a line, not a shadow. Only what floats casts one. */
+  --shadow-xs: none;
   --shadow-sm: 0 1px 2px rgb(16 24 20 / 0.06);
 }
 
@@ -96,7 +110,8 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), "Noto Sans Devanagari", "Noto Sans Gurmukhi", sans-serif;
+  /* Hindi and Punjabi use the phone's own faces (Android: Noto, iOS: Kohinoor/Mukta Mahee): no download. */
+  font-family: var(--font-sans), "Noto Sans Devanagari", "Kohinoor Devanagari", "Noto Sans Gurmukhi", "Mukta Mahee", sans-serif;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -132,18 +147,18 @@ select:focus {
 }
 
 .scrollbar-stable::-webkit-scrollbar-track {
-  background: #f1f3f5;
+  background: var(--surface-subtle);
 }
 
 .scrollbar-stable::-webkit-scrollbar-thumb {
-  background: #9aa3ad;
-  border: 2px solid #f1f3f5;
+  background: #cbd2c9;
+  border: 2px solid var(--surface-subtle);
   border-radius: 5px;
 }
 
 @supports not selector(::-webkit-scrollbar) {
   .scrollbar-stable {
-    scrollbar-color: #9aa3ad #f1f3f5;
+    scrollbar-color: #cbd2c9 var(--surface-subtle);
     scrollbar-width: thin;
   }
 }

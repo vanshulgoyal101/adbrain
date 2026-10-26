@@ -48,3 +48,11 @@ export function creativeFollowUps(): CreativeRecommendation[] {
     { id: "tone", label: "Change the tone", direction: "Explore a different tone for this message. Ask which direction I prefer without repeating the earlier business questions." },
   ].map(({ id, label, direction }) => ({ id, label, prompt: direction }));
 }
+/**
+ * #858: the Brand already answers what the interview would ask (an offer or proof point, an area, a
+ * phone), so a suggestion chip's brief can go straight to Generate.
+ */
+export function hasCreateFacts(brand: Pick<BrandContext, "offers" | "usps" | "locations" | "phone">): boolean {
+  const any = (values?: string[] | null) => (values ?? []).some((value) => value.trim());
+  return (any(brand.offers) || any(brand.usps)) && any(brand.locations) && Boolean(brand.phone?.trim());
+}

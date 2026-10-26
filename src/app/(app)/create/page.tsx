@@ -56,7 +56,7 @@ export default async function CreatePage() {
         description="Who do you want to reach? Start with your customer goal; you review every ad before a campaign."
       />
       <CreateFlow business={business} opening={openingLine(evidence)}>
-        <aside aria-label="Saved brand context" className="min-w-0 border-t border-slate-200 pt-6 lg:sticky lg:top-24 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <aside aria-label="Saved brand context" className="min-w-0 border-t border-slate-200 pt-6 lg:sticky lg:top-8 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="text-xs font-medium text-slate-500">Brand context</p>
           <h2 className="mt-2 font-semibold text-slate-900">{business.name}</h2>
           <dl className="mt-5 space-y-5 text-sm">

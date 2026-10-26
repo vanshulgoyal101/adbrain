@@ -20,27 +20,37 @@ operator and future arrangements are documented in [Payments](PAYMENTS-PLAN.md).
 
 ## Typography and Color
 
-[Global CSS](../src/app/globals.css) imports the locally packaged DM Sans
-Variable font. Both body and display text use that family; code uses the existing
-monospace stack. Reuse the tokens and shared primitives rather than introducing
-another font, theme or isolated palette.
+The system is "calm by default" (#847): only the customer's ads and their money are loud; everything
+else is ink on white, says one thing once and leads to one next step.
 
-| Token | Current value | Purpose |
+[Global CSS](../src/app/globals.css) imports the locally packaged DM Sans Variable font for body and
+display text; Hindi and Punjabi fall back to the phone's own Devanagari and Gurmukhi faces (no
+download). App type uses five sizes: 13 meta, 15 body, 17 section, 24 page title, 32 figures
+(`text-xs`, `text-sm`/`text-base`, `text-lg`/`text-xl`, `text-2xl`/`text-3xl`, `text-4xl`), and three
+weights (400, 500, 600). The marketing hero alone is larger. No all-caps labels, eyebrows, numbered
+markers on things that aren't a sequence, or trailing arrows on buttons.
+
+| Token | Value | Purpose |
 | --- | --- | --- |
-| `--background` | `#f6f7f9` | Application background |
-| `--foreground` | `#24292e` | Default text |
-| `--card` | `#ffffff` | Framed surfaces |
-| `--border` | `#e1e5e9` | Separators |
-| `--muted` | `#67727d` | Secondary information |
-| `--primary` | `#2563eb` | Primary brand/action blue |
-| `--accent` | `#d97706` | Accent amber |
-| `--focus-ring` | `#7ca0ff` | Global focus token |
+| `--foreground` (ink) | `#1b2420` | Text |
+| `--muted` (ink-2) | `#5a6660` | Secondary text |
+| `slate-400` (ink-3) | `#687370` | Meta and placeholders only |
+| `--border` (line) | `#e2e6df` | Every border, 1 px |
+| `--background` / `--surface-subtle` (canvas) | `#f6f7f4` | Sidebar, inset strips |
+| `--card` | `#ffffff` | Page and surfaces |
+| `--primary` (leaf) / `--primary-hover` | `#13784a` / `#0f6440` | The one action colour; link text |
+| `--lime-wash` | `#e8f6cf` | A selected ad |
+| `--warning` | `#a15c07` | Needs review |
+| `--danger` | `#b42318` | Errors |
 
-The [Button](../src/components/ui/button.tsx) has primary, secondary, outline,
-ghost and danger variants, fixed 32/40/48px heights, normal tracking and visible
-keyboard focus. The [Card](../src/components/ui/card.tsx) uses the existing
-rounded-lg white bordered surface; its Badge is pill-shaped. Follow the actual
-component defaults rather than assuming every element uses the same radius.
+Status is a dot plus a word in sentence case (Live, Paused, Needs review, Failed); Paused is neutral.
+Surfaces are flat: a 1 px line and no shadow, radius 10 (8 for small insets); only menus, dialogs
+and sticky bars cast a shadow. A card is an object (an ad or a campaign), never a card inside a card.
+The [Button](../src/components/ui/button.tsx) is 44 px (36 px `sm` for desktop tables); one primary
+per view, and a disabled primary turns grey. At most one banner per screen, only when something
+blocks the primary action. The app frame ([workspace shell](../src/components/workspace-shell.tsx))
+uses the same tokens: a canvas sidebar with "Create ads" in the navigation on desktop, and a top bar
+with the page name and a 44 px "+" on phones.
 Every modal uses [Dialog](../src/components/ui/dialog.tsx) (shadcn/ui on Radix, #403 S6): it
 traps focus, closes on Escape or outside click, returns focus to whatever opened it, locks page
 scroll and hides the page from screen readers. A bottom sheet on phones, centred from `sm`; give it
@@ -54,8 +64,8 @@ states must remain distinguishable without relying only on color.
 
 ## Language and Workflow
 
-Use the application's terms: Brand Brain, Create, Review, Campaigns and
-Enquiries. Keep copy short and tied to the current task. Distinguish saved,
+Use the application's terms: Your business, Create ads, Review, Campaigns and
+Enquiries; an ad, never a creative; an enquiry, never a lead. Keep copy short and tied to the current task. Distinguish saved,
 approved, paused, active, partial and failed states accurately: a saved creative
 is not a published ad, and a completed test payment is not advertising credit.
 Never promise leads, revenue, provider consent or live payment capability based
@@ -70,7 +80,7 @@ change, not to validate prose. Review generated diffs together with the generato
 | Output | Use |
 | --- | --- |
 | [logo.svg](../public/logo.svg) | Transparent monochrome geometry |
-| [icon.svg](../public/icon.svg) | White mark on blue browser background |
+| [icon.svg](../public/icon.svg) | White mark on the leaf browser background |
 | [favicon.ico](../public/favicon.ico) | 16/32/48px frames |
 | [icon-192.png](../public/icon-192.png), [icon-512.png](../public/icon-512.png) | Install icons |
 | [apple-icon-180.png](../public/apple-icon-180.png) | Apple touch icon |

@@ -46,6 +46,7 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
+import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
@@ -426,7 +427,7 @@ function BusinessCampaigns({
         : "Choose an area"
       : business.locations.length
         ? `AdBrain decides from ${business.locations.join(", ")}`
-        : "AdBrain decides from your Brand Brain";
+        : "AdBrain decides from your business details";
 
   function restoreDraft(draft: DraftDTO) {
     const input = draft.input;
@@ -1243,7 +1244,7 @@ function BusinessCampaigns({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
       {confirmDialog}
-        <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} requested active <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
+        <p className="text-sm text-slate-500">{campaigns.filter(campaign => campaign.status === "active").length} {OWNER_WORDS.running.toLowerCase()} <span className="mx-2 text-slate-300">/</span> {campaigns.filter(campaign => campaign.status === "paused").length} paused</p>
         <div className="flex flex-wrap items-center gap-2">
           {showComposer && <Button variant="ghost" onClick={startNewCampaign}><Trash2 className="h-4 w-4" aria-hidden="true" />Discard and start new</Button>}
           <Button variant={showComposer ? "outline" : "primary"} onClick={toggleComposer} aria-expanded={showComposer} aria-controls="campaign-composer">{showComposer ? <X className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}{showComposer ? "Close campaign setup" : "New campaign"}</Button>
@@ -1310,7 +1311,7 @@ function BusinessCampaigns({
               : activationFunding
                 ? <p className="mt-2">This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads listed above in Meta, then refresh this review.</p>
                 : activationReady
-                  ? <p className="mt-2">These children are requested active. Meta eligibility and actual delivery are not guaranteed.</p>
+                  ? <p className="mt-2">These ads are set to run. Meta still decides whether and when they deliver.</p>
                   : <p className="mt-2">Some listed children are on and some are paused. Pause all of them in Meta for a capped run, or turn on all of them, then refresh this review.</p>}
             {learningWarnings.length ? (
               <ul className="mt-2 space-y-1" aria-label="Before you activate">
@@ -1376,7 +1377,7 @@ function BusinessCampaigns({
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
                   {prepareReview.review.blockers.map((blocker) => {
                     const fixes = [
-                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open Brand Brain", href: "/brand" } as const : null),
+                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open your business details", href: "/brand" } as const : null),
                       reviewBlockerAlternative(blocker.reason),
                     ].filter((fix) => fix !== null);
                     return <li key={`${blocker.code}:${blocker.message}`} className="mt-1 first:mt-0">
@@ -1741,7 +1742,7 @@ function BusinessCampaigns({
                       </select>
                     </> : <p role="status" className="text-sm text-slate-600">
                       {whatsappStatus?.state === "not_linked"
-                        ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Brand Brain</Link> shows how to link one.</>
+                        ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Your business</Link> shows how to link one.</>
                         : connectedForDraft && !whatsappStatus ? "Checking your WhatsApp numbers..." : "AdBrain checks your WhatsApp number when you prepare the review."}
                     </p>}
                   </div>}
@@ -1932,7 +1933,7 @@ function BusinessCampaigns({
         )}
         {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-3">
           <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
-          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">Requested active</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
+          <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
         {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
           <Card>
@@ -1967,10 +1968,11 @@ function BusinessCampaigns({
                             "bg-slate-100 text-slate-600"
                           }
                         >
-                          {goneInMeta(c) ?? (c.status === "active" ? "Requested active" : c.status)}
+                          {goneInMeta(c) ?? (c.status === "active" ? OWNER_WORDS.running : c.status)}
                         </Badge>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
+                        {madeOutsideAdBrain(c) ? <Badge className="bg-slate-100 text-slate-700">{OWNER_WORDS.madeOutside}</Badge> : null}
                       </div>
                       <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
                         <span className="basis-full text-sm text-slate-500 sm:basis-auto">
@@ -2146,6 +2148,12 @@ function BusinessCampaigns({
       </div>
     </div>
   );
+}
+
+/** #763: synced from Meta, not launched by AdBrain (no launch result on record). */
+function madeOutsideAdBrain(campaign: Campaign): boolean {
+  const raw = campaign.raw;
+  return !!campaign.meta_campaign_id && !(raw && typeof raw === "object" && "metaResult" in raw);
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

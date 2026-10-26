@@ -425,17 +425,39 @@ function normalizeWhatsAppNumber(value: string): string | null {
   return /^\+[1-9]\d{6,14}$/.test(number) ? number : null;
 }
 
-/** Meta's click-to-WhatsApp `page_welcome_message`: a greeting plus a message pre-typed for the customer. */
-export function whatsappWelcomeMessage(texts: { autofill: string; greeting: string }): string {
+/**
+ * How a click-to-WhatsApp chat opens (#840): the business's greeting, then either a message
+ * pre-typed for the customer (optionally with a Call now button under the greeting) or up to
+ * three tap-to-send questions (ice breakers, #680 B1).
+ */
+export type WhatsAppOpening = { autofill: string; greeting: string; callButton?: boolean; iceBreakers?: string[] };
+
+/** Meta doesn't limit ice breakers on the 9:16 placement path, so AdBrain does (#680 B1). */
+export const ICE_BREAKER_LIMITS = { count: 3, chars: 40 } as const;
+
+/** Meta's click-to-WhatsApp `page_welcome_message` for an opening (shapes from Meta's click-to-WhatsApp guide). */
+export function whatsappWelcomeMessage(opening: WhatsAppOpening): string {
+  const iceBreakers = opening.iceBreakers?.map((title) => title.trim()).filter(Boolean) ?? [];
+  if (opening.iceBreakers && (!iceBreakers.length || iceBreakers.length > ICE_BREAKER_LIMITS.count
+    || iceBreakers.some((title) => [...title].length > ICE_BREAKER_LIMITS.chars) || new Set(iceBreakers).size !== iceBreakers.length)) {
+    throw new MetaError(`Use 1 to ${ICE_BREAKER_LIMITS.count} different questions of up to ${ICE_BREAKER_LIMITS.chars} characters each.`);
+  }
+  if (iceBreakers.length && opening.callButton) throw new MetaError("A Call now button goes with a pre-typed message, not with questions.");
   return JSON.stringify({
     type: "VISUAL_EDITOR",
     version: 2,
     landing_screen_type: "welcome_message",
     media_type: "text",
-    text_format: {
-      customer_action_type: "autofill_message",
-      message: { autofill_message: { content: texts.autofill }, text: texts.greeting },
-    },
+    text_format: iceBreakers.length
+      ? { customer_action_type: "ice_breakers", message: { text: opening.greeting, ice_breakers: iceBreakers.map((title) => ({ title })) } }
+      : {
+        customer_action_type: "autofill_message",
+        message: {
+          autofill_message: { content: opening.autofill },
+          text: opening.greeting,
+          ...(opening.callButton ? { automated_greeting_message_cta: { type: "call" } } : {}),
+        },
+      },
   });
 }
 
