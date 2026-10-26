@@ -1351,7 +1351,12 @@ function BusinessCampaigns({
                 </ul>
               )}
               {!prepareReview.review.canCreatePaused && (
-                <span className="mt-2 block text-sm font-normal">Send to Meta (paused) appears once this is fixed. Then prepare the review again.</span>
+                <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-normal">
+                  Send to Meta (paused) appears once this is fixed.
+                  <Button size="sm" variant="outline" onClick={() => void prepareManualCampaign()} disabled={preparing || creating || selected.size === 0 || budget <= 0}>
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />Check again
+                  </Button>
+                </span>
               )}
               <span className="mt-2 block text-sm font-normal">
                 Account: {prepareReview.review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"} · Page: {prepareReview.review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} · Currency: {prepareReview.review.currency}
