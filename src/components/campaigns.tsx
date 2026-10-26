@@ -48,6 +48,7 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
+import { AdResults } from "@/components/ad-results";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { EditBudgetDialog } from "@/components/edit-budget-dialog";
 import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
@@ -176,6 +177,8 @@ type CampaignsProps = {
   adAccountId: string;
   /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored). */
   newCampaign?: { creativeIds: string[] };
+  /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
+  adResults?: boolean;
 };
 
 
@@ -246,6 +249,7 @@ function BusinessCampaigns({
   metaReady,
   adAccountId,
   newCampaign,
+  adResults = false,
   scope,
   initialSetup,
   onSetupChange,
@@ -2121,6 +2125,7 @@ function BusinessCampaigns({
                         />
                       </div>
                     )}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">
