@@ -7,7 +7,7 @@ import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
-import { mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
+import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -159,6 +159,104 @@ export interface MetaCampaignSummary {
   daily_budget?: string;
   effective_status?: string;
   created_time?: string;
+}
+
+/** #773: what an owner may change on a launched ad set's audience (the same inputs as launch). */
+export type AudienceChanges = {
+  location?: GeoTargeting;
+  excludedLocation?: GeoTargeting;
+  age?: { min: number; max: number };
+  gender?: "all" | "men" | "women";
+};
+export type AudienceEdit = { mode: "patch" | "rebuild"; validated: boolean; adSetId: string; adIds: string[]; retiredAdSetId: string | null };
+
+/** Interests (or other detailed targeting) make Meta refuse an in-place targeting update (100/1359202). */
+export function hasInterests(targeting: Record<string, unknown>): boolean {
+  const flexible = targeting.flexible_spec;
+  return (Array.isArray(targeting.interests) && targeting.interests.length > 0)
+    || (Array.isArray(flexible) && flexible.some(spec => spec && typeof spec === "object" && Object.keys(spec).length > 0));
+}
+
+const AUTO_EXCLUDED_REGIONS = new Set<string>(INDIA_REGION_KEYS);
+const AUTO_EXCLUDED_CITIES = new Set(EXCLUDABLE_CITIES.map(city => city.key));
+
+/**
+ * #773: exclusions only grow. The ad set's existing exclusions are kept and the new ones added by key
+ * (per type). The one exception: when the area itself changes, an exclusion AdBrain's own service-area
+ * rule added earlier (a state or city of #741's list) that the new area no longer excludes is dropped,
+ * because it may cover the new area. The owner's own exclusions are never removed.
+ */
+function grownExclusions(existing: unknown, added: GeoTargeting, areaChanged: boolean): Record<string, unknown> | undefined {
+  const old = existing && typeof existing === "object" && !Array.isArray(existing) ? existing as Record<string, unknown> : {};
+  const fresh = buildGeoLocations(added, []);
+  const out: Record<string, unknown> = { ...old };
+  for (const type of ["regions", "cities"] as const) {
+    const auto = type === "regions" ? AUTO_EXCLUDED_REGIONS : AUTO_EXCLUDED_CITIES;
+    const additions = Array.isArray(fresh[type]) ? fresh[type] as Array<{ key: string }> : [];
+    const additionKeys = new Set(additions.map(item => item.key));
+    const kept = (Array.isArray(old[type]) ? old[type] as Array<{ key: string }> : [])
+      .filter(item => !areaChanged || !auto.has(String(item.key)) || additionKeys.has(item.key));
+    const merged = [...kept, ...additions.filter(item => !kept.some(have => have.key === item.key))];
+    if (merged.length) out[type] = merged; else delete out[type];
+  }
+  const countries = [...new Set([
+    ...Array.isArray(old.countries) ? old.countries as string[] : [],
+    ...Array.isArray(fresh.countries) ? fresh.countries as string[] : [],
+  ])];
+  if (countries.length) out.countries = countries; else delete out.countries;
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * #773: the source targeting with the owner's changes, built by launch's rules: area and exclusions hard;
+ * with Advantage+ audience on, a hard age_min up to 25, age_max 65 and the owner's range as `age_range`.
+ */
+function editedTargeting(source: Record<string, unknown>, changes: AudienceChanges): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...source };
+  if (changes.location) next.geo_locations = { ...buildGeoLocations(changes.location, []), location_types: ["home", "recent"] };
+  if (changes.excludedLocation) {
+    const grown = grownExclusions(source.excluded_geo_locations, changes.excludedLocation, Boolean(changes.location));
+    if (grown) next.excluded_geo_locations = grown; else delete next.excluded_geo_locations;
+  }
+  if (changes.age) {
+    const advantage = (source.targeting_automation as { advantage_audience?: number } | undefined)?.advantage_audience === 1;
+    const { min, max } = changes.age;
+    if (advantage) {
+      const hardMin = Math.min(min, ADVANTAGE_AUDIENCE_MAX_HARD_AGE_MIN);
+      Object.assign(next, { age_min: hardMin, age_max: 65 });
+      if (min !== hardMin || max !== 65) next.age_range = [min, max]; else delete next.age_range;
+    } else {
+      Object.assign(next, { age_min: min, age_max: max });
+      delete next.age_range;
+    }
+  }
+  if (changes.gender) {
+    if (changes.gender === "all") delete next.genders; else next.genders = [changes.gender === "men" ? 1 : 2];
+  }
+  return next;
+}
+
+/** A place (city, region or country) that is both in `geo_locations` and in `excluded_geo_locations`. */
+function excludesIncludedPlace(targeting: Record<string, unknown>): boolean {
+  const geo = (value: unknown) => (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const keys = (spec: Record<string, unknown>, type: string) => new Set((Array.isArray(spec[type]) ? spec[type] as unknown[] : [])
+    .map(item => typeof item === "string" ? item : String((item as { key?: unknown }).key)));
+  const included = geo(targeting.geo_locations);
+  const excluded = geo(targeting.excluded_geo_locations);
+  return ["cities", "regions", "countries"].some(type => {
+    const out = keys(excluded, type);
+    return [...keys(included, type)].some(key => out.has(key));
+  });
+}
+
+/** Meta echoed the changed audience back (it may add defaults, so only what changed is compared). */
+function sameAudience(targeting: Record<string, unknown> | undefined, sent: Record<string, unknown>, changes: AudienceChanges): boolean {
+  if (!targeting) return false;
+  const norm = (value: unknown): string => JSON.stringify(value ?? null);
+  return (!changes.location || targeting.geo_locations !== undefined)
+    && (!changes.excludedLocation || sent.excluded_geo_locations === undefined || targeting.excluded_geo_locations !== undefined)
+    && (!changes.age || ["age_min", "age_max", "age_range"].every(key => norm(targeting[key]) === norm(sent[key])))
+    && (!changes.gender || norm(targeting.genders) === norm(sent.genders));
 }
 
 export class MetaError extends Error {
@@ -1634,6 +1732,112 @@ export class MetaClient {
     }
   }
 
+  /**
+   * #773: change a launched, PAUSED ad set's audience. Meta refuses targeting updates on an Advantage+
+   * ad set with interests (100/1359202), so one with interests is rebuilt: a new PAUSED ad set with the
+   * same budget, bid and promoted object and the new targeting, the ads copied onto it PAUSED, read back,
+   * then the old ad set archived. One without interests is patched in place and read back. Only the
+   * audience fields change; interests and Advantage+ settings are kept. `validateOnly` changes nothing.
+   */
+  async editAdSetTargeting(
+    campaignId: string,
+    input: { adSetId: string; adIds: string[]; changes: AudienceChanges },
+    options: { validateOnly?: boolean } = {},
+  ): Promise<AudienceEdit> {
+    const { adSetId, adIds, changes } = input;
+    const validAge = !changes.age || (Number.isInteger(changes.age.min) && Number.isInteger(changes.age.max)
+      && changes.age.min >= 18 && changes.age.max <= 65 && changes.age.min <= changes.age.max);
+    if (!(changes.location || changes.excludedLocation || changes.age || changes.gender) || !validAge
+      || !adIds.length || new Set(adIds).size !== adIds.length) {
+      throw new MetaError("Invalid audience change.");
+    }
+    await this.verifyCampaignBinding(campaignId);
+    const source = await this.graph<{
+      id?: string; campaign_id?: string; status?: string; billing_event?: string; optimization_goal?: string; bid_strategy?: string;
+      destination_type?: string; promoted_object?: { page_id?: string }; targeting?: Record<string, unknown>;
+      daily_budget?: string; lifetime_budget?: string; budget_remaining?: string; end_time?: string;
+    }>(`${encodeURIComponent(adSetId)}?fields=id,campaign_id,status,billing_event,optimization_goal,bid_strategy,destination_type,promoted_object,targeting,daily_budget,lifetime_budget,budget_remaining,end_time`);
+    if (source.id !== adSetId || source.campaign_id !== campaignId || source.promoted_object?.page_id !== this.creds.pageId
+      || !source.billing_event || !source.optimization_goal || !source.targeting || typeof source.targeting !== "object") {
+      throw new CampaignDeliveryError("The ad set could not be verified. Keep the campaign paused.");
+    }
+    if (source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
+    // #741 (QA on #828): a new area must arrive with its own out-of-area exclusions ({} when it has none),
+    // so the old area's are replaced, and the result may never exclude a place it includes.
+    if (changes.location && !changes.excludedLocation) throw new TargetingExclusionsMissingError();
+    const targeting = editedTargeting(source.targeting, changes);
+    if (excludesIncludedPlace(targeting)) {
+      throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
+    }
+    const rebuild = hasInterests(source.targeting);
+    const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
+    if (!rebuild) {
+      const patched = await this.graph<{ success?: boolean }>(encodeURIComponent(adSetId), {
+        method: "POST", form: { targeting: JSON.stringify(targeting), ...validate },
+      });
+      if (patched.success !== true) throw new CampaignDeliveryError("Meta did not accept the new audience. Nothing changed.");
+      if (options.validateOnly) return { mode: "patch", validated: true, adSetId, adIds, retiredAdSetId: null };
+      const after = await this.graph<{ id?: string; status?: string; targeting?: Record<string, unknown> }>(`${encodeURIComponent(adSetId)}?fields=id,status,targeting`);
+      if (after.id !== adSetId || after.status !== "PAUSED" || !sameAudience(after.targeting, targeting, changes)) {
+        throw new CampaignDeliveryError("Meta did not confirm the new audience. Keep the campaign paused.");
+      }
+      return { mode: "patch", validated: false, adSetId, adIds, retiredAdSetId: null };
+    }
+    const capped = Number(source.lifetime_budget ?? 0) > 0;
+    // A capped run keeps only what is left of its cap, never the whole cap again.
+    const budget: Record<string, string> = capped
+      ? { lifetime_budget: source.budget_remaining ?? "", end_time: source.end_time ?? "" }
+      : { daily_budget: source.daily_budget ?? "" };
+    if (!/^[1-9]\d*$/.test(capped ? budget.lifetime_budget : budget.daily_budget)) {
+      throw new CampaignDeliveryError(capped && source.budget_remaining === "0"
+        ? "This capped run has spent its total. Start a new run instead."
+        : "The ad set's budget could not be verified. Keep the campaign paused.");
+    }
+    if (capped && !(Date.parse(budget.end_time) > Date.now())) throw new CampaignDeliveryError("This capped run has ended. Start a new run instead.");
+    const created = await this.graph<{ id?: string; success?: boolean }>(`${this.creds.adAccountId}/adsets`, {
+      method: "POST",
+      form: {
+        name: `AdBrain audience ${new Date().toISOString().slice(0, 10)}`,
+        campaign_id: campaignId, status: "PAUSED", ...budget,
+        billing_event: source.billing_event, optimization_goal: source.optimization_goal,
+        bid_strategy: source.bid_strategy ?? "LOWEST_COST_WITHOUT_CAP",
+        ...(source.destination_type ? { destination_type: source.destination_type } : {}),
+        promoted_object: JSON.stringify(source.promoted_object), targeting: JSON.stringify(targeting), ...validate,
+      },
+    });
+    if (options.validateOnly) {
+      if (created.success !== true) throw new CampaignDeliveryError("Meta did not accept the new audience. Nothing changed.");
+      return { mode: "rebuild", validated: true, adSetId, adIds, retiredAdSetId: null };
+    }
+    if (typeof created.id !== "string" || !created.id) throw new CampaignDeliveryError("Meta did not create the new ad set. Keep the campaign paused.");
+    const newAdSetId = created.id;
+    try {
+      const copied: string[] = [];
+      for (const adId of adIds) {
+        const copy = await this.graph<{ copied_ad_id?: string }>(`${encodeURIComponent(adId)}/copies`, {
+          method: "POST", form: { adset_id: newAdSetId, status_option: "PAUSED" },
+        });
+        if (typeof copy.copied_ad_id !== "string" || !copy.copied_ad_id) throw new CampaignDeliveryError("Meta did not copy an ad.");
+        copied.push(copy.copied_ad_id);
+      }
+      const node = encodeURIComponent(newAdSetId);
+      const [adSet, ads] = await Promise.all([
+        this.graph<{ id?: string; campaign_id?: string; status?: string; targeting?: Record<string, unknown> }>(`${node}?fields=id,campaign_id,status,targeting`),
+        this.graph<{ data?: Array<{ id: string; status?: string; adset_id?: string }>; paging?: { next?: string } }>(`${node}/ads?fields=id,status,adset_id&limit=100`),
+      ]);
+      if (adSet.id !== newAdSetId || adSet.campaign_id !== campaignId || adSet.status !== "PAUSED" || !sameAudience(adSet.targeting, targeting, changes)
+        || !Array.isArray(ads.data) || ads.paging?.next || ads.data.length !== copied.length
+        || ads.data.some(ad => !copied.includes(ad.id) || ad.status !== "PAUSED" || ad.adset_id !== newAdSetId)) {
+        throw new CampaignDeliveryError("Meta did not confirm the new ad set.");
+      }
+      await this.writeStatus(adSetId, "ARCHIVED");
+      return { mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: copied, retiredAdSetId: adSetId };
+    } catch (error) {
+      await this.graph(encodeURIComponent(newAdSetId), { method: "DELETE" }).catch(() => undefined);
+      throw error instanceof CampaignDeliveryError ? new CampaignDeliveryError(`${error.message} The old ad set is unchanged and the campaign stays paused.`) : error;
+    }
+  }
+
   /** Pause or resume a campaign after verifying its account and Page. */
   async updateCampaignStatus(
     campaignId: string,
@@ -1672,7 +1876,7 @@ export class MetaClient {
   }
 
   /** Status write with one retry after Meta's 613 (one status change per object per 30 s). */
-  private async writeStatus(id: string, status: "ACTIVE" | "PAUSED") {
+  private async writeStatus(id: string, status: "ACTIVE" | "PAUSED" | "ARCHIVED") {
     for (let attempt = 0; ; attempt++) {
       try {
         await this.graph(encodeURIComponent(id), { method: "POST", form: { status } });
