@@ -323,7 +323,11 @@ describe("durable campaign create route", () => {
   it.each(["valid", "forged", "changed number", "missing number"])("checks the WhatsApp review before creation: %s", async (scenario) => {
     mocks.learnings = [];
     mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, targeting: { ...draftInput.targeting, gender: "women" } } });
-    const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
+    // #672: like the real client, report the payloads sent and the creative each ad runs on.
+    const create = vi.fn().mockImplementation(async (params: { onPlanned?: (plan: { adSets: Record<string, string>[]; creatives: Record<string, string>[] }) => void }) => {
+      params.onPlanned?.({ adSets: [{ targeting: JSON.stringify({ targeting_automation: { advantage_audience: 1 } }) }], creatives: [] });
+      return { campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp", creativeIds: ["meta-creative-1"] };
+    });
     const forms = vi.fn().mockRejectedValue(new Error("WhatsApp must not load forms"));
     let whatsappNumber: string | null = "+919876543210";
     mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => whatsappNumber, createLeadCampaign: create, readActiveLeadForm: forms, resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
@@ -345,7 +349,8 @@ describe("durable campaign create route", () => {
       expect(mocks.learnings).toEqual([expect.objectContaining({ campaign_id: "11111111-1111-4111-8111-111111111111", business_id: businessId,
         snapshot: expect.objectContaining({ destination: "whatsapp", objective: "OUTCOME_ENGAGEMENT", formats: ["4:5"],
           whatsapp: expect.objectContaining({ prefill: "Hi! I'd like to know more about Solaride in Jaipur." }),
-          audience: expect.objectContaining({ areas: ["Jaipur"], gender: "women", advantageAudience: true }),
+          audience: expect.objectContaining({ areas: ["Jaipur"], gender: "women", advantageAudience: 1 }),
+          version: 2, metaCreativeIds: ["meta-creative-1"], cap: null,
           creatives: [expect.objectContaining({ id: creativeId })] }) })]);
     } else {
       expect(response.status).toBeGreaterThanOrEqual(400);

@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ADVANTAGE_AUDIENCE } from "@/lib/meta/client";
 import { savedGenerationSettings } from "@/lib/creative/receipt";
 import type { WhatsAppGreeting } from "./whatsapp-greeting";
 
@@ -20,7 +19,24 @@ export type LaunchSnapshotInput = {
   prefill: WhatsAppGreeting | null;
   storyFormat: boolean;
   creatives: { id: string; angle: string | null; generation: unknown }[];
+  /** #672: the ad sets' `targeting` forms as sent to Meta (from the plan check's payloads). */
+  sentTargetings?: string[];
+  /** #672: the Meta creative each ad runs on, in ad order. */
+  metaCreativeIds?: string[];
 };
+
+/** The advantage_audience Meta was sent: 1 or 0 when every ad set agrees, null when unknown or mixed. */
+function sentAdvantageAudience(targetings: string[] | undefined): number | null {
+  const values = new Set((targetings ?? []).map((form) => {
+    try {
+      const value = (JSON.parse(form) as { targeting_automation?: { advantage_audience?: unknown } }).targeting_automation?.advantage_audience;
+      return value === 0 || value === 1 ? value : null;
+    } catch {
+      return null;
+    }
+  }));
+  return values.size === 1 ? [...values][0] : null;
+}
 
 const text = (value: unknown) => (typeof value === "string" && value ? value : null);
 
@@ -31,7 +47,8 @@ const text = (value: unknown) => (typeof value === "string" && value ? value : n
  */
 export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
   return {
-    version: 1,
+    // v2 (#672): Advantage+ as sent, Meta creative ids, and `cap` once a capped run is activated.
+    version: 2,
     destination: input.destination,
     objective: input.objective,
     budget: { dailyRupees: input.dailyBudgetRupees, adSets: input.adSetCount, abTest: input.abTest },
@@ -41,7 +58,7 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
       ageMax: input.ageMax ?? null,
       gender: input.gender,
       interests: input.interests,
-      advantageAudience: ADVANTAGE_AUDIENCE,
+      advantageAudience: sentAdvantageAudience(input.sentTargetings),
     },
     placements: "advantage",
     formats: input.storyFormat ? ["4:5", "9:16"] : ["4:5"],
@@ -56,7 +73,26 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
         imageModel: text(generation?.image?.model),
       };
     }),
+    metaCreativeIds: input.metaCreativeIds ?? [],
+    cap: null as null | { lifetimeRupees: number; days: number; endTime: string },
   };
+}
+
+/**
+ * #672: on a confirmed capped activation, add the cap to the run's snapshot. Best effort, like
+ * saving the snapshot: activation never fails because the ledger couldn't be updated.
+ */
+export async function recordLaunchCap(database: SupabaseClient, row: { campaignId: string; cap: { lifetimeBudgetPaise: number; days: number; endTime: string } }): Promise<boolean> {
+  try {
+    const { data, error } = await database.from("campaign_learnings").select("snapshot").eq("campaign_id", row.campaignId).maybeSingle();
+    if (error || !data || !data.snapshot || typeof data.snapshot !== "object" || Array.isArray(data.snapshot)) return false;
+    const cap = { lifetimeRupees: row.cap.lifetimeBudgetPaise / 100, days: row.cap.days, endTime: row.cap.endTime };
+    const { error: updateError } = await database.from("campaign_learnings")
+      .update({ snapshot: { ...data.snapshot, cap }, updated_at: new Date().toISOString() }).eq("campaign_id", row.campaignId);
+    return !updateError;
+  } catch {
+    return false;
+  }
 }
 
 /** Best effort: a launch never fails because its ledger row couldn't be written. */

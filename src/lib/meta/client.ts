@@ -139,6 +139,8 @@ export interface CreateCampaignResult {
   adSetIds: string[];
   adIds: string[];
   destination: AdDestination;
+  /** #672: the creative each ad runs on, in ad order (the single-image one after a placement fallback). */
+  creativeIds?: string[];
 }
 
 export type CampaignMutationCheckpoint = {
@@ -1103,6 +1105,7 @@ export class MetaClient {
     const destination = requested;
     const adSetIds: string[] = [];
     const adIds: string[] = [];
+    const creativeIds: string[] = [];
 
     for (let i = 0; i < variants.length; i++) {
       let adSet: { id: string };
@@ -1189,6 +1192,7 @@ export class MetaClient {
           });
           const runsOn = creativeForms.get(creativeId);
           if (runsOn) plannedCreatives.push(runsOn);
+          creativeIds.push(creativeId);
           return created;
         };
         // If Meta still refuses the ad on a placement creative, make it with the single image instead.
@@ -1219,6 +1223,7 @@ export class MetaClient {
       adSetIds,
       adIds,
       destination,
+      creativeIds,
     };
   }
 

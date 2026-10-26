@@ -28,6 +28,7 @@ import {
 import type { Creative, Database } from "@/lib/types";
 import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
 import { CREATE_HEARTBEAT_MS } from "@/lib/creative/stream";
+import { freeImagesOnly } from "@/lib/llm/spend-policy";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -150,6 +151,7 @@ async function handlePOST(req: Request): Promise<Response> {
 }
 
 async function generate(req: Request, live?: LiveCreate) {
+  const startedAt = Date.now();
   const supabase = await createClient();
   const {
     data: { user },
@@ -377,9 +379,11 @@ async function generate(req: Request, live?: LiveCreate) {
     );
   }
 
-  recordProductEvent({ kind: "workflow", name: "creative.batch", businessId,
+  // #681: the whole batch's wall time; usage rows are written at the end, so they can't time it.
+  // Internal accounts make free Pollinations images; customers wait on the paid path.
+  recordProductEvent({ kind: "workflow", name: "creative.batch", businessId, durationMs: Date.now() - startedAt,
     outcome: !inserted.length ? "failed" : failures.length ? "partial" : "success",
-    attributes: { count: inserted.length, failedCount: failures.length } });
+    attributes: { count: inserted.length, failedCount: failures.length, provider: freeImagesOnly() ? "pollinations" : "paid" } });
   if (!inserted.length)
     return NextResponse.json(
       { error: failures[0]?.error ?? "No creatives were generated.", failures },

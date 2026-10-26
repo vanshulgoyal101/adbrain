@@ -99,6 +99,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Use subagents to go faster** (owner, Oct 21). Split an issue into independent
 	parts and run them in parallel: research, CI logs, running tests, reviewing your
 	own diff, a red test, a small adjacent fix, the doc update.
+- **Every role may spin up its own helpers** (owner, Oct 26): subagents, background
+	agents, research assistants, or a separate helper chat (`create_session`) for a
+	long, self-contained slice. No approval needed; the measure is a better product.
+	Title a helper chat `<Role> helper: <issue>` and post its link on the issue. It
+	works under your role and label (it signs `<Role> (helper):`), and you close it
+	when the slice ships. A new standing role (a new label and waiter name) still goes
+	through the CEO.
 - **Do small cross-role tasks yourself** with a subagent instead of handing them
 	off. DevOps needing a quick QA-style check starts a subagent; it does not route
 	the task to QA. Hand off only what needs another owner: migrations, money,

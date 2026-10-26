@@ -148,15 +148,40 @@ describe("<BrandForm> prefill", () => {
   });
 
   it("updates brand readiness as missing context is supplied", () => {
-    render(<BrandForm business={business({ target_audience: "" })} />);
+    render(<BrandForm business={business({ offers: [], usps: [] })} />);
     const preview = screen.getByRole("region", { name: "Live brand context" });
     expect(preview).toHaveTextContent("3 of 6 ready");
 
-    fireEvent.change(screen.getByLabelText("Target audience"), {
-      target: { value: "apartment owners" },
+    fireEvent.change(screen.getByLabelText(/^Offers/), {
+      target: { value: "Free survey" },
     });
 
     expect(preview).toHaveTextContent("4 of 6 ready");
+  });
+
+  // #681 (Dev 2's 390 px walk): a no-website owner who filled every essential read "1 of 6 ready".
+  it("counts what ads need: name, area and an offer, without brand voice or audience text", () => {
+    render(<BrandForm business={business({ website: null, brand_voice: null, target_audience: null, usps: [], languages: [] })} />);
+    const preview = screen.getByRole("region", { name: "Live brand context" });
+    expect(preview).toHaveTextContent("3 of 6 ready");
+    expect(screen.getByRole("link", { name: "Add website for lead ads" })).toHaveAttribute("href", "#brand-identity");
+  });
+
+  it("links each missing item to the section that fills it", () => {
+    render(<BrandForm business={business({ locations: [], offers: [], usps: [] })} />);
+    expect(screen.getByRole("link", { name: "Add audience and area" })).toHaveAttribute("href", "#brand-creative");
+    expect(screen.getByRole("link", { name: "Add offer or proof point" })).toHaveAttribute("href", "#brand-creative");
+  });
+
+  it("on a phone, the fields come before the readiness panel, and area and offers before styling", () => {
+    render(<BrandForm business={null} />);
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(screen.getByLabelText(/^Business name/), screen.getByRole("region", { name: "Live brand context" }))).toBe(true);
+    for (const essential of [/^Locations served/, /^Offers/]) {
+      for (const optional of ["Brand voice", "Primary color", /^Font/, "Logo URL"]) {
+        expect(follows(screen.getByText(essential, { selector: "span" }), screen.getAllByText(optional, { selector: "span" })[0]), `${essential} before ${optional}`).toBe(true);
+      }
+    }
   });
 
   it("is not ready for lead ads without a website, even with a phone number", () => {

@@ -299,13 +299,17 @@ async function generateConcept(
         "Output must be valid JSON matching the requested concept shape.",
       ];
     }
+    let claims: string[] = [];
     if (value !== undefined) {
       stage = "concept";
       const result = validateConcept(value, input);
       if (result.success) return { concept: result.concept, usage };
       issues = result.issues;
+      claims = result.claims ?? [];
     }
-    if (usage.length > usageBeforeAttempt) usage[usage.length - 1].validation = { stage, rules: conceptValidationRules(issues) };
+    if (usage.length > usageBeforeAttempt) {
+      usage[usage.length - 1].validation = { stage, rules: [...conceptValidationRules(issues), ...claims].slice(0, 12) };
+    }
     messages.push({
       role: "user",
       content: `Generate a fresh, complete JSON concept for the original brief. Fix these validation failures using only supplied facts, without inventing claims:\n${issues.join("\n")}`,

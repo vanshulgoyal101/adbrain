@@ -21,6 +21,8 @@ import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, obse
 import { isOperatorFunded } from "@/lib/payments/operator-funding";
 import { formatMoney } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
+import { recordLaunchCap } from "@/lib/campaign/learnings";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
@@ -166,6 +168,7 @@ async function handlePATCH(
 
   let deliveryAfter: CampaignDeliverySnapshot | null = null;
   let cappedAfter: CappedActivation | null = null;
+  let launchCap: { lifetimeBudgetPaise: number; days: number; endTime: string } | null = null;
   let pauseResult: PausedCampaignTree | null = null;
   try {
     if (action === "active") {
@@ -240,6 +243,7 @@ async function handlePATCH(
                 endTime: new Date(Date.now() + capDays * 86_400_000),
               });
               const tree = { adSetIds: [...children!.adSetIds, capped.adSetId], adIds: [...children!.adIds, ...capped.adIds] };
+              launchCap = { lifetimeBudgetPaise: capped.lifetimeBudgetPaise, days: capDays, endTime: capped.endTime };
               liveTree = tree;
               const stored = campaign.raw as { metaResult: Record<string, unknown> } & Record<string, unknown>;
               const { error: recordError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, {
@@ -270,7 +274,8 @@ async function handlePATCH(
             throw error;
           }
           // #208: never leave Meta running while AdBrain shows the campaign paused.
-          const { error: activeError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: "active" }, id)
+          // #672: launched_at is the first confirmed activation, not the creation date.
+          const { error: activeError } = await saveCampaign({ businessId: campaign.business_id, userId: user.id }, { status: "active", ...(campaign.launched_at ? {} : { launched_at: new Date().toISOString() }) }, id)
             .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
           if (activeError) {
             const paused = await meta.pauseCampaignTree(campaign.meta_campaign_id!, liveTree).catch(() => null);
@@ -281,6 +286,8 @@ async function handlePATCH(
             await confirm("paused").catch(() => undefined);
             throw new CampaignDeliveryError("AdBrain could not record the activation, so the campaign was paused again in Meta. Try again.");
           }
+          // The ledger is best effort: the run is live whether or not this is written.
+          if (launchCap) await Promise.resolve().then(() => recordLaunchCap(createAdminClient(), { campaignId: id, cap: launchCap! })).catch(() => false);
           return;
         }
         const reservation = await getCustomerBalance(context)
