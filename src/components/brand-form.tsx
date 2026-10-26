@@ -2,7 +2,8 @@
 
 import { useActionState, useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -553,9 +554,15 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
           Save Brand Brain
         </Button>
         {state.ok && state.submittedRevision === revision && !pending && (
-          <span className="inline-flex items-center gap-1.5 text-sm text-blue-700">
-            <CheckCircle2 className="h-4 w-4" /> Saved
-          </span>
+          <>
+            <span className="inline-flex items-center gap-1.5 text-sm text-blue-700">
+              <CheckCircle2 className="h-4 w-4" /> Saved
+            </span>
+            {/* #681: the next step sits beside Saved, so a phone isn't left at the bottom of the page. */}
+            <Link href="/create" className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">
+              Next: Create ads <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </>
         )}
         {state.error && <span className="text-sm text-red-600">{state.error}</span>}
       </div>
