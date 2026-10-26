@@ -83,6 +83,8 @@ export async function executeReviewedCampaign(input: {
           const storyImages = draft.input.destination === "whatsapp"
             ? renderStoriesWithin(creativeInputs.map(creative => creative.generation), STORY_RENDER_BUDGET_MS, code => storyFallback("render", code))
             : creativeInputs.map(() => null);
+          let storyRendered = false;
+          for (const story of storyImages) void Promise.resolve(story).then(image => { if (image) storyRendered = true; });
           // #493: the ask names the city only when the campaign targets one (same areas as targeting).
           const areas = draftAreaNames(draft.input, business.locations ?? []);
           const prefill = draft.input.destination === "whatsapp" ? whatsappGreeting(
@@ -122,7 +124,7 @@ export async function executeReviewedCampaign(input: {
             areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
             interests: (review.audienceInterests ?? []).map(interest => interest.name),
             whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill,
-            storyFormat: storyImages.some(Boolean),
+            storyFormat: storyRendered,
             creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
           });
           return metaResult;
