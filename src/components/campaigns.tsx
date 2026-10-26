@@ -25,6 +25,7 @@ import {
   MoreHorizontal,
   Trash2,
   Users,
+  IndianRupee,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -48,6 +49,8 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
+import { EditBudgetDialog } from "@/components/edit-budget-dialog";
+import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
 import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
@@ -1121,6 +1124,7 @@ function BusinessCampaigns({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // #773: the paused campaign whose audience is being edited.
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
+  const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
   const [adEdit, setAdEdit] = useState<Campaign | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
@@ -1965,6 +1969,20 @@ function BusinessCampaigns({
                 onSaved={(message) => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
               />
             )}
+            {budgetEdit && (
+              <EditBudgetDialog
+                campaignId={budgetEdit.campaign.id}
+                campaignName={budgetEdit.campaign.name ?? `${business.name} — ${budgetEdit.campaign.objective}`}
+                start={budgetEdit.start}
+                onClose={() => setBudgetEdit(null)}
+                onSaved={(message, after) => {
+                  const id = budgetEdit.campaign.id;
+                  setCampaigns((list) => list.map((item) => (item.id === id ? applyBudget(item, after) : item)));
+                  setCardNotice({ id, message });
+                  setBudgetEdit(null);
+                }}
+              />
+            )}
             {adEdit && (
               <EditAdDialog
                 campaign={adEdit}
@@ -2067,6 +2085,11 @@ function BusinessCampaigns({
                             {c.meta_campaign_id && c.status === "paused" && reviewableCampaign(c) && (
                               <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
                                 <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
+                              </DropdownMenuItem>
+                            )}
+                            {c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && reviewableCampaign(c) && budgetFormStart(c) && (
+                              <DropdownMenuItem data-product-event="campaign.edit_budget" onSelect={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>
+                                <IndianRupee className="h-4 w-4" aria-hidden="true" /> Edit budget
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && (
