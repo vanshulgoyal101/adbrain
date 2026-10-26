@@ -67,6 +67,7 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_AREAS_UNRESOLVED: (input) => { input.geo.unresolvedNames = ["Austin, Texas"]; input.geo.resolvedAreaLabel = null; },
   REVIEW_NO_AUDIENCE: (input) => { delete input.draft.targeting.audience; },
   REVIEW_INTERESTS_UNRESOLVED: (input) => { input.geo.audienceInterests = []; input.geo.unresolvedInterests = ["Wellness"]; },
+  REVIEW_AD_POLICY: (input) => { input.vertical = "chiropractic clinic"; input.creatives[0].headline = "Cures back pain, guaranteed"; },
 };
 function reviewBlockedOn(reason: ReviewBlockerReason) {
   const input = productionInput();
@@ -124,6 +125,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
   // The control each fix lands on, as the owner finds it in the composer.
   const fields: [ReviewBlockerReason, () => HTMLElement][] = [
     ["REVIEW_CREATIVES", () => screen.getByRole("button", { name: creative.headline! })],
+    ["REVIEW_AD_POLICY", () => screen.getByRole("button", { name: creative.headline! })],
     ["REVIEW_NO_LEAD_FORM", () => screen.getByLabelText("Lead form")],
     ["REVIEW_BUDGET", () => screen.getByLabelText("Daily budget (₹)")],
     ["REVIEW_NO_AGE_RANGE", () => screen.getByLabelText("Minimum age")],

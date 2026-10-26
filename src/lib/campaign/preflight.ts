@@ -1,3 +1,4 @@
+import { adPolicyHits } from "@/lib/campaign/ad-policy";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
@@ -47,6 +48,8 @@ export interface PreflightInput {
   creatives: PreflightCreative[];
   form: PreflightForm | null;
   whatsappNumber?: string | null;
+  /** The business's industry, for the health claim rules (#739). */
+  vertical?: string | null;
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
   geo: PreflightGeo;
@@ -205,6 +208,10 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   }
   if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
+  }
+  const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
+  if (policyHit) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is a health promise Meta rejects. Edit the ad to describe the service instead.`));
   }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
