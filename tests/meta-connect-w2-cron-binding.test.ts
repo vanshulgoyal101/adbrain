@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   readLifetimeSpendPaise: vi.fn(),
   observeCustomerCosts: vi.fn(),
   isOperatorFunded: vi.fn(),
+  ownAccount: false,
   readCampaignStopped: vi.fn(),
   settleCustomerCosts: vi.fn(),
   listSettlingBusinesses: vi.fn(),
@@ -42,7 +43,11 @@ vi.mock("@/lib/payments/customer-balance", () => ({
   settleCustomerCosts: mocks.settleCustomerCosts,
   listSettlingBusinesses: mocks.listSettlingBusinesses,
 }));
-vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
+// #759: the allowance rules are the managed path; own-account sets ownAccount.
+vi.mock("@/lib/payments/operator-funding", () => ({
+  isOperatorFunded: mocks.isOperatorFunded,
+  fundingMode: async (id: string) => (await mocks.isOperatorFunded(id)) ? "operator" : mocks.ownAccount ? "own" : "managed",
+}));
 vi.mock("@/lib/managed/spend-cap-wiring", () => ({ sweepManagedSpendCaps: mocks.sweepManaged }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
@@ -96,6 +101,7 @@ beforeEach(() => {
   mocks.confirmCustomerCampaign.mockResolvedValue(undefined);
   mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
   mocks.isOperatorFunded.mockResolvedValue(false);
+  mocks.ownAccount = false;
   mocks.observeCustomerCosts.mockResolvedValue(undefined);
   mocks.readCampaignStopped.mockResolvedValue(true);
   mocks.settleCustomerCosts.mockResolvedValue({ finalized: false });
@@ -318,6 +324,17 @@ describe("scheduled spend binding boundary", () => {
     expect(mocks.readLifetimeSpendPaise).not.toHaveBeenCalled();
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
     expect((await response.json()).swept).toEqual([]);
+  });
+
+  it("does not pause an own-account run for an AdBrain allowance it never had (#759)", async () => {
+    configureAdmin([boundCampaign], [{ business_id: "business-1", weekly_cap_rupees: null, alert_pct: 80, auto_pause: false }]);
+    mocks.ownAccount = true;
+    mocks.getCustomerBalance.mockResolvedValue(null);
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    expect(response.status).toBe(200);
+    expect(mocks.getCustomerBalance).not.toHaveBeenCalled();
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
   });
 
   it("still applies the weekly cap to an operator-funded run (#245)", async () => {

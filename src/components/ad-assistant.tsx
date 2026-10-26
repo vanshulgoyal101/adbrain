@@ -126,7 +126,12 @@ function clearDraft(businessId: string): void {
   }
 }
 
-export function AdAssistant({ business, opening = null }: { business: Business; opening?: OpeningLine | null }) {
+export function AdAssistant({ business, opening = null, onFlowStep }: {
+  business: Business;
+  opening?: OpeningLine | null;
+  /** #760: "Brief" while the owner answers, "Create" once ads are being or have been made. */
+  onFlowStep?: (step: "Brief" | "Create") => void;
+}) {
   const [goal, setGoal] = useState("");
   const [started, setStarted] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -448,6 +453,8 @@ export function AdAssistant({ business, opening = null }: { business: Business; 
   }
 
   const lastResultIndex = turns.findLastIndex((turn) => turn.role === "result");
+  const flowStep = phase === "generating" || phase === "done" || lastResultIndex >= 0 ? "Create" : "Brief";
+  useEffect(() => { onFlowStep?.(flowStep); }, [flowStep, onFlowStep]);
 
   function makeMissing() {
     const result = turns[lastResultIndex];

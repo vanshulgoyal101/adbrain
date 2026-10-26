@@ -11,9 +11,11 @@ import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue, missingBrandContext } from "@/lib/work-queue";
 import { describeAuditEvent } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
+import { homeResults } from "@/lib/campaign/home-results";
+import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
-import type { AuditLog, Business, Campaign, CreativePreview } from "@/lib/types";
+import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
 
 export interface WorkspaceHomeProps {
@@ -25,6 +27,9 @@ export interface WorkspaceHomeProps {
   spend: SpendEvaluation | null;
   spendStatus?: ReactNode;
   activity?: ReactNode;
+  /** Each launched campaign's latest result (#764). */
+  results?: Record<string, CampaignResult>;
+  now?: number;
 }
 
 const actionClass =
@@ -39,7 +44,10 @@ export function WorkspaceHome({
   spend,
   spendStatus,
   activity,
+  results = {},
+  now,
 }: WorkspaceHomeProps) {
+  const summary = business ? homeResults(campaigns, results) : null;
   const queue = buildWorkQueue({ business, creatives, campaigns, metaReady });
   const drafts = creatives.filter(
     (creative) => creative.status === "draft",
@@ -80,6 +88,30 @@ export function WorkspaceHome({
       {spendStatus ?? (spend && (spend.status === "approaching" || spend.status === "over") && (
         <SpendStatusBanner evaluation={spend} />
       ))}
+
+      {summary && (
+        <section aria-labelledby="results-title" className="border-b border-slate-200 pb-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="results-title" className="text-lg font-semibold text-slate-900">Results so far</h2>
+            <p className="text-xs text-slate-500">
+              Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
+              <Link href="/campaigns" className="font-medium text-blue-700 hover:underline">See campaigns</Link>
+            </p>
+          </div>
+          <dl className="mt-3 grid grid-cols-3 divide-x divide-slate-200">
+            {[
+              { label: "Enquiries", value: String(summary.enquiries) },
+              { label: "Spent", value: formatMoney(summary.spend) },
+              { label: "Per enquiry", value: summary.perEnquiry === null ? "Not yet" : formatMoney(summary.perEnquiry) },
+            ].map((metric) => (
+              <div key={metric.label} className="min-w-0 px-4 first:pl-0">
+                <dt className="text-xs text-slate-500">{metric.label}</dt>
+                <dd className="mt-1 break-words text-2xl font-semibold text-slate-950">{metric.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       {business && (
         <dl className="grid grid-cols-2 divide-x divide-slate-200 border-b border-slate-200 pb-6 lg:grid-cols-4">

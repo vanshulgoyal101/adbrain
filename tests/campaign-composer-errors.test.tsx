@@ -44,6 +44,17 @@ beforeEach(() => {
 });
 afterEach(() => { Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); vi.unstubAllGlobals(); });
 
+describe("launch composer defaults and plain words (#761)", () => {
+  it("starts at ₹300 a day, says what to expect and that the check spends nothing, with no 'pending' age", async () => {
+    view();
+    expect(await screen.findByLabelText("Daily budget (₹)")).toHaveValue(300);
+    expect(screen.getByRole("button", { name: "₹300 a day" })).toBeInTheDocument();
+    expect(screen.getByText(/What to expect: .*WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("pending");
+  });
+});
+
 describe("composer errors sit next to the control (#667)", () => {
   it("Prepare with no lead form chosen focuses the Lead form field and says why beside it", async () => {
     view();
@@ -51,7 +62,7 @@ describe("composer errors sit next to the control (#667)", () => {
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     expect(leadForm).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Choose a lead form before preparing campaign review.");
@@ -74,7 +85,7 @@ describe("composer errors sit next to the control (#667)", () => {
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     fireEvent.change(leadForm, { target: { value: "form-1" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Could not save the campaign draft.");
@@ -95,7 +106,7 @@ describe("composer errors sit next to the control (#667)", () => {
     await within(leadForm).findByRole("option", { name: "Callbacks" });
     fireEvent.change(leadForm, { target: { value: "form-1" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
 
     const alert = await screen.findByRole("alert");

@@ -509,6 +509,8 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
 
   it("preserves interests and excluded geography across both age variants", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
+      // #741's service-area read: Meta knows no fake place, so no exclusions are added.
+      .mockResolvedValueOnce(Response.json({ data: { cities: {}, regions: {} } }))
       .mockResolvedValueOnce(Response.json({ id: "campaign-1" }))
       .mockResolvedValueOnce(Response.json({ id: "adset-1" }))
       .mockResolvedValueOnce(Response.json({ id: "adset-2" }));
@@ -551,6 +553,7 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
 
   it("reports each external mutation as soon as it returns", async () => {
     const responses = [
+      new Response(JSON.stringify({ data: { cities: {} } }), { status: 200 }),
       new Response(JSON.stringify({ id: "campaign-1" }), { status: 200 }),
       new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
       new Response(JSON.stringify({ images: { uploaded: { hash: "image-hash-1" } } }), { status: 200 }),
