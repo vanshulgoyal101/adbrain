@@ -202,7 +202,7 @@ describe("<AdAssistant> draft persistence", () => {
     const user = userEvent.setup();
     render(<AdAssistant business={business} />);
 
-    expect(screen.getByText("Grounded in Cedar Ridge Chiro")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What would you like to achieve?" })).toBeInTheDocument();
     // #403: the page's Stepper shows Brief → Create → Review; the assistant has no second strip.
     expect(screen.queryByRole("list", { name: "Creation stages" })).toBeNull();
     expect(screen.queryByText("Brief preview")).toBeNull();

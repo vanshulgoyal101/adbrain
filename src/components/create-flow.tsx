@@ -12,7 +12,7 @@ export function CreateFlow({ business, opening, children }: { business: Business
   return (
     <>
       <Stepper current={step} className="mt-4" />
-      <div className="mt-7 grid gap-8 border-t border-slate-200 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+      <div className="mt-6 flex flex-col gap-8 border-t border-slate-200 pt-6">
         <AdAssistant business={business} opening={opening} onFlowStep={setStep} />
         {children}
       </div>

@@ -593,20 +593,14 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
   if (!started) {
     const suggestions = creativeRecommendations(business, goal, recentGoals);
     return (
-      <section aria-label="Campaign brief" className="min-w-0">
+      <section aria-label="Campaign brief" className="min-w-0 max-w-2xl">
         <div>
           <div className="flex flex-col gap-6">
-            <div>
-              <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                <Wand2 className="h-4 w-4 text-blue-600" aria-hidden="true" />
-                Grounded in {business.name}
-              </p>
-              <h2 className="mt-3 text-xl font-semibold tracking-normal text-slate-950">
-                What would you like to achieve?
-              </h2>
-            </div>
+            <h2 className="text-xl font-semibold tracking-normal text-slate-950">
+              What would you like to achieve?
+            </h2>
             {opening && (
-              <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-4">
+              <div className="rounded-lg bg-slate-50 p-4">
                 <p className="text-sm text-slate-800">{opening.text}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {opening.moreLikeThis && (
@@ -621,7 +615,8 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
               </div>
             )}
             <div className="min-w-0">
-              <label htmlFor="assistant-goal" className="text-sm font-medium text-slate-800">
+              {/* The question above is the visible label; this keeps the field's own name. */}
+              <label htmlFor="assistant-goal" className="sr-only">
                 Campaign goal
               </label>
               <Textarea
@@ -630,7 +625,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
                 onChange={(e) => setGoal(e.target.value)}
                 rows={6}
                 maxLength={500}
-                className="mt-3 rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
+                className="rounded-md bg-slate-50/50 p-4 text-base leading-7 focus:bg-white"
                 placeholder="Who do you want to reach, and what would you like them to do?"
               />
               <p className="mt-2 text-right text-xs tabular-nums text-slate-400" aria-label="Campaign goal length">{goal.length}/500</p>
@@ -642,7 +637,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
                     onClick={() => { setGoal(s.prompt); setChipGoal(s.prompt); }}
                     className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-600 hover:text-blue-700"
                   >
-                    {s.label}<ArrowRight size={15} aria-hidden="true" />
+                    {s.label}<ArrowRight size={15} className="shrink-0" aria-hidden="true" />
                   </button>
                 ))}
               </div>
@@ -652,7 +647,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
               <div className="mt-5 flex justify-end">
                 <Button onClick={start} disabled={!goal.trim()}>
                   {/* #858: this tap starts the 3 ads straight away, so it says so. */}
-                  {goal.trim() && chipGoal?.trim() === goal.trim() && hasCreateFacts(business) ? "Make 3 ads" : "Start creating"} <ArrowRight className="h-4 w-4" />
+                  {goal.trim() && chipGoal?.trim() === goal.trim() && hasCreateFacts(business) ? "Make 3 ads" : "Start creating"}
                 </Button>
               </div>
             </div>
@@ -783,7 +778,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
         )}
         {phase === "done" && (
           <div aria-label="Next creative directions" className="flex flex-col divide-y divide-slate-100 border-t border-slate-200">
-            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} disabled={stillMaking > 0} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{suggestion.label}<ArrowRight size={15} aria-hidden="true" /></button>)}
+            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} disabled={stillMaking > 0} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{suggestion.label}<ArrowRight size={15} className="shrink-0" aria-hidden="true" /></button>)}
           </div>
         )}
       </div>
