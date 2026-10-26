@@ -194,9 +194,12 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     const uncited = { ...reply, sourceQuotes: reply.sourceQuotes.filter((quote) => !quote.includes("$49")) };
 
     expect(validateConcept(uncited, withFact("$49 new-patient exam and consultation, no referral needed"))).toMatchObject({ success: true });
-    expect(validateConcept(uncited, withFact("$49 new-patient exam no longer offered"))).toMatchObject({
-      success: false, claims: ["claim:currency:negated-quote"],
-    });
+    for (const withdrawn of ["$49 new-patient exam no longer offered", "$49 new-patient exam, no longer offered"]) {
+      // #777: the withdrawal counts across the whole sentence, after a comma too.
+      expect(validateConcept(uncited, withFact(withdrawn)), withdrawn).toMatchObject({
+        success: false, claims: ["claim:currency:negated-quote"],
+      });
+    }
     expect(validateConcept({ ...reply, sourceQuotes: [...uncited.sourceQuotes, "Not $49 any more"] }, withFact("Not $49 any more"))).toMatchObject({
       success: false, claims: ["claim:currency:negated-quote"],
     });
