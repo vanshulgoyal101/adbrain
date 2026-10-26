@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 const noStore = { "Cache-Control": "no-store" };
-const fields = "id,owner_id,kind,status,created_at,updated_at";
+const fields = "id,owner_id,kind,status,source,confirmation_code,created_at,updated_at";
 
 async function operator() {
   const client = await createClient();

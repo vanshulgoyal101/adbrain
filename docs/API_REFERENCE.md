@@ -143,7 +143,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/oauth/callback` | Provider callback | Signed/bound OAuth completion and redirect |
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |
 | POST | `/api/meta/connect` | Business/account/Page | Retired selection, 410 after validation |
-| POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections; returns Meta's `{url, confirmation_code}` (status at `/data-deletion?code=`) |
+| POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections and file a deletion request for the privacy operator; returns Meta's `{url, confirmation_code}` (live status at `/data-deletion?code=`) |
 | GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
 | POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
 | POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |
@@ -818,7 +818,8 @@ It returns plain `{ok:true}`, not an envelope, and does not pause remote ads.
 
 Deauthorization is a Meta callback, not session-authenticated owner JSON. It accepts
 `signed_request` via form or JSON, verifies the signature, revokes the subject,
-and returns `{url:<data-deletion-page>}`. Invalid signature: 400; persistence: 503.
+records a deletion request under the confirmation code (#730), and returns
+`{url:<data-deletion-page>, confirmation_code}`. Invalid signature: 400; persistence: 503 (Meta retries).
 
 Retired routes are not compatibility creation paths: OAuth start returns 410;
 accounts requires an owned business before 410; connect validates nonempty
