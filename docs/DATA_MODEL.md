@@ -237,7 +237,10 @@ resumes or creates a run bound to the business owner and the current connected
 generation/account/Page; `lead_sync_checkpoint` inserts up to 200 rows and
 advances progress in one transaction, rejecting a stale version or changed
 binding. A run becomes `complete` only when form discovery is done and no forms
-are pending. Browser roles cannot supply progress.
+are pending. Browser roles cannot supply progress. Each row may carry Meta's
+`meta_campaign_id`; the checkpoint sets `leads.campaign_id` to this business's
+campaign with that Meta id (null for test or organic leads), fills an empty link
+on a lead seen again, and counts only new leads as imported (#680).
 
 `get_lead_page` is security-invoker, owner-checked and granted to authenticated
 only, so RLS still applies. It filters by status, contact availability and a
@@ -443,6 +446,7 @@ alone is not a safe deployment plan.
 | [20261025_whatsapp_number_bindings.sql](../db/migrations/20261025_whatsapp_number_bindings.sql) | #253 number boundary: `whatsapp_number_bindings` (owner-read RLS, service-role writes) |
 | [20261026_campaign_learnings.sql](../db/migrations/20261026_campaign_learnings.sql) | #588 learning ledger: `campaign_learnings` (owner-read RLS, service-role writes) |
 | [20261026_meta_token_search_path.sql](../db/migrations/20261026_meta_token_search_path.sql) | #625: `meta_token_insert`/`get`/`delete` run with `search_path = ''` (#359 standard); bodies already fully qualified, behaviour unchanged |
+| [20261026_lead_campaign_link.sql](../db/migrations/20261026_lead_campaign_link.sql) | Same-signature `lead_sync_checkpoint` links synced leads to their campaign by Meta campaign id and backfills empty links (#680); either release order works (the old function ignores the new key) |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and

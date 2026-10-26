@@ -74,7 +74,7 @@ vi.mock("@/lib/meta/connection-access", async () => {
   };
 });
 
-function replay(fail?: (path: string) => boolean) {
+function replay(fail?: (path: string) => boolean, edit?: (path: string, body: unknown) => unknown) {
   const sent: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -86,7 +86,7 @@ function replay(fail?: (path: string) => boolean) {
     if (fail?.(path)) return Response.json({ error: { message: "Service temporarily unavailable", code: 2 } }, { status: 503 });
     const exchange = (leadsTape as Exchange[]).find(item => item.path === path);
     if (!exchange) throw new Error(`Unrecorded Graph call: GET ${path}`);
-    return Response.json(exchange.body, { status: exchange.status });
+    return Response.json(edit ? edit(path, structuredClone(exchange.body)) : exchange.body, { status: exchange.status });
   });
   return sent;
 }
@@ -137,13 +137,31 @@ describe("core: scheduled lead sync against recorded Graph pages (#165)", () => 
     expect([...db.leads.values()]).toEqual([expect.objectContaining({
       business_id: businessId, meta_lead_id: testLead, form_id: "1732372914636573",
       full_name: "<test lead: dummy data for full_name>", created_time: "2026-10-22T05:39:35+0000",
+      // #680: Meta answers a test lead without campaign_id (recorded); it stays unlinked.
+      meta_campaign_id: null,
     })]);
+    expect(sent.filter(path => path.includes("/leads?")).every(path => path.includes("campaign_id"))).toBe(true);
     expect(sent.filter(path => path.includes("/leads?"))).toHaveLength(5);
 
     const second = await run();
     expect(second.status).toBe(200);
     expect(second.body).toMatchObject({ ok: true, imported: 0, businesses: [{ businessId, imported: 0 }] });
     expect(db.leads.size).toBe(1);
+  });
+
+  it("#680: passes an ad lead's Meta campaign id to the checkpoint, and drops a malformed one", async () => {
+    for (const [campaignId, expected] of [["120253707024160526", "120253707024160526"], ["act_1; drop", null]] as const) {
+      db.runs.clear();
+      db.leads.clear();
+      replay(undefined, (path, body) => {
+        if (!path.startsWith("1732372914636573/leads")) return body;
+        const page = body as { data: Record<string, unknown>[] };
+        return { ...page, data: page.data.map(lead => ({ ...lead, campaign_id: campaignId })) };
+      });
+      expect((await run()).status).toBe(200);
+      expect([...db.leads.values()]).toEqual([expect.objectContaining({ meta_lead_id: testLead, meta_campaign_id: expected })]);
+      vi.restoreAllMocks();
+    }
   });
 
   it("fails red with saved progress when Meta cannot be read, never a silent empty import", async () => {

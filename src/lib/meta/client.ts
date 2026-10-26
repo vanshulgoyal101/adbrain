@@ -28,6 +28,8 @@ export interface MetaLead {
   id: string;
   created_time: string;
   field_data: { name: string; values: string[] }[];
+  /** The ad's campaign; absent for leads Meta didn't get from an ad (e.g. organic or test leads). */
+  campaign_id?: string;
 }
 
 export interface MetaLeadPage<T> {
@@ -40,6 +42,7 @@ const leadPageSchema = z.object({
   id: z.string().min(1).max(200),
   created_time: z.string().refine(value => !value || Number.isFinite(Date.parse(value))).optional().default(""),
   field_data: z.array(z.object({ name: z.string(), values: z.array(z.string()) })).default([]),
+  campaign_id: z.string().regex(/^\d{1,64}$/).optional().catch(undefined),
 });
 
 function parseLeadPage<T>(value: unknown, schema: z.ZodType<T>, previous?: string | null): MetaLeadPage<T> {
@@ -783,7 +786,7 @@ export class MetaClient {
 
   async listLeadsForFormPage(formId: string, opts: { limit?: number; after?: string | null } = {}): Promise<MetaLeadPage<MetaLead>> {
     const pageToken = await this.getPageAccessToken();
-    const params = new URLSearchParams({ fields: "id,created_time,field_data", limit: String(Math.min(200, Math.max(1, opts.limit ?? 200))) });
+    const params = new URLSearchParams({ fields: "id,created_time,field_data,campaign_id", limit: String(Math.min(200, Math.max(1, opts.limit ?? 200))) });
     if (opts.after) params.set("after", opts.after);
     const data = await this.graph<unknown>(
       `${encodeURIComponent(formId)}/leads?${params}`,
