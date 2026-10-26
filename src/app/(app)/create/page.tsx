@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { occasionIdeas } from "@/lib/seasonal";
 
 export const metadata = {
   title: "Create ads",
@@ -55,7 +56,7 @@ export default async function CreatePage() {
         title="Create ads"
         description="Say who you want to reach. You check every ad before it runs."
       />
-      <CreateFlow business={business} opening={openingLine(evidence)}>
+      <CreateFlow business={business} opening={openingLine(evidence)} occasions={occasionIdeas(business.name)}>
         <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
           <p>
             Using {business.name}&apos;s details.{" "}
