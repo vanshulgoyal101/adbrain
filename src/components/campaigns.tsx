@@ -56,6 +56,7 @@ import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
+import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
 import { MetaConnectDialog } from "@/components/meta-connect/meta-connect-dialog";
 import {
@@ -105,13 +106,6 @@ import { cn, timeAgo } from "@/lib/utils";
 import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
-
-const STATUS_STYLES: Record<string, string> = {
-  paused: "bg-amber-50 text-amber-700",
-  active: "bg-blue-50 text-blue-700",
-  draft: "bg-slate-100 text-slate-600",
-  completed: "bg-slate-100 text-slate-600",
-};
 
 /** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
 function goneInMeta(campaign: Campaign): string | null {
@@ -738,10 +732,10 @@ function BusinessCampaigns({
           ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count)}` : "";
         setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
       } else {
-        setError(data.error ?? "Sync failed. Please try again.");
+        setError(data.error ?? "Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.");
       }
     } catch {
-      setError("Sync failed.");
+      setError("Couldn't reach Meta. Check your connection, then try Sync from Meta again.");
     } finally {
       setSyncing(false);
     }
@@ -1918,7 +1912,7 @@ function BusinessCampaigns({
                 <a
                   href="/api/campaigns/report"
                   download
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-xs font-medium text-slate-600 transition-colors hover:border-slate-400"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
                 >
                   <FileText className="h-4 w-4" /> Export report
                 </a>
@@ -1961,6 +1955,8 @@ function BusinessCampaigns({
           </Card>
         ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
+            {/* #847: said once for the list, not on every row. */}
+            {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-3 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
             {audienceEdit && (
               <EditAudienceDialog
                 campaignId={audienceEdit.id}
@@ -2005,14 +2001,9 @@ function BusinessCampaigns({
                         <h3 id={`campaign-${c.id}-name`} className="min-w-0 wrap-break-word font-semibold text-slate-900">
                           {c.name ?? `${business.name} — ${c.objective}`}
                         </h3>
-                        <Badge
-                          className={
-                            STATUS_STYLES[c.status] ??
-                            "bg-slate-100 text-slate-600"
-                          }
-                        >
-                          {goneInMeta(c) ?? (c.status === "active" ? OWNER_WORDS.running : c.status)}
-                        </Badge>
+                        <Status tone={goneInMeta(c) ? "neutral" : CAMPAIGN_STATUS[c.status]?.tone ?? "neutral"} className="text-sm text-slate-600">
+                          {goneInMeta(c) ?? (c.status === "active" ? OWNER_WORDS.running : CAMPAIGN_STATUS[c.status]?.label ?? c.status)}
+                        </Status>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}
                         {madeOutsideAdBrain(c) ? <Badge className="bg-slate-100 text-slate-700">{OWNER_WORDS.madeOutside}</Badge> : null}
@@ -2024,7 +2015,7 @@ function BusinessCampaigns({
                             : c.objective}
                         </span>
                         {resumeElsewhere ? (
-                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer"
+                          <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" title={RESUME_IN_ADS_MANAGER}
                             className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                             <ExternalLink className="h-4 w-4" aria-hidden="true" />
                             Resume in Ads Manager
@@ -2075,6 +2066,13 @@ function BusinessCampaigns({
                             {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <MoreHorizontal className="h-5 w-5" aria-hidden="true" />}
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
+                            {r && (
+                              <DropdownMenuItem asChild>
+                                <a href={`https://wa.me/?text=${encodeURIComponent(campaignWhatsAppSummary(c, r))}`} target="_blank" rel="noopener noreferrer" data-product-event="campaign.share_results">
+                                  <MessageCircle className="h-4 w-4" aria-hidden="true" /> Share results on WhatsApp
+                                </a>
+                              </DropdownMenuItem>
+                            )}
                             {c.meta_campaign_id && (
                               <DropdownMenuItem asChild>
                                 <a href={adsLink(c)} target="_blank" rel="noopener noreferrer">
@@ -2106,20 +2104,14 @@ function BusinessCampaigns({
                       </div>
                     </div>
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
-                    {resumeElsewhere ? <p className="text-sm text-slate-600">{RESUME_IN_ADS_MANAGER}</p> : null}
                     {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">
                       {cardError.message}
                       {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
                     </p> : null}
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
-                    {!r && (
-                      <p className="text-sm text-slate-500">
-                        No results yet.{c.meta_campaign_id ? " Refresh results to get Meta's latest numbers." : ""}
-                      </p>
-                    )}
 
                     {r && (
-                      <div className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <Stat label="Impressions" value={formatNumber(r.impressions)} />
                         <Stat label="Clicks" value={formatNumber(r.clicks)} />
                         <Stat label={outcome === "whatsapp" ? "WhatsApp conversations" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
@@ -2135,23 +2127,12 @@ function BusinessCampaigns({
                         {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
                       </p>
                     )}
-                    {r && (
-                      <a
-                        href={`https://wa.me/?text=${encodeURIComponent(campaignWhatsAppSummary(c, r))}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-product-event="campaign.share_results"
-                        className="inline-flex min-h-11 w-fit items-center gap-2 rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-800 hover:bg-green-100"
-                      >
-                        <MessageCircle className="h-4 w-4" /> Share results on WhatsApp
-                      </a>
-                    )}
                     {r && outcome === "whatsapp" && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
                         onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
-                      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                      <p className="text-sm text-slate-600">
                         {c.status === "paused" ? `Paused — nothing has spent.${resumeElsewhere ? "" : " Resume when you're ready."}`
                           : c.status === "active" ? "Waiting for Meta to start delivery."
                           : "Nothing has spent yet."}
@@ -2172,20 +2153,15 @@ function BusinessCampaigns({
                           leads: r.leads,
                           cpl: r.cpl,
                         });
-                        const tones = {
-                          idle: "border-slate-200 bg-slate-50 text-slate-700",
-                          good: "border-green-200 bg-green-50 text-green-800",
-                          ok: "border-blue-200 bg-blue-50 text-blue-800",
-                          warn: "border-amber-200 bg-amber-50 text-amber-800",
-                        } as const;
+                        // #847: no tinted boxes inside a card; the label carries the verdict.
                         return (
-                          <div className={cn("rounded-lg border px-3 py-2.5 text-sm", tones[h.tone])}>
+                          <div className="text-sm text-slate-700">
                             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                               <span className="font-semibold">{h.label}.</span>
                               <span>{h.detail}</span>
                             </div>
-                            <p className="mt-1.5 text-xs/5 text-current/80">{narrative}</p>
-                            <p className="mt-1 text-xs font-medium text-current/80">Next step: {nextAction}</p>
+                            <p className="mt-1 text-sm text-slate-600">{narrative}</p>
+                            <p className="mt-1 text-sm font-medium text-slate-700">Next step: {nextAction}</p>
                           </div>
                         );
                       })()}

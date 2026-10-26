@@ -341,7 +341,8 @@ describe("campaign sync feedback", () => {
     expect(link).toHaveAttribute("href", expect.stringContaining("selected_campaign_ids=meta-9"));
     expect(link).toHaveAttribute("target", "_blank");
     expect(link.className).toMatch(/\bh-11\b/);
-    expect(card.getByText("AdBrain can only resume campaigns it launched. Resume this one in Ads Manager.")).toBeInTheDocument();
+    // #847: the button carries the reason instead of a sentence repeated on every synced card.
+    expect(link).toHaveAttribute("title", "AdBrain can only resume campaigns it launched. Resume this one in Ads Manager.");
   });
 
   it("shows a failed activation review on the campaign's card, where the owner tapped Resume", async () => {
@@ -718,10 +719,10 @@ describe("campaign sync feedback", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
     await screen.findByText(/More campaigns are available/);
     fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
-    expect(await screen.findByText("Sync failed. Please try again.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
     await screen.findByText("Campaign sync completed.");
     expect(sync).toHaveBeenNthCalledWith(3, "/api/campaigns/sync?after=next-page");
-    expect(screen.queryByText("Sync failed. Please try again.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.")).not.toBeInTheDocument();
   });
 });
