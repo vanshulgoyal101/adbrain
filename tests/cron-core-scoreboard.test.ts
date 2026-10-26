@@ -6,11 +6,17 @@ const mocks = vi.hoisted(() => ({
   tables: {} as Record<string, unknown[]>,
   error: null as unknown,
   queries: [] as Filter[],
+  users: {} as Record<string, { id: string; email: string; email_confirmed_at: string | null }>,
 }));
 vi.mock("@/lib/env", () => ({ getEnv: () => ({ CRON_SECRET: mocks.secret }) }));
-vi.mock("@/lib/internal-accounts.json", () => ({ default: { smokeUserIds: ["smoke-user"] } }));
+vi.mock("@/lib/internal-accounts.json", () => ({
+  default: { smokeUserIds: ["smoke-user"], domains: ["team.example"], userIds: [], exemptFromFreeProviders: [] },
+}));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
+    auth: { admin: { getUserById: async (id: string) => (mocks.users[id]
+      ? { data: { user: mocks.users[id] }, error: null }
+      : { data: { user: null }, error: { message: "not found" } }) } },
     from: (table: string) => {
       const query: Filter = { table, ops: [] };
       mocks.queries.push(query);
@@ -49,9 +55,19 @@ beforeEach(() => {
     product_events: [
       { name: "meta.create_paused", outcome: "success", user_id: "real-user", business_id: "b1", duration_ms: 900, attributes: {}, created_at: now },
       { name: "meta.create_paused", outcome: "failed", user_id: null, business_id: "smoke-business", duration_ms: 900, attributes: {}, created_at: now },
+      { name: "creative.batch", outcome: "success", user_id: "real-user", business_id: "b1", duration_ms: null, attributes: { count: 3 }, created_at: now },
+      { name: "creative.batch", outcome: "success", user_id: "team-user", business_id: "b2", duration_ms: null, attributes: { count: 3 }, created_at: now },
       { name: "http.request", outcome: "success", user_id: "real-user", business_id: "b1", duration_ms: 2000, attributes: { route: "/api/campaigns/plan" }, created_at: now },
     ],
-    llm_usage_events: [],
+    llm_usage_events: [
+      { route: "creatives.generate", status: "success", user_id: "real-user", business_id: "b1", request_id: "r1", latency_ms: 20_000, created_at: now },
+      { route: "creatives.generate", status: "success", user_id: "team-user", business_id: "b2", request_id: "r2", latency_ms: 100_000, created_at: now },
+    ],
+    campaign_operations: [{ business_id: "b1", state: "succeeded", created_at: now }, { business_id: "smoke-business", state: "failed", created_at: now }],
+  };
+  mocks.users = {
+    "real-user": { id: "real-user", email: "owner@shop.example", email_confirmed_at: now },
+    "team-user": { id: "team-user", email: "qa@team.example", email_confirmed_at: now },
   };
 });
 
@@ -72,9 +88,12 @@ describe("GET /api/cron/core-scoreboard (#681)", () => {
     expect(body.ok).toBe(true);
     expect(body.hours).toBe(24);
     expect(body.excluded).toEqual({ events: 1, aiCalls: 0 });
-    expect(body.rows.find((r: { step: string }) => r.step === "Launch")).toMatchObject({ met: true });
-    expect(body.markdown).toContain("| Launch | 1 Meta create call: 100% succeeded |");
-    expect(JSON.stringify(body)).not.toMatch(/real-user|smoke-business|"b1"/);
+    const step = (name: string) => body.rows.find((r: { step: string }) => r.step === name);
+    expect(step("Launch")).toMatchObject({ now: "1 launch: 100% succeeded; Meta calls under `create_paused` 0/1 failed", met: true });
+    expect(step("Create (customers, paid images)").now).toContain("p90 20 s");
+    expect(step("Create (internal, free images)").now).toContain("p90 100 s");
+    expect(mocks.queries.find((q) => q.table === "campaign_operations")!.ops).toContainEqual(["eq", ["kind", "campaign_create"]]);
+    expect(JSON.stringify(body)).not.toMatch(/real-user|team-user|smoke-business|"b1"|example/);
     const businesses = mocks.queries.find((q) => q.table === "businesses")!;
     expect(businesses.ops).toContainEqual(["in", ["owner_id", ["smoke-user"]]]);
   });
@@ -84,7 +103,12 @@ describe("GET /api/cron/core-scoreboard (#681)", () => {
       ({ name: "meta.create_paused", outcome: "success", user_id: "real-user", business_id: "b1", duration_ms: 1, attributes: {}, created_at: now }));
     const { body } = await call("/api/cron/core-scoreboard?hours=168");
     expect(body.hours).toBe(168);
-    expect(body.rows.find((r: { step: string }) => r.step === "Launch").now).toBe("1500 Meta create calls: 100% succeeded");
+    expect(body.rows.find((r: { step: string }) => r.step === "Launch").now).toContain("Meta calls under `create_paused` 0/1500 failed");
+  });
+
+  it("returns 503 when a maker's account can't be read, so the split is never guessed", async () => {
+    delete mocks.users["team-user"];
+    expect(await call()).toEqual({ status: 503, body: { ok: false, error: "Scoreboard data is unavailable." } });
   });
 
   it("returns 503 without database details", async () => {
