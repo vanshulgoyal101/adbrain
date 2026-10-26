@@ -127,7 +127,9 @@ export function buildScoreboard(input: {
     const failed = plans.filter((event) => event.outcome === "failed");
     const partial = plans.filter((event) => event.outcome === "partial").length;
     const rate = percent(plans.length - failed.length, plans.length);
-    const ms = p90(named("http.request")
+    // #821: the plan event's own duration once it carries one; the plan route's request time before that.
+    const planned = plans.filter((event) => typeof event.duration_ms === "number").map((event) => event.duration_ms as number);
+    const ms = p90(planned.length ? planned : named("http.request")
       .filter((event) => event.attributes?.route === SCOREBOARD_PLAN_ROUTE && typeof event.duration_ms === "number")
       .map((event) => event.duration_ms as number));
     rows.push({

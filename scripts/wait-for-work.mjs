@@ -112,8 +112,8 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
-/** The Reviewer and the Analyst pick their own audits/research when empty (#681 rows, #703), so the CTO doesn't refill them. */
-export const SELF_SOURCING = new Set(["reviewer", "analyst"]);
+/** The Reviewer, the Analyst and the Designer pick their own audits, research and design slices (#681, #703, #847), so the CTO doesn't refill them. */
+export const SELF_SOURCING = new Set(["reviewer", "analyst", "designer"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);

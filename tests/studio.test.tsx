@@ -759,7 +759,7 @@ describe("<Studio> edit words on the picture (#280)", () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/picture", expect.objectContaining({ method: "POST" })));
     const [, init] = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([url]) => url === "/api/creatives/c1/picture")!;
-    expect(JSON.parse(String(init.body))).toEqual({ headline: "Diwali: free site visit", subhead: "Two short lines.", phone: "+91 98290 12345", ctaLabel: "Get Quote" });
+    expect(JSON.parse(String(init.body))).toEqual({ headline: "Diwali: free site visit", subhead: "Two short lines.", phone: "+91 98290 12345", ctaLabel: "Get Quote", showCta: true });
     expect(global.fetch).not.toHaveBeenCalledWith("/api/creatives/c1/regenerate", expect.anything());
     await waitFor(() => expect(screen.queryByRole("form", { name: "Edit words on the picture" })).not.toBeInTheDocument());
     expect(document.querySelector('img[src*="redrawn"]')).not.toBeNull();

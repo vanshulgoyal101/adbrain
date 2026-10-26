@@ -330,7 +330,16 @@ export function PictureWordsEditor({
       </div>
       <div className="flex flex-col gap-1">
         <Label htmlFor={field("ctaLabel")}>Button on picture</Label>
-        <Select id={field("ctaLabel")} value={words.ctaLabel} onChange={(e) => set("ctaLabel", e.target.value as PictureWords["ctaLabel"])}>
+        <Select
+          id={field("ctaLabel")}
+          value={words.showCta ? words.ctaLabel : ""}
+          onChange={(e) =>
+            setWords((w) =>
+              e.target.value ? { ...w, showCta: true, ctaLabel: e.target.value as PictureWords["ctaLabel"] } : { ...w, showCta: false },
+            )
+          }
+        >
+          <option value="">No button (Meta adds a real one below the ad)</option>
           {META_CTAS.map((cta) => (
             <option key={cta} value={cta}>
               {cta}

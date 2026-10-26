@@ -29,6 +29,12 @@ export interface AdDesignSpec {
   phone: string | null;
   contactLine: string | null;
   ctaLabel: string;
+  /**
+   * Paint `ctaLabel` as a button on the picture. Off for new ads (#760): Meta shows
+   * a real, tappable button under every ad, and a painted one that doesn't tap reads
+   * as bait. Owners can opt in from 'Button on picture'.
+   */
+  showCta: boolean;
   /** Validated brand colour used for accents, chips and the CTA button. */
   primaryColor: string;
   /** Readable text colour to sit on top of `primaryColor`. */
@@ -213,6 +219,7 @@ export function buildAdDesign(params: {
     phone: brand.phone?.trim() || null,
     contactLine: deriveContactLine({ ...brand, phone: null }),
     ctaLabel: (copy.cta ?? "").trim() || "Learn More",
+    showCta: false,
     primaryColor,
     ctaTextColor: readableTextOn(primaryColor),
     fontFamily: fontFamilyFor(brand.font),

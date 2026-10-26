@@ -89,7 +89,7 @@ describe("<AdAssistant> live Create progress", () => {
     const section = await screen.findByRole("region", { name: "Ads being created" });
     for (const name of ["Ad 1", "Ad 2", "Ad 3"]) expect(within(section).getByText(name)).toBeInTheDocument();
     expect(within(section).getByText("Creating 3 ads")).toBeInTheDocument();
-    expect(within(section).getByText(/usually about a minute/)).toBeInTheDocument();
+    expect(within(section).getByText(/usually under 1½ minutes/)).toBeInTheDocument();
     expect(within(section).getByRole("progressbar")).toBeInTheDocument();
 
     await send(
