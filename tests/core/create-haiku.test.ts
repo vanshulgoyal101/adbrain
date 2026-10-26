@@ -3,6 +3,13 @@ import run4 from "./fixtures/create/cedar-ridge-run4.json";
 import haiku from "./fixtures/create/cedar-ridge-haiku.json";
 import { openAIReply, requestBody, requestUrl, settleInVirtualTime, useVirtualDeadlines, wait } from "./replay";
 
+// #738: the Oct 22 pain-point reply opened with "Stiff From a Day at Your Desk?", which now breaks
+// personal-attribute. Replies to the reworded angle (recorded Oct 26, scripts/record-haiku-policy-fixture.ts)
+// name the service instead; the other two angles are the Oct 22 recordings.
+const painPoint = haiku.painPointV738.replies[0];
+const responses = haiku.responses.map((reply) => reply.angleName === painPoint.angleName
+  ? { ...reply, content: painPoint.content, usage: painPoint.usage, latencyMs: painPoint.latencyMs } : reply);
+
 // Create's OpenRouter model (#98): three real Claude Haiku 5.5 replies recorded through the
 // production route. Text calls, parsing and validation are real; only the network and images are replaced.
 vi.mock("@/lib/imageGen", () => ({
@@ -39,7 +46,7 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
       expect(requestUrl(input)).toBe("https://openrouter.ai/api/v1/chat/completions");
       const body = JSON.parse(requestBody(init));
       bodies.push(body);
-      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName));
+      const reply = responses.find(({ angleName }) => body.messages[1].content.includes(angleName));
       if (!reply) throw new Error("Concept request did not name a recorded angle.");
       return openAIReply(reply.content, haiku.model, reply.usage);
     }));
@@ -56,15 +63,15 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     });
 
     // #141 live progress: every angle reports real stages in order, and "ready" only after its save.
-    for (const { angleName } of haiku.responses) {
+    for (const { angleName } of responses) {
       expect(events.filter((event) => event.angleName === angleName).map(({ stage }) => stage))
         .toEqual(["queued", "writing", "checking", "image", "ready"]);
     }
     expect(events.slice(0, 3).map(({ stage }) => stage)).toEqual(["queued", "queued", "queued"]);
     expect(events.filter(({ stage }) => stage === "ready").map(({ angleName }) => angleName)).toEqual(saved);
     expect(events.every(({ at }, index) => index === 0 || at >= events[index - 1].at)).toBe(true);
-    expect(haiku.responses.some(({ content }) => content.startsWith("```json"))).toBe(true);
-    expect(variants.map(({ angleName }) => angleName)).toEqual(haiku.responses.map(({ angleName }) => angleName));
+    expect(responses.some(({ content }) => content.startsWith("```json"))).toBe(true);
+    expect(variants.map(({ angleName }) => angleName)).toEqual(responses.map(({ angleName }) => angleName));
     expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
     expect(bodies).toHaveLength(3);
     for (const body of bodies) {
@@ -74,18 +81,18 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
       expect(variant.llmUsage).toEqual([expect.objectContaining({ provider: "openrouter", model: "anthropic/claude-haiku-5.5", status: "success" })]);
     }
     // Recorded latencies leave most of the 270 s route deadline for images and repairs.
-    expect(haiku.responses.reduce((sum, { latencyMs }) => sum + latencyMs, 0)).toBeLessThan(60_000);
+    expect(responses.reduce((sum, { latencyMs }) => sum + latencyMs, 0)).toBeLessThan(60_000);
   });
 
   it("reports fixing on a repair and failed when the repair is also rejected", async () => {
-    const offer = haiku.responses.find(({ angleName }) => angleName === "Special offer / incentive")!;
+    const offer = responses.find(({ angleName }) => angleName === "Special offer / incentive")!;
     // A reply cut off mid-JSON, as when a model hits max_tokens.
     const truncated = offer.content.slice(0, Math.floor(offer.content.length / 2));
     let repairFails = false;
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(requestBody(init));
       const repair = body.messages.length > 2;
-      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+      const reply = responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
       const content = reply === offer && (!repair || repairFails) ? truncated : reply.content;
       return openAIReply(content, haiku.model, reply.usage);
     }));
@@ -116,7 +123,7 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     let peak = 0;
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(requestBody(init));
-      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+      const reply = responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
       peak = Math.max(peak, ++inFlight);
       await wait(reply.latencyMs);
       inFlight--;
@@ -130,20 +137,20 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     vi.useRealTimers();
 
     expect(peak).toBe(3);
-    expect(variants.map(({ angleName }) => angleName)).toEqual(haiku.responses.map(({ angleName }) => angleName));
+    expect(variants.map(({ angleName }) => angleName)).toEqual(responses.map(({ angleName }) => angleName));
     expect(new Set(variants.map(({ headline }) => headline)).size).toBe(3);
-    const latencies = haiku.responses.map(({ latencyMs }) => latencyMs);
+    const latencies = responses.map(({ latencyMs }) => latencyMs);
     // Concept time is the slowest call, not the sum of all three.
     expect(wallMs).toBeLessThan(Math.max(...latencies) + latencies.reduce((a, b) => a + b, 0) / 3);
   });
 
   it("parallel schedule (#142): a concept that repeats an earlier concurrent headline is repaired against it", async () => {
     vi.stubEnv("CREATIVE_CONCEPT_SCHEDULE", "parallel");
-    const [first, second] = haiku.responses;
+    const [first, second] = responses;
     const repairPrompts: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(requestBody(init));
-      const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+      const reply = responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
       const repair = body.messages.length > 2;
       if (repair) repairPrompts.push(body.messages[1].content);
       // The second angle's first reply copies the first angle's concept.
@@ -176,6 +183,29 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     // Real shouting is still rejected.
     expect(scanAdCopy("BOOK YOUR $49, VISIT TODAY").map(({ rule }) => rule)).toContain("all-caps");
     expect(scanAdCopy("Visits from $49, $49.00 in 2026").map(({ rule }) => rule)).not.toContain("all-caps");
+  });
+
+  // #738 (clinic pilots): Meta's Personal Attributes and health rules, and superlatives no fact states.
+  it("refuses condition questions, health outcomes and unsupported superlatives on recorded Haiku replies", async () => {
+    const { parseJSON } = await import("@/lib/llm");
+    const { validateConcept, conceptValidationRules } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const rulesOf = (reply: { angleName: string; content: string }, change: Record<string, string> = {}, vertical = run4.brand.vertical) => {
+      const angle = AD_ANGLES.find(({ name }) => name === reply.angleName)!;
+      const result = validateConcept({ ...parseJSON<Record<string, unknown>>(reply.content), ...change },
+        { brand: { ...run4.brand, vertical }, brief: run4.brief, angle });
+      return result.success ? [] : conceptValidationRules(result.issues);
+    };
+    const value = haiku.responses[0];
+    // The Oct 22 pain-point reply asked "Stiff From a Day at Your Desk?"; the reworded angle's replies don't.
+    expect(rulesOf(haiku.responses[1])).toContain("personal-attribute");
+    for (const reply of haiku.painPointV738.replies) expect(rulesOf(reply)).toEqual([]);
+    expect(rulesOf(value, { headline: "Are you suffering from back pain?" })).toContain("personal-attribute");
+    expect(rulesOf(value, { headline: "Do you have bleeding gums?" }, "Dental clinic")).toContain("personal-attribute");
+    expect(rulesOf(value, { headline: "Back pain care in Austin" })).toEqual([]);
+    expect(rulesOf(value, { headline: "Get lasting relief from sciatica" })).toContain("banned-claim");
+    expect(rulesOf(value, { headline: "Austin's #1 chiropractor" })).toContain("unsupported-superlative");
+    expect(rulesOf(value, { headline: "A $49 visit, guaranteed" })).toContain("banned-claim");
   });
 
   // #687 item 3: Create refused any quote with a negation anywhere ("…, no referral needed"), so a real
@@ -228,7 +258,7 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     });
 
     // The saved Haiku offer concept with the same 134-character label now saves, label clipped at a word.
-    const offer = haiku.responses.find(({ angleName }) => angleName === angle.name)!;
+    const offer = responses.find(({ angleName }) => angleName === angle.name)!;
     const clean = parseJSON<Concept>(offer.content);
     const result = validateConcept({ ...clean, visual: { ...clean.visual, medium } }, input);
     expect(result.success, JSON.stringify(result)).toBe(true);
@@ -246,7 +276,7 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     it("saves the recorded #194-prompt replies as short lines with the hook and offer in the first line", async () => {
       vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
         const body = JSON.parse(requestBody(init));
-        const reply = haiku.responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
+        const reply = responses.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
         expect(body.messages).toHaveLength(2);
         return openAIReply(reply.content, haiku.model, reply.usage);
       }));
@@ -283,7 +313,8 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
           expect(lines[0].length).toBeLessThanOrEqual(fold);
           expect(lines.join(" ")).toBe(draft.primary_text);
         } else {
-          expect(result.success ? [] : conceptValidationRules(result.issues)).toEqual(["offer-below-fold"]);
+          // This Oct 22 pain-point reply opens "Sore from sitting all day?", which also breaks #738's rule.
+          expect((result.success ? [] : conceptValidationRules(result.issues)).sort()).toEqual(["offer-below-fold", "personal-attribute"]);
         }
       }
       expect(outcomes.filter(({ offerAt }) => offerAt >= fold).map(({ angleName }) => angleName)).toEqual(["Solve a pain point"]);

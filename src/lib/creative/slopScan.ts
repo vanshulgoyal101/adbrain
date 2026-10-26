@@ -111,10 +111,30 @@ export const MEDICAL_BANNED_CLAIMS = [
   "permanent fix",
   "permanently fix",
   "risk-free",
+  // #738: implied outcomes that passed the exact-word list (Meta health & wellness policy).
+  "lasting relief",
+  "permanent relief",
+  "instant relief",
+  // Outcome-shaped (Reviewer on #805): "fix your appointment" and "eliminate waiting time" are fine.
+  "eliminate pain",
+  "eliminates pain",
+  "eliminate your pain",
+  "eliminate back pain",
+  "eliminate neck pain",
+  "fix your back",
+  "fix your pain",
+  "fix your posture",
+  "fix your teeth",
+  "fix your smile",
+  "feel better",
+  "get rid of",
+  "say goodbye to",
+  "no more pain",
+  "end your pain",
 ] as const;
 
 /** Verticals whose ads are held to the healthcare claim rules. */
-const HEALTH_VERTICAL = /chiro|dental|dentist|clinic|medical|doctor|physio|health|wellness|therapy|hospital|ayurved|derma/i;
+export const HEALTH_VERTICAL = /chiro|dental|dentist|clinic|medical|doctor|physio|health|wellness|therapy|hospital|ayurved|derma/i;
 
 /**
  * Banned claims for a business's industry. Non-health verticals get none, so

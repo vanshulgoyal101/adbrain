@@ -85,7 +85,7 @@ export const AD_ANGLES: AdAngle[] = [
     id: "problem",
     name: "Solve a pain point",
     description:
-      "Lead with the customer's problem, then the relief the business provides.",
+      "Name the problem the service solves (the service, never the reader's own condition or money worries), then how the business helps.",
     imageHint:
       "reassuring, solution-focused mood, crisp and modern composition",
     compositionHint:
@@ -105,7 +105,7 @@ export const AD_ANGLES: AdAngle[] = [
     id: "trust",
     name: "Trusted & local",
     description:
-      "Emphasise experience, quality, reviews, guarantees, and local track record.",
+      "Emphasise experience, quality, reviews and local track record.",
     imageHint:
       "trustworthy, precise and professional mood; skilled workers delivering the product/service in a real setting",
     compositionHint:

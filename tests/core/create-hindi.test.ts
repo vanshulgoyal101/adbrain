@@ -174,11 +174,35 @@ describe("core: Create makes Hindi and Hinglish ads (#290, #300)", () => {
     expect(result).toMatchObject({ success: true, concept: { sourceQuotes: expect.arrayContaining(["Free site survey"]) } });
   });
 
-  it("saves the Hinglish factory ad 3/3 on the first try: the Brand's capitals and a spelled ₹ amount", async () => {
+  // #738: the pain-point reply opened "Factory ka bijli bill bhari?" (the reader's money trouble), so it
+  // takes its recorded repair; the other two still pass first try.
+  // #738: Meta treats a best-case "up to 98%" as exaggerated even though Solaride's Brand states it.
+  // #738 / CTO on #805: Solaride's Brand states "up to 98%", so the recorded Hindi "98% तक" is normal sourced copy;
+  // the same reply for a Brand that doesn't state it is refused as an exaggerated result.
+  it("allows the recorded Hindi '98% तक' saving the Brand states, and refuses it when the Brand doesn't", async () => {
+    const { validateConcept, conceptValidationRules } = await import("@/lib/creative/concept");
+    const { parseJSON } = await import("@/lib/llm");
+    const { languagePromptName } = await import("@/lib/languages");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const final = turns("hi", "vague").at(-1)!.result as { brief: string; sourceFacts: string[] };
+    const [first] = replies("hi", "vague", "concept").filter((reply) => reply.angle === "Save money / value" && reply.attempt === 1);
+    const check = (brandUnderTest: BrandContext) => {
+      const result = validateConcept(parseJSON(first.content), { brand: brandUnderTest, brief: final.brief, angle: AD_ANGLES[0],
+        language: languagePromptName("hi"), format: "portrait", recentCopy: recorded.recentCopy, sourceFacts: final.sourceFacts });
+      return result.success ? [] : conceptValidationRules(result.issues);
+    };
+    expect(first.content).toContain("98% तक");
+    expect(brand.usps).toContain("Potential to cut electricity bills by up to 98%");
+    expect(check(brand)).not.toContain("exaggerated-result");
+    expect(check({ ...brand, usps: (brand.usps ?? []).filter((usp) => !usp.includes("98%")) })).toContain("exaggerated-result");
+  });
+
+  it("saves the Hinglish factory ad 3/3: the Brand's capitals and a spelled ₹ amount pass first try", async () => {
     const { saved, failed } = await create("hinglish", "factory");
     expect(failed).toEqual([]);
-    expect(saved.map((ad) => ad.llmUsage.length)).toEqual([1, 1, 1]);
-    expect(saved.map((ad) => ad.headline)).toContain("31 Dec ke baad factory solar mehenga");
-    expect(saved.some((ad) => /SOLARIDE ke IIT\/PEC engineers/.test(ad.primaryText))).toBe(true);
+    expect(saved.map((ad) => [ad.angleName, ad.llmUsage.length])).toEqual([["Save money / value", 1], ["Solve a pain point", 2], ["Special offer / incentive", 1]]);
+    // #738: attempt 1's "31 Dec ke baad factory solar mehenga" asked "Factory ka bijli bill bhari?"; its repair saves.
+    expect(saved.map((ad) => ad.headline)).toContain("31 Dec se pehle factory solar lagwao");
+    expect(saved.some((ad) => /SOLARIDE ke IIT Bombay aur PEC/.test(ad.primaryText))).toBe(true);
   });
 });

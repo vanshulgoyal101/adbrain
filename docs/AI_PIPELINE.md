@@ -120,6 +120,15 @@ can't time it (#681). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).
+Create also applies Meta ad-policy rules ([policy-rules.ts](../src/lib/creative/policy-rules.ts), #738),
+repairing once like any other rule: `personal-attribute` (in health verticals, a question or
+"your …" naming the reader's symptom or condition, or suggesting they neglected care; in any
+vertical, a question about the reader's money trouble such as debt or a bill that "feels heavy"),
+`unsupported-superlative` (#1, top-rated, leading, "Austin's best" unless a supplied fact says it)
+and `exaggerated-result` ("up to N%": refused in health verticals even when a fact states it;
+elsewhere allowed when a supplied fact states the same figure, refused when uncited). Health verticals also ban implied
+outcomes (lasting relief, eliminate, fix your, feel better…) and any guarantee, cited or not. Owner-typed
+copy only gets these as warnings.
 
 ### Orchestration Reuse
 
