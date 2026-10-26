@@ -456,11 +456,17 @@ describe("campaign sync feedback", () => {
     await waitFor(() => expect(card.getByRole("status")).toHaveTextContent("Results updated just now."));
   });
 
-  it("labels the stored active state as a request, not confirmed delivery", () => {
+  // #763: owners read "Running" (was "Requested active"); a row synced from Meta says it was made outside AdBrain.
+  it("labels an active campaign Running and a synced one Made outside AdBrain", () => {
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "active" } as Campaign;
-    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
-    expect(screen.getAllByText("Requested active")).toHaveLength(2);
-    expect(screen.getByText(/1 requested active/)).toBeInTheDocument();
+    const synced = { id: "campaign-2", name: "Agency campaign", status: "paused", meta_campaign_id: "120000000000000001", raw: { source: "sync" } } as unknown as Campaign;
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign, synced]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
+    expect(screen.getAllByText("Running")).toHaveLength(2);
+    expect(screen.getByText(/1 running/)).toBeInTheDocument();
+    expect(screen.queryByText(/requested active/i)).toBeNull();
+    const row = (name: string) => within(screen.getByRole("heading", { name }).closest("article")!);
+    expect(row("Agency campaign").getByText("Made outside AdBrain")).toBeInTheDocument();
+    expect(row("Saved campaign").queryByText("Made outside AdBrain")).toBeNull();
   });
 
   it("shows Needs attention with the reason for a live campaign the scheduled refresh flagged (#258)", () => {
