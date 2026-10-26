@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildLaunchSnapshot, recordLaunchCap, saveLaunchSnapshot } from "@/lib/campaign/learnings";
 import createTape from "./core/fixtures/meta/create.json";
+import launchTape from "./core/fixtures/meta/launch-validate.json";
 
 // The real create.json tape (recorded before #334, so it sent advantage_audience 0).
 const recorded = createTape as unknown as { path: string; form?: Record<string, string>; body: { id?: string } }[];
@@ -25,6 +26,14 @@ describe("learning ledger snapshot (#588)", () => {
       creatives: [{ id: "c1", angle: "Solve a pain point", language: "en", textModel: "anthropic/claude-haiku-5.5", imageModel: "openai/gpt-image-2.5-flare" }],
       metaCreativeIds: [], cap: null,
     });
+  });
+
+  it("#906: records the placements as sent: WhatsApp without Audience Network, lead forms automatic", () => {
+    const sent = (destination: string) => (launchTape.tape as unknown as { destination: string; kind: string; form: Record<string, string> }[])
+      .filter(e => e.destination === destination && e.kind === "adsets").map(e => e.form.targeting);
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: sent("whatsapp") }).placements).toBe("advantage:facebook,instagram,messenger");
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: sent("instant_form") }).placements).toBe("advantage");
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: [...sent("whatsapp"), ...sent("instant_form")] }).placements).toBe("mixed");
   });
 
   it("#672 v2: records Advantage+ as sent and Meta's creative ids from the recorded create tape", () => {

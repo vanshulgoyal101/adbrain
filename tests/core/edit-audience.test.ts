@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import rebuildTape from "./fixtures/meta/edit-audience-rebuild.json";
 import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
+import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
+import legacyWhatsAppTape from "./fixtures/meta/edit-audience-whatsapp-legacy.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
@@ -9,6 +11,7 @@ import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 // campaigns (archived afterwards): editing a launched ad set's audience, Chandigarh → Mohali, ages 30-60.
 // - rebuild: the ad set has interests, which Meta won't patch in place (100/1359202)
 // - patch:   the ad set has none
+// - whatsapp: a click-to-WhatsApp ad set without interests, which Meta won't patch either (#912)
 // - rate-limited: Meta allows one targeting update per ad set per 30 s (#613), validate_only included
 //   (its ad set read's field list was extended with budget_remaining after recording; bodies unchanged)
 
@@ -70,6 +73,48 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(posts[1].form).toMatchObject({ status: "PAUSED", campaign_id: campaignId });
     expect(posts[1].form).not.toHaveProperty("execution_options");
     expect(posts.at(-1)).toEqual({ method: "POST", path: adSetId, form: { status: "ARCHIVED" } });
+    expect(tape.sent.some(call => call.form.status === "ACTIVE")).toBe(false);
+    expect(tape.pending).toEqual([]);
+  });
+
+  // #912 (Dev 4): Meta refuses any in-place targeting update on a click-to-WhatsApp ad set (100/1359202),
+  // even without interests, so it is rebuilt. Recorded on a PAUSED WhatsApp test campaign, archived.
+  it("rebuilds a WhatsApp ad set without interests instead of patching it", async () => {
+    const tape = replay(whatsappTape);
+    const { campaignId, adSetId, adId, copiedAdId, newAdSetId } = ids(whatsappTape);
+    const meta = new MetaClient(creds);
+    const input = { adSetId, adIds: [adId], changes };
+    expect((await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).mode).toBe("rebuild");
+    expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: [copiedAdId], retiredAdSetId: adSetId });
+    const posts = tape.sent.filter(call => call.method === "POST");
+    expect(posts.some(call => call.path === adSetId && "targeting" in call.form)).toBe(false);
+    expect(JSON.parse(posts[1].form.promoted_object ?? "{}")).toMatchObject({ page_id: creds.pageId });
+    expect(posts[1].form).toMatchObject({ status: "PAUSED", destination_type: "WHATSAPP" });
+    expect(posts.at(-1)).toEqual({ method: "POST", path: adSetId, form: { status: "ARCHIVED" } });
+    expect(tape.sent.some(call => call.form.status === "ACTIVE")).toBe(false);
+    expect(tape.pending).toEqual([]);
+  });
+
+  // #913 follow-up (QA): a WhatsApp ad set launched before #913 (automatic placements) whose ad's 9:16 creative
+  // still names audience_network is rebuilt without Audience Network, and Meta accepts the old ad copied onto it.
+  // Recorded by scripts/record-meta-edit-whatsapp-legacy.ts on a PAUSED test campaign, archived.
+  it("rebuilds a pre-#913 WhatsApp ad set without Audience Network, keeping its old ad", async () => {
+    const tape = replay(legacyWhatsAppTape);
+    const { campaignId, adSetId, adId, copiedAdId, newAdSetId } = ids(legacyWhatsAppTape);
+    const meta = new MetaClient(creds);
+    const input = { adSetId, adIds: [adId], changes: { age: { min: 30, max: 60 } } };
+    expect((await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).mode).toBe("rebuild");
+    expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: [copiedAdId], retiredAdSetId: adSetId });
+    const recorded = legacyWhatsAppTape as Array<{ method: string; path: string; form?: Record<string, string>; body: unknown }>;
+    const source = recorded.find(exchange => exchange.method === "GET" && exchange.path.startsWith(`${adSetId}?`))!.body as { targeting: Record<string, unknown> };
+    expect(source.targeting).not.toHaveProperty("publisher_platforms");
+    const created = tape.sent.filter(call => call.method === "POST" && /^act_\d+\/adsets$/.test(call.path));
+    expect(created).toHaveLength(2);
+    for (const call of created) {
+      const targeting = JSON.parse(call.form.targeting);
+      expect(targeting.publisher_platforms).toEqual(["facebook", "instagram", "messenger"]);
+      expect(JSON.stringify(targeting)).not.toContain("audience_network");
+    }
     expect(tape.sent.some(call => call.form.status === "ACTIVE")).toBe(false);
     expect(tape.pending).toEqual([]);
   });

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Download, ExternalLink, ImageIcon, Link2 } from "lucide-react";
-import { Badge, Card, CardContent } from "@/components/ui/card";
+import { Check, Download, ExternalLink, ImageIcon, Link2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Status } from "@/components/ui/status";
 import type { BrandAsset, CreativePreview } from "@/lib/types";
 import { downloadBlob } from "@/lib/download";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
-import { cn } from "@/lib/utils";
+
+const PAGE = 24;
 
 const ASSET_TYPE_LABEL: Record<string, string> = {
   logo: "Logo",
@@ -36,13 +38,13 @@ function AssetTile({
   url,
   thumbnailUrl,
   title,
-  badges,
+  meta,
   filename,
 }: {
   url: string;
   thumbnailUrl?: string;
   title: string;
-  badges?: { label: string; className?: string }[];
+  meta?: React.ReactNode;
   filename: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -52,7 +54,7 @@ function AssetTile({
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <Card className="flex flex-col overflow-hidden">
+    <Card className="flex min-w-0 flex-col overflow-hidden">
       <div className="relative aspect-square bg-slate-100">
         {!broken ? (
           <img
@@ -70,24 +72,14 @@ function AssetTile({
             <ImageIcon className="h-8 w-8 text-slate-300" />
           </div>
         )}
-        {!!badges?.length && (
-          <div className="absolute left-2 top-2 flex flex-wrap gap-1.5">
-            {badges.map((b) => (
-              <Badge
-                key={b.label}
-                className={cn("bg-black/60 text-white backdrop-blur", b.className)}
-              >
-                {b.label}
-              </Badge>
-            ))}
-          </div>
-        )}
       </div>
-      <CardContent className="flex flex-col gap-2">
+      <CardContent className="flex flex-col gap-1 p-3">
         <p className="truncate text-sm font-medium text-slate-800" title={title}>
           {title}
         </p>
-        <div className="flex flex-wrap items-center gap-1 text-slate-500">
+        {meta && <div className="text-xs text-slate-500">{meta}</div>}
+        {/* #847: one row of labelled 44 px icons instead of three wrapping text links. */}
+        <div className="-mx-2 flex items-center text-slate-600">
           <button
             type="button"
             disabled={downloading}
@@ -98,9 +90,11 @@ function AssetTile({
               catch { setError("Download failed. Retry or use Open to view the original image."); }
               finally { setDownloading(false); }
             }}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-slate-100"
+            aria-label={downloading ? "Downloading" : "Download"}
+            title="Download"
+            className="inline-flex size-11 items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-50"
           >
-            <Download className="h-3.5 w-3.5" /> {downloading ? "Downloading" : "Download"}
+            <Download className="h-4 w-4" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -113,17 +107,21 @@ function AssetTile({
                 setTimeout(() => setCopied(false), 1500);
               } catch { setError("Could not copy the link. Use Open to access the image."); }
             }}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-slate-100"
+            aria-label={copied ? "Copied" : "Copy link"}
+            title="Copy link"
+            className="inline-flex size-11 items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-50"
           >
-            <Link2 className="h-3.5 w-3.5" /> {copied ? "Copied" : "Copy link"}
+            {copied ? <Check className="h-4 w-4 text-blue-700" aria-hidden="true" /> : <Link2 className="h-4 w-4" aria-hidden="true" />}
           </button>
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-slate-100"
+            aria-label="Open"
+            title="Open"
+            className="inline-flex size-11 items-center justify-center rounded-md hover:bg-slate-100 disabled:opacity-50"
           >
-            <ExternalLink className="h-3.5 w-3.5" /> Open
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>
         </div>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
@@ -140,67 +138,52 @@ export function AssetsLibrary({
   brandAssets: BrandAsset[];
 }) {
   const generated = creatives.filter((c) => c.image_url);
-  const approved = generated.filter((creative) => creative.status === "approved").length;
+  // #847: 88+ full images made a 44,000 px phone page; show a page at a time.
+  const [shown, setShown] = useState(PAGE);
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="grid gap-2 border-y border-slate-200/80 py-3 sm:grid-cols-3 sm:gap-0">
-        {[
-          { label: "Generated", value: generated.length },
-          { label: "Ready to launch", value: approved },
-          { label: "Brand uploads", value: brandAssets.length },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="rounded-lg px-3 py-2 sm:border-r sm:border-slate-200/80 sm:last:border-r-0"
-          >
-            <p className="text-xs text-slate-500">{item.label}</p>
-            <p className="mt-1 text-xl font-semibold tracking-[-0.02em] text-slate-950">
-              {item.value}
-            </p>
-          </div>
-        ))}
-      </div>
       <section>
         <div className="mb-3 flex items-baseline gap-2">
-          <h2 className="text-lg font-semibold text-slate-900">
-            AI-generated creatives
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900">Ads</h2>
           <span className="text-sm text-slate-400">({generated.length})</span>
         </div>
         {generated.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-slate-500">
-              No generated images yet. Create some in the Creative Studio — every
-              image you generate is saved here automatically.
+              No ads yet. Every ad you create is saved here.
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {generated.map((c) => (
+          <>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            {generated.slice(0, shown).map((c) => (
               <AssetTile
                 key={`${c.id}:${c.image_url}`}
                 url={c.image_url as string}
                 thumbnailUrl={creativeThumbnailUrl(c.image_url as string)}
                 title={c.headline ?? "Ad creative"}
                 filename={`adbrain-${slugify(c.headline ?? c.angle ?? "creative", c.id.slice(0, 6))}.jpg`}
-                badges={[
-                  ...(c.angle ? [{ label: c.angle }] : []),
-                  ...(c.status === "approved"
-                    ? [{ label: "Approved", className: "bg-blue-600" }]
-                    : []),
-                ]}
+                meta={c.status === "approved" ? <Status tone="live">Approved</Status> : undefined}
               />
             ))}
           </div>
+          {generated.length > shown && (
+            <button
+              type="button"
+              onClick={() => setShown((count) => count + PAGE)}
+              className="mt-4 inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50"
+            >
+              Show more ({generated.length - shown} left)
+            </button>
+          )}
+          </>
         )}
       </section>
 
       <section>
         <div className="mb-3 flex items-baseline gap-2">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Uploaded brand assets
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900">Your uploads</h2>
           <span className="text-sm text-slate-400">({brandAssets.length})</span>
         </div>
         {brandAssets.length === 0 ? (
@@ -210,14 +193,14 @@ export function AssetsLibrary({
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {brandAssets.map((a) => (
               <AssetTile
                 key={a.id}
                 url={a.url}
                 title={a.notes || ASSET_TYPE_LABEL[a.type] || "Asset"}
+                meta={a.notes ? ASSET_TYPE_LABEL[a.type] ?? a.type : undefined}
                 filename={`adbrain-${slugify(a.type, a.id.slice(0, 6))}.png`}
-                badges={[{ label: ASSET_TYPE_LABEL[a.type] ?? a.type }]}
               />
             ))}
           </div>

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { logEvent } from "@/lib/audit";
 import { intendedCampaignChildren, reviewableCampaign } from "@/lib/campaign/activation";
 import { saveCampaignChildren } from "@/lib/campaign/trusted-write";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, hasInterests, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
+import { CampaignDeliveryError, MetaError, friendlyMetaError, needsRebuild, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { mergeExclusions, TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 import { recordProductEvent } from "@/lib/observability/logger";
@@ -179,7 +179,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
       if (tree.adSets.some(adSet => adSet.status !== "PAUSED")) throw new CampaignEditError(PAUSE_FIRST, 409);
       const targets = tree.adSets.map(adSet => ({
         adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id),
-        mode: hasInterests((adSet.targeting ?? {}) as Record<string, unknown>) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
+        mode: needsRebuild({ targeting: adSet.targeting, destination_type: adSet.destinationType }) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
       }));
       if (targets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
 

@@ -66,7 +66,7 @@ export function SpendGuardrails({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-blue-600" />
+          <ShieldCheck className="h-5 w-5 text-slate-500" aria-hidden="true" />
           Spend guardrails
         </CardTitle>
       </CardHeader>
@@ -74,14 +74,8 @@ export function SpendGuardrails({
         <p className="text-sm text-slate-600">
           Set a weekly ad-spend ceiling. AdBrain warns you as you approach it and
           won’t let you turn on campaigns that would commit more than your cap.
+          {limits.weeklyCapRupees == null && " No cap is set yet, so campaigns follow only their Meta budgets."}
         </p>
-
-        {limits.weeklyCapRupees == null && (
-          <Alert variant="warning">
-            No weekly cap is set in AdBrain. Active campaigns still follow their
-            Meta budgets, but have no additional weekly limit here.
-          </Alert>
-        )}
 
         {evaluation.capRupees != null && (
           <SpendMeter evaluation={evaluation} />
@@ -135,12 +129,15 @@ export function SpendGuardrails({
           </span>
         </label>
 
-        <p className="text-xs leading-5 text-slate-500">
-          Checks are periodic, not real-time. Reporting delays and unsuccessful
-          pause requests can allow spending beyond this cap. Use Meta account
-          spending limits where supported; prepaid accounts need campaign budgets
-          instead. These guardrails do not verify available funds or payment setup.
-        </p>
+        <details className="text-sm text-slate-600">
+          <summary className="flex min-h-11 w-fit cursor-pointer items-center font-medium text-blue-700">How the cap works</summary>
+          <p className="pb-2 text-sm leading-6 text-slate-600">
+            Checks are periodic, not real-time. Reporting delays and unsuccessful
+            pause requests can allow spending beyond this cap. Use Meta account
+            spending limits where supported; prepaid accounts need campaign budgets
+            instead. These guardrails do not verify available funds or payment setup.
+          </p>
+        </details>
 
         <Button onClick={save} disabled={saving}>
           {saving && <Loader2 className="h-4 w-4 animate-spin" />}
