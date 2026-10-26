@@ -381,7 +381,8 @@ describe("campaign sync feedback", () => {
       };
       await resume();
       await screen.findByRole("button", { name: "Request activation" });
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      // The scroll runs in an effect after the review renders, so wait for it (flaked on PR #716 and next 5ece32f).
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1));
       // The owner scrolled back down to the card and tapped Resume again: the same review, brought back on screen.
       await resume();
       await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
