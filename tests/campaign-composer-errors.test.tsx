@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
+import { SupportLinkProvider } from "@/components/support-link";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Creative } from "@/lib/types";
 
@@ -52,6 +53,14 @@ describe("launch composer defaults and plain words (#761)", () => {
     expect(screen.getByText(/What to expect: .*WhatsApp chat has cost about ₹150–180\. Meta reviews new ads first/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("pending");
+  });
+});
+
+describe("help where owners get stuck (#796)", () => {
+  it("offers Help on WhatsApp at the Meta connection step while Meta isn't connected for the draft", async () => {
+    mocks.status.mockResolvedValue({ authorization: "disconnected", selected: null, generation: 1 });
+    render(<SupportLinkProvider url="https://wa.me/917009764842"><Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" /></SupportLinkProvider>);
+    expect(await screen.findByRole("link", { name: "Stuck connecting Meta? Help on WhatsApp" })).toHaveAttribute("href", "https://wa.me/917009764842");
   });
 });
 

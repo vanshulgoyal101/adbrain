@@ -23,6 +23,8 @@ const schema = z.object({
 
   // App
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
+  // #796: the owner's business WhatsApp for in-app help (public number; empty hides the link).
+  SUPPORT_WHATSAPP: z.string().optional().default(""),
 
   // Dev-only auth bypass (NEVER enable in production)
   NEXT_PUBLIC_DEV_AUTH_BYPASS: z.string().optional().default(""),
