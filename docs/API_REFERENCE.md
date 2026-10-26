@@ -135,7 +135,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/meta/managed/page` | `{attemptId, pageId}` -> envelope `{state, pageId}` | #523: link an admin Page (`page_linked` in `managed_meta_accounts`); `PAGE_NOT_ADMIN` / `PAGE_LOCKED` / `PAGE_TAKEN` 409 |
 | POST | `/api/meta/managed/provision` | `{attemptId}` -> envelope `{state, adAccountId}` | #521 2-Tier: create the caller's child business, INR ad account and its manager; owner-worded 409/503 codes; off unless `MANAGED_ACCOUNTS_ENABLED` |
 | GET | `/api/managed/onboarding` | `businessId` -> envelope `{row, paid}` | #526 2-Tier onboarding progress (owner's `managed_meta_accounts` row; `paid` = captured payments net of refunds, unreadable counts as not paid); behind the managed-route gate (`managedRouteUser`, #625: managed accounts on for the user (404), signed in (401), Meta Connect open (403)). Polled every 5 s by `/onboarding` |
-| POST | `/api/managed/whatsapp` | `{businessId}` -> envelope `{status: linked (masked) \| not_linked \| waiting_setup \| taken \| unavailable}` | #524 v1: reads the number linked to the customer's Page (parent token, needs the child ad account), records `whatsapp_number_e164` (funded → `whatsapp_linked`), binds it `page_link` and unbinds the business's other `page_link` numbers; `unavailable` for failed/offboarding accounts; behind the managed-route gate (`managedRouteUser`, #625: managed accounts on for the user (404), signed in (401), Meta Connect open (403)) |
+| POST | `/api/managed/whatsapp` | `{businessId}` -> envelope `{status: linked (masked) \| not_linked \| waiting_setup \| taken \| unavailable}` | #524 v1: reads the number linked to the customer's Page (the child's own token, #624, needs the child ad account), records `whatsapp_number_e164` (funded → `whatsapp_linked`), binds it `page_link` and unbinds the business's other `page_link` numbers; `unavailable` for failed/offboarding accounts; behind the managed-route gate (`managedRouteUser`, #625: managed accounts on for the user (404), signed in (401), Meta Connect open (403)) |
 | POST | `/api/meta/connections/attempts/[id]/select` | Pair/revision/confirmation -> envelope result | Commit verified connection |
 | POST | `/api/meta/connections/recheck` | Business/optional generation -> envelope connection | Live capability recheck |
 | POST | `/api/meta/disconnect` | Explicit business, or legacy empty body -> `{ok:true}` | Disconnect stored binding, not running ads |
@@ -382,7 +382,9 @@ answers 200 `application/x-ndjson`, one JSON object per line:
 `checking`, `fixing`, `image`, `ready` or `failed`; angles run concurrently),
 `{type:"creative", angleId, creative}` once that ad is saved (before its
 `ready`), and last `{type:"result", status, body}` carrying the status and body
-the JSON mode would have returned. A stream that ends without `result` must be
+the JSON mode would have returned. A blank line arrives every 15 s as a
+heartbeat; skip it. A stream that ends without `result`, or that goes silent
+(the page allows 60 s once it has seen a heartbeat, else 330 s), must be
 treated as unconfirmed and recovered with the GET below.
 
 POST atomically claims the

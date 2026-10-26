@@ -252,8 +252,9 @@ export async function runPlanner(
     // The standard reasoning model needs 30-90s per plan, beyond the 45s planner limit.
     const completion = await complete(messages, {
       routing: "budget", task: "campaign planner", attemptTimeoutMs: 20_000,
-      // #366: Groq answers in ~1 s; when it's rate-limited, Gemini without thinking gets 5 s, then Haiku.
-      thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, extraProviders: ["openrouter"],
+      // #366/#668: Groq answers in ~1 s. When it's rate-limited, Haiku with reasoning off answers in ~3-5 s,
+      // then Gemini without thinking gets 5 s (it timed out on 3 of 4 tries in Oct 2026).
+      thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, nextProviders: ["openrouter"], fallbackBeforeRateLimitWait: true,
       json: true, responseSchema: plannerResultSchema, cache: false, signal,
       promptVersion: PLANNER_PROMPT_VERSION, temperature: 0.2, maxTokens: 3000,
       onAttempt: (entry) => { if (entry.status === "error") failures.push(entry); },

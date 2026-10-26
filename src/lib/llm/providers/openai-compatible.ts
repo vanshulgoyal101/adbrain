@@ -24,7 +24,10 @@ export function createOpenAICompatibleProvider(config: {
           ...body,
           ...(config.name === "openrouter" && options.reasoningEffort
             ? { reasoning: { effort: options.reasoningEffort, exclude: true } }
-            : {}),
+            // #668: models like Haiku 5.5 reason at "medium" unless told not to (~800 hidden tokens a plan).
+            : config.name === "openrouter" && options.thinking === "off"
+              ? { reasoning: { effort: "none" } }
+              : {}),
         }),
       });
       return sdkCompletion(config.name, model, messages, options);

@@ -112,21 +112,25 @@ Routine steps never wait for the CEO or the CTO.
 
 ### Supervisor: waking idle and stuck chats (#573 A1)
 
-Chats can't wake themselves, but one chat can message another (`list_sessions`,
-`get_session_context`, `send_message`). The **CEO chat supervises and the CTO chat backs
-it up** (whichever is running). Each tick, at most every 10 minutes:
-1. `npm run team-status` lists each role as `waiting` (its waiter runs: healthy),
-   `has-work`, `no-work` or `error` (read-only; `wait-for-work --probe` takes no lock).
-2. `list_sessions` maps roles to chats by title. For each `has-work` role:
-   - chat **idle** → `send_message` (queue): "You are <Role>. Your next item: <first item>.
-     Run `node scripts/wait-for-work.mjs --me <role>` when done."
-   - chat **in progress** with no waiter: compare `get_session_context` (`digest`, last turn)
-     with the previous tick. If its text and tool calls haven't changed for 20+ min, it's stuck
-     on a dead shell: `send_message` (steer): "Stop waiting on the dead shell; pull origin/main
-     and do <first item>." (`modifiedAt` in `list_sessions` doesn't move while a chat works.)
-   - chat **error** or **input needed** → same message once; if still stuck next tick,
-     one line to the owner via the CEO.
-3. At most one message per chat per 20 minutes. Then wait for the next tick (`wait-for-work --me ceo` or `--me cto`).
+**No chat needs to stay alive.** A LaunchAgent (`in.adbrain.team-supervisor`) runs
+`npm run team-supervisor` every 10 minutes from `adbrain-wt/supervisor` (on `origin/main`).
+Each tick:
+1. A role is **live** if its waiter runs or its chat (a `~/.copilot/session-state` log whose
+   first prompt is "You are AdBrain's <Role>…") changed in the last 20 min.
+2. For the first role in order DevOps, QA, Reviewer, QA 2, Dev 3, Dev, Dev 2 that has work
+   (`wait-for-work --probe`) and isn't live, it starts **one** headless Copilot CLI run: the
+   role card, the first queue item, the hard limits (no money, Meta writes, secrets,
+   production settings or force-push), signed "<Role> (headless):". One run at a time,
+   40 min cap, 150 AI credits per run, 8 runs a day (CEO sets the caps).
+3. Log: `~/.adbrain-supervisor/supervisor.log`; stop it with `touch ~/.adbrain-supervisor/OFF`;
+   `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
+
+**After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one
+chat per role with `create_session` and the text from `npm run team-supervisor -- --restart-prompt all`;
+GitHub is the memory. Chats still help when they're alive: the CEO (or the CTO) can nudge an idle or
+stuck chat with `list_sessions`, `get_session_context` and `send_message` (at most once per
+chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
+or `error`.
 
 ### Ready pool (pull, don't wait)
 

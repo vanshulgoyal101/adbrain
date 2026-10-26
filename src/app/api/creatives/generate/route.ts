@@ -27,6 +27,7 @@ import {
 } from "@/lib/creative/receipt";
 import type { Creative, Database } from "@/lib/types";
 import { creativeAssets, recentCreativeCopy } from "@/lib/creative/references";
+import { CREATE_HEARTBEAT_MS } from "@/lib/creative/stream";
 import { preferenceContext } from "@/lib/preferences/store";
 
 export const runtime = "nodejs";
@@ -127,10 +128,22 @@ async function handlePOST(req: Request): Promise<Response> {
     writer.close().catch(() => {});
     return early;
   }
+  // #666: a blank line every 15 s lets the page tell a silently dead connection from a slow ad.
+  let heartbeat: ReturnType<typeof setTimeout> | undefined;
+  const beat = () => {
+    heartbeat = setTimeout(() => {
+      writer.write(encoder.encode("\n")).catch(() => {});
+      beat();
+    }, CREATE_HEARTBEAT_MS);
+  };
+  beat();
   void result
     .then(async (response) => write({ type: "result", status: response.status, body: await response.json() }))
     .catch(() => write({ type: "result", status: 502, body: { error: "Creative generation could not be completed. Check saved results before trying again." } }))
-    .finally(() => writer.close().catch(() => {}));
+    .finally(() => {
+      clearTimeout(heartbeat);
+      writer.close().catch(() => {});
+    });
   return new Response(readable, {
     headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
   });

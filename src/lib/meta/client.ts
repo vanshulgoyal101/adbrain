@@ -75,8 +75,11 @@ export interface CreativeInput {
   message: string;
   description?: string | null;
   cta?: string | null;
-  /** The same ad at 9:16 for Stories and Reels (#333); without it every placement gets the 4:5 image. */
-  storyImage?: Uint8Array | null;
+  /**
+   * The same ad at 9:16 for Stories and Reels (#333); without it every placement gets the 4:5 image.
+   * May still be rendering: it is awaited only when its upload is due, so the render overlaps Meta's calls.
+   */
+  storyImage?: Uint8Array | null | Promise<Uint8Array | null>;
 }
 
 /** A resolved Meta geo-targeting spec (subset of the targeting `geo_locations`). */
@@ -1033,8 +1036,9 @@ export class MetaClient {
       });
       // Placement images are proven for WhatsApp ads that name the Page's Instagram (story-validate.json).
       let storyHash: string | null = null;
-      if (c.storyImage && instagramUserId) {
-        storyHash = await this.uploadAdImageBytes(c.storyImage).catch((error: unknown) => {
+      const storyImage = instagramUserId ? await c.storyImage : null;
+      if (storyImage) {
+        storyHash = await this.uploadAdImageBytes(storyImage).catch((error: unknown) => {
           params.onStoryFallback?.("upload", metaErrorCode(error));
           return null;
         });

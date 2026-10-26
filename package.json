@@ -17,6 +17,7 @@
     "docs:check": "node scripts/check-docs.mjs",
     "team-metrics": "node scripts/team-metrics.mjs",
     "team-status": "node scripts/team-status.mjs",
+    "team-supervisor": "node scripts/team-supervisor.mjs",
     "db:push": "node scripts/apply-schema.mjs",
     "db:migrate": "node scripts/migrate-db.mjs",
     "worker:campaigns": "tsx scripts/campaign-worker.ts",

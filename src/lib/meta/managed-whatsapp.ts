@@ -16,12 +16,12 @@ const STOPPED_STATES = ["failed", "offboarding", "offboarded"];
 /**
  * #524 v1 (Page-linked WhatsApp): read the number the customer linked to their own Page (Meta
  * verified it with their OTP), record it on their ledger row and bind it (`page_link`, #253).
- * The Page is read with the parent token, so it needs the child business and ad account (#525).
+ * The Page is read with the child's own system-user token (#624), so it needs the child set up (#525).
  */
 export async function checkManagedWhatsApp(businessId: string): Promise<ManagedWhatsAppCheck> {
   const account = await getManagedAccount(businessId);
   if (account && STOPPED_STATES.includes(account.state)) return { status: "unavailable" };
-  const credentials = account ? managedCredentials(account) : null;
+  const credentials = account ? await managedCredentials(account) : null;
   if (!account || !credentials) return { status: "waiting_setup" };
   const number = await new MetaClient(credentials).getWhatsAppNumber(null);
   if (!number) return { status: "not_linked" };

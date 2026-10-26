@@ -25,6 +25,10 @@ export const SECTIONS = [
   { key: "funnel", title: "Sign-up funnel (reached each step)" },
 ];
 
+// #680: a real enquiry is a WhatsApp chat Meta counts as started (the person sent a message), or an
+// instant-form lead from that campaign whose phone is a valid Indian mobile (Meta's test leads fail it).
+export const VALID_INDIAN_MOBILE = "^(91|0)?[6-9][0-9]{9}$";
+
 export function sectionSql(key, days, emails, { includeInternal = false } = {}) {
   if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error("--days must be a whole number from 1 to 365.");
   const since = `created_at > now() - make_interval(days => ${days})`;
@@ -152,16 +156,21 @@ from public.managed_meta_accounts m join public.businesses b on b.id = m.busines
 where ${includeInternal ? "true" : customerFilterSql("b.owner_id", "b.id", emails)} group by m.state order by accounts desc`;
     // #588: not limited by --days; comparing runs (e.g. #157's Hinglish prefill vs #499's English one) spans weeks.
     case "learnings":
-      return `with r as (select distinct on (campaign_id) * from public.campaign_results order by campaign_id, fetched_at desc)
+      return `with r as (select distinct on (campaign_id) * from public.campaign_results order by campaign_id, fetched_at desc),
+f as (select campaign_id, count(*) as form_leads from public.leads
+  where source = 'meta_form' and campaign_id is not null and regexp_replace(coalesce(phone, ''), '\\D', '', 'g') ~ '${VALID_INDIAN_MOBILE}'
+  group by campaign_id)
 select to_char(l.created_at, 'MM-DD') as launched, left(coalesce(c.name, '-'), 32) as campaign, l.snapshot->>'destination' as destination,
   l.snapshot->'whatsapp'->>'language' as prefill_lang, left(l.snapshot->'whatsapp'->>'prefill', 40) as prefill,
   l.snapshot->'audience'->>'advantageAudience' as adv_audience, l.snapshot->'formats' as formats,
   (l.snapshot->'budget'->>'dailyRupees')::numeric as daily_inr, r.spend, r.impressions,
   round(r.spend / nullif(r.impressions, 0) * 1000, 2) as cpm, r.whatsapp_opens as opened, r.conversations as chats,
   round(100.0 * r.conversations / nullif(r.whatsapp_opens, 0), 1) as open_to_chat_pct, r.cost_per_conversation as inr_per_chat,
+  coalesce(f.form_leads, 0)::int as form_leads, (coalesce(r.conversations, 0) + coalesce(f.form_leads, 0))::int as enquiries,
+  round(r.spend / nullif(coalesce(r.conversations, 0) + coalesce(f.form_leads, 0), 0), 2) as inr_per_enquiry,
   left(l.hypothesis, 50) as hypothesis, left(l.verdict, 50) as verdict
 from public.campaign_learnings l join public.campaigns c on c.id = l.campaign_id join public.businesses b on b.id = l.business_id
-left join r on r.campaign_id = c.id
+left join r on r.campaign_id = c.id left join f on f.campaign_id = c.id
 where ${includeInternal ? "true" : customerFilterSql("b.owner_id", "b.id", emails)}
 order by l.created_at desc limit 10`;
     case "funnel":

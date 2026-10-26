@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { customerFilterSql } from "../scripts/lib/internal-accounts.mjs";
-import { SECTIONS, renderSection, sectionSql } from "../scripts/stats.mjs";
+import { SECTIONS, VALID_INDIAN_MOBILE, renderSection, sectionSql } from "../scripts/stats.mjs";
 
 describe("customer filter (#451)", () => {
   it("uses the user, or the business owner for background rows, and drops system rows", () => {
@@ -59,6 +59,18 @@ describe("npm run stats (#451)", () => {
     expect(sql).not.toContain("make_interval");
     expect(sql).toContain("not in (select u.id from auth.users u where ");
     expect(sectionSql("learnings", 7, [], { includeInternal: true })).not.toContain("auth.users u where");
+  });
+
+  it("counts real enquiries: WhatsApp chats started plus campaign form leads with a valid Indian mobile (#680)", () => {
+    const sql = sectionSql("learnings", 7, []);
+    expect(sql).toContain("source = 'meta_form' and campaign_id is not null");
+    expect(sql).toContain("regexp_replace(coalesce(phone, ''), '\\D', '', 'g') ~ '^(91|0)?[6-9][0-9]{9}$'");
+    expect(sql).toContain("as enquiries");
+    expect(sql).toContain("as inr_per_enquiry");
+    expect(sql).not.toMatch(/\bphone as\b|l\.phone|full_name/);
+    const valid = (phone: string) => new RegExp(VALID_INDIAN_MOBILE).test(phone.replace(/\D/g, ""));
+    for (const ok of ["+91 98765 43210", "9876543210", "09876543210", "919876543210", "+91-70097-64842"]) expect(valid(ok)).toBe(true);
+    for (const bad of ["<test lead: dummy data for phone_number>", "", "12345", "5876543210", "+1 512 555 0134", "98765432101"]) expect(valid(bad)).toBe(false);
   });
 
   it("filters every event section to customers by default and opts in to everyone", () => {

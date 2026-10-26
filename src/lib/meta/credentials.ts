@@ -77,7 +77,7 @@ export async function resolveMetaCredentials(
   void _db;
   // A managed business (#525) never falls back to an OAuth connection.
   const managed = await getManagedAccount(businessId);
-  if (managed) return managedCredentials(managed);
+  if (managed) return await managedCredentials(managed);
   const row = await getConnectionRow(businessId);
   const accessToken = row ? await getEncryptedToken(row) : null;
   if (
@@ -118,7 +118,7 @@ export async function getMetaConnection(
   }
   if (managed) {
     const ready = isManagedReady(managed);
-    return { source: "managed", pending: !ready, ready: ready && managedCredentials(managed) !== null,
+    return { source: "managed", pending: !ready, ready: ready && await managedCredentials(managed) !== null,
       adAccountId: managed.ad_account_id, pageId: managed.page_id, tokenExpiresAt: null, expired: false, scopes: [] };
   }
   const row = await getConnectionRow(businessId);

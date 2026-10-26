@@ -1,15 +1,15 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getEnv } from "@/lib/env";
 import { isInternalUser, type AccountIdentity } from "@/lib/internal-accounts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MetaCredentials } from "./client";
+import { decryptMetaToken, fromPostgresBytea } from "./token-store";
 import type { Capability, ConnectionDTO } from "./connect-contracts";
 
 /**
  * A managed business's child ad account and Page under AdBrain's parent business (2-Tier, #518).
- * Campaign calls run on the parent system user's token (#520) with the child's own ad account and
- * Page; customers with their own OAuth connection never get here (#525). Off unless
+ * Campaign calls run on the child's own system-user token (#624), never the parent's, with the child's
+ * own ad account and Page; customers with their own OAuth connection never get here (#525). Off unless
  * MANAGED_ACCOUNTS_ENABLED; the ledger is `managed_meta_accounts` (#519).
  */
 /** The columns of #519's `managed_meta_accounts` this module relies on (contract-tested against its migration). */
@@ -28,6 +28,8 @@ const managedRowSchema = z.object({
   funding_state: z.string().min(1),
   // The ad account can't change once set (#519's trigger); a Page change is caught by campaign bindings.
   generation: z.number().int().nonnegative().safe().optional().default(1),
+  // #567: the child system user's token in private.meta_tokens, stored for this business only.
+  manager_token_id: z.string().uuid().nullable().optional().default(null),
 });
 export type ManagedAccount = z.infer<typeof managedRowSchema>;
 
@@ -120,11 +122,24 @@ export function managedConnection(businessId: string, account: ManagedAccount): 
 }
 
 /**
- * Credentials for a managed account with an ad account and Page, or null; never another business's
- * or an OAuth token. What each purpose may do is checked by the caller's capabilities.
+ * Credentials for a managed account with an ad account and Page, or null; never another business's,
+ * an OAuth or the parent's token (#624: the parent token is for provisioning and re-mint only). A
+ * missing, revoked, expired or unreadable child token fails closed. What each purpose may do is
+ * checked by the caller's capabilities.
  */
-export function managedCredentials(account: ManagedAccount): MetaCredentials | null {
-  const token = getEnv().META_PARENT_SYSTEM_TOKEN;
-  if (!hasManagedAssets(account) || !token) return null;
-  return { adAccountId: account.ad_account_id, pageId: account.page_id, accessToken: token };
+export async function managedCredentials(account: ManagedAccount): Promise<MetaCredentials | null> {
+  if (!hasManagedAssets(account) || !account.manager_token_id) return null;
+  try {
+    const { data, error } = await createAdminClient().rpc("meta_token_get", { p_token_id: account.manager_token_id, p_business_id: account.business_id });
+    const row = data?.[0];
+    if (error || !row || row.id !== account.manager_token_id || row.business_id !== account.business_id || row.revoked_at
+      || [row.expires_at, row.data_access_expires_at].some((at) => at && new Date(at).getTime() <= Date.now())) return null;
+    const accessToken = decryptMetaToken({
+      ciphertext: fromPostgresBytea(row.ciphertext), nonce: fromPostgresBytea(row.nonce),
+      authTag: fromPostgresBytea(row.auth_tag), keyId: row.key_id, formatVersion: row.format_version,
+    }, { tokenId: row.id, businessId: row.business_id });
+    return { adAccountId: account.ad_account_id, pageId: account.page_id, accessToken };
+  } catch {
+    return null;
+  }
 }

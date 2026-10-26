@@ -23,7 +23,40 @@ export async function renderStoryAd(generation: unknown): Promise<Uint8Array | n
   // Keep the photo clear of the words: text on top puts the photo at the bottom, and the reverse.
   const spare = height - fittedHeight;
   const top = design.layout === "top" ? spare : design.layout === "bottom" ? 0 : Math.round(spare / 2);
-  const background = await sharp(backdrop).composite([{ input: fitted, left: 0, top }]).png().toBuffer();
-  const spec: AdDesignSpec = { ...design, format: "story", width, height, backgroundUrl: `data:image/png;base64,${background.toString("base64")}` };
+  // JPEG: a tenth of the PNG's size, so the composite decodes it about a third faster (#499).
+  const background = await sharp(backdrop).composite([{ input: fitted, left: 0, top }]).jpeg({ quality: 90 }).toBuffer();
+  const spec: AdDesignSpec = { ...design, format: "story", width, height, backgroundUrl: `data:image/jpeg;base64,${background.toString("base64")}` };
   return renderCompositeAd(spec);
+}
+
+/**
+ * Starts every ad's 9:16 render at once and returns one promise per ad, each settling to the image
+ * or null: on a render error, or for any still rendering when `budgetMs` runs out (reported once).
+ * Callers await each only when they need it, so the renders overlap other work.
+ */
+export function renderStoriesWithin(
+  generations: unknown[],
+  budgetMs: number,
+  onFallback: (code: "error" | "timeout") => void,
+  render: (generation: unknown) => Promise<Uint8Array | null> = renderStoryAd,
+): Promise<Uint8Array | null>[] {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let reportedTimeout = false;
+  const deadline = new Promise<void>(resolve => { timer = setTimeout(resolve, budgetMs); });
+  const renders = generations.map(generation => render(generation).catch(() => {
+    onFallback("error");
+    return null;
+  }));
+  void Promise.all(renders).finally(() => clearTimeout(timer));
+  return renders.map(rendering => {
+    let settled = false;
+    void rendering.finally(() => { settled = true; });
+    return Promise.race([rendering, deadline.then(() => {
+      if (!settled && !reportedTimeout) {
+        reportedTimeout = true;
+        onFallback("timeout");
+      }
+      return null;
+    })]);
+  });
 }
