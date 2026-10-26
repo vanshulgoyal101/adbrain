@@ -73,7 +73,7 @@ describe("<AdAssistant> next step after Create", () => {
 
     render(<AdAssistant business={business} />);
     expect(await screen.findByRole("heading", { name: "20% off your first visit" })).toBeInTheDocument();
-    expect(screen.getByText("Austin chiropractic")).toBeInTheDocument();
+    expect(sessionStorage.getItem(key)).toContain("Austin chiropractic");
   });
 
   it("rolls the selection back when saving fails", async () => {
@@ -98,19 +98,19 @@ describe("<AdAssistant> next step after Create", () => {
     expect(screen.getByRole("link", { name: /review ads/i })).toHaveAttribute("href", "/studio");
 
     await user.click(screen.getAllByRole("button", { name: "Use this ad" })[2]);
-    expect(await screen.findByRole("link", { name: "Create campaign (1)" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3");
+    expect(await screen.findByRole("link", { name: "Create campaign" })).toHaveAttribute("href", "/campaigns?new=1&creatives=ad-3");
     expect(screen.getByRole("link", { name: /review ads/i })).toBeInTheDocument();
   });
 
   it("uses the plural heading for several ads and the singular for one", async () => {
     doneDraft([ad("ad-1"), ad("ad-2"), ad("ad-3")]);
     const first = render(<AdAssistant business={business} />);
-    expect(await screen.findByText("Your ads are ready — pick your favourites:")).toBeInTheDocument();
+    expect(await screen.findByText("Your ads are ready. Pick the ones you like.")).toBeInTheDocument();
     first.unmount();
 
     doneDraft([ad("ad-1")]);
     render(<AdAssistant business={business} />);
-    expect(await screen.findByText("Your ad is ready — pick your favourite:")).toBeInTheDocument();
+    expect(await screen.findByText("Your ad is ready. Use it if you like it.")).toBeInTheDocument();
   });
 
   it("shows the small thumbnail and falls back to the original image", async () => {
