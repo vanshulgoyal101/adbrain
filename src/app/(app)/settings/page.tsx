@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Building2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -85,15 +85,17 @@ export default async function SettingsPage({
     <div className="max-w-2xl space-y-6 xl:max-w-6xl">
       <PageHeader
         title="Settings"
-        description="Manage publishing connections and the safety limits that protect your advertising budget."
+        description="Your Meta connection, spending limits and data."
       />
       <div className="space-y-6 xl:grid xl:grid-cols-2 xl:items-start xl:gap-6 xl:space-y-0">
         <div className="min-w-0 space-y-6">
           <Suspense fallback={<SettingsLoading label="Meta connection" />}>
-            <ConnectionSettings businessId={business.id} searchParams={searchParams} />
-          </Suspense>
-          <Suspense fallback={<SettingsLoading label="WhatsApp chat ads" />}>
-            <WhatsAppStatusSection businessId={business.id} />
+            {/* #847: WhatsApp sits with the Meta connection it depends on, above Billing. */}
+            <ConnectionSettings businessId={business.id} searchParams={searchParams} whatsapp={
+              <Suspense fallback={<SettingsLoading label="WhatsApp chat ads" />}>
+                <WhatsAppStatusSection businessId={business.id} />
+              </Suspense>
+            } />
           </Suspense>
         </div>
         <div className="min-w-0 space-y-6">
@@ -133,9 +135,10 @@ function SettingsLoading({ label }: { label: string }) {
   </section>;
 }
 
-async function ConnectionSettings({ businessId, searchParams }: {
+async function ConnectionSettings({ businessId, searchParams, whatsapp }: {
   businessId: string;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  whatsapp: ReactNode;
 }) {
   // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
   const mode = await fundingMode(businessId).catch(() => null);
@@ -157,6 +160,7 @@ async function ConnectionSettings({ businessId, searchParams }: {
           <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
         </Alert>
       )}
+      {whatsapp}
       <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance} />
     </>
