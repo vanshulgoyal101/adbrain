@@ -31,22 +31,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
 	labelled `decision`. Need the CTO? Label `owner:cto`. Blocked on the owner? Label
 	`waiting-owner`; only the CEO asks the owner, in one batched list.
-- **Doorbell rule** (owner, Oct 26: messages sat unread while chats waited).
-	GitHub holds the message; the receiver's chat gets a one-line **doorbell**.
-	1. Write the ask or handoff on the issue/PR first, as above.
-	2. Ring the receiver's chat (links in pinned #819) with `send_message`:
-		`→ QA 2: T+0 please, #499 (campaign 1202…)`. Check its state with
-		`get_session_context` first: **busy** (in a turn, including a waiter run) →
-		`delivery: "steer"`; **idle** (turn complete) → `queue`, which starts it at
-		once. Never queue to a busy chat: it isn't read until the turn ends, which
-		can be up to 2 h in a waiter.
-	3. Don't stack messages. A newer instruction replaces your pending one
-		(`operation: "replace"`) or cancels it (`"cancel"`); one doorbell per handoff.
-	4. A doorbell is self-contained: who, what, where (issue link), by when. No status
-		chatter.
-	5. **Never end a turn silently.** Before stopping, either run your waiter or post
-		`→ <Role>` for what's next. A chat that ends its turn with work left goes idle
-		until someone rings it.
+- **GitHub queue first; direct chat messages rarely** (owner, Oct 26). Work and
+	handoffs go on GitHub: the `owner:<role>` label plus a `→ <Role>:` comment on the
+	issue or PR. The receiver's `wait-for-work` wakes on that. Messages sent straight
+	into another chat get folded into its running turn or sit unread, so they are not
+	a work channel.
+	Send a direct chat message (`send_message`, links in pinned #819) **only** to:
+	1. wake a chat that is idle (turn complete, no waiter running) when it has queued
+		work: one line pointing at the issue, `queue` delivery;
+	2. stop a chat doing something harmful or obsolete right now (P0), with `steer`.
+	Never stack messages; replace or cancel a pending one. **Never end a turn
+	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
