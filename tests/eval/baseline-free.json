@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "ranAt": "2026-10-26T07:59:21.857Z",
+  "commit": "885899c",
+  "settings": {
+    "profile": "free",
+    "textModel": "gemini-3.8-flash",
+    "imageModel": "pollinations/flux",
+    "judge": "google",
+    "judgeModel": "gemini-3.8-flash",
+    "schedule": "serial",
+    "baseline": "tests/eval/baseline-free.json",
+    "gateCases": [
+      "cedar-ridge-en",
+      "solaride-factory-hi"
+    ],
+    "judgeByDefault": false,
+    "deterministic": true,
+    "repeat": 1
+  },
+  "judgeCalibration": null,
+  "spentUsd": 0,
+  "summary": {
+    "runs": 2,
+    "fullBatchRate": 0.5,
+    "adsSaved": 5,
+    "adsExpected": 6,
+    "conceptsSaved": 5,
+    "conceptsExpected": 6,
+    "providerFailures": 1,
+    "firstTryRate": 0.6,
+    "offerInFoldRate": 0.6667,
+    "scriptRate": 1,
+    "judgeCopy": 0,
+    "judgeImage": 0,
+    "inventedClaimRate": 0,
+    "imageTextErrorRate": 0,
+    "costPerRunUsd": 0,
+    "spentUsd": 0,
+    "wallMsP50": 200026,
+    "wallMsP90": 269998,
+    "rejectedRules": {
+      "schema:headline:too_big": 2,
+      "schema:visual.textPlacement:invalid_value": 1,
+      "sourceQuotes": 1,
+      "other": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "cedar-ridge-en",
+      "language": "en",
+      "saved": 3,
+      "expected": 3,
+      "failures": [],
+      "ads": [
+        {
+          "angle": "value",
+          "headline": "Start with a $49 exam",
+          "primaryText": "Skip the guesswork. Your first visit includes a digital posture scan.\n\nSee what your spine is telling you. Book your same-day appointment today.",
+          "cta": "Book Now",
+          "textModels": [
+            "gemini-3.8-flash",
+            "qwen/qwen3.8-27b",
+            "gemini-3.8-flash",
+            "qwen/qwen3.8-27b"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "schema:headline:too_big",
+            "schema:visual.textPlacement:invalid_value"
+          ],
+          "offerInFold": false,
+          "scriptOk": true,
+          "costUsd": 0
+        },
+        {
+          "angle": "problem",
+          "headline": "Feel better from the first step",
+          "primaryText": "Chronic stiffness? The $49 new-patient exam fits into your Austin week.\n\nBook a same-day appointment to see what we can do.\n\nWe include a digital posture scan in that first visit.",
+          "cta": "Book Now",
+          "textModels": [
+            "gemini-3.8-flash",
+            "qwen/qwen3.8-27b"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0
+        },
+        {
+          "angle": "offer",
+          "headline": "New here? Start with $49.",
+          "primaryText": "The $49 new-patient exam breaks down what’s going on with your back.\n\nKnow exactly what to expect before you commit.\n\nSame-day visits available for new patients.",
+          "cta": "Get Quote",
+          "textModels": [
+            "gemini-3.8-flash",
+            "qwen/qwen3.8-27b"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": true,
+          "scriptOk": true,
+          "costUsd": 0
+        }
+      ],
+      "costUsd": 0,
+      "wallMs": 200026
+    },
+    {
+      "id": "solaride-factory-hi",
+      "language": "hi",
+      "saved": 2,
+      "expected": 3,
+      "failures": [
+        {
+          "angle": "offer",
+          "stage": "provider",
+          "rules": [
+            "schema:headline:too_big",
+            "other"
+          ],
+          "issues": [
+            "Provider attempt could not be confirmed"
+          ]
+        }
+      ],
+      "ads": [
+        {
+          "angle": "value",
+          "headline": "31 दिसंबर के बाद लागत ₹10,000+/kW",
+          "primaryText": "31 दिसंबर के बाद लागत ₹10,000+/kW हो जाएगी। अब इंस्टॉलें।\n\nफ्री साइट सर्वे बुक करें।",
+          "cta": "Book Now",
+          "textModels": [
+            "gemini-3.8-flash",
+            "qwen/qwen3.8-27b"
+          ],
+          "attempts": 1,
+          "firstTry": true,
+          "rejectedRules": [],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0
+        },
+        {
+          "angle": "problem",
+          "headline": "बढ़ती लागत से फैक्ट्री को बचाएं",
+          "primaryText": "31 दिसंबर से नॉन-DCR सोलर पैनल बंद हो रहे हैं और लागत ₹10,000/kW से ज़्यादा बढ़ जाएगी।\nडेडलाइन से पहले सोलर इंस्टॉल करवाएं और भारी खर्च से बचें।\nफ्री साइट सर्वे के लिए आज ही संपर्क करें।",
+          "cta": "Book Now",
+          "textModels": [
+            "gemini-3.8-flash",
+            "qwen/qwen3.8-27b",
+            "gemini-3.8-flash"
+          ],
+          "attempts": 2,
+          "firstTry": false,
+          "rejectedRules": [
+            "sourceQuotes"
+          ],
+          "offerInFold": null,
+          "scriptOk": true,
+          "costUsd": 0
+        }
+      ],
+      "costUsd": 0,
+      "wallMs": 269998
+    }
+  ]
+}
