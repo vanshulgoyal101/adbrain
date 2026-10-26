@@ -47,15 +47,15 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged }: {
   }
 
   return (
-    <section aria-label="Real enquiries" className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3">
+    <section aria-label="Real enquiries" className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="text-lg font-bold text-slate-900">{formatNumber(enquiries)}</p>
+          <p className="text-lg font-semibold tabular-nums text-slate-900">{formatNumber(enquiries)}</p>
           <p className="text-xs text-slate-500">Real enquiries</p>
         </div>
         <div>
-          <p className="text-lg font-bold text-slate-900">{cost === null ? "—" : formatMoney(cost)}</p>
-          <p className="text-xs text-slate-500">Cost / real enquiry</p>
+          <p className="text-lg font-semibold tabular-nums text-slate-900">{cost === null ? "—" : formatMoney(cost)}</p>
+          <p className="text-xs text-slate-500">Per real enquiry</p>
         </div>
       </div>
       <p className="text-xs text-slate-500">Not every chat is a customer. Add each real enquiry from these WhatsApp chats.</p>
@@ -77,7 +77,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged }: {
           <Button type="button" size="sm" variant="outline" onClick={() => { setOpen(true); setSaved(false); }}>
             <Plus className="h-4 w-4" aria-hidden="true" /> Add enquiry
           </Button>
-          {saved && <p role="status" className="text-sm text-emerald-700">Saved to Enquiries.</p>}
+          {saved && <p role="status" className="text-sm text-blue-700">Saved to Enquiries.</p>}
         </div>
       )}
     </section>
