@@ -227,6 +227,21 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(writes()).toHaveLength(1);
   });
 
+  it("rebuilds a WhatsApp ad set end to end and moves the stored ids to the new ad set and ad", async () => {
+    const adId = (whatsappTape as Exchange[]).find(exchange => exchange.path.endsWith("/copies"))!.path.split("/")[0];
+    const scene = scenario(whatsappTape as Exchange[], adId);
+    const newAdSetId = ((whatsappTape as Exchange[]).find(exchange => exchange.method === "POST" && /^act_\d+\/adsets$/.test(exchange.path) && (exchange.body as { id?: string }).id)!.body as { id: string }).id;
+    const newAdId = ((whatsappTape as Exchange[]).find(exchange => exchange.path.endsWith("/copies"))!.body as { copied_ad_id: string }).copied_ad_id;
+    stored(scene);
+    replay(scene.tape);
+    const { status, body } = await edit();
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, result: { count: 1, adSets: [{ adSetId: newAdSetId, mode: "rebuild", previousAdSetId: scene.adSetId }] } });
+    expect(graph.pending).toEqual([]);
+    expect(mirror()).toMatchObject({ meta_adset_id: newAdSetId, meta_ad_ids: [newAdId] });
+    expect(mirror().raw).toMatchObject({ metaResult: { adSetIds: [newAdSetId], adIds: [newAdId] } });
+  });
+
   it("patches an ad set without interests in place and keeps the ids", async () => {
     const scene = patch();
     stored(scene);
