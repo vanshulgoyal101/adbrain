@@ -132,6 +132,23 @@ describe("POST /api/campaigns/preflight", () => {
     }));
   });
 
+  // #688: the event names every blocker's reason, not one shared PREFLIGHT_BLOCKED.
+  it("records every blocker reason on a rejected review", async () => {
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
+      execute({
+        readActiveLeadForm: vi.fn().mockResolvedValue(null),
+        resolveGeoTargeting: vi.fn().mockResolvedValue({ matched: [{ label: "Jaipur" }], unresolved: [], targeting: {} }),
+      }),
+    );
+    const { POST } = await import("@/app/api/campaigns/preflight/route");
+    const body = await (await POST(request({ businessId, draftId, draftVersion: 1 }))).json();
+    const reasons = body.data.blockers.map((blocker: { reason: string }) => blocker.reason);
+    expect(reasons).toContain("REVIEW_NO_LEAD_FORM");
+    expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({
+      name: "campaign.review", outcome: "rejected", attributes: expect.objectContaining({ blockerCodes: reasons, errorCode: reasons[0], failedCount: reasons.length }),
+    }));
+  });
+
   it("rejects a stale draft version before provider-dependent loaders", async () => {
     const { POST } = await import("@/app/api/campaigns/preflight/route");
     const response = await POST(request({ businessId, draftId, draftVersion: 2 }));

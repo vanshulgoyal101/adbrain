@@ -197,6 +197,16 @@ describe("<BrandForm> prefill", () => {
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
   });
 
+  // #681 (QA stranger walk): after Save, the next step is right beside it, not a hunt through the nav.
+  it("offers Create ads next to Saved, only while the save is current", async () => {
+    render(<BrandForm business={business()} />);
+    expect(screen.queryByRole("link", { name: "Next: Create ads" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    expect(await screen.findByRole("link", { name: "Next: Create ads" })).toHaveAttribute("href", "/create");
+    fireEvent.change(screen.getByLabelText("Description"), { target: { value: "New unsaved description" } });
+    expect(screen.queryByRole("link", { name: "Next: Create ads" })).not.toBeInTheDocument();
+  });
+
   it("preserves an in-flight edit until its own save succeeds", async () => {
     let finishSave!: (result: { ok: boolean }) => void;
     saveBusiness.mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));

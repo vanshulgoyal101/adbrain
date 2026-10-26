@@ -88,6 +88,7 @@ import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySn
 import { activationWarnings } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
+import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { cn, timeAgo } from "@/lib/utils";
@@ -184,6 +185,15 @@ function keptLeadForm(current: string, forms: { id: string }[]): string {
   return forms.length === 1 ? forms[0].id : "";
 }
 
+/** What a finished results refresh tells the owner (#671): new numbers, or none since the last fetch. */
+function refreshNotice(previous: CampaignResult | undefined, next: CampaignResult | undefined): string {
+  const keys = ["impressions", "clicks", "leads", "spend", "conversations", "whatsapp_opens"] as const;
+  if (!next) return "Checked just now: Meta has no results for this campaign yet.";
+  if (!previous || keys.some(key => (previous[key] ?? null) !== (next[key] ?? null))) return "Results updated just now.";
+  const since = new Date(previous.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return `Checked just now: no new results since ${since}.`;
+}
+
 function needsAudiencePlan(input: AudiencePlanInput): boolean {
   return input.targeting.age?.mode === "ai" || !input.targeting.audience;
 }
@@ -272,6 +282,8 @@ function BusinessCampaigns({
   }
   // #662: a card action's failure shows on that card, where the owner tapped (the page banner is off-screen on a phone).
   const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
+  // #671: a refresh always answers on the card, even when Meta's numbers didn't move.
+  const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [askConfirm, confirmDialog] = useConfirm();
@@ -368,7 +380,7 @@ function BusinessCampaigns({
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const syncStorageKey = `campaign-sync:${scope}:${adAccountId}`;
   const syncCursorRef = useRef<string | null>(null);
-  const syncSkippedRef = useRef(0);
+  const syncSkippedRef = useRef<{ count: number; named: SkippedCampaign[] }>({ count: 0, named: [] });
   const selectedLeadForm = availableForms.find((form) => form.id === leadFormId);
   const plannedAreas = includedNames.split("\n").map((value) => value.trim()).filter(Boolean);
   const plannedExclusions = excludedNames.split("\n").map((value) => value.trim()).filter(Boolean);
@@ -656,18 +668,20 @@ function BusinessCampaigns({
         nextCursor?: string | null;
         pageCursor?: string | null;
         skipped?: number;
+        skippedCampaigns?: SkippedCampaign[];
       };
       if (res.ok && Array.isArray(data.campaigns)) {
         replaceCampaignPage(data.campaigns, data.pageCursor ?? null);
-        syncSkippedRef.current = (cursor ? syncSkippedRef.current : 0) + (data.skipped ?? 0);
+        const before = cursor ? syncSkippedRef.current : { count: 0, named: [] };
+        syncSkippedRef.current = { count: before.count + (data.skipped ?? 0), named: [...before.named, ...(data.skippedCampaigns ?? [])] };
         syncCursorRef.current = data.nextCursor ?? null;
         if (!data.nextCursor) {
           const completedAt = new Date();
           setLastSynced(completedAt);
           saveCampaignSyncTime(syncStorageKey, completedAt.getTime());
         }
-        const skippedNotice = syncSkippedRef.current
-          ? ` ${syncSkippedRef.current} campaign(s) could not be imported and were left unchanged.` : "";
+        const skippedNotice = syncSkippedRef.current.count
+          ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count)}` : "";
         setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
       } else {
         setError(data.error ?? "Sync failed. Please try again.");
@@ -1000,6 +1014,8 @@ function BusinessCampaigns({
     setRefreshingId(id);
     clearErrors();
     setCardError(null);
+    setCardNotice(null);
+    const previous = results[id];
     try {
       const res = await fetch(`/api/campaigns/${id}/refresh`, {
         method: "POST",
@@ -1013,6 +1029,7 @@ function BusinessCampaigns({
       };
       if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
+        setCardNotice({ id, message: refreshNotice(previous, data.result) });
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
         if (data.review) setReviews((p) => ({ ...p, [id]: data.review! }));
         if (data.protectionConfirmed === false) setCardError({ id, message: "Results refreshed, but spend protection could not be verified. Check campaign delivery in Meta." });
@@ -1943,6 +1960,7 @@ function BusinessCampaigns({
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
                     {resumeElsewhere ? <p className="text-sm text-slate-600">{RESUME_IN_ADS_MANAGER}</p> : null}
                     {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">{cardError.message}</p> : null}
+                    {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
                     {!r && (
                       <p className="text-sm text-slate-500">
                         No results yet.{c.meta_campaign_id ? " Refresh results to get Meta's latest numbers." : ""}

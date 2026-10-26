@@ -85,11 +85,11 @@ describe("verified campaign sync", () => {
     expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ meta_adset_id: "set" }));
   });
 
-  it("reports unmatched campaigns without saving them", async () => {
-    mocks.readBoundCampaign.mockResolvedValue(null);
-    mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign" }], nextCursor: "next-page" });
+  it("reports unmatched campaigns by name and reason without saving them (#671)", async () => {
+    mocks.readBoundCampaign.mockResolvedValue({ skip: "capped" });
+    mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign", name: "Capped trial", status: "PAUSED" }], nextCursor: "next-page" });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1, nextCursor: "next-page" });
+    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Capped trial", reason: "capped" }], nextCursor: "next-page" });
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
@@ -111,7 +111,7 @@ describe("verified campaign sync", () => {
   it.each(["DELETED", "ARCHIVED", "UNKNOWN"])("does not import %s campaigns as paused", async (status) => {
     mocks.listCampaignsPage.mockResolvedValue({ campaigns: [{ id: "campaign", status }], nextCursor: null });
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1 });
+    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: null, reason: "not_running" }] });
     expect(mocks.readBoundCampaign).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
   });
@@ -119,7 +119,7 @@ describe("verified campaign sync", () => {
   it("preserves a known Page binding even when the stored account ID is missing", async () => {
     mocks.existing = { id: "stored", meta_ad_account_id: null, meta_page_id: "other" };
     const { POST } = await import("@/app/api/campaigns/sync/route");
-    expect(await (await POST()).json()).toMatchObject({ skipped: 1 });
+    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Local leads", reason: "other_connection" }] });
     expect(mocks.update).not.toHaveBeenCalled();
   });
 

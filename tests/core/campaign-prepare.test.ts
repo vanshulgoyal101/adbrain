@@ -3,6 +3,8 @@ import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
 import fallbackReplies from "./fixtures/planner/fallback-replies.json";
 import { parseJSON } from "@/lib/llm";
 import chiropracticInterests from "./fixtures/meta/interests-chiropractic.json";
+import plannerV6Interests from "./fixtures/meta/interests-planner-v6.json";
+import groqMetaInterestNames from "./fixtures/planner/groq-meta-interest-names.json";
 import { MetaClient } from "@/lib/meta/client";
 import { rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
 
@@ -163,6 +165,45 @@ describe("core: Prepare audience", () => {
     expect(rationale).not.toMatch(/professionals|Interests were selected/);
     expect(rationale).toMatch(/Meta couldn't match: Office workers, Posture, Fitness and wellness\. Interests targeted: Parenting\.$/);
     expect(rationaleForMatchedInterests(issue174Rationale, ["Parenting"], [])).toBe(issue174Rationale);
+  });
+
+  // #686: a ready plan is logged `success`, with only the counts of suggested and unresolved interests.
+  it("logs each Prepare outcome with interest counts on the recorded Graph search", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const planEvents = () => info.mock.calls.map(([entry]) => String(entry)).filter((entry) => entry.includes('"name":"campaign.plan"'))
+      .map((entry) => JSON.parse(entry) as { outcome: string; attributes: Record<string, unknown> });
+    const reply = (interests: string[]) => mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan: { ...plannerPlan, interests } }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
+
+    reply(["Chiropractic", "Sports medicine", "Posture", "Physical therapy", "Wellness"]);
+    replayMeta(chiropracticInterests);
+    expect((await prepare()).body.fallback).toBeUndefined();
+    reply(["Chiropractic", "Posture"]);
+    expect((await prepare()).body.fallback).toBe(true);
+    mocks.meta.mockRejectedValue(new Error("Meta unavailable"));
+    reply(["Chiropractic", "Posture"]);
+    expect((await prepare()).body.fallback).toBeUndefined();
+
+    expect(planEvents().map(({ outcome, attributes: { count, failedCount, errorCode } }) => ({ outcome, count, failedCount, errorCode }))).toEqual([
+      { outcome: "success", count: 5, failedCount: 4, errorCode: undefined },
+      { outcome: "partial", count: 2, failedCount: 2, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" },
+      { outcome: "partial", count: 2, failedCount: undefined, errorCode: "PLAN_AUDIENCE_INTEREST_LOOKUP_FAILED" },
+    ]);
+  });
+
+  // #686: the planner names interests the way Meta does (recorded Groq reply on production's Cedar Ridge
+  // facts, Oct 26; before this prompt, 'Chiropractic', 'Back pain' and 'Physical therapy' matched nothing).
+  it("asks for Meta-named interests, and Meta's recorded search keeps four of the five suggested", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    mocks.complete.mockResolvedValue({ text: groqMetaInterestNames.text, provider: "groq", model: groqMetaInterestNames.model, usage });
+    replayMeta(plannerV6Interests);
+    const { status, body } = await prepare();
+    expect(status).toBe(200);
+    expect(body.fallback).toBeUndefined();
+    expect(body.targeting.audience.interestNames).toEqual(["Physical fitness", "Running", "Yoga", "Parenting"]);
+    const [messages] = mocks.complete.mock.calls[0] as [{ role: string; content: string }[]];
+    expect(messages[0].content).toContain("not professions, services, medical specialties, symptoms or conditions");
+    const plan = info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"campaign.plan"'));
+    expect(JSON.parse(plan!)).toMatchObject({ outcome: "success", attributes: { count: 5, failedCount: 1 } });
   });
 
   it("explains a broad audience when Meta has none of the interests", async () => {

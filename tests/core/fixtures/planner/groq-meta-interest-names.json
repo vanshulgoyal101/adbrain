@@ -1,0 +1,6 @@
+{
+  "recordedAt": "2026-10-26T08:40:36.521Z",
+  "promptVersion": "campaign-planner-v6",
+  "model": "qwen/qwen3.8-27b",
+  "text": "{\n  \"ready\": true,\n  \"plan\": {\n    \"name\": \"Cedar Ridge leads\",\n    \"daily_budget_rupees\": 500,\n    \"lead_form_id\": \"form-1\",\n    \"creative_ids\": [\n      \"e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1\"\n    ],\n    \"age_min\": 30,\n    \"age_max\": 60,\n    \"city_scope\": \"city_only\",\n    \"radius_km\": null,\n    \"interests\": [\n      \"Physical fitness\",\n      \"Running\",\n      \"Yoga\",\n      \"Parenting\",\n      \"Office work\"\n    ],\n    \"special_ad_category\": \"none\",\n    \"locations\": [\n      \"Austin, Texas\",\n      \"Round Rock\",\n      \"Cedar Park\"\n    ],\n    \"excluded_locations\": [],\n    \"destination\": \"instant_form\",\n    \"rationale\": \"Targeting adults 30-60 in Austin, Round Rock, and Cedar Park aligns with the clinic's stated audience of desk workers, weekend athletes, and new parents. Interests like 'Physical fitness', 'Running', and 'Yoga' capture the active lifestyle segment, while 'Parenting' and 'Office work' address the specific demographic pain points of new parents and desk-bound professionals seeking posture care and injury rehab.\"\n  }\n}"
+}

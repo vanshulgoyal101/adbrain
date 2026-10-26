@@ -67,7 +67,7 @@ export interface PlannerInput {
   performance?: string;
 }
 
-export const PLANNER_PROMPT_VERSION = "campaign-planner-v5";
+export const PLANNER_PROMPT_VERSION = "campaign-planner-v6";
 export const plannerAnswerSchema = z.object({
   questionId: z.string().trim().min(1).max(80).optional(), topic: z.enum(plannerTopics).optional(),
   disposition: z.enum(["answered", "deferred"]).optional(),
@@ -168,6 +168,10 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "evidence-based: choose an explicit age range (65 means 65+), city_scope, and " +
         "one to five relevant general commercial interest names for detailed targeting in every plan. " +
         "Ground them in the advertised product, offer and business evidence, not a fixed industry template. " +
+        // #686: Meta has no interest named for a specialty or symptom ("Chiropractic", "Back pain").
+        "Name them as Meta's detailed-targeting interests are named: topics, hobbies, activities and life events " +
+        "people follow (for example 'Physical fitness', 'Home improvement', 'Running' or 'Small business'), " +
+        "not professions, services, medical specialties, symptoms or conditions, which Meta does not offer. " +
         "Never return an empty interests list in a ready plan. If relevant interests cannot be justified, " +
         "ask for the missing product or audience context instead of inventing interests. Never invent Meta IDs. " +
         "Default city_scope to city_only (no added radius; Meta defines the city area). " +

@@ -109,7 +109,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery,pause}` | Live Meta mutation (pause: campaign, ad sets and ads) + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
-| POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
+| POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/skippedCampaigns/nextCursor/pageCursor | Provider read + local imports; `skippedCampaigns` names each campaign left unchanged with a reason (`not_running`, `other_account`, `other_page`, `other_connection`, `lifetime_budget`, `capped`, `unsupported`); `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page; cached 10 min per business, Page and connection generation, `?fresh=1` re-reads Meta (#271) |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | GET | `/api/leads` | Filters/cursor -> `{leads,total,nextCursor}` | Owned saved enquiries only; no provider sync |
@@ -163,6 +163,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/cron/scheduler-health` | Cron Bearer auth | Read-only watchdog (#274): per job (`enforce-spend`, `sync-leads` every 15 min; `refresh-results` must succeed hourly) minutes since the last run and last successful run, from logged `http.request` events; `overdue` after twice the interval without a success; `ok:false` when any job is overdue |
 | GET | `/api/cron/meta-parent-health` | Cron Bearer auth | Read-only 2-Tier parent token check (#520): `GET /me` and the parent business with `META_PARENT_SYSTEM_TOKEN`; `{ok:true, configured:false}` when unset, `{configured, enabled, ok, businessVerified}` when it works, 503 with a Meta `errorCode` only when refused |
 | GET | `/api/cron/managed-health` | Cron Bearer auth | Read-only 2-Tier watchdog (#527): `{ok, accounts, byState, stuck:[{state, minutes, key}]}`; stuck = a non-final state (not `ready`/`offboarded`; `failed` included) unchanged for over 30 min; opaque 12-hex keys, no IDs |
+| GET | `/api/cron/core-scoreboard` | Cron Bearer auth | Read-only daily core scoreboard (#681): `?hours=` 1–168 (default 24) -> `{ok, hours, since, until, excluded:{events, aiCalls}, rows:[{step, now, target, met}], markdown}`; smoke left out by `smokeUserIds` in `src/lib/internal-accounts.json` (user first, the businesses it owns for background rows); aggregates only, no IDs; 400 bad window, 503 without details |
 | GET | `/api/cron/llm-credit` | Cron Bearer auth | Read-only OpenRouter credit (#449): `{ok, keys:[{index, limitUsd, remainingUsd, error?}], minRemainingUsd, thresholdUsd:0.5, low}`; never returns keys; 503 when OpenRouter refuses a key |
 | POST | `/api/internal/meta-traffic` | Bounded runner options | Allowlisted diagnostic reads; creation mode disabled |
 
@@ -583,7 +584,7 @@ nonnegative-safe-integer}`. Review data includes:
 | Field | Meaning |
 | --- | --- |
 | `draftId`, `draftVersion`, `connectionGeneration` | Reviewed concurrency identity |
-| `canCreatePaused`, `blockers` | Gate and actionable blocker list |
+| `canCreatePaused`, `blockers` | Gate and actionable blocker list; each Review blocker has a stable `reason` (`REVIEW_NO_WEBSITE`, `REVIEW_NO_LEAD_FORM`, … in `reviewBlockerReasons`) besides its API `code` |
 | `planHash` | 64 lowercase hex characters, or null while blocked |
 | `creativeHash` | Optional content hash used by current execution |
 | `currency` | `INR` |
@@ -806,7 +807,7 @@ Status DTO: `businessId`, `generation`, `authorization`, nullable `selected`,
 `reauth_required`, `revoked`. Selected assets: `metaBusinessId` (nullable),
 `adAccountId`, `accountName`, `pageId`, `pageName`, `currency`, `timezoneName`.
 Each capability has `state: available|blocked|unknown` and blockers. Blockers have
-`code,message,action`; recovery actions include reconnect, retry check, choose
+`code,message,action` (Review blockers add `reason`); recovery actions include reconnect, retry check, choose
 assets, contact admin, or an HTTPS Meta link. No tokens appear in these DTOs.
 
 Disconnect accepts `{businessId: UUID}`. A truly empty body retains primary-business

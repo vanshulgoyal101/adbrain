@@ -114,6 +114,24 @@ jobs:
               -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
+      - name: Core scoreboard (#681, once a day after 03:00Z)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: "681"
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          [ "$(date -u +%H)" -ge 3 ] || { echo "Before 03:00Z; posting later."; exit 0; }
+          [ "$(gh issue view "$ISSUE" -R "$GITHUB_REPOSITORY" --json state --jq .state)" = OPEN ] || { echo "#$ISSUE is closed."; exit 0; }
+          posted=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments?since=$(date -u +%F)T00:00:00Z&per_page=100" \
+            --jq '[.[] | select(.body | startswith("<!-- core-scoreboard -->")) | select(.created_at >= "'"$(date -u +%F)"'")] | length')
+          [ "$posted" = 0 ] || { echo "Already posted today."; exit 0; }
+          code=$(curl -sS --max-time 60 -o board.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/core-scoreboard") || code=000
+          [ "$code" = 404 ] && { echo "core-scoreboard not deployed yet"; exit 0; }
+          # Advisory: a missing scoreboard must not fail the scheduler.
+          [ "$code" = 200 ] || { echo "::warning::core-scoreboard HTTP $code"; exit 0; }
+          { printf '<!-- core-scoreboard -->\nDevOps (scheduled): '; jq -r '.markdown' board.json; } > board.md
+          gh issue comment "$ISSUE" -R "$GITHUB_REPOSITORY" --body-file board.md
       - name: OpenRouter credit (#449)
         if: always()
         env:

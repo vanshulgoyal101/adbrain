@@ -155,7 +155,8 @@ export function failedVariantUsage(
     attempt: index + 1,
     status: entry.status ?? "error",
     // #614: a provider failure keeps its own code; only a reply our checks rejected is a validation error.
-    errorCode: entry.failure ? `LLM_${entry.failure}` : error.name,
+    // #687: copy that passed is no error when only the image failed; the image rows carry that code.
+    errorCode: entry.failure ? `LLM_${entry.failure}` : error instanceof CreativeImageError ? undefined : error.name,
     ...(validation ? { metadata: { validationStage: validation.stage, validationRules: validation.rules } }
       : metadata && index === error.usage.length - 1 ? { metadata } : {}),
   }));

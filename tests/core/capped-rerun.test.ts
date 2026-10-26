@@ -69,6 +69,6 @@ describe("#197: a campaign stays manageable after one capped run", () => {
     replay(withCappedCopy(syncTape));
     const meta = new MetaClient(creds);
     const listed = (await meta.listCampaignsPage()).campaigns.find(campaign => campaign.id === campaignId)!;
-    expect(await meta.readBoundCampaign(listed)).toBeNull();
+    expect(await meta.readBoundCampaign(listed)).toEqual({ skip: "lifetime_budget" });
   });
 });

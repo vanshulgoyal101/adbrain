@@ -66,6 +66,10 @@ Brand context and explicitly selected campaign settings are supplied with histor
 Known single service areas/offers and manual settings do not need confirmation;
 exclusions default empty unless requested, and the planner recommends creatives
 and technical targeting rather than asking the owner for API IDs or ad jargon.
+`campaign-planner-v6` (#686) asks for interests named the way Meta names them
+(topics, hobbies, activities, life events), not professions, specialties or
+symptoms. On production's Cedar Ridge facts this took plans with no Meta match from
+1 in 5 to 0 in 5, and resolved interests from 30% to 84% (Solaride unchanged, 0 in 5).
 Goal interpretation remains model-driven, including natural-language city/radius
 requests; a prompt example is not a guarantee of correct interpretation.
 
@@ -105,6 +109,10 @@ creating a campaign. Preflight, approved-creative checks, ownership, special-cat
 restrictions, paused creation and explicit activation remain authoritative.
 The `campaign.interview` workflow event records fixed no-progress/limit codes,
 not conversation text. These are source claims, not deployed conversation results.
+The `campaign.plan` event is `success` for a ready plan, `partial` when it falls
+back (`PLAN_AUDIENCE_NO_META_INTERESTS`, questions, a failed interest lookup) and
+`failed` otherwise; `count` and `failedCount` are the suggested and unresolved
+interest counts, never the names (#686).
 
 ### Orchestration Reuse
 

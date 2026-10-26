@@ -1,6 +1,6 @@
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
-import type { SelectedAssets } from "@/lib/meta/connect-contracts";
+import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
 import { reviewWarnings } from "@/lib/campaign/plan-check";
 
@@ -91,8 +91,8 @@ export interface CanonicalReviewPayload {
 
 type ReviewBlocker = ReviewDTO["blockers"][number];
 
-function blocker(code: ReviewBlocker["code"], message: string, action: ReviewBlocker["action"] = null): ReviewBlocker {
-  return { code, message, action };
+function blocker(code: ReviewBlocker["code"], reason: ReviewBlockerReason, message: string, action: ReviewBlocker["action"] = null): ReviewBlocker {
+  return { code, reason, message, action };
 }
 
 function isAdvertiserWebsite(website: string | null): boolean {
@@ -164,12 +164,13 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   const { draft } = input;
 
   if (!input.connection?.selected) {
-    blockers.push(blocker("SETUP_REQUIRED", "Connect and select a Meta Page and ad account."));
+    blockers.push(blocker("SETUP_REQUIRED", "REVIEW_NO_META_CONNECTION", "Connect Facebook and choose your Page and ad account."));
   } else if (input.connection.selected.currency !== "INR") {
-    blockers.push(blocker("UNSUPPORTED_CURRENCY", "This campaign requires an INR ad account."));
+    blockers.push(blocker("UNSUPPORTED_CURRENCY", "REVIEW_CURRENCY", "Choose an ad account that pays in Indian rupees (INR)."));
   }
-  if (!input.connection?.canCreatePaused) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Meta has not confirmed paused campaign creation access."));
+  // No connection is one fix (connect), not two (#688).
+  if (input.connection && !input.connection.canCreatePaused) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_META_ACCESS", "Meta hasn't confirmed AdBrain can create campaigns in this ad account. Connect Facebook again and allow every permission it asks for."));
   }
 
   if (
@@ -186,40 +187,40 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
         !draft.creativeIds.includes(creative.id),
     )
   ) {
-    blockers.push(blocker("FORBIDDEN", "Every selected creative must belong to this business and be approved with an image and headline."));
+    blockers.push(blocker("FORBIDDEN", "REVIEW_CREATIVES", "Choose only approved ads from this business that have an image and a headline."));
   }
   if (draft.destination === "whatsapp") {
     if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
-      blockers.push(blocker("PREFLIGHT_BLOCKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
     }
   } else if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Choose an active lead form belonging to this business."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_LEAD_FORM", "Choose an active lead form from your Facebook Page in the Lead form field."));
   }
   if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
   }
   if (draft.dailyBudgetRupees <= 0) {
-    blockers.push(blocker("INVALID_INPUT", "Daily budget must be greater than zero before preparation."));
+    blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
   }
   const age = draft.targeting.age;
   if (age?.mode === "ai" || age?.min === undefined || age.max === undefined || age.min > age.max) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Generate or choose an explicit age range before reviewing the campaign."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AGE_RANGE", "Choose an age range, or let AdBrain recommend one, before reviewing."));
   }
   const location = draft.targeting.location;
   const radii = [location?.radiusKm, ...(location?.included ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm), ...(location?.excluded ?? []).filter((place) => place.type === "city").map((place) => place.radiusKm)];
   if (location?.cityScope !== "city_only" && radii.some((radius) => radius !== undefined && (radius < 17 || radius > 80))) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Meta city targeting requires a 17-80 km radius. Review the saved radius."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_RADIUS", "Set the city radius between 17 and 80 km; Meta allows nothing outside that range."));
   }
   if (location?.cityScope === "city_only" && [...(input.geo.location?.cities ?? []), ...(input.geo.excludedLocation?.cities ?? [])].some((city) => city.radius !== undefined || city.distance_unit !== undefined)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "City-only targeting unexpectedly includes a radius. Review the locations again."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_CITY_RADIUS", "\"City only\" came back from Meta with a radius. Choose the locations again."));
   }
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every selected service area or explicitly review nationwide targeting."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AREAS_UNRESOLVED", "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting."));
   }
   if (!draft.targeting.audience) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Generate AI detailed targeting before reviewing the campaign."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AUDIENCE", "Let AdBrain recommend the audience (Recommend audience) before reviewing."));
   } else if (draft.targeting.audience.interestNames.length && (input.geo.unresolvedInterests?.length || !input.geo.audienceInterests?.length)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "Resolve every audience interest with Meta or edit the audience plan."));
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_INTERESTS_UNRESOLVED", "Meta didn't recognise some audience interests. Edit or remove them."));
   }
 
   const adSetCount = draft.abTest ? 2 : 1;
