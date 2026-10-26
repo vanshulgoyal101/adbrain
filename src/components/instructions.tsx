@@ -37,8 +37,8 @@ export function Instructions({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <p className="text-sm text-slate-500">
-          Markdown instructions that guide how ads are written and designed.
-          Active files are fed into every generation.
+          Rules every ad follows, such as claims to avoid or words to use. Ads
+          use the ones marked Active.
         </p>
         {adding && (
           <InstructionEditor
@@ -47,7 +47,7 @@ export function Instructions({
           />
         )}
         {instructions.length === 0 && !adding && (
-          <p className="text-sm text-slate-400">No instruction files yet.</p>
+          <p className="text-sm text-slate-400">No instructions yet.</p>
         )}
         {instructions.map((i) => (
           <InstructionEditor
@@ -147,7 +147,7 @@ function InstructionEditor({
           }
         />
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={save} disabled={pending}>
+          <Button size="sm" variant="outline" onClick={save} disabled={pending}>
             {pending ? <Spinner /> : <Save className="h-4 w-4" />}
             Save
           </Button>

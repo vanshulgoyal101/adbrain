@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ICE_BREAKER_LIMITS, type WhatsAppOpening } from "@/lib/meta/client";
+import type { WhatsAppOpening } from "@/lib/meta/client";
+import { ICE_BREAKER_LIMITS } from "@/lib/meta/limits";
 
 /**
  * #840: a business's saved WhatsApp opening (`businesses.whatsapp_template`). New WhatsApp

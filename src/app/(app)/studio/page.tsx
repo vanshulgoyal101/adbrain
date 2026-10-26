@@ -67,10 +67,8 @@ export default async function StudioPage({
 
   return (
     <div>
-      <header className="border-b border-slate-200 pb-5">
-        <h1 className="text-3xl font-semibold text-slate-950">Review</h1>
-      </header>
-      <div className="mt-6">
+      <h1 className="text-2xl font-semibold text-slate-950">Review</h1>
+      <div className="mt-4">
         <Studio
           key={`${business.id}:${filter}:${params.creative ?? ""}`}
           business={business}

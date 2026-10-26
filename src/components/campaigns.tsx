@@ -51,6 +51,7 @@ import { CampaignChat } from "@/components/campaign-chat";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { EditBudgetDialog } from "@/components/edit-budget-dialog";
 import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
+import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
@@ -1124,6 +1125,7 @@ function BusinessCampaigns({
   // #773: the paused campaign whose audience is being edited.
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
   const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
+  const [adEdit, setAdEdit] = useState<Campaign | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
@@ -1979,6 +1981,15 @@ function BusinessCampaigns({
                 }}
               />
             )}
+            {adEdit && (
+              <EditAdDialog
+                campaign={adEdit}
+                campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
+                creatives={approved}
+                onClose={() => setAdEdit(null)}
+                onSaved={(message) => { setCardNotice({ id: adEdit.id, message }); setAdEdit(null); }}
+              />
+            )}
             {visibleCampaigns.map((c) => {
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
@@ -2077,6 +2088,11 @@ function BusinessCampaigns({
                             {c.meta_campaign_id && (c.status === "paused" || (c.status === "active" && budgetFormStart(c)?.capped)) && reviewableCampaign(c) && budgetFormStart(c) && (
                               <DropdownMenuItem data-product-event="campaign.edit_budget" onSelect={() => setBudgetEdit({ campaign: c, start: budgetFormStart(c)! })}>
                                 <IndianRupee className="h-4 w-4" aria-hidden="true" /> Edit budget
+                              </DropdownMenuItem>
+                            )}
+                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && (
+                              <DropdownMenuItem data-product-event="campaign.edit_ad" onSelect={() => setAdEdit(c)}>
+                                <Pencil className="h-4 w-4" aria-hidden="true" /> Edit ad words
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}
