@@ -123,15 +123,22 @@ jobs:
           code=$(curl -sS --max-time 30 -o access.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/access-requests") || code=000
           [ "$code" = 404 ] && { echo "access-requests not deployed yet"; exit 0; }
           # Public repo: an opaque key and hours only; the owner's name and number stay in the database.
-          echo "HTTP $code $(jq -c '{ok, requests: (.requests // [] | length), error}' access.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          echo "HTTP $code $(jq -c '{ok, requests: (.requests // [] | length), more, error}' access.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          # #725: at most 5 public issues a run; the rest wait for the next run, noted on the newest issue.
+          opened=0; waiting=$(jq -r '.more // 0' access.json 2>/dev/null); [[ "$waiting" =~ ^[0-9]+$ ]] || waiting=0; last=""
           for row in $(jq -r '.requests[]? | "\(.key):\(.hours)"' access.json 2>/dev/null); do
             IFS=: read -r key hours <<<"$row"
             [[ "$key" =~ ^[a-f0-9]{12}$ && "$hours" =~ ^[0-9]+$ ]] || continue
             seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
             [ "$seen" = 0 ] || continue
-            gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
-              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            if [ "$opened" -ge 5 ]; then waiting=$((waiting + 1)); continue; fi
+            opened=$((opened + 1))
+            last=$(gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
+              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")")
           done
+          if [ -n "$last" ] && [ "$waiting" -gt 0 ]; then
+            gh issue comment "$last" -R "$GITHUB_REPOSITORY" --body "$waiting more access requests are waiting; the next runs open them."
+          fi
           [ "$code" = 200 ]
       - name: Core scoreboard (#681, once a day after 03:00Z)
         if: always()
