@@ -12,10 +12,31 @@ import type { Creative } from "@/lib/types";
  * What a new owner sees on Campaigns before Facebook is connected (#336, CEO decision on #339):
  * share or download the approved ads today; launching opens after Meta's review, or on request.
  */
-export function ReadyAdsNextStep({ approved, phone }: { approved: Creative[]; phone: string | null }) {
+export function ReadyAdsNextStep({ approved, phone, businessId }: { approved: Creative[]; phone: string | null; businessId: string }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [requested, setRequested] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
+
+  // #725: "Request sent" only once the server has recorded it, so the team is sure to see it.
+  async function requestAccess() {
+    setRequesting(true);
+    setRequestError(null);
+    try {
+      const res = await fetch("/api/meta/access-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
+      if (!res.ok) throw new Error();
+      setRequested(true);
+    } catch {
+      setRequestError("Your request didn't send. Check your connection and try again.");
+    } finally {
+      setRequesting(false);
+    }
+  }
   const newest = approved[0];
 
   async function downloadAll() {
@@ -67,9 +88,10 @@ export function ReadyAdsNextStep({ approved, phone }: { approved: Creative[]; ph
         ) : (
           <>
             <p className="mt-1 text-sm leading-6 text-slate-600">We can switch on early access for your Facebook account. You approve every rupee before anything runs.</p>
-            <Button type="button" variant="ghost" className="mt-2 h-11 px-0 text-blue-700 hover:bg-transparent hover:underline" onClick={() => setRequested(true)} data-product-event="meta.access_request">
-              <Megaphone className="h-4 w-4" aria-hidden="true" /> Ask for Facebook access
+            <Button type="button" variant="ghost" className="mt-2 h-11 px-0 text-blue-700 hover:bg-transparent hover:underline" disabled={requesting} onClick={requestAccess} data-product-event="meta.access_request">
+              <Megaphone className="h-4 w-4" aria-hidden="true" /> {requesting ? "Sending request…" : "Ask for Facebook access"}
             </Button>
+            {requestError && <p role="alert" className="text-xs text-red-600">{requestError}</p>}
           </>
         )}
         <p className="mt-1 text-sm text-slate-600">
