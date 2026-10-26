@@ -1172,8 +1172,16 @@ async function verifyLeadCampaignLink(db, database) {
       { meta_lead_id: "new-lead", meta_campaign_id: "1201", form_id: "f1" },
     ]);
     assert.equal(second.imported, 1);
+    // The same lead twice in one batch must not fail the checkpoint (the old insert did nothing on it).
+    const third = await checkpoint(second.run.version, [
+      { meta_lead_id: "twice", meta_campaign_id: null, form_id: "f1" },
+      { meta_lead_id: "twice", meta_campaign_id: "1201", form_id: "f1" },
+      { meta_lead_id: "new-lead", meta_campaign_id: "1201", form_id: "f1" },
+      { meta_lead_id: "new-lead", meta_campaign_id: "1201", form_id: "f1" },
+    ]);
+    assert.equal(third.imported, 1);
     const links = Object.fromEntries((await db.query("select meta_lead_id, campaign_id from public.leads where business_id=$1", [business])).rows.map(row => [row.meta_lead_id, row.campaign_id]));
-    assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign });
+    assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign, twice: campaign });
   });
 }
 
