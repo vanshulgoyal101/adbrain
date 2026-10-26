@@ -9,7 +9,7 @@ set local statement_timeout = '30s';
 -- media link (media_asset_id) arrives with #744 phase 1, when its table exists.
 --
 -- ad_results: each ad's lifetime-to-date numbers from Meta's level=ad insights, one row per (campaign, ad,
--- period); the refresh job upserts it. An ad Meta hasn't delivered has a row with delivered = false and zeros.
+-- period; null period = lifetime to date); the refresh job upserts it. An ad Meta hasn't delivered has a row with delivered = false and zeros.
 -- No lead personal data. Both tables: owners read their own rows; only the service role writes. business_id
 -- must match the campaign's (composite FK), so a row can't be read through another tenant's business.
 -- The composite FKs need campaigns (business_id, id) unique; 20260926_campaign_integrity.sql added it, this keeps
@@ -43,6 +43,10 @@ create table if not exists public.ad_results (
   business_id uuid not null references public.businesses(id) on delete cascade,
   campaign_id uuid not null,
   meta_ad_id text not null check (meta_ad_id ~ '^[0-9]{1,30}$'),
+  -- Meta's ad name and status, so an ad without a campaign_ads link (older campaigns) still reads by name,
+  -- and an archived (rebuilt) ad shows as replaced.
+  ad_name text check (char_length(ad_name) <= 400),
+  effective_status text check (effective_status ~ '^[A-Z_]{1,40}$'),
   period_start date,
   period_end date,
   delivered boolean not null default false,

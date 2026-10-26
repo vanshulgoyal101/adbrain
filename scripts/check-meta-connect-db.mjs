@@ -1354,7 +1354,7 @@ async function verifyCampaignAdsAndResults(db, database) {
   await check(`${database}: per-ad results: owners read only their own, only the service role writes, rows stay on their campaign's business (#783)`, async () => {
     await as("service_role", null, async (session) => {
       await session.query("insert into public.campaign_ads(business_id,campaign_id,meta_ad_id,meta_creative_id,variant_index,position) values ($1,$2,'120253710068180526','2421940755245471',0,0),($3,$4,'120253710070870526',null,0,0)", [business, campaign, otherBusiness, otherCampaign]);
-      await session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id,period_start,period_end,delivered,impressions,link_clicks,conversations,spend_paise) values ($1,$2,'120253710068180526','2026-10-26','2026-10-26',true,1100,9,1,7030),($1,$2,'120253710006390526',null,null,false,0,0,0,0),($3,$4,'120253710070870526',null,null,true,10,1,0,1510)", [business, campaign, otherBusiness, otherCampaign]);
+      await session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id,ad_name,effective_status,period_start,period_end,delivered,impressions,link_clicks,conversations,spend_paise) values ($1,$2,'120253710068180526','Lower bills','ACTIVE','2026-10-26','2026-10-26',true,1100,9,1,7030),($1,$2,'120253710006390526',null,null,null,null,false,0,0,0,0),($3,$4,'120253710070870526',null,null,null,null,true,10,1,0,1510)", [business, campaign, otherBusiness, otherCampaign]);
       // The refresh upserts the lifetime row; an undelivered ad (no dates) is still one row (nulls not distinct).
       await session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id,delivered) values ($1,$2,'120253710006390526',false) on conflict (campaign_id,meta_ad_id,period_start,period_end) do update set synced_at = now()", [business, campaign]);
       for (const [sql, params, code] of [
@@ -1363,6 +1363,7 @@ async function verifyCampaignAdsAndResults(db, database) {
         ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'not-an-id')", [business, campaign], "23514"],
         ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,spend_paise) values ($1,$2,'2',-1)", [business, campaign], "23514"],
         ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,period_start,period_end) values ($1,$2,'3','2026-10-27','2026-10-26')", [business, campaign], "23514"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,effective_status) values ($1,$2,'4','archived; drop')", [business, campaign], "23514"],
         ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'120253710068180526')", [business, campaign], "23505"],
       ]) {
         await session.query("savepoint s");
