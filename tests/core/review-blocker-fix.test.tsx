@@ -205,6 +205,8 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     fireEvent.click(prepare);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Choose at least one ad to send to Meta.");
+    // #724 walk at 1440 px: below 11 ads the message sat ~440 px under the fold; it now leads the picker.
+    expect(alert.compareDocumentPosition(document.getElementById("campaign-ad-picker")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const firstAd = screen.getByRole("button", { name: creative.headline! });
     expect(firstAd).toHaveFocus();
     expect(firstAd).toHaveAttribute("aria-describedby", alert.id);
