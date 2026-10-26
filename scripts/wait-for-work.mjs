@@ -112,9 +112,12 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
+/** The Reviewer clears audits in minutes and picks its own from #681's failing rows when empty, so it isn't refilled. */
+export const SELF_SOURCING = new Set(["reviewer"]);
+
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
-  return WORKERS.filter((r) => counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
+  return WORKERS.filter((r) => !SELF_SOURCING.has(r) && counts[r] + readyPool(issues, r, MIN_QUEUE).length < MIN_QUEUE).map((r) => ({ role: r, count: counts[r] }));
 }
 
 export const QUIET_MIN = 90;
