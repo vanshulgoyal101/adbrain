@@ -125,7 +125,9 @@ Each tick:
 3. Log: `~/.adbrain-supervisor/supervisor.log`; stop it with `touch ~/.adbrain-supervisor/OFF`;
    `--dry-run` shows who it would wake; `--install`/`--uninstall` manage the LaunchAgent.
 
-Chats still help when they're alive: the CEO (or the CTO as backup) can nudge an idle or
+**After a VS Code restart** the old chats can't be messaged. The CEO (CTO as backup) starts one
+chat per role with `create_session` and the text from `npm run team-supervisor -- --restart-prompt all`;
+GitHub is the memory. Chats still help when they're alive: the CEO (or the CTO) can nudge an idle or
 stuck chat with `list_sessions`, `get_session_context` and `send_message` (at most once per
 chat per 20 min). `npm run team-status` lists each role as `waiting`, `has-work`, `no-work`
 or `error`.

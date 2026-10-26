@@ -7,6 +7,7 @@
 //   node scripts/team-supervisor.mjs [--dry-run] [--roles devops,qa,…]   one tick (what launchd runs)
 //   node scripts/team-supervisor.mjs --install | --uninstall              the LaunchAgent (StartInterval 600 s)
 //   node scripts/team-supervisor.mjs --smoke                              prove the CLI runs headless here
+//   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
 // Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -93,6 +94,19 @@ export function prompt(role, items, runMin) {
   ].join("\n");
 }
 
+/** The restart prompt a supervisor chat resends with create_session after a VS Code restart (#573; GitHub is the memory). */
+export function restartPrompt(role) {
+  const name = NAMES[role];
+  if (!name) throw new Error(`unknown role ${role}`);
+  return [
+    `You are AdBrain's ${name}. Your old chat was lost in a VS Code restart, so start fresh.`,
+    `Read AGENTS.md, then the Current Dispatch and your role card in docs/ORCHESTRATION.md, then your row and today's priorities on Team board #580.`,
+    `Your queue: \`gh issue list -R vanshulgoyal101/adbrain -l owner:${role} --state open\`; work the top item of your #580 row first.`,
+    `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
+    `When idle, run \`node scripts/wait-for-work.mjs --me ${role}\` in the foreground from a worktree on current origin/main; stop only when it times out.`,
+  ].join("\n");
+}
+
 function log(line) {
   mkdirSync(STATE_DIR, { recursive: true });
   appendFileSync(join(STATE_DIR, "supervisor.log"), `${new Date().toISOString()} ${line}\n`);
@@ -155,6 +169,7 @@ async function main() {
       install: { type: "boolean", default: false },
       uninstall: { type: "boolean", default: false },
       smoke: { type: "boolean", default: false },
+      "restart-prompt": { type: "string" },
       roles: { type: "string", default: ORDER.join(",") },
       "idle-min": { type: "string", default: "20" },
       "run-min": { type: "string", default: "40" },
@@ -167,6 +182,10 @@ async function main() {
   const agentFile = join(HOME, "Library", "LaunchAgents", `${LABEL}.plist`);
   const domain = `gui/${process.getuid()}`;
 
+  if (values["restart-prompt"]) {
+    const which = values["restart-prompt"] === "all" ? Object.keys(NAMES).filter((r) => r !== "ceo") : [values["restart-prompt"]];
+    return console.log(which.map((r) => `## ${NAMES[r]}\n${restartPrompt(r)}`).join("\n\n"));
+  }
   if (values.install || values.uninstall) {
     try { execFileSync("launchctl", ["bootout", domain, agentFile], { stdio: "ignore" }); } catch { /* not loaded */ }
     if (values.uninstall) { rmSync(agentFile, { force: true }); return console.log(`removed ${LABEL}`); }

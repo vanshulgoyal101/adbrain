@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { firstPrompt, liveRoles, pickRole, prompt, roleFromPrompt, runsToday } from "../scripts/team-supervisor.mjs";
+import { firstPrompt, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -60,5 +60,14 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain('"QA (headless):"');
     expect(text).toMatch(/no Meta writes or ad activation/);
     expect(text).toMatch(/Never run wait-for-work/);
+  });
+
+  it("gives each role a restart prompt that maps back to the same role", () => {
+    const text = restartPrompt("dev2");
+    expect(roleFromPrompt(text)).toBe("dev2");
+    expect(text).toContain("-l owner:dev2");
+    expect(text).toContain("wait-for-work.mjs --me dev2");
+    expect(text).toContain('"Dev 2:"');
+    expect(() => restartPrompt("nobody")).toThrow();
   });
 });
