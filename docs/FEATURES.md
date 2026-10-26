@@ -333,6 +333,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   interests are suggestions too. The review says: "Meta may reach people beyond your
   age range and interests; never outside your area." Campaigns already launched
   keep their original targeting.
+- A business's saved WhatsApp message (`businesses.whatsapp_template`, #840) is what every
+  new WhatsApp campaign sends: the welcome, then a pre-typed message (optionally with a Call
+  now button) or up to 3 questions. With nothing saved, AdBrain writes the greeting and
+  prefill per campaign as before. The ledger records the button and whether it was saved
+  or suggested.
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the

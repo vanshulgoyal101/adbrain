@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { savedGenerationSettings } from "@/lib/creative/receipt";
-import type { WhatsAppGreeting } from "./whatsapp-greeting";
+import type { WhatsAppOpening } from "@/lib/meta/client";
 
 type Generation = { textModels?: { model?: unknown }[]; image?: { model?: unknown } } | null;
 
@@ -16,7 +16,9 @@ export type LaunchSnapshotInput = {
   gender: string;
   interests: string[];
   whatsappLanguage: string | null;
-  prefill: WhatsAppGreeting | null;
+  prefill: WhatsAppOpening | null;
+  /** #840: the business's saved WhatsApp message, or the one AdBrain suggested for this launch. */
+  prefillSource?: "saved" | "suggested";
   storyFormat: boolean;
   creatives: { id: string; angle: string | null; generation: unknown }[];
   /** #672: the ad sets' `targeting` forms as sent to Meta (from the plan check's payloads). */
@@ -62,7 +64,12 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
     },
     placements: "advantage",
     formats: input.storyFormat ? ["4:5", "9:16"] : ["4:5"],
-    whatsapp: input.prefill ? { language: input.whatsappLanguage ?? "ad", prefill: input.prefill.autofill, greeting: input.prefill.greeting } : null,
+    whatsapp: input.prefill ? {
+      language: input.whatsappLanguage ?? "ad", prefill: input.prefill.autofill, greeting: input.prefill.greeting,
+      button: input.prefill.iceBreakers?.length ? "ice_breakers" : input.prefill.callButton ? "call" : "none",
+      ...(input.prefill.iceBreakers?.length ? { iceBreakers: input.prefill.iceBreakers } : {}),
+      source: input.prefillSource ?? "suggested",
+    } : null,
     creatives: input.creatives.map((creative) => {
       const generation = (creative.generation && typeof creative.generation === "object" ? creative.generation : null) as Generation;
       return {
