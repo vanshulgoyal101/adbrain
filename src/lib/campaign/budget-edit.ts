@@ -1,5 +1,7 @@
 import { formatMoney } from "@/lib/format";
 import { wouldExceedCap, type CampaignSpend } from "@/lib/campaign/spend";
+import { fundingShortfall, type AccountFunding } from "@/lib/campaign/funding-check";
+import type { FundingMode } from "@/lib/payments/operator-funding";
 
 export type BudgetEditInput = {
   current: { status: string; dailyRupees: number; capRupees: number | null; endTime: string | null; spentRupees: number };
@@ -9,15 +11,13 @@ export type BudgetEditInput = {
   /** The business's other active campaigns, for the weekly limit in Settings. */
   otherActive: CampaignSpend[];
   weeklyLimitRupees: number | null;
-  /** Prepaid ad account room (operator-funded runs); null when the account isn't prepaid. */
-  fundingRoomPaise: number | null;
+  /** Who pays Meta (#806) and what that payer has left: the ad account's funding, or the AdBrain allowance. */
+  funding: { mode: FundingMode; account: AccountFunding | null; allowancePaise?: number | null };
   now: number;
 };
 
 export type BudgetEditCheck = { ok: true; needsConfirmation: boolean; notices: string[] } | { ok: false; message: string };
 
-/** Meta's 18% GST on Indian ad spend, as `META_GST_RATE_BPS` (managed/spend-cap-sync.ts, server-only). */
-const META_GST_RATE_BPS = 1800;
 /** Meta's wording: a budget change "may or may not be significant, depending on the magnitude"; a fifth is our line. */
 const LEARNING_CHANGE = 0.2;
 export const LEARNING_NOTICE = "This is a big budget change, so it may restart Meta's learning; results can be slower for 2–3 days.";
@@ -48,11 +48,14 @@ export function checkBudgetEdit(input: BudgetEditInput): BudgetEditCheck {
         : `${formatMoney(nextDaily)} a day would take your campaigns past your weekly limit of ${formatMoney(input.weeklyLimitRupees)} in Settings.`);
     }
   }
-  if (cap !== undefined && input.fundingRoomPaise !== null && current.capRupees !== null && cap > current.capRupees) {
-    const neededPaise = Math.ceil((cap - current.capRupees) * 100 * (10_000 + META_GST_RATE_BPS) / 10_000);
-    if (neededPaise > input.fundingRoomPaise) {
-      return refuse(`Raising the cap by ${formatMoney(cap - current.capRupees)} needs ${formatMoney(neededPaise / 100)} in the ad account, including 18% GST. It has ${formatMoney(input.fundingRoomPaise / 100)}. Add funds first.`);
-    }
+  if (cap !== undefined && (current.capRupees === null || cap > current.capRupees)) {
+    // What the run may still spend under the new cap.
+    const neededPaise = Math.round((cap - current.spentRupees) * 100);
+    const short = fundingShortfall({ ...input.funding, neededPaise });
+    if (short?.kind === "no_limit") return refuse("Set a spending limit on the Meta ad account before raising the cap.");
+    if (short?.kind === "short") return refuse(`Meta has ${formatMoney(short.roomPaise / 100)} left under the ad account's spending limit; this cap needs ${formatMoney(short.neededPaise / 100)}. Add funds on Meta or choose a lower cap.`);
+    if (short?.kind === "allowance") return refuse("The new cap is more than the available advertising funds.");
+    if (short?.kind === "unverified") return refuse("AdBrain couldn't check the funding for this cap. Try again.");
   }
 
   const needsConfirmation = nextDaily > approved.dailyRupees || (cap !== undefined && (approved.capRupees === null || cap > approved.capRupees));

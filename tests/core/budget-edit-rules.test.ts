@@ -11,7 +11,7 @@ function input(over: Partial<BudgetEditInput> = {}): BudgetEditInput {
     change: {},
     otherActive: [],
     weeklyLimitRupees: null,
-    fundingRoomPaise: null,
+    funding: { mode: "own", account: { spendCapPaise: 0, amountSpentPaise: 0, roomPaise: 0, prepay: false } },
     now,
     ...over,
   };
@@ -56,9 +56,21 @@ describe("core: budget edit money rules (#774)", () => {
     expect(!result.ok && result.message).toMatch(/weekly limit of ₹2,500/);
   });
 
-  it("refuses a cap rise the ad account can't fund, counting Meta's 18% GST", () => {
-    // ₹100 more cap needs ₹118 of room.
-    expect(checkBudgetEdit(input({ change: { capRupees: 940 }, fundingRoomPaise: 11_700 })).ok).toBe(false);
-    expect(checkBudgetEdit(input({ change: { capRupees: 940 }, fundingRoomPaise: 11_800 })).ok).toBe(true);
+  // The run may still spend up to the new cap minus what it has spent; Meta's account limit counts spend (no GST).
+  it("refuses a cap rise the own account's spending limit can't cover", () => {
+    const account = (roomPaise: number) => ({ spendCapPaise: 500_000, amountSpentPaise: 500_000 - roomPaise, roomPaise, prepay: false });
+    const result = checkBudgetEdit(input({ change: { capRupees: 940 }, funding: { mode: "own", account: account(77_100) } }));
+    expect(!result.ok && result.message).toMatch(/₹771.*₹772/);
+    expect(checkBudgetEdit(input({ change: { capRupees: 940 }, funding: { mode: "own", account: account(77_200) } })).ok).toBe(true);
+  });
+
+  it("refuses an operator-funded cap rise when the account has no spending limit", () => {
+    const result = checkBudgetEdit(input({ change: { capRupees: 940 }, funding: { mode: "operator", account: { spendCapPaise: 0, amountSpentPaise: 0, roomPaise: 0, prepay: false } } }));
+    expect(!result.ok && result.message).toMatch(/Set a spending limit on the Meta ad account/);
+  });
+
+  it("refuses a managed cap rise past the AdBrain allowance", () => {
+    const result = checkBudgetEdit(input({ change: { capRupees: 940 }, funding: { mode: "managed", account: null, allowancePaise: 50_000 } }));
+    expect(!result.ok && result.message).toMatch(/advertising funds/);
   });
 });
