@@ -9,10 +9,12 @@ export function negatedTerm(text: string, index: number, term: string): boolean 
     || /^\s*(?:नहीं|ਨਹੀਂ)(?![\p{L}\p{M}])/u.test(text.slice(index + term.length, index + term.length + 12));
 }
 
-/** A Brand fact that negates or withdraws this term: "avoid free", "don't offer free", "Free survey no longer offered" (#613). */
+/** A Brand fact that negates or withdraws this term: "avoid free", "don't offer free", "Free survey, no longer offered" (#613, #767). */
 export function withdrawnInFact(source: string, index: number, term: string): boolean {
   const before = source.slice(Math.max(0, index - 32), index);
-  const clause = /^[^,;.()!?]*/.exec(source.slice(index + term.length))![0];
+  // The rest of the sentence, not just the clause: "$49 exam, no longer offered" withdraws $49 (#767).
+  // A sentence ends at . ! ? ; before a space, or a line break, so "$49.99" doesn't end it.
+  const clause = source.slice(index + term.length).split(/[.!?;](?=\s|$)|\n/)[0];
   return /\b(?:avoid|\w+n['’]t)\s+(?:\w+\s+)?(?:(?:a|an|any)\s+)?$/i.test(before)
     || /\b(?:no longer|not (?:available|offered|valid)|discontinued|ended|expired|withdrawn)\b/i.test(clause);
 }
