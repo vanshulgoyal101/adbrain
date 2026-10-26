@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import type { CreateStreamLine } from "@/app/api/creatives/generate/route";
 import type { CreateProgressStage } from "@/lib/creative/generate";
+import { CREATE_IDLE_MS, CREATE_IDLE_NO_HEARTBEAT_MS } from "@/lib/creative/stream";
 import type { Creative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +15,10 @@ export interface LiveAd {
   creative?: Creative;
 }
 
-/** Reads the live Create stream, or a plain JSON response, and returns the final status and body. */
+/**
+ * Reads the live Create stream, or a plain JSON response, and returns the final status and body.
+ * A stream that goes silent too long throws, so the caller falls back to reading saved results (#666).
+ */
 export async function readCreateResponse(
   res: Response,
   onLine: (line: Exclude<CreateStreamLine, { type: "result" }>) => void,
@@ -23,15 +27,30 @@ export async function readCreateResponse(
     return { status: res.status, data: await res.json().catch(() => ({})) };
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  // Before the first heartbeat (an older route, or a proxy holding bytes back), wait out the route's deadline.
+  let heartbeats = false;
+  const read = () => new Promise<ReadableStreamReadResult<string>>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reader.cancel().catch(() => {});
+      reject(new Error("The Create stream went silent."));
+    }, heartbeats ? CREATE_IDLE_MS : CREATE_IDLE_NO_HEARTBEAT_MS);
+    reader.read().then(
+      (chunk) => { clearTimeout(timer); resolve(chunk); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
   let buffer = "";
   for (;;) {
-    const { value, done } = await reader.read();
+    const { value, done } = await read();
     buffer += value ?? "";
     let end: number;
     while ((end = buffer.indexOf("\n")) >= 0) {
       const text = buffer.slice(0, end).trim();
       buffer = buffer.slice(end + 1);
-      if (!text) continue;
+      if (!text) {
+        heartbeats = true;
+        continue;
+      }
       const line = JSON.parse(text) as CreateStreamLine;
       if (line.type === "result") {
         reader.cancel().catch(() => {});
