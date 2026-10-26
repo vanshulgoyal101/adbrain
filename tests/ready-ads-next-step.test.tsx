@@ -44,7 +44,7 @@ describe("<ReadyAdsNextStep>", () => {
     const ask = screen.getByRole("button", { name: "Ask for Facebook access" });
     expect(ask).toHaveAttribute("data-product-event", "meta.access_request");
     fireEvent.click(ask);
-    expect(screen.getByRole("status")).toHaveTextContent("We'll WhatsApp you on +91 98765 43210");
+    expect(screen.getByRole("status")).toHaveTextContent("We'll WhatsApp you on +91 98765 43210 within a working day");
     rerender(<ReadyAdsNextStep approved={[ad("a")]} phone={null} />);
     expect(screen.getByRole("status")).toHaveTextContent("Add your WhatsApp number in Brand");
   });

@@ -62,7 +62,7 @@ export function ReadyAdsNextStep({ approved, phone }: { approved: Creative[]; ph
         {requested ? (
           <p role="status" className="mt-2 flex gap-2 text-sm leading-6 text-slate-700">
             <Check className="mt-1 h-4 w-4 shrink-0 text-green-600" aria-hidden="true" />
-            {phone ? `Request sent. We'll WhatsApp you on ${phone} to switch on Facebook access.` : "Request sent. Add your WhatsApp number in Brand so we can reach you."}
+            {phone ? `Request sent. We'll WhatsApp you on ${phone} within a working day to switch on Facebook access.` : "Request sent. Add your WhatsApp number in Brand so we can reach you within a working day."}
           </p>
         ) : (
           <>
