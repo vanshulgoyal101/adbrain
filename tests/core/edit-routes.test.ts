@@ -184,6 +184,24 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(JSON.stringify(audit)).toContain("campaign.edit");
   });
 
+  // #890 (Reviewer): a `raw` key written while Meta is being edited (the refresh cron's health, a budget
+  // or ad edit) survives the mirror; only the children change.
+  it("keeps raw written during the Meta round trips when it mirrors the new ids", async () => {
+    const scene = rebuild();
+    stored(scene);
+    replay(scene.tape);
+    const answer = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    const health = { checkedAt: "2026-10-26T13:00:00.000Z", flags: [] };
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (init?.method === "POST" && String(input).includes("/copies")) mirror().raw = { ...mirror().raw as Row, health };
+      return answer(input, init);
+    });
+    const { status } = await edit();
+    expect(status).toBe(200);
+    expect(mirror()).toMatchObject({ meta_adset_id: scene.newAdSetId, meta_ad_ids: [scene.newAdId] });
+    expect(mirror().raw).toMatchObject({ health, source: "campaign_operation", metaResult: { adSetIds: [scene.newAdSetId], adIds: [scene.newAdId] } });
+  });
+
   it("previews a rebuild with validate_only and changes nothing", async () => {
     const scene = rebuild();
     stored(scene);
