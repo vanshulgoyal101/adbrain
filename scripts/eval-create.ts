@@ -12,6 +12,7 @@
  * (--judge adds it) and compares only the deterministic copy checks with tests/eval/baseline-free.json.
  *
  *   npx tsx --env-file=.env.local scripts/eval-create.ts [--profile free] [--cases id,id] [--repeat 2] [--write-baseline] [--no-judge | --judge]
+ *     [--cap-usd 5] [--keep-usd 2]   (keep-usd: the shared key's dollars kept for production; at least 0.5)
  *
  * Without --write-baseline it compares with its profile's baseline and exits 1 when a customer
  * would see something worse (the upgrade-only gate). Bake-off: set EVAL_TEXT_MODEL,
@@ -44,6 +45,8 @@ const FREE = settings.profile === "free";
 const ROOT = process.cwd();
 const BASELINE = join(ROOT, settings.baseline);
 const CAP_USD = Number(option("cap-usd") ?? 5);
+// #449: dollars of the shared key kept for production. Lower only with a CEO approval that names it (#713: 0.9).
+const KEEP_USD = Math.max(0.5, Number(option("keep-usd") ?? 2));
 const REPEAT = Math.max(1, Number(option("repeat") ?? 1));
 if (!FREE && !OPENROUTER_KEY) throw new Error("Set OPENROUTER_API_KEYS (run with --env-file=.env.local).");
 if (FREE && !GOOGLE_KEY) throw new Error("Set GOOGLE_AI_API_KEYS (run with --env-file=.env.local).");
@@ -80,9 +83,10 @@ async function loadPrices() {
   // The key is shared with production (#449): never let an eval spend production's headroom.
   const key = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${OPENROUTER_KEY}` } });
   const { data: limits } = await key.json() as { data?: { limit?: number | null; limit_remaining?: number | null } };
-  if (limits?.limit != null && (limits.limit_remaining ?? 0) < CAP_USD + 2) {
-    throw new Error(`The OpenRouter key has $${(limits.limit_remaining ?? 0).toFixed(2)} left; this run needs its $${CAP_USD} cap plus $2 kept for production. Lower --cap-usd or raise the key limit.`);
+  if (limits?.limit != null && (limits.limit_remaining ?? 0) < CAP_USD + KEEP_USD) {
+    throw new Error(`The OpenRouter key has $${(limits.limit_remaining ?? 0).toFixed(2)} left; this run needs its $${CAP_USD} cap plus $${KEEP_USD} kept for production. Lower --cap-usd or raise the key limit.`);
   }
+  console.log(`OpenRouter key: $${(limits?.limit_remaining ?? 0).toFixed(2)} left before this run (cap $${CAP_USD}, $${KEEP_USD} kept for production)`);
   const response = await fetch("https://openrouter.ai/api/v1/models");
   const { data } = await response.json() as { data: { id: string; pricing?: { prompt?: string; completion?: string } }[] };
   prices = Object.fromEntries(data.map((model) => [model.id, { prompt: Number(model.pricing?.prompt ?? 0), completion: Number(model.pricing?.completion ?? 0) }]));

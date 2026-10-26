@@ -317,7 +317,7 @@ claims and garbled image text. Without `--write-baseline` it compares with
 fewer full batches or saved ads, more invented claims or garbled text, judge scores down more than
 0.25, more than ₹25 per run, or Create p90 over 60 s and slower than before. About $0.05 per case;
 `--cap-usd` (default 5) stops the run, and it refuses to start unless the shared OpenRouter key keeps
-$2 for production after the cap (#449). `--repeat N` runs each case N times; bake-offs set
+$2 for production after the cap (#449; `--keep-usd`, at least 0.5, lowers that only with a CEO approval naming it). `--repeat N` runs each case N times; bake-offs set
 `EVAL_TEXT_MODEL`, `EVAL_IMAGE_MODEL` or `EVAL_JUDGE_MODEL`; `EVAL_SCHEDULE=serial` runs the paid
 profile one concept at a time, to time production's default against parallel (#713).
 
