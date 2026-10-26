@@ -95,6 +95,25 @@ jobs:
               -b "$(printf 'A live campaign needs attention: %s. The campaign shows a Needs attention badge in AdBrain with the reason.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$kind" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
+      - name: Meta reconnect needed (#758)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The spend, lead and results crons list owners whose Meta token is dead as `reauth: [{key, since, activeCampaigns}]`
+          # (opaque key = sha256(business_id)[:12]). One open waiting-owner issue per key; the CEO asks the owner to reconnect.
+          # Per file, so one missing or non-JSON response doesn't hide the others.
+          rows=$(for f in spend.json leads.json results.json; do jq -c '.reauth[]?' "$f" 2>/dev/null || true; done \
+            | jq -rs 'group_by(.key) | map({key: .[0].key, since: (map(.since) | min), active: (map(.activeCampaigns // 0) | max)}) | .[] | "\(.key)|\(.since)|\(.active)"' 2>/dev/null) || rows=""
+          echo "reauth: $(printf '%s' "$rows" | grep -c . || true) owner(s)"
+          while IFS='|' read -r key since active; do
+            [[ "$key" =~ ^[a-f0-9]{12}$ && "$active" =~ ^[0-9]+$ && "$since" =~ ^[0-9T:.Z-]+$ ]] || continue
+            open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"Meta reconnect needed ($key)\"" --json number --jq length)
+            [ "$open" = 0 ] || continue
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Meta reconnect needed ($key)" \
+              -b "$(printf "An owner's Meta connection stopped working (token expired or revoked) since %s. Their leads don't sync, results go stale and the weekly cap can't be enforced until they reconnect.\nACTIVE campaigns: %s%s\n\n→ CEO: ask the owner to reconnect Meta in AdBrain (Settings → Meta). Find them (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n" \
+                "$since" "$active" "$([ "$active" -gt 0 ] && echo ' (still delivering; Meta lifetime cap applies, ask today)')" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done <<<"$rows"
       - name: Managed accounts (2-Tier provisioning, #527)
         if: always()
         env:
