@@ -610,7 +610,7 @@ export interface Database {
           field_data: Json;
           created_time: string | null;
           created_at: string;
-          workflow_status: "new" | "contacted" | "qualified" | "booked" | "closed";
+          workflow_status: "new" | "contacted" | "qualified" | "booked" | "customer" | "closed";
           follow_up_note: string;
         };
         Insert: {
@@ -628,7 +628,7 @@ export interface Database {
           field_data?: Json;
           created_time?: string | null;
           created_at?: string;
-          workflow_status?: "new" | "contacted" | "qualified" | "booked" | "closed";
+          workflow_status?: "new" | "contacted" | "qualified" | "booked" | "customer" | "closed";
           follow_up_note?: string;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
@@ -1120,6 +1120,8 @@ export type CampaignResult =
   Database["public"]["Tables"]["campaign_results"]["Row"] & {
     /** Real enquiries the owner logged from this WhatsApp campaign's chats (#335); not a stored column. */
     real_enquiries?: number;
+    /** Enquiries the owner marked "Became a customer" (#798); not a stored column. */
+    customers?: number;
   };
 export type AdInstruction =
   Database["public"]["Tables"]["ad_instructions"]["Row"];

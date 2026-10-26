@@ -99,6 +99,7 @@ import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySn
 import { activationWarnings } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
+import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
@@ -2130,6 +2131,13 @@ function BusinessCampaigns({
                       <p className="text-sm text-slate-700">
                         {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
                       </p>
+                    )}
+                    {r && (r.customers ?? 0) > 0 && (
+                      // #798: what a real customer cost, beside the per-enquiry figures.
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
+                        <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
+                        <Stat label="Per customer" value={formatMoney(costPerCustomer(r.spend, r.customers ?? 0) ?? 0)} />
+                      </div>
                     )}
                     {r && outcome === "whatsapp" && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}

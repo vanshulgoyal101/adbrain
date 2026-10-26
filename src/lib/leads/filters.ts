@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const workflowStatuses = ["new", "contacted", "qualified", "booked", "closed"] as const;
+export const workflowStatuses = ["new", "contacted", "qualified", "booked", "customer", "closed"] as const;
 export type WorkflowStatus = typeof workflowStatuses[number];
 
 export const leadListSchema = z.object({
