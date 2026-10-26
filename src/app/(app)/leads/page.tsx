@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getMetaConnection } from "@/lib/meta/credentials";
-import { getPrimaryBusiness } from "@/lib/supabase/queries";
+import { getCampaigns, getLatestResultsWithEnquiries, getPrimaryBusiness } from "@/lib/supabase/queries";
+import { WhatsAppChats } from "@/components/whatsapp-chats";
+import { whatsappChatRows, type WhatsAppChatRow } from "@/lib/campaign/real-enquiries";
 import { getLeadPage } from "@/lib/leads/queries";
 
 export const metadata = { title: "Enquiries" };
@@ -35,9 +37,14 @@ export default async function LeadsPage() {
     );
   }
 
-  const [page, metaConnection] = await Promise.all([
+  const [page, metaConnection, chatRows] = await Promise.all([
     getLeadPage(business.id),
     getMetaConnection(business.id),
+    // #764: WhatsApp chats beside form leads; an unreadable read hides the section, never the inbox.
+    getCampaigns(business.id).then(async (campaigns) => {
+      const launched = campaigns.filter((campaign) => campaign.meta_campaign_id);
+      return launched.length ? whatsappChatRows(launched, await getLatestResultsWithEnquiries(launched.map((campaign) => campaign.id))) : [];
+    }).catch((): WhatsAppChatRow[] => []),
   ]);
 
   return (
@@ -48,6 +55,7 @@ export default async function LeadsPage() {
         description="People who responded to your campaigns. Find their details and make the next conversation count."
       />
       <div className="mt-6 max-sm:mt-4">
+        <WhatsAppChats rows={chatRows} />
         <LeadInbox
           key={`${business.owner_id}:${business.id}`}
           businessName={business.name}
