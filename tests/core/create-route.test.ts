@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import run4 from "./fixtures/create/cedar-ridge-run4.json";
 import evalRows from "./fixtures/create/eval-concepts.json";
 import { googleReply, openAIReply, requestBody, requestUrl, settleInVirtualTime, useVirtualDeadlines, wait } from "./replay";
+import { CREATE_HEARTBEAT_MS, CREATE_IDLE_MS } from "@/lib/creative/stream";
 
 // Core regression gate (#110): brief -> 3 concepts -> validation -> images -> 3 saved ads.
 // Everything from the route to the AI SDK, the validator and the image provider is real;
@@ -342,7 +343,7 @@ describe("core: Create route streams live progress on recorded run 4", () => {
     stubProviders({ text: valueRejectedFirst });
     const response = await postStream();
     expect(response.headers.get("content-type")).toContain("application/x-ndjson");
-    const lines = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+    const lines = (await response.text()).split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
     const result = lines.at(-1);
     expect(lines.filter((line) => line.type === "result")).toHaveLength(1);
     expect(result).toMatchObject({ type: "result", status: 200 });
@@ -377,6 +378,32 @@ describe("core: Create route streams live progress on recorded run 4", () => {
     expect(response.status).toBe(400);
     expect(response.headers.get("content-type")).toContain("application/json");
     expect(mocks.inserts).toHaveLength(0);
+  });
+
+  it("keeps the page's stream alive with heartbeats through run 4's recorded 89 s concept (#666)", async () => {
+    mocks.fastRaster = true;
+    const { POST } = await import("@/app/api/creatives/generate/route");
+    const { readCreateResponse } = await import("@/components/create-progress");
+    const clock = useVirtualDeadlines();
+    stubProviders({ down: { google: 503, groq: 503 }, text: valueRejectedFirst, recordedLatency: true });
+    const response = await POST(new Request("http://localhost/api/creatives/generate", {
+      method: "POST", headers: { Accept: "application/x-ndjson" },
+      body: JSON.stringify({ businessId: run4.brand.id, brief: run4.brief, count: 3, generationId: "6d0e7324-171e-45df-894a-28ef6c910196" }),
+    }));
+    const [forPage, forTimes] = response.body!.tee();
+    const arrivals: number[] = [];
+    const reader = forTimes.getReader();
+    const timed = (async () => { while (!(await reader.read()).done) arrivals.push(Date.now()); })();
+    const page = readCreateResponse(new Response(forPage, { headers: response.headers }), () => {});
+    const { status, data } = await settleInVirtualTime(page);
+    await timed;
+    expect(status).toBe(200);
+    expect((data as { creatives: unknown[] }).creatives).toHaveLength(3);
+    // Run 4 had silent gaps far over the page's 60 s idle limit; heartbeats keep every gap at 15 s or less.
+    const times = [clock.startedAt, ...arrivals];
+    const gaps = times.slice(1).map((at, i) => at - times[i]);
+    expect(Date.now() - clock.startedAt).toBeGreaterThan(CREATE_IDLE_MS);
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(CREATE_HEARTBEAT_MS);
   });
 });
 

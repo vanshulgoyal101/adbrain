@@ -382,7 +382,9 @@ answers 200 `application/x-ndjson`, one JSON object per line:
 `checking`, `fixing`, `image`, `ready` or `failed`; angles run concurrently),
 `{type:"creative", angleId, creative}` once that ad is saved (before its
 `ready`), and last `{type:"result", status, body}` carrying the status and body
-the JSON mode would have returned. A stream that ends without `result` must be
+the JSON mode would have returned. A blank line arrives every 15 s as a
+heartbeat; skip it. A stream that ends without `result`, or that goes silent
+(the page allows 60 s once it has seen a heartbeat, else 330 s), must be
 treated as unconfirmed and recovered with the GET below.
 
 POST atomically claims the
