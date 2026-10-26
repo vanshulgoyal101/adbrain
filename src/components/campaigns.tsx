@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
@@ -275,6 +277,14 @@ function BusinessCampaigns({
   function failAt(at: "leadform" | "composer" | "review", message: string) {
     setError(null);
     setPlacedError({ at, message });
+  }
+  // #723: a Review blocker's fix opens the composer and jumps to the first of its controls on screen.
+  function jumpToFix(targets: string[]) {
+    flushSync(() => setShowComposer(true));
+    const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
+    const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
+    control?.scrollIntoView?.({ block: "center" });
+    control?.focus();
   }
   function clearErrors() {
     setError(null);
@@ -623,6 +633,13 @@ function BusinessCampaigns({
 
   function unresolvedRecovery() {
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
+  }
+
+  function openConnect() {
+    if (unresolvedRecovery()) { setError("Check the existing campaign operation before connecting again."); return; }
+    setConnectionIntent({ kind: "setup" });
+    setPrepareReview(null);
+    setConnectOpen(true);
   }
 
   async function loadPrepareReview(
@@ -1196,12 +1213,7 @@ function BusinessCampaigns({
             Meta isn’t connected yet. Connect an existing business to continue, or keep this campaign as a draft.
           </Alert>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => {
-              if (unresolvedRecovery()) { setError("Check the existing campaign operation before connecting again."); return; }
-              setConnectionIntent({ kind: "setup" });
-              setPrepareReview(null);
-              setConnectOpen(true);
-            }}>
+            <Button onClick={openConnect}>
               <Link2 className="h-4 w-4" aria-hidden="true" /> Connect Business
             </Button>
             <Link href="/settings" className="inline-flex h-10 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
@@ -1315,10 +1327,17 @@ function BusinessCampaigns({
               </span>
               {prepareReview.review.blockers.length > 0 && (
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
-                  {prepareReview.review.blockers.map((blocker) => <li key={`${blocker.code}:${blocker.message}`}>
-                    {blocker.message}
-                    {blocker.action?.kind === "open_brand" && <> <Link href="/brand" className="font-medium underline underline-offset-4">Open Brand Brain</Link></>}
-                  </li>)}
+                  {prepareReview.review.blockers.map((blocker) => {
+                    const fix = reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open Brand Brain", href: "/brand" } as const : null);
+                    return <li key={`${blocker.code}:${blocker.message}`} className="mt-1 first:mt-0">
+                      {blocker.message}
+                      {fix && <span className="mt-1 block">
+                        {fix.kind === "page"
+                          ? <Link href={fix.href} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</Link>
+                          : <button type="button" onClick={() => fix.kind === "connect" ? openConnect() : jumpToFix(fix.targets)} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</button>}
+                      </span>}
+                    </li>;
+                  })}
                 </ul>
               )}
               {!prepareReview.review.canCreatePaused && (
@@ -1503,7 +1522,7 @@ function BusinessCampaigns({
               <>
                 <div>
                   <Label>Choose ads</Label>
-                  <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
+                  <div id="campaign-ad-picker" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
                     {pickerAds.map((c, index) => {
                       const isSel = selected.has(c.id);
                       return (
@@ -1727,7 +1746,7 @@ function BusinessCampaigns({
                       <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
                     </>}
                   />
-                  <Button variant="outline" onClick={() => void requestAudienceRecommendation()} disabled={preparing || selected.size === 0 || budget <= 0}>
+                  <Button id="recommend-audience" variant="outline" onClick={() => void requestAudienceRecommendation()} disabled={preparing || selected.size === 0 || budget <= 0}>
                     <Sparkles className="h-4 w-4" aria-hidden="true" /> Recommend audience
                   </Button>
                   {targeting.audience && <div className="space-y-3 border-t border-slate-200 pt-3">
