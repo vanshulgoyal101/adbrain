@@ -125,7 +125,8 @@ repairing once like any other rule: `personal-attribute` (in health verticals, a
 "your …" naming the reader's symptom or condition, or suggesting they neglected care; in any
 vertical, a question about the reader's money trouble such as debt or a bill that "feels heavy"),
 `unsupported-superlative` (#1, top-rated, leading, "Austin's best" unless a supplied fact says it)
-and `exaggerated-result` ("up to N%", even when a fact states it). Health verticals also ban implied
+and `exaggerated-result` ("up to N%": refused in health verticals even when a fact states it;
+elsewhere allowed when a supplied fact states the same figure, refused when uncited). Health verticals also ban implied
 outcomes (lasting relief, eliminate, fix your, feel better…) and any guarantee, cited or not. Owner-typed
 copy only gets these as warnings.
 

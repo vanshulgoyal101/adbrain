@@ -27,10 +27,10 @@ const NEGLECT = /\b(?:overdue|putting off|put off|skipp(?:ed|ing)|neglect(?:ed|i
 // Money trouble about the reader: "Is your bill too high?", "बिल भारी लग रहा है?".
 // Financial status, as Meta's examples (debt, can't afford), plus the audit's "bill feels heavy" (#738).
 // A bill that is rising or annoying is about cost, not the reader's means, and is allowed.
-const MONEY_TROUBLE = /\bbills?\b[^?.!]{0,40}\b(?:heavy|too high|so high|sky[- ]high|shock(?:ing)?|hurting|burden)\b|\bcan'?t afford\b|\bstruggling to pay\b|\bin debt\b|\bdebts?\b|\bbroke\b|\bmoney (?:problems|trouble|worries)\b|बिल[^?।]{0,30}भारी|\bbill\b[^?.!]{0,30}\b(?:bhaari|bhari)\b/iu;
+const MONEY_TROUBLE = /\bbills?\b[^?.!]{0,40}\b(?:heavy|too high|so high|sky[- ]high|shock(?:ing)?|hurting|burden)\b|\bcan'?t afford\b|\bstruggling to pay\b|\bin debt\b|\bdebts?\b|\b(?:i'?m|you'?re|are you)\s+broke\b|\bmoney (?:problems|trouble|worries)\b|बिल[^?।]{0,30}भारी|\bbill\b[^?.!]{0,30}\b(?:bhaari|bhari)\b/iu;
 const SUFFERING = /\b(?:suffer(?:ing|s)?\s+(?:from|with)|struggl(?:e|ing)\s+with|living with|dealing with|battling|tired of)\b/i;
 
-const SUPERLATIVE = /(?:#\s?1|\bno\.?\s?1\b|\bnumber\s+one\b|\btop[- ]rated\b|\bbest[- ]rated\b|\baward[- ]winning\b|\bleading\b|\bmost trusted\b|\bunbeatable\b|\b(?:the|our|[\p{L}]+['’]s)\s+(?:very\s+)?best\b)/iu;
+const SUPERLATIVE = /(?:#\s?1|\bno\.?\s?1\b|\bnumber\s+one\b|\btop[- ]rated\b|\bbest[- ]rated\b|\baward[- ]winning\b|\b(?:the|our|[\p{L}]+['’]s)\s+leading\b|\bleading\s+(?:clinic|dentist|doctor|provider|company|brand|installer|\w+ist)s?\b|\bmost trusted\b|\bunbeatable\b|\b(?:the|our|[\p{L}]+['’]s)\s+(?:very\s+)?best\b)/iu;
 const UP_TO_RESULT = /\bup\s*to\s+\d+(?:\.\d+)?\s*%|\d+(?:\.\d+)?\s*%\s*तक/iu;
 
 function sentences(text: string): string[] {
@@ -65,10 +65,16 @@ export function policyFindings(text: string, options: { vertical?: string | null
     findings.push({ rule: "unsupported-superlative", detail: superlative,
       fix: "remove the ranking or superlative; no supplied fact says it" });
   }
+  // CTO (#805): a health outcome is refused even when cited; elsewhere a figure the Brand states (Solaride's
+  // "up to 98%") is normal ad copy, and only an uncited one is refused.
   const upTo = UP_TO_RESULT.exec(text)?.[0];
-  if (upTo) {
+  const figure = upTo?.match(/\d+(?:\.\d+)?\s*%/)?.[0].replace(/\s+/g, "");
+  const cited = Boolean(figure && facts.replace(/\s+/g, "").includes(figure));
+  if (upTo && (health || !cited)) {
     findings.push({ rule: "exaggerated-result", detail: upTo,
-      fix: "remove the \"up to\" percentage; Meta treats best-case results as exaggerated, even when a fact states them" });
+      fix: health
+        ? "remove the \"up to\" percentage; Meta refuses best-case health results even when a fact states them"
+        : "remove the \"up to\" percentage; no supplied fact states it" });
   }
   return findings;
 }
