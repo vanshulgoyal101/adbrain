@@ -124,10 +124,10 @@ describe("core: Create learns from the business's own results (#371)", () => {
     const result = validateConcept(parseJSON<unknown>(reply.content), {
       brand, brief: regenerate.brief, angle: getAngleByName(regenerate.angle)!, recentCopy: [], sourceFacts: regenerate.sourceFacts,
     });
-    // Its quote of the dropped offer is no longer a supplied fact, so the old offer can't pass.
+    // Its quote of the dropped offer is no longer a supplied fact, so it is dropped (#713) and the old offer can't pass.
     expect(result.success).toBe(false);
     const issues = result.success ? [] : result.issues;
-    expect(conceptValidationRules(issues)).toContain("sourceQuotes");
-    expect(issues.join("\n")).toContain("Diwali offer: 10% off rooftop solar installation");
+    expect(conceptValidationRules(issues)).toContain("unsupported-commercial-claim");
+    expect(issues.join("\n")).toMatch(/unsupported-commercial-claim: 10\s*%/);
   });
 });
