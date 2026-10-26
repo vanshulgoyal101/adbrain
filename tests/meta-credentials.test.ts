@@ -121,6 +121,15 @@ describe("getMetaConnection", () => {
     expect(c.scopes).toEqual([]);
   });
 
+  // #757: the earlier of the token's two expiries, so the owner can be warned before it lapses.
+  it("reports when the token stops working: the earlier of expires_at and data_access_expires_at", async () => {
+    const soon = new Date(Date.now() + 6 * 86_400_000).toISOString();
+    h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: "act_oauth", page_id: "pg_oauth", authorization_status: "connected" };
+    h.token = { id: "token-1", business_id: "biz", expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(), data_access_expires_at: soon, revoked_at: null };
+    const { getMetaConnection } = await import("@/lib/meta/credentials");
+    expect(await getMetaConnection("biz")).toMatchObject({ ready: true, tokenExpiresAt: soon });
+  });
+
   it("reports pending when no account/page chosen", async () => {
     h.connection = { business_id: "biz", token_id: "token-1", ad_account_id: null, page_id: null, authorization_status: "connected" };
     h.token = { id: "token-1", business_id: "biz", expires_at: future(), revoked_at: null };

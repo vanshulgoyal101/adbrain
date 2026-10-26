@@ -678,6 +678,10 @@ room (limit minus amount spent) of at least the cap. All checks run before any M
 Only managed businesses (AdBrain holds ad money) use the allowance reservation. It then runs the capped flow
 above with no reservation, cost evidence or confirmation; the compensating pause
 still applies. 503 when the funding mode cannot be read.
+When Meta refuses the owner's token (Graph 190, any subcode; #757), the connection
+is marked `reauth_required` (it then reads `expired`) and PATCH answers 409
+`{error, code:"META_REAUTH"}`. The error names the manual step ("Pause it in Ads Manager
+now") for a pause or an active campaign, and the card links to the campaign in Ads Manager.
 Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
 after Meta's 613 status rate limit), and reads all three levels back; `pause` is
 `{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only

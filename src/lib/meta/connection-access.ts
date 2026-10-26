@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { MetaClient, MetaError, type MetaCredentials } from "./client";
+import { isMetaReauthError, MetaClient, MetaError, type MetaCredentials } from "./client";
 import {
   capabilitiesSchema,
   type AttemptDTO,
@@ -288,7 +288,15 @@ async function withConnectionCredentials<Result>(
     pageId: connection.selected.pageId,
     accessToken: token,
   };
-  return execute(credentials, connection);
+  try {
+    return await execute(credentials, connection);
+  } catch (error) {
+    // #757: Meta refused the owner's token with no deauthorize callback; show the connection as needing Facebook again.
+    if (isMetaReauthError(error)) {
+      await admin.rpc("meta_connection_mark_reauth", { p_business_id: context.businessId, p_generation: connection.generation }).then(() => undefined, () => undefined);
+    }
+    throw error;
+  }
 }
 
 export async function recheckMetaConnection(context: AuthorizedBusiness, expectedGeneration: number): Promise<ConnectionDTO> {

@@ -1,0 +1,5 @@
+{
+  "_recorded": "2026-10-26: GET /v21.0/me with a malformed token, read-only, no credentials (#757); fbtrace_id scrubbed",
+  "status": 400,
+  "body": { "error": { "message": "Malformed access token", "type": "OAuthException", "code": 190, "fbtrace_id": "SCRUBBED" } }
+}

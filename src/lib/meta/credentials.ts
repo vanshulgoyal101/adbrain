@@ -42,7 +42,7 @@ async function getConnectionRow(businessId: string): Promise<ConnectionRow | nul
   return (data as ConnectionRow | null) ?? null;
 }
 
-async function getEncryptedToken(row: ConnectionRow): Promise<string | null> {
+async function getEncryptedToken(row: ConnectionRow): Promise<{ token: string; expiresAt: string | null } | null> {
   if (!row.token_id || row.authorization_status !== "connected") return null;
   const { data: rows, error } = await createAdminClient().rpc("meta_token_get", {
     p_token_id: row.token_id,
@@ -52,14 +52,17 @@ async function getEncryptedToken(row: ConnectionRow): Promise<string | null> {
   if (error || !data || data.revoked_at) return null;
   if (data.expires_at && new Date(data.expires_at).getTime() <= Date.now()) return null;
   if (data.data_access_expires_at && new Date(data.data_access_expires_at).getTime() <= Date.now()) return null;
+  // #757: the earlier of the two expiries is when managing the ads stops working.
+  const expiries = [data.expires_at, data.data_access_expires_at].filter((value): value is string => Boolean(value)).sort((a, b) => Date.parse(a) - Date.parse(b));
   try {
-    return decryptMetaToken({
+    const token = decryptMetaToken({
       ciphertext: fromPostgresBytea(data.ciphertext),
       nonce: fromPostgresBytea(data.nonce),
       authTag: fromPostgresBytea(data.auth_tag),
       keyId: data.key_id,
       formatVersion: data.format_version,
     }, { tokenId: data.id, businessId: data.business_id });
+    return { token, expiresAt: expiries[0] ?? null };
   } catch {
     return null;
   }
@@ -79,7 +82,7 @@ export async function resolveMetaCredentials(
   const managed = await getManagedAccount(businessId);
   if (managed) return await managedCredentials(managed);
   const row = await getConnectionRow(businessId);
-  const accessToken = row ? await getEncryptedToken(row) : null;
+  const accessToken = row ? (await getEncryptedToken(row))?.token ?? null : null;
   if (
     row &&
     accessToken &&
@@ -122,13 +125,13 @@ export async function getMetaConnection(
       adAccountId: managed.ad_account_id, pageId: managed.page_id, tokenExpiresAt: null, expired: false, scopes: [] };
   }
   const row = await getConnectionRow(businessId);
-  const accessToken = row ? await getEncryptedToken(row) : null;
+  const stored = row ? await getEncryptedToken(row) : null;
 
   if (row && ["reauth_required", "revoked"].includes(row.authorization_status)) {
     return { source: "oauth", pending: false, ready: false, adAccountId: row.ad_account_id, pageId: row.page_id, tokenExpiresAt: null, expired: true, scopes: [] };
   }
   if (row?.authorization_status === "connected") {
-    const expired = !accessToken;
+    const expired = !stored;
     const complete = Boolean(row.ad_account_id && row.page_id);
     return {
       source: "oauth",
@@ -136,7 +139,7 @@ export async function getMetaConnection(
       ready: complete && !expired,
       adAccountId: row.ad_account_id,
       pageId: row.page_id,
-      tokenExpiresAt: null,
+      tokenExpiresAt: stored?.expiresAt ?? null,
       expired,
       scopes: [],
     };

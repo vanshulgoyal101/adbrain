@@ -4,6 +4,7 @@ import resultsTape from "./fixtures/meta/results.json";
 import cappedAdSetTape from "./fixtures/meta/safety/capped-adset.json";
 import campaignSpendCapTape from "./fixtures/meta/safety/campaign-spend-cap.json";
 import pauseAllTape from "./fixtures/meta/safety/pause-all.json";
+import tokenRevoked from "./fixtures/meta/token-revoked.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
 import fundingTape from "./fixtures/meta/account-funding.json";
 import deletedTape from "./fixtures/meta/campaign-deleted.json";
@@ -267,6 +268,27 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(graph.pending).toEqual([]);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
     expect(audits()).toHaveLength(1);
+  });
+
+  // #757: Meta stops accepting the token (password change, checkpoint) with no deauthorize callback.
+  it("pause: a recorded Graph 190 names Ads Manager, writes nothing, and flips the connection to reauth_required", async () => {
+    treeCampaign();
+    replay([{ ...(tapes.pause[0]), status: tokenRevoked.status, body: tokenRevoked.body }]);
+    store.state.rpc.meta_connection_mark_reauth = args => {
+      const row = store.state.tables.meta_connections.find(r => r.business_id === args.p_business_id && r.generation === args.p_generation && r.authorization_status === "connected");
+      if (row) row.authorization_status = "reauth_required";
+      return { data: Boolean(row), error: null };
+    };
+    const response = await pause();
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.code).toBe("META_REAUTH");
+    expect(body.error).toBe("Meta stopped accepting AdBrain's access, so we couldn't pause this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.");
+    expect(graph.sent.filter(call => call.method !== "GET")).toEqual([]);
+    expect(store.state.log).toContain("rpc meta_connection_mark_reauth");
+    expect(store.state.tables.meta_connections[0].authorization_status).toBe("reauth_required");
+    const { getMetaConnection } = await import("@/lib/meta/credentials");
+    expect(await getMetaConnection(BUSINESS)).toMatchObject({ expired: true, ready: false });
   });
 
   it.each([
