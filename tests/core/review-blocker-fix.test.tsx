@@ -141,11 +141,15 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     expect(scrollIntoView.mock.contexts).toContain(control());
   });
 
-  it.each(["REVIEW_CITY_RADIUS", "REVIEW_AREAS_UNRESOLVED"] as const)("%s: with areas chosen by hand, the fix focuses the location search", async (reason) => {
+  // With areas chosen by hand: Meta's own city picks go through the search; typed names (#740) sit in Planned areas.
+  it.each([
+    ["REVIEW_CITY_RADIUS", "Search locations to include"],
+    ["REVIEW_AREAS_UNRESOLVED", "Planned areas"],
+  ] as const)("%s: with areas chosen by hand, the fix focuses %s", async (reason, field) => {
     composerTargeting = { ...aiAreas, location: { mode: "manual", included: [{ key: "2420379", name: "Austin", type: "city", radiusKm: 25 }], excluded: [], radiusKm: 25 } } as DraftInput["targeting"];
     const region = await prepareBlockedOn(reason);
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerFix(reason)!.label }));
-    expect(screen.getByLabelText("Search locations to include")).toHaveFocus();
+    expect(screen.getByLabelText(field)).toHaveFocus();
   });
 
   it.each(["REVIEW_NO_WEBSITE", "REVIEW_WHATSAPP_NOT_LINKED"] as const)("%s: the fix opens Brand Brain", async (reason) => {
