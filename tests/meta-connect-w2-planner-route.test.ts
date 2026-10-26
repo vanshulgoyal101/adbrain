@@ -379,9 +379,18 @@ describe("guided planner route", () => {
   });
 
   it("returns a validated proposal without making a Meta mutation", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({
+      listLeadForms: vi.fn().mockResolvedValue([{ id: "form-1", name: "Leads" }]),
+      resolveAudienceInterests: vi.fn(async (names: string[]) => ({ interests: [{ id: "6003306084421", name: names[0] }], unresolved: names.slice(1) })),
+    }));
     const { POST } = await import("@/app/api/campaigns/plan/route");
     const response = await POST(post());
     const body = await response.json();
+    // #686: a saved guided draft counts as a successful plan.
+    const plans = info.mock.calls.map(([entry]) => String(entry)).filter((entry) => entry.includes('"name":"campaign.plan"'));
+    info.mockRestore();
+    expect(plans.map((entry) => JSON.parse(entry).outcome)).toEqual(["success"]);
 
     expect(response.status).toBe(200);
     expect(body.ready).toBe(true);

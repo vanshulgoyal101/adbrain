@@ -165,6 +165,29 @@ describe("core: Prepare audience", () => {
     expect(rationaleForMatchedInterests(issue174Rationale, ["Parenting"], [])).toBe(issue174Rationale);
   });
 
+  // #686: a ready plan is logged `success`, with only the counts of suggested and unresolved interests.
+  it("logs each Prepare outcome with interest counts on the recorded Graph search", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const planEvents = () => info.mock.calls.map(([entry]) => String(entry)).filter((entry) => entry.includes('"name":"campaign.plan"'))
+      .map((entry) => JSON.parse(entry) as { outcome: string; attributes: Record<string, unknown> });
+    const reply = (interests: string[]) => mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan: { ...plannerPlan, interests } }), provider: "groq", model: "qwen/qwen3.8-27b", usage });
+
+    reply(["Chiropractic", "Sports medicine", "Posture", "Physical therapy", "Wellness"]);
+    replayMeta(chiropracticInterests);
+    expect((await prepare()).body.fallback).toBeUndefined();
+    reply(["Chiropractic", "Posture"]);
+    expect((await prepare()).body.fallback).toBe(true);
+    mocks.meta.mockRejectedValue(new Error("Meta unavailable"));
+    reply(["Chiropractic", "Posture"]);
+    expect((await prepare()).body.fallback).toBeUndefined();
+
+    expect(planEvents().map(({ outcome, attributes: { count, failedCount, errorCode } }) => ({ outcome, count, failedCount, errorCode }))).toEqual([
+      { outcome: "success", count: 5, failedCount: 4, errorCode: undefined },
+      { outcome: "partial", count: 2, failedCount: 2, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" },
+      { outcome: "partial", count: 2, failedCount: undefined, errorCode: "PLAN_AUDIENCE_INTEREST_LOOKUP_FAILED" },
+    ]);
+  });
+
   it("explains a broad audience when Meta has none of the interests", async () => {
     const plan = { ...plannerPlan, interests: ["Chiropractic", "Posture"] };
     mocks.complete.mockResolvedValue({ text: JSON.stringify({ ready: true, plan }), provider: "groq", model: "qwen/qwen3.8-27b", usage });

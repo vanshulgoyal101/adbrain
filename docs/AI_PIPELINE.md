@@ -102,6 +102,10 @@ creating a campaign. Preflight, approved-creative checks, ownership, special-cat
 restrictions, paused creation and explicit activation remain authoritative.
 The `campaign.interview` workflow event records fixed no-progress/limit codes,
 not conversation text. These are source claims, not deployed conversation results.
+The `campaign.plan` event is `success` for a ready plan, `partial` when it falls
+back (`PLAN_AUDIENCE_NO_META_INTERESTS`, questions, a failed interest lookup) and
+`failed` otherwise; `count` and `failedCount` are the suggested and unresolved
+interest counts, never the names (#686).
 
 ### Orchestration Reuse
 
