@@ -331,7 +331,8 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the
-  place's radius + 30 km (Ludhiana, Amritsar, Ambala, Gurugram…). Places are matched
+  included city's radius + 30 km (Ludhiana, Amritsar, Ambala, Gurugram…); a state
+  included as a whole keeps all its cities (#804). Places are matched
   by Meta key (`src/lib/meta/service-area.ts`); the owner's own exclusions are kept.
   If Meta can't describe the area, the launch is refused (`TARGETING_EXCLUSIONS_MISSING`),
   and a tree built before the rule can't be activated. With Advantage+ audience and

@@ -90,7 +90,8 @@ function km(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
 
 /**
  * The exclusions for an Indian service area: every state/UT with no included place, plus the known
- * cities in the kept states that lie outside every included place's radius + {@link SERVICE_BUFFER_KM}.
+ * cities in the kept states that lie outside every included city's radius + {@link SERVICE_BUFFER_KM}.
+ * A state included as a whole keeps every city in it (#804).
  * City exclusions need every included city's position; without one, only states are excluded.
  * Returns null when the rule doesn't apply: a country-wide or non-Indian area (QA #741 scope).
  */
@@ -103,8 +104,10 @@ export function serviceAreaExclusions(included: IncludedPlace[]): GeoTargeting |
     return known ? { ...known, radiusKm: place.radiusKm ?? 0 } : null;
   });
   const includedKeys = new Set(included.map((place) => place.key));
-  const cities = centres.some((centre) => !centre) ? [] : EXCLUDABLE_CITIES
-    .filter((city) => keptRegions.has(city.region) && !includedKeys.has(city.key))
+  // A whole included state keeps all its cities; distance only counts from included cities.
+  const wholeRegions = new Set(included.filter((place) => place.type === "region").map((place) => place.regionKey!));
+  const cities = !centres.length || centres.some((centre) => !centre) ? [] : EXCLUDABLE_CITIES
+    .filter((city) => keptRegions.has(city.region) && !wholeRegions.has(city.region) && !includedKeys.has(city.key))
     .filter((city) => centres.every((centre) => km(centre!, city) >= centre!.radiusKm + SERVICE_BUFFER_KM))
     .map((city) => ({ key: city.key }));
   return { regions, ...(cities.length ? { cities } : {}) };

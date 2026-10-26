@@ -98,6 +98,20 @@ describe("core: every Indian ad set excludes what's outside the service area (#7
     expect(unknown.regions).toHaveLength(33);
   });
 
+  it("#804: a state included as a whole keeps all its cities; other kept states still lose their distant ones", () => {
+    const punjab = { key: "1742", type: "region" as const, regionKey: "1742", countryCode: "IN" };
+    const chandigarh = { key: "1021145", type: "city" as const, regionKey: "1726", countryCode: "IN" };
+    const panchkula = { key: "2676092", type: "city" as const, regionKey: "1730", countryCode: "IN" };
+    const inPunjab = (key: string) => EXCLUDABLE_CITIES.find((city) => city.key === key)?.region === "1742";
+    expect(serviceAreaExclusions([punjab])!.cities).toBeUndefined();
+    const withCity = serviceAreaExclusions([chandigarh, punjab, panchkula])!;
+    expect(withCity.regions!.map((region) => region.key)).not.toContain("1742");
+    expect(withCity.cities!.filter((city) => inPunjab(city.key))).toEqual([]);
+    expect(withCity.cities!.map((city) => city.key)).toEqual(expect.arrayContaining(["1026297", "1027034"])); // Gurugram, Hisar
+    const tricity = TRICITY.map((key, index) => ({ key, type: "city" as const, regionKey: KEPT[index], countryCode: "IN" }));
+    expect(serviceAreaExclusions(tricity)!.cities).toHaveLength(42);
+  });
+
   it("keeps the owner's own exclusions and flags an Indian tree built before the rule", () => {
     expect(mergeExclusions({ cities: [{ key: "1033379", radius: 10, distance_unit: "kilometer" }] }, { regions: [{ key: "1731" }], cities: [{ key: "1033379" }] }))
       .toEqual({ regions: [{ key: "1731" }], cities: [{ key: "1033379", radius: 10, distance_unit: "kilometer" }] });

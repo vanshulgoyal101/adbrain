@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { renderStoriesWithin } from "@/lib/creative/story";
+import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
 import { buildCreativeReviewPayload } from "./preflight";
@@ -120,6 +121,10 @@ export async function executeReviewedCampaign(input: {
                 ...planCheckEvent(checkPlan(plan), draft.input.destination ?? "instant_form"),
               });
             },
+          }).catch((error: unknown) => {
+            // #741: refused before any POST, so Meta holds nothing; the owner can simply retry.
+            if (error instanceof TargetingExclusionsMissingError) throw new OperationPhaseError(error.message, { transmitted: false });
+            throw error;
           });
           // #588: what this launch tried, for the learning ledger (saved once the campaign row exists). Never fails the launch (#603).
           try {

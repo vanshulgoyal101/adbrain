@@ -15,7 +15,7 @@ describe("out-of-area exclusions never cut into a state the owner included (QA, 
       { key: "1021145", type: "city", regionKey: "1726", countryCode: "IN" },
     ]);
     const punjabCities = new Set(EXCLUDABLE_CITIES.filter((city) => city.region === PUNJAB).map((city) => city.key));
-    expect(exclusions?.regions.map((region) => region.key)).not.toContain(PUNJAB);
+    expect(exclusions?.regions?.map((region) => region.key)).not.toContain(PUNJAB);
     expect((exclusions?.cities ?? []).filter((city) => punjabCities.has(city.key))).toEqual([]);
   });
 
