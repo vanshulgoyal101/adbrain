@@ -74,9 +74,8 @@ export default async function BrandPage() {
                   suggestedQuestions={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => [language, suggestedQuestions(business, language)])) as Record<"en" | "hi" | "hinglish" | "pa", string[]>}
                   callNumber={whatsappStatus?.then((status) => status.state === "ready" ? status.numbers.find((number) => number.source === "page")?.masked ?? null : null)}
                   suggested={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => {
-                    // Questions too, as launches suggest them since #914 (#680).
-                    const text = whatsappGreeting(business, business.offers ?? [], business.locations ?? [], [], language, true);
-                    return [language, { greeting: text.greeting, prefill: text.autofill, ...(text.iceBreakers ? { iceBreakers: text.iceBreakers } : {}) }];
+                    const text = whatsappGreeting(business, business.offers ?? [], business.locations ?? [], [], language);
+                    return [language, { greeting: text.greeting, prefill: text.autofill }];
                   })) as Suggested} />
               </section>
             )}

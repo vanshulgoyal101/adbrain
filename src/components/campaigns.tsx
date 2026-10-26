@@ -286,8 +286,8 @@ function BusinessCampaigns({
   const adLanguages = (ads: Creative[]) => ads.map((creative) => { const stored = (creative.generation as { language?: unknown } | null)?.language; return typeof stored === "string" ? stored : null; });
   const adsLanguage = (ads: Creative[]) => whatsappLanguageFor(adWords(ads), adLanguages(ads));
   const suggestedMessages = (ads: Creative[]): Suggested => Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => {
-    const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language, true);
-    return [language, { greeting: text.greeting, prefill: text.autofill, ...(text.iceBreakers ? { iceBreakers: text.iceBreakers } : {}) }];
+    const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
+    return [language, { greeting: text.greeting, prefill: text.autofill }];
   })) as Suggested;
   const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");

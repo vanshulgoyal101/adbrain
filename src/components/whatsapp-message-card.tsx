@@ -9,7 +9,7 @@ import { ICE_BREAKER_LIMITS } from "@/lib/meta/limits";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 
 type Language = WhatsAppTemplate["language"];
-/** AdBrain's suggestion per language: a pre-typed message, or (#680) up to 3 questions. */
+/** AdBrain's suggestion per language: a pre-typed message, or up to 3 questions. */
 export type SuggestedOpening = { greeting: string; prefill: string; iceBreakers?: string[] };
 export type Suggested = Record<Language, SuggestedOpening>;
 type ButtonKind = "none" | "call" | "questions";
