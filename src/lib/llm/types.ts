@@ -21,6 +21,10 @@ export interface CompletionOptions {
   providerAttemptTimeoutMs?: Partial<Record<string, number>>;
   /** Providers tried after the routing order, if not already in it (e.g. a fast last resort). */
   extraProviders?: string[];
+  /** Providers tried right after the routing order's first one, before the rest (e.g. a proven fast fallback). */
+  nextProviders?: string[];
+  /** On a brief 429, try later providers before waiting out the cooldown, then come back to it (#668). */
+  fallbackBeforeRateLimitWait?: boolean;
   /** "off" asks thinking models (Gemini) not to think: for small structured outputs where speed matters. */
   thinking?: "off";
   onAttempt?: (attempt: ProviderAttempt) => void;

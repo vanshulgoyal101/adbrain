@@ -107,6 +107,55 @@ describe("LLM 429 cooldown", () => {
     }
   });
 
+  // #668: the planner's fallback answers in seconds, sooner than a short cooldown ends.
+  it("with fallbackBeforeRateLimitWait, tries the next provider before waiting out a short rate limit", async () => {
+    setEnv({ GROQ_API_KEYS: "a,b", OPENROUTER_API_KEYS: "ok" });
+    mockFetchByHost({
+      "api.groq.com": () => new Response("slow down", { status: 429, headers: { "retry-after": "3" } }),
+      "openrouter.ai": () => ok("fast fallback"),
+    });
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "hi" }], { fallbackBeforeRateLimitWait: true }))
+      .resolves.toMatchObject({ provider: "openrouter", text: "fast fallback" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("with fallbackBeforeRateLimitWait, comes back and waits out the rate limit when the fallback fails", async () => {
+    vi.useFakeTimers();
+    try {
+      setEnv({ GROQ_API_KEYS: "a,b", OPENROUTER_API_KEYS: "ok" });
+      let groqCalls = 0;
+      mockFetchByHost({
+        "api.groq.com": () => ++groqCalls <= 2
+          ? new Response("slow down", { status: 429, headers: { "retry-after": "3" } })
+          : ok("after the wait"),
+        "openrouter.ai": () => httpError(503),
+      });
+      const { complete } = await import("@/lib/llm");
+      const result = complete([{ role: "user", content: "hi" }], { fallbackBeforeRateLimitWait: true });
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(result).resolves.toMatchObject({ provider: "groq", text: "after the wait" });
+      const hosts = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input)).host);
+      expect(hosts).toEqual(["api.groq.com", "api.groq.com", "openrouter.ai", "api.groq.com"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("puts nextProviders right after the routing order's first provider", async () => {
+    setEnv({ GROQ_API_KEYS: "g", GOOGLE_AI_API_KEYS: "k", OPENROUTER_API_KEYS: "ok", LLM_BUDGET_PROVIDER_ORDER: "groq,google" });
+    mockFetchByHost({
+      "api.groq.com": () => httpError(500),
+      "generativelanguage.googleapis.com": () => httpError(500),
+      "openrouter.ai": () => ok("next"),
+    });
+    const { complete } = await import("@/lib/llm");
+    await expect(complete([{ role: "user", content: "hi" }], { routing: "budget", nextProviders: ["openrouter"] }))
+      .resolves.toMatchObject({ provider: "openrouter" });
+    const hosts = vi.mocked(fetch).mock.calls.map(([input]) => new URL(String(input)).host);
+    expect(hosts).toEqual(["api.groq.com", "openrouter.ai"]);
+  });
+
   it("falls through when the rate limit outlasts the wait cap", async () => {
     setEnv({ GROQ_API_KEYS: "a,b", OPENROUTER_API_KEYS: "ok" });
     mockFetchByHost({

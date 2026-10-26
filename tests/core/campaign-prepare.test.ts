@@ -125,7 +125,7 @@ describe("core: Prepare audience", () => {
     expect(mocks.complete).toHaveBeenCalledTimes(1);
   });
 
-  // fallback-replies.json: real OpenRouter Claude Haiku replies to this exact route prompt (#366), fenced JSON.
+  // fallback-replies.json: real OpenRouter Claude Haiku replies to this exact route prompt, reasoning off (#366, #668).
   it("accepts the real Haiku fallback reply and asks for the fast fallback chain", async () => {
     const haiku = fallbackReplies.openrouterHaiku;
     mocks.complete.mockResolvedValue({ text: haiku.text, provider: "openrouter", model: haiku.model, usage });
@@ -134,7 +134,7 @@ describe("core: Prepare audience", () => {
     expect(body.fallback).toBeUndefined();
     expect(body.targeting.audience.interestNames).toEqual(parseJSON<{ plan: { interests: string[] } }>(haiku.text!).plan.interests);
     expect(mocks.complete).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      routing: "budget", thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, extraProviders: ["openrouter"],
+      routing: "budget", thinking: "off", providerAttemptTimeoutMs: { google: 5_000 }, nextProviders: ["openrouter"], fallbackBeforeRateLimitWait: true,
     }));
   });
 

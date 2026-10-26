@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { FALLBACK_AUDIENCE_RATIONALE } from "@/lib/campaign/planner-draft";
+import fallbackReplies from "./fixtures/planner/fallback-replies.json";
 import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
 import { googleReply, openAIReply, requestBody, requestUrl, settleInVirtualTime, useVirtualDeadlines, wait } from "./replay";
 
@@ -158,21 +159,53 @@ describe("core: Prepare over the provider transport", () => {
     const { body, targeting } = await expectTargeting(response);
     expect(body.fallback).toBe(true);
     expect(targeting.audience).toMatchObject({ rationale: FALLBACK_AUDIENCE_RATIONALE });
-    // Groq and Gemini each use their 20 s attempt; the 45 s planner deadline cuts Cerebras off.
-    expect(calls).toEqual(["api.groq.com", "generativelanguage.googleapis.com", "api.cerebras.ai"]);
+    // Groq and Haiku each use their 20 s attempt; the 45 s planner deadline ends Gemini's 5 s; Cerebras never starts.
+    expect(calls).toEqual(["api.groq.com", "openrouter.ai", "generativelanguage.googleapis.com"]);
     expect(elapsed).toBeGreaterThanOrEqual(45_000);
     expect(elapsed).toBeLessThan(60_000);
   });
 
   // #612 (CTO): free-tier rate limits must not cost the owner a plan.
-  it("plans after every free provider answers 429, on the paid last resort", async () => {
+  it("plans after every free provider answers 429, on the paid fallback", async () => {
     const post = await prepare();
     useVirtualDeadlines();
     stubRateLimits(() => ["api.groq.com", "generativelanguage.googleapis.com", "api.cerebras.ai"]);
     const { body, targeting } = await expectTargeting(await settleInVirtualTime(post()));
     expect(body.fallback).toBeUndefined();
-    expect(new Set(calls)).toEqual(new Set(["api.groq.com", "generativelanguage.googleapis.com", "api.cerebras.ai", "openrouter.ai"]));
+    // #668: Haiku is tried right after Groq, before Groq's 15 s retry-after is waited out.
+    expect(calls).toEqual(["api.groq.com", "openrouter.ai"]);
     expect(targeting.audience).toMatchObject({ interestNames: groqCityOnly.plan.interests });
+  });
+
+  // #668: on a Groq 429, Haiku (reasoning off) answers before Gemini spends its 5 s.
+  it("plans within 8 s on a Groq 429: production's 429 latency, then Haiku's slowest recorded reply", async () => {
+    const post = await prepare();
+    const clock = useVirtualDeadlines();
+    calls = [];
+    const openRouterBodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = requestUrl(input);
+      if (!requestBody(init).includes("Plan only the audience")) throw new Error(`Unexpected request: ${url}`);
+      const host = new URL(url).host;
+      calls.push(host);
+      if (host === "api.groq.com") {
+        await wait(141, init?.signal); // production p50 for a Groq 429 on the planner (7 days to Oct 26)
+        return RATE_LIMITED[host]();
+      }
+      if (host === "openrouter.ai") {
+        openRouterBodies.push(JSON.parse(requestBody(init)));
+        await wait(Math.max(...fallbackReplies.latencyMs.openrouterHaiku), init?.signal);
+        return openAIReply(fallbackReplies.openrouterHaiku.text, fallbackReplies.openrouterHaiku.model);
+      }
+      await wait(10 * 60_000, init?.signal);
+      throw new Error(`${host} should not answer first`);
+    }));
+    const { body, targeting } = await expectTargeting(await settleInVirtualTime(post()));
+    expect(body.fallback).toBeUndefined();
+    expect(targeting.audience?.interestNames?.length).toBeGreaterThan(0);
+    expect(calls).toEqual(["api.groq.com", "openrouter.ai"]);
+    expect(openRouterBodies[0]).toMatchObject({ reasoning: { effort: "none" } });
+    expect(Date.now() - clock.startedAt).toBeLessThan(8_000);
   });
 
   // The router already waits (up to 20 s) for a parked provider that frees up soon, rather than failing.

@@ -44,7 +44,7 @@ const FREE_PROVIDERS = ["google", "groq"];
 // Round-robin cursor per provider so load spreads across a key pool.
 const rrCursor = new Map<string, number>();
 
-function buildRegistry(routing: "standard" | "budget" | "creative" = "standard", extraProviders: string[] = []): RegisteredProvider[] {
+function buildRegistry(routing: "standard" | "budget" | "creative" = "standard", extraProviders: string[] = [], nextProviders: string[] = []): RegisteredProvider[] {
   const env = getEnv();
 
   const registry: Record<string, RegisteredProvider[] | RegisteredProvider | null> = {
@@ -103,7 +103,9 @@ function buildRegistry(routing: "standard" | "budget" | "creative" = "standard",
   const configured = orderValue.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const order = [...configured, ...extraProviders.filter((name) => !configured.includes(name))];
+  const listed = [...configured, ...extraProviders.filter((name) => !configured.includes(name))];
+  const next = nextProviders.filter((name) => name !== listed[0]);
+  const order = listed.length ? [listed[0], ...next, ...listed.slice(1).filter((name) => !next.includes(name))] : next;
 
   return order
     .flatMap((name) => registry[name] ?? []);
@@ -124,7 +126,7 @@ export async function complete(
   messages: ChatMessage[],
   options: CompletionOptions = {},
 ): Promise<CompletionResult> {
-  const registry = buildRegistry(options.routing, options.extraProviders);
+  const registry = buildRegistry(options.routing, options.extraProviders, options.nextProviders);
   if (registry.length === 0) throw new NoLLMKeysError();
 
   const startedAt = Date.now();
@@ -156,7 +158,13 @@ async function callProviders(
   let terminal: LLMError | undefined;
   let creditExhausted = false;
 
-  for (const { provider, keys, model } of registry) {
+  const queue = [...registry];
+  const deferred = new Set<RegisteredProvider>();
+  const available = ({ provider, keys }: RegisteredProvider) =>
+    keys.some((_, idx) => (cooldownUntil.get(`${provider.name}:${idx}`) ?? 0) <= Date.now());
+  for (let position = 0; position < queue.length; position++) {
+    const entry = queue[position];
+    const { provider, keys, model } = entry;
     for (let round = 0; round < 2; round++) {
       const start = nextKeyStart(provider.name, keys.length);
       for (let i = 0; i < keys.length; i++) {
@@ -213,6 +221,12 @@ async function callProviders(
       // Every key is rate-limited only briefly: wait once, then retry this model.
       const wait = Math.min(...keys.map((_, idx) => cooldownUntil.get(`${provider.name}:${idx}`) ?? 0)) - Date.now();
       if (round === 1 || wait <= 0 || wait > RATE_LIMIT_WAIT_MS) break;
+      // #668: a fast fallback answers sooner than the cooldown ends; come back to this provider after it.
+      if (options.fallbackBeforeRateLimitWait && !deferred.has(entry) && queue.slice(position + 1).some(available)) {
+        deferred.add(entry);
+        queue.push(entry);
+        break;
+      }
       options.signal?.throwIfAborted();
       await new Promise<void>((resolve, reject) => {
         const onAbort = () => { clearTimeout(timer); reject(options.signal?.reason); };

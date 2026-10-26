@@ -28,6 +28,17 @@ it("sends reasoning effort separately from total output budget", async () => {
   });
 });
 
+it("turns reasoning off on OpenRouter when the caller asks for no thinking (#668)", async () => {
+  const fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }));
+  vi.stubGlobal("fetch", fetchMock);
+  await provider.complete([{ role: "user", content: "Plan" }], { thinking: "off", json: true }, { apiKey: "test", model: "reasoning-model" });
+  expect(JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toMatchObject({ reasoning: { effort: "none" } });
+
+  const groq = createOpenAICompatibleProvider({ name: "groq", baseUrl: "https://example.com", defaultModel: "m" });
+  await groq.complete([{ role: "user", content: "Plan" }], { thinking: "off", json: true }, { apiKey: "test", model: "m" });
+  expect(JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body))).not.toHaveProperty("reasoning");
+});
+
 it("does not treat truncated reasoning or JSON as successful output", async () => {
   vi.stubGlobal(
     "fetch",
