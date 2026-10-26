@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { recordProductEvent } from "@/lib/observability/logger";
-import { renderStoryAd } from "@/lib/creative/story";
+import { renderStoriesWithin } from "@/lib/creative/story";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
 import { buildCreativeReviewPayload } from "./preflight";
@@ -23,7 +23,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildLaunchSnapshot, saveLaunchSnapshot } from "./learnings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const STORY_RENDER_BUDGET_MS = 6_000;
+const STORY_RENDER_BUDGET_MS = 15_000;
 
 export async function executeReviewedCampaign(input: {
   database: CampaignSupabase;
@@ -75,26 +75,14 @@ export async function executeReviewedCampaign(input: {
           }))))).digest("hex");
           if (creativeHash !== review.creativeHash) throw new OperationPhaseError("Selected creative changed since review.", { transmitted: false });
           // #333: Stories and Reels get a 9:16 layout of the same reviewed design; on any failure they keep the 4:5.
-          // Capped well inside the 60 s create lease; a slow photo or logo host just means no 9:16.
-          const noStories = creativeInputs.map(() => null);
+          // The renders run alongside Meta's campaign create and 4:5 uploads (#499: three 9:16s never fit a
+          // separate 6 s wait in production). Capped inside the 60 s create lease; a slow host just means no 9:16.
           const storyFallback = (stage: "render" | "instagram" | "upload" | "creative" | "ad", errorCode: string) => recordProductEvent({
             kind: "workflow", name: "campaign.story_fallback", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: `${stage}:${errorCode}` },
           });
-          let storyTimer: ReturnType<typeof setTimeout> | undefined;
           const storyImages = draft.input.destination === "whatsapp"
-            ? await Promise.race([
-              Promise.all(creativeInputs.map(creative => renderStoryAd(creative.generation).catch(() => {
-                storyFallback("render", "error");
-                return null;
-              }))),
-              new Promise<null[]>(resolve => {
-                storyTimer = setTimeout(() => {
-                  storyFallback("render", "timeout");
-                  resolve(noStories);
-                }, STORY_RENDER_BUDGET_MS);
-              }),
-            ]).finally(() => clearTimeout(storyTimer))
-            : noStories;
+            ? renderStoriesWithin(creativeInputs.map(creative => creative.generation), STORY_RENDER_BUDGET_MS, code => storyFallback("render", code))
+            : creativeInputs.map(() => null);
           // #493: the ask names the city only when the campaign targets one (same areas as targeting).
           const areas = draftAreaNames(draft.input, business.locations ?? []);
           const prefill = draft.input.destination === "whatsapp" ? whatsappGreeting(

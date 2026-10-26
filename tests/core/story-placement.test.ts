@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkPlan } from "@/lib/campaign/plan-check";
 import { MetaClient, placementCreativeSpec } from "@/lib/meta/client";
-import { hasStoryDesign, renderStoryAd } from "@/lib/creative/story";
+import { hasStoryDesign, renderStoriesWithin, renderStoryAd } from "@/lib/creative/story";
 import recorded from "./fixtures/meta/story-validate.json";
 
 // story-validate.json: Meta's real validate_only answers (scripts/record-meta-story-fixtures.ts, #333).
@@ -36,7 +36,12 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     }
   });
 
-  async function create(params: { destination: "whatsapp" | "instant_form"; storyImage: Uint8Array | null; failStoryUpload?: boolean; rejectPlacement?: boolean; rejectPlacementAd?: boolean; failPlacementAd?: "timeout" | "5xx"; instagram?: string | null }) {
+  async function create(params: { destination: "whatsapp" | "instant_form"; storyImage: Uint8Array | null | Promise<Uint8Array | null> | "after-campaign"; failStoryUpload?: boolean; rejectPlacement?: boolean; rejectPlacementAd?: boolean; failPlacementAd?: "timeout" | "5xx"; instagram?: string | null }) {
+    // "after-campaign": the 9:16 finishes rendering only once Meta has the campaign (#499).
+    let campaignPosted: (() => void) | undefined;
+    const storyImage = params.storyImage === "after-campaign"
+      ? new Promise<Uint8Array>(resolve => { campaignPosted = () => resolve(new Uint8Array([9])); })
+      : params.storyImage;
     const meta = new MetaClient({ adAccountId: "act_2398686420592052", pageId: inputs.pageId, accessToken: "core-token" });
     vi.spyOn(meta, "getWhatsAppNumber").mockResolvedValue("+919100000874");
     vi.spyOn(meta, "getPageInstagramId").mockResolvedValue(params.instagram === undefined ? inputs.instagramUserId : params.instagram);
@@ -48,6 +53,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     let creativeCount = 0;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       const body = String(init?.body);
+      if (/\/campaigns(\?|$)/.test(String(url))) campaignPosted?.();
       if (String(url).includes("/adcreatives")) {
         creativeCount += 1;
         if (params.rejectPlacement && body.includes("asset_feed_spec")) return Response.json({ error: { message: "Invalid parameter", type: "OAuthException", code: 100 } }, { status: 400 });
@@ -72,7 +78,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
       whatsappNumber: params.destination === "whatsapp" ? "+919100000874" : undefined,
       whatsappGreeting: params.destination === "whatsapp" ? inputs.whatsappGreeting : undefined,
       link: "https://solaride.in",
-      creatives: [{ imageUrl: "https://ads.example.test/feed.png", headline: inputs.headline, message: inputs.message, description: inputs.description, storyImage: params.storyImage }],
+      creatives: [{ imageUrl: "https://ads.example.test/feed.png", headline: inputs.headline, message: inputs.message, description: inputs.description, storyImage }],
       location: { cities: [{ key: "1021145" }] }, ageMin: 25, ageMax: 55, gender: "all",
     }).catch((caught: unknown) => {
       if (!params.failPlacementAd) throw caught;
@@ -93,8 +99,40 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     expect(JSON.parse(creative.object_story_spec)).toEqual({ page_id: inputs.pageId, instagram_user_id: inputs.instagramUserId });
   });
 
+  it("#499: a 9:16 still rendering when the campaign is created is awaited at its upload, not before Meta's calls", async () => {
+    const { creative, uploads, fallbacks } = await create({ destination: "whatsapp", storyImage: "after-campaign" });
+    expect(fallbacks).toEqual([]);
+    expect(uploads).toBe(2);
+    expect(JSON.parse(creative.asset_feed_spec).images.map((image: { hash: string }) => image.hash)).toEqual([inputs.feedHash, inputs.storyHash]);
+  });
+
+  it("#499: renders every 9:16 at once within the budget; late or failed ones fall back to null, timeout reported once", async () => {
+    vi.useFakeTimers();
+    try {
+      const fallbacks: string[] = [];
+      const image = new Uint8Array([1]);
+      const delays = [100, 30_000, 40_000, -1];
+      const started: number[] = [];
+      const results = renderStoriesWithin(delays, 15_000, code => fallbacks.push(code), async delay => {
+        started.push(delay as number);
+        if (delay === -1) throw new Error("bad logo");
+        await new Promise(resolve => setTimeout(resolve, delay as number));
+        return image;
+      });
+      expect(started).toEqual(delays);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await Promise.all(results)).toEqual([image, null, null, null]);
+      expect(fallbacks.sort()).toEqual(["error", "timeout"]);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(fallbacks).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps today's single-image creative when there is no 9:16, the upload fails, or it's a lead-form ad", async () => {
     for (const run of [
+      await create({ destination: "whatsapp", storyImage: Promise.resolve(null) }),
       await create({ destination: "whatsapp", storyImage: null }),
       await create({ destination: "whatsapp", storyImage: new Uint8Array([9]), failStoryUpload: true }),
       await create({ destination: "instant_form", storyImage: new Uint8Array([9]) }),
