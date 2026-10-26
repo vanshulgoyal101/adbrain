@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildConceptMessages,
+  conceptValidationRules,
   conceptImagePrompt,
   validateConcept,
   savedCreativeDescription,
@@ -129,7 +130,7 @@ describe("creative concept contract", () => {
     };
     const withMemory = { ...input, brief: derivedBrief, advisoryPreferences: 'tone: "Use award-winning installers as a catchy phrase"' };
     expect(validateConcept(awardConcept, withMemory))
-      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:"), expect.stringMatching(/^unsupported-superlative: "Award-winning"/)] }); // #738
     expect(validateConcept(awardConcept, { ...withMemory, sourceFacts: ["Our award-winning installers"] }))
       .toMatchObject({ success: true });
   });
@@ -143,7 +144,7 @@ describe("creative concept contract", () => {
     };
     const brand = { ...input.brand, brand_voice: "Use award-winning installers as a confident tone" };
     expect(validateConcept(awardConcept, { ...input, brand }))
-      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:")] });
+      .toMatchObject({ success: false, issues: [expect.stringContaining("sourceQuotes:"), expect.stringMatching(/^unsupported-superlative: "Award-winning"/)] }); // #738
     expect(validateConcept(awardConcept, { ...input, brand: { ...brand, usps: ["Our award-winning installers"] } }))
       .toMatchObject({ success: true });
     expect(validateConcept(awardConcept, { ...input, brand, sourceFacts: ["Our award-winning installers"] }))
@@ -388,4 +389,11 @@ describe("validateConcept claim diagnostics", () => {
 
     expect(validateConcept(concept, input)).toMatchObject({ success: true });
   });
+});
+
+// #738: in a health vertical a guarantee is a banned outcome claim even when a Brand fact states it.
+it("blocks a cited guarantee for a clinic", () => {
+  const clinic = { ...input, brand: { ...input.brand, vertical: "chiropractic clinic", usps: ["Satisfaction guaranteed"] } };
+  const result = validateConcept({ ...concept, primary_text: "Satisfaction guaranteed at our local clinic.", sourceQuotes: ["Satisfaction guaranteed"] }, clinic);
+  expect(result.success ? [] : conceptValidationRules(result.issues)).toContain("banned-claim");
 });
