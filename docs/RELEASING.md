@@ -159,6 +159,9 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   into `next` itself (a `Train sync: main → next` PR whose head is `main`'s CI-checked
   commit), dispatches CI on the merged commit and promotes once it's green. Only a conflict
   or red `main` stops it; then merge `main` into `next` by a person's PR.
+- If `main` refuses the train PR's merge, the train checks the PR's own `pull_request` CI on that
+  commit. A run with **0 jobs** is GitHub's merge ref not being ready yet (#878): it reruns that run
+  once and keeps retrying for up to 10 minutes. A PR CI failure that ran jobs stops the train at once.
 - A red or stuck `next` opens one `Deploy train stuck` issue for DevOps. Fix `next`
   with a PR to it; production keeps the last train.
 - [pr-base.yml](../.github/workflows/pr-base.yml) retargets PRs opened against `main`

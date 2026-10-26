@@ -104,12 +104,26 @@ jobs:
             pr=${pr##*/}
           fi
           # A merge commit keeps next's history, so the next train needs no rebase.
-          # A just-created PR can briefly report its green checks as "expected" (#608); retry for 2 min.
-          for i in $(seq 1 6); do
-            gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha" && break
-            [ "$i" -lt 6 ] || exit 1
+          # A just-created PR can briefly report its green checks as "expected" (#608). Its pull_request CI can
+          # also fail with 0 jobs when the merge ref isn't ready yet (#878): that's GitHub, not a red build, so
+          # rerun it once. A PR CI failure that ran jobs is a real failure and stops the train at once.
+          merged=""; rerun=""
+          for i in $(seq 1 30); do
+            if gh pr merge "$pr" -R "$repo" --merge --match-head-commit "$sha"; then merged=1; break; fi
+            run=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=20" \
+              --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last // empty | "\(.id) \(.status) \(.conclusion)"')
+            read -r rid rstatus rconclusion <<<"$run"
+            if [ -n "$rid" ] && [ "$rstatus" = completed ] && [ "$rconclusion" = failure ]; then
+              jobs=$(gh api "repos/$repo/actions/runs/$rid/jobs" --jq .total_count)
+              if [ "$jobs" != 0 ]; then echo "::error::pull_request CI $rid on ${sha::7} failed; not promoting."; exit 1; fi
+              if [ -z "$rerun" ]; then
+                echo "pull_request CI $rid has 0 jobs (merge ref not ready); rerunning it once."
+                gh run rerun "$rid" -R "$repo" && rerun=1
+              fi
+            fi
             sleep 20
           done
+          [ -n "$merged" ] || { echo "::error::#$pr was not mergeable within 10 min."; exit 1; }
           echo "Promoted ${sha::7} via #$pr."
           gh workflow run production-drift.yml -R "$repo" --ref main || echo "::warning::drift check not dispatched"
       - name: Alert once when the train is stuck
