@@ -42,6 +42,28 @@ z.config({ jitless: true });
 const studioGenerationSchema = z.object({ generationId: z.string().uuid(), count: z.number().int().min(1).max(6) });
 type StudioGeneration = z.infer<typeof studioGenerationSchema>;
 
+const SET_ASIDE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+type CreateBatch = { key: string; made: number | null; items: Creative[] };
+
+/** #762: ads in their Create batch (`variant_group`), newest batch first, each in its given order. */
+function createBatches(list: Creative[]): CreateBatch[] {
+  const batches = new Map<string, CreateBatch>();
+  for (const item of list) {
+    const key = item.variant_group ?? item.id;
+    const batch = batches.get(key) ?? { key, made: null, items: [] };
+    const made = item.created_at ? Date.parse(item.created_at) : NaN;
+    if (!Number.isNaN(made)) batch.made = Math.max(batch.made ?? made, made);
+    batch.items.push(item);
+    batches.set(key, batch);
+  }
+  return [...batches.values()].sort((first, second) => (second.made ?? -Infinity) - (first.made ?? -Infinity));
+}
+
+function formatBatchDate(made: number): string {
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(made);
+}
+
 export function Studio({
   business,
   initialCreatives,
@@ -82,8 +104,12 @@ export function Studio({
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(initialCreativeId);
 
+  // #762: unreviewed ads older than 7 days are set aside (view only; approving one brings it back).
+  const [now] = useState(() => Date.now());
+  const setAside = (item: Creative) => item.status !== "approved" && Boolean(item.created_at) && now - Date.parse(item.created_at) > SET_ASIDE_AFTER_MS;
   const approvedCount = items.filter((i) => i.status === "approved").length;
-  const reviewCount = items.length - approvedCount;
+  const setAsideCount = items.filter(setAside).length;
+  const reviewCount = items.length - approvedCount - setAsideCount;
   const previewCreative = items.find((item) => item.id === previewId) ?? null;
   const visibleItems = items.filter(
     (item) =>
@@ -92,19 +118,8 @@ export function Studio({
         value?.toLowerCase().includes(search.trim().toLowerCase()),
       ),
   );
-  const variantsByHeadline = new Map<string, Creative[]>();
-  for (const item of items) {
-    const headline = item.headline?.trim().toLowerCase() ?? "";
-    const variants = variantsByHeadline.get(headline) ?? [];
-    variants.push(item);
-    variantsByHeadline.set(headline, variants);
-  }
-  const variantLabels = new Map<string, string>();
-  for (const variants of variantsByHeadline.values()) {
-    if (variants.length < 2) continue;
-    variants.sort((first, second) => first.id < second.id ? -1 : first.id > second.id ? 1 : 0);
-    variants.forEach((item, index) => variantLabels.set(item.id, `Variant ${index + 1} of ${variants.length}`));
-  }
+  const batches = createBatches(visibleItems.filter((item) => !setAside(item)));
+  const setAsideItems = visibleItems.filter(setAside);
   // #360: on a phone the selected ad's picture is the largest paint; board tiles wait for it.
   const [boardImages, setBoardImages] = useState(false);
   useEffect(() => {
@@ -113,7 +128,8 @@ export function Studio({
   }, []);
   const selectedCreative =
     visibleItems.find((item) => item.id === selectedId) ??
-    visibleItems[0] ??
+    batches[0]?.items[0] ??
+    setAsideItems[0] ??
     null;
   const workflowStep = generating
     ? 2
@@ -122,6 +138,57 @@ export function Studio({
       : approvedCount === items.length
         ? 4
         : 3;
+
+  function adList(list: Creative[]) {
+    return (
+      <ul className="flex gap-3 overflow-x-auto p-1 lg:grid lg:grid-cols-2">
+        {list.map((creative) => {
+          const statusLabel = creative.status === "approved" ? "Approved" : "Needs review";
+          return (
+            <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
+              <button
+                type="button"
+                aria-pressed={creative.id === selectedCreative?.id}
+                onClick={() => setSelectedId(creative.id)}
+                data-product-event="creative.inspect"
+                className={cn(
+                  "w-full overflow-hidden rounded-md border text-left",
+                  creative.id === selectedCreative?.id
+                    ? "border-blue-700 ring-1 ring-blue-700"
+                    : "border-slate-200 hover:border-slate-400",
+                )}
+              >
+                <div className="flex aspect-square items-center justify-center bg-slate-100">
+                  {creative.image_url && boardImages ? (
+                    <img
+                      src={creativeThumbnailUrl(creative.image_url)}
+                      alt=""
+                      loading="lazy"
+                      fetchPriority="low"
+                      className="h-full w-full object-contain"
+                      onError={(event) => {
+                        if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
+                      }}
+                    />
+                  ) : (
+                    <ImageIcon className="text-slate-400" />
+                  )}
+                </div>
+                <div className="p-3">
+                  <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
+                    {creative.headline || "Untitled ad"}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-600">
+                    {statusLabel}
+                  </p>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   if (mounted && restoredGenerationKey !== generationKey) {
     setRestoredGenerationKey(generationKey);
@@ -411,7 +478,7 @@ export function Studio({
             <legend className="sr-only">Ad status</legend>
             {(
               [
-                ["all", `All (${items.length})`],
+                ["all", `All (${items.length - setAsideCount})`],
                 ["draft", `Needs review (${reviewCount})`],
                 ["approved", `Approved (${approvedCount})`],
               ] as const
@@ -478,57 +545,23 @@ export function Studio({
         </Card>
       ) : selectedCreative ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
-          <section aria-label="Ads" className="min-w-0">
-            <ul
-              className="scrollbar-stable flex gap-3 overflow-x-auto p-1 lg:grid lg:max-h-[75vh] lg:grid-cols-2 lg:overflow-y-scroll"
-            >
-              {visibleItems.map((creative) => {
-                const statusLabel = creative.status === "approved" ? "Approved" : "Needs review";
-                const variantLabel = variantLabels.get(creative.id);
-                return (
-                  <li key={creative.id} className="w-40 min-w-0 shrink-0 lg:w-auto">
-                    <button
-                      type="button"
-                      aria-pressed={creative.id === selectedCreative.id}
-                      onClick={() => setSelectedId(creative.id)}
-                      data-product-event="creative.inspect"
-                      className={cn(
-                        "w-full overflow-hidden rounded-md border text-left",
-                        creative.id === selectedCreative.id
-                          ? "border-blue-700 ring-1 ring-blue-700"
-                          : "border-slate-200 hover:border-slate-400",
-                      )}
-                    >
-                      <div className="flex aspect-square items-center justify-center bg-slate-100">
-                        {creative.image_url && boardImages ? (
-                          <img
-                            src={creativeThumbnailUrl(creative.image_url)}
-                            alt=""
-                            loading="lazy"
-                            fetchPriority="low"
-                            className="h-full w-full object-contain"
-                            onError={(event) => {
-                              if (creative.image_url && event.currentTarget.src !== creative.image_url) event.currentTarget.src = creative.image_url;
-                            }}
-                          />
-                        ) : (
-                          <ImageIcon className="text-slate-400" />
-                        )}
-                      </div>
-                      <div className="p-3">
-                        <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
-                          {creative.headline || "Untitled ad"}
-                        </p>
-                        <p className="mt-2 text-xs text-slate-600">
-                          {statusLabel}
-                        </p>
-                        {variantLabel && <p className="mt-1 text-xs font-medium text-blue-700">{variantLabel}</p>}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+          <section aria-label="Ads" className="scrollbar-stable min-w-0 space-y-3 lg:max-h-[75vh] lg:overflow-y-auto">
+            {batches.map((batch, index) => {
+              const list = adList(batch.items);
+              const label = `${batch.made ? `Made ${formatBatchDate(batch.made)}` : "Earlier ads"} · ${batch.items.length} ${batch.items.length === 1 ? "ad" : "ads"}`;
+              return index === 0
+                ? <div key={batch.key}><p className="px-1 pb-1 text-xs font-medium text-slate-500">{label}</p>{list}</div>
+                : <details key={batch.key} open={batch.items.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
+                    <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">{label}</summary>
+                    {list}
+                  </details>;
+            })}
+            {setAsideItems.length > 0 && (
+              <details open={setAsideItems.some((item) => item.id === selectedCreative.id) || undefined} className="border-t border-slate-200 pt-2">
+                <summary className="flex min-h-10 cursor-pointer items-center px-1 text-sm font-medium text-slate-700">Older unreviewed ads ({setAsideItems.length}), set aside after 7 days</summary>
+                {adList(setAsideItems)}
+              </details>
+            )}
           </section>
           <section
             aria-label="Ad details"

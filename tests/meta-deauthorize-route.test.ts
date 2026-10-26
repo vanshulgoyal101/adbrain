@@ -54,6 +54,20 @@ describe("POST /api/meta/deauthorize (Meta data deletion callback)", () => {
     expect(other.confirmation_code).not.toBe(body.confirmation_code);
   });
 
+  // #730: the operator must see the request the status URL promises to answer.
+  it("records a deletion request under the same confirmation code it returns", async () => {
+    const { POST } = await import("@/app/api/meta/deauthorize/route");
+    const body = await (await POST(post(signedRequest("meta-user-1")))).json() as { confirmation_code: string };
+    expect(rpc).toHaveBeenCalledWith("meta_deletion_request_record", { p_subject_id: "meta-user-1", p_code: body.confirmation_code });
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(["meta_revoke_subject", "meta_deletion_request_record"]);
+  });
+
+  it("answers 503 so Meta retries when the request can't be recorded", async () => {
+    rpc.mockImplementation(async (name: string) => ({ error: name === "meta_deletion_request_record" ? { message: "down" } : null }));
+    const { POST } = await import("@/app/api/meta/deauthorize/route");
+    expect((await POST(post(signedRequest("meta-user-1")))).status).toBe(503);
+  });
+
   it("rejects an unsigned or forged request without revoking anything", async () => {
     const { POST } = await import("@/app/api/meta/deauthorize/route");
     const res = await POST(post(signedRequest("meta-user-1", "wrong-secret")));

@@ -3,7 +3,7 @@ import type { Database } from "@/lib/types";
 
 /**
  * Service-role Supabase client. Bypasses RLS — use ONLY in trusted server
- * code (e.g. seeding meta_credentials, background jobs). Never import from a
+ * code (e.g. background jobs). Never import from a
  * Client Component.
  */
 export function createAdminClient() {

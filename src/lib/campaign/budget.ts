@@ -6,7 +6,7 @@
  */
 
 /** Quick daily-budget presets shown as one-tap chips (INR). */
-export const BUDGET_PRESETS = [200, 500, 1000] as const;
+export const BUDGET_PRESETS = [300, 500, 1000] as const;
 
 /**
  * Rough local lead-gen cost-per-lead band (INR), used ONLY for the pre-launch

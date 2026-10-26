@@ -5,6 +5,8 @@ import { MarketingHome } from "@/components/marketing-home";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import PrivacyPolicyPage from "@/app/privacy/page";
 import DataDeletionPage from "@/app/data-deletion/page";
+// #730: the status page reads the recorded request; here it was received.
+vi.mock("@/lib/privacy-requests", () => ({ metaDeletionStatus: async () => "received" }));
 
 describe("public product example", () => {
   it("labels the example without claiming a live generation or customer result", () => {

@@ -1,4 +1,4 @@
-import { negatedTerm } from "./claim-support";
+import { affirmedInFact, negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
@@ -261,6 +261,20 @@ function citesTerm(quote: string, term: string): boolean {
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
 }
 
+/**
+ * #687: a quote supports a term when it states the term itself, not merely when it has no negation
+ * anywhere ("$49 exam, no referral needed" supports $49; "$49 exam no longer offered" doesn't).
+ * Forms found only by meaning (Hindi words, spelled amounts) keep the whole-quote negation check.
+ */
+function affirmedCitation(quote: string, term: string, negation: RegExp): boolean {
+  const pattern = /^(?:free|no[- ]cost)$/i.test(term) ? /free|no[- ]cost/gi
+    : /^guarantee/i.test(term) ? /guarantee/gi
+      : new RegExp(`(?<![\\d.,])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d]|[.,]\\d)`, "gi");
+  const matches = [...quote.matchAll(pattern)];
+  if (!matches.length) return !negation.test(quote);
+  return matches.some((match) => affirmedInFact(quote, match.index, match[0]));
+}
+
 /** A verbatim quote of `fact` for `term`: the whole fact when it fits a quote, else its sentence that cites it. */
 function citationFor(fact: string, term: string): string | null {
   if (fact.length <= 500) return fact;
@@ -443,7 +457,7 @@ export function validateConcept(
   ].join(" ").normalize("NFC");
   const supported = (term: string) => concept.sourceQuotes.some((quote) => {
     const text = quote.normalize("NFC");
-    return cites(text, term) && !negation.test(text);
+    return cites(text, term) && affirmedCitation(text, term, negation);
   });
   // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
   // contains it. None or several matching facts leave it uncited; nothing is invented.

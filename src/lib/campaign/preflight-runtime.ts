@@ -71,6 +71,10 @@ export function buildCampaignPreflightLoaders(
       const { data } = await supabase.from("businesses").select("website").eq("id", actor.businessId).maybeSingle();
       return data?.website ?? null;
     },
+    findVertical: async (actor) => {
+      const { data } = await supabase.from("businesses").select("vertical").eq("id", actor.businessId).maybeSingle();
+      return data?.vertical ?? null;
+    },
     getConnection: async () => {
       const connection = await status();
       return {
