@@ -97,6 +97,8 @@ export type AdResult = {
   delivered: boolean; impressions: number; clicks: number; spend: number;
   /** Chats for a WhatsApp campaign, form leads otherwise. */
   results: number; costPerResult: number | null; whatsappOpens?: number;
+  /** Archived (an audience edit rebuilt its ad set) or gone from the listing: its results count, but it can't be "Best so far". */
+  replaced: boolean;
 };
 
 const adListSchema = z.object({
@@ -109,8 +111,9 @@ const adInsightsSchema = z.object({
 });
 
 /**
- * #783/#789: a campaign's ads (from `/{campaign}/ads`) left-joined with `level=ad` insights, which list only
- * delivering ads, so a paused or unspent ad stays visible. Same action names as the campaign total.
+ * #783/#789: a campaign's ads (from `/{campaign}/ads`, every status Meta lists) left-joined with `level=ad`
+ * insights, which list only delivering ads, so a paused or unspent ad stays visible. Same action names as the
+ * campaign total.
  */
 export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, destination: CampaignDestination): AdResult[] {
   const ads = adListSchema.safeParse(adsPayload);
@@ -121,9 +124,11 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
     if (rows.has(row.ad_id)) throw new Error("Ad results are ambiguous.");
     rows.set(row.ad_id, row);
   }
+  if (new Set(ads.data.data.map(ad => ad.id)).size !== ads.data.data.length) throw new Error("Ad results are ambiguous.");
   const known = new Set(ads.data.data.map(ad => ad.id));
-  if ([...rows.keys()].some(id => !known.has(id))) throw new Error("Ad results name an ad the campaign doesn't list.");
-  return ads.data.data.map((ad) => {
+  // Meta can't list deleted ads, but their delivery stays in the insights: keep it so the totals add up.
+  const gone = [...rows.keys()].filter(id => !known.has(id)).map(id => ({ id, name: undefined, effective_status: undefined, creative: undefined }));
+  return [...ads.data.data, ...gone].map((ad) => {
     const row = rows.get(ad.id);
     const count = actionCounter(row);
     const spend = row?.spend ?? 0;
@@ -133,6 +138,7 @@ export function decodeAdResults(adsPayload: unknown, insightsPayload: unknown, d
       delivered: Boolean(row), impressions: row?.impressions ?? 0, clicks: row?.clicks ?? 0, spend,
       results, costPerResult: results > 0 ? spend / results : null,
       ...(destination === "whatsapp" ? { whatsappOpens: count(["link_click"]) } : {}),
+      replaced: !known.has(ad.id) || ad.effective_status === "ARCHIVED",
     };
   });
 }
@@ -146,7 +152,7 @@ export const BEST_AD_MARGIN = 0.3;
  * or, for an ad with spend but no results, at least its spend; an ad with neither isn't a comparison.
  */
 export function bestAd(ads: AdResult[]): AdResult | null {
-  const ranked = ads.filter(ad => ad.results >= BEST_AD_MIN_RESULTS && ad.costPerResult !== null)
+  const ranked = ads.filter(ad => !ad.replaced && ad.results >= BEST_AD_MIN_RESULTS && ad.costPerResult !== null)
     .sort((left, right) => left.costPerResult! - right.costPerResult!);
   const best = ranked[0];
   if (!best) return null;

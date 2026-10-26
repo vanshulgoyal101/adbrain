@@ -573,6 +573,9 @@ export function adSetTargeting(params: {
   };
 }
 
+/** #783: every ad status Meta will list for a campaign's ads; DELETED can't be requested (1815001). */
+const LISTED_AD_STATUSES = ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO"];
+
 /** #906: a WhatsApp ad set's targeting names its platforms without Audience Network. */
 export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
   const platforms = Array.isArray(targeting.publisher_platforms) ? (targeting.publisher_platforms as unknown[]).filter(item => item !== "audience_network") : [];
@@ -1608,7 +1611,8 @@ export class MetaClient {
     const destination = await this.verifyCampaignBinding(campaignId);
     const node = encodeURIComponent(campaignId);
     const [ads, insights] = await Promise.all([
-      this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100`),
+      // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
+      this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
       this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
     ]);
     return decodeAdResults(ads, insights, destination);

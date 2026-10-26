@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-26T16:48:58.727Z",
+  "recordedAt": "2026-10-26T16:56:24.115Z",
   "campaignId": "120253709994100526",
   "tape": [
     {
@@ -48,7 +48,7 @@
     },
     {
       "method": "GET",
-      "path": "120253709994100526/ads?fields=id%2Cname%2Ceffective_status%2Ccreative%7Bid%7D&limit=100",
+      "path": "120253709994100526/ads?fields=id%2Cname%2Ceffective_status%2Ccreative%7Bid%7D&limit=100&effective_status=%5B%22ACTIVE%22%2C%22PAUSED%22%2C%22ARCHIVED%22%2C%22CAMPAIGN_PAUSED%22%2C%22ADSET_PAUSED%22%2C%22IN_PROCESS%22%2C%22WITH_ISSUES%22%2C%22PENDING_REVIEW%22%2C%22DISAPPROVED%22%2C%22PREAPPROVED%22%2C%22PENDING_BILLING_INFO%22%5D",
       "status": 200,
       "body": {
         "data": [
@@ -117,13 +117,13 @@
         "data": [
           {
             "ad_id": "120253710068180526",
-            "impressions": "1428",
+            "impressions": "1487",
             "clicks": "10",
-            "spend": "70.3",
+            "spend": "72.06",
             "actions": [
               {
                 "action_type": "link_click",
-                "value": "7"
+                "value": "8"
               },
               {
                 "action_type": "post_reaction",
@@ -139,7 +139,7 @@
               },
               {
                 "action_type": "post_engagement",
-                "value": "12"
+                "value": "13"
               },
               {
                 "action_type": "post_interaction_gross",
@@ -147,7 +147,7 @@
               },
               {
                 "action_type": "page_engagement",
-                "value": "12"
+                "value": "13"
               },
               {
                 "action_type": "post_interaction_net",
@@ -187,9 +187,9 @@
           },
           {
             "ad_id": "120253710070870526",
-            "impressions": "393",
+            "impressions": "395",
             "clicks": "2",
-            "spend": "15.1",
+            "spend": "15.3",
             "actions": [
               {
                 "action_type": "link_click",
@@ -267,13 +267,13 @@
       "body": {
         "data": [
           {
-            "impressions": "1984",
+            "impressions": "2046",
             "clicks": "12",
-            "spend": "93.34",
+            "spend": "95.3",
             "actions": [
               {
                 "action_type": "link_click",
-                "value": "9"
+                "value": "10"
               },
               {
                 "action_type": "post_reaction",
@@ -289,7 +289,7 @@
               },
               {
                 "action_type": "post_engagement",
-                "value": "14"
+                "value": "15"
               },
               {
                 "action_type": "post_interaction_gross",
@@ -297,7 +297,7 @@
               },
               {
                 "action_type": "page_engagement",
-                "value": "14"
+                "value": "15"
               },
               {
                 "action_type": "post_interaction_net",
