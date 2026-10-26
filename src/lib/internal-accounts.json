@@ -7,6 +7,9 @@
   "userIds": [
     "da0771ca-c07f-4e86-b6da-023aaf517d74"
   ],
+  "smokeUserIds": [
+    "144e4745-7e6d-4fb9-a1fd-7edec31a335f"
+  ],
   "exemptFromFreeProviders": [
     {
       "userId": "0dc149e7-2b7a-459c-82e5-04aa9915e342",

@@ -22,6 +22,14 @@ describe("PR reviews count as the latest word (#423)", () => {
     expect(latestWord(comments, [])?.url).toBe("c1");
     expect(waitingOnMe(latestWord(comments, [])!.body, matchers("devops"))).toBe(false);
   });
+
+  it("skips the daily core scoreboard, so it doesn't wake every role on #681", () => {
+    const comments = [
+      { body: "QA: walk done. → Dev: #692", created_at: "2026-10-26T03:00:00Z", html_url: "c1" },
+      { body: "<!-- core-scoreboard -->\nDevOps (scheduled): **Core scoreboard** (production, 24 h)", created_at: "2026-10-26T03:37:00Z", html_url: "c2" },
+    ];
+    expect(latestWord(comments, [])?.url).toBe("c1");
+  });
 });
 
 describe("restart-proof start (#384)", () => {

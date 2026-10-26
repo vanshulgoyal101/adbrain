@@ -197,10 +197,13 @@ export function skillsFor(map, title, labels = []) {
   return [...new Set([scored[0].row.skills[0], scored[1].row.skills[0]])];
 }
 
-/** The latest word on an item across issue comments and PR reviews (verdicts are reviews since #423). The advisory AI review bot (#587) is not a word: it would wake the PR owner on every push. */
+/** Bot posts that are not a word: the advisory AI review (#587) would wake the PR owner on every push, the daily core scoreboard (#681) every role on #681. */
+const BOT_MARKERS = ["<!-- ai-review -->", "<!-- core-scoreboard -->"];
+
+/** The latest word on an item across issue comments and PR reviews (verdicts are reviews since #423), bot posts left out. */
 export function latestWord(comments = [], reviews = []) {
   const words = [
-    ...comments.filter((c) => !(c.body ?? "").startsWith("<!-- ai-review -->")).map((c) => ({ body: c.body ?? "", at: c.created_at, url: c.html_url })),
+    ...comments.filter((c) => !BOT_MARKERS.some((marker) => (c.body ?? "").startsWith(marker))).map((c) => ({ body: c.body ?? "", at: c.created_at, url: c.html_url })),
     ...reviews.filter((r) => (r.body ?? "").trim()).map((r) => ({ body: r.body, at: r.submitted_at, url: r.html_url })),
   ].filter((w) => w.at).sort((a, b) => a.at.localeCompare(b.at));
   return words.at(-1) ?? null;

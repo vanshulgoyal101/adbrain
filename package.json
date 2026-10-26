@@ -38,6 +38,7 @@
     "eval:create": "tsx --env-file=.env.local scripts/eval-create.ts",
     "smoke:core": "node scripts/smoke-core.mjs",
     "stats": "node scripts/stats.mjs",
+    "core-scoreboard": "tsx scripts/core-scoreboard.mts",
     "learnings": "node --env-file-if-exists=.env.local scripts/learnings.mjs",
     "perf:pages": "node scripts/perf-pages.mjs"
   },
