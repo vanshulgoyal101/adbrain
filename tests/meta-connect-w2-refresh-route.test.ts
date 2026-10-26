@@ -114,6 +114,8 @@ describe("campaign refresh binding boundary", () => {
       expect.any(Function),
     );
     expect(mocks.metaClientForBusiness).not.toHaveBeenCalled();
+    // #649: the summary names the campaign, not its objective.
+    expect(mocks.summarizeInsights).toHaveBeenCalledWith("Campaign", expect.objectContaining({ impressions: 1 }));
   });
 
   it("keeps refreshed results distinct from unconfirmed spend protection", async () => {

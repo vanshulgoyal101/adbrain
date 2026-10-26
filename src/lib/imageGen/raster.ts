@@ -2,7 +2,19 @@ import sharp from "sharp";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
-export async function validateRaster(bytes: Uint8Array) {
+/**
+ * #661: the anonymous Pollinations tier ignores nologo and stamps "pollinations.ai" in the bottom-right
+ * (about the last 30 px of an 858 px image). Its images lose a bottom strip (6%, at least 44 px) and the
+ * same share of the width, centred, so the shape is kept. Images under 400 px aren't stamped answers.
+ */
+function watermarkFreeRegion(width: number, height: number) {
+  if (height < 400) return null;
+  const keptHeight = height - Math.max(Math.round(height * 0.06), 44);
+  const keptWidth = Math.round((width * keptHeight) / height);
+  return { left: Math.floor((width - keptWidth) / 2), top: 0, width: keptWidth, height: keptHeight };
+}
+
+export async function validateRaster(bytes: Uint8Array, options: { trimWatermark?: boolean } = {}) {
   if (!bytes.byteLength || bytes.byteLength > MAX_IMAGE_BYTES)
     throw new Error("Image is empty or exceeds 20 MB.");
   const image = sharp(bytes, {
@@ -15,10 +27,12 @@ export async function validateRaster(bytes: Uint8Array) {
     (metadata.pages ?? 1) > 1
   )
     throw new Error("Expected a single PNG, JPEG or WebP image.");
-  const { data, info } = await image
+  let { data, info } = await image
     .rotate()
     .png()
     .toBuffer({ resolveWithObject: true });
+  const region = options.trimWatermark ? watermarkFreeRegion(info.width, info.height) : null;
+  if (region) ({ data, info } = await sharp(data).extract(region).png().toBuffer({ resolveWithObject: true }));
   if (data.byteLength > MAX_IMAGE_BYTES)
     throw new Error("Decoded image exceeds 20 MB.");
   return {

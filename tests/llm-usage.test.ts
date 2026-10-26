@@ -60,6 +60,19 @@ describe("persistent quota accounting", () => {
     expect(browserFrom).not.toHaveBeenCalled();
   });
 
+  // #650: Brand autofill on first setup runs before the business exists; business_id is NOT NULL.
+  it("keeps the ai.completion event but writes no row for a call made before the business exists", async () => {
+    adminFrom.mockReturnValue({ insert });
+    insert.mockReturnValue({ abortSignal });
+    abortSignal.mockResolvedValue({ error: null });
+    const call = { userId: "owner", route: "brand.autofill", provider: "groq", model: "m", usage: { promptTokens: 10, completionTokens: 4, totalTokens: 14 }, requestId: "request" };
+    expect(await persistLLMUsage([{ ...call, businessId: null }])).toBe(true);
+    expect(recordProductEvent).toHaveBeenCalledWith(expect.objectContaining({ name: "ai.completion", businessId: null, outcome: "success" }));
+    expect(adminFrom).not.toHaveBeenCalled();
+    expect(await persistLLMUsage([{ ...call, businessId: null }, { ...call, businessId: "owned-business" }])).toBe(true);
+    expect(insert).toHaveBeenCalledWith([expect.objectContaining({ business_id: "owned-business", route: "brand.autofill" })]);
+  });
+
   it("stores provider evidence without replacing the internal generation identity", async () => {
     adminFrom.mockReturnValue({ insert });
     insert.mockReturnValue({ abortSignal });

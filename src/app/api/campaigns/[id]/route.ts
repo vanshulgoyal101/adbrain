@@ -15,11 +15,12 @@ import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { campaignActivationPatchSchema } from "@/lib/campaign/connect-contracts";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
-import { activationConfirmationPayload, intendedCampaignChildren } from "@/lib/campaign/activation";
+import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { isOperatorFunded } from "@/lib/payments/operator-funding";
 import { formatMoney } from "@/lib/format";
+import { getActivationLearning } from "@/lib/campaign/activation-learning";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
@@ -38,25 +39,22 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
   if (!campaign) return apiError("Campaign not found", 404);
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
-    const binding = readStoredCampaignBinding(campaign);
-    const children = intendedCampaignChildren(campaign);
-    if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId
-      || binding.metaConnectionGeneration === null || !children || !Number.isFinite(campaign.daily_budget)) {
-      return apiError("Campaign children or account need reconciliation before activation review.", 409);
-    }
-    await recheckMetaConnection(context, binding.metaConnectionGeneration);
+    const review = reviewableCampaign(campaign);
+    if (!review) return apiError(RESUME_IN_ADS_MANAGER, 409);
+    await recheckMetaConnection(context, review.generation);
     const operatorFunded = await isOperatorFunded(campaign.business_id);
-    const { delivery, funding } = await withMetaConnection(context, {
+    const [{ delivery, funding }, learning] = await Promise.all([withMetaConnection(context, {
       purpose: "activate",
-      binding: { adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId },
-      expectedGeneration: binding.metaConnectionGeneration,
+      binding: { adAccountId: review.adAccountId, pageId: review.pageId },
+      expectedGeneration: review.generation,
     }, async meta => ({
-      delivery: await meta.readCampaignDelivery(campaign.meta_campaign_id!, {
-        dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children,
+      delivery: await meta.readCampaignDelivery(review.metaCampaignId, {
+        dailyBudgetRupees: review.dailyBudgetRupees, status: campaign.status, ...review.children,
       }),
       funding: operatorFunded ? await meta.readAccountFunding() : null,
-    }));
-    return NextResponse.json({ delivery, ...(funding ? { funding } : {}) }, { headers: { "Cache-Control": "no-store" } });
+    })), getActivationLearning(campaign)]);
+    // #419 item 2: inputs for the learning-restart notes; not part of the confirmation digest.
+    return NextResponse.json({ delivery, ...(funding ? { funding } : {}), learning }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);

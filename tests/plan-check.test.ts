@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import launch from "./core/fixtures/meta/launch-validate.json";
-import { planCheckEvent, checkPlan, reviewWarnings, REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
+import { activationWarnings, planCheckEvent, checkPlan, reviewWarnings, REVIEW_WARNINGS } from "@/lib/campaign/plan-check";
 
 // #419: the plan check runs on the exact payloads Meta accepted for today's launch code.
 type Exchange = { destination: string; kind: string; form: Record<string, string> };
@@ -79,5 +79,44 @@ describe("plan check (#419)", () => {
       expect(reviewWarnings({ destination: "whatsapp", storyReady: true, perAdSetDailyBudgetRupees: 50, costPerResultRupees: cost })).toEqual([]);
     }
   });
-});
 
+  // #419 item 2: the edits AdBrain makes that restart Meta's learning, warned on the activation review.
+  describe("activation warnings", () => {
+    const now = Date.parse("2026-10-25T12:00:00Z");
+    const daysAgo = (days: number) => new Date(now - days * 86_400_000).toISOString();
+
+    it("warns that a capped run is a new ad set and, with the business's cost, whether its days can finish learning", () => {
+      // ₹280 a day for 3 days at ₹69 a chat buys about 12 chats, far under Meta's ~50 (#157).
+      expect(activationWarnings({ capDays: 3, dailyBudgetRupees: 280, costPerResultRupees: 69, pausedAt: null, now })).toEqual([
+        "A capped run is a new ad set, so Meta's learning starts from zero: 3 days at about ₹69 a result buys about 12 results, under the ~50 it needs, so it will likely end while still learning",
+      ]);
+      // ₹200 for 1 day at ₹150 a lead: "1 result", not "1 results".
+      expect(activationWarnings({ capDays: 1, dailyBudgetRupees: 200, costPerResultRupees: 150, pausedAt: null, now })).toEqual([
+        "A capped run is a new ad set, so Meta's learning starts from zero: 1 day at about ₹150 a result buys about 1 result, under the ~50 it needs, so it will likely end while still learning",
+      ]);
+      // ₹500 a day for 7 days at ₹69 is about 50: enough to finish learning, so no note.
+      expect(activationWarnings({ capDays: 7, dailyBudgetRupees: 500, costPerResultRupees: 69, pausedAt: null, now })).toEqual([]);
+      for (const cost of [null, undefined, 0]) {
+        expect(activationWarnings({ capDays: 2, dailyBudgetRupees: 280, costPerResultRupees: cost, pausedAt: null, now })).toEqual([
+          "A capped run is a new ad set, so Meta's learning starts from zero; results may be slow at first",
+        ]);
+      }
+    });
+
+    it("warns when resuming a campaign AdBrain paused 7 or more days ago, and only then", () => {
+      expect(activationWarnings({ capDays: null, dailyBudgetRupees: 280, costPerResultRupees: 69, pausedAt: daysAgo(8.5), now })).toEqual([
+        "Paused for 8 days: Meta restarts learning when a campaign resumes after 7 days or more; results may be slow at first",
+      ]);
+      expect(activationWarnings({ capDays: null, dailyBudgetRupees: 280, costPerResultRupees: 69, pausedAt: daysAgo(7), now })).toHaveLength(1);
+      for (const pausedAt of [daysAgo(6.9), null, undefined, "not a date"]) {
+        expect(activationWarnings({ capDays: null, dailyBudgetRupees: 280, costPerResultRupees: 69, pausedAt, now })).toEqual([]);
+      }
+    });
+
+    it("gives a capped run after a long pause one note, not two: the new ad set learns from zero either way", () => {
+      expect(activationWarnings({ capDays: 3, dailyBudgetRupees: 280, costPerResultRupees: null, pausedAt: daysAgo(30), now })).toEqual([
+        "A capped run is a new ad set, so Meta's learning starts from zero; results may be slow at first",
+      ]);
+    });
+  });
+});

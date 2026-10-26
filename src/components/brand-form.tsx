@@ -213,7 +213,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       const res = await fetch("/api/brand/autofill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: fields.website }),
+        // #650: usage is logged on the business once it exists.
+        body: JSON.stringify({ url: fields.website, ...(business ? { businessId: business.id } : {}) }),
         signal: AbortSignal.timeout(50_000),
       });
       const data = (await res.json()) as {

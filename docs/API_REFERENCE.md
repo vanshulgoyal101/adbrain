@@ -105,7 +105,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/campaigns/list` | `businessId`, optional opaque `cursor`, `query` (max 200), `status` -> `{campaigns,results,nextCursor}` | Owner-scoped, at most 50 rows; latest stored result per returned campaign |
 | GET | `/api/campaigns/operations` | Business/key -> envelope operation or null | Recovery read; can expire stale leases |
 | GET | `/api/campaigns/operations/[id]` | Path ID -> envelope operation | Recovery read; can expire stale leases |
-| GET | `/api/campaigns/[id]` | Path ID -> `{delivery}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation |
+| GET | `/api/campaigns/[id]` | Path ID -> `{delivery,funding?,learning}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation. `learning` (`costPerResultRupees`, `pausedAt`, either null) feeds the learning-restart notes (#419) and is not part of the digest |
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery,pause}` | Live Meta mutation (pause: campaign, ad sets and ads) + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
@@ -134,8 +134,8 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/managed/page` | `attemptId` -> envelope `{pages, createUrl, linked}` | #523 2-Tier: Pages the owner administers from that attempt's discovery; off unless `MANAGED_ACCOUNTS_ENABLED` |
 | POST | `/api/meta/managed/page` | `{attemptId, pageId}` -> envelope `{state, pageId}` | #523: link an admin Page (`page_linked` in `managed_meta_accounts`); `PAGE_NOT_ADMIN` / `PAGE_LOCKED` / `PAGE_TAKEN` 409 |
 | POST | `/api/meta/managed/provision` | `{attemptId}` -> envelope `{state, adAccountId}` | #521 2-Tier: create the caller's child business, INR ad account and its manager; owner-worded 409/503 codes; off unless `MANAGED_ACCOUNTS_ENABLED` |
-| GET | `/api/managed/onboarding` | `businessId` -> envelope `{row, paid}` | #526 2-Tier onboarding progress (owner's `managed_meta_accounts` row; `paid` = captured payments net of refunds, unreadable counts as not paid); off unless `MANAGED_ACCOUNTS_ENABLED`. Polled every 5 s by `/onboarding` |
-| POST | `/api/managed/whatsapp` | `{businessId}` -> envelope `{status: linked (masked) \| not_linked \| waiting_setup \| taken \| unavailable}` | #524 v1: reads the number linked to the customer's Page (the child's own token, #624, needs the child ad account), records `whatsapp_number_e164` (funded → `whatsapp_linked`), binds it `page_link` and unbinds the business's other `page_link` numbers; `unavailable` for failed/offboarding accounts; off unless `MANAGED_ACCOUNTS_ENABLED` |
+| GET | `/api/managed/onboarding` | `businessId` -> envelope `{row, paid}` | #526 2-Tier onboarding progress (owner's `managed_meta_accounts` row; `paid` = captured payments net of refunds, unreadable counts as not paid); behind the managed-route gate (`managedRouteUser`, #625: managed accounts on for the user (404), signed in (401), Meta Connect open (403)). Polled every 5 s by `/onboarding` |
+| POST | `/api/managed/whatsapp` | `{businessId}` -> envelope `{status: linked (masked) \| not_linked \| waiting_setup \| taken \| unavailable}` | #524 v1: reads the number linked to the customer's Page (the child's own token, #624, needs the child ad account), records `whatsapp_number_e164` (funded → `whatsapp_linked`), binds it `page_link` and unbinds the business's other `page_link` numbers; `unavailable` for failed/offboarding accounts; behind the managed-route gate (`managedRouteUser`, #625: managed accounts on for the user (404), signed in (401), Meta Connect open (403)) |
 | POST | `/api/meta/connections/attempts/[id]/select` | Pair/revision/confirmation -> envelope result | Commit verified connection |
 | POST | `/api/meta/connections/recheck` | Business/optional generation -> envelope connection | Live capability recheck |
 | POST | `/api/meta/disconnect` | Explicit business, or legacy empty body -> `{ok:true}` | Disconnect stored binding, not running ads |
@@ -290,12 +290,15 @@ Supabase Auth client APIs rather than an invented `/api/login` endpoint.
 
 ### Website Autofill
 
-`POST /api/brand/autofill`: `{url: string}`; trimmed length 1-2048. Public URL
+`POST /api/brand/autofill`: `{url: string, businessId?: uuid}`; trimmed length 1-2048. Public URL
 policy and redirect/DNS checks apply. Returns `{extraction}` with suggested brand
 fields; the caller must review and save separately. Blocked URL: 400; fetch/model
 failure: 502; no readable text: 422. Extraction is a model result, not a factual
 verification. `extraction.phone` comes only from the page's first `tel:` link in
 international `+` format (never from the model). Website fetch deadline is 10 seconds; route duration setting is 30.
+Every provider attempt (and a response-cache hit, as a zero-token row) is logged as usage with
+route `brand.autofill` on `businessId` when the owner's session can read that business; on
+first Brand setup there is no business yet, so only the `ai.completion` product event is kept (#650).
 
 ### Interview
 
@@ -623,8 +626,12 @@ Activation: strict `{status:"active", confirmationDigest:<64 lowercase hex>,
 connectionGeneration:<nonnegative-safe-integer>}`. The digest is derived from
 [the activation payload](../src/lib/campaign/activation.ts) after the owner reviews
 current assets/budget and exact Meta campaign/ad-set/ad delivery snapshot from
-`GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Legacy or
-incomplete stored child identity requires reconciliation; the route does not guess.
+`GET /api/campaigns/[id]`. It is not interchangeable with `planHash`. Only a campaign
+AdBrain launched (stored ad sets and ads plus account, Page and connection binding,
+`reviewableCampaign`) can be reviewed; synced, legacy or incomplete rows get a 409
+"AdBrain can only resume campaigns it launched. Resume this one in Ads Manager." and
+the route does not guess. The Campaigns card uses the same check to offer "Resume in
+Ads Manager" instead of Resume (#662).
 GET and PATCH verify business ownership before reporting binding or child
 reconciliation details.
 
