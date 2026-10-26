@@ -410,6 +410,10 @@ Preflight validates ownership, approved creative content, active lead form,
 connection capability, INR currency, resolved targeting, and budget. Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
 Creation reruns preflight and rejects a stale draft, hash, or connection generation.
+Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,
+#723): it opens Brand Brain (website, WhatsApp), opens Connect Facebook (no
+connection, currency, access), or jumps to and focuses the composer control
+(ads, lead form, budget, age, radius, locations, Recommend audience, interests).
 
 The durable creation operation uses an idempotency key and checkpoints external
 IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
