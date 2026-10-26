@@ -1408,6 +1408,8 @@ function BusinessCampaigns({
                 <br />
                 Destination: {prepareReview.draft.input.destination === "whatsapp" ? `WhatsApp chat ${prepareReview.review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}
                 <br />
+                {/* #906: WhatsApp ads leave Audience Network out. */}
+                {prepareReview.draft.input.destination === "whatsapp" && <>Shown on Facebook, Instagram and Messenger<br /></>}
                 Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatMoney(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatMoney(prepareReview.review.totalDailyBudgetRupees)}
                 <br />
                 {prepareReview.review.serviceArea && <>{serviceAreaLine(prepareReview.review.serviceArea)}<br /></>}

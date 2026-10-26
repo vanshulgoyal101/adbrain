@@ -287,6 +287,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   upload, or a creative or ad Meta refuses fall back to the single 4:5 image and
   log `campaign.story_fallback`. Lead-form ads keep the single image. Meta's real
   answers are recorded by `scripts/record-meta-story-fixtures.ts`.
+- WhatsApp ad sets run on Facebook, Instagram and Messenger only (#906): `publisher_platforms`
+  leaves Audience Network out (on #157 most of its WhatsApp taps were accidental); positions stay
+  automatic within those. Review says "Shown on Facebook, Instagram and Messenger", the plan check
+  passes it, and the #588 ledger records `placements: "advantage:facebook,instagram,messenger"`.
+  An audience edit to a WhatsApp ad set applies the same rule. Lead-form ads keep automatic placements.
 - Every launch checks the payloads it sent against Meta's new-advertiser guidance
   (Advantage+ audience and placements, one ad set, budget vs learning, 4:5 and 9:16
   images) and logs `campaign.plan_check` (#419). Review shows two plain, non-blocking warnings
