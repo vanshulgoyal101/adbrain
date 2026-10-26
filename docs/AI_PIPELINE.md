@@ -112,7 +112,9 @@ not conversation text. These are source claims, not deployed conversation result
 The `campaign.plan` event is `success` for a ready plan, `partial` when it falls
 back (`PLAN_AUDIENCE_NO_META_INTERESTS`, questions, a failed interest lookup) and
 `failed` otherwise; `count` and `failedCount` are the suggested and unresolved
-interest counts, never the names (#686). The `creative.batch` event carries the
+interest counts, never the names (#686). A concept whose `visual.direction` shows an empty scene
+(an empty or bare space, a reception or waiting room) with no person, team or product is
+refused as `no-subject` before any image is paid for, and repaired once ([visual-rules.ts](../src/lib/creative/visual-rules.ts), #760). The `creative.batch` event carries the
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
 path (`provider`: `pollinations` for internal accounts, `paid` for customers), so
 Create speed is timed per path; usage rows are written when the batch ends and
@@ -120,6 +122,15 @@ can't time it (#681). A refused commercial claim in Create adds a
 `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
 `currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
 negation elsewhere in that quote refused it), never the term or the copy (#687).
+Create also applies Meta ad-policy rules ([policy-rules.ts](../src/lib/creative/policy-rules.ts), #738),
+repairing once like any other rule: `personal-attribute` (in health verticals, a question or
+"your …" naming the reader's symptom or condition, or suggesting they neglected care; in any
+vertical, a question about the reader's money trouble such as debt or a bill that "feels heavy"),
+`unsupported-superlative` (#1, top-rated, leading, "Austin's best" unless a supplied fact says it)
+and `exaggerated-result` ("up to N%": refused in health verticals even when a fact states it;
+elsewhere allowed when a supplied fact states the same figure, refused when uncited). Health verticals also ban implied
+outcomes (lasting relief, eliminate, fix your, feel better…) and any guarantee, cited or not. Owner-typed
+copy only gets these as warnings.
 
 ### Orchestration Reuse
 

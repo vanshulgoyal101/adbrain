@@ -35,7 +35,8 @@ export function evalProfile(name: string, overrides: Record<string, string | und
       imageModel: overrides.EVAL_IMAGE_MODEL ?? "openai/gpt-image-2.5-flare",
       judge: "openrouter",
       judgeModel: overrides.EVAL_JUDGE_MODEL ?? "google/gemini-3.8-flash",
-      schedule: "parallel",
+      // #713: EVAL_SCHEDULE=serial measures production's default against parallel on the same paid models.
+      schedule: overrides.EVAL_SCHEDULE === "serial" ? "serial" : "parallel",
       baseline: "tests/eval/baseline.json", gateCases: null, judgeByDefault: true, deterministic: false,
     };
     return { settings, env: { ...shared, CREATIVE_CONCEPT_SCHEDULE: settings.schedule, CREATIVE_PROVIDER_ORDER: "openrouter", OPENROUTER_MODEL: settings.textModel,

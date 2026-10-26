@@ -1566,6 +1566,8 @@ function BusinessCampaigns({
               <>
                 <div>
                   <Label>Choose ads</Label>
+                  {/* #724: above the grid, so it shows where focus lands on the first ad. */}
+                  {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-1 text-sm font-medium text-red-800">{placedError.message}</p>}
                   <div id="campaign-ad-picker" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
                     {pickerAds.map((c, index) => {
                       const isSel = selected.has(c.id);
@@ -1630,7 +1632,6 @@ function BusinessCampaigns({
                       );
                     })}
                   </div>
-                  {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-2 text-sm font-medium text-red-800">{placedError.message}</p>}
                   {!showAllAds && pickerAds.length > PHONE_PICKER_ADS && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 w-full sm:hidden">
                       Show all {pickerAds.length} ads
