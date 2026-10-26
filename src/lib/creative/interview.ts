@@ -5,7 +5,7 @@ import { AD_LANGUAGES } from "@/lib/languages";
 import { formatPromptContext } from "@/lib/preferences/context";
 import { AD_ANGLES, brandIndustry, type BrandContext } from "@/lib/templates/ads";
 import { spelledCurrency } from "./currency";
-import { negatedTerm } from "./concept";
+import { affirmedInFact, negatedTerm } from "./claim-support";
 import { isNonAnswer, isWriteYourOwnOption } from "./interview-options";
 
 /**
@@ -197,7 +197,7 @@ function unsupportedTerms(result: InterviewResult, input: InterviewInput): strin
     // #613: only a negation of the term itself ("no free survey", "isn't free", "Free survey no longer
     // offered") withdraws support, not one about something else ("Free site survey, no obligation").
     const pattern = free(term) ? /free|no[- ]cost/gi : new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-    return [...source.matchAll(pattern)].some((match) => !negatedTerm(source, match.index, match[0]) && !withdrawnInFact(source, match.index, match[0]))
+    return [...source.matchAll(pattern)].some((match) => affirmedInFact(source, match.index, match[0]))
       || (spelledCurrency(term, source) && !/\b(no|not|never|without|avoid)\b/i.test(source));
   }));
 }
@@ -207,14 +207,6 @@ function claimClass(term: string): string {
   if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
   if (/^guaranteed?$/i.test(term)) return "guarantee";
   return term.includes("%") ? "percent" : "currency";
-}
-
-/** A Brand fact that negates or withdraws this term: "avoid free", "don't offer free", "Free survey no longer offered" (#613). */
-function withdrawnInFact(source: string, index: number, term: string): boolean {
-  const before = source.slice(Math.max(0, index - 32), index);
-  const clause = /^[^,;.()!?]*/.exec(source.slice(index + term.length))![0];
-  return /\b(?:avoid|\w+n['’]t)\s+(?:\w+\s+)?(?:(?:a|an|any)\s+)?$/i.test(before)
-    || /\b(?:no longer|not (?:available|offered|valid)|discontinued|ended|expired|withdrawn)\b/i.test(clause);
 }
 
 function commercialClaimIssues(result: InterviewResult, input: InterviewInput): string[] {

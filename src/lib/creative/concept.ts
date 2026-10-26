@@ -1,3 +1,4 @@
+import { negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
@@ -229,15 +230,6 @@ const COMMERCIAL_TERMS = new RegExp(
   `(?<!\\btext-)\\bfree\\b|\\bno[- ]cost\\b|\\bguaranteed?\\b|\\d+(?:\\.\\d+)?\\s*%|[$\\u00a3\\u20ac\\u20b9]\\s*\\d+(?:[.,]\\d+)*|${FREE_WORD.source}|${GUARANTEE_WORD.source}`,
   "giu",
 );
-
-/**
- * "Not a guaranteed saving", "no guarantee", "गारंटी नहीं": a negated term is not a claim (#378).
- * Only a negation right next to the term counts, so "not just free installation" is still a claim.
- */
-export function negatedTerm(text: string, index: number, term: string): boolean {
-  return /\b(?:not|never|no|without)\s+(?:(?:a|an|any)\s+)?$/i.test(text.slice(Math.max(0, index - 24), index))
-    || /^\s*(?:नहीं|ਨਹੀਂ)(?![\p{L}\p{M}])/u.test(text.slice(index + term.length, index + term.length + 12));
-}
 
 /** The commercial terms text states, skipping negated ones. */
 function claimedTerms(text: string): string[] {
