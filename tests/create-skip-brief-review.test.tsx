@@ -38,7 +38,7 @@ async function startFromChip(business: Business, edit?: string) {
     const goal = screen.getByLabelText("Campaign goal") as HTMLTextAreaElement;
     fireEvent.change(goal, { target: { value: `${goal.value} ${edit}` } });
   }
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Start creating/ })); });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Make 3 ads|Start creating/ })); });
 }
 
 describe("<AdAssistant> skips the brief review when the Brand has the facts (#858)", () => {
@@ -54,7 +54,11 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
 
   it("an unedited chip on a complete Brand generates at once, shows the brief collapsed, and Edit makes a new batch", async () => {
     const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
-    await startFromChip(complete);
+    render(<AdAssistant business={complete} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Feature: Free site survey/ }));
+    // The tap that starts the paid run says so (QA + CPO on #681).
+    expect(screen.getByRole("button", { name: /Make 3 ads/ })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Make 3 ads/ })); });
 
     await waitFor(() => expect(generatePosts(fetchMock)).toHaveLength(1));
     expect(JSON.parse(String(generatePosts(fetchMock)[0][1]?.body))).toMatchObject({ brief: BRIEF, count: 3 });
@@ -78,13 +82,17 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
   it("keeps the review when the owner edited the chip's goal", async () => {
     const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
     await startFromChip(complete, "Mention weekend slots.");
+    expect(screen.queryByRole("button", { name: /Make 3 ads/ })).not.toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "Review creative brief" })).toBeInTheDocument();
     expect(generatePosts(fetchMock)).toHaveLength(0);
   });
 
   it("keeps the review when the Brand is missing a phone", async () => {
     const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
-    await startFromChip({ ...complete, phone: null } as Business);
+    render(<AdAssistant business={{ ...complete, phone: null } as Business} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Feature: Free site survey/ }));
+    expect(screen.getByRole("button", { name: /Start creating/ })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Start creating/ })); });
     expect(await screen.findByRole("region", { name: "Review creative brief" })).toBeInTheDocument();
     expect(generatePosts(fetchMock)).toHaveLength(0);
   });

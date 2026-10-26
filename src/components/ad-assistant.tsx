@@ -162,7 +162,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
   const movedOnRef = useRef(false);
   const useSavedRef = useRef<(() => void) | null>(null);
   // #858: an unedited suggestion chip on a Brand with offer, area and phone skips the brief review.
-  const chipGoalRef = useRef<string | null>(null);
+  const [chipGoal, setChipGoal] = useState<string | null>(null);
   const quickStartRef = useRef(false);
   const [quickBrief, setQuickBrief] = useState<string | null>(null);
 
@@ -549,7 +549,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     if (loading) return;
     const g = goal.trim();
     if (!g) return;
-    quickStartRef.current = chipGoalRef.current?.trim() === g && hasCreateFacts(business);
+    quickStartRef.current = chipGoal?.trim() === g && hasCreateFacts(business);
     setQuickBrief(null);
     followConversationRef.current = true;
     setStarted(true);
@@ -579,7 +579,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     setReferenceBrief(nextReference);
     setGoal(nextGoal);
     setQuickBrief(null);
-    chipGoalRef.current = null;
+    setChipGoal(null);
   }
 
   function editQuickBrief() {
@@ -639,7 +639,7 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => { setGoal(s.prompt); chipGoalRef.current = s.prompt; }}
+                    onClick={() => { setGoal(s.prompt); setChipGoal(s.prompt); }}
                     className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-600 hover:text-blue-700"
                   >
                     {s.label}<ArrowRight size={15} aria-hidden="true" />
@@ -651,7 +651,8 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
               </div>
               <div className="mt-5 flex justify-end">
                 <Button onClick={start} disabled={!goal.trim()}>
-                  Start creating <ArrowRight className="h-4 w-4" />
+                  {/* #858: this tap starts the 3 ads straight away, so it says so. */}
+                  {goal.trim() && chipGoal?.trim() === goal.trim() && hasCreateFacts(business) ? "Make 3 ads" : "Start creating"} <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
