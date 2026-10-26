@@ -48,6 +48,7 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
+import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { EditBudgetDialog } from "@/components/edit-budget-dialog";
 import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
@@ -1955,6 +1956,8 @@ function BusinessCampaigns({
           </Card>
         ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
+            {/* #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply. */}
+            {campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp") && <div className="pt-3"><WhatsAppAiCard businessId={business.id} /></div>}
             {/* #847: said once for the list, not on every row. */}
             {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-3 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
             {audienceEdit && (
