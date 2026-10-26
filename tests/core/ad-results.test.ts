@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/meta/ad-results.json";
 import { MetaClient } from "@/lib/meta/client";
 import { bestAd, decodeAdResults, type AdResult } from "@/lib/meta/insights";
+import { adResultViews, saveAdResults, type StoredAdResult } from "@/lib/campaign/ad-results-store";
 
 // #783/#789: per-ad results. Meta's real read-only answers for Solaride's live WhatsApp campaign (#499), recorded
 // by scripts/record-meta-ad-results.ts: 6 ads, of which Meta lists insights only for the 3 that delivered.
@@ -67,6 +68,27 @@ describe("core: results per ad (#783)", () => {
     expect(ads.find(ad => ad.adId === deleted)).toMatchObject({ replaced: true, name: null, delivered: true });
     expect(ads.find(ad => ad.adId === archived)).toMatchObject({ replaced: true, effectiveStatus: "ARCHIVED" });
     expect(ads.filter(ad => ad.replaced)).toHaveLength(2);
+  });
+});
+
+// #783 PR 3: what the refresh stores and what the card reads back, on the same recorded campaign.
+describe("core: stored per-ad results round-trip (#783)", () => {
+  it("stores one lifetime row per ad and reads back the same totals, with no 'Best' at one chat", async () => {
+    replay();
+    const meta = new MetaClient(creds);
+    const ads = await meta.getAdResults(recorded.campaignId);
+    const total = await meta.getCampaignInsights(recorded.campaignId);
+    let stored: StoredAdResult[] = [];
+    const database = { from: () => ({ upsert: async (rows: StoredAdResult[]) => { stored = rows; return { error: null }; } }) };
+    expect(await saveAdResults(database as never, { businessId: "b", campaignId: "c", ads })).toBe(true);
+    expect(stored).toHaveLength(6);
+    const view = adResultViews(stored, true);
+    expect(view.ads.reduce((sum, ad) => sum + ad.spend, 0)).toBeCloseTo(total.spend, 2);
+    expect(view.ads.reduce((sum, ad) => sum + ad.results, 0)).toBe(total.conversations);
+    expect(view.ads.some(ad => ad.best)).toBe(false);
+    expect(view.ads.filter(ad => !ad.delivered)).toHaveLength(3);
+    expect(view.ads[0].results).toBe(1);
+    expect(view.syncedAt).toEqual(expect.any(String));
   });
 });
 
