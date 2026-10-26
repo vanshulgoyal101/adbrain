@@ -31,6 +31,7 @@ const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
+const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -1334,6 +1335,20 @@ async function verifyCampaignLearnings(db, database) {
   });
 }
 
+async function verifyEditAdCreativeKind(db, database) {
+  const owner = randomUUID(), business = randomUUID(), campaign = randomUUID();
+  const hash = "c".repeat(64);
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Ad edit')", [business, owner]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300)", [campaign, business]);
+  await check(`${database}: edit envelope takes an ad creative edit, and still refuses unknown kinds (#775)`, async () => {
+    await db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash,before,change) values ($1,$2,'ad_creative','ad-edit-key-1',$3,$4,$5)",
+      [business, campaign, hash, JSON.stringify({ ad_id: "120253710068180526", previous_creative_id: "2421940755245471" }), JSON.stringify({ message: "New words" })]);
+    await assert.rejects(db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'other','ad-edit-key-2',$3)", [business, campaign, hash]), { code: "23514" });
+    assert.equal((await db.query("select count(*)::int as n from public.campaign_edit_operations where campaign_id=$1 and kind='ad_creative'", [campaign])).rows[0].n, 1);
+  });
+}
+
 async function verifyCampaignEditOperations(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2241,6 +2256,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(editOperationsMigration);
       await db.query(editOperationsMigration);
       await verifyCampaignEditOperations(db,database);
+      await db.query(editAdCreativeMigration);
+      await db.query(editAdCreativeMigration);
+      await verifyEditAdCreativeKind(db,database);
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
