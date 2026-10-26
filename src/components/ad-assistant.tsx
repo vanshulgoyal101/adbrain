@@ -983,8 +983,13 @@ function ResultCard({
     setApproved(next); // optimistic
     setSaveError(null);
     startTransition(async () => {
-      const res = await setCreativeStatus(creative.id, next ? "approved" : "draft");
-      if (!res.ok) {
+      try {
+        const res = await setCreativeStatus(creative.id, next ? "approved" : "draft");
+        if (!res.ok) {
+          setApproved(!next);
+          setSaveError("Couldn't save — try again.");
+        }
+      } catch {
         setApproved(!next);
         setSaveError("Couldn't save — try again.");
       }
