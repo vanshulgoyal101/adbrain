@@ -32,6 +32,7 @@ const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
+const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -1335,6 +1336,59 @@ async function verifyCampaignLearnings(db, database) {
   });
 }
 
+async function verifyCampaignAdsAndResults(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Per ad'),($3,$4,'Other per ad')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300),($3,$4,300)", [campaign, business, otherCampaign, otherBusiness]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: per-ad results: owners read only their own, only the service role writes, rows stay on their campaign's business (#783)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query("insert into public.campaign_ads(business_id,campaign_id,meta_ad_id,meta_creative_id,variant_index,position) values ($1,$2,'120253710068180526','2421940755245471',0,0),($3,$4,'120253710070870526',null,0,0)", [business, campaign, otherBusiness, otherCampaign]);
+      await session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id,period_start,period_end,delivered,impressions,link_clicks,conversations,spend_paise) values ($1,$2,'120253710068180526','2026-10-26','2026-10-26',true,1100,9,1,7030),($1,$2,'120253710006390526',null,null,false,0,0,0,0),($3,$4,'120253710070870526',null,null,true,10,1,0,1510)", [business, campaign, otherBusiness, otherCampaign]);
+      // The refresh upserts the lifetime row; an undelivered ad (no dates) is still one row (nulls not distinct).
+      await session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id,delivered) values ($1,$2,'120253710006390526',false) on conflict (campaign_id,meta_ad_id,period_start,period_end) do update set synced_at = now()", [business, campaign]);
+      for (const [sql, params, code] of [
+        ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, otherCampaign], "23503"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, otherCampaign], "23503"],
+        ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'not-an-id')", [business, campaign], "23514"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,spend_paise) values ($1,$2,'2',-1)", [business, campaign], "23514"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,period_start,period_end) values ($1,$2,'3','2026-10-27','2026-10-26')", [business, campaign], "23514"],
+        ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'120253710068180526')", [business, campaign], "23505"],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code });
+        await session.query("rollback to savepoint s");
+      }
+      assert.equal((await session.query("select count(*)::int as n from public.ad_results where campaign_id=$1", [campaign])).rows[0].n, 2);
+      await session.query("commit");
+    });
+    await as("authenticated", owner, async (session) => {
+      assert.deepEqual((await session.query("select meta_ad_id from public.campaign_ads order by meta_ad_id")).rows, [{ meta_ad_id: "120253710068180526" }]);
+      assert.deepEqual((await session.query("select meta_ad_id, spend_paise::int from public.ad_results order by meta_ad_id")).rows,
+        [{ meta_ad_id: "120253710006390526", spend_paise: 0 }, { meta_ad_id: "120253710068180526", spend_paise: 7030 }]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'9')", [business, campaign]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.campaign_ads set position=1"), { code: "42501" });
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.ad_results"), { code: "42501" });
+    });
+    await db.query("delete from public.campaigns where id=$1", [campaign]);
+    assert.equal((await db.query("select (select count(*) from public.campaign_ads where campaign_id=$1)::int + (select count(*) from public.ad_results where campaign_id=$1)::int as n", [campaign])).rows[0].n, 0);
+  });
+}
+
 async function verifyEditAdCreativeKind(db, database) {
   const owner = randomUUID(), business = randomUUID(), campaign = randomUUID();
   const hash = "c".repeat(64);
@@ -2259,6 +2313,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(editAdCreativeMigration);
       await db.query(editAdCreativeMigration);
       await verifyEditAdCreativeKind(db,database);
+      await db.query(adResultsMigration);
+      await db.query(adResultsMigration);
+      await verifyCampaignAdsAndResults(db,database);
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
