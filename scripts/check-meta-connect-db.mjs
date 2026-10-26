@@ -31,6 +31,7 @@ const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -49,7 +50,7 @@ const bootstrap = `
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
   create schema storage;
-  create table storage.buckets (id text primary key, name text, public boolean);
+  create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
   alter table storage.objects enable row level security;
   create function storage.foldername(name text) returns text[] language sql immutable as
@@ -1147,6 +1148,18 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+async function verifyLegacyCredentialsAndBuckets(db, database) {
+  await check(`${database}: browsers can't reach legacy meta_credentials, and buckets take only images within a size limit (#731)`, async () => {
+    const legacy = (await db.query(`select case when to_regclass('public.meta_credentials') is null then false else
+        has_table_privilege('authenticated', 'public.meta_credentials', 'SELECT') or has_table_privilege('authenticated', 'public.meta_credentials', 'UPDATE')
+        or has_table_privilege('anon', 'public.meta_credentials', 'SELECT') end as browser`)).rows[0];
+    assert.equal(legacy.browser, false);
+    const buckets = (await db.query("select id, file_size_limit::int as size, allowed_mime_types as types from storage.buckets where id in ('brand-assets','creatives') order by id")).rows;
+    const images = ["image/png", "image/jpeg", "image/webp"];
+    assert.deepEqual(buckets, [{ id: "brand-assets", size: 10485760, types: images }, { id: "creatives", size: 20971520, types: images }]);
+  });
+}
+
 async function verifyLeadCampaignLink(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2085,6 +2098,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await db.query(hardeningMigration);
+      await db.query(hardeningMigration);
+      await verifyLegacyCredentialsAndBuckets(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);

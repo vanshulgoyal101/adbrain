@@ -59,6 +59,14 @@ function loaders(overrides: Partial<PreflightLoaders> = {}): PreflightLoaders {
 }
 
 describe("campaign preflight orchestration", () => {
+  it("checks the ad wording against the business's own industry (#739)", async () => {
+    const result = await prepareCampaignReview(loaders({
+      findVertical: async () => "chiropractic clinic",
+      findCreatives: async () => [{ ...(await loaders().findCreatives(actor.businessId, draft.input.creativeIds))[0], headline: "Cures back pain" }],
+    }), { actor, draftId: draft.id, requestedDraftVersion: draft.version, now: "2026-09-08T10:00:00.000Z" });
+    expect(result.kind === "review" && result.review.blockers.map((item) => item.reason)).toContain("REVIEW_AD_POLICY");
+  });
+
   it("gives Review the business's own cost per result for this kind of campaign (#419 2b)", async () => {
     const asked: string[] = [];
     const result = await prepareCampaignReview(loaders({

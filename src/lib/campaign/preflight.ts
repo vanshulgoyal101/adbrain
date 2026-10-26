@@ -1,3 +1,4 @@
+import { adPolicyHits } from "@/lib/campaign/ad-policy";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
@@ -47,6 +48,8 @@ export interface PreflightInput {
   creatives: PreflightCreative[];
   form: PreflightForm | null;
   whatsappNumber?: string | null;
+  /** The business's industry, for the health claim rules (#739). */
+  vertical?: string | null;
   /** Business website; undefined when the caller does not check it. */
   website?: string | null;
   geo: PreflightGeo;
@@ -93,6 +96,13 @@ type ReviewBlocker = ReviewDTO["blockers"][number];
 
 function blocker(code: ReviewBlocker["code"], reason: ReviewBlockerReason, message: string, action: ReviewBlocker["action"] = null): ReviewBlocker {
   return { code, reason, message, action };
+}
+
+/** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
+function named(names: string[]): string {
+  const shown = names.slice(0, 5).map((name) => `"${name}"`);
+  const more = names.length > shown.length ? ` and ${names.length - shown.length} more` : "";
+  return shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}${more}` : `${shown[0]}${more}`;
 }
 
 function isAdvertiserWebsite(website: string | null): boolean {
@@ -199,6 +209,10 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   if (draft.destination !== "whatsapp" && input.website !== undefined && !isAdvertiserWebsite(input.website)) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_WEBSITE", "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.", { kind: "open_brand" }));
   }
+  const policyHit = adPolicyHits(input.creatives, input.vertical)[0];
+  if (policyHit) {
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AD_POLICY", `"${policyHit.term}" in the ad "${policyHit.headline ?? "without a headline"}" is a health promise Meta rejects. Edit the ad to describe the service instead.`));
+  }
   if (draft.dailyBudgetRupees <= 0) {
     blockers.push(blocker("INVALID_INPUT", "REVIEW_BUDGET", "Set a daily budget above ₹0."));
   }
@@ -215,12 +229,18 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_CITY_RADIUS", "\"City only\" came back from Meta with a radius. Choose the locations again."));
   }
   if (input.geo.unresolvedNames.length || (!input.geo.resolvedAreaLabel && !input.geo.explicitlyNationwide)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AREAS_UNRESOLVED", "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting."));
+    const names = input.geo.unresolvedNames;
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_AREAS_UNRESOLVED", names.length
+      ? `Meta didn't recognise the area${names.length === 1 ? "" : "s"} ${named(names)}. Fix or remove ${names.length === 1 ? "it" : "them"}, or choose nationwide targeting.`
+      : "Meta didn't recognise some of your areas. Fix or remove them, or choose nationwide targeting."));
   }
   if (!draft.targeting.audience) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_AUDIENCE", "Let AdBrain recommend the audience (Recommend audience) before reviewing."));
   } else if (draft.targeting.audience.interestNames.length && (input.geo.unresolvedInterests?.length || !input.geo.audienceInterests?.length)) {
-    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_INTERESTS_UNRESOLVED", "Meta didn't recognise some audience interests. Edit or remove them."));
+    const names = input.geo.unresolvedInterests ?? [];
+    blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_INTERESTS_UNRESOLVED", names.length
+      ? `Meta didn't recognise the interest${names.length === 1 ? "" : "s"} ${named(names)}. Edit or remove ${names.length === 1 ? "it" : "them"}.`
+      : "Meta didn't recognise some audience interests. Edit or remove them."));
   }
 
   const adSetCount = draft.abTest ? 2 : 1;
