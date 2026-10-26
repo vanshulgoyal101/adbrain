@@ -2,8 +2,16 @@ import type { Metadata } from "next";
 import { JsonLd } from "@/components/json-ld";
 import { LegalPage } from "@/components/legal-page";
 import { contentPageGraph } from "@/lib/seo/jsonLd";
+import { metaDeletionStatus } from "@/lib/privacy-requests";
 
 const TITLE = "Data Deletion Instructions";
+const STATUS_LABEL = { received: "Received", in_review: "In review", completed: "Completed", declined: "Declined" } as const;
+const STATUS_TEXT = {
+  received: "We received your request from Facebook and disconnected AdBrain from your Meta account. An operator reviews it within 7 days.",
+  in_review: "An operator is reviewing your request. We respond within 30 days.",
+  completed: "We removed the AdBrain data covered by your request. Some records may remain, as listed below.",
+  declined: "We couldn't act on this request. Use Settings or contact us with this code; we explain why in our reply.",
+} as const;
 const DESCRIPTION =
   "How to request deletion of your AdBrain account data and Meta-connected data from AdBrain systems.";
 
@@ -25,6 +33,8 @@ export default async function DataDeletionPage({
 }) {
   const { code } = await searchParams;
   const confirmationCode = typeof code === "string" && /^[a-f0-9]{16}$/.test(code) ? code : null;
+  // #730: the real status of the request Meta's callback recorded under this code.
+  const status = confirmationCode ? await metaDeletionStatus(confirmationCode).catch(() => undefined) : undefined;
   return (
     <>
       <JsonLd
@@ -38,12 +48,13 @@ export default async function DataDeletionPage({
         {confirmationCode && (
           <>
             <h2>Your Meta deletion request</h2>
-            <p>
-              Confirmation code <strong>{confirmationCode}</strong>. We received
-              your request from Facebook and disconnected AdBrain from your Meta
-              account. Stored Meta access for this account no longer works. To
-              remove the rest of your AdBrain data, follow the steps below and
-              include this code in your request.
+            <p role="status">
+              Confirmation code <strong>{confirmationCode}</strong>.{" "}
+              {status === null
+                ? "We can't find a request with this code. If you asked Facebook to delete your AdBrain data, follow the steps below and include this code."
+                : status === undefined
+                  ? "We couldn't check its status just now. Reload this page in a minute."
+                  : <>Status: <strong>{STATUS_LABEL[status]}</strong>. {STATUS_TEXT[status]}</>}
             </p>
           </>
         )}

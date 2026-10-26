@@ -24,7 +24,8 @@ async function handlePOST(request: Request) {
   const signed = value ? verifyMetaSignedRequest(value) : null;
   if (!signed) return NextResponse.json({ error: "Invalid deauthorization request." }, { status: 400 });
 
-  const { error } = await createAdminClient().rpc("meta_revoke_subject", {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("meta_revoke_subject", {
     p_subject_id: signed.userId,
   });
   if (error) return NextResponse.json({ error: "Deauthorization could not be recorded." }, { status: 503 });
@@ -35,6 +36,9 @@ async function handlePOST(request: Request) {
     .update(`meta-deletion:${signed.userId}`)
     .digest("hex")
     .slice(0, 16);
+  // #730: the operator queue gets the request the status URL promises to answer; a failure makes Meta retry.
+  const recorded = await admin.rpc("meta_deletion_request_record", { p_subject_id: signed.userId, p_code: confirmationCode });
+  if (recorded.error) return NextResponse.json({ error: "Deletion request could not be recorded." }, { status: 503 });
   return NextResponse.json({
     url: `${env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/data-deletion?code=${confirmationCode}`,
     confirmation_code: confirmationCode,
