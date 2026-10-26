@@ -10,6 +10,8 @@ export const pictureWordsSchema = z.object({
   subhead: z.string().trim().max(64),
   phone: z.string().trim().max(20).regex(/^[+\d\s().-]*$/, "Use digits, spaces and + only."),
   ctaLabel: z.enum(META_CTAS),
+  /** Omitted by older clients: the picture keeps whatever it has now. */
+  showCta: z.boolean().optional(),
 });
 
 export type PictureWords = z.infer<typeof pictureWordsSchema>;
@@ -26,6 +28,8 @@ const storedDesignSchema = z.object({
   phone: z.string().nullable(),
   contactLine: z.string().nullable(),
   ctaLabel: z.string(),
+  // Designs saved before #760 were all drawn with the button.
+  showCta: z.boolean().default(true),
   primaryColor: z.string(),
   ctaTextColor: z.string(),
   fontFamily: z.string(),
@@ -68,10 +72,12 @@ export function pictureDesign(creative: CreativeRow, brand: BrandContext): AdDes
     angle: getAngleByName(creative.angle ?? ""),
     format,
   });
-  if (typeof concept.headline !== "string") return design;
+  // Ads this old were all drawn with the button (before #760); keep it on redraw.
+  if (typeof concept.headline !== "string") return { ...design, showCta: true };
   // Concept ads were drawn from the concept, not from the derived copy fields.
   return {
     ...design,
+    showCta: true,
     headline: concept.headline,
     subhead: typeof concept.supportingText === "string" ? concept.supportingText : null,
     benefits: [],
@@ -87,6 +93,7 @@ export function pictureWordsOf(design: AdDesignSpec): PictureWords {
     ctaLabel: (META_CTAS as readonly string[]).includes(design.ctaLabel)
       ? (design.ctaLabel as PictureWords["ctaLabel"])
       : "Learn More",
+    showCta: design.showCta,
   };
 }
 
@@ -97,6 +104,7 @@ export function withPictureWords(design: AdDesignSpec, words: PictureWords): AdD
     subhead: words.subhead || null,
     phone: words.phone || null,
     ctaLabel: words.ctaLabel,
+    showCta: words.showCta ?? design.showCta,
   };
 }
 
