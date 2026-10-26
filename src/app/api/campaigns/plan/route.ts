@@ -36,6 +36,9 @@ const note = (text: string): PlannerQuestion => ({
 export const POST = observeRoute("/api/campaigns/plan", "POST", handlePOST);
 
 async function handlePOST(req: Request) {
+  // #821: Prepare's end-to-end time for the scoreboard (target p90 < 8 s).
+  const started = performance.now();
+  const elapsed = () => Math.round(performance.now() - started);
   const supabase = await createClient();
   const {
     data: { user },
@@ -192,7 +195,7 @@ async function handlePOST(req: Request) {
         : "OTHER";
     // #612: an audience plan that falls back to default targeting still lets the owner launch: partial.
     const fallsBack = Boolean(audienceDraft) && failureStage === "MODEL" && failureClass !== "ABORTED";
-    recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: fallsBack ? "partial" : "failed", businessId: business.id,
+    recordProductEvent({ kind: "workflow", name: "campaign.plan", durationMs: elapsed(), outcome: fallsBack ? "partial" : "failed", businessId: business.id,
       attributes: { errorCode: `PLAN_${failureStage}_${failureClass}` } });
     if (fallsBack) {
       return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft!) });
@@ -202,7 +205,7 @@ async function handlePOST(req: Request) {
 
   // The editor cannot answer interview questions; give it usable default targeting instead.
   const audienceFallback = (errorCode: string) => {
-    recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "partial", businessId: business.id, attributes: { errorCode } });
+    recordProductEvent({ kind: "workflow", name: "campaign.plan", durationMs: elapsed(), outcome: "partial", businessId: business.id, attributes: { errorCode } });
     return NextResponse.json({ ready: true, fallback: true, targeting: fallbackAudienceTargeting(audienceDraft!) });
   };
   if (audienceDraft && result.handoff) return audienceFallback("PLAN_AUDIENCE_HANDOFF");
@@ -268,7 +271,7 @@ async function handlePOST(req: Request) {
       interestCounts.errorCode = "PLAN_AUDIENCE_INTEREST_LOOKUP_FAILED";
     }
   }
-  const planReady = () => recordProductEvent({ kind: "workflow", name: "campaign.plan",
+  const planReady = () => recordProductEvent({ kind: "workflow", name: "campaign.plan", durationMs: elapsed(),
     outcome: interestCounts.errorCode ? "partial" : "success", businessId: business.id, attributes: interestCounts });
   if (audienceDraft) {
     const targeting = {
@@ -284,7 +287,7 @@ async function handlePOST(req: Request) {
       ...(audienceDraft.targeting.age?.mode === "manual" ? { age: audienceDraft.targeting.age } : {}),
     };
     if (noMetaInterests) {
-      recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "partial", businessId: business.id, attributes: { ...interestCounts, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" } });
+      recordProductEvent({ kind: "workflow", name: "campaign.plan", durationMs: elapsed(), outcome: "partial", businessId: business.id, attributes: { ...interestCounts, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" } });
       return NextResponse.json({ ready: true, fallback: true, targeting });
     }
     planReady();
