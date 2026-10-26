@@ -247,6 +247,7 @@ describe("core: Create route on recorded run 4", () => {
 
   it("fits the 270 s route deadline at run 4's recorded OpenRouter and image latencies", async () => {
     mocks.fastRaster = true;
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const post = await postCreate();
     const clock = useVirtualDeadlines();
     // Run 4 was answered by OpenRouter only; the fallbacks are down so a cut-off attempt fails here too.
@@ -265,6 +266,9 @@ describe("core: Create route on recorded run 4", () => {
     expect(elapsed).toBeLessThan(run4.routeDeadlineMs);
     // Value attempt 1 took 89 s in production; every attempt deadline must allow it.
     expect(Math.min(...clock.llmAttemptDeadlines)).toBeGreaterThan(value.textAttempts[0].latencyMs);
+    // #681: the batch event carries the run's own wall time and path, for the scoreboard.
+    const batch = info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"creative.batch"'));
+    expect(JSON.parse(batch!)).toMatchObject({ outcome: "success", durationMs: elapsed, attributes: { count: 3, provider: "paid" } });
   });
 
   it("fits the 270 s route deadline at a 60 s attempt limit when every concept answers 1 ms before it", async () => {
