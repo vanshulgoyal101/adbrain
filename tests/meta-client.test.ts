@@ -285,6 +285,17 @@ describe("campaign object binding", () => {
   });
 });
 
+describe("MetaClient on a campaign deleted in Meta (#721)", () => {
+  it("says it was deleted and still refuses the write, reading only", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [] }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", status: "DELETED", effective_status: "DELETED" }));
+    await expect(new MetaClient(creds).deleteObject("camp_1")).rejects.toThrow("deleted in Meta");
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+});
+
 describe("MetaClient.enforceCampaignSpendCap", () => {
   const bound = () => vi.spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))

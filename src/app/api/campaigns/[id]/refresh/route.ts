@@ -1,6 +1,6 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
-import { friendlyMetaError, type AdReview } from "@/lib/meta/client";
+import { CampaignGoneError, friendlyMetaError, type AdReview } from "@/lib/meta/client";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
 import { enforceAutoPauseWithStatus } from "@/lib/campaign/spend-enforce";
@@ -11,7 +11,7 @@ import {
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { createClient } from "@/lib/supabase/server";
-import { saveCampaignResult } from "@/lib/campaign/trusted-write";
+import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -78,6 +78,13 @@ async function handlePOST(
       }),
     ));
   } catch (err) {
+    if (err instanceof CampaignGoneError) {
+      // #721: no spend can come from a deleted campaign; end it here so Manage stops treating it as paused.
+      const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw : {};
+      const { data: ended } = await saveCampaign({ businessId: campaign.business_id, userId: user.id },
+        { status: "completed", raw: { ...raw, metaStatus: err.metaStatus } }, id).catch(() => ({ data: null }));
+      return NextResponse.json({ error: `${err.message} AdBrain moved it to ended campaigns.`, gone: err.metaStatus, campaign: ended ?? null }, { status: 410 });
+    }
     const enforcement = await enforceAutoPauseWithStatus(campaign.business_id);
     if (err instanceof ConnectionAccessError) {
       return NextResponse.json({ error: err.message, autoPaused: enforcement.paused, protectionConfirmed: enforcement.confirmed }, { status: err.code === "CONFLICT" ? 409 : 400 });
