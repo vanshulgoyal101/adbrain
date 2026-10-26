@@ -66,7 +66,7 @@ async function handleGET(request: Request) {
       pages<ScoreEvent>((from, to) => db.from("product_events").select(eventColumns)
         .gte("created_at", since).eq("name", "http.request").eq("attributes->>route", SCOREBOARD_PLAN_ROUTE)
         .order("created_at").range(from, to).abortSignal(signal())),
-      pages<ScoreAiCall>((from, to) => db.from("llm_usage_events").select("route, status, user_id, business_id, request_id, latency_ms, created_at")
+      pages<ScoreAiCall>((from, to) => db.from("llm_usage_events").select("route, status, user_id, business_id, request_id, latency_ms, created_at, provider, usage_kind")
         .gte("created_at", since).in("route", [...SCOREBOARD_AI_ROUTES])
         .order("created_at").range(from, to).abortSignal(signal())),
     ]);

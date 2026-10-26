@@ -23,6 +23,8 @@ export type ScoreAiCall = {
   request_id: string | null;
   latency_ms: number | null;
   created_at: string;
+  provider?: string | null;
+  usage_kind?: string | null;
 };
 
 export type ScoreRow = { step: string; now: string; target: string; met: boolean | null };
@@ -70,16 +72,18 @@ function topCodes(events: ScoreEvent[], limit = 2): string {
 
 /** A request succeeds when any of its AI calls succeeded (retries and fallbacks are one request). */
 function requestOutcomes(calls: ScoreAiCall[]) {
-  const requests = new Map<string, { ok: boolean; start: number; end: number }>();
+  const requests = new Map<string, { ok: boolean; start: number; end: number; free: boolean }>();
   calls.forEach((call, index) => {
     const key = call.request_id ?? `call-${index}`;
     const end = Date.parse(call.created_at);
     const start = end - (call.latency_ms ?? 0);
     const ok = call.status === "success";
+    // #681: internal accounts make free Pollinations images; customers wait on the paid path.
+    const free = call.usage_kind === "image" && call.provider === "pollinations";
     const current = requests.get(key);
     requests.set(key, current
-      ? { ok: current.ok || ok, start: Math.min(current.start, start), end: Math.max(current.end, end) }
-      : { ok, start, end });
+      ? { ok: current.ok || ok, start: Math.min(current.start, start), end: Math.max(current.end, end), free: current.free || free }
+      : { ok, start, end, free });
   });
   return [...requests.values()];
 }
@@ -138,13 +142,21 @@ export function buildScoreboard(input: {
     const rate = percent(full, batches.length);
     const calls = ai("creatives.generate");
     const failedCalls = calls.filter((call) => call.status !== "success").length;
-    const seconds = p90(requestOutcomes(calls).map((request) => (request.end - request.start) / 1000));
+    const requests = requestOutcomes(calls);
+    const wall = (free: boolean) => requests.filter((request) => request.free === free).map((request) => (request.end - request.start) / 1000);
+    const paid = wall(false);
+    const free = wall(true);
+    const paidSeconds = p90(paid);
+    const freeSeconds = p90(free);
+    const show = (value: number | null, n: number) => value === null ? "n/a" : `${Math.round(value)} s (${n})`;
+    // The target is the customer path; with no paid runs in the window, the free path stands in.
+    const seconds = paid.length ? paidSeconds : freeSeconds;
     rows.push({
       step: "Create",
       now: batches.length
-        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}`
+        ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 customer path ${show(paidSeconds, paid.length)}, internal free path ${show(freeSeconds, free.length)}`
         : "no batches",
-      target: "≥ 95% of batches give 3 usable ads, p90 < 30 s",
+      target: "≥ 95% of batches give 3 usable ads, customer-path p90 < 30 s",
       met: batches.length ? rate >= 95 && seconds !== null && seconds < 30 : null,
     });
   }

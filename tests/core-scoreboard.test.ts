@@ -61,8 +61,26 @@ describe("core scoreboard (#681)", () => {
       call("creatives.generate", "error", { request_id: "r1", created_at: at(59.5), latency_ms: 2_000 }),
       call("creatives.generate", "success", { request_id: "r2", created_at: at(30), latency_ms: 12_000 }),
     ];
-    expect(row(board(batches, calls), "Create")).toMatchObject({ now: "2 batches: 50% gave 3 ads; AI calls 1/3 failed; p90 40 s", met: false });
+    expect(row(board(batches, calls), "Create")).toMatchObject({ now: "2 batches: 50% gave 3 ads; AI calls 1/3 failed; p90 customer path 40 s (2), internal free path n/a", met: false });
     expect(row(board([batches[0]], calls.slice(2)), "Create").met).toBe(true);
+  });
+
+  // #681: internal accounts' free Pollinations images made the board read 112 s; customers wait on the paid path.
+  it("Create times the customer path apart from the internal free path, and judges the customer path", () => {
+    const batches = [ev("creative.batch", "success", { attributes: { count: 3 } })];
+    const calls = [
+      call("creatives.generate", "success", { request_id: "paid", created_at: at(60), latency_ms: 20_000 }),
+      call("creatives.generate", "success", { request_id: "paid", created_at: at(59.98), latency_ms: 14_000, usage_kind: "image", provider: "openrouter-image" }),
+      call("creatives.generate", "success", { request_id: "free", created_at: at(30), latency_ms: 14_000 }),
+      call("creatives.generate", "success", { request_id: "free", created_at: at(28), latency_ms: 90_000, usage_kind: "image", provider: "pollinations" }),
+    ];
+    expect(row(board(batches, calls), "Create")).toMatchObject({
+      now: "1 batch: 100% gave 3 ads; AI calls 0/4 failed; p90 customer path 21 s (1), internal free path 134 s (1)",
+      target: "≥ 95% of batches give 3 usable ads, customer-path p90 < 30 s",
+      met: true,
+    });
+    // With no paid run in the window, the free path stands in.
+    expect(row(board(batches, calls.slice(2)), "Create").met).toBe(false);
   });
 
   it("Regenerate and the assistant count a request as ok when any of its calls succeeded", () => {

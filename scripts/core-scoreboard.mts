@@ -33,7 +33,7 @@ const [owned, events, aiCalls] = await Promise.all([
   readOnlyQuery(`select name, outcome, user_id, business_id, duration_ms, attributes,
   ${iso} from public.product_events
 where ${inWindow} and (name in (${list(SCOREBOARD_EVENT_NAMES)}) or (name = 'http.request' and attributes->>'route' = ${quote(SCOREBOARD_PLAN_ROUTE)}))`),
-  readOnlyQuery(`select route, status, user_id, business_id, request_id, latency_ms,
+  readOnlyQuery(`select route, status, user_id, business_id, request_id, latency_ms, provider, usage_kind,
   ${iso} from public.llm_usage_events
 where ${inWindow} and route in (${list(SCOREBOARD_AI_ROUTES)})`),
 ]);
