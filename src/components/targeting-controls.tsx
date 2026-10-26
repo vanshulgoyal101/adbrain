@@ -54,7 +54,7 @@ function ModeToggle({
   );
 }
 
-function LocationPicker({
+export function LocationPicker({
   value,
   onChange,
   placeholder,

@@ -24,6 +24,7 @@ import {
   Save,
   MoreHorizontal,
   Trash2,
+  Users,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import {
   type TargetingValue,
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
+import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
@@ -1104,6 +1106,8 @@ function BusinessCampaigns({
   }
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // #773: the paused campaign whose audience is being edited.
+  const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
@@ -1933,6 +1937,14 @@ function BusinessCampaigns({
           </Card>
         ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
+            {audienceEdit && (
+              <EditAudienceDialog
+                campaignId={audienceEdit.id}
+                campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
+                onClose={() => setAudienceEdit(null)}
+                onSaved={(message) => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
+              />
+            )}
             {visibleCampaigns.map((c) => {
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
@@ -2020,6 +2032,11 @@ function BusinessCampaigns({
                                 <a href={adsLink(c)} target="_blank" rel="noopener noreferrer">
                                   <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open in Ads Manager
                                 </a>
+                              </DropdownMenuItem>
+                            )}
+                            {c.meta_campaign_id && c.status === "paused" && reviewableCampaign(c) && (
+                              <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
+                                <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}
