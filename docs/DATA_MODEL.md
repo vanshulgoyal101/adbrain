@@ -201,8 +201,8 @@ direct service-role table operations; narrowly granted security-definer RPCs
 mediate token/attempt access. Connection metadata is served through authorized
 server DTOs, not unrestricted client reads.
 
-Legacy `meta_credentials` may exist in upgraded installations and in compatibility
-types/migrations. It is not the current publishing credential source. Do not
+Legacy `meta_credentials` may exist in upgraded installations. Nothing reads or writes
+it, and browsers have no access (#731). It is not the current publishing credential source. Do not
 backfill binding IDs from global environment settings or expose legacy token
 columns to restore an obsolete UI.
 
@@ -447,6 +447,7 @@ alone is not a safe deployment plan.
 | [20261026_campaign_learnings.sql](../db/migrations/20261026_campaign_learnings.sql) | #588 learning ledger: `campaign_learnings` (owner-read RLS, service-role writes) |
 | [20261026_meta_token_search_path.sql](../db/migrations/20261026_meta_token_search_path.sql) | #625: `meta_token_insert`/`get`/`delete` run with `search_path = ''` (#359 standard); bodies already fully qualified, behaviour unchanged |
 | [20261026_lead_campaign_link.sql](../db/migrations/20261026_lead_campaign_link.sql) | Same-signature `lead_sync_checkpoint` links synced leads to their campaign by Meta campaign id and backfills empty links (#680); either release order works (the old function ignores the new key) |
+| [20261026_legacy_credentials_bucket_limits.sql](../db/migrations/20261026_legacy_credentials_bucket_limits.sql) | #731: revoke browser access to legacy `meta_credentials` (when present); `brand-assets` 10 MB and `creatives` 20 MB, PNG/JPEG/WebP only |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and

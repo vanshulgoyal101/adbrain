@@ -46,9 +46,10 @@ async function handleGET(request: NextRequest) {
     return NextResponse.redirect(settings);
   }
 
+  // #731: only the encrypted instant-connect flow exists; the plaintext legacy path is gone.
   if (verified.flow !== "instant") {
-    const { completeLegacyMetaOAuth } = await import("@/lib/meta/legacy-callback");
-    return completeLegacyMetaOAuth(request, verified);
+    settings.searchParams.set("error", "invalid_state");
+    return NextResponse.redirect(settings);
   }
 
   // The person completing the flow must be the one who started it.
