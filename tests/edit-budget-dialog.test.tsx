@@ -65,7 +65,7 @@ describe("EditBudgetDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
     const status = await screen.findByRole("status");
     expect(status).toHaveTextContent("₹200 → ₹250 a day");
-    expect(status).toHaveTextContent("more than you approved");
+    expect(status).toHaveTextContent("than you approved before");
     expect(sent(0)).toMatchObject({ change: { dailyRupees: 250 }, preview: true });
 
     const wait = screen.getByRole("button", { name: /Meta needs a moment/ });

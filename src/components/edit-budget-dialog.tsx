@@ -104,7 +104,7 @@ export function EditBudgetDialog({ campaignId, campaignName, start, onClose, onS
   };
 
   const confirmLabel = preview?.needsConfirmation
-    ? `Confirm ${start.capped ? `${formatMoney(preview.after.capRupees ?? 0)} total` : `${formatMoney(preview.after.dailyRupees)} a day`}`
+    ? start.capped ? "Confirm the new total and date" : `Confirm ${formatMoney(preview.after.dailyRupees)} a day`
     : "Save change";
 
   return (
@@ -150,7 +150,7 @@ export function EditBudgetDialog({ campaignId, campaignName, start, onClose, onS
             <div role="status" className="flex flex-col gap-1 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
               <p>{budgetWords(preview)}</p>
               {preview.notices.map(notice => <p key={notice}>{notice}</p>)}
-              {preview.needsConfirmation && <p className="font-medium">This is more than you approved before, so it needs your confirmation.</p>}
+              {preview.needsConfirmation && <p className="font-medium">This spends more, or faster, than you approved before, so it needs your confirmation.</p>}
             </div>
           )}
         </div>
