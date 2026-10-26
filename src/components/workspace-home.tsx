@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Building2, CheckCircle2, ChevronRight, ImageIcon } from "lucide-react";
 import { SpendStatusBanner } from "@/components/spend-status";
 import { buildWorkQueue } from "@/lib/work-queue";
-import { describeAuditEvent } from "@/lib/audit-labels";
+import { describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { formatDate, formatMoney, formatPerDay } from "@/lib/format";
 import { homeResults } from "@/lib/campaign/home-results";
@@ -207,7 +207,8 @@ export function WorkspaceHome({
   );
 }
 
-export function RecentActivity({ audit }: { audit: AuditLog[] }) {
+export function RecentActivity({ audit: all }: { audit: AuditLog[] }) {
+  const audit = all.filter((event) => !isBackgroundAuditAction(event.action));
   if (!audit.length) return null;
   return (
     <details className="group border-t border-slate-200 pt-2">

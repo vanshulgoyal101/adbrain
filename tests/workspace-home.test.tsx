@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { WorkspaceHome } from "@/components/workspace-home";
+import { RecentActivity, WorkspaceHome } from "@/components/workspace-home";
 import { DEFAULT_SPEND_LIMITS, evaluateSpend } from "@/lib/campaign/spend";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 
@@ -392,5 +392,22 @@ describe("Home results row (#764)", () => {
     render(await DashboardPage());
     expect(queries.getLatestResults).toHaveBeenCalledWith(["c-wa", "c-form"]);
     expect(screen.getByRole("region", { name: "Results so far" })).toBeInTheDocument();
+  });
+});
+
+// #763: background syncs are a system log, not something the owner did.
+describe("Recent activity", () => {
+  const row = (id: string, action: string, reason: string | null = null) =>
+    ({ id, action, reason, authority: "server", created_at: "2026-10-20T10:00:00Z" }) as Parameters<typeof RecentActivity>[0]["audit"][number];
+
+  it("leaves out enquiry and campaign syncs", () => {
+    render(<RecentActivity audit={[row("1", "leads.sync", "Imported 0 new lead(s); 0 form(s) failed"), row("2", "campaign.pause"), row("3", "campaigns.sync")]} />);
+    expect(screen.getByText("Campaign paused")).toBeInTheDocument();
+    expect(screen.queryByText(/lead\(s\)|from Meta/)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing when only syncs happened", () => {
+    const { container } = render(<RecentActivity audit={[row("1", "leads.sync")]} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
