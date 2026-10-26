@@ -32,6 +32,7 @@ const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
+const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -1335,6 +1336,32 @@ async function verifyCampaignLearnings(db, database) {
   });
 }
 
+async function verifyLeadCustomerStatus(db, database) {
+  const owner = randomUUID(), business = randomUUID(), lead = randomUUID();
+  await db.query("insert into auth.users(id) values ($1)", [owner]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Customers')", [business, owner]);
+  await db.query("insert into public.leads(id,business_id,meta_lead_id,full_name) values ($1,$2,'manual-798','Asha')", [lead, business]);
+  await check(`${database}: an enquiry can become a customer, the Enquiries filter finds it, nothing else is accepted (#798)`, async () => {
+    const checks = await db.query("select count(*)::int as n from pg_constraint where conrelid='public.leads'::regclass and contype='c' and pg_get_constraintdef(oid) like '%workflow_status%'");
+    assert.equal(checks.rows[0].n, 1);
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query("set local role authenticated");
+      await session.query("select set_config('request.jwt.claim.sub',$1,true)", [owner]);
+      await session.query("update public.leads set workflow_status='customer' where id=$1", [lead]);
+      const page = await session.query("select public.get_lead_page($1,'','customer') as page", [business]);
+      assert.equal(page.rows[0].page.total, 1);
+      assert.equal(page.rows[0].page.leads[0].workflow_status, "customer");
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.leads set workflow_status='sold' where id=$1", [lead]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.get_lead_page($1,'','sold')", [business]), { code: "22023" });
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  });
+}
+
 async function verifyEditAdCreativeKind(db, database) {
   const owner = randomUUID(), business = randomUUID(), campaign = randomUUID();
   const hash = "c".repeat(64);
@@ -2259,6 +2286,11 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(editAdCreativeMigration);
       await db.query(editAdCreativeMigration);
       await verifyEditAdCreativeKind(db,database);
+      await db.query(leadCustomerMigration);
+      await db.query(leadCustomerMigration);
+      if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {
+        await verifyLeadCustomerStatus(db,database);
+      }
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
