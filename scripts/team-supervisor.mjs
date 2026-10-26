@@ -31,12 +31,34 @@ const REPO = "vanshulgoyal101/adbrain";
 
 /** Role named by a chat's first prompt ("You are AdBrain's Dev 2. …" → dev2); longest names first so "Dev 2" isn't "Dev". */
 export function roleFromPrompt(text) {
-  const names = Object.entries(NAMES).sort((a, b) => b[1].length - a[1].length);
-  const m = /You are AdBrain's ([A-Za-z]+(?: \d)?)/i.exec(String(text ?? ""));
+  // "You are AdBrain's Dev 2.", "…'s Product Designer (…)", "…'s Competitive Intelligence Analyst": the role is
+  // the first role name in the next few words. Helpers ("CTO helper") are separate chats, not the role itself.
+  const m = /You are AdBrain's ([^.,;:(\n]{1,60})/i.exec(String(text ?? ""));
   if (!m) return null;
-  const said = m[1].toLowerCase();
-  const hit = names.find(([, name]) => said === name.toLowerCase() || said.startsWith(`${name.toLowerCase()} `));
-  return hit ? hit[0] : null;
+  const said = ` ${m[1].toLowerCase().replace(/\s+/g, " ").trim()} `;
+  if (/ helper /.test(said)) return null;
+  const names = Object.entries(NAMES).sort((a, b) => b[1].length - a[1].length);
+  let best = null;
+  for (const [role, name] of names) {
+    const at = said.search(new RegExp(` ${name.toLowerCase()}(?=[ ])`));
+    if (at >= 0 && (best === null || at < best.at)) best = { role, at };
+  }
+  return best ? best.role : null;
+}
+
+/** Event types after which a chat's turn is over: it ended, checkpointed or shut down (#573, CEO 14:25Z). */
+const TURN_OVER = new Set(["assistant.turn_end", "session.usage_checkpoint", "session.shutdown", "session.task_complete", "session.idle", "hook.start", "hook.end"]);
+
+/** The last event type in an events.jsonl tail; hooks after a turn end don't count as work. */
+export function lastEventType(tail) {
+  const types = String(tail ?? "").split("\n").map((line) => { try { return JSON.parse(line)?.type ?? null; } catch { return null; } }).filter(Boolean);
+  const work = types.filter((t) => !t.startsWith("hook."));
+  return work.at(-1) ?? types.at(-1) ?? null;
+}
+
+/** A chat is mid-turn (working) unless its last event ends the turn. */
+export function midTurn(type) {
+  return Boolean(type) && !TURN_OVER.has(type);
 }
 
 /** First user prompt of an events.jsonl head (only the first 64 KB is read). */
@@ -55,14 +77,19 @@ export function liveRoles(dir = SESSIONS, idleMin = 20, now = Date.now()) {
   try { entries = readdirSync(dir); } catch { return live; }
   for (const id of entries) {
     const file = join(dir, id, "events.jsonl");
-    let mtime;
-    try { mtime = statSync(file).mtimeMs; } catch { continue; }
-    if (now - mtime > idleMin * 60_000) continue;
-    const buf = Buffer.alloc(65_536);
+    let stat;
+    try { stat = statSync(file); } catch { continue; }
+    if (now - stat.mtimeMs > idleMin * 60_000) continue;
     const fd = openSync(file, "r");
-    const n = readSync(fd, buf, 0, buf.length, 0);
+    const head = Buffer.alloc(65_536);
+    const n = readSync(fd, head, 0, head.length, 0);
+    const tailSize = Math.min(16_384, stat.size);
+    const tail = Buffer.alloc(tailSize);
+    readSync(fd, tail, 0, tailSize, stat.size - tailSize);
     closeSync(fd);
-    const role = roleFromPrompt(firstPrompt(buf.subarray(0, n).toString("utf8")));
+    // A chat that finished its turn without starting its waiter is idle, however recent its last write.
+    if (!midTurn(lastEventType(tail.toString("utf8")))) continue;
+    const role = roleFromPrompt(firstPrompt(head.subarray(0, n).toString("utf8")));
     if (role) live.add(role);
   }
   return live;

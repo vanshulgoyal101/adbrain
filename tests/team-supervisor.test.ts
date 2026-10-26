@@ -7,10 +7,11 @@ import { firstPrompt, lastWords, liveRoles, pickRole, prompt, restartPrompt, rol
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-function session(id: string, text: string, minutesAgo: number) {
+function session(id: string, text: string, minutesAgo: number, last: string[] = []) {
   mkdirSync(join(dir, id));
   const file = join(dir, id, "events.jsonl");
-  writeFileSync(file, `${JSON.stringify({ type: "session.start", data: {} })}\n${JSON.stringify({ type: "user.message", data: { content: text } })}\n`);
+  const tail = last.map((type) => `${JSON.stringify({ type, data: {} })}\n`).join("");
+  writeFileSync(file, `${JSON.stringify({ type: "session.start", data: {} })}\n${JSON.stringify({ type: "user.message", data: { content: text } })}\n${tail}`);
   const t = new Date(Date.now() - minutesAgo * 60_000);
   utimesSync(file, t, t);
 }
@@ -23,6 +24,11 @@ describe("team-supervisor (#573 A1)", () => {
     expect(roleFromPrompt("You are AdBrain's DevOps. Rea")).toBe("devops");
     expect(roleFromPrompt("You are AdBrain's QA, started headless")).toBe("qa");
     expect(roleFromPrompt("hello")).toBeNull();
+    expect(roleFromPrompt("You are AdBrain's Product Designer, a new role")).toBe("designer");
+    expect(roleFromPrompt("You are AdBrain's Competitive Intelligence Analyst. Your pre")).toBe("analyst");
+    expect(roleFromPrompt("You are AdBrain's Dev 4 (owner of the pre-launch Review step)")).toBe("dev4");
+    expect(roleFromPrompt("You are AdBrain's CPO (product research and the ranked roadmap)")).toBe("cpo");
+    expect(roleFromPrompt("You are AdBrain's CTO helper for epic #744")).toBeNull();
   });
 
   it("reads the first user message from an events.jsonl head", () => {
@@ -35,7 +41,10 @@ describe("team-supervisor (#573 A1)", () => {
     session("a", "You are AdBrain's QA. Read AGENTS.md", 5);
     session("b", "You are AdBrain's DevOps. Read", 45);
     session("c", "Unrelated chat", 1);
-    expect([...liveRoles(dir, 20)]).toEqual(["qa"]);
+    // Finished its turn 2 min ago and never started its waiter: idle, not live (CEO, 14:25Z).
+    session("d", "You are AdBrain's Dev 4 (owner of the Review step).", 2, ["assistant.turn_start", "tool.execution_complete", "assistant.turn_end", "hook.start", "hook.end", "session.usage_checkpoint"]);
+    session("e", "You are AdBrain's Product Designer (issue #847).", 1, ["assistant.turn_start", "tool.execution_start"]);
+    expect([...liveRoles(dir, 20)].sort()).toEqual(["designer", "qa"]);
   });
 
   it("wakes the first role in order with work and no live chat", () => {
