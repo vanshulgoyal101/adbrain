@@ -432,8 +432,8 @@ function normalizeWhatsAppNumber(value: string): string | null {
  */
 export type WhatsAppOpening = { autofill: string; greeting: string; callButton?: boolean; iceBreakers?: string[] };
 
-/** Meta doesn't limit ice breakers on the 9:16 placement path, so AdBrain does (#680 B1). */
-export const ICE_BREAKER_LIMITS = { count: 3, chars: 40 } as const;
+import { ICE_BREAKER_LIMITS } from "./limits";
+export { ICE_BREAKER_LIMITS };
 
 /** Meta's click-to-WhatsApp `page_welcome_message` for an opening (shapes from Meta's click-to-WhatsApp guide). */
 export function whatsappWelcomeMessage(opening: WhatsAppOpening): string {
