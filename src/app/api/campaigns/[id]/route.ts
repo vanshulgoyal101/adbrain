@@ -22,6 +22,7 @@ import { isOperatorFunded } from "@/lib/payments/operator-funding";
 import { formatMoney } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
+import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
@@ -201,6 +202,10 @@ async function handlePATCH(
             : await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
               dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!,
             });
+          // #741: a tree built before the out-of-area rule must be rebuilt, never activated.
+          if (delivery.adSets.some(adSet => lacksAreaExclusions(adSet.targeting))) {
+            throw new CampaignDeliveryError("This campaign was built without out-of-area exclusions, so Meta could show it far outside your area. Create it again, then activate the new one.");
+          }
           if (capDays && (delivery.adSets.some(adSet => adSet.status !== "PAUSED") || delivery.ads.some(ad => ad.status !== "PAUSED"))) {
             throw new CampaignDeliveryError("Pause the reviewed ad sets and ads in Meta first. AdBrain turns on only the capped copy.");
           }

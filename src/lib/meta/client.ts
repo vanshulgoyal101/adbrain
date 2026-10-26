@@ -7,6 +7,7 @@ import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
+import { mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -815,6 +816,39 @@ export class MetaClient {
   }
 
   /**
+   * #741: the out-of-area exclusions for an ad set's included places. Reads each place's region and
+   * country from Meta by key; null for a country-wide or non-Indian area. Refuses (rather than
+   * launching without exclusions) when Meta can't describe an Indian place.
+   */
+  async serviceAreaExclusionsFor(location: GeoTargeting | undefined): Promise<GeoTargeting | null> {
+    if (!location || location.countries?.length) return null;
+    const cities = location.cities ?? [];
+    const regions = location.regions ?? [];
+    if (!cities.length && !regions.length) return null;
+    const params = new URLSearchParams({ type: "adgeolocationmeta", locale: "en_US" });
+    if (cities.length) params.set("cities", JSON.stringify(cities.map((city) => city.key)));
+    if (regions.length) params.set("regions", JSON.stringify(regions.map((region) => region.key)));
+    type Meta = { key: string; region_id?: number | string; country_code?: string };
+    const data = await this.graph<{ data?: { cities?: Record<string, Meta>; regions?: Record<string, Meta> } }>(`search?${params}`)
+      .catch(() => { throw new TargetingExclusionsMissingError("Meta couldn't confirm the service area's states, so the out-of-area exclusions can't be set. Try again."); });
+    const radiusKm = (city: NonNullable<GeoTargeting["cities"]>[number]) =>
+      city.radius === undefined ? 0 : city.distance_unit === "mile" ? city.radius * 1.609 : city.radius;
+    const places: IncludedPlace[] = [
+      ...cities.map((city): IncludedPlace => {
+        const meta = data.data?.cities?.[city.key];
+        return { key: city.key, type: "city", regionKey: meta?.region_id === undefined ? null : String(meta.region_id), countryCode: meta?.country_code ?? null, radiusKm: radiusKm(city) };
+      }),
+      ...regions.map((region): IncludedPlace => {
+        const meta = data.data?.regions?.[region.key];
+        return { key: region.key, type: "region", regionKey: region.key, countryCode: meta?.country_code ?? null };
+      }),
+    ];
+    const exclusions = serviceAreaExclusions(places);
+    if (!exclusions && places.some((place) => place.countryCode === "IN")) throw new TargetingExclusionsMissingError();
+    return exclusions;
+  }
+
+  /**
    * Resolve human place names (e.g. "Jaipur", "Rajasthan") into a Meta geo
    * targeting spec. Cities get a search radius; regions/countries are exact.
    * Names that don't resolve are reported in `unresolved` and skipped.
@@ -1009,6 +1043,12 @@ export class MetaClient {
       }
     }
 
+    // #741: work out every ad set's out-of-area exclusions before anything is created.
+    const areaExclusions = new Map<GeoTargeting | undefined, GeoTargeting | null>();
+    for (const location of new Set([params.location, ...(params.variants ?? []).map((variant) => variant.location ?? params.location)])) {
+      areaExclusions.set(location, await this.serviceAreaExclusionsFor(location));
+    }
+
     const campaign = await this.graph<{ id: string }>(`${acct}/campaigns`, {
       method: "POST",
       form: {
@@ -1071,7 +1111,7 @@ export class MetaClient {
     // Ages are validated above, so both bounds are set here.
     const targetingFor = (v: AdSetVariant) => JSON.stringify(adSetTargeting({
       location: v.location ?? params.location,
-      excludedLocation: v.excludedLocation ?? params.excludedLocation,
+      excludedLocation: mergeExclusions(v.excludedLocation ?? params.excludedLocation, areaExclusions.get(v.location ?? params.location) ?? null),
       ageMin: (v.ageMin ?? params.ageMin)!,
       ageMax: (v.ageMax ?? params.ageMax)!,
       gender: params.gender,

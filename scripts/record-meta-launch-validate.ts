@@ -32,6 +32,8 @@ const LAUNCH_INPUTS = {
   location: { cities: [{ key: "1021145" }, { key: "2676092" }, { key: "1035473" }] },
   creative: { headline: "Rooftop solar in 7 days", message: "Cut your power bill with rooftop solar.\nFree site visit.", description: "Free site visit in Tricity", cta: "Get Quote" },
   whatsappGreeting: { autofill: "Hi, I'd like a solar quote.", greeting: "Hi! Thanks for reaching out to Solaride." },
+  // #741: Advantage+ with interest suggestions takes the out-of-area exclusions only at create (#499).
+  interests: [{ id: "6003437140731", name: "Solar energy" }],
 };
 const PLACEHOLDER_PHONE = "+910000000000";
 
@@ -40,6 +42,8 @@ const tape: Exchange[] = [];
 const scrubs: [string, string][] = [[account, "act_ACCOUNT"], [pageId, "PAGE"]];
 const scrub = <T>(value: T): T => JSON.parse(scrubs.reduce((text, [real, label]) => text.split(real).join(label), JSON.stringify(value)));
 const created: { kind: string; id: string }[] = [];
+/** #741: Meta's answer to the service-area read (region and country of each included place). */
+let geoMeta: { path: string; status: number; body: unknown } | null = null;
 
 const realFetch = globalThis.fetch;
 let destination: AdDestination = "instant_form";
@@ -57,6 +61,13 @@ async function graphPost(path: string, form: Record<string, string>) {
 
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
+  if (url.href.startsWith(GRAPH) && (init?.method ?? "GET") === "GET" && url.searchParams.get("type") === "adgeolocationmeta") {
+    const res = await realFetch(input, init);
+    const body = await res.clone().json();
+    url.searchParams.delete("access_token");
+    geoMeta = { path: url.pathname.replace("/v21.0/", "") + url.search, status: res.status, body };
+    return res;
+  }
   if (!url.href.startsWith(GRAPH) || (init?.method ?? "GET") !== "POST") return realFetch(input, init);
   const path = url.pathname.replace("/v21.0/", "");
   const kind = path.split("/").pop()!;
@@ -110,7 +121,7 @@ async function main() {
     await meta.createLeadCampaign({ ...base, destination, leadFormId: leadForm.id });
     destination = "whatsapp";
     imageUploads = 0;
-    await meta.createLeadCampaign({ ...base, destination, whatsappNumber: phone });
+    await meta.createLeadCampaign({ ...base, destination, whatsappNumber: phone, boundWhatsAppNumbers: [phone] });
   } finally {
     for (const object of [...created].reverse().filter((o) => o.kind !== "adsets")) {
       const res = await realFetch(`${GRAPH}${object.id}?access_token=${encodeURIComponent(token)}`, { method: "DELETE" });
@@ -118,7 +129,7 @@ async function main() {
     }
   }
   const file = join(process.cwd(), "tests/core/fixtures/meta/launch-validate.json");
-  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, phone: PLACEHOLDER_PHONE }, tape }), null, 2)}\n`);
+  writeFileSync(file, `${JSON.stringify(scrub({ recordedAt: new Date().toISOString(), inputs: { ...LAUNCH_INPUTS, phone: PLACEHOLDER_PHONE }, geoMeta, tape }), null, 2)}\n`);
   console.log(`launch-validate: ${tape.length} validated objects`);
 }
 
