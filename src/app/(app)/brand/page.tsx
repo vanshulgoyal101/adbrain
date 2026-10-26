@@ -3,6 +3,8 @@ import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { MetaConnectionPanel } from "@/components/meta-connection";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
+import { WhatsAppMessageCard } from "@/components/whatsapp-message-card";
+import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 import { Suspense } from "react";
 import { Instructions } from "@/components/instructions";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,6 +15,7 @@ import {
 } from "@/lib/supabase/queries";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
+import { readWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status";
 
 export const metadata = { title: OWNER_WORDS.business };
 
@@ -25,6 +28,10 @@ export default async function BrandPage() {
         getMetaConnection(business.id),
       ])
     : [[], [], null];
+  // One Meta read for both the status panel and the Call now note; neither blocks the page.
+  const whatsappStatus: Promise<WhatsAppStatus> | null = business && connection?.ready
+    ? readWhatsAppStatus(business.id).catch((): WhatsAppStatus => ({ state: "unavailable" }))
+    : null;
 
   return (
     <div>
@@ -44,8 +51,20 @@ export default async function BrandPage() {
           {connection.ready && (
             <div className="mt-4">
               <Suspense fallback={<p role="status" className="text-sm text-slate-500">Checking WhatsApp chat ads</p>}>
-                <WhatsAppStatusSection businessId={business.id} />
+                <WhatsAppStatusSection businessId={business.id} status={whatsappStatus ?? undefined} />
               </Suspense>
+            </div>
+          )}
+          {connection.ready && (
+            <div className="mt-4">
+              {/* #840: suggestions are today's generated text, per language, from the Brand's offers and areas. */}
+              <WhatsAppMessageCard businessId={business.id} businessName={business.name} saved={business.whatsapp_template}
+                firstOffer={business.offers?.[0]}
+                callNumber={whatsappStatus?.then((status) => status.state === "ready" ? status.numbers.find((number) => number.source === "page")?.masked ?? null : null)}
+                suggested={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => {
+                  const text = whatsappGreeting(business, business.offers ?? [], business.locations ?? [], [], language);
+                  return [language, { greeting: text.greeting, prefill: text.autofill }];
+                })) as Record<"en" | "hi" | "hinglish" | "pa", { greeting: string; prefill: string }>} />
             </div>
           )}
         </div>

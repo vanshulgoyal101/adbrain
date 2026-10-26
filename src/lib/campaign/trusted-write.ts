@@ -61,6 +61,23 @@ export async function saveCampaignChildren(
     .eq("business_id", actor.businessId).eq("id", campaignId).eq("meta_adset_id", data.meta_adset_id).select("id").single();
 }
 
+/**
+ * #774: write a confirmed budget edit onto the row as it is now (as #890 does for children), so `raw`
+ * written meanwhile (health, children, another edit) is kept. Updates only while the children are unchanged.
+ */
+export async function saveCampaignBudget(
+  actor: Actor, campaignId: string,
+  mirror: (current: Pick<Database["public"]["Tables"]["campaigns"]["Row"], "daily_budget" | "raw">) => Partial<Pick<CampaignInsert, "daily_budget" | "raw">>,
+  database: Store = createAdminClient(),
+) {
+  await checkOwner(database, actor);
+  const { data, error } = await database.from("campaigns").select("meta_adset_id, daily_budget, raw")
+    .eq("business_id", actor.businessId).eq("id", campaignId).maybeSingle();
+  if (error || !data?.meta_adset_id) return { data: null, error: error ?? new Error("The campaign could not be read.") };
+  return database.from("campaigns").update(mirror(data))
+    .eq("business_id", actor.businessId).eq("id", campaignId).eq("meta_adset_id", data.meta_adset_id).select("id").single();
+}
+
 export async function deleteVerifiedCampaign(actor: Actor, campaignId: string, database: Store = createAdminClient()) {
   await checkOwner(database, actor);
   return database.from("campaigns").delete().eq("business_id", actor.businessId).eq("id", campaignId).select("id").single();

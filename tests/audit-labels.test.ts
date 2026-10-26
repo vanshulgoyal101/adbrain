@@ -1,17 +1,18 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditActionLabel, describeAuditEvent } from "@/lib/audit-labels";
+import { auditActionLabel, describeAuditEvent, isBackgroundAuditAction } from "@/lib/audit-labels";
 
 describe("auditActionLabel", () => {
   it("gives plain wording for internal action keys", () => {
     expect(auditActionLabel("creative.unapprove")).toBe(
-      "Creative moved back to drafts",
+      "Ad moved back to drafts",
     );
     expect(auditActionLabel("creatives.generate")).toBe(
-      "New creatives generated",
+      "New ads made",
     );
-    expect(auditActionLabel("campaigns.sync")).toBe("Campaigns synced from Meta");
+    expect(auditActionLabel("campaigns.sync")).toBe("Campaigns updated from Meta");
+    expect(auditActionLabel("leads.sync")).toBe("Enquiries checked in Meta");
   });
 
   it("degrades readably for an action added later", () => {
@@ -24,24 +25,31 @@ describe("auditActionLabel", () => {
 
 describe("describeAuditEvent", () => {
   it("appends a short, human reason", () => {
-    expect(describeAuditEvent("campaigns.sync", "Synced 28 campaign(s) from Meta")).toBe(
-      "Campaigns synced from Meta — Synced 28 campaign(s) from Meta",
+    expect(describeAuditEvent("campaign.pause", "Spend cap reached")).toBe(
+      "Campaign paused — Spend cap reached",
     );
+  });
+
+  // #763: the sync log ("Imported 0 new lead(s); 0 form(s) failed") stays out of the owner's activity.
+  it("marks background syncs so the activity feed can leave them out", () => {
+    expect(isBackgroundAuditAction("leads.sync")).toBe(true);
+    expect(isBackgroundAuditAction("campaigns.sync")).toBe(true);
+    expect(isBackgroundAuditAction("campaign.pause")).toBe(false);
   });
 
   it("drops a long reason instead of dumping it at the user", () => {
     // Older rows stored the whole generated brief here.
     const prompt = "A calm, bright, professional photograph of the clinic ".repeat(6);
     expect(describeAuditEvent("creatives.generate", prompt)).toBe(
-      "New creatives generated",
+      "New ads made",
     );
   });
 
   it("handles a missing reason and avoids repeating the label", () => {
-    expect(describeAuditEvent("creative.approve", null)).toBe("Creative approved");
-    expect(describeAuditEvent("creative.approve", "   ")).toBe("Creative approved");
-    expect(describeAuditEvent("creative.approve", "Creative approved")).toBe(
-      "Creative approved",
+    expect(describeAuditEvent("creative.approve", null)).toBe("Ad approved");
+    expect(describeAuditEvent("creative.approve", "   ")).toBe("Ad approved");
+    expect(describeAuditEvent("creative.approve", "Ad approved")).toBe(
+      "Ad approved",
     );
   });
 });

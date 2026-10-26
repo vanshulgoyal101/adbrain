@@ -19,12 +19,10 @@ import {
 import { setCreativeStatus } from "@/app/(app)/studio/actions";
 import { AdLanguagePicker } from "@/components/ad-language-picker";
 import { CopyEditNotice, CreativeEditor, UnsavedPreviewBadge, sameAdText, savedAdText, type AdText, type CopyEditNotes } from "@/components/creative-copy-editor";
-import { ShareCreativeButton } from "@/components/share-creative-button";
 import { LivePicture, type PicturePreview } from "@/components/live-picture";
 import { applyCreateLine, CreateProgress, orderBySlots, readCreateResponse, type LiveAd } from "@/components/create-progress";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { useMounted } from "@/lib/use-mounted";
 import type { InterviewAnswer, InterviewQuestion } from "@/lib/creative/interview";
@@ -670,7 +668,8 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
             const node = event.currentTarget;
             followConversationRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
           }}
-          className="scrollbar-stable flex flex-col gap-3 pr-1 lg:max-h-[62vh] lg:overflow-y-scroll"
+          // #847: the cap keeps a long Q&A in view; finished results flow with the page so no card is clipped.
+          className={cn("scrollbar-stable flex flex-col gap-3 pr-1", phase !== "done" && "lg:max-h-[62vh] lg:overflow-y-scroll")}
         >
           {turns.map((turn, i) => (
             <Fragment key={i}>
@@ -758,28 +757,29 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
         )}
 
         {phase === "done" && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-            {selectedIds.length > 0 && (
-              <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}`}>
-                <Button>
-                  Create campaign ({selectedIds.length}) <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            )}
-            <Link href="/studio">
-              <Button variant={selectedIds.length > 0 ? "outline" : "primary"}>
-                Review ads <ArrowRight className="h-4 w-4" />
-              </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/studio" className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-blue-700 hover:bg-slate-100">
+              Review ads
             </Link>
-            <Button variant="outline" onClick={() => reset()} disabled={stillMaking > 0}>
-              <RotateCcw className="h-4 w-4" /> Make another
+            <Button variant="ghost" onClick={() => reset()} disabled={stillMaking > 0} className="min-h-11">
+              <RotateCcw className="h-4 w-4" aria-hidden="true" /> Make another
             </Button>
           </div>
         )}
-        {phase === "done" && (
-          <div aria-label="Next creative directions" className="flex flex-col divide-y divide-slate-100 border-t border-slate-200">
-            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} disabled={stillMaking > 0} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{suggestion.label}<ArrowRight size={15} className="shrink-0" aria-hidden="true" /></button>)}
+        {phase === "done" && selectedIds.length > 0 && (
+          // #847: one primary for the whole result, pinned where a phone's thumb is.
+          <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
+            <span className="text-sm text-slate-700">{selectedIds.length} selected</span>
+            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+              Create campaign
+            </Link>
           </div>
+        )}
+        {phase === "done" && (
+          <section aria-labelledby="more-ad-ideas" className="flex flex-col divide-y divide-slate-100 border-t border-slate-200">
+            <h3 id="more-ad-ideas" className="pb-1 pt-4 text-sm font-medium text-slate-500">Ideas for more ads</h3>
+            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} disabled={stillMaking > 0} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{suggestion.label}<ArrowRight size={15} className="shrink-0" aria-hidden="true" /></button>)}
+          </section>
         )}
       </div>
     </section>
@@ -813,7 +813,7 @@ function TurnView({
   if (turn.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-blue-600 px-3.5 py-2 text-sm text-white">
+        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-slate-100 px-3.5 py-2 text-sm text-slate-900">
           {turn.text}
         </div>
       </div>
@@ -834,17 +834,16 @@ function TurnView({
   if (turn.role === "result") {
     return (
       <div className="flex flex-col gap-2">
-        <div data-result-heading className="flex scroll-mt-20 items-center gap-2 text-sm font-medium text-slate-800 lg:scroll-mt-4">
-          <Sparkles className="h-4 w-4 text-blue-600" />
-          {turn.creatives.length > 1 ? "Your ads are ready — pick your favourites:" : "Your ad is ready — pick your favourite:"}
-        </div>
+        <h2 data-result-heading className="scroll-mt-20 text-lg font-semibold text-slate-900 lg:scroll-mt-4">
+          {turn.creatives.length > 1 ? "Your ads are ready. Pick the ones you like." : "Your ad is ready. Use it if you like it."}
+        </h2>
         <div className="grid gap-3 sm:grid-cols-3">
           {turn.creatives.map((c) => (
             <ResultCard key={c.id} creative={c} brand={brand} onStatus={(status) => onStatus(c.id, status)} onEdited={onEdited} />
           ))}
         </div>
         {!!turn.missing && (
-          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-600">
             <span className="min-w-0 flex-1">
               {turn.missing} of {turn.creatives.length + turn.missing} ads couldn&apos;t be made this time.
             </span>
@@ -855,11 +854,6 @@ function TurnView({
             )}
           </div>
         )}
-        <p className="text-xs text-slate-500">
-          Tap <span className="font-medium">Use this ad</span> on the ones you like — that
-          approves them for launch. Use <span className="font-medium">Edit</span> to change the
-          text or the words on the picture; regenerate or delete in Review.
-        </p>
       </div>
     );
   }
@@ -1001,7 +995,7 @@ function ResultCard({
     <div
       className={cn(
         "flex flex-col overflow-hidden rounded-xl border bg-white transition-colors",
-        approved ? "border-blue-500 ring-1 ring-blue-500" : "border-slate-200",
+        approved ? "border-primary ring-1 ring-primary" : "border-slate-200",
       )}
     >
       <div className="relative aspect-square bg-slate-100">
@@ -1025,33 +1019,13 @@ function ResultCard({
           </div>
         )}
       </div>
-      {/* #367: chips sit under the picture; its top edge is the brand's logo and name. */}
-      {(creative.angle || approved) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-3">
-          {creative.angle ? <Badge className="bg-slate-100 text-slate-700">{creative.angle}</Badge> : <span />}
-          {approved && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Selected
-            </span>
-          )}
-        </div>
-      )}
-      <div className="flex flex-1 flex-col gap-1.5 p-3">
+      <div className="flex flex-1 flex-col gap-1.5 p-4">
         {unsaved && <UnsavedPreviewBadge />}
         <h3 className="text-sm font-semibold text-slate-900">{shown.headline}</h3>
-        <p className="line-clamp-4 whitespace-pre-line text-xs text-slate-600">
+        <p className="line-clamp-2 whitespace-pre-line text-sm text-slate-600">
           {shown.primary_text}
         </p>
-        {shown.description && (
-          <p className="break-words text-xs text-slate-600">
-            <span className="font-medium">Description: </span>{shown.description}
-          </p>
-        )}
-        {shown.cta && (
-          <span className="mt-1 inline-flex w-fit rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-white">
-            {shown.cta}
-          </span>
-        )}
+        {shown.cta && <p className="text-xs text-slate-500">Button: {shown.cta}</p>}
         {editing ? (
           <div className="mt-2 border-t border-slate-100 pt-3">
             <CreativeEditor
@@ -1074,11 +1048,11 @@ function ResultCard({
         {editNotes && <CopyEditNotice notes={editNotes} />}
         <div className="mt-auto flex items-center gap-2 pt-2">
           <Button
-            size="sm"
-            variant={approved ? "outline" : "primary"}
+            variant="outline"
             onClick={toggle}
             disabled={pending}
-            className="flex-1"
+            aria-pressed={approved}
+            className={cn("min-h-11 flex-1", approved && "border-primary bg-lime-wash text-slate-900 hover:bg-lime-wash")}
           >
             {pending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1088,18 +1062,17 @@ function ResultCard({
             {approved ? "Selected" : "Use this ad"}
           </Button>
           <Button
-            size="sm"
-            variant="outline"
+            variant="ghost"
             onClick={() => {
               setEditNotes(null);
               setEditing(true);
             }}
             disabled={pending}
+            className="min-h-11"
           >
-            <Pencil className="h-3.5 w-3.5" /> Edit
+            <Pencil className="h-4 w-4" aria-hidden="true" /> Edit
           </Button>
         </div>
-        {approved && <ShareCreativeButton creative={creative} data-product-event="creative.share" />}
         {saveError && <p className="text-xs text-red-600">{saveError}</p>}
         </>
         )}
