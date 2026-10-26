@@ -67,7 +67,7 @@ export interface Database {
   public: {
     Tables: {
       privacy_requests: {
-        Row: { id: string; owner_id: string; kind: "export" | "delete"; status: "received" | "in_review" | "completed" | "declined"; handled_by: string | null; created_at: string; updated_at: string };
+        Row: { id: string; owner_id: string | null; kind: "export" | "delete"; status: "received" | "in_review" | "completed" | "declined"; handled_by: string | null; source: "owner" | "meta_callback"; confirmation_code: string | null; meta_subject_id: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; owner_id: string; kind: "export" | "delete"; status?: "received" | "in_review" | "completed" | "declined"; handled_by?: string | null; created_at?: string; updated_at?: string };
         Update: Partial<Database["public"]["Tables"]["privacy_requests"]["Insert"]>;
         Relationships: [];
@@ -944,6 +944,10 @@ export interface Database {
       meta_connection_mark_reauth: {
         Args: { p_business_id: string; p_generation: number };
         Returns: boolean;
+      };
+      meta_deletion_request_record: {
+        Args: { p_subject_id: string; p_code: string };
+        Returns: number;
       };
       razorpay_test_order_claim: {
         Args: { p_business_id: string; p_user_id: string; p_request_key: string; p_order_id: string; p_account_id: string; p_key_id: string };

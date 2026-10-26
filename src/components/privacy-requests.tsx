@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
 import type { PrivacyRequest } from "@/lib/privacy-requests";
+import { privacyRequestSubject } from "@/lib/privacy-request-label";
 import { formatDate } from "@/lib/format";
 
 const statusLabel = { received: "Received", in_review: "In review", completed: "Completed", declined: "Declined" };
@@ -112,7 +113,7 @@ export function PrivacyOperatorQueue() {
     {!requests && !error && <p role="status" className="text-sm text-slate-600">Loading requests</p>}
     {requests?.length === 0 && <p className="text-sm text-slate-600">No open requests.</p>}
     {requests && requests.length > 0 && <ul className="divide-y divide-slate-200 border-y border-slate-200">{requests.map(row => <li key={row.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-      <span className="min-w-0 flex-1 break-all text-slate-800">{row.owner_id} · {row.kind === "export" ? "Export" : "Deletion"} · {statusLabel[row.status]} · {formatDate(row.created_at)}</span>
+      <span className="min-w-0 flex-1 break-all text-slate-800">{privacyRequestSubject(row)} · {row.kind === "export" ? "Export" : "Deletion"} · {statusLabel[row.status]} · {formatDate(row.created_at)}</span>
       <select aria-label={`Update ${row.kind} request ${row.id}`} defaultValue="" disabled={busy}
         onChange={event => { if (event.target.value) void update(row, event.target.value as "in_review" | "completed" | "declined"); event.target.value = ""; }}
         className="h-10 rounded border border-slate-300 bg-white px-2 text-sm">

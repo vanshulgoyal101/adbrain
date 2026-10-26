@@ -31,6 +31,7 @@ const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
@@ -1171,6 +1172,48 @@ async function verifyConnectionReauth(db, database) {
   });
 }
 
+async function verifyMetaDeletionRequests(db, database) {
+  await check(`${database}: Meta's deletion callback records one open request per owner and code, or one unbound, and owners can't forge one (#730)`, async () => {
+    const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+    const record = async (subject, code) => (await db.query("select public.meta_deletion_request_record($1,$2) as n", [subject, code])).rows[0].n;
+    const refused = async (sql, params) => {
+      await db.query("savepoint refused");
+      await assert.rejects(db.query(sql, params));
+      await db.query("rollback to savepoint refused");
+    };
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Deletion'),($3,$4,'Deletion 2')", [business, owner, otherBusiness, other]);
+      for (const [b, by] of [[business, owner], [otherBusiness, other], [otherBusiness, other]]) {
+        await db.query(`insert into private.meta_tokens(business_id,authorized_by,subject_id,token_kind,ciphertext,nonce,auth_tag,key_id)
+          values ($1,$2,'fb-person','user','\\x01',$3,$4,'k1')`, [b, by, `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+      }
+      // The owner's own open deletion request doesn't block the callback's.
+      await db.query("insert into public.privacy_requests(owner_id,kind) values ($1,'delete')", [owner]);
+      assert.equal(await record("fb-person", "0123456789abcdef"), 2);
+      assert.equal(await record("fb-person", "0123456789abcdef"), 2, "a Meta retry must not duplicate");
+      const rows = (await db.query("select owner_id, source, status from public.privacy_requests where confirmation_code = '0123456789abcdef' order by owner_id")).rows;
+      assert.deepEqual(rows.map(row => row.owner_id).sort(), [owner, other].sort());
+      assert.ok(rows.every(row => row.source === "meta_callback" && row.status === "received"));
+      assert.equal(await record("fb-unknown", "fedcba9876543210"), 1);
+      assert.equal(await record("fb-unknown", "fedcba9876543210"), 1);
+      assert.equal((await db.query("select count(*)::int n from public.privacy_requests where confirmation_code = 'fedcba9876543210' and owner_id is null")).rows[0].n, 1);
+      await refused("select public.meta_deletion_request_record('fb-person','not-a-code')");
+      await refused("insert into public.privacy_requests(owner_id,kind) values (null,'delete')");
+      // After review completes, a later callback is a new request.
+      await db.query("update public.privacy_requests set status = 'completed' where confirmation_code = 'fedcba9876543210'");
+      assert.equal(await record("fb-unknown", "fedcba9876543210"), 1);
+      const fn = (await db.query(`select p.proconfig, has_function_privilege('authenticated', p.oid, 'execute') as customer
+        from pg_proc p where p.proname = 'meta_deletion_request_record'`)).rows[0];
+      assert.deepEqual(fn, { proconfig: ['search_path=""'], customer: false });
+      await db.query("set local role authenticated");
+      await db.query("select set_config('request.jwt.claim.sub', $1, true)", [owner]);
+      await refused("insert into public.privacy_requests(owner_id,kind,source,confirmation_code,meta_subject_id) values ($1,'delete','meta_callback','aaaaaaaaaaaaaaaa','x')", [owner]);
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyLegacyCredentialsAndBuckets(db, database) {
   await check(`${database}: browsers can't reach legacy meta_credentials, and buckets take only images within a size limit (#731)`, async () => {
     const legacy = (await db.query(`select case when to_regclass('public.meta_credentials') is null then false else
@@ -2121,6 +2164,11 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      if ((await db.query("select to_regclass('public.privacy_requests') is not null as installed")).rows[0].installed) {
+        await db.query(metaDeletionMigration);
+        await db.query(metaDeletionMigration);
+        await verifyMetaDeletionRequests(db,database);
+      }
       await db.query(hardeningMigration);
       await db.query(hardeningMigration);
       await verifyLegacyCredentialsAndBuckets(db,database);

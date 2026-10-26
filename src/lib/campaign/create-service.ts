@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { renderStoriesWithin } from "@/lib/creative/story";
+import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
 import { buildCreativeReviewPayload } from "./preflight";
 import { createOperationCheckpoint } from "./operation-store";
-import { executeOperation, OperationPhaseError, recordExternalId, type OperationRecord } from "./operations";
+import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
 import { savedCreativeDescription } from "@/lib/creative/concept";
-import { splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
+import { MetaCreateRolledBackError, splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
@@ -120,6 +121,10 @@ export async function executeReviewedCampaign(input: {
                 ...planCheckEvent(checkPlan(plan), draft.input.destination ?? "instant_form"),
               });
             },
+          }).catch((error: unknown) => {
+            // #741: refused before any POST, so Meta holds nothing; the owner can simply retry.
+            if (error instanceof TargetingExclusionsMissingError) throw new OperationPhaseError(error.message, { transmitted: false });
+            throw error;
           });
           // #588: what this launch tried, for the learning ledger (saved once the campaign row exists). Never fails the launch (#603).
           try {
@@ -136,6 +141,9 @@ export async function executeReviewedCampaign(input: {
             launchSnapshot = null;
           }
           return metaResult;
+        }).catch((error: unknown) => {
+          // #735: Meta confirmed the empty campaign is gone, so this attempt simply failed.
+          throw error instanceof MetaCreateRolledBackError ? new OperationRolledBackError(error.message) : error;
         });
         return { externalIds: [created.campaignId, ...created.adSetIds, ...created.adIds] };
       },

@@ -62,7 +62,7 @@ describe("campaign Ads Manager links", () => {
     mocks.preflight.mockImplementation(async (...args: unknown[]) => ({ ...(await (base as (...a: unknown[]) => Promise<object>)(...args)), planWarnings: warnings }));
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     for (const warning of warnings) expect(await screen.findByText(warning)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send to Meta (paused)" })).toBeEnabled();
   });
@@ -82,7 +82,7 @@ describe("campaign Ads Manager links", () => {
   it("removes the old send action while saving a replacement review and after a save failure", async () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByRole("button", { name: "Send to Meta (paused)" });
     let rejectSave!: (reason: Error) => void;
     mocks.updateDraft.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
@@ -99,7 +99,7 @@ describe("campaign Ads Manager links", () => {
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "failed", checkpoints: [], externalIds: {}, error: null });
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await screen.findByText(/The operation failed before completion/);
     if (failure === "reconnect") {
@@ -113,7 +113,7 @@ describe("campaign Ads Manager links", () => {
       await screen.findByText("Draft save unavailable");
     } else {
       fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "" } });
-      fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+      fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
       await screen.findByText("Choose a lead form before preparing campaign review.");
     }
     const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
@@ -127,7 +127,7 @@ describe("campaign Ads Manager links", () => {
     mocks.createCampaign.mockRejectedValue(new Error("Request interrupted"));
     const first = view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }, { timeout: 5000 }));
     await screen.findByText("Request interrupted");
     first.unmount();
@@ -162,7 +162,7 @@ describe("campaign Ads Manager links", () => {
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "failed", checkpoints: [], externalIds: {}, error: null });
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await waitFor(() => expect(mocks.createCampaign).toHaveBeenCalledTimes(1));
     const destination = screen.getByRole("radio", { name: "WhatsApp chat" });
@@ -206,7 +206,7 @@ describe("campaign Ads Manager links", () => {
     expect(language).toHaveValue("ad");
     fireEvent.change(language, { target: { value: "en" } });
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByText(/Destination: WhatsApp chat/);
     expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappLanguage: "en" });
     first.unmount();
@@ -225,7 +225,7 @@ describe("campaign Ads Manager links", () => {
     fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByText(/Destination: WhatsApp chat \+919876543210/);
     expect(saved.input).toMatchObject({ destination: "whatsapp", leadFormId: null });
     expect(vi.mocked(fetch).mock.calls.some(([url]) => url === "/api/campaigns/lead-forms")).toBe(false);
@@ -234,7 +234,7 @@ describe("campaign Ads Manager links", () => {
     await waitFor(() => expect(screen.getByRole("radio", { name: "WhatsApp chat" })).toBeChecked());
     expect(screen.queryByLabelText("Lead form")).not.toBeInTheDocument();
     expect(mocks.createCampaign).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await waitFor(() => expect(mocks.createCampaign).toHaveBeenCalledTimes(1));
   });

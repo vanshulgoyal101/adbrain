@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   readLifetimeSpendPaise: vi.fn(),
   observeCustomerCosts: vi.fn(),
   isOperatorFunded: vi.fn(),
+  ownAccount: false,
   readAccountFunding: vi.fn(),
   dailyBudget: 500,
   storedAdSetIds: ["set-1"],
@@ -97,7 +98,11 @@ vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
   getCustomerBalance: mocks.getCustomerBalance,
   observeCustomerCosts: mocks.observeCustomerCosts,
 }));
-vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
+// #759: an AdBrain-held allowance is the managed path; these tests default to it, own-account sets ownAccount.
+vi.mock("@/lib/payments/operator-funding", () => ({
+  isOperatorFunded: mocks.isOperatorFunded,
+  fundingMode: async (id: string) => (await mocks.isOperatorFunded(id)) ? "operator" : mocks.ownAccount ? "own" : "managed",
+}));
 vi.mock("@/lib/campaign/activation-learning", () => ({ getActivationLearning: mocks.getActivationLearning }));
 vi.mock("@/lib/campaign/learnings", () => ({ recordLaunchCap: mocks.recordLaunchCap }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
@@ -135,6 +140,7 @@ beforeEach(() => {
   mocks.readLifetimeSpendPaise.mockResolvedValue(3263);
   mocks.observeCustomerCosts.mockResolvedValue(undefined);
   mocks.isOperatorFunded.mockResolvedValue(false);
+  mocks.ownAccount = false;
   mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
   mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
@@ -540,6 +546,25 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     expect(mocks.recordLaunchCap).toHaveBeenLastCalledWith(expect.anything(), { campaignId: "campaign-1", cap: expect.objectContaining({ days: 3, lifetimeBudgetPaise: expect.any(Number), endTime: expect.any(String) }) });
   });
 
+  it("#741: refuses to activate an Indian tree built without out-of-area exclusions, before any Meta write or reservation", async () => {
+    const tricity = { geo_locations: { cities: [{ key: "1021145", country: "IN" }, { key: "1035473", country: "IN" }] } };
+    mocks.readCampaignDelivery.mockResolvedValue({ ...pausedDelivery, adSets: pausedDelivery.adSets.map(adSet => ({ ...adSet, targeting: tricity })) });
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toContain("out-of-area exclusions");
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    expect(mocks.createCappedAdSet).not.toHaveBeenCalled();
+    expect(mocks.activateCappedTree).not.toHaveBeenCalled();
+    // The same tree with the state exclusions activates as before.
+    const excluded = { ...tricity, excluded_geo_locations: { regions: [{ key: "1731" }] } };
+    mocks.readCampaignDelivery.mockResolvedValue({ ...pausedDelivery, adSets: pausedDelivery.adSets.map(adSet => ({ ...adSet, targeting: excluded })) });
+    const digestWith = createHash("sha256").update(activationConfirmationPayload(
+      { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+      { generation: 4, selected }, { ...pausedDelivery, adSets: pausedDelivery.adSets.map(adSet => ({ ...adSet, targeting: excluded })) }, 3,
+    )).digest("hex");
+    expect((await activate({ capDays: 3, confirmationDigest: digestWith })).status).toBe(200);
+  });
+
   it("rejects a digest reviewed for a different number of days", async () => {
     expect((await activate({ capDays: 7, confirmationDigest: digest(3) })).status).toBe(409);
     expect((await activate({ capDays: 3, confirmationDigest: digest() })).status).toBe(409);
@@ -726,10 +751,65 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
       const { GET } = await import("@/app/api/campaigns/[id]/route");
       const review = () => GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
       const learning = { costPerResultRupees: null, pausedAt: null };
-      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: roomy, learning });
+      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: roomy, spendLimitRequired: true, learning });
       mocks.isOperatorFunded.mockResolvedValue(false);
       expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, learning });
       expect(mocks.readAccountFunding).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // #759 (CTO, CEO ack pending): an owner on their own ad account pays Meta directly; AdBrain holds no ad money.
+  describe("own-account business: Meta-side cap and the weekly cap, no AdBrain allowance (#759)", () => {
+    const noLimit = { spendCapPaise: 0, amountSpentPaise: 4237, roomPaise: 0, prepay: false };
+    const metaWrites = () => [mocks.createCappedAdSet, mocks.activateCappedTree, mocks.updateCampaignStatus, mocks.enforceCampaignSpendCap];
+
+    beforeEach(() => {
+      mocks.ownAccount = true;
+      mocks.readAccountFunding.mockResolvedValue(noLimit);
+    });
+
+    it("activates the capped run with no allowance and no account spending limit", async () => {
+      expect((await activate()).status).toBe(200);
+      expect(mocks.createCappedAdSet).toHaveBeenCalledWith("meta-campaign-1", expect.objectContaining({ lifetimeBudgetPaise: 150_000 }));
+      expect(mocks.activateCappedTree).toHaveBeenCalledWith("meta-campaign-1", capped);
+      expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+      expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
+      expect(mocks.observeCustomerCosts).not.toHaveBeenCalled();
+    });
+
+    it("refuses when the owner's own Meta spending limit has less room than the cap, before any Meta write", async () => {
+      mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
+      const response = await activate();
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toMatch(/Meta has ₹847\.46 left .* this run needs ₹1,500\.00/);
+      for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
+    });
+
+    it("refuses an uncapped activation: the total limit on Meta is the guard", async () => {
+      mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
+      const uncapped = createHash("sha256").update(activationConfirmationPayload(
+        { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+        { generation: 4, selected }, reviewedDelivery,
+      )).digest("hex");
+      const response = await activate({ confirmationDigest: uncapped });
+      expect(response.status).toBe(409);
+      expect((await response.json()).error).toMatch(/runs only with a total limit/);
+      for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
+      expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    });
+
+    it("a managed business without an allowance is still refused", async () => {
+      mocks.ownAccount = false;
+      const { CustomerBalanceError } = await import("@/lib/payments/customer-balance");
+      mocks.reserveCustomerCampaign.mockRejectedValueOnce(new CustomerBalanceError());
+      expect((await activate()).status).not.toBe(200);
+      for (const write of metaWrites()) expect(write).not.toHaveBeenCalled();
+    });
+
+    it("the review shows Meta funding without requiring a spending limit", async () => {
+      const { GET } = await import("@/app/api/campaigns/[id]/route");
+      const body = await (await GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) })).json();
+      expect(body).toMatchObject({ funding: noLimit, spendLimitRequired: false });
     });
   });
 });

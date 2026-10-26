@@ -35,13 +35,13 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | Next action, onboarding progress, activity, results | Uses stored state; not proof of live provider health |
+| `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected | Live Meta writes require verified binding and capability |
-| `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
+| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764), then sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
 | `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
@@ -142,6 +142,11 @@ failures rather than pretending every variant succeeded. A disconnected browser
 should check saved results using the same generation ID before starting another
 paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
+
+The Review board groups ads by Create batch (`variant_group`), newest batch first
+and open, older batches folded (#762). Unreviewed ads older than 7 days sit in a
+folded "Older unreviewed ads" section and leave the Needs review count; this is
+view-only, so approving one brings it back.
 
 Newly saved creatives use a smaller WebP for Review board and generated Assets
 tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
@@ -328,6 +333,17 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   interests are suggestions too. The review says: "Meta may reach people beyond your
   age range and interests; never outside your area." Campaigns already launched
   keep their original targeting.
+- Every Indian ad set also excludes everything outside the service area (#741):
+  every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
+  Haryana), plus the larger cities in the kept states that lie further than the
+  included city's radius + 30 km (Ludhiana, Amritsar, Ambala, Gurugram…); a state
+  included as a whole keeps all its cities (#804). Places are matched
+  by Meta key (`src/lib/meta/service-area.ts`); the owner's own exclusions are kept.
+  If Meta can't describe the area, the launch is refused (`TARGETING_EXCLUSIONS_MISSING`),
+  and a tree built before the rule can't be activated. With Advantage+ audience and
+  interests, Meta refuses later targeting edits, so exclusions must be in the create;
+  a targeting edit on a live ad set restarts ad review (about 5 minutes on #157).
+  Country-wide and non-Indian areas get no automatic exclusions.
 - Every campaign must have detailed interest targeting before creation. AI plans
   require one to five relevant commercial interests grounded in the business and
   offer. Preparing a draft with missing/empty interests requests AI recommendations
@@ -407,7 +423,10 @@ operation cannot be discarded to bypass its recovery identity; saved drafts
 remain available after clearing the local setup.
 
 Preflight validates ownership, approved creative content, active lead form,
-connection capability, INR currency, resolved targeting, and budget. Its hash
+connection capability, INR currency, resolved targeting, and budget. For health
+businesses it also reads each ad's saved wording with Create's banned-claim rule
+(whole words only), so an owner-edited "Cures back pain" is blocked before Meta
+(`REVIEW_AD_POLICY`, #739). Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
 Creation reruns preflight and rejects a stale draft, hash, or connection generation.
 Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,

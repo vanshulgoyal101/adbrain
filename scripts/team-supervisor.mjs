@@ -19,7 +19,7 @@ import { NAMES } from "./wait-for-work.mjs";
 import { probe } from "./team-status.mjs";
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
@@ -145,9 +145,10 @@ const agentArgs = (text, credits) => [
   "--max-ai-credits", String(credits), "-s",
 ];
 
+/** `roles` null = every role in ORDER at tick time, so new roles need no reinstall. */
 function plist(roles) {
   const path = [dirname(process.execPath), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
-  const cmd = `cd '${WT}' && exec '${process.execPath}' scripts/team-supervisor.mjs --roles ${roles.join(",")}`;
+  const cmd = `cd '${WT}' && exec '${process.execPath}' scripts/team-supervisor.mjs${roles ? ` --roles ${roles.join(",")}` : ""}`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -170,14 +171,14 @@ async function main() {
       uninstall: { type: "boolean", default: false },
       smoke: { type: "boolean", default: false },
       "restart-prompt": { type: "string" },
-      roles: { type: "string", default: ORDER.join(",") },
+      roles: { type: "string" },
       "idle-min": { type: "string", default: "20" },
       "run-min": { type: "string", default: "40" },
       "max-runs-day": { type: "string", default: "8" },
       credits: { type: "string", default: "150" },
     },
   });
-  const roles = values.roles.split(",").map((r) => r.trim()).filter((r) => ORDER.includes(r));
+  const roles = values.roles ? values.roles.split(",").map((r) => r.trim()).filter((r) => ORDER.includes(r)) : ORDER;
   const runMin = Number(values["run-min"]);
   const agentFile = join(HOME, "Library", "LaunchAgents", `${LABEL}.plist`);
   const domain = `gui/${process.getuid()}`;
@@ -190,7 +191,7 @@ async function main() {
     try { execFileSync("launchctl", ["bootout", domain, agentFile], { stdio: "ignore" }); } catch { /* not loaded */ }
     if (values.uninstall) { rmSync(agentFile, { force: true }); return console.log(`removed ${LABEL}`); }
     mkdirSync(STATE_DIR, { recursive: true });
-    writeFileSync(agentFile, plist(roles));
+    writeFileSync(agentFile, plist(values.roles ? roles : null));
     execFileSync("launchctl", ["bootstrap", domain, agentFile]);
     return console.log(`installed ${LABEL}: every 10 min from ${WT} for ${roles.join(",")}`);
   }

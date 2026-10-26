@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { friendlyMetaError, MetaClient, MetaError } from "@/lib/meta/client";
+import { friendlyMetaError, MetaClient, MetaCreateRolledBackError, MetaError } from "@/lib/meta/client";
+import createTape from "./core/fixtures/meta/create.json";
+import cleanupRefusals from "./core/fixtures/meta/create-cleanup-refusals.json";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { decodeCampaignInsights } from "@/lib/meta/insights";
 
@@ -285,6 +287,17 @@ describe("campaign object binding", () => {
   });
 });
 
+describe("MetaClient on a campaign deleted in Meta (#721)", () => {
+  it("says it was deleted and still refuses the write, reading only", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
+      .mockResolvedValueOnce(Response.json({ data: [] }))
+      .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123", status: "DELETED", effective_status: "DELETED" }));
+    await expect(new MetaClient(creds).deleteObject("camp_1")).rejects.toThrow("deleted in Meta");
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+});
+
 describe("MetaClient.enforceCampaignSpendCap", () => {
   const bound = () => vi.spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(Response.json({ id: "camp_1", account_id: "123" }))
@@ -401,6 +414,37 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
     }
   });
 
+  // #735: a failure before the first ad set deletes the empty PAUSED campaign; after one, nothing is deleted.
+  it.each([
+    ["the first ad set is refused", "/adsets", true],
+    ["an ad creative is refused after the ad set exists", "/adcreatives", false],
+  ])("when %s, deletes the campaign: %s", async (_case, refusedEdge, deletes) => {
+    const campaignId = (createTape[0].body as { id: string }).id;
+    const refusal = cleanupRefusals.find((exchange) => exchange.path.endsWith("/adimages"))!;
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      calls.push(`${init?.method ?? "GET"} ${url.pathname.replace(/^\/v[\d.]+\//, "")}`);
+      if (url.pathname.endsWith(refusedEdge)) return Response.json(refusal.body, { status: refusal.status });
+      if (init?.method === "DELETE") return Response.json({ success: true });
+      if (url.pathname.endsWith("/campaigns")) return Response.json({ id: campaignId });
+      if (url.pathname.endsWith("/adimages")) return Response.json({ images: { bytes: { hash: "hash-1" } } });
+      return Response.json({ id: `created-${calls.length}` });
+    });
+    const create = new MetaClient(creds).createLeadCampaign({
+      name: "Rollback", dailyBudgetRupees: 200, leadFormId: "form-1", link: "https://example.com",
+      creatives: [{ imageUrl: "https://example.com/ad.png", headline: "Offer", message: "Book" }],
+      location: { countries: ["IN"] }, ageMin: 25, ageMax: 60,
+    });
+    if (deletes) {
+      await expect(create).rejects.toBeInstanceOf(MetaCreateRolledBackError);
+      expect(calls.filter((call) => call.startsWith("DELETE"))).toEqual([`DELETE ${campaignId}`]);
+    } else {
+      await expect(create).rejects.not.toBeInstanceOf(MetaCreateRolledBackError);
+      expect(calls.some((call) => call.startsWith("DELETE"))).toBe(false);
+    }
+  });
+
   it("creates WhatsApp ads paused with the verified recipient and no form", async () => {
     const client = new MetaClient(creds);
     vi.spyOn(client, "getWhatsAppNumber").mockResolvedValue("+919876543210");
@@ -465,6 +509,8 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
 
   it("preserves interests and excluded geography across both age variants", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
+      // #741's service-area read: Meta knows no fake place, so no exclusions are added.
+      .mockResolvedValueOnce(Response.json({ data: { cities: {}, regions: {} } }))
       .mockResolvedValueOnce(Response.json({ id: "campaign-1" }))
       .mockResolvedValueOnce(Response.json({ id: "adset-1" }))
       .mockResolvedValueOnce(Response.json({ id: "adset-2" }));
@@ -507,6 +553,7 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
 
   it("reports each external mutation as soon as it returns", async () => {
     const responses = [
+      new Response(JSON.stringify({ data: { cities: {} } }), { status: 200 }),
       new Response(JSON.stringify({ id: "campaign-1" }), { status: 200 }),
       new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
       new Response(JSON.stringify({ images: { uploaded: { hash: "image-hash-1" } } }), { status: 200 }),

@@ -7,6 +7,7 @@ import pauseAllTape from "./fixtures/meta/safety/pause-all.json";
 import tokenRevoked from "./fixtures/meta/token-revoked.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
 import fundingTape from "./fixtures/meta/account-funding.json";
+import deletedTape from "./fixtures/meta/campaign-deleted.json";
 
 // #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
 // handlers, connection access, MetaClient, trusted writes, spend enforcement and audit, on an OAuth
@@ -406,6 +407,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
         ads: [{ id: REVIEWED.adIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", adSetId: REVIEWED.adSetIds[0], creativeId: "1148404661464451" }],
       },
       funding: { spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true },
+      spendLimitRequired: true,
       learning: { costPerResultRupees: null, pausedAt: null },
     });
     expect(capabilities.verify).toHaveBeenCalledWith(ACCESS, expect.objectContaining({ adAccountId: ACCOUNT, pageId: PAGE }));
@@ -415,16 +417,18 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(store.state.tables.campaigns[0].status).toBe("paused");
   });
 
-  it("activation review: a customer-funded business gets the delivery without an account funding read", async () => {
+  // #759: with managed accounts off, a business that isn't operator-funded is on its own ad account: it pays
+  // Meta directly, so the review reads Meta's funding too, but no spending limit is required.
+  it("activation review: an own-account business gets the delivery and Meta funding, with no limit required", async () => {
     store.state.rpc.operator_funded = () => ({ data: false, error: null });
     reviewedCampaign();
-    replay(tapes.delivery);
+    replay(tapes.delivery, tapes.funding);
     const response = await review();
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).not.toHaveProperty("funding");
+    expect(body).toMatchObject({ funding: { spendCapPaise: 88983, roomPaise: 84746 }, spendLimitRequired: false });
     expect(body.delivery.campaign).toEqual({ id: REVIEWED.campaignId, status: "PAUSED", effectiveStatus: "PAUSED" });
-    expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads].sort());
+    expect(writes()).toEqual([]);
   });
 
   it("activate: a stale confirmation digest is refused after the recorded delivery reads, with no write", async () => {
@@ -499,5 +503,19 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(writes()).toEqual([]);
     expect(graph.pending).toEqual([]);
     expect(store.state.tables.campaigns[0].status).toBe("paused");
+  });
+
+  // #721 (QA): #499's first tree, deleted in Meta, still listed as paused; every Refresh answered 502.
+  // campaign-deleted.json: the real reads after the delete (binding read finds no ad sets; status DELETED).
+  it("refresh: a campaign Meta deleted is shown as deleted, not paused, and the refresh says so instead of failing", async () => {
+    const DELETED = "120253706331870526";
+    storeCampaign({ meta_campaign_id: DELETED, status: "paused", name: "Solaride | Free Survey | Tricity | WhatsApp EN | Oct 26" });
+    replay(deletedTape.tape as Exchange[], deletedTape.tape as Exchange[]);
+    const response = await refresh();
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).not.toBe(502);
+    expect(JSON.stringify(body)).toMatch(/deleted/i);
+    expect(store.state.tables.campaigns.find(row => row.id === STORED)?.status).not.toBe("paused");
+    expect(graph.sent.every(call => call.method === "GET")).toBe(true);
   });
 });

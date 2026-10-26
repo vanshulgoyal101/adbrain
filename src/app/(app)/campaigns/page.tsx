@@ -78,7 +78,7 @@ export default async function CampaignsPage({
       <div className="mt-6">
         {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
         {!metaReady && !campaigns.length && approved.length ? (
-          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} />
+          <ReadyAdsNextStep approved={approved} phone={business.phone ?? null} businessId={business.id} />
         ) : <Campaigns
           business={business}
           approved={approved}

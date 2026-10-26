@@ -46,6 +46,7 @@ const cases: [string, (value: PreflightInput) => void][] = [
   ["REVIEW_AREAS_UNRESOLVED", (v) => { v.geo.unresolvedNames = ["Atlantis"]; }],
   ["REVIEW_NO_AUDIENCE", (v) => { v.draft.targeting.audience = undefined; }],
   ["REVIEW_INTERESTS_UNRESOLVED", (v) => { v.geo.unresolvedInterests = ["Wellness"]; }],
+  ["REVIEW_AD_POLICY", (v) => { v.vertical = "chiropractic clinic"; v.creatives[0].headline = "Cures back pain"; }],
 ];
 
 describe("Review blockers carry their own reason (#688)", () => {

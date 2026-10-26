@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import prepareTape from "./fixtures/meta/prepare.json";
 import leadFormTape from "./fixtures/meta/lead-form.json";
 import createTape from "./fixtures/meta/create.json";
+// #741: Meta's recorded region/country of each launched place (the service-area read).
+import geoTape from "./fixtures/meta/geo-exclusions.json";
 import interestsTape from "./fixtures/meta/interests-chiropractic.json";
+import refusals from "./fixtures/meta/create-cleanup-refusals.json";
+import deletedTape from "./fixtures/meta/safety/capped-adset-delete.json";
 
 // #648: the launch routes themselves (POST /api/campaigns/preflight → POST /api/campaigns/create,
 // inline and through the queued worker) against the real Graph recordings of one PAUSED test
@@ -236,7 +240,7 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
 
   it("creates a reviewed campaign inline: only PAUSED objects on the connected account and Page, operation succeeded with the recorded campaign", async () => {
     await seed("https://adbrain.vanshul.com");
-    const tape = replay(...reviewReads, ...reviewReads, createTape);
+    const tape = replay(...reviewReads, ...reviewReads, createTape, geoTape);
     const review = await preflight();
     expect(review.status).toBe(200);
     expect(review.body.data).toMatchObject({ canCreatePaused: true, blockers: [], connectionGeneration: 1,
@@ -251,6 +255,33 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
     for (const edge of ["campaigns", "adsets", "ads"]) expect(tape.posts().find((call) => call.path.endsWith(`/${edge}`))?.form.status).toBe("PAUSED");
     expect(JSON.stringify(tape.sent)).not.toContain("ACTIVE");
     expect(JSON.parse(tape.posts().find((call) => call.path.endsWith("/adcreatives"))!.form.object_story_spec).page_id).toBe(PAGE);
+  });
+
+  // #735: Meta made the campaign, then refused the image upload, before any ad set. AdBrain deletes the
+  // empty PAUSED campaign (sync can't import a campaign without ad sets); if the delete fails, it reconciles.
+  describe("a create that fails before any ad set", () => {
+    const [campaignPost] = createTape as Exchange[];
+    const campaignId = (campaignPost.body as { id: string }).id;
+    const imageRefused = (refusals as Exchange[]).find((exchange) => exchange.path.endsWith("/adimages"))!;
+    const deleteAnswer = (answer: Exchange) => ({ ...answer, method: "DELETE", path: campaignId });
+
+    it.each([
+      ["Meta confirms the delete: nothing is left, so the attempt failed", deletedTape[0] as Exchange, "failed"],
+      ["Meta refuses the delete: the campaign may remain, so it needs reconciliation",
+        (refusals as Exchange[]).find((exchange) => exchange.method === "DELETE")!, "needs_reconciliation"],
+    ])("%s", async (_case, answer, state) => {
+      await seed("https://adbrain.vanshul.com");
+      const tape = replay(...reviewReads, ...reviewReads, [campaignPost, imageRefused, deleteAnswer(answer)], geoTape);
+      const review = await preflight();
+      await post("create", createRequest(review.body.data));
+      expect(tape.sent.map((call) => `${call.method} ${call.path}`)).toEqual(expect.arrayContaining([
+        `POST ${ACCOUNT}/campaigns`, `POST ${ACCOUNT}/adimages`, `DELETE ${campaignId}`]));
+      expect(tape.sent.filter((call) => call.method === "DELETE")).toHaveLength(1);
+      expect(tape.posts().some((call) => call.path.endsWith("/adsets"))).toBe(false);
+      expect(db.tables.campaign_operations).toEqual([expect.objectContaining({ state })]);
+      expect(db.tables.campaigns ?? []).toEqual([]);
+      if (state === "failed") expect(String(db.tables.campaign_operations[0].sanitized_error)).toContain("was deleted; nothing is left in Meta");
+    });
   });
 
   it.each([
@@ -270,7 +301,7 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
   it("queues the reviewed campaign and the worker creates it PAUSED with the recorded campaign", async () => {
     vi.stubEnv("CAMPAIGN_EXECUTION_MODE", "worker");
     await seed("https://adbrain.vanshul.com");
-    const tape = replay(...reviewReads, ...reviewReads, ...reviewReads, createTape);
+    const tape = replay(...reviewReads, ...reviewReads, ...reviewReads, createTape, geoTape);
     const review = await preflight();
     const queued = await post("create", createRequest(review.body.data));
     expect(queued).toMatchObject({ status: 202, body: { data: { state: "pending", campaignId: null } } });

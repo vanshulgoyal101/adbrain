@@ -181,7 +181,7 @@ try {
       await form.selectOption(leadForm);
       const preflight = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/campaigns/preflight" && response.request().method() === "POST", { timeout: 90_000 });
       preflight.catch(() => undefined);
-      await page.getByRole("button", { name: "Prepare campaign review" }).click();
+      await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
       const response = await preflight.catch(async (error) => {
         const alert = page.getByRole("alert").first();
         const message = await alert.isVisible() ? (await alert.innerText()).trim() : "";
@@ -293,7 +293,7 @@ try {
       assert.ok(solarideForm, "No Solaride lead form; nothing created");
       await form.selectOption(solarideForm);
       campaignSetup = true;
-      await page.getByRole("button", { name: "Prepare campaign review" }).click();
+      await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
       const review = page.getByRole("region", { name: "Campaign review result" });
       await review.getByRole("button", { name: "Send to Meta (paused)" }).waitFor({ state: "visible", timeout: 120_000 });
       assert.match(await review.innerText(), /Account: Solaride\b/i, "Meta account is not Solaride; no campaign created");

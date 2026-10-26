@@ -105,6 +105,12 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-slate-100 text-slate-600",
 };
 
+/** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
+function goneInMeta(campaign: Campaign): string | null {
+  const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
+  return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
+}
+
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
 /** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
@@ -238,7 +244,8 @@ function BusinessCampaigns({
   const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
     newCampaign?.creativeIds.filter(id => approved.some(creative => creative.id === id)),
   ));
-  const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
+  // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
+  const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
@@ -328,15 +335,17 @@ function BusinessCampaigns({
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
   const [activationFunding, setActivationFunding] = useState<AccountFunding | null>(null);
+  // #759: only an operator-funded business must set an account spending limit; an owner's own account needn't.
+  const [spendLimitRequired, setSpendLimitRequired] = useState(true);
   const [capDays, setCapDays] = useState(3);
   const [activationLearning, setActivationLearning] = useState<{ costPerResultRupees: number | null; pausedAt: string | null; now: number } | null>(null);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
-  // #245: an operator-funded business runs only capped, within Meta's account spending limit.
+  // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
-    || (activationCapped && activationFunding.spendCapPaise > 0 && activationFunding.roomPaise >= activationCapPaise);
+    || (activationCapped && (activationFunding.spendCapPaise > 0 ? activationFunding.roomPaise >= activationCapPaise : !spendLimitRequired));
   // #419 item 2: edits that restart Meta's learning (a capped run's new ad set, a long pause); never block.
   const learningWarnings = activationReview && activationLearning && activationDelivery
     ? activationWarnings({ capDays: activationCapped ? capDays : null, dailyBudgetRupees: activationReview.daily_budget ?? 0, ...activationLearning })
@@ -584,7 +593,7 @@ function BusinessCampaigns({
     const reconciling = operation?.state === "needs_reconciliation";
     if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
     if (!(await askConfirm(reconciling
-      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you don't want it.", confirmLabel: "Start new campaign" }
+      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Everything it made is paused, so nothing can spend. Sync brings it into Your campaigns if it has an ad set; an empty campaign shows only in Ads Manager, where you can delete it.", confirmLabel: "Start new campaign" }
       : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
     clearErrors();
     preparedDraftRef.current = null;
@@ -1063,8 +1072,13 @@ function BusinessCampaigns({
         review?: AdReview[] | null;
         error?: string;
         protectionConfirmed?: boolean;
+        gone?: string;
+        campaign?: Campaign | null;
       };
-      if (res.ok) {
+      if (res.status === 410 && data.gone) {
+        if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        setCardNotice({ id, message: data.error ?? "This campaign is no longer in Meta." });
+      } else if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         setCardNotice({ id, message: refreshNotice(previous, data.result) });
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
@@ -1104,7 +1118,7 @@ function BusinessCampaigns({
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO, refreshing = false) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
-      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
+      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; spendLimitRequired?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
       const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
@@ -1119,6 +1133,7 @@ function BusinessCampaigns({
       setActivationDigest(digest);
       setActivationDelivery(delivery);
       setActivationFunding(funding);
+      setSpendLimitRequired(review.spendLimitRequired !== false);
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
@@ -1276,7 +1291,9 @@ function BusinessCampaigns({
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
                     ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
-                    : "Funded on Meta: set a spending limit on the Meta ad account first."}
+                    : spendLimitRequired
+                      ? "Funded on Meta: set a spending limit on the Meta ad account first."
+                      : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
               </div>
@@ -1415,7 +1432,7 @@ function BusinessCampaigns({
                 {operation?.state === "failed" && <span className="text-sm font-normal">The operation failed before completion. Review the draft and start a new reviewed attempt.</span>}
                 {operation?.state === "needs_reconciliation" && (
                   <>
-                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Sync imports anything it made as paused.</span>
+                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Everything it made is paused, so nothing can spend. Sync brings it in if it has an ad set; an empty campaign shows only in Ads Manager.</span>
                     <Button size="sm" variant="outline" onClick={startNewCampaign}>Start a new campaign</Button>
                   </>
                 )}
@@ -1753,6 +1770,10 @@ function BusinessCampaigns({
                     Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). */}
+                <p className="-mt-2 text-xs text-slate-500">
+                  What to expect: in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180. Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
                 {destination === "instant_form" && formsError && (
@@ -1815,7 +1836,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
-                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
+                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
 
@@ -1831,7 +1852,7 @@ function BusinessCampaigns({
                     ) : (
                       <CheckCircle2 className="h-4 w-4" />
                     )}
-                    Prepare campaign review
+                    Check my campaign (nothing spends)
                   </Button>
                 </div>
                 <details className="border-t border-slate-200 pt-3"><summary className="cursor-pointer text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>
@@ -1932,7 +1953,7 @@ function BusinessCampaigns({
                             "bg-slate-100 text-slate-600"
                           }
                         >
-                          {c.status === "active" ? "Requested active" : c.status}
+                          {goneInMeta(c) ?? (c.status === "active" ? "Requested active" : c.status)}
                         </Badge>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}

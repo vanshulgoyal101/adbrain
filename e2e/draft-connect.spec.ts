@@ -65,8 +65,8 @@ for (const width of [1440, 390]) {
     await page.getByRole("textbox", { name: "Campaign name", exact: true }).fill("Weekend rooftop consultations");
     await page.locator("#budget").fill("350");
     await page.getByRole("checkbox", { name: /A\/B test the audience/ }).check();
-    await expect(page.getByRole("button", { name: "Prepare campaign review" })).toBeEnabled();
-    await page.getByRole("button", { name: "Prepare campaign review" }).click();
+    await expect(page.getByRole("button", { name: "Check my campaign (nothing spends)" })).toBeEnabled();
+    await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Connect Business" }).click();
     await expect(page.getByRole("option", { name: "Rooftop enquiry" })).toHaveCount(1);
     await expect(page.getByRole("textbox", { name: "Campaign name", exact: true })).toHaveValue("Weekend rooftop consultations");
@@ -76,7 +76,7 @@ for (const width of [1440, 390]) {
     await page.locator("#leadform").selectOption("fresh-form");
     await expect(page.locator("#leadform")).toHaveValue("fresh-form");
     const update = page.waitForResponse(response => new URL(response.url()).pathname === `/api/campaign-drafts/${savedDraftId}` && response.request().method() === "PUT");
-    await page.getByRole("button", { name: "Prepare campaign review" }).click();
+    await page.getByRole("button", { name: "Check my campaign (nothing spends)" }).click();
     expect((await update).ok()).toBe(true);
     const updated = await admin.from("campaign_drafts").select("input,version").eq("id", savedDraftId).single();
     expect(updated.data?.input).toMatchObject({ name: "Weekend rooftop consultations", leadFormId: "fresh-form", dailyBudgetRupees: 350, abTest: true });

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { WorkspaceHome } from "@/components/workspace-home";
 import { DEFAULT_SPEND_LIMITS, evaluateSpend } from "@/lib/campaign/spend";
-import type { Business, Creative } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
 
 const queries = vi.hoisted(() => ({
   getPrimaryBusiness: vi.fn(),
@@ -352,5 +352,46 @@ describe("Home workspace", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Spend status could not be loaded");
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     expect(screen.queryByText("Private database detail")).not.toBeInTheDocument();
+  });
+});
+
+// #764: CPO's first-time-owner walk: Home showed work (75 awaiting review), not results. The first row now
+// answers "is it working?" with the same latest results the campaign cards show.
+describe("Home results row (#764)", () => {
+  const now = Date.parse("2026-10-26T10:00:00Z");
+  const chats = { id: "c-wa", business_id: "business", name: "WhatsApp run", status: "active", destination: "whatsapp", meta_campaign_id: "1", created_at: "2026-10-24T08:00:00Z" } as unknown as Campaign;
+  const forms = { id: "c-form", business_id: "business", name: "Form run", status: "paused", destination: "instant_form", meta_campaign_id: "2", created_at: "2026-10-22T08:00:00Z" } as unknown as Campaign;
+  const results = {
+    "c-wa": { id: "r1", campaign_id: "c-wa", destination: "whatsapp", impressions: 900, clicks: 40, leads: 0, conversations: 5, spend: 840, cpl: null, fetched_at: new Date(now - 3 * 60_000).toISOString() },
+    "c-form": { id: "r2", campaign_id: "c-form", destination: "instant_form", impressions: 300, clicks: 9, leads: 2, spend: 160, cpl: 80, fetched_at: new Date(now - 10 * 60_000).toISOString() },
+  } as unknown as Record<string, CampaignResult>;
+
+  it("sums enquiries and spend from each campaign's latest results and says how fresh they are", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} now={now} />);
+    const row = screen.getByRole("region", { name: "Results so far" });
+    expect(within(row).getByText("Enquiries").nextElementSibling).toHaveTextContent("7");
+    expect(within(row).getByText("Spent").nextElementSibling).toHaveTextContent("₹1,000");
+    expect(within(row).getByText("Per enquiry").nextElementSibling).toHaveTextContent("₹143");
+    expect(within(row).getByText(/Updated 10m ago/)).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
+  });
+
+  it("shows no results row before any campaign has results", () => {
+    render(<WorkspaceHome {...empty} business={business} campaigns={[chats]} results={{}} now={now} />);
+    expect(screen.queryByRole("region", { name: "Results so far" })).not.toBeInTheDocument();
+  });
+
+  it("the dashboard reads the launched campaigns' latest results", async () => {
+    queries.getPrimaryBusiness.mockResolvedValue(business);
+    queries.getCreativePreviews.mockResolvedValue([]);
+    queries.getAuditLog.mockResolvedValue([]);
+    queries.getCampaigns.mockResolvedValue([chats, forms, { ...forms, id: "c-draft", meta_campaign_id: null }]);
+    queries.getLatestResults.mockResolvedValue(results);
+    queries.getSpendEvaluation.mockResolvedValue({ limits: {}, evaluation: { status: "healthy" } });
+    queries.getMetaConnection.mockResolvedValue({ ready: true });
+    const { default: DashboardPage } = await import("@/app/(app)/dashboard/page");
+    render(await DashboardPage());
+    expect(queries.getLatestResults).toHaveBeenCalledWith(["c-wa", "c-form"]);
+    expect(screen.getByRole("region", { name: "Results so far" })).toBeInTheDocument();
   });
 });

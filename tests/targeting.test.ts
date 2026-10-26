@@ -91,7 +91,7 @@ describe("describeAudience", () => {
       ageMode: "ai",
     });
     expect(s).toBe(
-      "People in India (nationwide), age recommendation pending.",
+      "People in India (nationwide), ages picked by AdBrain when you check the campaign.",
     );
   });
 });
