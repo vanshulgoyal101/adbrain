@@ -1257,7 +1257,8 @@ function BusinessCampaigns({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
-      {notice && <Alert variant="success">{notice}</Alert>}
+      {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
+      <p aria-live="polite" className={notice ? "text-sm text-slate-600" : "sr-only"}>{notice}</p>
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
