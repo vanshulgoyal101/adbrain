@@ -117,6 +117,12 @@ export const reviewDtoSchema = z.object({
   resolvedExcludedLocation: resolvedGeoSchema.optional(),
   audienceInterests: z.array(z.object({ id: z.string().regex(/^\d+$/), name: boundedText(200) })).max(5).optional(),
   selected: selectedAssetsSchema.nullable(),
+  /** #741: where the ads won't show (launch applies the same exclusions); display only, not in the plan hash. */
+  serviceArea: z.object({
+    excludedCities: z.array(boundedText(100)).max(50),
+    keptStates: z.array(boundedText(100)).max(36),
+    excludedStateCount: z.number().int().nonnegative().max(36),
+  }).optional(),
   /** #419 2(b): non-blocking notes from Meta's new-advertiser guidance; never part of the plan hash. */
   planWarnings: z.array(boundedText(200)).max(5).optional(),
 });

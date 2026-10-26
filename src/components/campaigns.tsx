@@ -111,6 +111,15 @@ function goneInMeta(campaign: Campaign): string | null {
   return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
 }
 
+/** #741: where the ads won't show, in the owner's words (launch applies the same exclusions). */
+function serviceAreaLine(area: NonNullable<ReviewDTO["serviceArea"]>): string {
+  const states = `the other ${area.excludedStateCount} states and UTs`;
+  const cities = area.excludedCities.length
+    ? `${area.excludedCities.join(", ")} (outside your area in ${area.keptStates.join(", ")}) or `
+    : "";
+  return `Not shown in: ${cities}${states}.`;
+}
+
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
 /** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
@@ -1394,6 +1403,7 @@ function BusinessCampaigns({
                 <br />
                 Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatMoney(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatMoney(prepareReview.review.totalDailyBudgetRupees)}
                 <br />
+                {prepareReview.review.serviceArea && <>{serviceAreaLine(prepareReview.review.serviceArea)}<br /></>}
                 Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · Gender: {{ all: "All genders", men: "Men", women: "Women" }[prepareReview.draft.input.targeting.gender ?? "all"]} · City coverage: {prepareReview.draft.input.targeting.location?.cityScope === "city_only" ? "City only (no added radius)" : `${prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km radius`}
                 <br />
                 Interests: {prepareReview.review.audienceInterests?.map((interest) => interest.name).join(", ") || (prepareReview.draft.input.targeting.audience?.interestNames.length ? "Needs resolution" : "No interest narrowing")}
