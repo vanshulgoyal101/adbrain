@@ -2,11 +2,10 @@ import Link from "next/link";
 import { ArrowRight, Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
-import { AdAssistant } from "@/components/ad-assistant";
+import { CreateFlow } from "@/components/create-flow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { Stepper } from "@/components/ui/stepper";
 import { getBrandAssets, getPrimaryBusiness } from "@/lib/supabase/queries";
 
 export const metadata = {
@@ -56,9 +55,7 @@ export default async function CreatePage() {
         title="Create ads"
         description="Who do you want to reach? Start with your customer goal; you review every ad before a campaign."
       />
-      <Stepper current="Create" className="mt-4" />
-      <div className="mt-7 grid gap-8 border-t border-slate-200 pt-7 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
-        <AdAssistant business={business} opening={openingLine(evidence)} />
+      <CreateFlow business={business} opening={openingLine(evidence)}>
         <aside aria-label="Saved brand context" className="min-w-0 border-t border-slate-200 pt-6 lg:sticky lg:top-24 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="text-xs font-medium text-slate-500">Brand context</p>
           <h2 className="mt-2 font-semibold text-slate-900">{business.name}</h2>
@@ -79,7 +76,7 @@ export default async function CreatePage() {
           )}
           <Link href="/brand" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700">Edit Brand Brain <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
         </aside>
-      </div>
+      </CreateFlow>
     </div>
   );
 }
