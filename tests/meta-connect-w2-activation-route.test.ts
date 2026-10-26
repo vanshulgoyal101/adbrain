@@ -5,6 +5,7 @@ import { CampaignDeliveryError } from "@/lib/meta/client";
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
+  recordLaunchCap: vi.fn(async () => true),
   getActivationLearning: vi.fn(),
   requireOwnedBusiness: vi.fn(),
   withMetaConnection: vi.fn(),
@@ -98,6 +99,8 @@ vi.mock("@/lib/payments/customer-balance", async importOriginal => ({
 }));
 vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
 vi.mock("@/lib/campaign/activation-learning", () => ({ getActivationLearning: mocks.getActivationLearning }));
+vi.mock("@/lib/campaign/learnings", () => ({ recordLaunchCap: mocks.recordLaunchCap }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 function patch(body: unknown): Request {
   return new Request("http://localhost/api/campaigns/campaign-1", {
@@ -532,7 +535,9 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     // #208: the reservation is bounded by the Meta lifetime budget, not 7 × daily.
     expect(mocks.reserveCustomerCampaign).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ lifetimeCapPaise: 150000 }));
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith(expect.anything(), "campaign-1", "reservation-1", "active");
-    expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active" }, "campaign-1");
+    // #672: the first confirmed activation stamps launched_at and puts the cap in the ledger.
+    expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active", launched_at: expect.any(String) }, "campaign-1");
+    expect(mocks.recordLaunchCap).toHaveBeenLastCalledWith(expect.anything(), { campaignId: "campaign-1", cap: expect.objectContaining({ days: 3, lifetimeBudgetPaise: expect.any(Number), endTime: expect.any(String) }) });
   });
 
   it("rejects a digest reviewed for a different number of days", async () => {
@@ -660,7 +665,9 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
       expect(mocks.confirmCustomerCampaign).not.toHaveBeenCalled();
       expect(mocks.readLifetimeSpendPaise).not.toHaveBeenCalled();
       expect(mocks.observeCustomerCosts).not.toHaveBeenCalled();
-      expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active" }, "campaign-1");
+      // #672: the first confirmed activation stamps launched_at and puts the cap in the ledger.
+    expect(mocks.saveCampaign).toHaveBeenLastCalledWith(expect.anything(), { status: "active", launched_at: expect.any(String) }, "campaign-1");
+    expect(mocks.recordLaunchCap).toHaveBeenLastCalledWith(expect.anything(), { campaignId: "campaign-1", cap: expect.objectContaining({ days: 3, lifetimeBudgetPaise: expect.any(Number), endTime: expect.any(String) }) });
     });
 
     it("refuses when Meta's room is below the cap, before any Meta write", async () => {
