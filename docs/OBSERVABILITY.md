@@ -189,7 +189,8 @@ shows them in its auth section, including signed-out failures.
 
 **Learning ledger (#588).** Every launch writes a settings snapshot to `campaign_learnings`
 (destination, WhatsApp prefill text and language, areas, ages, Advantage+ audience, formats,
-budget, creatives with angle and models), best effort: a ledger failure logs
+budget, creatives with angle and models; v2 (#672) adds Advantage+ as sent, the Meta creative ids,
+and the cap once a capped activation is confirmed), best effort: a ledger failure logs
 `campaign.learning_snapshot` and never fails the launch. QA 2 records the hypothesis a run tests
 and its verdict with `npm run learnings -- set <meta campaign id> --hypothesis "…" --verdict "…"`
 (and `--snapshot file.json` for runs launched before the ledger, e.g. #157); that's a production
