@@ -157,6 +157,10 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [generationCount, setGenerationCount] = useState(FULL_BATCH);
   const [live, setLive] = useState<LiveAd[] | null>(null);
+  // #760: ads still being made after the owner moved on with the saved ones; the same request finishes them.
+  const [stillMaking, setStillMaking] = useState(0);
+  const movedOnRef = useRef(false);
+  const useSavedRef = useRef<(() => void) | null>(null);
 
   // Restore after mount (never during SSR) so server and client markup agree.
   const mounted = useMounted();
@@ -311,6 +315,21 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
   function showResult(creatives: Creative[], count: number, brief?: string, language?: string, final = true) {
     // While a generation is still running, the rest may yet arrive; don't offer to remake them.
     const missing = final ? Math.max(0, count - creatives.length) : 0;
+    if (movedOnRef.current) {
+      // The owner already has the saved ads on screen; add only the ones that are new.
+      setTurns((t) => {
+        const index = t.findLastIndex((turn) => turn.role === "result");
+        if (index < 0) return [...withoutProgress(t), { role: "result", creatives, missing, brief, language }];
+        return withoutProgress(t.map((turn, i) => {
+          if (i !== index || turn.role !== "result") return turn;
+          const shown = new Set(turn.creatives.map((c) => c.id));
+          const merged = [...turn.creatives, ...creatives.filter((c) => !shown.has(c.id))];
+          return { ...turn, creatives: merged, missing: final ? Math.max(0, count - merged.length) : 0 };
+        }));
+      });
+      setPhase("done");
+      return;
+    }
     setTurns((t) => {
       const settled = withoutProgress(t);
       const index = count < FULL_BATCH ? settled.findLastIndex((turn) => turn.role === "result") : -1;
@@ -352,6 +371,15 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
     ]);
     let slots: LiveAd[] = Array.from({ length: count }, () => ({ stage: "starting" as const }));
     setLive(slots);
+    movedOnRef.current = false;
+    useSavedRef.current = () => {
+      const saved = slots.map((ad) => ad.creative).filter((c): c is Creative => Boolean(c));
+      if (movedOnRef.current || saved.length < 2) return;
+      showResult(withLiveEdits(orderBySlots(slots, saved)), count, brief, language, false);
+      movedOnRef.current = true;
+      setStillMaking(count - saved.length);
+      setLive(null);
+    };
     try {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
@@ -365,12 +393,14 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
       });
       const { status, data: body } = await readCreateResponse(res, (line) => {
         slots = applyCreateLine(slots, line);
-        setLive(slots);
+        if (!movedOnRef.current) setLive(slots);
       });
       const data = (body ?? {}) as {
         creatives?: Creative[];
         error?: string;
       };
+      // The owner already moved on with the saved ads: add any new ones, never raise an error over them.
+      if (movedOnRef.current && (status < 200 || status >= 300 || !data.creatives?.length)) return;
       if (status < 200 || status >= 300) {
         if (status >= 500 || status === 408) {
           const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
@@ -396,12 +426,16 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
       }
       showResult(withLiveEdits(orderBySlots(slots, data.creatives!)), count, brief, language);
     } catch {
+      if (movedOnRef.current) return;
       const recovered = await recoverPersistedGeneration(newGenerationId, count, brief, language);
       if (!recovered) {
         setError("Your ads are still being made, or the server stopped responding. Open Review shortly; don't try again yet, because finished ads may already be saved.");
         setPhase("chat");
       }
     } finally {
+      movedOnRef.current = false;
+      useSavedRef.current = null;
+      setStillMaking(0);
       setLive(null);
       setTurns(withoutProgress);
       if (ownsLock) inFlightRef.current = false;
@@ -633,11 +667,16 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
           ))}
 
           {phase === "generating" && live ? (
-            <CreateProgress ads={live} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
+            <CreateProgress ads={live} onUseSaved={() => useSavedRef.current?.()} renderReady={(creative) => <ResultCard creative={creative} brand={business} onEdited={(edited) => liveEditsRef.current.set(edited.id, edited)} />} />
           ) : (loading || phase === "generating") && (
             <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> {phase === "generating" ? "Creating images and copy…" : "Preparing your brief…"}
             </div>
+          )}
+          {stillMaking > 0 && (
+            <p role="status" className="text-sm text-slate-500">
+              {stillMaking === 1 ? "1 more ad is still being made. It's added here when it's ready." : `${stillMaking} more ads are still being made. They're added here when they're ready.`}
+            </p>
           )}
         </div>
 
@@ -697,14 +736,14 @@ export function AdAssistant({ business, opening = null, onFlowStep }: {
                 Review ads <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Button variant="outline" onClick={() => reset()}>
+            <Button variant="outline" onClick={() => reset()} disabled={stillMaking > 0}>
               <RotateCcw className="h-4 w-4" /> Make another
             </Button>
           </div>
         )}
         {phase === "done" && (
           <div aria-label="Next creative directions" className="flex flex-col divide-y divide-slate-100 border-t border-slate-200">
-            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700">{suggestion.label}<ArrowRight size={15} aria-hidden="true" /></button>)}
+            {(prepared?.recommendations?.length ? prepared.recommendations : creativeFollowUps()).map((suggestion) => <button key={suggestion.label} type="button" onClick={() => reset(suggestion.prompt, prepared?.brief ?? goal)} disabled={stillMaking > 0} className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-700 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{suggestion.label}<ArrowRight size={15} aria-hidden="true" /></button>)}
           </div>
         )}
       </div>
