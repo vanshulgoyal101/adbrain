@@ -16,4 +16,6 @@ regexes = [
   '''https://placeholder\.supabase\.co''',
   # The verification-gates skill quotes this example of a gitleaks false positive (#258, #408).
   '''^0123456789ab$''',
+  # A fake token-row UUID in #624's tests (commit cc662a4, renamed since); not a credential.
+  '''^0c8e5f4a-1b2c-4d3e-8f9a-0b1c2d3e4f5a$''',
 ]

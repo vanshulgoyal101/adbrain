@@ -5,7 +5,7 @@ import syncTape from "./fixtures/meta/sync.json";
 import pauseTape from "./fixtures/meta/pause.json";
 
 // #525: a managed (2-Tier) customer runs the same Prepare → PAUSED create → sync → pause as an
-// OAuth customer, on the parent system user's token and their own child ad account and Page.
+// OAuth customer, on their child's own system-user token (#624) and their own child ad account and Page.
 // The Graph responses are the real recordings from one PAUSED Solaride test campaign
 // (scripts/record-meta-core-fixtures.ts); the managed ledger row points at that ad account and
 // Page, so the routing is real end to end. Only Supabase is stubbed.
@@ -32,10 +32,22 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 const BUSINESS = "6f0c2a10-5a43-4c55-9b1f-3f7a3f0c8c1f";
 const PARENT_TOKEN = "parent-system-user-token";
-const LEDGER = {
+const CHILD_TOKEN = "child-system-user-token";
+const CHILD_ROW_ID = "00000000-0000-4000-8000-000000000624";
+const KEY = Buffer.alloc(32, 7).toString("base64");
+let LEDGER: Record<string, unknown>;
+const BASE_LEDGER = {
   business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: "act_2398686420592052",
-  page_id: "885223068001054", funding_state: "card_attached", generation: 1,
+  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID,
 };
+async function storedChildToken(overrides: Record<string, unknown> = {}) {
+  const { encryptMetaToken } = await import("@/lib/meta/token-store");
+  const sealed = encryptMetaToken(CHILD_TOKEN, { tokenId: CHILD_ROW_ID, businessId: BUSINESS });
+  mocks.rpc.mockImplementation(async (name: string, args: Record<string, string>) => name === "meta_token_get" && args.p_token_id === CHILD_ROW_ID && args.p_business_id === BUSINESS
+    ? { data: [{ id: CHILD_ROW_ID, business_id: BUSINESS, ciphertext: sealed.ciphertext, nonce: sealed.nonce, auth_tag: sealed.authTag, key_id: sealed.keyId,
+      format_version: sealed.formatVersion, revoked_at: null, expires_at: null, data_access_expires_at: null, ...overrides }], error: null }
+    : { data: [], error: null });
+}
 const campaignId = "120253646427440526";
 type Exchange = { method: string; path: string; status: number; body: unknown };
 
@@ -60,13 +72,17 @@ function replay(...tapes: unknown[][]) {
   return { pending, tokens, posts };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
   mocks.tables = [];
+  mocks.rpc.mockReset();
+  LEDGER = { ...BASE_LEDGER };
   for (const [name, value] of Object.entries({
     NEXT_PUBLIC_SUPABASE_URL: "https://core-test.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
     META_CONNECT_ROLLOUT: "enabled", MANAGED_ACCOUNTS_ENABLED: "true", META_PARENT_SYSTEM_TOKEN: PARENT_TOKEN,
+    META_TOKEN_ENCRYPTION_KEY: KEY,
   })) vi.stubEnv(name, value);
+  await storedChildToken();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -79,7 +95,7 @@ async function managedCustomer() {
 }
 
 describe("core: a managed customer's campaign runs on their child account (#525)", () => {
-  it("prepares and launches PAUSED with the parent token, on the child ad account and Page only", async () => {
+  it("prepares and launches PAUSED with the child's own token, on the child ad account and Page only", async () => {
     const tape = replay(prepareTape, createTape);
     const { context, withMetaConnection } = await managedCustomer();
     const created = await withMetaConnection(context, { purpose: "create_paused" }, async (meta, connection) => {
@@ -97,11 +113,11 @@ describe("core: a managed customer's campaign runs on their child account (#525)
     });
     expect(created.campaignId).toBe(campaignId);
     expect(tape.pending).toEqual([]);
-    // Recorded paging links carry Meta's own token, redacted in the tape; every call AdBrain builds uses the parent's.
-    expect([...tape.tokens].filter((token) => token !== "REDACTED")).toEqual([PARENT_TOKEN]);
+    // Recorded paging links carry Meta's own token, redacted in the tape; every call AdBrain builds uses the child's.
+    expect([...tape.tokens].filter((token) => token !== "REDACTED")).toEqual([CHILD_TOKEN]);
     expect(tape.posts.every((path) => path.startsWith(`${LEDGER.ad_account_id}/`))).toBe(true);
     expect(mocks.tables).not.toContain("meta_connections");
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.rpc.mock.calls.map(([name, args]) => [name, args])).toEqual([["meta_token_get", { p_token_id: CHILD_ROW_ID, p_business_id: BUSINESS }]]);
   });
 
   it("syncs and pauses through the same binding checks as an OAuth customer", async () => {
@@ -111,10 +127,38 @@ describe("core: a managed customer's campaign runs on their child account (#525)
       (await meta.listCampaignsPage()).campaigns.find((campaign) => campaign.id === campaignId));
     expect(listed?.status).toBe("PAUSED");
     await withMetaConnection(context, { purpose: "pause", expectedGeneration: 1,
-      binding: { adAccountId: LEDGER.ad_account_id, pageId: LEDGER.page_id } }, (meta) => meta.updateCampaignStatus(campaignId, "PAUSED"));
+      binding: { adAccountId: String(LEDGER.ad_account_id), pageId: String(LEDGER.page_id) } }, (meta) => meta.updateCampaignStatus(campaignId, "PAUSED"));
     expect(tape.posts).toEqual([campaignId]);
-    expect([...tape.tokens]).toEqual([PARENT_TOKEN]);
+    expect([...tape.tokens]).toEqual([CHILD_TOKEN]);
     await expect(withMetaConnection(context, { purpose: "pause", expectedGeneration: 1,
-      binding: { adAccountId: "act_1", pageId: LEDGER.page_id } }, (meta) => meta.updateCampaignStatus(campaignId, "PAUSED"))).rejects.toThrow(/no longer match/);
+      binding: { adAccountId: "act_1", pageId: String(LEDGER.page_id) } }, (meta) => meta.updateCampaignStatus(campaignId, "PAUSED"))).rejects.toThrow(/no longer match/);
+  });
+
+  // #624 (CTO): no child token means no Meta call at all; the parent token is never a fallback.
+  it("fails closed, without calling Meta, when the child token is missing, revoked, expired or another business's", async () => {
+    const cases: [string, () => Promise<void>][] = [
+      ["no token id", async () => { LEDGER = { ...BASE_LEDGER, manager_token_id: null }; }],
+      ["deleted", async () => { mocks.rpc.mockResolvedValue({ data: [], error: null }); }],
+      ["revoked", () => storedChildToken({ revoked_at: "2026-10-25T00:00:00Z" })],
+      ["expired", () => storedChildToken({ expires_at: "2020-01-01T00:00:00Z" })],
+      ["another business's row", () => storedChildToken({ business_id: "11111111-1111-4111-8111-111111111111" })],
+      ["store down", async () => { mocks.rpc.mockResolvedValue({ data: null, error: { message: "down" } }); }],
+    ];
+    for (const [name, arrange] of cases) {
+      LEDGER = { ...BASE_LEDGER };
+      await storedChildToken();
+      await arrange();
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => { throw new Error("Meta must not be called"); });
+      const { context, withMetaConnection } = await managedCustomer();
+      for (const purpose of ["create_paused", "read_insights", "pause"] as const) {
+        await expect(withMetaConnection(context, { purpose, expectedGeneration: 1, binding: { adAccountId: String(LEDGER.ad_account_id), pageId: String(LEDGER.page_id) } },
+          async () => "ran"), `${name} ${purpose}`).rejects.toMatchObject({ code: "UNAVAILABLE" });
+      }
+      expect(fetch, name).not.toHaveBeenCalled();
+      const { resolveMetaCredentials, getMetaConnection } = await import("@/lib/meta/credentials");
+      expect(await resolveMetaCredentials(BUSINESS), name).toBeNull();
+      expect(await getMetaConnection(BUSINESS), name).toMatchObject({ source: "managed", ready: false });
+      vi.restoreAllMocks();
+    }
   });
 });

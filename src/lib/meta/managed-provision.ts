@@ -68,6 +68,12 @@ async function findChild(graph: ProvisionGraph, parentBusinessId: string, busine
   return null;
 }
 const MANAGER_TASKS = ["MANAGE", "ADVERTISE", "ANALYZE"];
+/** #624: campaigns run on the child token, so it needs the Page and lead reads too (Meta OBO guide, step 2). */
+export const MANAGER_SCOPE = "ads_management,business_management,pages_read_engagement,pages_manage_ads,pages_show_list,leads_retrieval";
+const SETUP_STATES = ["page_linked", "child_created", "ad_account_created", "failed"];
+const REPAIRABLE_STATES = ["funded", "whatsapp_linked", "ready"];
+/** The tasks the customer shared with the child business (child creation's page_permitted_tasks). */
+const PAGE_TASKS = ["ADVERTISE", "ANALYZE", "MESSAGING"];
 
 /** Meta failures → stable codes the owner screen explains (#518 research, external-api-error-contracts). */
 export function provisionErrorCode(error: unknown): { code: string; retryable: boolean } {
@@ -96,13 +102,17 @@ export async function provisionManagedAccount(input: {
 }): Promise<ProvisionResult> {
   const { businessId, store, graph, tokens, parentBusinessId, requestId } = input;
   const row = await store.get(businessId);
-  if (!row?.page_id || !["page_linked", "child_created", "ad_account_created", "failed"].includes(row.state)) {
+  // #624 (Reviewer): a set-up account (funded onwards) can be repaired, re-minting its manager token or
+  // granting its Page, without moving its state; a failed repair keeps the state and records last_error.
+  const repair = Boolean(row && REPAIRABLE_STATES.includes(row.state) && row.child_business_id && row.ad_account_id);
+  if (!row?.page_id || !(SETUP_STATES.includes(row.state) || repair)) {
     return { ok: false, code: "PAGE_NOT_LINKED", retryable: false };
   }
   const keys = row.step_keys && typeof row.step_keys === "object" && !Array.isArray(row.step_keys) ? { ...(row.step_keys as Record<string, string>) } : {};
   let childId = row.child_business_id;
   let adAccountId = row.ad_account_id;
   let step: "child_business" | "ad_account" = "child_business";
+  let state = row.state;
 
   try {
     if (!childId) {
@@ -113,7 +123,7 @@ export async function provisionManagedAccount(input: {
         const created = await graph.post<{ id: string }>(`${parentBusinessId}/owned_businesses`, {
           name: input.businessName.trim().slice(0, 100),
           shared_page_id: row.page_id,
-          page_permitted_tasks: JSON.stringify(["ADVERTISE", "ANALYZE", "MESSAGING"]),
+          page_permitted_tasks: JSON.stringify(PAGE_TASKS),
           timezone_id: INDIA_TIMEZONE_ID,
           child_business_external_id: businessId,
         }, tokens.customer);
@@ -121,6 +131,7 @@ export async function provisionManagedAccount(input: {
       }
       keys.child_business = key;
       await store.update({ state: "child_created", child_business_id: childId, step_keys: keys, last_error: null });
+      state = "child_created";
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: childId });
     }
 
@@ -143,17 +154,19 @@ export async function provisionManagedAccount(input: {
       adAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`;
       keys.ad_account = key;
       await store.update({ state: "ad_account_created", ad_account_id: adAccountId, step_keys: keys, last_error: null });
+      state = "ad_account_created";
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
     }
 
     // The child's own system user: reuse the stored one, mint (with the parent token) only if absent or its token is gone.
     let managerUserId = row.manager_user_id ?? null;
     let managerToken = row.manager_token_id && managerUserId ? await input.manager.load(row.manager_token_id) : null;
-    if (!managerToken || !managerUserId) {
+    // A token minted before the scope grew (#624) can't read the Page: mint again.
+    if (!managerToken || !managerUserId || keys.manager_scope !== MANAGER_SCOPE) {
       step = "ad_account";
       const key = `manager:${businessId}`;
       const minted = await graph.post<{ access_token?: string }>(`${childId}/access_token`, {
-        id: childId, app_id: input.manager.appId, scope: "ads_management,business_management",
+        id: childId, app_id: input.manager.appId, scope: MANAGER_SCOPE,
       }, tokens.parent);
       if (!minted.access_token) throw new LookupError("MANAGER_TOKEN_MISSING");
       // Meta's guide reads the system user from /me with the child token.
@@ -163,6 +176,7 @@ export async function provisionManagedAccount(input: {
       managerToken = minted.access_token;
       const tokenId = await input.manager.save(managerToken, managerUserId);
       keys.manager = key;
+      keys.manager_scope = MANAGER_SCOPE;
       try {
         await store.update({ manager_user_id: managerUserId, manager_token_id: tokenId, step_keys: keys, last_error: null });
       } catch (error) {
@@ -184,13 +198,33 @@ export async function provisionManagedAccount(input: {
         await graph.post(`${adAccountId}/assigned_users`, { user: managerUserId, tasks: JSON.stringify(MANAGER_TASKS), business: childId }, managerToken);
       }
       keys.grant = key;
-      await store.update({ state: "ad_account_created", step_keys: keys, last_error: null });
+      await store.update({ ...(repair ? {} : { state: "ad_account_created" as const }), step_keys: keys, last_error: null });
+      if (!repair) state = "ad_account_created";
       await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: adAccountId });
     }
-    return { ok: true, state: "ad_account_created", childBusinessId: childId, adAccountId };
+
+    // #624: the child token runs the campaigns, so its system user needs the shared Page (Meta OBO guide, step 4).
+    if (!keys.page_grant) {
+      step = "ad_account";
+      const key = `page:${businessId}`;
+      const pageId = row.page_id!;
+      const assigned = await graph.get<{ data?: { id: string; tasks?: string[] }[] }>(
+        `${pageId}/assigned_users?business=${encodeURIComponent(childId)}&fields=id,tasks`, managerToken);
+      const granted = assigned.data?.some((user) => user.id === managerUserId && PAGE_TASKS.every((task) => user.tasks?.includes(task)));
+      if (!granted) {
+        await graph.post(`${pageId}/assigned_users`, { user: managerUserId, tasks: JSON.stringify(PAGE_TASKS), business: childId }, managerToken);
+      }
+      keys.page_grant = key;
+      await store.update({ step_keys: keys, last_error: null });
+      await store.event({ business_id: businessId, step, outcome: "succeeded", request_id: requestId, idempotency_key: key, meta_object_id: pageId });
+    }
+    // Only set-up runs reach "failed" (a repair keeps its state), so a failed row whose remaining step was
+    // the Page grant resumes to ad_account_created here, as the earlier steps do.
+    if (!repair && state === "failed") await store.update({ state: "ad_account_created", last_error: null });
+    return { ok: true, state: repair ? row.state : "ad_account_created", childBusinessId: childId, adAccountId };
   } catch (error) {
     const failure = provisionErrorCode(error);
-    await store.update({ state: "failed", last_error: failure.code });
+    await store.update({ ...(repair ? {} : { state: "failed" as const }), last_error: failure.code });
     await store.event({ business_id: businessId, step, outcome: "failed", request_id: requestId, error_code: failure.code });
     return { ok: false, ...failure };
   }

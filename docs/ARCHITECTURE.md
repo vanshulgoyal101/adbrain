@@ -83,9 +83,11 @@ current patterns with older framework recipes without checking them.
   need an activation capability, but still need management permission.
   A **managed** business (2-Tier child under AdBrain's parent business, #518) has a
   `managed_meta_accounts` row instead (#519). With `MANAGED_ACCOUNTS_ENABLED`, its calls use
-  that row's child ad account and Page with the parent system user's token
-  (`META_PARENT_SYSTEM_TOKEN`), through the same generation, binding and capability checks;
-  it never falls back to an OAuth connection. Reads, pause and delete work whenever the ad account
+  that row's child ad account and Page with the child's own system-user token (`manager_token_id`,
+  read with `meta_token_get` for that business only, #624), through the same generation, binding and
+  capability checks. A missing, revoked, expired or unreadable child token fails closed
+  (`UNAVAILABLE`, no Meta call); it never falls back to the parent token
+  (`META_PARENT_SYSTEM_TOKEN`, provisioning and re-mint only) or an OAuth connection. Reads, pause and delete work whenever the ad account
   and Page exist (any state, so spend can always be stopped); paused creation needs `state =
   ready`, and activation also needs `funding_state` `card_attached` or `invoiced` and a current
   Meta spending limit with room on the child account (`managedSpendCapGate`, #522). The ledger's ad

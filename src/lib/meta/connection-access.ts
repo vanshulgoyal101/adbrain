@@ -238,7 +238,7 @@ async function withConnectionCredentials<Result>(
     );
   }
   if (managed) {
-    const credentials = managedCredentials(managed);
+    const credentials = await managedCredentials(managed);
     if (!credentials) throw new ConnectionAccessError("UNAVAILABLE", "Managed Meta credentials are unavailable.");
     // #522: new delivery needs a current Meta spending limit with room on the child account.
     if (options.purpose === "activate" && isManagedReady(managed)) {
