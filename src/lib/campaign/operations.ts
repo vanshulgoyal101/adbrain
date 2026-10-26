@@ -36,6 +36,14 @@ export class OperationPhaseError extends Error {
   }
 }
 
+/** The step removed every external object it had created (#735): nothing is left to reconcile. */
+export class OperationRolledBackError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OperationRolledBackError";
+  }
+}
+
 export type OperationStepResult = {
   externalIds: string[];
   campaignId?: string;
@@ -196,7 +204,8 @@ export async function executeOperation(
       }
       current = saved;
     } catch (error) {
-      const reconciled = error instanceof OperationPhaseError && !error.transmitted && current.externalIds.length === 0
+      const reconciled = (error instanceof OperationPhaseError && !error.transmitted && current.externalIds.length === 0)
+        || error instanceof OperationRolledBackError
         ? markFailed(current, error.message)
         : markNeedsReconciliation(current, sanitizeOperationError(error));
       const saved = await persistCheckpoint(checkpoint, reconciled);
