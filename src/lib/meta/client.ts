@@ -4,12 +4,12 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
-export type { CampaignInsights } from "./insights";
+export type { AdResult, CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -1601,6 +1601,17 @@ export class MetaClient {
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+  }
+
+  /** #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only. */
+  async getAdResults(campaignId: string): Promise<AdResult[]> {
+    const destination = await this.verifyCampaignBinding(campaignId);
+    const node = encodeURIComponent(campaignId);
+    const [ads, insights] = await Promise.all([
+      this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
+    ]);
+    return decodeAdResults(ads, insights, destination);
   }
 
   /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */
