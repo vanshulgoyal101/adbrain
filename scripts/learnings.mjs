@@ -24,16 +24,35 @@ export function learningUpdate({ hypothesis, verdict, snapshot }) {
   return { ...update, updated_at: new Date().toISOString() };
 }
 
+/**
+ * Businesses sharing one ad account each import its campaigns on sync, so one Meta id can have
+ * several AdBrain rows. The ledger row belongs to the one that launched it (it holds the snapshot).
+ * @param {Array<{ id: string, business_id: string }>} campaigns
+ * @param {string[]} ledgerCampaignIds campaign ids that already have a campaign_learnings row
+ */
+export function pickCampaign(campaigns, ledgerCampaignIds, metaCampaignId) {
+  if (campaigns.length === 1) return campaigns[0];
+  const launched = campaigns.filter((campaign) => ledgerCampaignIds.includes(campaign.id));
+  if (launched.length === 1) return launched[0];
+  if (!campaigns.length) throw new Error(`No AdBrain campaign has Meta id ${metaCampaignId}.`);
+  throw new Error(`Meta id ${metaCampaignId} is on ${campaigns.length} AdBrain campaigns (businesses ${campaigns.map((c) => c.business_id.slice(0, 8)).join(", ")}) and ${launched.length} have a ledger row; fix the rows first.`);
+}
+
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { hypothesis: { type: "string" }, verdict: { type: "string" }, snapshot: { type: "string" } } });
   const [command, metaCampaignId] = positionals;
   if (command !== "set" || !/^\d{6,24}$/.test(metaCampaignId ?? "")) throw new Error('Usage: scripts/learnings.mjs set <meta campaign id> [--hypothesis "…"] [--verdict "…"] [--snapshot file.json]');
   const update = learningUpdate({ hypothesis: values.hypothesis, verdict: values.verdict, snapshot: values.snapshot ? JSON.parse(readFileSync(values.snapshot, "utf8")) : undefined });
   const database = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-  const { data: campaign, error } = await database.from("campaigns").select("id, business_id").eq("meta_campaign_id", metaCampaignId).maybeSingle();
-  if (error || !campaign) throw new Error(`No AdBrain campaign has Meta id ${metaCampaignId}.`);
-  const { data: existing } = await database.from("campaign_learnings").select("campaign_id").eq("campaign_id", campaign.id).maybeSingle();
-  const write = existing
+  const { data: campaigns, error } = await database.from("campaigns").select("id, business_id").eq("meta_campaign_id", metaCampaignId);
+  if (error) throw new Error(`Couldn't read campaigns: ${error.message}`);
+  const { data: ledger, error: ledgerError } = campaigns.length
+    ? await database.from("campaign_learnings").select("campaign_id").in("campaign_id", campaigns.map((c) => c.id))
+    : { data: [], error: null };
+  if (ledgerError) throw new Error(`Couldn't read the ledger: ${ledgerError.message}`);
+  const ledgerIds = ledger.map((row) => row.campaign_id);
+  const campaign = pickCampaign(campaigns, ledgerIds, metaCampaignId);
+  const write = ledgerIds.includes(campaign.id)
     ? database.from("campaign_learnings").update(update).eq("campaign_id", campaign.id)
     : database.from("campaign_learnings").insert({ campaign_id: campaign.id, business_id: campaign.business_id, ...update });
   const { error: writeError } = await write;
