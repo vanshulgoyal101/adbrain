@@ -333,6 +333,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   interests are suggestions too. The review says: "Meta may reach people beyond your
   age range and interests; never outside your area." Campaigns already launched
   keep their original targeting.
+- **Edit ad words** (#775): a paused or running AdBrain campaign's More menu changes an ad's
+  headline, text or description. Meta gets a new version of the ad (picture, 9:16 and WhatsApp
+  message kept), the ad goes back to review, and nothing else changes. Same claim checks as Studio.
 - A business's saved WhatsApp message (`businesses.whatsapp_template`, #840) is what every
   new WhatsApp campaign sends: the welcome, then a pre-typed message (optionally with a Call
   now button) or up to 3 questions. With nothing saved, AdBrain writes the greeting and

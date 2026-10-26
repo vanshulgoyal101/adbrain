@@ -4,7 +4,7 @@ import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { useActionState, useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
+import { CheckCircle2, Circle, Save, Wand2 } from "lucide-react";
 import { saveBusiness, type SaveState } from "@/app/(app)/brand/actions";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -154,9 +154,14 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     firstLine(fields.usps) ||
     fields.description.trim() ||
     "Add an offer or proof point to shape the message.";
-  const previewAudience = fields.target_audience.trim() || "your ideal customer";
-  const previewLocation = firstLine(fields.locations) || "your service area";
-  const previewContact = fields.phone.trim() || fields.website.trim();
+  const areas = fields.locations.split("\n").map((part) => part.trim()).filter(Boolean);
+  // Each fact on its own line: audience text often names the area too, so a joined sentence read twice.
+  const previewFacts: [string, string][] = [
+    ["Who", fields.target_audience.trim() || "Not added"],
+    ["Where", areas.join(", ") || "Not added"],
+    ...(fields.brand_voice.trim() ? [["Voice", fields.brand_voice.trim()] as [string, string]] : []),
+    ...((fields.phone.trim() || fields.website.trim()) ? [["Contact", fields.phone.trim() || fields.website.trim()] as [string, string]] : []),
+  ];
   // What Prepare and Meta will use: a bare domain is stored with https:// (#470).
   const websiteLink = normalizeWebsite(fields.website);
   // #681: what ads need, each linking to where it's filled. Brand voice and audience text stay optional.
@@ -484,65 +489,46 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
 
       {/* #681: on a phone the fields come first; on desktop this panel leads (order-first). */}
       <section
-        aria-label="Live brand context"
-        className="grid gap-5 border-y border-slate-200/80 py-5 lg:order-first lg:grid-cols-[0.7fr_1.3fr] lg:items-center"
+        aria-labelledby="brand-preview-title"
+        className="grid gap-4 border-y border-slate-200 py-6 lg:order-first lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-12"
       >
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
-            {OWNER_WORDS.preview}
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">
-            What AdBrain will use
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            This updates as you edit. It is the foundation for copy, visuals,
-            targeting, and contact details.
-          </p>
-          <div className="mt-4" aria-label={`${readinessCount} of ${readinessChecks.length} brand signals ready`}>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-700">Brand readiness</span>
-              <span className="text-slate-500">{readinessCount} of {readinessChecks.length} ready</span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-[width]"
-                style={{ width: `${(readinessCount / readinessChecks.length) * 100}%` }}
-              />
-            </div>
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="brand-preview-title" className="text-lg font-semibold text-slate-950">
+              {OWNER_WORDS.preview}
+            </h2>
+            <span className="text-xs text-slate-500">
+              {readinessCount} of {readinessChecks.length} ready
+            </span>
           </div>
+          <p className="mt-1 text-sm text-slate-500">What every ad will use. It updates as you type.</p>
+          {readinessCount < readinessChecks.length && (
+            <ul className="mt-3 flex flex-col">
+              {readinessChecks.filter((check) => !check.ready).map((check) => (
+                <li key={check.label} className="flex min-h-11 items-center gap-2 text-sm text-slate-500">
+                  <Circle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {check.href ? (
+                    <a href={check.href} className="font-medium text-blue-700 underline-offset-2 hover:underline">
+                      Add {check.label.toLowerCase()}
+                    </a>
+                  ) : (
+                    `Add ${check.label.toLowerCase()}`
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div>
-          <div className="border-l-2 border-blue-500 pl-4">
-            <p className="font-semibold text-slate-950">{previewMessage}</p>
-            <p className="mt-1 text-sm text-slate-600">
-              For {previewAudience} in {previewLocation}
-              {fields.brand_voice.trim() ? ` · ${fields.brand_voice.trim()} voice` : ""}
-            </p>
-            {previewContact && (
-              <p className="mt-2 text-xs font-medium text-blue-700">{previewContact}</p>
-            )}
-          </div>
-          <ul className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
-            {readinessChecks.map((check) => (
-              <li
-                key={check.label}
-                className={check.ready ? "flex items-center gap-2 text-slate-700" : "flex items-center gap-2 text-slate-400"}
-              >
-                {check.ready ? (
-                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                ) : (
-                  <Circle className="h-4 w-4" />
-                )}
-                {!check.ready && check.href ? (
-                  <a href={check.href} className="font-medium text-blue-700 underline-offset-2 hover:underline">
-                    Add {check.label.toLowerCase()}
-                  </a>
-                ) : (
-                  check.label
-                )}
-              </li>
+          <p className="text-lg font-semibold text-slate-950">{previewMessage}</p>
+          <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+            {previewFacts.map(([term, value]) => (
+              <div key={term} className="contents">
+                <dt className="text-slate-500">{term}</dt>
+                <dd className="text-slate-700">{value}</dd>
+              </div>
             ))}
-          </ul>
+          </dl>
         </div>
       </section>
 
@@ -557,8 +543,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               <CheckCircle2 className="h-4 w-4" /> Saved
             </span>
             {/* #681: the next step sits beside Saved, so a phone isn't left at the bottom of the page. */}
-            <Link href="/create" className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50">
-              Next: Create ads <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            <Link href="/create" className="ml-auto inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-blue-700 hover:bg-slate-100">
+              Next: Create ads
             </Link>
           </>
         )}

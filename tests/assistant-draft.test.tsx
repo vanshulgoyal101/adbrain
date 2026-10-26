@@ -35,19 +35,21 @@ describe("<AdAssistant> draft persistence", () => {
     }));
     render(<AdAssistant business={business} />);
     expect(await screen.findByText("Find a new approach")).toBeInTheDocument();
-    expect(screen.getByText("Book a consultation.")).toBeInTheDocument();
     expect(blockedEval).not.toHaveBeenCalled();
   });
 
-  it("shows the angle and Selected chips under each picture, never over the logo (#367)", async () => {
+  // #847: the card is the picture, the words and one choice; no angle tag or extra Selected chip.
+  it("shows no angle tag and marks the chosen ad on its own button", async () => {
     sessionStorage.setItem(`adbrain:assistant:${business.id}`, JSON.stringify({
       goal: "Invite enquiries", started: true, answers: [], phase: "done",
-      turns: [{ role: "result", creatives: [{ id: "creative-1", headline: "Find a new approach", primary_text: "Explore.", status: "approved", angle: "Clear value", image_url: "https://img.example/a.png" }] }],
+      turns: [{ role: "result", creatives: [{ id: "creative-1", headline: "Find a new approach", primary_text: "Explore.", status: "approved", angle: "Clear value", cta: "Book Now", image_url: "https://img.example/a.png" }] }],
     }));
     render(<AdAssistant business={business} />);
-    const chip = await screen.findByText("Clear value");
-    expect(chip.closest(".aspect-square")).toBeNull();
-    for (const selected of screen.getAllByText("Selected")) expect(selected.closest(".aspect-square")).toBeNull();
+    expect(await screen.findByRole("button", { name: "Selected" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("Clear value")).toBeNull();
+    expect(screen.getAllByText("Selected")).toHaveLength(1);
+    expect(screen.getByText("Button: Book Now")).toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
   });
 
   it("opens new results at their heading so a phone shows all three ads, not only the last card (#169)", async () => {
@@ -58,11 +60,11 @@ describe("<AdAssistant> draft persistence", () => {
       goal: "Invite enquiries", started: true, answers: [], phase: "done", turns: [{ role: "user", text: "Invite enquiries" }, { role: "result", creatives }],
     }));
     render(<AdAssistant business={business} />);
-    const heading = await screen.findByText("Your ads are ready — pick your favourites:");
+    const heading = await screen.findByText("Your ads are ready. Pick the ones you like.");
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "instant" });
     expect(scrollIntoView.mock.contexts.at(-1)).toBe(heading.closest("[data-result-heading]"));
-    // The history box scrolls only on large screens; on a phone the stacked cards flow with the page.
-    expect(screen.getByRole("region", { name: "Conversation history" })).toHaveClass("lg:max-h-[62vh]");
+    // #847: finished results flow with the page at every width, so no card's buttons sit inside a clipped box.
+    expect(screen.getByRole("region", { name: "Conversation history" })).not.toHaveClass("lg:max-h-[62vh]");
     expect(screen.getAllByRole("button", { name: /use this ad/i })).toHaveLength(3);
     Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
   });
@@ -202,7 +204,7 @@ describe("<AdAssistant> draft persistence", () => {
     const user = userEvent.setup();
     render(<AdAssistant business={business} />);
 
-    expect(screen.getByText("Grounded in Cedar Ridge Chiro")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What would you like to achieve?" })).toBeInTheDocument();
     // #403: the page's Stepper shows Brief → Create → Review; the assistant has no second strip.
     expect(screen.queryByRole("list", { name: "Creation stages" })).toBeNull();
     expect(screen.queryByText("Brief preview")).toBeNull();
