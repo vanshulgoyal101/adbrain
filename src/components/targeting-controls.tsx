@@ -388,7 +388,7 @@ export function TargetingControls({
               <>Saved campaign areas: <span className="font-medium">{plannedAreas.join(", ")}</span>{plannedExclusions.length ? <>; excluding <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}.</>
             ) : brandAreas.length ? (
               <>
-                AdBrain will target your service areas from your Brand Brain:{" "}
+                AdBrain will target your service areas from your business details:{" "}
                 <span className="font-medium">{brandAreas.join(", ")}</span>{plannedExclusions.length ? <>; excluding <span className="font-medium">{plannedExclusions.join(", ")}</span></> : null}.
               </>
             ) : (

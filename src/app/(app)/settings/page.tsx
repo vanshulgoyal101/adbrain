@@ -26,7 +26,7 @@ export const metadata = { title: "Settings" };
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_configured: "Facebook Login isn't configured on this server yet.",
-  no_business: "Set up your Brand Brain before connecting Meta.",
+  no_business: "Set up your business before connecting Meta.",
   invalid_state: "That connection link expired. Please try connecting again.",
   connect_failed: "Couldn't complete the connection. Please try again.",
   access_denied: "You declined the permissions AdBrain needs to manage ads.",
@@ -68,10 +68,10 @@ export default async function SettingsPage({
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain first, then connect your ad account here.
+              Set up your business first, then connect your ad account here.
             </p>
             <Link href="/brand">
-              <Button>Go to Brand Brain</Button>
+              <Button>Set up your business</Button>
             </Link>
           </CardContent>
         </Card>

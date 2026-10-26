@@ -27,11 +27,11 @@ export default async function CreatePage() {
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain first: the assistant uses it to make
+              Set up your business first: the assistant uses it to make
               ads that reflect your business.
             </p>
             <Link href="/brand">
-              <Button>Go to Brand Brain</Button>
+              <Button>Set up your business</Button>
             </Link>
           </CardContent>
         </Card>
@@ -74,7 +74,7 @@ export default async function CreatePage() {
               or skip for now.
             </p>
           )}
-          <Link href="/brand" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700">Edit Brand Brain <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          <Link href="/brand" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700">Edit your business <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
         </aside>
       </CreateFlow>
     </div>

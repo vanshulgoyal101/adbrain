@@ -213,7 +213,7 @@ describe("Home workspace", () => {
   it("shows a first-run action without fabricated metrics", () => {
     render(<WorkspaceHome {...empty} />);
     expect(
-      screen.getByRole("link", { name: "Set up Brand Brain" }),
+      screen.getByRole("link", { name: "Set up your business" }),
     ).toHaveAttribute("href", "/brand");
     expect(screen.queryByText("Active campaigns")).not.toBeInTheDocument();
     expect(screen.queryByText("Ready")).not.toBeInTheDocument();

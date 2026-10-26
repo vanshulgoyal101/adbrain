@@ -130,7 +130,7 @@ describe("<Nav>", () => {
     const expected: [string, string][] = [
       ["Home", "/dashboard"],
       ["Create", "/create"],
-      ["Brand Brain", "/brand"],
+      ["Your business", "/brand"],
       ["Review", "/studio"],
       ["Campaigns", "/campaigns"],
       ["Enquiries", "/leads"],

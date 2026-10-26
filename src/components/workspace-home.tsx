@@ -81,7 +81,7 @@ export function WorkspaceHome({
           ) : (
             <Building2 size={17} aria-hidden="true" />
           )}
-          {business ? "Create an ad" : "Set up Brand Brain"}
+          {business ? "Create an ad" : "Set up your business"}
         </Link>
       </header>
 
