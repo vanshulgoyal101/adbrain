@@ -453,6 +453,7 @@ alone is not a safe deployment plan.
 | [20261026_lead_campaign_link.sql](../db/migrations/20261026_lead_campaign_link.sql) | Same-signature `lead_sync_checkpoint` links synced leads to their campaign by Meta campaign id and backfills empty links (#680); either release order works (the old function ignores the new key) |
 | [20261026_meta_deletion_requests.sql](../db/migrations/20261026_meta_deletion_requests.sql) | #730: `privacy_requests` gains `source`, `confirmation_code`, `meta_subject_id` (nullable `owner_id` only for callback rows); service-only `meta_deletion_request_record` files the callback's deletion request, idempotent per open code and owner |
 | [20261026_legacy_credentials_bucket_limits.sql](../db/migrations/20261026_legacy_credentials_bucket_limits.sql) | #731: revoke browser access to legacy `meta_credentials` (when present); `brand-assets` 10 MB and `creatives` 20 MB, PNG/JPEG/WebP only |
+| [20261026_meta_connection_reauth.sql](../db/migrations/20261026_meta_connection_reauth.sql) | #757: service-only `meta_connection_mark_reauth(business, generation)` marks a `connected` connection `reauth_required` after a Graph 190, only at the generation that failed |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and

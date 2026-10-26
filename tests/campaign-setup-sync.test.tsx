@@ -406,6 +406,23 @@ describe("campaign sync feedback", () => {
     expect(await card.findByRole("alert")).toHaveTextContent("Meta did not confirm the pause. Pause the campaign in Ads Manager now.");
   });
 
+  // #757: a dead token can't pause; the card names the manual step and links straight to the campaign in Ads Manager.
+  it("a pause refused for a dead Meta token links to the campaign in Ads Manager on its card", async () => {
+    const live = { id: "campaign-9", business_id: business.id, name: "new year", status: "active", meta_campaign_id: "meta-9", daily_budget: 500, ...launched } as unknown as Campaign;
+    const message = "Meta stopped accepting AdBrain's access, so we couldn't pause this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.";
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => url === "/api/campaigns/campaign-9" && init?.method === "PATCH"
+      ? Response.json({ error: message, code: "META_REAUTH" }, { status: 409 })
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[live]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    const card = within(screen.getByRole("heading", { name: "new year" }).closest("article")!);
+    fireEvent.click(card.getByRole("button", { name: "Pause" }));
+    const alert = await card.findByRole("alert");
+    expect(alert).toHaveTextContent(message);
+    const link = within(alert).getByRole("link", { name: "Open in Ads Manager" });
+    expect(link.getAttribute("href")).toContain("selected_campaign_ids=meta-9");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("shows a failed refresh on the campaign's card, and clears it on the next try", async () => {
     const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
     let fail = true;

@@ -175,6 +175,11 @@ export class MetaError extends Error {
   }
 }
 
+/** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
+export function isMetaReauthError(error: unknown): error is MetaError {
+  return error instanceof MetaError && error.code === 190;
+}
+
 /**
  * #735: a create that failed after Meta made the campaign but before any ad set, where AdBrain then
  * deleted that empty PAUSED campaign and Meta confirmed it. Nothing is left in Meta.

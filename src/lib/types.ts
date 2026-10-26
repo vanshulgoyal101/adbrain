@@ -941,6 +941,10 @@ export interface Database {
         Args: { p_subject_id: string };
         Returns: number;
       };
+      meta_connection_mark_reauth: {
+        Args: { p_business_id: string; p_generation: number };
+        Returns: boolean;
+      };
       meta_deletion_request_record: {
         Args: { p_subject_id: string; p_code: string };
         Returns: number;

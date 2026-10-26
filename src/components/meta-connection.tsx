@@ -1,5 +1,6 @@
 "use client";
 
+import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
@@ -67,6 +68,9 @@ export function MetaConnectionPanel({
         )}
         {connection.source === "oauth" && connection.expired && (
           <Alert variant="warning">Your Meta connection needs to be renewed.</Alert>
+        )}
+        {connection.source === "oauth" && !connection.expired && reconnectByLabel(connection.tokenExpiresAt) && (
+          <Alert variant="warning">Reconnect Facebook by {reconnectByLabel(connection.tokenExpiresAt)} to keep managing your ads.</Alert>
         )}
         {connection.ready && (
           <div className="flex items-start gap-2 text-sm text-emerald-800">
