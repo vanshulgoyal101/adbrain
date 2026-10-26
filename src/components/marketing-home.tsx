@@ -28,7 +28,7 @@ export function MarketingHome() {
         <Link href="/" aria-label="AdBrain home" className={styles.logo}><Brain aria-hidden="true" size={26} /> AdBrain</Link>
         <nav aria-label="Main navigation">
           <Link href="/ideas" className={styles.exampleLink}>Campaign ideas</Link>
-          <a href="#workflow" className={styles.exampleLink}>From idea to enquiry</a>
+          <a href="#cycle" className={styles.exampleLink}>How it works</a>
           <Link href="/login" className={styles.signIn}>Sign in <ArrowRight aria-hidden="true" size={16} /></Link>
         </nav>
       </header>
@@ -75,16 +75,6 @@ export function MarketingHome() {
           <p className={styles.exampleFoot}>Made by AdBrain for example businesses, not customers.</p>
         </section>
 
-        <section id="workflow" className={styles.workflow} aria-labelledby="workflow-title">
-          <div className={styles.sectionHeading}><div><p className={styles.eyebrow}>02 / FROM IDEA TO ENQUIRY</p><h2 id="workflow-title">More than something to post.</h2></div><Link href="/login" className={styles.textLink}>Start with your brand <ArrowRight size={18} aria-hidden="true" /></Link></div>
-          <ol className={styles.steps}>
-            <li><span>01</span><h3>Start with your customer</h3><p>Bring your offer, service areas, and brand voice. Set a goal, from a first enquiry to a consultation booking.</p></li>
-            <li><span>02</span><h3>Find your message</h3><p>Create images and copy with AI. Compare the options, check the details, and approve what feels right for your business.</p></li>
-            <li><span>03</span><h3>Build your campaign</h3><p>Export your creative or connect Meta. Choose your audience, enquiry destination, and budget. Nothing goes live automatically.</p></li>
-            <li><span>04</span><h3>Keep the conversation going</h3><p>Sync campaign results and form enquiries. Review contact details and share a lead digest with your team for follow-up.</p></li>
-          </ol>
-        </section>
-
         <section className={styles.safety} aria-labelledby="safety-title">
           <div>
             <ShieldCheck size={30} aria-hidden="true" />
@@ -101,11 +91,11 @@ export function MarketingHome() {
         </section>
 
         <section className={styles.faq} aria-labelledby="faq-title">
-          <div><p className={styles.eyebrow}>BEFORE YOU START</p><h2 id="faq-title">Good questions.</h2><Link href="/login" className={styles.primary}>Get started <ArrowRight size={18} aria-hidden="true" /></Link></div>
+          <div><h2 id="faq-title">Questions before you start</h2><Link href="/login" className={styles.primary}>Get started <ArrowRight size={18} aria-hidden="true" /></Link></div>
           <div>{MARKETING_FAQS.map((faq) => <details key={faq.question}><summary>{faq.question}</summary><p>{faq.answer}</p></details>)}</div>
         </section>
       </main>
-      <footer className={styles.footer}><span>AdBrain / Customer-focused marketing for local businesses</span><nav aria-label="Resources and legal"><Link href="/guides">Guides</Link>{LEGAL_LINKS.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav></footer>
+      <footer className={styles.footer}><span>AdBrain</span><nav aria-label="Resources and legal"><Link href="/guides">Guides</Link>{LEGAL_LINKS.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}</nav></footer>
     </div>
   );
 }
