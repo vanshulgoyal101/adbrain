@@ -1,8 +1,7 @@
 import { observeRoute, currentRequestId } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { managedAccountsEnabledFor } from "@/lib/meta/managed-account";
-import { createClient } from "@/lib/supabase/server";
+import { managedRouteUser } from "@/lib/meta/managed-attempt";
 import { ConnectionAccessError, requireOwnedBusiness } from "@/lib/meta/connection-access";
 import { checkManagedWhatsApp } from "@/lib/meta/managed-whatsapp";
 
@@ -15,8 +14,8 @@ export const POST = observeRoute("/api/managed/whatsapp", "POST", handlePOST);
 
 /** #524 v1: 'Check again' after the owner links WhatsApp to their Page; records and binds the Page-linked number. */
 async function handlePOST(request: Request) {
-  const { data: { user } } = await (await createClient()).auth.getUser();
-  if (!managedAccountsEnabledFor(user)) return fail(404, "NOT_ENABLED", "Managed accounts are not enabled.");
+  const gate = await managedRouteUser();
+  if (!gate.ok) return gate.response;
   const body = z.object({ businessId: z.uuid() }).safeParse(await request.json().catch(() => null));
   if (!body.success) return fail(400, "INVALID_INPUT", "A business is required.");
   let actor;
