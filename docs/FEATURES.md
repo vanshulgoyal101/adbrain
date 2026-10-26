@@ -407,7 +407,10 @@ operation cannot be discarded to bypass its recovery identity; saved drafts
 remain available after clearing the local setup.
 
 Preflight validates ownership, approved creative content, active lead form,
-connection capability, INR currency, resolved targeting, and budget. Its hash
+connection capability, INR currency, resolved targeting, and budget. For health
+businesses it also reads each ad's saved wording with Create's banned-claim rule
+(whole words only), so an owner-edited "Cures back pain" is blocked before Meta
+(`REVIEW_AD_POLICY`, #739). Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
 Creation reruns preflight and rejects a stale draft, hash, or connection generation.
 Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,

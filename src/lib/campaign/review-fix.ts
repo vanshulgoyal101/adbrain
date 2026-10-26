@@ -25,6 +25,7 @@ const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
   REVIEW_CITY_RADIUS: { kind: "field", label: "Choose the locations again", targets: ["location-include", "location-mode"] },
   REVIEW_AREAS_UNRESOLVED: { kind: "field", label: "Fix the areas", targets: ["planned-areas", "location-include", "location-mode"] },
   REVIEW_NO_AUDIENCE: { kind: "field", label: "Go to Recommend audience", targets: ["recommend-audience"] },
+  REVIEW_AD_POLICY: { kind: "field", label: "Edit the ad's wording", targets: ["campaign-ad-picker"] },
   REVIEW_INTERESTS_UNRESOLVED: { kind: "field", label: "Edit the interests", targets: ["audience-interests", "recommend-audience"] },
 };
 
