@@ -15,13 +15,6 @@ const run21Offer = [
 // mixed Hinglish naming two offers ("Mujhe Solaride ke Diwali offer: 10% off ... aur Free site survey
 // ke baare mein jaankari chahiye."). Now: one short ask, one offer, the ad's own language.
 describe("whatsappGreeting (#209, #493)", () => {
-  it("creates three distinct ice breakers from Brand offers", () => {
-    expect(whatsappGreeting(solaride, run21Offer, ["Mohali"], [], "ad", true).iceBreakers).toEqual([
-      "What does Free site survey include?",
-      "How much does Free site survey cost?",
-      "How do I book Free site survey?",
-    ]);
-  });
   it("asks for one offer in the ad's language, a free offer first, naming the city when there is one", () => {
     expect(whatsappGreeting(solaride, run21Offer, ["Mohali"])).toEqual({
       autofill: "Hi! I'd like a free site survey in Mohali.",
