@@ -1039,6 +1039,19 @@ describe("<Studio> review board", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps a creative visible after a thrown approval error", async () => {
+    h.setCreativeStatus.mockRejectedValueOnce(new Error("offline"));
+    render(<Studio business={business} initialCreatives={[creative()]} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /^approve$/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't update approval. Check your connection and try again.",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Cut your power bill" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^approve$/i })).toBeInTheDocument();
+  });
+
   it("keeps a creative after a thrown delete error", async () => {
     h.deleteCreative.mockRejectedValueOnce(new Error("offline"));
     render(<Studio business={business} initialCreatives={[creative()]} />);
