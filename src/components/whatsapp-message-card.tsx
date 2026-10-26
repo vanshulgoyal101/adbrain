@@ -4,7 +4,7 @@ import { Suspense, use, useState, useTransition } from "react";
 import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { saveWhatsAppTemplate } from "@/app/(app)/brand/whatsapp-template-actions";
+import { saveWhatsAppTemplate, type WhatsAppTemplateResult } from "@/app/(app)/brand/whatsapp-template-actions";
 import { ICE_BREAKER_LIMITS } from "@/lib/meta/limits";
 import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
 
@@ -56,7 +56,9 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
     if (hasSaved) setDirty(true);
   };
   const save = (value: WhatsAppTemplate | null) => startTransition(async () => {
-    const result = await saveWhatsAppTemplate({ businessId, template: value });
+    // #920: a dropped connection rejects; it must not reach the error boundary and lose the owner's words.
+    const result = await saveWhatsAppTemplate({ businessId, template: value })
+      .catch((): WhatsAppTemplateResult => ({ ok: false, error: "Couldn't save your WhatsApp message. Try again." }));
     if (!result.ok) { setMessage({ ok: false, text: result.error ?? "Couldn't save.", field: result.field }); return; }
     if (!value) { setLanguage("auto"); setGreeting(suggested.en.greeting); setPrefill(suggested.en.prefill); setButton("none"); setQuestions(["", "", ""]); }
     if (value) setLanguage(value.language);
