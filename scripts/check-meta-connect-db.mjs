@@ -30,6 +30,7 @@ const provisionLeaseMigration = await readFile(join(root, "db/migrations/2026102
 const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
+const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -1123,6 +1124,28 @@ async function verifyManagedWhatsAppPageLink(db, database) {
   });
 }
 
+async function verifyTokenSearchPath(db, database) {
+  await check(`${database}: the token RPCs run with an empty search_path and still store, read and delete (#625)`, async () => {
+    const config = (await db.query(`select p.proname, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname in ('meta_token_insert','meta_token_get','meta_token_delete') order by p.proname`)).rows;
+    assert.deepEqual(config, ["meta_token_delete", "meta_token_get", "meta_token_insert"].map((proname) => ({ proname, proconfig: ['search_path=""'] })));
+    const owner = randomUUID(), business = randomUUID(), token = randomUUID();
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Search path')", [business, owner]);
+      await db.query("set local search_path = ''");
+      await db.query(`select public.meta_token_insert($1,$2,$3,'s1','business_system_user',$4,$5,$6,'k1','v1',array['ads_management'],'[]'::jsonb,null,now(),null)`,
+        [token, business, owner, "\\x01", `\\x${"00".repeat(12)}`, `\\x${"00".repeat(16)}`]);
+      const [row] = (await db.query("select * from public.meta_token_get($1,$2)", [token, business])).rows;
+      assert.equal(row.id, token);
+      assert.deepEqual([...row.ciphertext], [1]);
+      assert.equal((await db.query("select public.meta_token_delete($1,$2) as deleted", [token, business])).rows[0].deleted, true);
+      assert.equal((await db.query("select count(*)::int n from private.meta_tokens where id = $1", [token])).rows[0].n, 0);
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyCampaignLearnings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2020,6 +2043,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(learningsMigration);
       await db.query(learningsMigration);
       await verifyCampaignLearnings(db,database);
+      await db.query(tokenSearchPathMigration);
+      await db.query(tokenSearchPathMigration);
+      await verifyTokenSearchPath(db,database);
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       return;
     }

@@ -442,6 +442,7 @@ alone is not a safe deployment plan.
 | [20261025_managed_whatsapp_page_link.sql](../db/migrations/20261025_managed_whatsapp_page_link.sql) | #524 v1: `managed_meta_accounts.whatsapp_number_e164` (the Page-linked, Meta-verified number); `whatsapp_linked` needs it or the Embedded Signup IDs; one active customer per number |
 | [20261025_whatsapp_number_bindings.sql](../db/migrations/20261025_whatsapp_number_bindings.sql) | #253 number boundary: `whatsapp_number_bindings` (owner-read RLS, service-role writes) |
 | [20261026_campaign_learnings.sql](../db/migrations/20261026_campaign_learnings.sql) | #588 learning ledger: `campaign_learnings` (owner-read RLS, service-role writes) |
+| [20261026_meta_token_search_path.sql](../db/migrations/20261026_meta_token_search_path.sql) | #625: `meta_token_insert`/`get`/`delete` run with `search_path = ''` (#359 standard); bodies already fully qualified, behaviour unchanged |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and
