@@ -82,6 +82,16 @@ describe("WhatsApp message card (#840)", () => {
     expect(screen.getByLabelText("Question 1")).toHaveAttribute("placeholder", "e.g. What's the price?");
   });
 
+  it("a failed save (network drop) keeps the card and the owner's words, and says to try again (#920)", async () => {
+    save.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={solaride} suggested={suggested} />);
+    fireEvent.change(screen.getByLabelText(/Welcome message/), { target: { value: "Hi! Solaride here." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
+    expect(await screen.findByText("Couldn't save your WhatsApp message. Try again.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Welcome message/)).toHaveValue("Hi! Solaride here.");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
   it("shows a refusal next to the field it's about, and Reset goes back to the suggestion", async () => {
     save.mockResolvedValueOnce({ ok: false, field: "greeting", error: "\"guaranteed\": Meta often rejects this." });
     render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={solaride} suggested={suggested} />);
