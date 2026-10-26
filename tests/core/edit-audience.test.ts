@@ -17,7 +17,8 @@ type Sent = { method: string; path: string; form: Record<string, string> };
 
 const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
 const mohali = { cities: [{ key: "1029599", name: "Mohali", radius: 25, distance_unit: "kilometer" }] };
-const changes = { location: mohali as never, age: { min: 30, max: 60 } };
+// A new area always arrives with its #741 out-of-area exclusions (the edit service computes them).
+const changes = { location: mohali as never, excludedLocation: { regions: [{ key: "1723" }] } as never, age: { min: 30, max: 60 } };
 
 function replay(tape: unknown[]) {
   const pending = [...tape] as Exchange[];
@@ -110,20 +111,45 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(form).not.toHaveProperty("daily_budget");
   });
 
-  // #741 (Reviewer and QA on #828): a new Indian service area without its out-of-area exclusions is refused.
-  it("refuses a new Indian area on a pre-#741 ad set when no out-of-area exclusions come with it, before any write", async () => {
-    // A campaign launched before #741: the recorded ad set read without its excluded_geo_locations.
-    const old = (rebuildTape as Exchange[]).map(exchange => {
-      const body = exchange.body as { targeting?: Record<string, unknown> };
-      if (!/fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event/.test(exchange.path) || !body.targeting) return exchange;
-      const targeting = { ...body.targeting };
-      delete targeting.excluded_geo_locations;
-      return { ...exchange, body: { ...body, targeting } };
+  // Exclusions only grow: what the ad set already excludes stays; a state AdBrain's own #741 rule added
+  // that the new area now needs is the one thing dropped, and the owner's own exclusions never are.
+  describe("exclusions only grow", () => {
+    const withExclusions = () => (patchTape as Exchange[]).slice(0, 4).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
+      ? { ...exchange, body: { ...(exchange.body as { targeting: object }), targeting: { ...(exchange.body as { targeting: object }).targeting,
+        excluded_geo_locations: { regions: [{ key: "1723" }, { key: "1742" }, { key: "777" }], cities: [{ key: "555" }, { key: "1033379" }] } } } } : exchange);
+    const sentExclusions = async (edit: object) => {
+      const tape = replay(withExclusions());
+      const { campaignId, adSetId } = ids(patchTape);
+      await new MetaClient(creds).editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: edit as never }, { validateOnly: true });
+      return JSON.parse(tape.sent.find(call => call.method === "POST")!.form.targeting).excluded_geo_locations;
+    };
+
+    it("adds the new exclusions to the existing ones by key without removing any", async () => {
+      expect(await sentExclusions({ excludedLocation: { regions: [{ key: "1723" }, { key: "1724" }], cities: [{ key: "666" }] } })).toEqual({
+        regions: [{ key: "1723" }, { key: "1742" }, { key: "777" }, { key: "1724" }], cities: [{ key: "555" }, { key: "1033379" }, { key: "666" }],
+      });
     });
-    const tape = replay(old);
-    const { campaignId, adSetId, adId } = ids(rebuildTape);
-    const india = { cities: [{ key: "1029599", name: "Mohali", country: "IN", radius: 25, distance_unit: "kilometer" }] };
-    await expect(new MetaClient(creds).editAdSetTargeting(campaignId, { adSetId, adIds: [adId], changes: { location: india as never } }, { validateOnly: true }))
+
+    it("when the area changes, drops only the #741 exclusions the new area no longer makes (never the owner's own)", async () => {
+      expect(await sentExclusions({ location: mohali, excludedLocation: { regions: [{ key: "1723" }, { key: "1724" }] } })).toEqual({
+        regions: [{ key: "1723" }, { key: "777" }, { key: "1724" }], cities: [{ key: "555" }],
+      });
+    });
+
+    it("a new area with no exclusions (country-wide) clears #741's and keeps the owner's", async () => {
+      expect(await sentExclusions({ location: { countries: ["IN"] }, excludedLocation: {} })).toEqual({ regions: [{ key: "777" }], cities: [{ key: "555" }] });
+    });
+  });
+
+  // #741 (QA on #828): the old area's exclusions can't be kept for a new area, nor a place included and excluded at once.
+  it("refuses a new area that comes without its own exclusions, or that the result would also exclude, before any write", async () => {
+    const rajasthan = { regions: [{ key: "1743" }] };
+    const tape = replay(patchTape);
+    const { campaignId, adSetId } = ids(patchTape);
+    const meta = new MetaClient(creds);
+    await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { location: rajasthan as never } }, { validateOnly: true }))
+      .rejects.toBeInstanceOf(TargetingExclusionsMissingError);
+    await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { location: rajasthan as never, excludedLocation: rajasthan as never } }, { validateOnly: true }))
       .rejects.toBeInstanceOf(TargetingExclusionsMissingError);
     expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });

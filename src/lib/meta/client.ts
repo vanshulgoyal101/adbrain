@@ -7,7 +7,7 @@ import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
-import { lacksAreaExclusions, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
+import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -171,10 +171,40 @@ export type AudienceChanges = {
 export type AudienceEdit = { mode: "patch" | "rebuild"; validated: boolean; adSetId: string; adIds: string[]; retiredAdSetId: string | null };
 
 /** Interests (or other detailed targeting) make Meta refuse an in-place targeting update (100/1359202). */
-function hasInterests(targeting: Record<string, unknown>): boolean {
+export function hasInterests(targeting: Record<string, unknown>): boolean {
   const flexible = targeting.flexible_spec;
   return (Array.isArray(targeting.interests) && targeting.interests.length > 0)
     || (Array.isArray(flexible) && flexible.some(spec => spec && typeof spec === "object" && Object.keys(spec).length > 0));
+}
+
+const AUTO_EXCLUDED_REGIONS = new Set<string>(INDIA_REGION_KEYS);
+const AUTO_EXCLUDED_CITIES = new Set(EXCLUDABLE_CITIES.map(city => city.key));
+
+/**
+ * #773: exclusions only grow. The ad set's existing exclusions are kept and the new ones added by key
+ * (per type). The one exception: when the area itself changes, an exclusion AdBrain's own service-area
+ * rule added earlier (a state or city of #741's list) that the new area no longer excludes is dropped,
+ * because it may cover the new area. The owner's own exclusions are never removed.
+ */
+function grownExclusions(existing: unknown, added: GeoTargeting, areaChanged: boolean): Record<string, unknown> | undefined {
+  const old = existing && typeof existing === "object" && !Array.isArray(existing) ? existing as Record<string, unknown> : {};
+  const fresh = buildGeoLocations(added, []);
+  const out: Record<string, unknown> = { ...old };
+  for (const type of ["regions", "cities"] as const) {
+    const auto = type === "regions" ? AUTO_EXCLUDED_REGIONS : AUTO_EXCLUDED_CITIES;
+    const additions = Array.isArray(fresh[type]) ? fresh[type] as Array<{ key: string }> : [];
+    const additionKeys = new Set(additions.map(item => item.key));
+    const kept = (Array.isArray(old[type]) ? old[type] as Array<{ key: string }> : [])
+      .filter(item => !areaChanged || !auto.has(String(item.key)) || additionKeys.has(item.key));
+    const merged = [...kept, ...additions.filter(item => !kept.some(have => have.key === item.key))];
+    if (merged.length) out[type] = merged; else delete out[type];
+  }
+  const countries = [...new Set([
+    ...Array.isArray(old.countries) ? old.countries as string[] : [],
+    ...Array.isArray(fresh.countries) ? fresh.countries as string[] : [],
+  ])];
+  if (countries.length) out.countries = countries; else delete out.countries;
+  return Object.keys(out).length ? out : undefined;
 }
 
 /**
@@ -184,8 +214,10 @@ function hasInterests(targeting: Record<string, unknown>): boolean {
 function editedTargeting(source: Record<string, unknown>, changes: AudienceChanges): Record<string, unknown> {
   const next: Record<string, unknown> = { ...source };
   if (changes.location) next.geo_locations = { ...buildGeoLocations(changes.location, []), location_types: ["home", "recent"] };
-  // #741: exclusions only grow. A new exclusion is added to those already on the ad set, never instead of them.
-  if (changes.excludedLocation) next.excluded_geo_locations = unionGeo(source.excluded_geo_locations, buildGeoLocations(changes.excludedLocation, []));
+  if (changes.excludedLocation) {
+    const grown = grownExclusions(source.excluded_geo_locations, changes.excludedLocation, Boolean(changes.location));
+    if (grown) next.excluded_geo_locations = grown; else delete next.excluded_geo_locations;
+  }
   if (changes.age) {
     const advantage = (source.targeting_automation as { advantage_audience?: number } | undefined)?.advantage_audience === 1;
     const { min, max } = changes.age;
@@ -204,18 +236,17 @@ function editedTargeting(source: Record<string, unknown>, changes: AudienceChang
   return next;
 }
 
-/** Union of two Meta geo specs, list by list, de-duplicated by key (countries by code). */
-function unionGeo(current: unknown, added: Record<string, unknown>): Record<string, unknown> {
-  const base = (current && typeof current === "object" ? current : {}) as Record<string, unknown>;
-  const merged: Record<string, unknown> = { ...base };
-  for (const [kind, items] of Object.entries(added)) {
-    const existing = base[kind];
-    if (!Array.isArray(items) || !Array.isArray(existing)) { if (existing === undefined) merged[kind] = items; continue; }
-    const id = (item: unknown) => typeof item === "string" ? item : String((item as { key?: unknown }).key ?? JSON.stringify(item));
-    const seen = new Set(existing.map(id));
-    merged[kind] = [...existing, ...items.filter(item => !seen.has(id(item)))];
-  }
-  return merged;
+/** A place (city, region or country) that is both in `geo_locations` and in `excluded_geo_locations`. */
+function excludesIncludedPlace(targeting: Record<string, unknown>): boolean {
+  const geo = (value: unknown) => (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const keys = (spec: Record<string, unknown>, type: string) => new Set((Array.isArray(spec[type]) ? spec[type] as unknown[] : [])
+    .map(item => typeof item === "string" ? item : String((item as { key?: unknown }).key)));
+  const included = geo(targeting.geo_locations);
+  const excluded = geo(targeting.excluded_geo_locations);
+  return ["cities", "regions", "countries"].some(type => {
+    const out = keys(excluded, type);
+    return [...keys(included, type)].some(key => out.has(key));
+  });
 }
 
 /** Meta echoed the changed audience back (it may add defaults, so only what changed is compared). */
@@ -223,7 +254,7 @@ function sameAudience(targeting: Record<string, unknown> | undefined, sent: Reco
   if (!targeting) return false;
   const norm = (value: unknown): string => JSON.stringify(value ?? null);
   return (!changes.location || targeting.geo_locations !== undefined)
-    && (!changes.excludedLocation || targeting.excluded_geo_locations !== undefined)
+    && (!changes.excludedLocation || sent.excluded_geo_locations === undefined || targeting.excluded_geo_locations !== undefined)
     && (!changes.age || ["age_min", "age_max", "age_range"].every(key => norm(targeting[key]) === norm(sent[key])))
     && (!changes.gender || norm(targeting.genders) === norm(sent.genders));
 }
@@ -1726,9 +1757,13 @@ export class MetaClient {
       throw new CampaignDeliveryError("The ad set could not be verified. Keep the campaign paused.");
     }
     if (source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
+    // #741 (QA on #828): a new area must arrive with its own out-of-area exclusions ({} when it has none),
+    // so the old area's are replaced, and the result may never exclude a place it includes.
+    if (changes.location && !changes.excludedLocation) throw new TargetingExclusionsMissingError();
     const targeting = editedTargeting(source.targeting, changes);
-    // #741: a new service area must carry its out-of-area exclusions (Reviewer and QA on #828).
-    if (changes.location && lacksAreaExclusions(targeting)) throw new TargetingExclusionsMissingError();
+    if (excludesIncludedPlace(targeting)) {
+      throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
+    }
     const rebuild = hasInterests(source.targeting);
     const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
     if (!rebuild) {
