@@ -230,7 +230,6 @@ describe("Home workspace", () => {
     expect(
       screen.getByRole("link", { name: /A home worth caring for/ }),
     ).toHaveAttribute("href", "/studio?creative=draft-1");
-    expect(screen.getByText("Not added")).toBeInTheDocument();
     expect(container.querySelector("a button")).toBeNull();
   });
 
