@@ -39,13 +39,13 @@ export default function GlobalError({
           textAlign: "center",
           fontFamily:
             "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-          color: "#0f172a",
+          color: "#1b2420",
           background: "#ffffff",
         }}
       >
-        <p style={{ margin: 0, fontWeight: 500, color: "#2563eb", display: "flex", alignItems: "center", gap: 8 }}><Brain size={24} aria-hidden="true" />AdBrain</p>
+        <p style={{ margin: 0, fontWeight: 500, color: "#13784a", display: "flex", alignItems: "center", gap: 8 }}><Brain size={24} aria-hidden="true" />AdBrain</p>
         <h1 ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: "1.25rem" }}>Something went wrong</h1>
-        <p style={{ margin: 0, maxWidth: "28rem", color: "#475569" }}>
+        <p style={{ margin: 0, maxWidth: "28rem", color: "#5a6660" }}>
           We hit an unexpected error and couldn&apos;t load the page. Try again —
           if it keeps happening, come back in a few minutes.
         </p>
@@ -56,7 +56,7 @@ export default function GlobalError({
             cursor: "pointer",
             borderRadius: "0.5rem",
             border: "none",
-            background: "#2563eb",
+            background: "#13784a",
             color: "#ffffff",
             padding: "0.5rem 1rem",
             fontSize: "0.875rem",
@@ -65,7 +65,7 @@ export default function GlobalError({
         >
           Try again
         </button>
-        <a href="/login" style={{ color: "#1d4ed8", fontSize: "0.875rem", fontWeight: 500 }}>Sign in</a>
+        <a href="/login" style={{ color: "#0f6440", fontSize: "0.875rem", fontWeight: 500 }}>Sign in</a>
       </body>
     </html>
   );

@@ -45,10 +45,10 @@ export function SignOutButton() {
       aria-busy={busy}
       aria-label="Sign out"
       title="Sign out"
-      className="w-auto justify-start px-2 text-slate-600 md:w-full md:px-3"
+      className="w-full justify-start px-3 text-slate-600"
     >
       <LogOut className="h-4 w-4" />
-      <span className="hidden md:inline">Sign out</span>
+      <span>Sign out</span>
     </Button>
     {error && <p role="alert" className="mt-1 max-w-48 text-xs text-red-700">{error}</p>}
     </div>

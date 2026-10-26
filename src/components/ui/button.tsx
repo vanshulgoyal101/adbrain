@@ -1,12 +1,12 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** #403: primary (leaf, solid), secondary/outline, quiet/ghost (text), danger (outline; solid red only in a confirm dialog). */
+/** #403/#847: primary (leaf, solid; grey when disabled), secondary/outline, quiet/ghost (text), danger (outline; solid red only in a confirm dialog). */
 type Variant = "primary" | "secondary" | "outline" | "ghost" | "quiet" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover",
+  primary: "bg-primary text-primary-foreground hover:bg-primary-hover disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-100 aria-disabled:bg-slate-100 aria-disabled:text-slate-500 aria-disabled:opacity-100",
   secondary: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
   outline: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
   ghost: "text-slate-700 hover:bg-slate-100",

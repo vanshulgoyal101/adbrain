@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 const primaryItems = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/create", label: "Create", icon: Wand2 },
+  { href: "/create", label: "Create ads", icon: Wand2 },
   { href: "/studio", label: "Review", icon: Sparkles },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/leads", label: "Enquiries", icon: Inbox },
@@ -36,8 +36,8 @@ const navClass = (active: boolean) =>
   cn(
     "flex min-h-11 items-center gap-3 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
     active
-      ? "bg-blue-50 text-blue-700"
-      : "text-slate-700 hover:bg-slate-100 hover:text-slate-950",
+      ? "bg-white text-slate-950 ring-1 ring-slate-200"
+      : "text-slate-600 hover:bg-white/70 hover:text-slate-950",
   );
 
 function NavLabel({ label, icon: Icon }: { label: string; icon: LucideIcon }) {
@@ -61,7 +61,7 @@ function NavItem({ href, label, icon, active, unseenCount = 0 }: {
     <Link href={href} prefetch={intent && !active ? true : null} aria-current={active ? "page" : undefined} className={navClass(active)}
       onMouseEnter={warmRoute} onFocus={warmRoute} onTouchStart={warmRoute}>
       <NavLabel label={label} icon={icon} />
-      {unseenCount > 0 && <span aria-label={`${unseenCount} new enquiries`} className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded bg-emerald-100 px-1 text-xs font-semibold tabular-nums text-emerald-900">{unseenCount > 99 ? "99+" : unseenCount}</span>}
+      {unseenCount > 0 && <span aria-label={`${unseenCount} new enquiries`} className="ml-auto shrink-0 text-xs font-semibold tabular-nums text-blue-700">{unseenCount > 99 ? "99+" : unseenCount}</span>}
     </Link>
   );
 }
@@ -84,22 +84,13 @@ export function Nav({
           : "scrollbar-none flex-row overflow-x-auto",
       )}
     >
-      {orientation === "vertical" && (
-        <p className="mb-2 px-3 text-[10px] font-semibold text-slate-500">
-          Marketing
-        </p>
-      )}
       {primaryItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
           <NavItem key={href} href={href} label={label} icon={Icon} active={active} unseenCount={href === "/leads" ? unseenCount : 0} />
         );
       })}
-      {orientation === "vertical" && (
-        <p className="mb-2 mt-7 px-3 text-[10px] font-semibold text-slate-500">
-          Workspace
-        </p>
-      )}
+      {orientation === "vertical" && <div className="h-4" aria-hidden="true" />}
       {workspaceItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(href + "/");
         return (
