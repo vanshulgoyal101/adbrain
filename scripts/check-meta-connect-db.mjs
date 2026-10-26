@@ -31,6 +31,7 @@ const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
 const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
@@ -1264,6 +1265,35 @@ async function verifyLeadCampaignLink(db, database) {
   });
 }
 
+async function verifyWhatsAppTemplate(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Template')", [business, owner]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: WhatsApp template: owner saves an object, other owners can't, bounded shape (#840)`, async () => {
+    const template = JSON.stringify({ greeting: "Hi! Thanks for messaging Solaride.", opening: { kind: "prefill", prefill: "Can I get more info on this", callButton: true }, language: "en" });
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("update public.businesses set whatsapp_template=$2::jsonb where id=$1", [business, template])).rowCount, 1);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.businesses set whatsapp_template='[]'::jsonb where id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.businesses set whatsapp_template=jsonb_build_object('greeting', repeat('x', 5000)) where id=$1", [business]), { code: "23514" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("update public.businesses set whatsapp_template='{}'::jsonb where id=$1", [business])).rowCount, 0);
+    });
+  });
+}
+
 async function verifyCampaignLearnings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2164,6 +2194,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await db.query(whatsappTemplateMigration);
+      await db.query(whatsappTemplateMigration);
+      await verifyWhatsAppTemplate(db,database);
       if ((await db.query("select to_regclass('public.privacy_requests') is not null as installed")).rows[0].installed) {
         await db.query(metaDeletionMigration);
         await db.query(metaDeletionMigration);
