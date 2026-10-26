@@ -1453,14 +1453,9 @@ grant execute on function public.lead_sync_checkpoint(uuid, uuid, uuid, bigint, 
 
 alter table public.leads
   add column if not exists workflow_status text not null default 'new'
-    check (workflow_status in ('new', 'contacted', 'qualified', 'booked', 'customer', 'closed')),
+    check (workflow_status in ('new', 'contacted', 'qualified', 'booked', 'closed')),
   add column if not exists follow_up_note text not null default ''
     check (char_length(follow_up_note) <= 2000);
-
--- #798: an enquiry that became a customer (counts toward ₹ per customer).
-alter table public.leads drop constraint if exists leads_workflow_status_check;
-alter table public.leads add constraint leads_workflow_status_check
-  check (workflow_status in ('new', 'contacted', 'qualified', 'booked', 'customer', 'closed'));
 
 create index if not exists leads_inbox_cursor_idx
   on public.leads (business_id, created_time desc nulls last, id);
@@ -1480,7 +1475,7 @@ begin
     raise insufficient_privilege using message = 'Business access denied';
   end if;
   if p_limit is null or p_limit < 1 or p_limit > 100 or p_query is null or char_length(p_query) > 200
-    or p_status is null or p_status not in ('all', 'new', 'contacted', 'qualified', 'booked', 'customer', 'closed')
+    or p_status is null or p_status not in ('all', 'new', 'contacted', 'qualified', 'booked', 'closed')
     or p_contact is null or p_contact not in ('all', 'ready', 'missing')
     or p_sort is null or p_sort not in ('newest', 'oldest', 'name')
     or p_after_key is null or p_after_null is null then
