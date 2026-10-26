@@ -191,7 +191,7 @@ try {
       const review = (await response.json().catch(() => null))?.data;
       assert.equal(response.status(), 200, `Preflight returned HTTP ${response.status()}`);
       const blockers = (review?.blockers ?? []).map((blocker) => blocker.message);
-      const unexpected = blockers.filter((message) => !message.startsWith("Add your business website in Brand Brain."));
+      const unexpected = blockers.filter((message) => !message.startsWith("Add your business website"));
       assert.equal(unexpected.length, 0, `Preflight blocked: ${unexpected[0]}`);
       assert.equal(review.selected?.currency, "INR", "No INR Meta ad account selected");
       const result = page.getByRole("region", { name: "Campaign review result" });
@@ -200,7 +200,7 @@ try {
       if (blockers.length) assert.equal(await send.count(), 0, "Send to Meta is offered despite a blocker");
       else await send.waitFor({ state: "visible" });
       assert.equal(errors.length, 0, errors[0] ?? "Browser error during Prepare");
-      console.log(`PASS Prepare preflight (${review.selected.accountName}, ${review.resolvedAreaLabel ?? "area unresolved"}; ${blockers.length ? "Send held only by missing Brand Brain website" : "ready to send paused"}; nothing sent to Meta)`);
+      console.log(`PASS Prepare preflight (${review.selected.accountName}, ${review.resolvedAreaLabel ?? "area unresolved"}; ${blockers.length ? "Send held only by the missing business website" : "ready to send paused"}; nothing sent to Meta)`);
     } catch (error) {
       console.log(`FAIL Prepare preflight: ${error instanceof Error ? error.message.split("\n")[0].slice(0, 180) : "Unknown error"}; nothing sent to Meta`);
       process.exitCode = 1;
