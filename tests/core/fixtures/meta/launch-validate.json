@@ -28,7 +28,12 @@
     },
     "whatsappGreeting": {
       "autofill": "Hi, I'd like a solar quote.",
-      "greeting": "Hi! Thanks for reaching out to Solaride."
+      "greeting": "Hi! Thanks for reaching out to Solaride.",
+      "iceBreakers": [
+        "What does Free site survey include?",
+        "How much does Free site survey cost?",
+        "How do I book Free site survey?"
+      ]
     },
     "interests": [
       {
@@ -199,7 +204,7 @@
       "kind": "adcreatives",
       "form": {
         "name": "Rooftop solar in 7 days",
-        "object_story_spec": "{\"page_id\":\"PAGE\",\"link_data\":{\"image_hash\":\"FEED_HASH\",\"message\":\"Cut your power bill with rooftop solar.\\nFree site visit.\",\"name\":\"Rooftop solar in 7 days\",\"description\":\"Free site visit in Tricity\",\"link\":\"https://wa.me/910000000000\",\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi, I'd like a solar quote.\\\"},\\\"text\\\":\\\"Hi! Thanks for reaching out to Solaride.\\\"}}}\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/910000000000\"}}}}"
+        "object_story_spec": "{\"page_id\":\"PAGE\",\"link_data\":{\"image_hash\":\"FEED_HASH\",\"message\":\"Cut your power bill with rooftop solar.\\nFree site visit.\",\"name\":\"Rooftop solar in 7 days\",\"description\":\"Free site visit in Tricity\",\"link\":\"https://wa.me/910000000000\",\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"ice_breakers\\\",\\\"message\\\":{\\\"text\\\":\\\"Hi! Thanks for reaching out to Solaride.\\\",\\\"ice_breakers\\\":[{\\\"title\\\":\\\"What does Free site survey include?\\\"},{\\\"title\\\":\\\"How much does Free site survey cost?\\\"},{\\\"title\\\":\\\"How do I book Free site survey?\\\"}]}}}\",\"call_to_action\":{\"type\":\"WHATSAPP_MESSAGE\",\"value\":{\"app_destination\":\"WHATSAPP\",\"link\":\"https://wa.me/910000000000\"}}}}"
       },
       "status": 200,
       "body": {
