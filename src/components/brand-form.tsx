@@ -158,25 +158,20 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
   const previewContact = fields.phone.trim() || fields.website.trim();
   // What Prepare and Meta will use: a bare domain is stored with https:// (#470).
   const websiteLink = normalizeWebsite(fields.website);
+  // #681: what ads need, each linking to where it's filled. Brand voice and audience text stay optional.
   const readinessChecks = [
     {
       label: "Business identity",
       ready: Boolean(fields.name.trim() && (fields.description.trim() || fields.vertical.trim())),
+      href: "#brand-identity",
     },
-    {
-      label: "Audience and area",
-      ready: Boolean(fields.target_audience.trim() && firstLine(fields.locations)),
-    },
-    {
-      label: "Creative direction",
-      ready: Boolean(
-        fields.brand_voice.trim() && (firstLine(fields.usps) || firstLine(fields.offers)),
-      ),
-    },
+    { label: "Audience and area", ready: Boolean(firstLine(fields.locations)), href: "#brand-creative" },
+    { label: "Offer or proof point", ready: Boolean(firstLine(fields.usps) || firstLine(fields.offers)), href: "#brand-creative" },
     {
       // Prepare blocks lead-form campaigns without the advertiser's own website.
       label: "Website for lead ads",
       ready: Boolean(fields.website.trim()),
+      href: "#brand-identity",
     },
     { label: "Logo", ready: Boolean(fields.logo_url.trim()), href: business ? "#brand-assets" : undefined },
     { label: "Real photos", ready: photoCount > 0, href: business ? "#brand-assets" : undefined },
@@ -263,69 +258,6 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
     <form action={formAction} className="flex flex-col gap-6">
       {confirmDialog}
       {business && <input type="hidden" name="id" value={business.id} />}
-
-      <section
-        aria-label="Live brand context"
-        className="grid gap-5 border-y border-slate-200/80 py-5 lg:grid-cols-[0.7fr_1.3fr] lg:items-center"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
-            Live context check
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">
-            What AdBrain will use
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            This updates as you edit. It is the foundation for copy, visuals,
-            targeting, and contact details.
-          </p>
-          <div className="mt-4" aria-label={`${readinessCount} of ${readinessChecks.length} brand signals ready`}>
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-700">Brand readiness</span>
-              <span className="text-slate-500">{readinessCount} of {readinessChecks.length} ready</span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-blue-600 transition-[width]"
-                style={{ width: `${(readinessCount / readinessChecks.length) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-        <div>
-          <div className="border-l-2 border-blue-500 pl-4">
-            <p className="font-semibold text-slate-950">{previewMessage}</p>
-            <p className="mt-1 text-sm text-slate-600">
-              For {previewAudience} in {previewLocation}
-              {fields.brand_voice.trim() ? ` · ${fields.brand_voice.trim()} voice` : ""}
-            </p>
-            {previewContact && (
-              <p className="mt-2 text-xs font-medium text-blue-700">{previewContact}</p>
-            )}
-          </div>
-          <ul className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
-            {readinessChecks.map((check) => (
-              <li
-                key={check.label}
-                className={check.ready ? "flex items-center gap-2 text-slate-700" : "flex items-center gap-2 text-slate-400"}
-              >
-                {check.ready ? (
-                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                ) : (
-                  <Circle className="h-4 w-4" />
-                )}
-                {!check.ready && check.href ? (
-                  <a href={check.href} className="font-medium text-blue-700 underline-offset-2 hover:underline">
-                    Add {check.label.toLowerCase()}
-                  </a>
-                ) : (
-                  check.label
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
 
       <div id="brand-identity" className="scroll-mt-6">
       <Card>
@@ -450,12 +382,13 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
           <CardTitle>Brand details</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Brand voice">
-            <Input
-              name="brand_voice"
-              value={fields.brand_voice}
-              onChange={(e) => set("brand_voice", e.target.value)}
-              placeholder="friendly, trustworthy, no-jargon"
+          {/* #681: what ads need first (area, offer); styling after, so a phone reaches them sooner. */}
+          <Field label="Locations served">
+            <TokenField
+              name="locations"
+              value={fields.locations}
+              onChange={(v) => set("locations", v)}
+              placeholder="Type a city and press Enter"
             />
           </Field>
           <Field label="Target audience">
@@ -464,6 +397,45 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               value={fields.target_audience}
               onChange={(e) => set("target_audience", e.target.value)}
               placeholder="the customers you most want to reach"
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Offers" hint="one per line">
+              <Textarea
+                name="offers"
+                rows={2}
+                value={fields.offers}
+                onChange={(e) => set("offers", e.target.value)}
+                placeholder={"Free site survey this month"}
+              />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="USPs" hint="one per line">
+              <Textarea
+                name="usps"
+                rows={3}
+                value={fields.usps}
+                onChange={(e) => set("usps", e.target.value)}
+                placeholder={"25-year warranty\nSubsidy paperwork handled\n500+ installations"}
+              />
+            </Field>
+          </div>
+          <Field label="Brand voice">
+            <Input
+              name="brand_voice"
+              value={fields.brand_voice}
+              onChange={(e) => set("brand_voice", e.target.value)}
+              placeholder="friendly, trustworthy, no-jargon"
+            />
+          </Field>
+          <Field label="Languages">
+            <TokenField
+              name="languages"
+              value={fields.languages}
+              onChange={(v) => set("languages", v)}
+              suggestions={LANGUAGE_SUGGESTIONS}
+              placeholder="Type a language and press Enter"
             />
           </Field>
           <Field label="Primary color">
@@ -505,48 +477,73 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               aria-invalid={errors.logo_url ? true : undefined}
             />
           </Field>
-          <Field label="Languages">
-            <TokenField
-              name="languages"
-              value={fields.languages}
-              onChange={(v) => set("languages", v)}
-              suggestions={LANGUAGE_SUGGESTIONS}
-              placeholder="Type a language and press Enter"
-            />
-          </Field>
-          <Field label="Locations served">
-            <TokenField
-              name="locations"
-              value={fields.locations}
-              onChange={(v) => set("locations", v)}
-              placeholder="Type a city and press Enter"
-            />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="USPs" hint="one per line">
-              <Textarea
-                name="usps"
-                rows={3}
-                value={fields.usps}
-                onChange={(e) => set("usps", e.target.value)}
-                placeholder={"25-year warranty\nSubsidy paperwork handled\n500+ installations"}
-              />
-            </Field>
-          </div>
-          <div className="sm:col-span-2">
-            <Field label="Offers" hint="one per line">
-              <Textarea
-                name="offers"
-                rows={2}
-                value={fields.offers}
-                onChange={(e) => set("offers", e.target.value)}
-                placeholder={"Free site survey this month"}
-              />
-            </Field>
-          </div>
         </CardContent>
       </Card>
       </div>
+
+      {/* #681: on a phone the fields come first; on desktop this panel leads (order-first). */}
+      <section
+        aria-label="Live brand context"
+        className="grid gap-5 border-y border-slate-200/80 py-5 lg:order-first lg:grid-cols-[0.7fr_1.3fr] lg:items-center"
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+            Live context check
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-950">
+            What AdBrain will use
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            This updates as you edit. It is the foundation for copy, visuals,
+            targeting, and contact details.
+          </p>
+          <div className="mt-4" aria-label={`${readinessCount} of ${readinessChecks.length} brand signals ready`}>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-700">Brand readiness</span>
+              <span className="text-slate-500">{readinessCount} of {readinessChecks.length} ready</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-[width]"
+                style={{ width: `${(readinessCount / readinessChecks.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="border-l-2 border-blue-500 pl-4">
+            <p className="font-semibold text-slate-950">{previewMessage}</p>
+            <p className="mt-1 text-sm text-slate-600">
+              For {previewAudience} in {previewLocation}
+              {fields.brand_voice.trim() ? ` · ${fields.brand_voice.trim()} voice` : ""}
+            </p>
+            {previewContact && (
+              <p className="mt-2 text-xs font-medium text-blue-700">{previewContact}</p>
+            )}
+          </div>
+          <ul className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+            {readinessChecks.map((check) => (
+              <li
+                key={check.label}
+                className={check.ready ? "flex items-center gap-2 text-slate-700" : "flex items-center gap-2 text-slate-400"}
+              >
+                {check.ready ? (
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                ) : (
+                  <Circle className="h-4 w-4" />
+                )}
+                {!check.ready && check.href ? (
+                  <a href={check.href} className="font-medium text-blue-700 underline-offset-2 hover:underline">
+                    Add {check.label.toLowerCase()}
+                  </a>
+                ) : (
+                  check.label
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
 
       <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
         <Button type="submit" data-product-event="brand.save" disabled={pending || autofilling}>
