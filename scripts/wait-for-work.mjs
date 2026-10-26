@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked"]);
 
@@ -28,8 +28,8 @@ const PARKED = new Set(["waiting-owner", "blocked"]);
 export function matchers(role) {
   const build = (r) => {
     const name = NAMES[r];
-    // "Dev" must not match "Dev 2" / "Dev 3", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
-    const notOther = r === "dev" ? "(?! ?[23])" : r === "qa" ? "(?! ?2)" : "";
+    // "Dev" must not match "Dev 2" / "Dev 3" / "Dev 4", nor "QA" match "QA 2"; "DevOps" never matches \bDev\b.
+    const notOther = r === "dev" ? "(?! ?[234])" : r === "qa" ? "(?! ?2)" : "";
     return {
       writtenBy: new RegExp(`^[\\s*#>_\`-]*${name}\\b${notOther}`),
       addressedTo: new RegExp(`(?:^|[\\s>(*_-])${name}${notOther}\\*{0,2}\\s*[:,]|→\\s*\\**${name}\\b${notOther}|@${r}\\b`, "m"),
@@ -97,7 +97,7 @@ export function readyPool(issues, role, max = 3) {
     .slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "qa", "qa2", "reviewer", "devops", "cpo"];
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo"];
 export const MIN_QUEUE = 2;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
