@@ -68,6 +68,8 @@ export function CampaignLaunchReview({
               ? whatsappNumber ? `WhatsApp chat ${whatsappNumber}` : "WhatsApp chat (number verification pending)"
               : leadFormName ?? "Choose a lead form"}
           </dd>
+          {/* #906: WhatsApp ads leave Audience Network out, where taps were mostly accidental. */}
+          {destination === "whatsapp" && <dd className="mt-1 text-xs text-slate-500">Shown on Facebook, Instagram and Messenger</dd>}
         </div>
         <div>
           <dt className="flex items-center gap-1 text-xs text-slate-500">

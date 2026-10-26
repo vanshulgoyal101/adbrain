@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
@@ -572,6 +573,14 @@ export function adSetTargeting(params: {
   };
 }
 
+/** #906: a WhatsApp ad set's targeting names its platforms without Audience Network. */
+export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
+  const platforms = Array.isArray(targeting.publisher_platforms) ? (targeting.publisher_platforms as unknown[]).filter(item => item !== "audience_network") : [];
+  const { audience_network_positions: _dropped, ...rest } = targeting;
+  void _dropped;
+  return { ...rest, publisher_platforms: platforms.length ? platforms : [...WHATSAPP_PUBLISHER_PLATFORMS] };
+}
+
 /** #334: every ad set runs with Advantage+ audience (area and age_min hard). The learning ledger records it (#588). */
 export const ADVANTAGE_AUDIENCE = true;
 
@@ -595,12 +604,12 @@ const STORY_PLACEMENTS = {
   instagram_positions: ["story", "reels", "profile_reels"],
   messenger_positions: ["story"],
 };
+// The placement creative is WhatsApp-only, whose ad sets leave Audience Network out (#906).
 const FEED_PLACEMENTS = {
-  publisher_platforms: ["facebook", "instagram", "messenger", "audience_network"],
+  publisher_platforms: ["facebook", "instagram", "messenger"],
   facebook_positions: ["feed", "right_hand_column", "marketplace", "video_feeds", "search", "instream_video", "facebook_reels_overlay", "profile_feed", "notification", "biz_disco_feed"],
   instagram_positions: ["stream", "explore", "explore_home", "profile_feed", "ig_search"],
   messenger_positions: ["messenger_home", "sponsored_messages"],
-  audience_network_positions: ["classic", "instream_video", "rewarded_video"],
 };
 
 /**
@@ -1332,14 +1341,14 @@ export class MetaClient {
         ];
 
     // Ages are validated above, so both bounds are set here.
-    const targetingFor = (v: AdSetVariant) => JSON.stringify(adSetTargeting({
+    const targetingFor = (v: AdSetVariant, dest: AdDestination) => JSON.stringify((dest === "whatsapp" ? withoutAudienceNetwork : (t: Record<string, unknown>) => t)(adSetTargeting({
       location: v.location ?? params.location,
       excludedLocation: mergeExclusions(v.excludedLocation ?? params.excludedLocation, areaExclusions.get(v.location ?? params.location) ?? null),
       ageMin: (v.ageMin ?? params.ageMin)!,
       ageMax: (v.ageMax ?? params.ageMax)!,
       gender: params.gender,
       interests: params.interests,
-    }));
+    })));
 
     const plannedAdSets: Record<string, string>[] = [];
     const plannedCreatives: Record<string, string>[] = [];
@@ -1358,7 +1367,7 @@ export class MetaClient {
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
         destination_type: dp.destinationType,
         promoted_object: JSON.stringify({ page_id: this.creds.pageId, ...(dest === "whatsapp" ? { whatsapp_phone_number: params.whatsappNumber } : {}) }),
-        targeting: targetingFor(v),
+        targeting: targetingFor(v, dest),
       };
       const created = await this.graph<{ id: string }>(`${acct}/adsets`, { method: "POST", form });
       plannedAdSets.push(form);
@@ -1879,7 +1888,9 @@ export class MetaClient {
     // #741 (QA on #828): a new area must arrive with its own out-of-area exclusions ({} when it has none),
     // so the old area's are replaced, and the result may never exclude a place it includes.
     if (changes.location && !changes.excludedLocation) throw new TargetingExclusionsMissingError();
-    const targeting = editedTargeting(source.targeting, changes);
+    // #906: an edited WhatsApp ad set leaves Audience Network out, as a new one does.
+    const edited = editedTargeting(source.targeting, changes);
+    const targeting = source.destination_type === "WHATSAPP" ? withoutAudienceNetwork(edited) : edited;
     if (excludesIncludedPlace(targeting)) {
       throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
     }

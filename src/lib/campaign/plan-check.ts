@@ -3,6 +3,7 @@
  * run on the exact Graph payloads AdBrain would send. No Meta call, no spend.
  */
 import { formatMoney, formatPerDay } from "@/lib/format";
+import { WHATSAPP_PUBLISHER_PLATFORMS } from "@/lib/meta/placements";
 
 /** Meta's learning phase ends after about 50 optimisation events within 7 days of the last significant edit. */
 export const LEARNING_EVENTS_PER_WEEK = 50;
@@ -41,10 +42,15 @@ export function checkPlan(plan: PlannedCampaign): PlanFinding[] {
   });
 
   const pinned = targetings.flatMap((t) => PLACEMENT_KEYS.filter((key) => key in t));
+  // #906: WhatsApp ad sets name only the platforms (no Audience Network); positions stay automatic.
+  const withoutAudienceNetwork = pinned.length > 0 && pinned.every((key) => key === "publisher_platforms")
+    && targetings.every((t) => JSON.stringify(t.publisher_platforms) === JSON.stringify(WHATSAPP_PUBLISHER_PLATFORMS));
   findings.push({
     rule: "Advantage+ placements",
-    status: pinned.length ? "warn" : "pass",
-    detail: pinned.length ? `Placements are pinned (${[...new Set(pinned)].join(", ")}); Meta can't move budget to the cheapest placement.` : "Automatic: Meta places the ad wherever results are cheapest.",
+    status: pinned.length && !withoutAudienceNetwork ? "warn" : "pass",
+    detail: withoutAudienceNetwork
+      ? "Automatic on Facebook, Instagram and Messenger; Audience Network is left out, where WhatsApp taps were mostly accidental (#906)."
+      : pinned.length ? `Placements are pinned (${[...new Set(pinned)].join(", ")}); Meta can't move budget to the cheapest placement.` : "Automatic: Meta places the ad wherever results are cheapest.",
   });
 
   findings.push({

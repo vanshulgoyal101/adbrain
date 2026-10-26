@@ -27,6 +27,20 @@ export type LaunchSnapshotInput = {
   metaCreativeIds?: string[];
 };
 
+/** #906: the placements Meta was sent: automatic everywhere, or automatic within named platforms (WhatsApp leaves Audience Network out). */
+function sentPlacements(targetings: string[] | undefined): string {
+  const platforms = new Set((targetings ?? []).map((form) => {
+    try {
+      const value = (JSON.parse(form) as { publisher_platforms?: unknown }).publisher_platforms;
+      return Array.isArray(value) ? value.join(",") : "advantage";
+    } catch {
+      return "unknown";
+    }
+  }));
+  if (!platforms.size) return "advantage";
+  return platforms.size === 1 ? ([...platforms][0] === "advantage" ? "advantage" : `advantage:${[...platforms][0]}`) : "mixed";
+}
+
 /** The advantage_audience Meta was sent: 1 or 0 when every ad set agrees, null when unknown or mixed. */
 function sentAdvantageAudience(targetings: string[] | undefined): number | null {
   const values = new Set((targetings ?? []).map((form) => {
@@ -62,7 +76,7 @@ export function buildLaunchSnapshot(input: LaunchSnapshotInput) {
       interests: input.interests,
       advantageAudience: sentAdvantageAudience(input.sentTargetings),
     },
-    placements: "advantage",
+    placements: sentPlacements(input.sentTargetings),
     formats: input.storyFormat ? ["4:5", "9:16"] : ["4:5"],
     whatsapp: input.prefill ? {
       language: input.whatsappLanguage ?? "ad", prefill: input.prefill.autofill, greeting: input.prefill.greeting,

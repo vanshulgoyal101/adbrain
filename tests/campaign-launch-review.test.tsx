@@ -70,6 +70,7 @@ describe("<CampaignLaunchReview>", () => {
       />,
     );
     expect(screen.getByText("WhatsApp chat +91 ••••• 4842")).toBeInTheDocument();
+    expect(screen.getByText("Shown on Facebook, Instagram and Messenger")).toBeInTheDocument();
     expect(screen.getByText(/ready for campaign review/i)).toBeInTheDocument();
   });
 });
