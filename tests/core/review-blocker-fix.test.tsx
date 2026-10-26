@@ -109,6 +109,7 @@ beforeEach(() => {
   mocks.drafts.mockResolvedValue([]);
   mocks.status.mockResolvedValue({ authorization: "connected", selected, generation: 1 });
   mocks.saveDraft.mockImplementation(async (input: DraftInput): Promise<DraftDTO> => ({ draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", version: 2, expiresAt: "2099-01-01T00:00:00.000Z", input }));
+  mocks.updateDraft.mockImplementation(async (draftId: string, version: number, input: DraftInput): Promise<DraftDTO> => ({ draftId, version: version + 1, expiresAt: "2099-01-01T00:00:00.000Z", input }));
   vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(url === "/api/campaigns/plan"
     ? { ready: true, targeting: composerTargeting }
     : { forms: [{ id: "1732372914636573", name: "Enquiries", status: "ACTIVE" }] })));
@@ -164,6 +165,17 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     const whatsapp = screen.getByRole("radio", { name: "WhatsApp chat" });
     expect(whatsapp).toBeChecked();
     expect(whatsapp).toHaveFocus();
+  });
+
+  // #756: the blocked review said "prepare the review again" with no button there; Prepare was far below.
+  it("after a fix, Check again in the review re-runs Review in place", async () => {
+    const region = await prepareBlockedOn("REVIEW_BUDGET");
+    mocks.preflight.mockResolvedValue(runPreflight(productionInput()));
+    fireEvent.click(within(region).getByRole("button", { name: reviewBlockerFix("REVIEW_BUDGET")!.label }));
+    fireEvent.change(screen.getByLabelText("Daily budget (₹)"), { target: { value: "200" } });
+    fireEvent.click(within(screen.getByRole("region", { name: "Campaign review result" })).getByRole("button", { name: "Check again" }));
+    expect(await screen.findByRole("button", { name: "Send to Meta (paused)" })).toBeInTheDocument();
+    expect(mocks.preflight).toHaveBeenCalledTimes(2);
   });
 
   it.each(["REVIEW_NO_META_CONNECTION", "REVIEW_CURRENCY", "REVIEW_META_ACCESS"] as const)("%s: the fix opens Connect Facebook", async (reason) => {
