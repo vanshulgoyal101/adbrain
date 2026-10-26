@@ -112,7 +112,10 @@ not conversation text. These are source claims, not deployed conversation result
 The `campaign.plan` event is `success` for a ready plan, `partial` when it falls
 back (`PLAN_AUDIENCE_NO_META_INTERESTS`, questions, a failed interest lookup) and
 `failed` otherwise; `count` and `failedCount` are the suggested and unresolved
-interest counts, never the names (#686).
+interest counts, never the names (#686). A refused commercial claim in Create adds
+a `claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
+`currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
+negation elsewhere in that quote refused it), never the term or the copy (#687).
 
 ### Orchestration Reuse
 

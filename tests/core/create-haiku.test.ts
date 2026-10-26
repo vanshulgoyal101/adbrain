@@ -197,6 +197,7 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     expect(validateConcept({ ...overrun, rationale: rationale.replace("text-free graphic art", "free graphic art") }, input)).toEqual({
       success: false,
       issues: [expect.stringMatching(/^unsupported-commercial-claim: free/)],
+      claims: ["claim:free:uncited"],
     });
 
     // The saved Haiku offer concept with the same 134-character label now saves, label clipped at a word.
