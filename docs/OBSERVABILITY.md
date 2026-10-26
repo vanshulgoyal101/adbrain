@@ -381,6 +381,17 @@ where name = 'ai.completion' and outcome = 'failed' and created_at >= now() - in
 group by 1, 2 order by failures desc;
 ```
 
+A rejected `campaign.review` event carries `blockerCodes`, the stable reason of every
+Review blocker (#688; `errorCode` is the first). Rank them, then leave out internal accounts
+(`scripts/lib/internal-accounts.mjs`): the production smoke is rejected on `REVIEW_NO_WEBSITE` by design.
+
+```sql
+select code, count(*) as rejections
+from public.product_events, jsonb_array_elements_text(attributes->'blockerCodes') as code
+where name = 'campaign.review' and outcome = 'rejected' and created_at >= now() - interval '7 days'
+group by 1 order by rejections desc;
+```
+
 A failed image attempt's usage row and `ai.completion` event carry a short reason in
 `errorCode`: `IMAGE_HTTP_<status>`, `IMAGE_FREE_BUSY` (an internal account's Pollinations stayed
 busy past ~90 s), `IMAGE_INVALID` (the answer was not a usable picture), `IMAGE_FETCH_<code>`,

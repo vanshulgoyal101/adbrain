@@ -63,9 +63,11 @@ async function handlePOST(request: Request) {
     if (result.kind === "not_found") return errorResponse(requestId, 404, "NOT_FOUND", "Draft not found.");
     if (result.kind === "forbidden") return errorResponse(requestId, 403, "FORBIDDEN", "Draft access is not allowed.");
     if (result.kind === "stale") return errorResponse(requestId, 409, "CONFLICT", "Draft changed in another tab. Review the latest version.", true);
+    // #688: every blocker's own reason, so production can rank which fix owners need.
+    const blockerCodes = result.review.blockers.map((blocker) => blocker.reason ?? blocker.code);
     recordProductEvent({ kind: "workflow", name: "campaign.review", outcome: result.review.canCreatePaused ? "success" : "rejected",
       businessId: actor.businessId, durationMs: Math.round(performance.now() - started),
-      attributes: { failedCount: result.review.blockers.length, errorCode: result.review.blockers[0]?.code, destination: result.review.destination } });
+      attributes: { failedCount: result.review.blockers.length, errorCode: blockerCodes[0], blockerCodes, destination: result.review.destination } });
     return NextResponse.json(
       { ok: true, data: result.review, requestId },
       { headers: { "Cache-Control": "no-store" } },
