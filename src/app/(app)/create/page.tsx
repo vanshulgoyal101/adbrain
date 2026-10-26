@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { openingLine } from "@/lib/campaign/result-evidence";
 import { getResultEvidence } from "@/lib/campaign/result-evidence-store";
 import { CreateFlow } from "@/components/create-flow";
@@ -53,28 +53,24 @@ export default async function CreatePage() {
     <div>
       <PageHeader
         title="Create ads"
-        description="Who do you want to reach? Start with your customer goal; you review every ad before a campaign."
+        description="Say who you want to reach. You check every ad before it runs."
       />
       <CreateFlow business={business} opening={openingLine(evidence)}>
-        <aside aria-label="Saved brand context" className="min-w-0 border-t border-slate-200 pt-6 lg:sticky lg:top-8 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <p className="text-xs font-medium text-slate-500">Brand context</p>
-          <h2 className="mt-2 font-semibold text-slate-900">{business.name}</h2>
-          <dl className="mt-5 space-y-5 text-sm">
-            {[["Voice", business.brand_voice], ["Audience", business.target_audience], ["Offers", (business.offers ?? []).join(", ")], ["Service areas", (business.locations ?? []).join(", ")], ["Phone", business.phone]].map(([label, value]) => <div key={label}><dt className="mb-1 text-xs text-slate-400">{label}</dt><dd className="break-words leading-6 text-slate-600">{value || "Not added"}</dd></div>)}
-          </dl>
+        <aside aria-label="Your business details" className="max-w-2xl border-t border-slate-200 pt-5 text-sm text-slate-500">
+          <p>
+            Using {business.name}&apos;s details.{" "}
+            <Link href="/brand" className="inline-flex min-h-11 items-center font-medium text-blue-700 underline-offset-2 hover:underline">Edit your business</Link>
+          </p>
           {missing.length > 0 && (
-            <p className="mt-5 text-sm leading-6 text-amber-800">
-              Not in your Brand yet: {missing.join(", ")}. Ads only state facts your Brand has, so they will leave these out.
-            </p>
+            <p className="mt-1">Not added yet: {missing.join(", ")}. Ads leave these out.</p>
           )}
           {visualsMissing.length > 0 && (
-            <p className="mt-4 text-sm leading-6 text-slate-600">
+            <p className="mt-1">
               Add {visualsMissing.join(" and ")} so ads look like your business.{" "}
               <Link href="/brand#brand-assets" className="font-medium text-blue-700 underline-offset-2 hover:underline">Add photos</Link>{" "}
               or skip for now.
             </p>
           )}
-          <Link href="/brand" className="mt-6 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-blue-700">Edit your business <ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
         </aside>
       </CreateFlow>
     </div>
