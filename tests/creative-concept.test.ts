@@ -372,3 +372,20 @@ describe("claims a reader would not take as an offer (#378)", () => {
     expect(await rules({ supportingText: "Not just free installation", sourceQuotes: ["Local installation team"] })).toEqual(["unsupported-commercial-claim"]);
   });
 });
+
+// #681/#687: production's top Create rejection is unsupported-commercial-claim; log why, never the copy.
+describe("validateConcept claim diagnostics", () => {
+  it("labels a refused claim by class and by whether a quote cited it", () => {
+    const negated = validateConcept({
+      ...concept,
+      primary_text: "Book a free site visit with our local installation team.",
+      sourceQuotes: ["Free site visit, no obligation"],
+    }, { ...input, brand: { ...input.brand, offers: ["Free site visit, no obligation"] } });
+    expect(negated).toMatchObject({ success: false, claims: ["claim:free:negated-quote"] });
+
+    const uncited = validateConcept({ ...concept, primary_text: "Save 10% on rooftop solar with our local installation team." }, input);
+    expect(uncited).toMatchObject({ success: false, claims: ["claim:percent:uncited"] });
+
+    expect(validateConcept(concept, input)).toMatchObject({ success: true });
+  });
+});
