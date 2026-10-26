@@ -252,18 +252,24 @@ async function handlePOST(req: Request) {
   }
   const audience = draftResult.draft.targeting.audience;
   let noMetaInterests = false;
+  // #686: counts only (suggested, unresolved), so the scoreboard can read interest quality.
+  const interestCounts: { count: number; failedCount?: number; errorCode?: string } = { count: audience?.interestNames.length ?? 0 };
   if (audience?.interestNames.length) {
     // Meta has no interest for many AI suggestions (e.g. "Chiropractic"); preflight would block on them.
     try {
       const { interests, unresolved } = await withMetaConnection(actor, { purpose: "create_paused" }, (meta) => meta.resolveAudienceInterests(audience.interestNames));
+      interestCounts.failedCount = unresolved.length;
       if (interests.length) {
         audience.interestNames = interests.map((interest) => interest.name);
         audience.rationale = rationaleForMatchedInterests(audience.rationale, audience.interestNames, unresolved);
       } else noMetaInterests = true;
     } catch {
       // Keep the AI names; preflight reports the lookup failure.
+      interestCounts.errorCode = "PLAN_AUDIENCE_INTEREST_LOOKUP_FAILED";
     }
   }
+  const planReady = () => recordProductEvent({ kind: "workflow", name: "campaign.plan",
+    outcome: interestCounts.errorCode ? "partial" : "success", businessId: business.id, attributes: interestCounts });
   if (audienceDraft) {
     const targeting = {
       ...draftResult.draft.targeting,
@@ -278,9 +284,10 @@ async function handlePOST(req: Request) {
       ...(audienceDraft.targeting.age?.mode === "manual" ? { age: audienceDraft.targeting.age } : {}),
     };
     if (noMetaInterests) {
-      recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "partial", businessId: business.id, attributes: { errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" } });
+      recordProductEvent({ kind: "workflow", name: "campaign.plan", outcome: "partial", businessId: business.id, attributes: { ...interestCounts, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" } });
       return NextResponse.json({ ready: true, fallback: true, targeting });
     }
+    planReady();
     return NextResponse.json({ ready: true, targeting });
   }
 
@@ -322,5 +329,6 @@ async function handlePOST(req: Request) {
     .single();
   if (error || !row) return NextResponse.json({ error: "Draft storage is unavailable." }, { status: 503 });
   const draft = draftDtoSchema.parse(draftRecordToDTO(draftRecordFromRow(row)));
+  planReady();
   return NextResponse.json({ ready: true, draft });
 }
