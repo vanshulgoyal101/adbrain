@@ -70,7 +70,7 @@ const CAMPAIGN = "00000000-0000-4000-8000-000000000775";
 
 type Answer = { status: number; body: unknown };
 const graph = { sent: [] as Array<{ method: string; path: string; form: Record<string, string> }> };
-function replay(overrides: { createCreative?: Answer; swap?: Answer; validateCreative?: Answer } = {}) {
+function replay(overrides: { createCreative?: Answer; swap?: Answer; validateCreative?: Answer; duringSwap?: () => void } = {}) {
   graph.sent = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
@@ -84,7 +84,10 @@ function replay(overrides: { createCreative?: Answer; swap?: Answer; validateCre
     if (method === "GET" && path.startsWith(`${AD}?fields=id,account_id,creative`)) return Response.json({ ...recorded.ad, id: AD });
     if (method === "GET" && path === `${AD}?fields=creative{id}`) return Response.json({ creative: { id: "NEW_CREATIVE" } });
     if (method === "POST" && path === `${ACCOUNT}/adcreatives`) return validateOnly ? answer(overrides.validateCreative ?? recorded.validated.creative) : answer(overrides.createCreative ?? { status: 200, body: { id: "NEW_CREATIVE" } });
-    if (method === "POST" && path === AD) return validateOnly ? answer(recorded.validated.swap) : answer(overrides.swap ?? { status: 200, body: { success: true } });
+    if (method === "POST" && path === AD) {
+      if (!validateOnly) overrides.duringSwap?.();
+      return validateOnly ? answer(recorded.validated.swap) : answer(overrides.swap ?? { status: 200, body: { success: true } });
+    }
     throw new Error(`Unrecorded Graph call: ${method} ${path}`);
   });
 }
@@ -155,6 +158,17 @@ describe("core: edit a launched ad's words through the route (#775)", () => {
     expect(operation()).toMatchObject({ kind: "ad_creative", state: "succeeded", phase: "complete", transmitted: true,
       before: { ad_id: AD, previous_creative_id: recorded.ad.creative.id }, change: recorded.edit });
     expect((store.state.tables.campaigns![0].raw as Row).adCreatives).toEqual({ [AD]: "NEW_CREATIVE" });
+  });
+
+  it("keeps another writer's raw change made during the swap (only this ad's creative is merged)", async () => {
+    replay({ duringSwap: () => {
+      // e.g. activation adding the capped ad set while Meta was swapping the creative.
+      const row = store.state.tables.campaigns![0];
+      row.raw = { ...(row.raw as Row), metaResult: { campaignId: META_CAMPAIGN, adSetIds: [ADSET, "CAPPED_SET"], adIds: [AD, "CAPPED_AD"] }, cap: { adSetId: "CAPPED_SET", days: 3 } };
+    } });
+    expect((await patchAd(recorded.edit)).status).toBe(200);
+    expect(store.state.tables.campaigns![0].raw).toMatchObject({
+      metaResult: { adSetIds: [ADSET, "CAPPED_SET"], adIds: [AD, "CAPPED_AD"] }, cap: { adSetId: "CAPPED_SET", days: 3 }, adCreatives: { [AD]: "NEW_CREATIVE" } });
   });
 
   it("replays the same change by key without calling Meta again, and refuses the key for a different change", async () => {

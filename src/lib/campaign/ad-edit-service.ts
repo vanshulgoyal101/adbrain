@@ -107,10 +107,16 @@ export async function editAdCopy(
     }));
 
     await touch({ phase: "mirror" });
-    const raw = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? campaign.raw as Record<string, Json | undefined> : {};
-    const adCreatives = { ...(raw.adCreatives && typeof raw.adCreatives === "object" && !Array.isArray(raw.adCreatives) ? raw.adCreatives as Record<string, Json> : {}), [adId]: swapped.creativeId };
-    const { error: mirrorError } = await saveCampaign({ businessId: context.businessId, userId: context.userId }, { raw: { ...raw, adCreatives } as Json }, campaignId)
-      .catch(() => ({ error: new Error("Campaign storage unavailable.") }));
+    // Re-read `raw` now: other writers (activation, audience/budget edits, the refresh cron) may have
+    // changed it during the Meta round trips, and saveCampaign replaces it whole (#258's pattern).
+    const mirror = async () => {
+      const { data: fresh, error: readError } = await database.from("campaigns").select("raw").eq("business_id", context.businessId).eq("id", campaignId).maybeSingle();
+      if (readError || !fresh) return { error: readError ?? new Error("Campaign not found.") };
+      const raw = fresh.raw && typeof fresh.raw === "object" && !Array.isArray(fresh.raw) ? fresh.raw as Record<string, Json | undefined> : {};
+      const adCreatives = { ...(raw.adCreatives && typeof raw.adCreatives === "object" && !Array.isArray(raw.adCreatives) ? raw.adCreatives as Record<string, Json> : {}), [adId]: swapped.creativeId };
+      return saveCampaign({ businessId: context.businessId, userId: context.userId }, { raw: { ...raw, adCreatives } as Json }, campaignId);
+    };
+    const { error: mirrorError } = await mirror().catch(() => ({ error: new Error("Campaign storage unavailable.") }));
     if (mirrorError) {
       await touch({ state: "needs_reconciliation", sanitized_error: "Meta changed the ad but AdBrain could not record it." }).catch(() => undefined);
       throw new CampaignEditError("Meta changed the ad but AdBrain could not record it. Check the campaign before editing again.", 502);
@@ -129,7 +135,7 @@ export async function editAdCopy(
     if (error instanceof MetaError && error.code === 613 && !createdCreativeId) transmitted = false;
     const mapped = error instanceof CampaignEditError ? error
       : error instanceof ConnectionAccessError ? new CampaignEditError(error.message, error.code === "CONFLICT" ? 409 : 400)
-      : error instanceof MetaError && error.code === 613 ? new CampaignEditError(AD_RATE_LIMITED, 429, true)
+      : error instanceof MetaError && error.code === 613 ? new CampaignEditError(AD_RATE_LIMITED, 429, !transmitted)
       : new CampaignEditError(friendlyMetaError(error, "Meta didn't accept the new words."), error instanceof MetaError && error.status && error.status < 500 ? 422 : 502, !transmitted);
     await touch({ state: transmitted ? "needs_reconciliation" : "failed", transmitted, sanitized_error: mapped.message.slice(0, 500) }).catch(() => undefined);
     recordProductEvent({ kind: "workflow", name: "campaign.edit", outcome: "failed", businessId: context.businessId,
