@@ -31,6 +31,7 @@ const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
 const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
@@ -1146,6 +1147,44 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+async function verifyLeadCampaignLink(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Leads link'),($3,$4,'Other leads link')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget,meta_campaign_id) values ($1,$2,300,'1201'),($3,$4,300,'1202')", [campaign, business, otherCampaign, otherBusiness]);
+  await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,1,'connected','act_fixture','page_fixture')", [business]);
+  await check(`${database}: lead sync links a lead to its business's campaign by Meta id, backfills an empty link and counts only new leads (#680)`, async () => {
+    const run = (await db.query("select * from public.lead_sync_start($1,$2,null,1,'act_fixture','page_fixture')", [business, owner])).rows[0];
+    const checkpoint = async (version, rows) => (await db.query(
+      "select public.lead_sync_checkpoint($1,$2,$3,1,'act_fixture','page_fixture',$4,$5::jsonb,$6::jsonb) as result",
+      [business, owner, run.id, version, JSON.stringify(rows), JSON.stringify({ formsDone: false, pending: [] })],
+    )).rows[0].result;
+    const first = await checkpoint(run.version, [
+      { meta_lead_id: "ad-lead", meta_campaign_id: "1201", form_id: "f1", full_name: "A" },
+      { meta_lead_id: "test-lead", meta_campaign_id: null, form_id: "f1" },
+      { meta_lead_id: "foreign", meta_campaign_id: "1202", form_id: "f1" },
+      { meta_lead_id: "late-link", form_id: "f1" },
+    ]);
+    assert.equal(first.imported, 4);
+    const second = await checkpoint(first.run.version, [
+      { meta_lead_id: "late-link", meta_campaign_id: "1201", form_id: "f1" },
+      { meta_lead_id: "ad-lead", meta_campaign_id: "9999", form_id: "f1" },
+      { meta_lead_id: "new-lead", meta_campaign_id: "1201", form_id: "f1" },
+    ]);
+    assert.equal(second.imported, 1);
+    // The same lead twice in one batch must not fail the checkpoint (the old insert did nothing on it).
+    const third = await checkpoint(second.run.version, [
+      { meta_lead_id: "twice", meta_campaign_id: null, form_id: "f1" },
+      { meta_lead_id: "twice", meta_campaign_id: "1201", form_id: "f1" },
+      { meta_lead_id: "new-lead", meta_campaign_id: "1201", form_id: "f1" },
+      { meta_lead_id: "new-lead", meta_campaign_id: "1201", form_id: "f1" },
+    ]);
+    assert.equal(third.imported, 1);
+    const links = Object.fromEntries((await db.query("select meta_lead_id, campaign_id from public.leads where business_id=$1", [business])).rows.map(row => [row.meta_lead_id, row.campaign_id]));
+    assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign, twice: campaign });
+  });
+}
+
 async function verifyCampaignLearnings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2046,6 +2085,11 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
+        await db.query(leadCampaignLinkMigration);
+        await db.query(leadCampaignLinkMigration);
+        await verifyLeadCampaignLink(db,database);
+      }
       if (database === "customer_fresh") await verifyAdvisorHardening(db,database);
       return;
     }

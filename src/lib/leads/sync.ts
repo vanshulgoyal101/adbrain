@@ -54,7 +54,8 @@ export async function syncMetaLeads(
   let discoveryFailed = false;
   const failedThisRequest = new Set<string>();
 
-  const save = async (progress: Progress, rows: LeadInsert[] = []) => {
+  // #680: Meta's campaign id rides along; the checkpoint links it to this business's campaign.
+  const save = async (progress: Progress, rows: (LeadInsert & { meta_campaign_id: string | null })[] = []) => {
     const saved = await db.rpc("lead_sync_checkpoint", {
       ...scope, p_sync_id: run.id, p_version: run.version,
       p_rows: rows as unknown as Json, p_progress: progress as unknown as Json,
@@ -116,7 +117,7 @@ export async function syncMetaLeads(
         const rows = page.data.map(lead => {
           const fields = parseLeadFields(lead.field_data);
           return {
-            business_id: context.businessId, meta_lead_id: lead.id, form_id: form.id, form_name: form.name,
+            business_id: context.businessId, meta_lead_id: lead.id, meta_campaign_id: lead.campaign_id ?? null, form_id: form.id, form_name: form.name,
             full_name: fields.fullName, phone: fields.phone, email: fields.email, city: fields.city,
             field_data: fields.fields, created_time: lead.created_time || null,
           };
