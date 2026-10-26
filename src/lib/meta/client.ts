@@ -1704,8 +1704,8 @@ export class MetaClient {
     const source = await this.graph<{
       id?: string; campaign_id?: string; status?: string; billing_event?: string; optimization_goal?: string; bid_strategy?: string;
       destination_type?: string; promoted_object?: { page_id?: string }; targeting?: Record<string, unknown>;
-      daily_budget?: string; lifetime_budget?: string; end_time?: string;
-    }>(`${encodeURIComponent(adSetId)}?fields=id,campaign_id,status,billing_event,optimization_goal,bid_strategy,destination_type,promoted_object,targeting,daily_budget,lifetime_budget,end_time`);
+      daily_budget?: string; lifetime_budget?: string; budget_remaining?: string; end_time?: string;
+    }>(`${encodeURIComponent(adSetId)}?fields=id,campaign_id,status,billing_event,optimization_goal,bid_strategy,destination_type,promoted_object,targeting,daily_budget,lifetime_budget,budget_remaining,end_time`);
     if (source.id !== adSetId || source.campaign_id !== campaignId || source.promoted_object?.page_id !== this.creds.pageId
       || !source.billing_event || !source.optimization_goal || !source.targeting || typeof source.targeting !== "object") {
       throw new CampaignDeliveryError("The ad set could not be verified. Keep the campaign paused.");
@@ -1727,11 +1727,14 @@ export class MetaClient {
       return { mode: "patch", validated: false, adSetId, adIds, retiredAdSetId: null };
     }
     const capped = Number(source.lifetime_budget ?? 0) > 0;
+    // A capped run keeps only what is left of its cap, never the whole cap again.
     const budget: Record<string, string> = capped
-      ? { lifetime_budget: source.lifetime_budget ?? "", end_time: source.end_time ?? "" }
+      ? { lifetime_budget: source.budget_remaining ?? "", end_time: source.end_time ?? "" }
       : { daily_budget: source.daily_budget ?? "" };
     if (!/^[1-9]\d*$/.test(capped ? budget.lifetime_budget : budget.daily_budget)) {
-      throw new CampaignDeliveryError("The ad set's budget could not be verified. Keep the campaign paused.");
+      throw new CampaignDeliveryError(capped && source.budget_remaining === "0"
+        ? "This capped run has spent its total. Start a new run instead."
+        : "The ad set's budget could not be verified. Keep the campaign paused.");
     }
     if (capped && !(Date.parse(budget.end_time) > Date.now())) throw new CampaignDeliveryError("This capped run has ended. Start a new run instead.");
     const created = await this.graph<{ id?: string; success?: boolean }>(`${this.creds.adAccountId}/adsets`, {

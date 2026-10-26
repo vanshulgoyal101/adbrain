@@ -9,6 +9,7 @@ import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client"
 // - rebuild: the ad set has interests, which Meta won't patch in place (100/1359202)
 // - patch:   the ad set has none
 // - rate-limited: Meta allows one targeting update per ad set per 30 s (#613), validate_only included
+//   (its ad set read's field list was extended with budget_remaining after recording; bodies unchanged)
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 type Sent = { method: string; path: string; form: Record<string, string> };
@@ -36,10 +37,13 @@ function replay(tape: unknown[]) {
 }
 
 const ids = (tape: unknown[]) => {
-  const first = (tape as Exchange[]).find(exchange => /\/adsets\?/.test(exchange.path))!;
+  const exchanges = tape as Exchange[];
+  const first = exchanges.find(exchange => /\/adsets\?/.test(exchange.path))!;
   const campaignId = first.path.split("/")[0];
   const adSetId = ((first.body as { data: { id: string }[] }).data)[0].id;
-  return { campaignId, adSetId };
+  const copy = exchanges.find(exchange => exchange.path.endsWith("/copies"));
+  const created = exchanges.find(exchange => exchange.method === "POST" && /^act_\d+\/adsets$/.test(exchange.path) && (exchange.body as { id?: string }).id);
+  return { campaignId, adSetId, adId: copy?.path.split("/")[0] ?? "ad", copiedAdId: (copy?.body as { copied_ad_id?: string } | undefined)?.copied_ad_id, newAdSetId: (created?.body as { id?: string } | undefined)?.id };
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -47,15 +51,15 @@ afterEach(() => vi.restoreAllMocks());
 describe("core: edit a launched ad set's audience (#773)", () => {
   it("rebuilds an ad set with interests: validate first, then a new PAUSED ad set with the ads copied, and the old one archived", async () => {
     const tape = replay(rebuildTape);
-    const { campaignId, adSetId } = ids(rebuildTape);
+    const { campaignId, adSetId, adId, copiedAdId, newAdSetId } = ids(rebuildTape);
     const meta = new MetaClient(creds);
-    const input = { adSetId, adIds: ["120253709601690526"], changes };
+    const input = { adSetId, adIds: [adId], changes };
     const validated = await meta.editAdSetTargeting(campaignId, input, { validateOnly: true });
     expect(validated).toEqual({ mode: "rebuild", validated: true, adSetId, adIds: input.adIds, retiredAdSetId: null });
     expect(tape.sent.filter(call => call.method === "POST").map(call => call.form.execution_options)).toEqual(['["validate_only"]']);
 
     const edited = await meta.editAdSetTargeting(campaignId, input);
-    expect(edited).toEqual({ mode: "rebuild", validated: false, adSetId: "120253709623300526", adIds: ["120253709644710526"], retiredAdSetId: adSetId });
+    expect(edited).toEqual({ mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: [copiedAdId], retiredAdSetId: adSetId });
     const posts = tape.sent.filter(call => call.method === "POST");
     const created = JSON.parse(posts[1].form.targeting);
     // Launch's Advantage+ rule: hard age_min ≤ 25 and age_max 65, the owner's range as age_range; interests kept.
@@ -72,7 +76,7 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     const tape = replay(patchTape);
     const { campaignId, adSetId } = ids(patchTape);
     const meta = new MetaClient(creds);
-    const input = { adSetId, adIds: ["120253709694680526"], changes };
+    const input = { adSetId, adIds: ["ad"], changes };
     expect((await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).validated).toBe(true);
     expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "patch", validated: false, adSetId, adIds: input.adIds, retiredAdSetId: null });
     const posts = tape.sent.filter(call => call.method === "POST");
@@ -90,6 +94,19 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     await meta.editAdSetTargeting(campaignId, input, { validateOnly: true });
     await expect(meta.editAdSetTargeting(campaignId, input)).rejects.toSatisfy((error: unknown) => error instanceof MetaError && error.code === 613);
     expect(tape.sent.filter(call => call.method === "POST")).toHaveLength(2);
+  });
+
+  // A capped run must not get its whole cap back: the rebuilt ad set carries only what is left of it.
+  it("rebuilds a capped ad set with only its remaining budget and the same end time", async () => {
+    const end = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const capped = (rebuildTape as Exchange[]).map(exchange => /fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event/.test(exchange.path)
+      ? { ...exchange, body: { ...(exchange.body as object), daily_budget: "0", lifetime_budget: "150000", budget_remaining: "62000", end_time: end } } : exchange);
+    const tape = replay(capped);
+    const { campaignId, adSetId, adId } = ids(rebuildTape);
+    await new MetaClient(creds).editAdSetTargeting(campaignId, { adSetId, adIds: [adId], changes }, { validateOnly: true });
+    const form = tape.sent.find(call => call.method === "POST")!.form;
+    expect(form).toMatchObject({ lifetime_budget: "62000", end_time: end });
+    expect(form).not.toHaveProperty("daily_budget");
   });
 
   it("refuses an ad set that isn't PAUSED, and empty or out-of-range changes, before any write", async () => {

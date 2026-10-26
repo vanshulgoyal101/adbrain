@@ -33,7 +33,7 @@
   },
   {
     "method": "GET",
-    "path": "120253709671100526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cend_time",
+    "path": "120253709671100526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
     "status": 200,
     "body": {
       "id": "120253709671100526",
@@ -124,7 +124,7 @@
   },
   {
     "method": "GET",
-    "path": "120253709671100526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cend_time",
+    "path": "120253709671100526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
     "status": 200,
     "body": {
       "id": "120253709671100526",
