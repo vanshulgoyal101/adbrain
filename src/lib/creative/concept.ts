@@ -8,6 +8,7 @@ import {
 } from "@/lib/templates/ads";
 import { formatDimensions, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
+import { policyFindings } from "@/lib/creative/policy-rules";
 import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
 
@@ -131,7 +132,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-    "hook-length", "offer-below-fold", "no-subject",
+    "hook-length", "offer-below-fold", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -356,6 +357,9 @@ export function copyClaimWarnings(
       warnings.push(`"${finding.detail}" is a health claim Meta often rejects. Consider rewording it.`);
     }
   }
+  for (const finding of policyFindings([copy.headline, copy.primary_text, copy.description].join("\n"), { vertical, facts: sources })) {
+    warnings.push(`"${finding.detail}": Meta often rejects this. ${finding.fix[0].toUpperCase()}${finding.fix.slice(1)}.`);
+  }
   return warnings;
 }
 
@@ -425,6 +429,11 @@ export function validateConcept(
     allowedCaps,
   }).map((finding) => `${finding.rule}: ${finding.detail}`));
   issues.push(...quoteIssues);
+  // #738: Meta rejects these in health and other sensitive ads; repair once like any other rule.
+  issues.push(...policyFindings(
+    [concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"),
+    { vertical: input.brand.vertical, facts: sources },
+  ).map((finding) => `${finding.rule}: "${finding.detail}"; ${finding.fix}`));
   const empty = emptyScene(concept.visual.direction);
   if (empty) {
     issues.push(`no-subject: visual.direction shows an "${empty}" scene; give the image a clear subject (the people the business serves, its team at work, or its product), not an empty space`);

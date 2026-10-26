@@ -32,6 +32,9 @@ describe("Create eval profiles (#418)", () => {
   it("takes bake-off overrides and rejects an unknown profile", () => {
     expect(evalProfile("free", { EVAL_TEXT_MODEL: "gemini-3.7-flash" }).env.GEMINI_MODEL).toBe("gemini-3.7-flash");
     expect(evalProfile("paid", { EVAL_TEXT_MODEL: "openai/gpt-5-mini" }).env.OPENROUTER_MODEL).toBe("openai/gpt-5-mini");
+    // #713: production's default schedule against parallel, on the same paid models.
+    expect(evalProfile("paid", { EVAL_SCHEDULE: "serial" }).env.CREATIVE_CONCEPT_SCHEDULE).toBe("serial");
+    expect(evalProfile("paid", { EVAL_SCHEDULE: "anything" }).env.CREATIVE_CONCEPT_SCHEDULE).toBe("parallel");
     expect(() => evalProfile("cheap", {})).toThrow(/paid or free/);
   });
 });
