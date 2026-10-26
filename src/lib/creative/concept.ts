@@ -218,6 +218,13 @@ const foldQuote = (text: string) => text.toLowerCase().replace(/[\u2018\u2019]/g
 // A quote that differs from a fact only in case or curly quotes is stored as the fact's exact text.
 function verbatimQuote(quote: string, sources: string[]): string | null {
   if (sources.some((source) => source.includes(quote))) return quote;
+  // #713: Haiku prefixed "the" to the owner's "…or cost of the solar installation…" and the ad was lost
+  // after two tries. Without the added article, store the source's own words.
+  const unprefixed = /^(?:the|a|an)\s+(\S.*)$/i.exec(quote)?.[1];
+  if (unprefixed && unprefixed.length >= 20) {
+    const found = verbatimQuote(unprefixed, sources);
+    if (found) return found;
+  }
   const folded = foldQuote(quote);
   if (folded.length !== quote.length) return null;
   for (const source of sources) {
