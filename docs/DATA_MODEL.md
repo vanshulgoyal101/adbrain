@@ -215,7 +215,7 @@ columns to restore an obsolete UI.
 
 | Table | Important fields and guarantees |
 | --- | --- |
-| `public.leads` | Business, nullable campaign, `source` `meta_form` (default) or `whatsapp_manual` ([#335 migration](../db/migrations/20261024_manual_whatsapp_enquiries.sql)); `meta_lead_id` is null exactly for `whatsapp_manual` rows the owner logs from WhatsApp chats; unique `(business_id,meta_lead_id)` for Meta leads, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time; `workflow_status` `new`/`contacted`/`qualified`/`booked`/`closed` (default `new`) and `follow_up_note` (default empty, <=2000 characters) |
+| `public.leads` | Business, nullable campaign, `source` `meta_form` (default) or `whatsapp_manual` ([#335 migration](../db/migrations/20261024_manual_whatsapp_enquiries.sql)); `meta_lead_id` is null exactly for `whatsapp_manual` rows the owner logs from WhatsApp chats; unique `(business_id,meta_lead_id)` for Meta leads, form ID/name, normalized name/phone/email/city, field JSON, provider creation time and import time; `workflow_status` `new`/`contacted`/`qualified`/`booked`/`customer`/`closed` (default `new`; `customer` = "Became a customer", #798) and `follow_up_note` (default empty, <=2000 characters) |
 | `public.lead_sync_runs` | Business/owner, connection generation, ad account and Page, state `partial`/`complete`, version, progress JSON (form cursor, seen forms, pending forms); RLS with browser roles revoked, service-role only |
 | `public.spend_limits` | One per business; nullable integer weekly cap, alert percentage 1-100 default 80, auto-pause default false, updated time |
 | `public.audit_log` | Business/actor, action, entity type/ID, Meta object ID, reason, detail JSON, timestamp |
