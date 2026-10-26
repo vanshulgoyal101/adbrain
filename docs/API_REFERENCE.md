@@ -109,7 +109,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery,pause}` | Live Meta mutation (pause: campaign, ad sets and ads) + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
 | POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
-| POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/nextCursor/pageCursor | Provider read + local imports; `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
+| POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/skippedCampaigns/nextCursor/pageCursor | Provider read + local imports; `skippedCampaigns` names each campaign left unchanged with a reason (`not_running`, `other_account`, `other_page`, `other_connection`, `lifetime_budget`, `capped`, `unsupported`); `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page; cached 10 min per business, Page and connection generation, `?fresh=1` re-reads Meta (#271) |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
 | GET | `/api/leads` | Filters/cursor -> `{leads,total,nextCursor}` | Owned saved enquiries only; no provider sync |

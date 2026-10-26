@@ -397,6 +397,24 @@ describe("campaign sync feedback", () => {
     await waitFor(() => expect(card.queryByRole("alert")).toBeNull());
   });
 
+  // #671: a refresh always answers on the card, even when Meta's numbers didn't move.
+  it("says on the card whether a refresh brought new results", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    const before = { id: "r1", campaign_id: "campaign-1", impressions: 120, clicks: 4, leads: 1, spend: 80, cpl: 80, fetched_at: "2026-10-26T03:35:00.000Z" };
+    let next = { ...before, id: "r2", fetched_at: "2026-10-26T05:00:00.000Z" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/campaigns/campaign-1/refresh"
+      ? Response.json({ result: next })
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{ "campaign-1": before } as never} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    const card = within(screen.getByRole("heading", { name: "Saved campaign" }).closest("article")!);
+    fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
+    const since = new Date(before.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    expect(await card.findByRole("status")).toHaveTextContent(`Checked just now: no new results since ${since}.`);
+    next = { ...next, id: "r3", impressions: 300, fetched_at: "2026-10-26T06:00:00.000Z" };
+    fireEvent.click(card.getByRole("button", { name: "Refresh results" }));
+    await waitFor(() => expect(card.getByRole("status")).toHaveTextContent("Results updated just now."));
+  });
+
   it("labels the stored active state as a request, not confirmed delivery", () => {
     const campaign = { id: "campaign-1", name: "Saved campaign", status: "active" } as Campaign;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="" />);
@@ -620,22 +638,26 @@ describe("campaign sync feedback", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
-  it("keeps skipped counts across pages and clears stale continuation warnings", async () => {
+  // #671: the banner names each skipped campaign and why, across pages.
+  it("names skipped campaigns across pages and clears stale continuation warnings", async () => {
     const sync = vi.fn()
-      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "next/page", skipped: 2 }))
-      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 1 }))
-      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 0 }));
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: "next/page", skipped: 2, skippedCampaigns: [{ name: "Capped trial", reason: "capped" }, { name: "Old Page ads", reason: "other_page" }] }))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 1, skippedCampaigns: [{ name: "Diwali", reason: "lifetime_budget" }] }))
+      .mockResolvedValueOnce(Response.json({ campaigns: [], nextCursor: null, skipped: 0, skippedCampaigns: [] }));
     vi.stubGlobal("fetch", vi.fn((url: string) => url.startsWith("/api/campaigns/sync") ? sync(url) : Promise.resolve(Response.json({ forms: [] }))));
     view(true);
     fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
-    expect(await screen.findByText(/More campaigns are available/)).toHaveTextContent("2 campaign(s) could not be imported");
+    expect(await screen.findByText(/More campaigns are available/)).toHaveTextContent(
+      "\"Capped trial\" was left unchanged: it runs on a spend cap AdBrain manages, so sync leaves it as is. \"Old Page ads\" was left unchanged: it advertises a different Facebook Page.");
     fireEvent.click(await screen.findByRole("button", { name: "Sync from Meta" }));
-    expect(await screen.findByText(/Campaign sync completed/)).toHaveTextContent("3 campaign(s) could not be imported");
+    const done = await screen.findByText(/Campaign sync completed/);
+    expect(done).toHaveTextContent("\"Capped trial\" was left unchanged");
+    expect(done).toHaveTextContent("\"Diwali\" was left unchanged: it uses a lifetime budget set in Meta, which AdBrain doesn't manage.");
     expect(sync).toHaveBeenNthCalledWith(2, "/api/campaigns/sync?after=next%2Fpage");
     expect(screen.queryByText(/More campaigns are available/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sync from Meta" }));
     await waitFor(() => expect(screen.getByText("Campaign sync completed.")).toBeInTheDocument());
-    expect(screen.queryByText(/could not be imported/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/left unchanged/)).not.toBeInTheDocument();
   });
 
   it("reports a malformed success response and retries the same page", async () => {
