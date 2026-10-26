@@ -70,7 +70,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignDestination } from "@/lib/campaign/outcomes";
-import { reviewBlockerFix } from "@/lib/campaign/review-fix";
+import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
@@ -633,6 +633,13 @@ function BusinessCampaigns({
 
   function unresolvedRecovery() {
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
+  }
+
+  function switchDestination(value: "instant_form" | "whatsapp") {
+    if (unresolvedRecovery()) { setError("Check the existing campaign operation before changing the destination."); return; }
+    destinationChosenRef.current = true;
+    flushSync(() => { setDestination(value); setPrepareReview(null); });
+    jumpToFix([`destination-${value}`]);
   }
 
   function openConnect() {
@@ -1328,13 +1335,16 @@ function BusinessCampaigns({
               {prepareReview.review.blockers.length > 0 && (
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
                   {prepareReview.review.blockers.map((blocker) => {
-                    const fix = reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open Brand Brain", href: "/brand" } as const : null);
+                    const fixes = [
+                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open Brand Brain", href: "/brand" } as const : null),
+                      reviewBlockerAlternative(blocker.reason),
+                    ].filter((fix) => fix !== null);
                     return <li key={`${blocker.code}:${blocker.message}`} className="mt-1 first:mt-0">
                       {blocker.message}
-                      {fix && <span className="mt-1 block">
-                        {fix.kind === "page"
-                          ? <Link href={fix.href} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</Link>
-                          : <button type="button" onClick={() => fix.kind === "connect" ? openConnect() : jumpToFix(fix.targets)} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</button>}
+                      {fixes.length > 0 && <span className="mt-1 flex flex-wrap items-center gap-x-3">
+                        {fixes.map((fix) => fix.kind === "page"
+                          ? <Link key={fix.label} href={fix.href} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</Link>
+                          : <button key={fix.label} type="button" onClick={() => fix.kind === "connect" ? openConnect() : fix.kind === "destination" ? switchDestination(fix.destination) : jumpToFix(fix.targets)} className="inline-flex min-h-10 items-center text-left font-medium underline underline-offset-4">{fix.label}</button>)}
                       </span>}
                     </li>;
                   })}
@@ -1472,7 +1482,7 @@ function BusinessCampaigns({
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}

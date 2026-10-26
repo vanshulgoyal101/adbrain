@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import { runPreflight, type PreflightInput } from "@/lib/campaign/preflight";
-import { reviewBlockerFix } from "@/lib/campaign/review-fix";
+import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { reviewBlockerReasons, type ReviewBlockerReason } from "@/lib/meta/connect-contracts";
 import type { Business, Creative } from "@/lib/types";
 
@@ -150,6 +150,20 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
   it.each(["REVIEW_NO_WEBSITE", "REVIEW_WHATSAPP_NOT_LINKED"] as const)("%s: the fix opens Brand Brain", async (reason) => {
     const region = await prepareBlockedOn(reason);
     expect(within(region).getByRole("link", { name: reviewBlockerFix(reason)!.label })).toHaveAttribute("href", "/brand");
+  });
+
+  // #742: QA's 390 px walk: a site-less owner on Instant form was only told to add a website.
+  it("REVIEW_NO_WEBSITE also offers WhatsApp chat, which the same draft passes without a website", async () => {
+    const input = productionInput();
+    breaks.REVIEW_NO_WEBSITE(input);
+    input.draft.destination = "whatsapp";
+    expect(runPreflight(input).blockers).toEqual([]);
+
+    const region = await prepareBlockedOn("REVIEW_NO_WEBSITE");
+    fireEvent.click(within(region).getByRole("button", { name: reviewBlockerAlternative("REVIEW_NO_WEBSITE")!.label }));
+    const whatsapp = screen.getByRole("radio", { name: "WhatsApp chat" });
+    expect(whatsapp).toBeChecked();
+    expect(whatsapp).toHaveFocus();
   });
 
   it.each(["REVIEW_NO_META_CONNECTION", "REVIEW_CURRENCY", "REVIEW_META_ACCESS"] as const)("%s: the fix opens Connect Facebook", async (reason) => {
