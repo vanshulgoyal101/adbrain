@@ -1,17 +1,18 @@
 {
   "recordedAt": "2026-10-24T12:37:15.523Z",
+  "haikuRecordedAt": "2026-10-26T08:08:05.454Z",
   "latencyMs": {
     "geminiThinkingOn": [],
     "geminiThinkingOff": [],
     "openrouterHaiku": [
-      7769,
-      7100,
-      6038
+      4828,
+      3142,
+      2800
     ]
   },
   "geminiThinkingOff": {},
   "openrouterHaiku": {
     "model": "anthropic/claude-haiku-5.5",
-    "text": "```json\n{\n  \"ready\": true,\n  \"plan\": {\n    \"name\": \"Cedar Ridge leads\",\n    \"daily_budget_rupees\": 500,\n    \"lead_form_id\": null,\n    \"creative_ids\": [\"e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1\"],\n    \"age_min\": 25,\n    \"age_max\": 65,\n    \"city_scope\": \"city_only\",\n    \"radius_km\": 0,\n    \"interests\": [\"Chiropractic\", \"Physical therapy\", \"Wellness\"],\n    \"special_ad_category\": \"none\",\n    \"locations\": [\"Austin\", \"Round Rock\", \"Cedar Park\"],\n    \"excluded_locations\": [],\n    \"destination\": \"instant_form\",\n    \"rationale\": \"Targets the brand's listed service areas (Austin, Round Rock, Cedar Park) using city-only location targeting, as the owner set manual location with city_only scope. 'Texas' is the state containing these areas rather than a city, so it is not added as a separate location. The age range 25 to 65 (65 meaning 65+) reflects typical adult demand for chiropractic exams and is a testable hypothesis, not a guaranteed best audience. Interests (Chiropractic, Physical therapy, Wellness) are general commercial interests tied to the advertised chiropractic exam offer. No exclusions were requested. The lead form is null because no lead forms were provided; the owner can connect Meta and choose a form before creation. The approved value-focused creative is used with the owner's existing budget of ₹500 per day, which is above the ₹150 minimum.\"\n  }\n}\n```"
+    "text": "{\"ready\": true, \"plan\": {\"name\": \"Cedar Ridge leads\", \"daily_budget_rupees\": 500, \"lead_form_id\": \"form-1\", \"creative_ids\": [\"e3d165a9-bbf8-47f7-8c61-e69dbb8ee3d1\"], \"age_min\": 25, \"age_max\": 65, \"city_scope\": \"city_only\", \"radius_km\": 0, \"interests\": [\"Chiropractor\", \"Physical therapy\", \"Back pain\", \"Wellness\", \"Yoga\"], \"special_ad_category\": \"none\", \"locations\": [\"Austin\", \"Round Rock\", \"Cedar Park\"], \"excluded_locations\": [], \"destination\": \"instant_form\", \"rationale\": \"Cedar Ridge Chiropractic serves Austin, Round Rock and Cedar Park, so the audience is set to those three city areas using city_only scope, as the owner's manual location choice is preserved and no added radius is needed. The advertised offer is a $49 new-patient exam, a general wellness and health service rather than a regulated category, so no special ad category applies. Adults aged 25 to 65 are a testable working hypothesis for people seeking a new chiropractic exam, since the age range is an AI-selected setting that covers typical working-age adults likely to book routine care. Interests such as chiropractic, physical therapy, back pain, wellness and yoga are general commercial interests tied to the chiropractic service and the wellness-oriented Diwali renewal creative. This is a hypothesis to test, not a guaranteed best audience, and results should be reviewed after launch.\"}}"
   }
 }

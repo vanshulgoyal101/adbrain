@@ -20,7 +20,7 @@ process.env.LLM_BUDGET_PROVIDER_ORDER = " ";
 process.env.OPENROUTER_MODEL = "anthropic/claude-haiku-5.5";
 
 async function sample(label: string, provider: string, options: CompletionOptions) {
-  const runs: { ms: number; valid: boolean; model: string; text: string }[] = [];
+  const runs: { ms: number; valid: boolean; model: string; text: string; tokens?: number }[] = [];
   for (let i = 0; i < 3; i++) {
     const started = Date.now();
     try {
@@ -28,12 +28,12 @@ async function sample(label: string, provider: string, options: CompletionOption
         onAttempt: (attempt) => { if (attempt.status === "error") console.log("  attempt", attempt.provider, attempt.failure, attempt.latencyMs, "ms"); } });
       const value = parseJSON<{ plan?: { radius_km?: unknown } }>(result.text);
       if (value?.plan && (value.plan.radius_km === 0 || value.plan.radius_km === null)) delete value.plan.radius_km;
-      runs.push({ ms: Date.now() - started, valid: plannerResultSchema.safeParse(value).success, model: result.model, text: result.text });
+      runs.push({ ms: Date.now() - started, valid: plannerResultSchema.safeParse(value).success, model: result.model, text: result.text, tokens: result.usage?.completionTokens });
     } catch (error) {
       const detail = error as { message?: string; code?: string; status?: number; cause?: { message?: string } };
       runs.push({ ms: Date.now() - started, valid: false, model: "error", text: `${detail.code ?? ""} ${detail.status ?? ""} ${detail.message ?? String(error)} ${detail.cause?.message ?? ""}`.slice(0, 300) });
     }
-    console.log(label, runs.at(-1)!.ms, "ms", runs.at(-1)!.valid ? "valid" : "INVALID", runs.at(-1)!.model, runs.at(-1)!.valid ? "" : runs.at(-1)!.text.slice(0, 160));
+    console.log(label, runs.at(-1)!.ms, "ms", runs.at(-1)!.valid ? "valid" : "INVALID", runs.at(-1)!.model, runs.at(-1)!.tokens ?? "", "completion tokens", runs.at(-1)!.valid ? "" : runs.at(-1)!.text.slice(0, 160));
   }
   return runs;
 }
@@ -43,7 +43,7 @@ async function main() {
   const skip = async () => [] as Awaited<ReturnType<typeof sample>>;
   const thinking = !only || only === "on" ? await sample("gemini thinking-on", "google", { routing: "budget", attemptTimeoutMs: 20_000 }) : await skip();
   const off = !only || only === "off" ? await sample("gemini thinking-off", "google", { routing: "budget", attemptTimeoutMs: 20_000, thinking: "off" }) : await skip();
-  const haiku = !only || only === "haiku" ? await sample("openrouter haiku", "openrouter", { routing: "budget", attemptTimeoutMs: 20_000 }) : await skip();
+  const haiku = !only || only === "haiku" ? await sample("openrouter haiku", "openrouter", { routing: "budget", attemptTimeoutMs: 20_000, thinking: "off" }) : await skip();
   const firstValid = (runs: typeof off) => runs.find((run) => run.valid);
   const out = {
     recordedAt: new Date().toISOString(),
