@@ -11,4 +11,8 @@ export const OWNER_WORDS = {
   logoUrl: "Logo link",
   /** Brand page panel eyebrow. Was "Live context check". */
   preview: "Preview",
+  /** A campaign whose stored status is active; Meta still decides delivery. Was "Requested active". */
+  running: "Running",
+  /** A campaign synced from Meta that AdBrain didn't launch (#763). Pause still works; resume is in Ads Manager. */
+  madeOutside: "Made outside AdBrain",
 } as const;
