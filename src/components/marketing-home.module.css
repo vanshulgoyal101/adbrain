@@ -79,6 +79,8 @@
   .actions { gap: 12px; align-items: start; flex-direction: column; margin-top: 24px; }
   .heroCaption { right: 12px; bottom: 12px; }
   .example, .faq, .cycle { padding: 36px 24px; }
+  /* Restored after #931 removed it with the old .steps rules: the safety points and FAQ stack on a phone. */
+  .safety, .faq { grid-template-columns: minmax(0, 1fr); }
       .sectionHeading { gap: 16px; }
   .safety { padding: 36px 24px; }
   .footer { padding: 24px; }
