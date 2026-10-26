@@ -98,6 +98,7 @@ export async function executeReviewedCampaign(input: {
             areas,
             creativeInputs.map(creative => savedGenerationSettings(creative.generation).language),
             draft.input.whatsappLanguage ?? "ad",
+            true,
           );
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,

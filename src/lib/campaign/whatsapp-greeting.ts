@@ -1,4 +1,4 @@
-export type WhatsAppGreeting = { autofill: string; greeting: string };
+export type WhatsAppGreeting = { autofill: string; greeting: string; iceBreakers?: string[] };
 
 /** Whole-word, case-insensitive: "EMI" must not match "Premium". */
 function mentions(copy: string, phrase: string): boolean {
@@ -21,27 +21,32 @@ const TEXT: Record<Language, {
   offer: (offer: string, city: string | null) => string;
   business: (name: string, city: string | null) => string;
   greeting: (name: string) => string;
+  iceBreakers: (fact: string) => string[];
 }> = {
   en: {
     // Short, simple English (owner, Oct 25): "Hi! I'd like a free site survey."
     offer: (offer, city) => `Hi! I'd like ${/^free\b/i.test(offer) ? "a" : "the"} ${offer}${city ? ` in ${city}` : ""}.`,
     business: (name, city) => `Hi! I'd like to know more about ${name}${city ? ` in ${city}` : ""}.`,
     greeting: (name) => `Hi! Thanks for messaging ${name}. Send this message and we'll reply here.`,
+    iceBreakers: fact => [`What does ${fact} include?`, `How much does ${fact} cost?`, `How do I book ${fact}?`],
   },
   hi: {
     offer: (offer, city) => `नमस्ते, मुझे ${city ? `${city} में ` : ""}${offer} के बारे में जानकारी चाहिए।`,
     business: (name, city) => `नमस्ते, मुझे ${city ? `${city} में ` : ""}${name} के बारे में जानकारी चाहिए।`,
     greeting: (name) => `नमस्ते! ${name} को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।`,
+    iceBreakers: fact => [`${fact} में क्या शामिल है?`, `${fact} की कीमत क्या है?`, `${fact} कैसे बुक करें?`],
   },
   hinglish: {
     offer: (offer, city) => `Namaste, mujhe ${city ? `${city} mein ` : ""}${offer} ke baare mein jaankari chahiye.`,
     business: (name, city) => `Namaste, mujhe ${city ? `${city} mein ` : ""}${name} ke baare mein jaankari chahiye.`,
     greeting: (name) => `Namaste! ${name} ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.`,
+    iceBreakers: fact => [`${fact} mein kya hai?`, `${fact} ki keemat kya hai?`, `${fact} kaise book karein?`],
   },
   pa: {
     offer: (offer, city) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ ${city ? `${city} ਵਿੱਚ ` : ""}${offer} ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।`,
     business: (name, city) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ ${city ? `${city} ਵਿੱਚ ` : ""}${name} ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।`,
     greeting: (name) => `ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ${name} ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।`,
+    iceBreakers: fact => [`${fact} ਵਿੱਚ ਕੀ ਮਿਲਦਾ ਹੈ?`, `${fact} ਦੀ ਕੀਮਤ ਕੀ ਹੈ?`, `${fact} ਕਿਵੇਂ ਬੁੱਕ ਕਰੀਏ?`],
   },
 };
 
@@ -70,6 +75,7 @@ export function whatsappGreeting(
   adLanguages: (string | null | undefined)[] = [],
   /** The campaign's choice; "ad" (default) follows the ads. */
   chosen: WhatsAppLanguage = "ad",
+  withIceBreakers = false,
 ): WhatsAppGreeting {
   const name = brand.name.trim();
   const copy = adCopy.join(" ");
@@ -86,8 +92,13 @@ export function whatsappGreeting(
   // Mid-sentence, follow the ad's own casing: "a free site survey" but "a Diwali offer".
   const lower = offer && offer[0].toLowerCase() + offer.slice(1);
   const phrase = offer && lower !== offer && copy.includes(lower) ? lower : offer;
+  const facts = withIceBreakers
+    ? (brand.offers ?? []).map(offerPhrase).filter(Boolean).filter((fact, index, all) => all.indexOf(fact) === index).slice(0, 3)
+    : [];
+  const iceBreakers = facts.length ? facts.flatMap(fact => text.iceBreakers(fact)).slice(0, 3).map(question => [...question].slice(0, 40).join("")) : undefined;
   return {
     autofill: (phrase ? text.offer(phrase, city) : text.business(name, city)).slice(0, 300),
     greeting: text.greeting(name).slice(0, 300),
+    ...(iceBreakers?.length === 3 ? { iceBreakers } : {}),
   };
 }
