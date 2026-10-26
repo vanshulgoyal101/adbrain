@@ -12,6 +12,7 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { reauthEntry, type ReauthEntry } from "@/lib/meta/reauth";
 import { managedAccountsEnabled } from "@/lib/meta/managed-account";
 import { sweepManagedSpendCaps } from "@/lib/managed/spend-cap-wiring";
 import {
@@ -35,7 +36,8 @@ export const maxDuration = 60;
  * still hold a reserve: once Meta confirms the stop and the spend has settled,
  * SQL records final evidence and releases the reserve (#221). Managed child ad accounts get their
  * Meta spending limit refreshed from the customer's balance (#522). It runs
- * under the service-role client (no user session).
+ * under the service-role client (no user session). A business whose owner must
+ * reconnect Meta is listed in `reauth` and its Meta reads and pauses do not fail the run (#758).
  *
  * Vercel Cron calls this with `Authorization: Bearer $CRON_SECRET`.
  */
@@ -73,6 +75,8 @@ async function handleGET(request: Request) {
   // Businesses whose spend data is missing: never reported as ₹0 (#49, #165).
   const unverified: string[] = [];
   let incomplete = false;
+  // #758: dead owner tokens, reported by opaque key instead of failing the run.
+  const reauth: ReauthEntry[] = [];
   let activeCampaigns;
   try {
     activeCampaigns = await readAllByCursor(after => {
@@ -119,14 +123,21 @@ async function handleGET(request: Request) {
       incomplete = true;
       return false;
     });
+    // Meta reads and pauses that failed for this business: a dead owner token puts it in `reauth`
+    // instead (after the same fail-closed pauses), anything else fails the run as before.
+    const metaErrors: unknown[] = [];
+    let metaIncomplete = false;
     let customerBalance = null;
     if (!metaFunded) {
       const initialBalance = await getCustomerBalance(context).catch(() => null);
       const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
-      if (initialBalance && !refresh.complete) incomplete = true;
+      if (initialBalance && !refresh.complete) metaIncomplete = true;
       const settle = await settlePausedRuns(context, campaigns, initialBalance);
-      if (!settle.complete) incomplete = true;
-      if (!hasActive) continue;
+      if (!settle.complete) metaIncomplete = true;
+      if (!hasActive) {
+        await settleMetaOutcome(businessId, metaErrors, metaIncomplete, false, 0);
+        continue;
+      }
       customerBalance = refresh.observed || settle.read ? await getCustomerBalance(context).catch(() => null) : initialBalance;
     } else if (!hasActive) continue;
     // #245/#759: a run funded on Meta (operator or own account) is capped there and has no customer allowance to hold.
@@ -146,9 +157,8 @@ async function handleGET(request: Request) {
           insights: await meta.getCampaignInsights(campaign.meta_campaign_id!, { weekly: true }),
           currency: connection.selected?.currency ?? null,
           timezoneName: connection.selected?.timezoneName ?? null,
-        }));
+        })).catch((error: unknown) => { metaErrors.push(error); throw error; });
       });
-    if (!decision.verified) { incomplete = true; unverified.push(businessId); }
 
     const paused: string[] = [];
     // A capped run whose Meta end time has passed is paused here, then settles like any paused run (#221).
@@ -197,11 +207,24 @@ async function handleGET(request: Request) {
           p_details: {} as unknown as Json,
         });
         if (auditError) incomplete = true;
-      } catch {
-        incomplete = true;
+      } catch (error) {
+        metaErrors.push(error);
+        metaIncomplete = true;
       }
     }
     if (paused.length) swept.push({ businessId, paused });
+    // An unknown customer balance is a database failure, never a token one.
+    if (financialHold && !decision.verified) { incomplete = true; unverified.push(businessId); }
+    await settleMetaOutcome(businessId, metaErrors, metaIncomplete, !financialHold && !decision.verified,
+      campaigns.filter(campaign => campaign.status === "active").length);
+  }
+
+  async function settleMetaOutcome(businessId: string, errors: unknown[], failed: boolean, decisionUnverified: boolean, activeCount: number) {
+    if (!failed && !decisionUnverified) return;
+    const dead = await reauthEntry(businessId, errors, activeCount);
+    if (dead) { reauth.push(dead); return; }
+    incomplete = true;
+    if (decisionUnverified) unverified.push(businessId);
   }
 
   // #522: each managed child ad account's Meta spending limit follows its customer's balance, so
@@ -220,5 +243,5 @@ async function handleGET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept, unverified, managedSpendCaps }, { status: incomplete ? 503 : 200 });
+  return NextResponse.json({ ok: !incomplete, at: new Date().toISOString(), swept, unverified, reauth, managedSpendCaps }, { status: incomplete ? 503 : 200 });
 }

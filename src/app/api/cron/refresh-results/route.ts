@@ -5,6 +5,7 @@ import { observeRoute } from "@/lib/observability/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
+import { isTokenFailure, reauthEntry, type ReauthEntry } from "@/lib/meta/reauth";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaignHealth, saveCampaignResult } from "@/lib/campaign/trusted-write";
 import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@/lib/campaign/health";
@@ -22,7 +23,8 @@ const ALERT_WINDOW_MS = 24 * 3_600_000;
  * Scheduled results refresh (#258): at most hourly per active campaign, read Meta
  * insights and ad review read-only, save one result row and the campaign's health
  * flags. Never pauses or changes a campaign; enforcement stays in enforce-spend.
- * Alerts carry only a problem kind and an opaque key (public workflow logs).
+ * Alerts carry only a problem kind and an opaque key (public workflow logs). A business
+ * whose owner must reconnect Meta is listed once in `reauth`, not counted as failed (#758).
  */
 export const GET = observeRoute("/api/cron/refresh-results", "GET", handleGET);
 
@@ -45,9 +47,11 @@ async function handleGET(request: Request) {
   }
 
   let refreshed = 0, skipped = 0, failed = 0, hasMore = false;
+  const reauth = new Map<string, ReauthEntry>();
   const health = new Map<string, CampaignHealth | null>(campaigns.map(campaign => [campaign.id, readCampaignHealth(campaign.raw)]));
   for (const campaign of campaigns) {
     if (Date.now() - started > START_BUDGET_MS) { hasMore = true; break; }
+    if (reauth.has(campaign.business_id)) { skipped++; continue; }
     const binding = readStoredCampaignBinding(campaign);
     if (!campaign.meta_campaign_id || !binding.metaAdAccountId || !binding.metaPageId || binding.metaConnectionGeneration === null) {
       skipped++;
@@ -88,13 +92,16 @@ async function handleGET(request: Request) {
       if (healthError) throw new Error("Health storage unavailable.");
       health.set(campaign.id, assessed);
       refreshed++;
-    } catch {
-      failed++;
+    } catch (error) {
+      const dead = isTokenFailure(error) ? await reauthEntry(campaign.business_id, [error],
+        campaigns.filter(({ business_id }) => business_id === campaign.business_id).length) : null;
+      if (dead) reauth.set(campaign.business_id, dead);
+      else failed++;
     }
   }
 
   const alerts = [...health.values()].flatMap(current => current?.flags ?? [])
     .filter(flag => Date.now() - Date.parse(flag.since) <= ALERT_WINDOW_MS)
     .map(({ kind, key }) => ({ kind, key }));
-  return NextResponse.json({ ok: failed === 0, refreshed, skipped, failed, hasMore, alerts }, { status: failed ? 503 : 200 });
+  return NextResponse.json({ ok: failed === 0, refreshed, skipped, failed, hasMore, alerts, reauth: [...reauth.values()] }, { status: failed ? 503 : 200 });
 }
