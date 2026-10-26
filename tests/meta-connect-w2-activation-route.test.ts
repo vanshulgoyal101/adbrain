@@ -540,6 +540,25 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     expect(mocks.recordLaunchCap).toHaveBeenLastCalledWith(expect.anything(), { campaignId: "campaign-1", cap: expect.objectContaining({ days: 3, lifetimeBudgetPaise: expect.any(Number), endTime: expect.any(String) }) });
   });
 
+  it("#741: refuses to activate an Indian tree built without out-of-area exclusions, before any Meta write or reservation", async () => {
+    const tricity = { geo_locations: { cities: [{ key: "1021145", country: "IN" }, { key: "1035473", country: "IN" }] } };
+    mocks.readCampaignDelivery.mockResolvedValue({ ...pausedDelivery, adSets: pausedDelivery.adSets.map(adSet => ({ ...adSet, targeting: tricity })) });
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toContain("out-of-area exclusions");
+    expect(mocks.reserveCustomerCampaign).not.toHaveBeenCalled();
+    expect(mocks.createCappedAdSet).not.toHaveBeenCalled();
+    expect(mocks.activateCappedTree).not.toHaveBeenCalled();
+    // The same tree with the state exclusions activates as before.
+    const excluded = { ...tricity, excluded_geo_locations: { regions: [{ key: "1731" }] } };
+    mocks.readCampaignDelivery.mockResolvedValue({ ...pausedDelivery, adSets: pausedDelivery.adSets.map(adSet => ({ ...adSet, targeting: excluded })) });
+    const digestWith = createHash("sha256").update(activationConfirmationPayload(
+      { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+      { generation: 4, selected }, { ...pausedDelivery, adSets: pausedDelivery.adSets.map(adSet => ({ ...adSet, targeting: excluded })) }, 3,
+    )).digest("hex");
+    expect((await activate({ capDays: 3, confirmationDigest: digestWith })).status).toBe(200);
+  });
+
   it("rejects a digest reviewed for a different number of days", async () => {
     expect((await activate({ capDays: 7, confirmationDigest: digest(3) })).status).toBe(409);
     expect((await activate({ capDays: 3, confirmationDigest: digest() })).status).toBe(409);

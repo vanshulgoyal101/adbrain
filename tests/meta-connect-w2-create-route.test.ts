@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   existingOperation: null as Record<string, unknown> | null,
   creativeReads: 0,
   changeCreativeBeforeExecution: false,
+  refuseExclusions: false,
   description: null as string | null,
   submittedCreative: vi.fn(),
 }));
@@ -242,6 +243,7 @@ beforeEach(() => {
   mocks.existingOperation = null;
   mocks.creativeReads = 0;
   mocks.changeCreativeBeforeExecution = false;
+  mocks.refuseExclusions = false;
   mocks.description = null;
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId, userId });
@@ -257,6 +259,7 @@ beforeEach(() => {
         resolveAudienceInterests: vi.fn().mockResolvedValue({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }),
         createLeadCampaign: vi.fn().mockImplementation(async (params: { onCheckpoint?: (event: { phase: "campaign" | "adset" | "creative" | "ad"; externalId: string }) => Promise<void> }) => {
           mocks.submittedCreative(params);
+          if (mocks.refuseExclusions) throw new (await import("@/lib/meta/service-area")).TargetingExclusionsMissingError();
           await params.onCheckpoint?.({ phase: "campaign", externalId: "meta-campaign-1" });
           await params.onCheckpoint?.({ phase: "adset", externalId: "meta-adset-1" });
           await params.onCheckpoint?.({ phase: "ad", externalId: "meta-ad-1" });
@@ -381,6 +384,15 @@ describe("durable campaign create route", () => {
     expect(mocks.rpc).toHaveBeenCalledWith("fail_campaign_operation", expect.any(Object));
     expect(mocks.rpc).not.toHaveBeenCalledWith("checkpoint_campaign_operation", expect.any(Object));
     expect(mocks.rpc).not.toHaveBeenCalledWith("finish_campaign_operation", expect.any(Object));
+  });
+
+  it("#741: an exclusions refusal before any Meta POST ends failed (retryable), never needs_reconciliation", async () => {
+    mocks.refuseExclusions = true;
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    const response = await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewPlanHash(), connectionGeneration, idempotencyKey }));
+    expect((await response.json()).data.state).toBe("failed");
+    expect(mocks.rpc).toHaveBeenCalledWith("fail_campaign_operation", expect.objectContaining({ p_state: "failed", p_external_ids: [] }));
+    expect(mocks.rpc).not.toHaveBeenCalledWith("fail_campaign_operation", expect.objectContaining({ p_state: "needs_reconciliation" }));
   });
 
   it("claims, checkpoints, saves a bound paused campaign, and finishes", async () => {
