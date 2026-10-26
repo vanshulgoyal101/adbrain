@@ -1477,7 +1477,12 @@ export class MetaClient {
    * keeps the old creative, so the change can be rolled back by swapping it back), then the ad is
    * pointed at it. Each step is validated by Meta first; the ad goes back to Meta review.
    */
-  async replaceAdCreative(adId: string, edit: AdCopyEdit): Promise<{ adId: string; previousCreativeId: string; creativeId: string }> {
+  async replaceAdCreative(adId: string, edit: AdCopyEdit, hooks: {
+    /** Runs after Meta validated the new creative, right before the first real write. */
+    beforeWrite?: (stored: { previousCreativeId: string }) => Promise<void>;
+    /** The new creative exists on Meta (so a failed swap can be reconciled). */
+    onCreative?: (creativeId: string) => Promise<void>;
+  } = {}): Promise<{ adId: string; previousCreativeId: string; creativeId: string }> {
     const acct = this.creds.adAccountId;
     const ad = await this.graph<{ id: string; account_id?: string; creative?: StoredCreative & { id?: string } }>(
       `${encodeURIComponent(adId)}?fields=id,account_id,creative{id,name,object_story_spec,asset_feed_spec}`,
@@ -1486,7 +1491,9 @@ export class MetaClient {
     const form = editedCreativeForm(ad.creative, edit);
     const validate = JSON.stringify(["validate_only"]);
     await this.graph(`${acct}/adcreatives`, { method: "POST", form: { ...form, execution_options: validate } });
+    await hooks.beforeWrite?.({ previousCreativeId: ad.creative.id });
     const created = await this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
+    await hooks.onCreative?.(created.id);
     const swap = { creative: JSON.stringify({ creative_id: created.id }) };
     await this.graph(encodeURIComponent(adId), { method: "POST", form: { ...swap, execution_options: validate } });
     await this.graph(encodeURIComponent(adId), { method: "POST", form: swap });
