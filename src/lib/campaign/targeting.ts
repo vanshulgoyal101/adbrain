@@ -126,7 +126,7 @@ export function describeAudience(t: {
   if (t.ageMode === "manual" && t.ageMin && t.ageMax) {
     parts.push(`ages ${t.ageMin}–${t.ageMax === 65 ? "65+" : t.ageMax}`);
   } else {
-    parts.push("age recommendation pending");
+    parts.push("ages picked by AdBrain when you check the campaign");
   }
   return parts.join(", ") + ".";
 }

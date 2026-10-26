@@ -142,7 +142,7 @@ describe("unsaved campaign setup", () => {
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "needs_reconciliation", checkpoints: [], externalIds: {}, error: null });
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await screen.findByText("Campaign creation needs reconciliation. Do not retry the create operation.");
     expect(screen.getByText(/Meta only partly created this campaign/)).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe("unsaved campaign setup", () => {
     mocks.createCampaign.mockRejectedValue(new Error("Network lost"));
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await screen.findByText("Network lost");
     fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
@@ -303,6 +303,30 @@ describe("campaign sync feedback", () => {
     fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "5" } });
     expect(screen.getByText("Funded on Meta: ₹2,000.00 room for a ₹2,500.00 cap. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
+  });
+
+  // #759: an owner on their own ad account needs no account spending limit; the total limit on Meta is the guard.
+  it.each([
+    [false, "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above.", true],
+    [true, "Funded on Meta: set a spending limit on the Meta ad account first.", false],
+  ])("with no account spending limit and spendLimitRequired=%s, the review says so and activation is %s", async (spendLimitRequired, text, enabled) => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    const delivery = {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+      adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    };
+    const funding = { spendCapPaise: 0, amountSpentPaise: 4237, roomPaise: 0, prepay: false };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/campaigns/campaign-1"
+      ? Response.json({ delivery, funding, spendLimitRequired })
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Approve total and activate" });
+    if (enabled) expect(button).toBeEnabled(); else expect(button).toBeDisabled();
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
   });
 

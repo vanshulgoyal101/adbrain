@@ -244,7 +244,8 @@ function BusinessCampaigns({
   const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
     newCampaign?.creativeIds.filter(id => approved.some(creative => creative.id === id)),
   ));
-  const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
+  // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
+  const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
@@ -333,15 +334,17 @@ function BusinessCampaigns({
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
   const [activationFunding, setActivationFunding] = useState<AccountFunding | null>(null);
+  // #759: only an operator-funded business must set an account spending limit; an owner's own account needn't.
+  const [spendLimitRequired, setSpendLimitRequired] = useState(true);
   const [capDays, setCapDays] = useState(3);
   const [activationLearning, setActivationLearning] = useState<{ costPerResultRupees: number | null; pausedAt: string | null; now: number } | null>(null);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
-  // #245: an operator-funded business runs only capped, within Meta's account spending limit.
+  // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
-    || (activationCapped && activationFunding.spendCapPaise > 0 && activationFunding.roomPaise >= activationCapPaise);
+    || (activationCapped && (activationFunding.spendCapPaise > 0 ? activationFunding.roomPaise >= activationCapPaise : !spendLimitRequired));
   // #419 item 2: edits that restart Meta's learning (a capped run's new ad set, a long pause); never block.
   const learningWarnings = activationReview && activationLearning && activationDelivery
     ? activationWarnings({ capDays: activationCapped ? capDays : null, dailyBudgetRupees: activationReview.daily_budget ?? 0, ...activationLearning })
@@ -1114,7 +1117,7 @@ function BusinessCampaigns({
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO, refreshing = false) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
-      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
+      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; spendLimitRequired?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
       const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
@@ -1129,6 +1132,7 @@ function BusinessCampaigns({
       setActivationDigest(digest);
       setActivationDelivery(delivery);
       setActivationFunding(funding);
+      setSpendLimitRequired(review.spendLimitRequired !== false);
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
@@ -1286,7 +1290,9 @@ function BusinessCampaigns({
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
                     ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
-                    : "Funded on Meta: set a spending limit on the Meta ad account first."}
+                    : spendLimitRequired
+                      ? "Funded on Meta: set a spending limit on the Meta ad account first."
+                      : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
               </div>
@@ -1763,6 +1769,10 @@ function BusinessCampaigns({
                     Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). */}
+                <p className="-mt-2 text-xs text-slate-500">
+                  What to expect: in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180. Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
                 {destination === "instant_form" && formsError && (
@@ -1825,7 +1835,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
-                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
+                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
 
@@ -1841,7 +1851,7 @@ function BusinessCampaigns({
                     ) : (
                       <CheckCircle2 className="h-4 w-4" />
                     )}
-                    Prepare campaign review
+                    Check my campaign (nothing spends)
                   </Button>
                 </div>
                 <details className="border-t border-slate-200 pt-3"><summary className="cursor-pointer text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>

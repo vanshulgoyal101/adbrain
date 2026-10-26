@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-24T12:23:34.284Z",
+  "recordedAt": "2026-10-26T09:54:35.968Z",
   "inputs": {
     "name": "AdBrain #419 validate (PAUSED, deleted after)",
     "dailyBudgetRupees": 280,
@@ -30,7 +30,72 @@
       "autofill": "Hi, I'd like a solar quote.",
       "greeting": "Hi! Thanks for reaching out to Solaride."
     },
+    "interests": [
+      {
+        "id": "6003437140731",
+        "name": "Solar energy"
+      }
+    ],
     "phone": "+910000000000"
+  },
+  "geoMeta": {
+    "path": "search?type=adgeolocationmeta&locale=en_US&cities=%5B%221021145%22%2C%222676092%22%2C%221035473%22%5D",
+    "status": 200,
+    "body": {
+      "data": {
+        "countries": {},
+        "regions": {},
+        "cities": {
+          "1021145": {
+            "key": "1021145",
+            "type": "city",
+            "name": "Chandigarh",
+            "region_id": 1726,
+            "region": "Chandigarh",
+            "country_code": "IN",
+            "country_name": "India",
+            "supports_city": true,
+            "supports_region": true
+          },
+          "1035473": {
+            "key": "1035473",
+            "type": "city",
+            "name": "Mohali",
+            "region_id": 1742,
+            "region": "Punjab region",
+            "country_code": "IN",
+            "country_name": "India",
+            "supports_city": true,
+            "supports_region": true
+          },
+          "2676092": {
+            "key": "2676092",
+            "type": "city",
+            "name": "Panchkula",
+            "region_id": 1730,
+            "region": "Haryana",
+            "country_code": "IN",
+            "country_name": "India",
+            "supports_city": true,
+            "supports_region": true
+          }
+        },
+        "zips": {},
+        "places": {},
+        "custom_locations": {},
+        "geo_markets": {},
+        "electoral_districts": {},
+        "country_groups": {},
+        "subneighborhoods": {},
+        "neighborhoods": {},
+        "subcities": {},
+        "metro_areas": {},
+        "small_geo_areas": {},
+        "medium_geo_areas": {},
+        "large_geo_areas": {},
+        "location_cluster_ids": {}
+      }
+    }
   },
   "tape": [
     {
@@ -61,7 +126,7 @@
         "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
         "destination_type": "ON_AD",
         "promoted_object": "{\"page_id\":\"PAGE\"}",
-        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"targeting_automation\":{\"advantage_audience\":1}}"
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"excluded_geo_locations\":{\"cities\":[{\"key\":\"1033379\"},{\"key\":\"1016294\"},{\"key\":\"1027716\"},{\"key\":\"1038870\"},{\"key\":\"2674292\"},{\"key\":\"1016128\"},{\"key\":\"1047439\"},{\"key\":\"2676079\"},{\"key\":\"1029837\"},{\"key\":\"1038394\"},{\"key\":\"1027034\"},{\"key\":\"1041296\"},{\"key\":\"1026297\"},{\"key\":\"1024627\"},{\"key\":\"1044013\"},{\"key\":\"1035456\"},{\"key\":\"1027125\"},{\"key\":\"1038824\"},{\"key\":\"1024719\"},{\"key\":\"1042093\"},{\"key\":\"1018444\"},{\"key\":\"1029615\"},{\"key\":\"1039228\"},{\"key\":\"1035873\"},{\"key\":\"1024700\"},{\"key\":\"1034654\"},{\"key\":\"1024628\"},{\"key\":\"1026295\"},{\"key\":\"1018671\"},{\"key\":\"1043687\"},{\"key\":\"1019700\"},{\"key\":\"1028355\"},{\"key\":\"1028764\"},{\"key\":\"1041183\"},{\"key\":\"1028177\"},{\"key\":\"1024645\"},{\"key\":\"1038220\"},{\"key\":\"1036842\"},{\"key\":\"1017312\"},{\"key\":\"1015543\"},{\"key\":\"1034076\"},{\"key\":\"1036173\"}],\"regions\":[{\"key\":\"1723\"},{\"key\":\"1724\"},{\"key\":\"1725\"},{\"key\":\"1727\"},{\"key\":\"1728\"},{\"key\":\"1729\"},{\"key\":\"1731\"},{\"key\":\"1732\"},{\"key\":\"1733\"},{\"key\":\"1734\"},{\"key\":\"1735\"},{\"key\":\"1736\"},{\"key\":\"1737\"},{\"key\":\"1738\"},{\"key\":\"1739\"},{\"key\":\"1740\"},{\"key\":\"1741\"},{\"key\":\"1743\"},{\"key\":\"1744\"},{\"key\":\"1745\"},{\"key\":\"1746\"},{\"key\":\"1747\"},{\"key\":\"1748\"},{\"key\":\"1749\"},{\"key\":\"1750\"},{\"key\":\"1751\"},{\"key\":\"1752\"},{\"key\":\"1753\"},{\"key\":\"1754\"},{\"key\":\"1755\"},{\"key\":\"1756\"},{\"key\":\"1757\"},{\"key\":\"4100\"}]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"flexible_spec\":[{\"interests\":[{\"id\":\"6003437140731\",\"name\":\"Solar energy\"}]}],\"targeting_automation\":{\"advantage_audience\":1}}"
       },
       "status": 200,
       "body": {
@@ -122,7 +187,7 @@
         "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
         "destination_type": "WHATSAPP",
         "promoted_object": "{\"page_id\":\"PAGE\",\"whatsapp_phone_number\":\"+910000000000\"}",
-        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"targeting_automation\":{\"advantage_audience\":1}}"
+        "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"1021145\"},{\"key\":\"2676092\"},{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"excluded_geo_locations\":{\"cities\":[{\"key\":\"1033379\"},{\"key\":\"1016294\"},{\"key\":\"1027716\"},{\"key\":\"1038870\"},{\"key\":\"2674292\"},{\"key\":\"1016128\"},{\"key\":\"1047439\"},{\"key\":\"2676079\"},{\"key\":\"1029837\"},{\"key\":\"1038394\"},{\"key\":\"1027034\"},{\"key\":\"1041296\"},{\"key\":\"1026297\"},{\"key\":\"1024627\"},{\"key\":\"1044013\"},{\"key\":\"1035456\"},{\"key\":\"1027125\"},{\"key\":\"1038824\"},{\"key\":\"1024719\"},{\"key\":\"1042093\"},{\"key\":\"1018444\"},{\"key\":\"1029615\"},{\"key\":\"1039228\"},{\"key\":\"1035873\"},{\"key\":\"1024700\"},{\"key\":\"1034654\"},{\"key\":\"1024628\"},{\"key\":\"1026295\"},{\"key\":\"1018671\"},{\"key\":\"1043687\"},{\"key\":\"1019700\"},{\"key\":\"1028355\"},{\"key\":\"1028764\"},{\"key\":\"1041183\"},{\"key\":\"1028177\"},{\"key\":\"1024645\"},{\"key\":\"1038220\"},{\"key\":\"1036842\"},{\"key\":\"1017312\"},{\"key\":\"1015543\"},{\"key\":\"1034076\"},{\"key\":\"1036173\"}],\"regions\":[{\"key\":\"1723\"},{\"key\":\"1724\"},{\"key\":\"1725\"},{\"key\":\"1727\"},{\"key\":\"1728\"},{\"key\":\"1729\"},{\"key\":\"1731\"},{\"key\":\"1732\"},{\"key\":\"1733\"},{\"key\":\"1734\"},{\"key\":\"1735\"},{\"key\":\"1736\"},{\"key\":\"1737\"},{\"key\":\"1738\"},{\"key\":\"1739\"},{\"key\":\"1740\"},{\"key\":\"1741\"},{\"key\":\"1743\"},{\"key\":\"1744\"},{\"key\":\"1745\"},{\"key\":\"1746\"},{\"key\":\"1747\"},{\"key\":\"1748\"},{\"key\":\"1749\"},{\"key\":\"1750\"},{\"key\":\"1751\"},{\"key\":\"1752\"},{\"key\":\"1753\"},{\"key\":\"1754\"},{\"key\":\"1755\"},{\"key\":\"1756\"},{\"key\":\"1757\"},{\"key\":\"4100\"}]},\"age_min\":25,\"age_max\":65,\"age_range\":[25,55],\"flexible_spec\":[{\"interests\":[{\"id\":\"6003437140731\",\"name\":\"Solar energy\"}]}],\"targeting_automation\":{\"advantage_audience\":1}}"
       },
       "status": 200,
       "body": {

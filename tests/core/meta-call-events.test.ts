@@ -46,6 +46,8 @@ describe("core: Meta call events (#451 L2)", () => {
       if (method === "POST" && path.endsWith("/campaigns")) return answer("campaign-paused");
       if (method === "POST" && path.endsWith("/adsets")) return answer("adset-on-age-25-55");
       if (method === "DELETE") return answer("campaign-delete");
+      // #741: the service-area read, with Meta's recorded answer.
+      if (method === "GET" && new URL(String(input)).searchParams.get("type") === "adgeolocationmeta") return Response.json(launchTape.geoMeta.body);
       throw new Error(`Unexpected Graph call ${method} ${path}`);
     });
     const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "secret-token" });

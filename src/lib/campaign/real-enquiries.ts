@@ -1,4 +1,5 @@
-import type { CampaignResult } from "@/lib/types";
+import { campaignDestination } from "@/lib/campaign/outcomes";
+import type { Campaign, CampaignResult } from "@/lib/types";
 
 /** Adds each campaign's logged WhatsApp enquiries (#335) to its latest result; the inputs are not changed. */
 export function attachRealEnquiries(
@@ -13,4 +14,15 @@ export function attachRealEnquiries(
 /** Spend per real enquiry; null until the first one is logged. */
 export function costPerRealEnquiry(spend: number, enquiries: number): number | null {
   return enquiries > 0 ? spend / enquiries : null;
+}
+
+export type WhatsAppChatRow = { id: string; name: string; chats: number; spend: number; realEnquiries: number };
+
+/** #764: each WhatsApp campaign's chats from its latest result, as its card counts them, for Enquiries. */
+export function whatsappChatRows(campaigns: Campaign[], results: Record<string, CampaignResult>): WhatsAppChatRow[] {
+  return campaigns.flatMap((campaign) => {
+    const result = results[campaign.id];
+    if (!result || campaignDestination(campaign, result) !== "whatsapp") return [];
+    return [{ id: campaign.id, name: campaign.name ?? "WhatsApp campaign", chats: result.conversations ?? 0, spend: result.spend, realEnquiries: result.real_enquiries ?? 0 }];
+  });
 }
