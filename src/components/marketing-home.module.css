@@ -11,9 +11,13 @@
 .exampleLink { font-size: var(--t-sm); }
 .signIn, .primary, .heroSecondary, .textLink { display: inline-flex; align-items: center; justify-content: center; gap: 12px; font-weight: 600; }
 .signIn { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 18px; }
-.hero { position: relative; isolation: isolate; color: var(--ink); background: #edf0f2; }
+.hero { position: relative; isolation: isolate; color: var(--ink); background: #f6f7f4; }
+/* Wide screens show the 1440 composition centred, like the hero text, instead of scaling the ads past the fold. */
+.heroMedia { position: absolute; inset: 0; max-width: 1440px; margin: 0 auto; }
 .heroPhoto { object-fit: cover; object-position: right top; z-index: 0; }
-.hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, #f6f7f4 0%, #f6f7f4 38%, rgba(246, 247, 244, .8) 50%, rgba(246, 247, 244, 0) 72%); }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, #f6f7f4 0, #f6f7f4 77.5%, rgba(246, 247, 244, 0) 79%); }
+/* #847: the hero image holds two real ads at its right edge; below 1400 px only the right one shows, whole. */
+@media (min-width: 1400px) { .hero::after { background: linear-gradient(90deg, #f6f7f4 0, #f6f7f4 720px, rgba(246, 247, 244, 0) 800px); } }
 .heroContent { position: relative; z-index: 2; max-width: 1440px; margin: auto; padding: 40px 48px 48px; }
 .heroStatement { max-width: 640px; font-family: var(--font-sans); font-weight: 600; letter-spacing: -0.01em; font-size: var(--t-3xl); line-height: 1.08; }
 .hero h1.heroStatement { font-size: var(--t-3xl); font-weight: 600; line-height: 1.1; margin: 8px 0 16px; }
