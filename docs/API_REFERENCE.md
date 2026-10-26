@@ -588,6 +588,7 @@ nonnegative-safe-integer}`. Review data includes:
 | --- | --- |
 | `draftId`, `draftVersion`, `connectionGeneration` | Reviewed concurrency identity |
 | `canCreatePaused`, `blockers` | Gate and actionable blocker list; each Review blocker has a stable `reason` (`REVIEW_NO_WEBSITE`, `REVIEW_NO_LEAD_FORM`, … in `reviewBlockerReasons`) besides its API `code` |
+| `serviceArea` | Optional, display only (#741): `excludedCities` (names), `keptStates`, `excludedStateCount`: the out-of-area exclusions launch adds; not part of `planHash` |
 | `planHash` | 64 lowercase hex characters, or null while blocked |
 | `creativeHash` | Optional content hash used by current execution |
 | `currency` | `INR` |

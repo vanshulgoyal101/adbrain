@@ -109,10 +109,13 @@ export function buildCampaignPreflightLoaders(
             resolveDraftTargeting(draft.input, business?.locations ?? [], meta.resolveGeoTargeting.bind(meta)),
             names.length ? meta.resolveAudienceInterests(names).catch(() => null) : null,
           ]);
-          if (!names.length) return geo;
+          // #741: Review shows the exclusions launch will add; a failed read only drops the line.
+          const areaExclusions = await Promise.resolve().then(() => meta.serviceAreaExclusionsFor(geo.location)).catch(() => null);
+          const located = { ...geo, areaExclusions };
+          if (!names.length) return located;
           return audience
-            ? { ...geo, audienceInterests: audience.interests, unresolvedInterests: audience.unresolved }
-            : { ...geo, audienceInterests: [], unresolvedInterests: names };
+            ? { ...located, audienceInterests: audience.interests, unresolvedInterests: audience.unresolved }
+            : { ...located, audienceInterests: [], unresolvedInterests: names };
         },
       );
     },

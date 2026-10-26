@@ -1,4 +1,6 @@
 import { adPolicyHits } from "@/lib/campaign/ad-policy";
+import type { GeoTargeting } from "@/lib/meta/client";
+import { describeServiceArea } from "@/lib/meta/service-area";
 import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
@@ -38,6 +40,8 @@ export interface PreflightGeo {
   explicitlyNationwide: boolean;
   audienceInterests?: NonNullable<ReviewDTO["audienceInterests"]>;
   unresolvedInterests?: string[];
+  /** #741: the out-of-area exclusions launch will add; null when none apply. */
+  areaExclusions?: GeoTargeting | null;
 }
 
 export interface PreflightInput {
@@ -275,6 +279,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     ...(input.geo.excludedLocation ? { resolvedExcludedLocation: input.geo.excludedLocation } : {}),
     ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
     ...(planWarnings.length ? { planWarnings } : {}),
+    ...(input.geo.areaExclusions ? { serviceArea: describeServiceArea(input.geo.areaExclusions) } : {}),
   };
 }
 
