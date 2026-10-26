@@ -31,6 +31,22 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
 	labelled `decision`. Need the CTO? Label `owner:cto`. Blocked on the owner? Label
 	`waiting-owner`; only the CEO asks the owner, in one batched list.
+- **Doorbell rule** (owner, Oct 26: messages sat unread while chats waited).
+	GitHub holds the message; the receiver's chat gets a one-line **doorbell**.
+	1. Write the ask or handoff on the issue/PR first, as above.
+	2. Ring the receiver's chat (links in pinned #819) with `send_message`:
+		`→ QA 2: T+0 please, #499 (campaign 1202…)`. Check its state with
+		`get_session_context` first: **busy** (in a turn, including a waiter run) →
+		`delivery: "steer"`; **idle** (turn complete) → `queue`, which starts it at
+		once. Never queue to a busy chat: it isn't read until the turn ends, which
+		can be up to 2 h in a waiter.
+	3. Don't stack messages. A newer instruction replaces your pending one
+		(`operation: "replace"`) or cancels it (`"cancel"`); one doorbell per handoff.
+	4. A doorbell is self-contained: who, what, where (issue link), by when. No status
+		chatter.
+	5. **Never end a turn silently.** Before stopping, either run your waiter or post
+		`→ <Role>` for what's next. A chat that ends its turn with work left goes idle
+		until someone rings it.
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
