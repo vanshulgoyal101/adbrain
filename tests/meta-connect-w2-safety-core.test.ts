@@ -54,7 +54,7 @@ describe("campaign preflight", () => {
     const review = runPreflight(input({ draft: { ...draft, targeting: { ...draft.targeting, audience: undefined } } }));
     expect(review.canCreatePaused).toBe(false);
     expect(review.planHash).toBeNull();
-    expect(review.blockers.some((item) => item.message.includes("detailed targeting"))).toBe(true);
+    expect(review.blockers.some((item) => item.reason === "REVIEW_NO_AUDIENCE")).toBe(true);
   });
 
   it("allows an explicit broad audience without interest narrowing", () => {

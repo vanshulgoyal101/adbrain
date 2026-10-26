@@ -38,6 +38,8 @@ export const productEventSchema = z.object({
     destination: z.enum(["instant_form", "whatsapp"]).optional(),
     /** #378: names of the validation rules a rejected AI reply broke; never the reply's text. */
     validationRules: z.array(z.string().regex(/^[a-zA-Z0-9_.:*/[\]-]{1,80}$/)).max(12).optional(),
+    /** #688: the reason of every blocker on a rejected campaign review, e.g. REVIEW_NO_WEBSITE. */
+    blockerCodes: z.array(label).max(20).optional(),
     action: z.enum(productActions).optional(),
     viewport: viewportSchema.optional(),
     /** #615: Meta's error code, subcode, user title, trace id and Graph edge (ids replaced); never tokens or bodies. */

@@ -583,7 +583,7 @@ nonnegative-safe-integer}`. Review data includes:
 | Field | Meaning |
 | --- | --- |
 | `draftId`, `draftVersion`, `connectionGeneration` | Reviewed concurrency identity |
-| `canCreatePaused`, `blockers` | Gate and actionable blocker list |
+| `canCreatePaused`, `blockers` | Gate and actionable blocker list; each Review blocker has a stable `reason` (`REVIEW_NO_WEBSITE`, `REVIEW_NO_LEAD_FORM`, … in `reviewBlockerReasons`) besides its API `code` |
 | `planHash` | 64 lowercase hex characters, or null while blocked |
 | `creativeHash` | Optional content hash used by current execution |
 | `currency` | `INR` |
@@ -806,7 +806,7 @@ Status DTO: `businessId`, `generation`, `authorization`, nullable `selected`,
 `reauth_required`, `revoked`. Selected assets: `metaBusinessId` (nullable),
 `adAccountId`, `accountName`, `pageId`, `pageName`, `currency`, `timezoneName`.
 Each capability has `state: available|blocked|unknown` and blockers. Blockers have
-`code,message,action`; recovery actions include reconnect, retry check, choose
+`code,message,action` (Review blockers add `reason`); recovery actions include reconnect, retry check, choose
 assets, contact admin, or an HTTPS Meta link. No tokens appear in these DTOs.
 
 Disconnect accepts `{businessId: UUID}`. A truly empty body retains primary-business
