@@ -34,6 +34,8 @@ label it for the owner instead of doing it.
 | **QA 2** | Live checks: live-run reads and final reports (#157, #499), production smoke follow-up, phone and desktop walks, 2-Tier acceptance walks (#527) | Same as QA |
 | **Reviewer** | High-risk code review (money, migration, tenant/auth): `gh pr review <n> --comment --body "Reviewer review of <sha>: **approved**. …"`, accepted by `release.mjs` where the CTO's is; reviews in parallel with QA, within an hour | Design and priority calls (CTO, CEO); fixing code (the author) |
 | **DevOps** | Migrations, money/tenant/config releases, secrets and production settings, rollback, scheduler, CI and the production guard | Feature work; priority (CEO) |
+| **Dev 4** | The pre-launch Review step (#681): every rejection says in plain words what to fix, with a one-tap path to fix it, plus issues assigned to you | Same as Dev |
+| **CPO** | Product research and feature proposals with evidence (cost, value to local businesses, fit with the core loop); the ranked roadmap (#703). Writes no product code, spends nothing | Priority and money (CEO); scheduling a build (CTO) |
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
 auto-merge); hand off with the label and one `→ Role:` line.

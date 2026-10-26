@@ -91,7 +91,7 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "qa2", count: 0 }, { role: "reviewer", count: 0 }, { role: "devops", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "reviewer", count: 0 }, { role: "devops", count: 0 }]);
   });
 });
 
@@ -194,5 +194,24 @@ describe("ready pool (#573)", () => {
     expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([13]);
     expect(readyPool(pool, "devops")).toEqual([]);
     expect(readyPool(pool, "cto")).toEqual([]);
+  });
+});
+
+describe("Dev 4 and CPO roles", () => {
+  it("keeps Dev distinct from Dev 4, and routes Dev 4 and CPO handoffs", () => {
+    const dev = matchers("dev");
+    const dev4 = matchers("dev4");
+    const cpo = matchers("cpo");
+    expect(dev.writtenByMe("Dev 4: Review step plan")).toBe(false);
+    expect(dev4.writtenByMe("Dev 4: Review step plan")).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 4: take #688.", dev)).toBe(false);
+    expect(waitingOnMe("CTO: → Dev 4: take #688.", dev4)).toBe(true);
+    expect(waitingOnMe("CEO: → CPO: pricing research next.", cpo)).toBe(true);
+    expect(cpo.writtenByMe("CPO: research answer for #694")).toBe(true);
+  });
+  it("counts Dev 4's queue but not the CPO's (the CEO feeds the CPO)", () => {
+    const low = lowQueues([]).map((x) => x.role);
+    expect(low).toContain("dev4");
+    expect(low).not.toContain("cpo");
   });
 });
