@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { logEvent } from "@/lib/audit";
 import { intendedCampaignChildren, reviewableCampaign } from "@/lib/campaign/activation";
-import { saveCampaign } from "@/lib/campaign/trusted-write";
+import { saveCampaignChildren } from "@/lib/campaign/trusted-write";
 import { CampaignDeliveryError, MetaError, friendlyMetaError, hasInterests, type AudienceChanges, type AudienceEdit, type GeoTargeting } from "@/lib/meta/client";
 import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { mergeExclusions, TargetingExclusionsMissingError } from "@/lib/meta/service-area";
@@ -222,8 +222,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
       // Mirror only what Meta confirmed, even when a later ad set failed, so the stored ids stay honest.
       await touch({ phase: "mirror" });
       try {
-        const mirrored = mirroredChildren(campaign, done);
-        const { error } = await saveCampaign({ businessId: context.businessId, userId: context.userId }, mirrored, campaignId);
+        const { error } = await saveCampaignChildren({ businessId: context.businessId, userId: context.userId }, campaignId, current => mirroredChildren(current, done));
         if (error) throw error;
       } catch {
         await fail("needs_reconciliation", "Meta changed the audience but AdBrain could not record it. Check the campaign.");

@@ -38,12 +38,16 @@ export function checkBudgetEdit(input: BudgetEditInput): BudgetEditCheck {
     return refuse(`This campaign has already spent ${formatMoney(current.spentRupees)}. Set a total cap above that.`);
   }
   if (end !== undefined && !(Date.parse(end) > input.now)) return refuse("Choose an end date in the future.");
+  // Meta won't switch an ad set from a daily budget to a lifetime one (QA on #833).
+  if (cap !== undefined && current.capRupees === null) {
+    return refuse("This campaign runs on a daily budget with no total cap, and Meta can't add one to it. To cap the spend, start a new run.");
+  }
 
   const nextDaily = daily ?? current.dailyRupees;
   if (current.status === "active" && daily !== undefined && daily > current.dailyRupees) {
     const guard = wouldExceedCap(input.otherActive, nextDaily, input.weeklyLimitRupees);
     if (guard.exceeds) {
-      return refuse(input.weeklyLimitRupees === null
+      return refuse(!guard.verified || input.weeklyLimitRupees === null
         ? "AdBrain couldn't check this against your weekly limit. Try again."
         : `${formatMoney(nextDaily)} a day would take your campaigns past your weekly limit of ${formatMoney(input.weeklyLimitRupees)} in Settings.`);
     }
@@ -58,7 +62,9 @@ export function checkBudgetEdit(input: BudgetEditInput): BudgetEditCheck {
     if (short?.kind === "unverified") return refuse("AdBrain couldn't check the funding for this cap. Try again.");
   }
 
-  const needsConfirmation = nextDaily > approved.dailyRupees || (cap !== undefined && (approved.capRupees === null || cap > approved.capRupees));
+  // Running longer adds spend only when there's no cap to hold it (CTO on #833).
+  const runsLonger = end !== undefined && current.capRupees === null && current.endTime !== null && Date.parse(end) > Date.parse(current.endTime);
+  const needsConfirmation = nextDaily > approved.dailyRupees || runsLonger || (cap !== undefined && (approved.capRupees === null || cap > approved.capRupees));
   const notices = daily !== undefined && current.dailyRupees > 0 && Math.abs(daily / current.dailyRupees - 1) >= LEARNING_CHANGE ? [LEARNING_NOTICE] : [];
   return { ok: true, needsConfirmation, notices };
 }

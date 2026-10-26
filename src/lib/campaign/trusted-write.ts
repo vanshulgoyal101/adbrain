@@ -41,6 +41,26 @@ export async function saveCampaignHealth(actor: Actor, campaignId: string, healt
     .eq("business_id", actor.businessId).eq("id", campaignId).eq("status", "active").select("id").maybeSingle();
 }
 
+type StoredChildren = Pick<Database["public"]["Tables"]["campaigns"]["Row"], "meta_campaign_id" | "meta_adset_id" | "meta_ad_ids" | "raw">;
+
+/**
+ * #890: write edited children onto the row as it is now, not as it was before a slow Meta edit, so
+ * `raw` written meanwhile (health, caps, another edit) is kept. Re-reads, then updates only while the
+ * stored ad set is unchanged; a concurrent children change matches no row and returns an error.
+ */
+export async function saveCampaignChildren(
+  actor: Actor, campaignId: string,
+  mirror: (current: StoredChildren) => Pick<StoredChildren, "meta_adset_id" | "meta_ad_ids" | "raw">,
+  database: Store = createAdminClient(),
+) {
+  await checkOwner(database, actor);
+  const { data, error } = await database.from("campaigns").select("meta_campaign_id, meta_adset_id, meta_ad_ids, raw")
+    .eq("business_id", actor.businessId).eq("id", campaignId).maybeSingle();
+  if (error || !data?.meta_adset_id) return { data: null, error: error ?? new Error("The campaign's stored children could not be read.") };
+  return database.from("campaigns").update(mirror(data))
+    .eq("business_id", actor.businessId).eq("id", campaignId).eq("meta_adset_id", data.meta_adset_id).select("id").single();
+}
+
 export async function deleteVerifiedCampaign(actor: Actor, campaignId: string, database: Store = createAdminClient()) {
   await checkOwner(database, actor);
   return database.from("campaigns").delete().eq("business_id", actor.businessId).eq("id", campaignId).select("id").single();

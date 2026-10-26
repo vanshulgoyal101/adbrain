@@ -21,7 +21,7 @@ describe("learning ledger snapshot (#588)", () => {
       budget: { dailyRupees: 300, adSets: 1, abTest: false },
       audience: { areas: ["Chandigarh", "Mohali", "Panchkula"], ageMin: 25, ageMax: 55, gender: "all", interests: ["Solar energy"], advantageAudience: null },
       placements: "advantage", formats: ["4:5", "9:16"],
-      whatsapp: { language: "en", prefill: "Hi! I'd like a free solar site survey.", greeting: "Welcome to Solaride." },
+      whatsapp: { language: "en", prefill: "Hi! I'd like a free solar site survey.", greeting: "Welcome to Solaride.", button: "none", source: "suggested" },
       creatives: [{ id: "c1", angle: "Solve a pain point", language: "en", textModel: "anthropic/claude-haiku-5.5", imageModel: "openai/gpt-image-2.5-flare" }],
       metaCreativeIds: [], cap: null,
     });
@@ -54,6 +54,13 @@ describe("learning ledger snapshot (#588)", () => {
     expect(await recordLaunchCap(database({}, { message: "down" }) as never, { campaignId: "a", cap })).toBe(false);
     expect(await recordLaunchCap({ from: () => { throw new Error("no table"); } } as never, { campaignId: "a", cap })).toBe(false);
     expect(updates).toHaveLength(1);
+  });
+
+  it("#840: records the saved WhatsApp message with its button, and ice breakers by name", () => {
+    const call = buildLaunchSnapshot({ ...base, prefill: { greeting: "Hi!", autofill: "Can I get more info on this", callButton: true }, prefillSource: "saved" });
+    expect(call.whatsapp).toEqual({ language: "en", prefill: "Can I get more info on this", greeting: "Hi!", button: "call", source: "saved" });
+    const questions = buildLaunchSnapshot({ ...base, prefill: { greeting: "Hi!", autofill: "", iceBreakers: ["Free site survey"] }, prefillSource: "saved" });
+    expect(questions.whatsapp).toMatchObject({ button: "ice_breakers", iceBreakers: ["Free site survey"] });
   });
 
   it("copes with lead-form launches and old creatives without a receipt", () => {

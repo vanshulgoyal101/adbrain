@@ -381,6 +381,26 @@ and provider accounts have different backup/retention boundaries. Test restore
 procedures before relying on them. Code rollback does not undo ads, restore rows,
 or recreate a deleted encryption key.
 
+**Backups and restore (#883, drilled Oct 26).** The Supabase org is on the free plan:
+`GET /v1/projects/kmzuxrvfrwwpwmoovwcp/database/backups` returns no backups and no PITR,
+so Supabase can't restore anything (paid backups are a CEO call, #884). Our own path:
+- `node scripts/db-export.mjs export <dir>` reads every `public`/`private` table, plus
+  `auth.users` (id, email) and Storage object paths, as JSON through the read-only
+  Management API (`BEGIN READ ONLY`). It took **100 s** for 56 tables and 33,287 rows (24 MB
+  database, mostly `product_events`). `<dir>` holds customer data and encrypted Meta
+  tokens: keep it private and delete it when done.
+- `node scripts/db-export.mjs restore <dir>` builds git's schema in a throwaway local
+  Postgres 17, loads every row with triggers and FK checks off, prints exported vs restored
+  counts and deletes the cluster. It took **4 s**, with 0 rows lost.
+- To bring production back from an export: create a new Supabase project, apply git's
+  schema the same way, load the export (the restore's insert step), set `META_TOKEN_ENCRYPTION_KEY`
+  to the same value so stored tokens decrypt, and point Vercel at it. Owners sign in again
+  by email.
+- **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
+  and brand uploads; regenerate or re-upload), and everything since the export ran.
+- Known drift, harmless: production still has the empty legacy tables `meta_credentials`,
+  `meta_billing_events` and `meta_billing_event_conflicts`, which git's schema no longer creates.
+
 Before cleanup, inventory rows plus creative references in campaigns/drafts/
 operations, dependent results/leads, external IDs and storage paths. Obtain a
 scoped approval, back up required evidence securely, compare the intended snapshot

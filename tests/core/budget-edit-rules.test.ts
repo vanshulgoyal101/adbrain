@@ -56,6 +56,28 @@ describe("core: budget edit money rules (#774)", () => {
     expect(!result.ok && result.message).toMatch(/weekly limit of ₹2,500/);
   });
 
+  it("says it couldn't check, not 'past your limit', when another campaign's budget can't be read", () => {
+    const result = checkBudgetEdit(input({ change: { dailyRupees: 300 }, weeklyLimitRupees: 25_000, otherActive: [{ id: "c2", status: "active", dailyBudget: null, spend: 0 }] }));
+    expect(!result.ok && result.message).toMatch(/couldn't check this against your weekly limit/);
+  });
+
+  // QA on #833: Meta won't switch an ad set from a daily budget to a lifetime one.
+  it("refuses adding a total cap to a run that has none", () => {
+    const uncapped = { status: "active", dailyRupees: 280, capRupees: null, endTime: null, spentRupees: 168 };
+    const result = checkBudgetEdit(input({ current: uncapped, approved: { dailyRupees: 280, capRupees: null }, change: { capRupees: 840 } }));
+    expect(!result.ok && result.message).toMatch(/start a new run/i);
+  });
+
+  // CTO on #833: an end-date extension adds no spend only because the run is capped.
+  it("an uncapped run needs a fresh confirmation to run longer, but not to stop sooner", () => {
+    const uncapped = { status: "active", dailyRupees: 280, capRupees: null, endTime: "2026-10-26T14:24:00Z", spentRupees: 168 };
+    const edit = (endTime: string) => checkBudgetEdit(input({ current: uncapped, approved: { dailyRupees: 280, capRupees: null }, change: { endTime } }));
+    expect(edit("2026-10-29T14:24:00Z")).toMatchObject({ ok: true, needsConfirmation: true });
+    expect(edit("2026-10-25T14:24:00Z")).toMatchObject({ ok: true, needsConfirmation: false });
+    const endless = checkBudgetEdit(input({ current: { ...uncapped, endTime: null }, approved: { dailyRupees: 280, capRupees: null }, change: { endTime: "2026-10-29T14:24:00Z" } }));
+    expect(endless).toMatchObject({ ok: true, needsConfirmation: false });
+  });
+
   // The run may still spend up to the new cap minus what it has spent; Meta's account limit counts spend (no GST).
   it("refuses a cap rise the own account's spending limit can't cover", () => {
     const account = (roomPaise: number) => ({ spendCapPaise: 500_000, amountSpentPaise: 500_000 - roomPaise, roomPaise, prepay: false });
