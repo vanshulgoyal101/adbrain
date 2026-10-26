@@ -1,0 +1,73 @@
+[
+  {
+    "method": "GET",
+    "path": "120253712459000526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253712459000526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712459000526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253712459810526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHJwejNrNHJLODA1VnFWS1dZAVmNlcDJ2V1dQN3RocFVJcFh2blBZAdmt3Ym41S25ocjlEblRKS2w2cTdod0ZACZA1hVQjZAxM29VR1BfbnFGdWl5WFdFVjBn",
+          "after": "QVFIVHJwejNrNHJLODA1VnFWS1dZAVmNlcDJ2V1dQN3RocFVJcFh2blBZAdmt3Ym41S25ocjlEblRKS2w2cTdod0ZACZA1hVQjZAxM29VR1BfbnFGdWl5WFdFVjBn"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712459810526?fields=id%2Ccampaign_id%2Cstatus%2Cpromoted_object%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253712459810526",
+      "campaign_id": "120253712459000526",
+      "status": "PAUSED",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false
+      },
+      "daily_budget": "15000",
+      "lifetime_budget": "0",
+      "budget_remaining": "2548"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253712459810526",
+    "form": {
+      "daily_budget": "100",
+      "execution_options": "[\"validate_only\"]"
+    },
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Invalid parameter",
+        "type": "OAuthException",
+        "code": 100,
+        "error_data": "{\"blame_field_specs\":[[\"daily_budget\"]]}",
+        "error_subcode": 1885272,
+        "is_transient": false,
+        "error_user_title": "बजट बहुत कम है",
+        "error_user_msg": "आपके विज्ञापन सेट का बजट ₹95.46 से ज़्यादा होना चाहिए, नहीं तो आपके विज्ञापन डिलीवर नहीं होंगे.",
+        "fbtrace_id": "AXFCVDdej4ZpbEyNNnSltAy"
+      }
+    }
+  }
+]

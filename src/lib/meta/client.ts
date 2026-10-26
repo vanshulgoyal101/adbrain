@@ -169,6 +169,11 @@ export type AudienceChanges = {
   gender?: "all" | "men" | "women";
 };
 export type AudienceEdit = { mode: "patch" | "rebuild"; validated: boolean; adSetId: string; adIds: string[]; retiredAdSetId: string | null };
+/** #774: an ad set's budget as Meta reports it, in paise. A capped run has a lifetime budget and an end time. */
+export type AdSetBudget = {
+  adSetId: string; status: string; dailyBudgetPaise: number; lifetimeBudgetPaise: number; remainingPaise: number; endTime: string | null;
+};
+export type AdSetBudgetChange = { dailyBudgetPaise?: number; lifetimeBudgetPaise?: number; endTime?: string };
 
 /** Interests (or other detailed targeting) make Meta refuse an in-place targeting update (100/1359202). */
 export function hasInterests(targeting: Record<string, unknown>): boolean {
@@ -300,6 +305,9 @@ const META_SUBCODE_MESSAGES: Record<number, (userMessage: string) => string> = {
   2446307: userMessage =>
     `Meta's minimum campaign spending limit for this currency is ${userMessage.match(/₹\s?[\d,]+(?:\.\d+)?/)?.[0] ?? "higher than this amount"}.`,
   1885257: () => "Meta does not allow changing a daily budget ad set to a lifetime budget.",
+  // #774: recorded in tests/core/fixtures/meta/edit-budget-refused.json (the text arrives in the token user's locale).
+  1885272: userMessage =>
+    `That budget is below Meta's minimum${userMessage.match(/₹\s?[\d,]+(?:\.\d+)?/) ? ` of ${userMessage.match(/₹\s?[\d,]+(?:\.\d+)?/)![0]} a day` : ""}. Choose a higher budget.`,
 };
 
 /** English text for a Graph error; error_user_msg follows the token user's locale (#185). */
@@ -385,6 +393,7 @@ export function friendlyMetaError(
   if (/minimum campaign spending limit/.test(normalized)) {
     return `${message} The campaign stays paused.`;
   }
+  if (/below meta's minimum/.test(normalized)) return message;
   if (/bid_strategy|bid strategy|bidding strategy/.test(normalized)) {
     return "Meta rejected the bidding strategy. Changing the daily budget alone may not fix this; the campaign bidding configuration needs review.";
   }
@@ -1925,6 +1934,64 @@ export class MetaClient {
       await this.graph(encodeURIComponent(newAdSetId), { method: "DELETE" }).catch(() => undefined);
       throw error instanceof CampaignDeliveryError ? new CampaignDeliveryError(`${error.message} The old ad set is unchanged and the campaign stays paused.`) : error;
     }
+  }
+
+  /** #774: an ad set's budget and end time, verified to belong to the campaign and the bound Page. */
+  async readAdSetBudget(campaignId: string, adSetId: string): Promise<AdSetBudget> {
+    const adSet = await this.graph<{
+      id?: string; campaign_id?: string; status?: string; promoted_object?: { page_id?: string };
+      daily_budget?: string; lifetime_budget?: string; budget_remaining?: string; end_time?: string;
+    }>(`${encodeURIComponent(adSetId)}?fields=id,campaign_id,status,promoted_object,daily_budget,lifetime_budget,budget_remaining,end_time`);
+    const paise = (value: string | undefined) => value === undefined ? 0 : /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : Number.NaN;
+    const budget = {
+      adSetId, status: adSet.status ?? "", dailyBudgetPaise: paise(adSet.daily_budget), lifetimeBudgetPaise: paise(adSet.lifetime_budget),
+      remainingPaise: paise(adSet.budget_remaining), endTime: adSet.end_time && Number.isFinite(Date.parse(adSet.end_time)) ? new Date(Date.parse(adSet.end_time)).toISOString() : null,
+    };
+    // Exactly one of a daily or a lifetime budget; a lifetime budget always has an end time.
+    if (adSet.id !== adSetId || adSet.campaign_id !== campaignId || adSet.promoted_object?.page_id !== this.creds.pageId
+      || !["ACTIVE", "PAUSED"].includes(budget.status) || ![budget.dailyBudgetPaise, budget.lifetimeBudgetPaise, budget.remainingPaise].every(Number.isSafeInteger)
+      || (budget.dailyBudgetPaise > 0) === (budget.lifetimeBudgetPaise > 0) || (budget.lifetimeBudgetPaise > 0 && !budget.endTime)) {
+      throw new CampaignDeliveryError("The ad set's budget could not be verified. Refresh the campaign and try again.");
+    }
+    return budget;
+  }
+
+  /**
+   * #774: change a launched ad set's daily budget, lifetime budget (a capped run's total) or end time in
+   * place. Meta doesn't send budget or schedule edits back to review, so this never rebuilds and never
+   * changes status. `validateOnly` changes nothing; otherwise the ad set is read back and must match.
+   */
+  async editAdSetBudget(campaignId: string, adSetId: string, change: AdSetBudgetChange, options: { validateOnly?: boolean } = {}): Promise<AdSetBudget> {
+    const positive = (value: number | undefined) => value === undefined || (Number.isSafeInteger(value) && value > 0);
+    const endSeconds = change.endTime === undefined ? undefined : Math.floor(Date.parse(change.endTime) / 1000);
+    if ((change.dailyBudgetPaise === undefined && change.lifetimeBudgetPaise === undefined && change.endTime === undefined)
+      || !positive(change.dailyBudgetPaise) || !positive(change.lifetimeBudgetPaise)
+      || (change.dailyBudgetPaise !== undefined && change.lifetimeBudgetPaise !== undefined)
+      || (endSeconds !== undefined && !(endSeconds * 1000 > Date.now()))) {
+      throw new MetaError("Invalid budget change.");
+    }
+    await this.verifyCampaignBinding(campaignId);
+    const before = await this.readAdSetBudget(campaignId, adSetId);
+    if ((change.dailyBudgetPaise !== undefined && !before.dailyBudgetPaise) || (change.lifetimeBudgetPaise !== undefined && !before.lifetimeBudgetPaise)) {
+      throw new CampaignDeliveryError("This ad set's budget type changed in Meta. Refresh the campaign and try again.");
+    }
+    const form: Record<string, string> = {
+      ...(change.dailyBudgetPaise !== undefined ? { daily_budget: String(change.dailyBudgetPaise) } : {}),
+      ...(change.lifetimeBudgetPaise !== undefined ? { lifetime_budget: String(change.lifetimeBudgetPaise) } : {}),
+      ...(endSeconds !== undefined ? { end_time: new Date(endSeconds * 1000).toISOString() } : {}),
+      ...(options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {}),
+    };
+    const written = await this.graph<{ success?: boolean }>(encodeURIComponent(adSetId), { method: "POST", form });
+    if (written.success !== true) throw new CampaignDeliveryError("Meta did not accept the new budget. Nothing changed.");
+    if (options.validateOnly) return before;
+    const after = await this.readAdSetBudget(campaignId, adSetId);
+    if (after.status !== before.status
+      || after.dailyBudgetPaise !== (change.dailyBudgetPaise ?? before.dailyBudgetPaise)
+      || after.lifetimeBudgetPaise !== (change.lifetimeBudgetPaise ?? before.lifetimeBudgetPaise)
+      || (endSeconds !== undefined && Math.floor(Date.parse(after.endTime ?? "") / 1000) !== endSeconds)) {
+      throw new CampaignDeliveryError("Meta did not confirm the new budget. Check the campaign in Meta before changing it again.");
+    }
+    return after;
   }
 
   /** Pause or resume a campaign after verifying its account and Page. */
