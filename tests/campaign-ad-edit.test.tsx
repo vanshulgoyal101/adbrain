@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { Campaigns } from "@/components/campaigns";
 import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
@@ -132,7 +133,10 @@ describe("campaign results: Share on WhatsApp (#372)", () => {
     const result = { campaign_id: live.id, impressions: 900, clicks: 40, leads: 0, spend: 412, cpl: null, conversations: 6, cost_per_conversation: 68.7,
       destination: "whatsapp", fetched_at: "2026-10-24T09:00:00Z" } as unknown as CampaignResult;
     render(<Campaigns business={business} approved={[creative]} initialCampaigns={[live]} initialResults={{ [live.id]: result }} leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
-    const link = await screen.findByRole("link", { name: "Share results on WhatsApp" });
+    // #847: Share sits in the card's More menu.
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "More actions for Solaride Tricity" }));
+    const link = await screen.findByRole("menuitem", { name: "Share results on WhatsApp" });
     const text = decodeURIComponent(link.getAttribute("href")!.replace("https://wa.me/?text=", ""));
     expect(text).toBe("Solaride Tricity\nSpent ₹412 (₹280 a day)\n6 WhatsApp chats\n₹68.70 per chat\nNext: running fine, nothing to do.");
     expect(link).toHaveAttribute("target", "_blank");

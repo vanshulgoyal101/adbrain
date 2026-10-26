@@ -96,7 +96,9 @@ describe("Campaigns rows (#403 S5)", () => {
     view({ [active.id]: result });
     const pausedRow = (await screen.findByRole("heading", { name: "Rooftop solar" })).closest("article") as HTMLElement;
     const activeRow = screen.getByRole("heading", { name: "Solar EMI" }).closest("article") as HTMLElement;
-    expect(within(pausedRow).getByText(/No results yet/)).toBeInTheDocument();
+    // #847: one line for the list instead of a sentence on each row.
+    expect(within(pausedRow).queryByText(/No results yet/)).toBeNull();
+    expect(screen.getAllByText(/No results yet for 1 of these campaigns/)).toHaveLength(1);
     expect(within(activeRow).queryByText(/No results yet/)).toBeNull();
     expect(within(activeRow).getByText("1,200")).toBeInTheDocument();
   });

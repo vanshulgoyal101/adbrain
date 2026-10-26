@@ -46,27 +46,30 @@ export function WhatsAppReadyChecklist({ businessId }: { businessId: string }) {
   }
 
   return (
-    <section aria-labelledby={titleId} className="rounded-lg border border-green-200 bg-green-50/60 p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p id={titleId} className="flex items-center gap-2 font-semibold text-slate-900">
-          <MessageCircle className="h-4 w-4 text-green-700" aria-hidden="true" />WhatsApp ready?
-        </p>
-        <span className="text-sm text-slate-600">{done.length} of {ITEMS.length} ready</span>
-      </div>
-      <p className="mt-1 text-sm text-slate-600">People who tap your ad land in your WhatsApp. These make them send the message.</p>
-      <ul className="mt-2 flex flex-col">
-        {ITEMS.map((item) => (
-          <li key={item.id}>
-            <label className="flex min-h-11 cursor-pointer items-start gap-3 py-2">
-              <input type="checkbox" checked={done.includes(item.id)} onChange={() => toggle(item.id)} className="mt-0.5 size-5 shrink-0 accent-primary" />
-              <span className="text-sm">
-                <span className="font-medium text-slate-900">{item.label}</span>
-                <span className="block text-slate-600">{item.hint}</span>
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
+    // #847: one quiet line that opens, instead of a green panel above every campaign.
+    <section aria-labelledby={titleId}>
+      <details className="group border-y border-slate-200">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 py-2 [&::-webkit-details-marker]:hidden">
+          <span id={titleId} className="flex items-center gap-2 text-sm font-medium text-slate-900">
+            <MessageCircle className="h-4 w-4 text-slate-500" aria-hidden="true" />WhatsApp ready?
+          </span>
+          <span className="text-sm text-slate-600">{done.length} of {ITEMS.length} ready</span>
+        </summary>
+        <p className="text-sm text-slate-600">People who tap your ad land in your WhatsApp. These make them send the message.</p>
+        <ul className="mt-2 flex flex-col pb-2">
+          {ITEMS.map((item) => (
+            <li key={item.id}>
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 py-2">
+                <input type="checkbox" checked={done.includes(item.id)} onChange={() => toggle(item.id)} className="mt-0.5 size-5 shrink-0 accent-primary" />
+                <span className="text-sm">
+                  <span className="font-medium text-slate-900">{item.label}</span>
+                  <span className="block text-slate-600">{item.hint}</span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   );
 }
