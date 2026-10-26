@@ -92,6 +92,9 @@ const STEPS = [
 ];
 const RANK: Record<LiveAd["stage"], number> = { starting: 0, queued: 0, writing: 1, checking: 2, fixing: 2, image: 3, ready: 4, failed: 0 };
 
+/** p90 of a 3-ad Create on production models: 66 s serial, 75 s parallel (#713 timing run, Oct 26). */
+export const CREATE_PROMISE_MS = 90_000;
+
 function elapsed(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -121,7 +124,8 @@ export function CreateProgress({ ads, renderReady, onUseSaved }: {
         <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
           <span className="font-medium text-slate-900">Creating {ads.length} ads</span>
           <span className="tabular-nums text-slate-500">
-            {elapsed(now - startedAt)} elapsed · usually about a minute
+            {elapsed(now - startedAt)} elapsed ·{" "}
+            {now - startedAt < CREATE_PROMISE_MS ? "usually under 1½ minutes" : "taking longer than usual, still going"}
           </span>
         </p>
         <div
