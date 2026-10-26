@@ -306,6 +306,30 @@ describe("campaign sync feedback", () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
   });
 
+  // #759: an owner on their own ad account needs no account spending limit; the total limit on Meta is the guard.
+  it.each([
+    [false, "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above.", true],
+    [true, "Funded on Meta: set a spending limit on the Meta ad account first.", false],
+  ])("with no account spending limit and spendLimitRequired=%s, the review says so and activation is %s", async (spendLimitRequired, text, enabled) => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    const delivery = {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+      adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    };
+    const funding = { spendCapPaise: 0, amountSpentPaise: 4237, roomPaise: 0, prepay: false };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/campaigns/campaign-1"
+      ? Response.json({ delivery, funding, spendLimitRequired })
+      : Response.json({ campaigns: [], nextCursor: null })));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Approve total and activate" });
+    if (enabled) expect(button).toBeEnabled(); else expect(button).toBeDisabled();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
+  });
+
   // #662 (QA, 390 px): a synced campaign's Resume could never work and failed off-screen.
   it("sends a paused campaign AdBrain didn't launch to Ads Manager, with the reason on its card", async () => {
     const synced = { id: "campaign-9", business_id: business.id, name: "new year", status: "paused", meta_campaign_id: "meta-9", meta_ad_account_id: "act_1", daily_budget: 500, raw: null } as unknown as Campaign;

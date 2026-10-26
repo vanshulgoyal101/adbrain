@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ManagedBilling } from "@/components/managed-billing";
+import { BillingSection, ManagedBilling } from "@/components/managed-billing";
 import { OPERATOR_MANAGED_POLICY } from "@/lib/payments/production-config";
 import { TestCheckout, type TestCheckoutOptions } from "@/components/test-checkout";
 import { ProductionCheckout } from "@/components/production-checkout";
@@ -491,6 +491,22 @@ describe("production checkout with synthetic responses", () => {
 });
 
 describe("managed billing settings", () => {
+  // #759: only where AdBrain holds ad money (managed) is there anything to pay; own-account owners pay Meta.
+  it.each(["own", "operator", null] as const)("a %s business sees no Pay, Ad money or balance anywhere", (mode) => {
+    render(<BillingSection mode={mode} connection={connected} testBusinessId={businessId} liveBusinessId={businessId} />);
+    expect(screen.queryByRole("button", { name: /pay/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ad money|Pay any amount|Managed billing/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("customer-balance")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    if (mode === "own") expect(screen.getByText("You pay Meta directly from your ad account. AdBrain's pilot is free.")).toBeInTheDocument();
+  });
+
+  it("a managed business keeps the live checkout and allowance", () => {
+    fetchMock.mockResolvedValue(Response.json({ policy: null, orders: [] }));
+    render(<BillingSection mode="managed" connection={connected} liveBusinessId={businessId} />);
+    expect(screen.getByTestId("customer-balance")).toHaveAttribute("data-business-id", businessId);
+  });
+
   it("shows the live business's checkout and allowance, updating both when the business changes", async () => {
     const otherBusinessId = "33333333-3333-4333-8333-333333333333";
     fetchMock.mockResolvedValue(Response.json({ policy: null, orders: [] }));
