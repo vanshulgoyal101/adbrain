@@ -174,14 +174,13 @@ describe("core: Regenerate retries a recorded over-long headline once, then a pl
   });
 });
 
-describe("core: Regenerate retries a recorded shortened quote once (#281)", () => {
-  it("feeds the shortened quote back to the retry and saves the fixed reply", async () => {
+describe("core: Regenerate saves a recorded quote with an added 'the' on the first try (#281, #713)", () => {
+  it("stores the owner's own words instead of spending a retry", async () => {
     expect(concept(SHORTENED_QUOTE).sourceQuotes).toContain(SHORTENED);
     replay(SHORTENED_QUOTE, VALID);
     const { status, body } = await regenerate();
     expect(status, JSON.stringify(body)).toBe(200);
-    expect(prompts).toHaveLength(2);
-    expect(prompts[1]).toContain(SHORTENED);
+    expect(prompts).toHaveLength(1);
     expect(mocks.updates).toHaveLength(1);
   });
 });

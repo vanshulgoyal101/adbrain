@@ -179,6 +179,8 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    - Case and spacing variants of a CTA or `textPlacement` are mapped, and `left` becomes `center`.
    - An empty or over-long `supportingText` becomes null, and empty quotes are dropped.
    - A quote that differs from a fact only in case is stored as the fact's exact text.
+   - A quote that only adds a leading "the", "a" or "an" to a fact (20+ characters after it) is
+     stored as the fact's own words (#713).
    - Primary text written as one paragraph over 125 characters is split into
      sentence lines (words unchanged), because Meta shows about 125 characters on
      mobile before "See more" (#194).
