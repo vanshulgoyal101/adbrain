@@ -84,6 +84,7 @@ export async function executeReviewedCampaign(input: {
             ? renderStoriesWithin(creativeInputs.map(creative => creative.generation), STORY_RENDER_BUDGET_MS, code => storyFallback("render", code))
             : creativeInputs.map(() => null);
           let storyRendered = false;
+          let sentTargetings: string[] | undefined;
           for (const story of storyImages) void Promise.resolve(story).then(image => { if (image) storyRendered = true; });
           // #493: the ask names the city only when the campaign targets one (same areas as targeting).
           const areas = draftAreaNames(draft.input, business.locations ?? []);
@@ -112,21 +113,28 @@ export async function executeReviewedCampaign(input: {
             onCheckpoint,
             onStoryFallback: storyFallback,
             // #419 item 2(a): the exact payloads sent, checked against Meta's new-advertiser guidance.
-            onPlanned: (plan) => recordProductEvent({
-              kind: "workflow", name: "campaign.plan_check", businessId: actor.businessId,
-              ...planCheckEvent(checkPlan(plan), draft.input.destination ?? "instant_form"),
-            }),
+            onPlanned: (plan) => {
+              sentTargetings = plan.adSets.map(form => form.targeting ?? "");
+              recordProductEvent({
+                kind: "workflow", name: "campaign.plan_check", businessId: actor.businessId,
+                ...planCheckEvent(checkPlan(plan), draft.input.destination ?? "instant_form"),
+              });
+            },
           });
-          // #588: what this launch tried, for the learning ledger (saved once the campaign row exists).
-          launchSnapshot = buildLaunchSnapshot({
-            destination: metaResult.destination, objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
-            dailyBudgetRupees: draft.input.dailyBudgetRupees, adSetCount: metaResult.adSetIds.length || 1, abTest: Boolean(draft.input.abTest),
-            areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
-            interests: (review.audienceInterests ?? []).map(interest => interest.name),
-            whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill,
-            storyFormat: storyRendered,
-            creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
-          });
+          // #588: what this launch tried, for the learning ledger (saved once the campaign row exists). Never fails the launch (#603).
+          try {
+            launchSnapshot = buildLaunchSnapshot({
+              destination: metaResult.destination, objective: metaResult.destination === "whatsapp" ? "OUTCOME_ENGAGEMENT" : "leads",
+              dailyBudgetRupees: draft.input.dailyBudgetRupees, adSetCount: metaResult.adSetIds.length || 1, abTest: Boolean(draft.input.abTest),
+              areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
+              interests: (review.audienceInterests ?? []).map(interest => interest.name),
+              whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill,
+              storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
+              creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
+            });
+          } catch {
+            launchSnapshot = null;
+          }
           return metaResult;
         });
         return { externalIds: [created.campaignId, ...created.adSetIds, ...created.adIds] };
