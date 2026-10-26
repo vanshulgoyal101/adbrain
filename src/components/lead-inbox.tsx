@@ -191,15 +191,16 @@ export function LeadInbox({
         error?: string;
       };
       if ((!res.ok && !(res.status === 502 && data.sync?.hasMore)) || !Array.isArray(data.leads)) {
-        setError(data.error ?? "Couldn't sync leads. Your existing enquiries are still available.");
+        setError(data.error ?? "Couldn't check Meta for enquiries. The ones below are still here.");
         return;
       }
       page.refresh();
       setSyncId(data.sync?.hasMore ? data.sync.id : null);
       if (data.failedForms?.length || data.sync?.state === "partial" || data.sync?.hasMore) {
-        const failures = data.failedForms?.length ? ` Could not read: ${data.failedForms.map(form => form.name).join(", ")}.` :
-          !res.ok ? " Could not check all forms. Retry to check remaining enquiries." : " More enquiries remain to be checked.";
-        setWarning(`Sync incomplete.${failures} ${data.imported ?? 0} new leads imported.`);
+        const imported = data.imported ?? 0;
+        const soFar = `${imported} new ${imported === 1 ? "enquiry" : "enquiries"} so far`;
+        setWarning(data.failedForms?.length ? `Couldn't read: ${data.failedForms.map(form => form.name).join(", ")}. ${soFar}.` :
+          !res.ok ? `Some forms didn't answer. ${soFar}; Keep checking to try again.` : `Still checking Meta. ${soFar}; Keep checking to finish.`);
         return;
       }
       if (syncStorageKey && data.sync?.state === "complete") {
@@ -207,11 +208,11 @@ export function LeadInbox({
       }
       setNotice(
         data.imported
-          ? `Synced ${data.imported} lead${data.imported === 1 ? "" : "s"} from Meta.`
-          : data.sync?.state === "complete" ? "You're up to date — no new leads." : "Sync finished. Completion could not be verified.",
+          ? `${data.imported} new ${data.imported === 1 ? "enquiry" : "enquiries"} from Meta.`
+          : data.sync?.state === "complete" ? "Up to date. No new enquiries." : "Checked Meta, but couldn't confirm everything was read.",
       );
     } catch {
-      setError("Couldn't sync leads — check your connection.");
+      setError("Couldn't check Meta for enquiries. Check your connection.");
     } finally {
       setSyncing(false);
     }
@@ -253,7 +254,7 @@ export function LeadInbox({
     <div className={styles.inbox}>
       {!metaReady && (
         <Alert variant="warning">
-          Meta isn’t configured, so leads can’t be synced yet. <Link href="/settings" className="font-semibold underline">Connect your account in Settings</Link>.
+          Meta isn’t connected, so new enquiries can’t come in yet. <Link href="/settings" className="font-semibold underline">Connect your account in Settings</Link>.
         </Alert>
       )}
 
@@ -269,14 +270,14 @@ export function LeadInbox({
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            {syncId ? "Resume sync" : "Sync leads"}
+            {syncId ? "Keep checking" : "Check for enquiries"}
           </Button>
         )}
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}
-      {warning && <Alert variant="warning">{warning}</Alert>}
-      {notice && <Alert variant="success">{notice}</Alert>}
+      {/* #847: sync results are news, not alarms; the list below stays usable either way. */}
+      <p aria-live="polite" className={warning || notice ? "text-sm text-slate-600" : "sr-only"}>{warning ?? notice}</p>
       {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>Retry list</button></Alert>}
 
       <div>
@@ -302,7 +303,7 @@ export function LeadInbox({
           </select>
           </div>
         </div>
-        <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : `${leads.length} of ${page.total} enquiries`}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
+        <div className={styles.resultCount}><span role="status">{page.loading ? "Loading enquiries..." : hasFilters || leads.length < page.total ? `${leads.length} of ${page.total} enquiries` : ""}</span>{hasFilters && leads.length > 0 && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>
       </div>
 
       {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>
@@ -383,7 +384,7 @@ export function LeadInbox({
           <summary className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             <MessageCircle className="h-4 w-4 text-blue-600" />
             WhatsApp digest
-            <span className="ml-auto text-xs font-normal text-slate-500">Loaded enquiries · Last 7 days · Up to 10 contacts</span>
+            <span className="ml-auto text-xs font-normal text-slate-500">Last 7 days, up to 10 people</span>
           </summary>
           <pre
             className="scrollbar-stable max-h-72 overflow-y-scroll whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm text-slate-700"

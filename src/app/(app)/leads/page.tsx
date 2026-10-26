@@ -25,7 +25,7 @@ export default async function LeadsPage() {
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your business and launch a campaign first — leads will
+              Set up your business and launch a campaign first. Enquiries
               land here.
             </p>
             <Link href="/brand">
@@ -52,10 +52,9 @@ export default async function LeadsPage() {
       <PageHeader
         title="Enquiries"
         titleInTopBarOnPhone
-        description="People who responded to your campaigns. Find their details and make the next conversation count."
+        description="People who responded to your ads."
       />
       <div className="mt-6 max-sm:mt-4">
-        <WhatsAppChats rows={chatRows} />
         <LeadInbox
           key={`${business.owner_id}:${business.id}`}
           businessName={business.name}
@@ -65,6 +64,7 @@ export default async function LeadsPage() {
           metaReady={metaConnection.ready}
           syncScope={`${business.owner_id}:${business.id}:${metaConnection.adAccountId ?? ""}:${metaConnection.pageId ?? ""}`}
         />
+        <WhatsAppChats rows={chatRows} />
       </div>
     </div>
   );
