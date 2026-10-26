@@ -87,7 +87,7 @@ import { parsePhone } from "@/lib/brand/countries";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
@@ -1989,7 +1989,18 @@ function BusinessCampaigns({
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
                 onClose={() => setAdEdit(null)}
-                onSaved={(message) => { setCardNotice({ id: adEdit.id, message }); setAdEdit(null); }}
+                onSaved={(message, { adId, change }) => {
+                  // Mirror the server's raw.adWords, so reopening the editor shows the new words.
+                  setCampaigns((list) => list.map((item) => {
+                    if (item.id !== adEdit.id) return item;
+                    const raw = (item.raw && typeof item.raw === "object" && !Array.isArray(item.raw) ? item.raw : {}) as Record<string, Json>;
+                    const words = (raw.adWords && typeof raw.adWords === "object" && !Array.isArray(raw.adWords) ? raw.adWords : {}) as Record<string, Json>;
+                    const previous = (words[adId] && typeof words[adId] === "object" ? words[adId] : {}) as Record<string, Json>;
+                    return { ...item, raw: { ...raw, adWords: { ...words, [adId]: { ...previous, ...change } } } };
+                  }));
+                  setCardNotice({ id: adEdit.id, message });
+                  setAdEdit(null);
+                }}
               />
             )}
             {visibleCampaigns.map((c) => {
