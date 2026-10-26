@@ -7,7 +7,7 @@ const now = Date.parse("2026-10-24T14:24:00Z");
 function input(over: Partial<BudgetEditInput> = {}): BudgetEditInput {
   return {
     current: { status: "active", dailyRupees: 280, capRupees: 840, endTime: "2026-10-26T14:24:00Z", spentRupees: 168 },
-    approved: { dailyRupees: 280, capRupees: 840 },
+    approved: { dailyRupees: 280, capRupees: 840, capDays: 3 },
     change: {},
     otherActive: [],
     weeklyLimitRupees: null,
@@ -94,5 +94,25 @@ describe("core: budget edit money rules (#774)", () => {
   it("refuses a managed cap rise past the AdBrain allowance", () => {
     const result = checkBudgetEdit(input({ change: { capRupees: 940 }, funding: { mode: "managed", account: null, allowancePaise: 50_000 } }));
     expect(!result.ok && result.message).toMatch(/advertising funds/);
+  });
+
+  // Reviewer on #901: a capped run spends (cap − spent) over the days left, so a shorter end or a bigger cap
+  // with the same end raises Meta's daily pace above the approved cap / days.
+  describe("a capped run's daily pace", () => {
+    it("a shorter end date that speeds spending up needs a fresh confirmation and says the new pace", () => {
+      const result = checkBudgetEdit(input({ current: { status: "paused", dailyRupees: 280, capRupees: 840, endTime: "2026-10-26T14:24:00Z", spentRupees: 168 }, change: { endTime: "2026-10-25T14:24:00Z" } }));
+      expect(result).toMatchObject({ ok: true, needsConfirmation: true });
+      expect(result.ok && result.notices.join(" ")).toContain("about ₹672 a day");
+    });
+
+    it("a running capped run's faster pace is checked against the weekly limit in Settings", () => {
+      const result = checkBudgetEdit(input({ change: { capRupees: 1_200 }, weeklyLimitRupees: 2_000 }));
+      expect(result).toEqual({ ok: false, message: "About ₹516 a day would take your campaigns past your weekly limit of ₹2,000 in Settings." });
+      expect(checkBudgetEdit(input({ change: { capRupees: 1_200 }, weeklyLimitRupees: 5_000 }))).toMatchObject({ ok: true, needsConfirmation: true });
+    });
+
+    it("a pace at or below the approved one needs no confirmation", () => {
+      expect(checkBudgetEdit(input({ change: { capRupees: 700 } }))).toMatchObject({ ok: true, needsConfirmation: false, notices: [] });
+    });
   });
 });
