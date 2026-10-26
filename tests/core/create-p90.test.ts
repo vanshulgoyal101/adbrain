@@ -11,6 +11,14 @@ import { openAIReply, requestBody, settleInVirtualTime, useVirtualDeadlines, wai
 const TARGET_MS = 30_000;
 const imageMs = Object.fromEntries(run4.angles.map((angle) => [angle.angleName, angle.imageLatencyMs]));
 const painTakes = haiku.painPointV738.replies;
+type Reply = (typeof haiku.responses)[number];
+// #713 (Dev): CREATIVE_REASONING_EFFORT=low, recorded Oct 26: 3 takes × 3 angles, 8.9–13.4 s (medium: 13.2–17.7 s).
+// The worst run with no repair: every angle's slowest valid take. Runs that need a repair (2 of 9 takes failed
+// validation; parallel siblings can share a headline) take a second concept call and are not covered here.
+const lowSlowest = haiku.responses.map(({ angleName }) =>
+  haiku.byEffort.low.replies
+    .filter((reply) => reply.angleName === angleName && reply.rulesAtRecording.length === 0)
+    .reduce((slowest, reply) => (reply.latencyMs > slowest.latencyMs ? reply : slowest)));
 
 let imageDelay = () => 0;
 vi.mock("@/lib/imageGen", () => ({
@@ -30,9 +38,11 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-async function runMs(schedule: "serial" | "parallel", pain: (typeof painTakes)[number]): Promise<number> {
+const withPain = (pain: (typeof painTakes)[number]): Reply[] =>
+  haiku.responses.map((reply) => reply.angleName === pain.angleName ? { ...reply, ...pain } : reply);
+
+async function runMs(schedule: "serial" | "parallel", replies: Pick<Reply, "angleName" | "content" | "latencyMs" | "usage">[]): Promise<number> {
   vi.stubEnv("CREATIVE_CONCEPT_SCHEDULE", schedule);
-  const replies = haiku.responses.map((reply) => reply.angleName === pain.angleName ? { ...reply, ...pain } : reply);
   vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
     const body = JSON.parse(requestBody(init));
     const reply = replies.find(({ angleName }) => body.messages[1].content.includes(angleName))!;
@@ -62,13 +72,18 @@ const seconds = (runs: number[]) => `runs ${runs.map((ms) => (ms / 1000).toFixed
 describe("core: Create p90 on recorded latencies (QA, #713)", () => {
   it("serial concepts (today's default) miss the 30 s target", async () => {
     const runs: number[] = [];
-    for (const take of painTakes) runs.push(await runMs("serial", take));
+    for (const take of painTakes) runs.push(await runMs("serial", withPain(take)));
     expect(p90(runs), seconds(runs)).toBeGreaterThan(TARGET_MS);
   });
 
-  it("parallel concepts: Create p90 < 30 s", async () => {
+  it("parallel concepts at medium reasoning (today's effort) still miss it", async () => {
     const runs: number[] = [];
-    for (const take of painTakes) runs.push(await runMs("parallel", take));
+    for (const take of painTakes) runs.push(await runMs("parallel", withPain(take)));
+    expect(p90(runs), seconds(runs)).toBeGreaterThan(TARGET_MS);
+  });
+
+  it("parallel concepts at low reasoning: a run with no repair stays under 30 s, even on the slowest takes", async () => {
+    const runs = [await runMs("parallel", lowSlowest)];
     expect(p90(runs), seconds(runs)).toBeLessThan(TARGET_MS);
   });
 });
