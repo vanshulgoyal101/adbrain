@@ -30,6 +30,7 @@ const provisionLeaseMigration = await readFile(join(root, "db/migrations/2026102
 const managedSpendCapsMigration = await readFile(join(root, "db/migrations/20261025_managed_spend_caps.sql"), "utf8");
 const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261025_whatsapp_number_bindings.sql"), "utf8");
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
+const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
@@ -1333,6 +1334,52 @@ async function verifyCampaignLearnings(db, database) {
   });
 }
 
+async function verifyCampaignEditOperations(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Edits'),($3,$4,'Other edits')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300),($3,$4,300)", [campaign, business, otherCampaign, otherBusiness]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  const hash = "a".repeat(64);
+  await check(`${database}: edit envelope: owners read only their own rows; only the service role writes; one row per key (#773)`, async () => {
+    await db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'audience','edit-key-1',$3),($4,$5,'budget','edit-key-2',$3)",
+      [business, campaign, hash, otherBusiness, otherCampaign]);
+    await as("service_role", null, async (session) => {
+      await session.query("update public.campaign_edit_operations set state='running', phase='edit', transmitted=true where campaign_id=$1", [campaign]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'audience','edit-key-1',$3)", [business, campaign, hash]), { code: "23505" });
+      await session.query("rollback to savepoint s");
+      for (const values of [["'other'", "'edit-key-3'", `'${hash}'`], ["'audience'", "'short'", `'${hash}'`], ["'audience'", "'edit-key-4'", "'not-a-hash'"]]) {
+        await assert.rejects(session.query(`insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,${values.join(",")})`, [business, campaign]), { code: "23514" });
+        await session.query("rollback to savepoint s");
+      }
+      await assert.rejects(session.query("update public.campaign_edit_operations set state='done' where campaign_id=$1", [campaign]), { code: "23514" });
+    });
+    await as("authenticated", owner, async (session) => {
+      assert.deepEqual((await session.query("select campaign_id, state, phase, transmitted from public.campaign_edit_operations")).rows, [{ campaign_id: campaign, state: "pending", phase: "validate", transmitted: false }]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.campaign_edit_operations set state='succeeded' where campaign_id=$1", [campaign]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'audience','edit-key-9',$3)", [business, campaign, hash]), { code: "42501" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.deepEqual((await session.query("select campaign_id from public.campaign_edit_operations")).rows, [{ campaign_id: otherCampaign }]);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.campaign_edit_operations"), { code: "42501" });
+    });
+  });
+}
+
 async function verifyWhatsAppBindings(db, database) {
   const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
   await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
@@ -2191,6 +2238,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(learningsMigration);
       await db.query(learningsMigration);
       await verifyCampaignLearnings(db,database);
+      await db.query(editOperationsMigration);
+      await db.query(editOperationsMigration);
+      await verifyCampaignEditOperations(db,database);
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);

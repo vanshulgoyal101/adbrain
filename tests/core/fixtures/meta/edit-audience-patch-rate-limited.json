@@ -1,0 +1,189 @@
+[
+  {
+    "method": "GET",
+    "path": "120253709655620526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253709655620526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253709655620526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253709671100526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVDBrZAVVaQkJkZAFk1MlZAlTWtUSnVIenpLMW56RjE2d0NXcDBsOS1wQmMxb0VUcFdwcDhyY2hmaWQyUTRaUlhpTXFWeFNmcjVjZAmNkTURiMzkwUlVzanJ3",
+          "after": "QVFIVDBrZAVVaQkJkZAFk1MlZAlTWtUSnVIenpLMW56RjE2d0NXcDBsOS1wQmMxb0VUcFdwcDhyY2hmaWQyUTRaUlhpTXFWeFNmcjVjZAmNkTURiMzkwUlVzanJ3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253709671100526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253709671100526",
+      "campaign_id": "120253709655620526",
+      "status": "PAUSED",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "LEAD_GENERATION",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "ON_AD",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false
+      },
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          25,
+          55
+        ],
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1021145",
+              "name": "Chandigarh",
+              "region": "Chandigarh",
+              "region_id": "1726"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        }
+      },
+      "daily_budget": "20000",
+      "lifetime_budget": "0"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253709671100526",
+    "form": {
+      "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[30,60],\"geo_locations\":{\"cities\":[{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1}}",
+      "execution_options": "[\"validate_only\"]"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253709655620526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253709655620526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253709655620526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253709671100526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVDBrZAVVaQkJkZAFk1MlZAlTWtUSnVIenpLMW56RjE2d0NXcDBsOS1wQmMxb0VUcFdwcDhyY2hmaWQyUTRaUlhpTXFWeFNmcjVjZAmNkTURiMzkwUlVzanJ3",
+          "after": "QVFIVDBrZAVVaQkJkZAFk1MlZAlTWtUSnVIenpLMW56RjE2d0NXcDBsOS1wQmMxb0VUcFdwcDhyY2hmaWQyUTRaUlhpTXFWeFNmcjVjZAmNkTURiMzkwUlVzanJ3"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253709671100526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253709671100526",
+      "campaign_id": "120253709655620526",
+      "status": "PAUSED",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "LEAD_GENERATION",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "ON_AD",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false
+      },
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          25,
+          55
+        ],
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1021145",
+              "name": "Chandigarh",
+              "region": "Chandigarh",
+              "region_id": "1726"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        }
+      },
+      "daily_budget": "20000",
+      "lifetime_budget": "0"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253709671100526",
+    "form": {
+      "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[30,60],\"geo_locations\":{\"cities\":[{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1}}"
+    },
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "(#613) Calls to this API have exceeded the concurrent request rate limit of 1 calls per 30 seconds.",
+        "type": "OAuthException",
+        "code": 613,
+        "error_subcode": 4841018,
+        "fbtrace_id": "AuiNvbIaL0LyBb9ccRVbNRe"
+      }
+    }
+  }
+]
