@@ -298,6 +298,7 @@ export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesi
               </div>
             ) : null}
           </div>
+          {spec.showCta ? (
           <div
             style={{
               display: "flex",
@@ -312,6 +313,7 @@ export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesi
           >
             {spec.ctaLabel}
           </div>
+          ) : null}
         </div>
       </div>
     </div>
