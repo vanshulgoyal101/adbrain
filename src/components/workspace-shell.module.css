@@ -12,6 +12,7 @@
 .business small { display: block; color: #73808c; font-size: 10px; margin-top: 3px; }
 .business > svg { flex-shrink: 0; color: #7b858e; }
 .account { margin-top: auto; padding-top: 24px; }
+.help { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 6px; font-size: 13px; font-weight: 600; color: #047857; }
 .account > div { display: flex; align-items: center; gap: 9px; padding: 12px 6px; border-top: 1px solid #e1e5e9; }
 .account > div > span:last-child { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avatar { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #e0e8e9; color: #3e5b5f; display: grid; place-items: center; font-size: 12px; font-weight: 600; }

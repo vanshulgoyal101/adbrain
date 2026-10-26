@@ -61,7 +61,8 @@ function createBatches(list: Creative[]): CreateBatch[] {
 }
 
 function formatBatchDate(made: number): string {
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(made);
+  // #724: several batches a day are common, so the time tells them apart.
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(made);
 }
 
 export function Studio({
@@ -440,7 +441,7 @@ export function Studio({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
-          <span className="font-normal text-slate-400">({items.length})</span>
+          <span className="font-normal text-slate-400">({items.length - setAsideCount})</span>
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
+import { CampaignDeliveryError, MetaError, friendlyMetaError, isMetaReauthError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -19,6 +19,7 @@ import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
+import { fundingShortfall } from "@/lib/campaign/funding-check";
 import { formatMoney } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
@@ -223,9 +224,10 @@ async function handlePATCH(
             }
             const funding = await meta.readAccountFunding();
             // The operator must set an account spending limit; an owner's own limit, when set, must have room.
-            if (mode === "operator" && funding.spendCapPaise <= 0) throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
-            if (funding.spendCapPaise > 0 && funding.roomPaise < capPaise) {
-              throw new CustomerBalanceError(`Meta has ${exactRupees.format(funding.roomPaise / 100)} left under the ad account's spending limit; this run needs ${exactRupees.format(capPaise / 100)}. Add funds on Meta or choose fewer days.`);
+            const short = fundingShortfall({ mode, neededPaise: capPaise, account: funding });
+            if (short?.kind === "no_limit") throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
+            if (short?.kind === "short") {
+              throw new CustomerBalanceError(`Meta has ${exactRupees.format(short.roomPaise / 100)} left under the ad account's spending limit; this run needs ${exactRupees.format(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
             }
           } else {
             // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.
@@ -244,7 +246,7 @@ async function handlePATCH(
           let liveTree = { adSetIds: children!.adSetIds, adIds: children!.adIds };
           try {
             if (capDays && capPaise) {
-              if (reservation && capPaise > reservation.mediaLimitPaise) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
+              if (reservation && fundingShortfall({ mode, neededPaise: capPaise, account: null, allowancePaise: reservation.mediaLimitPaise })) throw new CustomerBalanceError("The approved total is more than the available advertising funds.");
               const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
               const capped = await meta.createCappedAdSet(campaign.meta_campaign_id!, {
                 sourceAdSetId: children!.adSetIds[0], sourceAdIds: children!.adIds.filter(adId => !priorCappedAds.has(adId)), lifetimeBudgetPaise: capPaise,
@@ -320,6 +322,13 @@ async function handlePATCH(
         err.message,
         err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400,
       );
+    }
+    if (isMetaReauthError(err)) {
+      // #757: a dead token can't stop delivery, so name the manual step first while the campaign may be running.
+      const message = action === "paused" || campaign.status === "active"
+        ? `Meta stopped accepting AdBrain's access, so we couldn't ${action === "paused" ? "pause" : "change"} this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.`
+        : "Meta stopped accepting AdBrain's access. Reconnect Facebook in Settings, then try again.";
+      return NextResponse.json({ error: message, code: "META_REAUTH" }, { status: 409 });
     }
     if (err instanceof MetaError) {
       return apiError(friendlyMetaError(err), err.status && err.status >= 500 ? 502 : 400);

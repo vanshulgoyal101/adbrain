@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { firstPrompt, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday } from "../scripts/team-supervisor.mjs";
+import { firstPrompt, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -69,5 +69,24 @@ describe("team-supervisor (#573 A1)", () => {
     expect(text).toContain("wait-for-work.mjs --me dev2");
     expect(text).toContain('"Dev 2:"');
     expect(() => restartPrompt("nobody")).toThrow();
+  });
+});
+
+describe("scheduled-jobs dispatch (#692)", () => {
+  const now = Date.parse("2026-10-26T12:00:00Z");
+  it("dispatches when GitHub's schedule has lapsed over 14 min, or there is no run yet", () => {
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T07:01:50Z", status: "completed" }, now)).toBe(true);
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T11:45:00Z", status: "completed" }, now)).toBe(true);
+    expect(scheduledJobsDue(undefined, now)).toBe(true);
+  });
+  it("waits while a recent run exists or one is queued or running", () => {
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T11:50:00Z", status: "completed" }, now)).toBe(false);
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T07:00:00Z", status: "in_progress" }, now)).toBe(false);
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T07:00:00Z", status: "queued" }, now)).toBe(false);
+  });
+
+  it("logs a run's final words, so a short run shows what it decided", () => {
+    expect(lastWords("I'll check #741.\n\nThe 24 h read isn't due until 2026-10-27T11:19Z; posted that on #741.\n")).toBe("The 24 h read isn't due until 2026-10-27T11:19Z; posted that on #741.");
+    expect(lastWords("")).toBe("(no output)");
   });
 });

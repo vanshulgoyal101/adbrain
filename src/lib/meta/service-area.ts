@@ -13,6 +13,18 @@ export const INDIA_REGION_KEYS = [
   "1747", "1748", "1749", "1750", "1751", "1752", "1753", "1754", "1755", "1756", "1757", "4100",
 ] as const;
 
+/** #741: the same 36 keys' names from that search, for the owner's Review line. */
+export const INDIA_REGION_NAMES: Record<string, string> = {
+  "1723": "Andaman and Nicobar Islands", "1724": "Andhra Pradesh", "1725": "Assam", "1726": "Chandigarh",
+  "1727": "Dadra and Nagar Haveli", "1728": "Delhi", "1729": "Gujarat", "1730": "Haryana",
+  "1731": "Himachal Pradesh", "1732": "Jammu and Kashmir", "1733": "Kerala", "1734": "Lakshadweep",
+  "1735": "Maharashtra", "1736": "Manipur", "1737": "Meghalaya", "1738": "Karnataka", "1739": "Nagaland",
+  "1740": "Odisha", "1741": "Puducherry", "1742": "Punjab", "1743": "Rajasthan", "1744": "Tamil Nadu",
+  "1745": "Tripura", "1746": "West Bengal", "1747": "Sikkim", "1748": "Arunachal Pradesh", "1749": "Mizoram",
+  "1750": "Daman and Diu", "1751": "Goa", "1752": "Bihar", "1753": "Madhya Pradesh", "1754": "Uttar Pradesh",
+  "1755": "Chhattisgarh", "1756": "Jharkhand", "1757": "Uttarakhand", "4100": "Telangana",
+};
+
 type KnownCity = { key: string; name: string; region: string; lat: number; lng: number };
 
 /** Places whose position we know, so a service radius can be measured (keys from Meta's Targeting Search). */
@@ -135,4 +147,15 @@ export function lacksAreaExclusions(targeting: unknown): boolean {
   if (geo.countries?.length) return false;
   const indian = [...(geo.cities ?? []), ...(geo.regions ?? [])].some((place) => place.country === "IN");
   return indian && !(value.excluded_geo_locations?.regions?.length);
+}
+
+/** #741: the owner's Review line: the excluded cities by name, the states they sit in, and how many states are excluded. */
+export function describeServiceArea(exclusions: GeoTargeting): { excludedCities: string[]; keptStates: string[]; excludedStateCount: number } {
+  const excluded = new Set((exclusions.cities ?? []).map((city) => city.key));
+  const cities = EXCLUDABLE_CITIES.filter((city) => excluded.has(city.key));
+  return {
+    excludedCities: cities.map((city) => city.name),
+    keptStates: [...new Set(cities.map((city) => INDIA_REGION_NAMES[city.region] ?? city.region))],
+    excludedStateCount: exclusions.regions?.length ?? 0,
+  };
 }

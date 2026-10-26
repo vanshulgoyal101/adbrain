@@ -1,5 +1,6 @@
 "use client";
 
+import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import Link, { useLinkStatus } from "next/link";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
@@ -26,7 +27,7 @@ const primaryItems = [
 ];
 
 const workspaceItems = [
-  { href: "/brand", label: "Brand Brain", icon: Building2 },
+  { href: "/brand", label: OWNER_WORDS.business, icon: Building2 },
   { href: "/assets", label: "Assets", icon: ImageIcon },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

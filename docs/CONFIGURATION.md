@@ -40,6 +40,7 @@ settings, credentials and encryption keys are DevOps-owned changes; see the
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Required nonempty string | Public session key; relies on RLS |
 | `SUPABASE_SERVICE_ROLE_KEY` | Optional in parser; empty becomes absent | Server admin, trusted usage/limits, tokens, jobs; required for those workflows |
 | `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000`, URL | Canonical origin and OAuth callbacks |
+| `SUPPORT_WHATSAPP` | empty, phone number | The owner's business WhatsApp for the in-app **Help on WhatsApp** link (#796), pre-typed with the business name. Public number, not a secret; empty hides the link |
 | `NEXT_PUBLIC_SUPPORT_WHATSAPP` | Empty; phone number with country code | Homepage "Questions? WhatsApp us" link (`wa.me`); hidden while empty. Needs a rebuild |
 | `FONTCONFIG_FILE` | Set at runtime by the ad renderer; don't configure | Points fontconfig at `src/lib/creative/fonts` only, so Hindi/Punjabi shaping is identical on every server (#300) |
 | `NEXT_PUBLIC_DEV_AUTH_BYPASS` | Empty; exact `true` outside production | UI identity fallback, not general API authentication |

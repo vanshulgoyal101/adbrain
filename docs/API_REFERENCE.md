@@ -91,7 +91,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | POST | `/api/creatives/generate` | Generation input -> saved variants/failures | Paid work + Storage/DB |
 | GET | `/api/creatives/generate` | Business/group/count -> saved status | DB lookup/unknown-ID fence, no generation |
 | POST | `/api/creatives/[id]/regenerate` | No body -> `{creative}` | Paid work, overwrite, reset approval |
-| POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept |
+| POST | `/api/creatives/[id]/picture` | `{headline,subhead,phone,ctaLabel,showCta?}` -> `{creative,liveNotice?}` | Re-renders the overlay, no AI; new `image_url`, status kept. `showCta` paints the button on the picture (off for new ads, #760); omitted keeps it as is |
 | POST | `/api/creatives/[id]/background` | `{instruction}` (3-300) or `{photoUrl}` -> `{creative,liveNotice?}` | Paid image (like Regenerate) or the owner's Brand photo (free), same claim; keeps copy, overlay words and status |
 | POST | `/api/creatives/export` | IDs -> ZIP | Downloads selected media |
 | GET | `/api/campaign-drafts` | `businessId` -> envelope draft array | Owner-scoped read |
@@ -589,6 +589,7 @@ nonnegative-safe-integer}`. Review data includes:
 | --- | --- |
 | `draftId`, `draftVersion`, `connectionGeneration` | Reviewed concurrency identity |
 | `canCreatePaused`, `blockers` | Gate and actionable blocker list; each Review blocker has a stable `reason` (`REVIEW_NO_WEBSITE`, `REVIEW_NO_LEAD_FORM`, … in `reviewBlockerReasons`) besides its API `code` |
+| `serviceArea` | Optional, display only (#741): `excludedCities` (names), `keptStates`, `excludedStateCount`: the out-of-area exclusions launch adds; not part of `planHash` |
 | `planHash` | 64 lowercase hex characters, or null while blocked |
 | `creativeHash` | Optional content hash used by current execution |
 | `currency` | `INR` |
@@ -679,6 +680,10 @@ room (limit minus amount spent) of at least the cap. All checks run before any M
 Only managed businesses (AdBrain holds ad money) use the allowance reservation. It then runs the capped flow
 above with no reservation, cost evidence or confirmation; the compensating pause
 still applies. 503 when the funding mode cannot be read.
+When Meta refuses the owner's token (Graph 190, any subcode; #757), the connection
+is marked `reauth_required` (it then reads `expired`) and PATCH answers 409
+`{error, code:"META_REAUTH"}`. The error names the manual step ("Pause it in Ads Manager
+now") for a pause or an active campaign, and the card links to the campaign in Ads Manager.
 Pause writes PAUSED to the campaign, then its stored ad sets and ads (one retry
 after Meta's 613 status rate limit), and reads all three levels back; `pause` is
 `{confirmed,objects:[{id,level,status,effectiveStatus}]}`. It is saved locally only

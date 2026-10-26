@@ -1,3 +1,5 @@
+import { reconnectByLabel } from "@/lib/meta/token-expiry";
+import { Alert } from "@/components/ui/alert";
 import { clientCreative } from "@/lib/creative/client-receipt";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
@@ -36,10 +38,10 @@ export default async function CampaignsPage({
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain and generate some creatives first.
+              Set up your business and generate some creatives first.
             </p>
             <Link href="/brand">
-              <Button>Go to Brand Brain</Button>
+              <Button>Set up your business</Button>
             </Link>
           </CardContent>
         </Card>
@@ -57,6 +59,7 @@ export default async function CampaignsPage({
     getMetaConnection(business.id),
   ]);
   const metaReady = connection.ready;
+  const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
   const campaigns = page.campaigns;
   const requested = typeof params.creatives === "string" ? params.creatives.split(",") : [];
 
@@ -66,6 +69,12 @@ export default async function CampaignsPage({
         title="Campaigns"
         description="Turn approved ads into Meta lead campaigns with the audience, budget, and destination reviewed before anything can spend."
       />
+      {/* #757: warn a week before the Facebook connection stops working, while managing still works. */}
+      {reconnectBy && (
+        <Alert variant="warning" className="mt-6">
+          Reconnect Facebook by {reconnectBy} to keep managing your ads. <Link href="/settings" className="font-medium underline underline-offset-4">Open Settings</Link>
+        </Alert>
+      )}
       <div className="mt-6">
         {/* Before Meta's App Review a new owner can't connect, so the setup form would be a dead end (#336). */}
         {!metaReady && !campaigns.length && approved.length ? (

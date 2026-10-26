@@ -56,6 +56,12 @@ describe("core scoreboard (#681)", () => {
     expect(row(board([...plans, ...requests.slice(0, 2)]), "Prepare").met).toBe(true);
   });
 
+  it("Prepare prefers the plan event's own duration once it carries one (#821)", () => {
+    const timed = Array.from({ length: 20 }, () => ev("campaign.plan", "success", { duration_ms: 2_500 }));
+    const slowRequest = ev("http.request", "success", { duration_ms: 20_000, attributes: { route: "/api/campaigns/plan" } });
+    expect(row(board([...timed, slowRequest]), "Prepare")).toMatchObject({ now: "20 runs: 100% planned (0 partial, 0 failed); p90 2.5 s", met: true });
+  });
+
   it("Create needs 3 ads per batch and times a run from its first AI call's start to its last call", () => {
     const batches = [ev("creative.batch", "success", { attributes: { count: 3 } }), ev("creative.batch", "partial", { attributes: { count: 2 } })];
     const calls = [

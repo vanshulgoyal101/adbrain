@@ -143,8 +143,10 @@ describe("core: Regenerate fact check on recorded Solaride replies (#281)", () =
       ["schema:headline:too_big"], ["sourceQuotes"], ["unsupported-commercial-claim"],
     ]);
     // 2#2 states "10%" and "free" without citing them; each is in exactly one Brand fact, so it is cited (CTO, #281).
+    // #713: replies 2 and 4 cited the owner's fact with an added "the" ("the cost of the solar installation…");
+    // the fact's own words are stored now, so only the 42-character headline still fails.
     expect(recorded.replies.map(({ content }) => rules(content))).toEqual([
-      [], [], ["sourceQuotes"], ["schema:headline:too_big"], ["sourceQuotes"], [],
+      [], [], [], ["schema:headline:too_big"], [], [],
     ]);
   });
 
@@ -183,12 +185,13 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
     expect(mocks.claims.size).toBe(0);
   });
 
-  it("saves the recorded run whose retry stated a Brand offer without citing it", async () => {
+  // #713: this run's first reply only added "the" to the owner's quote, so it saves without a second paid call.
+  it("saves the recorded run on its first reply", async () => {
     replay(run(2));
     const { status, body } = await regenerate();
     expect(status, JSON.stringify(body)).toBe(200);
-    expect(textCalls).toBe(2);
-    expect(mocks.updates).toEqual([expect.objectContaining({ headline: "Miss 10 Nov, Pay More After 31 Dec" })]);
+    expect(textCalls).toBe(1);
+    expect(mocks.updates).toEqual([expect.objectContaining({ headline: "Lock Today's Solar Rates by 10 Nov" })]);
     expect(mocks.claims.size).toBe(0);
   });
 
@@ -210,7 +213,9 @@ describe("core: Regenerate route on recorded Solaride replies (#281)", () => {
   });
 
   it("explains other failed checks without naming a claim or asking for a refresh", async () => {
-    replay(run(1));
+    // The recorded 42-character headline, refused on both attempts.
+    const [, longHeadline] = run(1);
+    replay([longHeadline, longHeadline]);
     const { status, body } = await regenerate();
     expect(status).toBe(422);
     expect(body.error).toBe("The new version didn't pass our ad checks. Your current ad is unchanged. Try again.");

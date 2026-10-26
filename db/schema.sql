@@ -108,6 +108,12 @@ alter table public.businesses add column if not exists phone   text;
 alter table public.businesses add column if not exists email   text;
 alter table public.businesses add column if not exists address text;
 
+-- #840: the business's own WhatsApp opening (null: AdBrain writes one per campaign).
+alter table public.businesses add column if not exists whatsapp_template jsonb;
+alter table public.businesses drop constraint if exists businesses_whatsapp_template_shape;
+alter table public.businesses add constraint businesses_whatsapp_template_shape
+  check (whatsapp_template is null or (jsonb_typeof(whatsapp_template) = 'object' and octet_length(whatsapp_template::text) <= 4096));
+
 drop trigger if exists businesses_set_updated_at on public.businesses;
 create trigger businesses_set_updated_at
   before update on public.businesses

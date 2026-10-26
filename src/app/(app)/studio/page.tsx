@@ -34,14 +34,14 @@ export default async function StudioPage({
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain first: AdBrain uses it to write
+              Set up your business first: AdBrain uses it to write
               on-brand ads.
             </p>
             <Link
               href="/brand"
               className="inline-flex min-h-11 items-center rounded-md bg-blue-700 px-4 text-sm font-medium text-white"
             >
-              Go to Brand Brain
+              Set up your business
             </Link>
           </CardContent>
         </Card>

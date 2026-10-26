@@ -1,5 +1,6 @@
 "use client";
 
+import { reconnectByLabel } from "@/lib/meta/token-expiry";
 import { useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
@@ -68,6 +69,9 @@ export function MetaConnectionPanel({
         {connection.source === "oauth" && connection.expired && (
           <Alert variant="warning">Your Meta connection needs to be renewed.</Alert>
         )}
+        {connection.source === "oauth" && !connection.expired && reconnectByLabel(connection.tokenExpiresAt) && (
+          <Alert variant="warning">Reconnect Facebook by {reconnectByLabel(connection.tokenExpiresAt)} to keep managing your ads.</Alert>
+        )}
         {connection.ready && (
           <div className="flex items-start gap-2 text-sm text-emerald-800">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -79,7 +83,7 @@ export function MetaConnectionPanel({
             Connect an existing Meta business to prepare campaigns. You can keep working on a draft first.
           </p>
         )}
-        {!businessId && <Alert variant="warning">Set up your Brand Brain before connecting Meta.</Alert>}
+        {!businessId && <Alert variant="warning">Set up your business before connecting Meta.</Alert>}
         {businessId && !oauthConfigured && (
           <Alert variant="warning">Meta connection is not configured on this server yet.</Alert>
         )}

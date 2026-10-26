@@ -4,8 +4,8 @@
  * product whose whole promise is plain language.
  */
 const ACTION_LABELS: Record<string, string> = {
-  "business.create": "Brand Brain created",
-  "business.update": "Brand Brain updated",
+  "business.create": "Business details created",
+  "business.update": "Business details updated",
   "creatives.generate": "New creatives generated",
   "creative.approve": "Creative approved",
   "creative.unapprove": "Creative moved back to drafts",

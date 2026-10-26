@@ -92,14 +92,19 @@ const STEPS = [
 ];
 const RANK: Record<LiveAd["stage"], number> = { starting: 0, queued: 0, writing: 1, checking: 2, fixing: 2, image: 3, ready: 4, failed: 0 };
 
+/** p90 of a 3-ad Create on production models: 66 s serial, 75 s parallel (#713 timing run, Oct 26). */
+export const CREATE_PROMISE_MS = 90_000;
+
 function elapsed(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function CreateProgress({ ads, renderReady }: {
+export function CreateProgress({ ads, renderReady, onUseSaved }: {
   ads: LiveAd[];
   renderReady: (creative: Creative) => ReactNode;
+  /** #760: move on with the saved ads while the rest keep going on the server. */
+  onUseSaved?: () => void;
 }) {
   const [startedAt] = useState(() => Date.now());
   const [now, setNow] = useState(startedAt);
@@ -110,6 +115,7 @@ export function CreateProgress({ ads, renderReady }: {
   const ready = ads.filter((ad) => ad.stage === "ready" && ad.creative).length;
   const failed = ads.filter((ad) => ad.stage === "failed").length;
   const done = ads.reduce((total, ad) => total + (ad.stage === "failed" ? 4 : RANK[ad.stage]), 0);
+  const saved = ads.filter((ad) => ad.creative).length;
 
   return (
     <section aria-label="Ads being created" className="flex min-w-0 flex-col gap-3">
@@ -118,7 +124,8 @@ export function CreateProgress({ ads, renderReady }: {
         <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
           <span className="font-medium text-slate-900">Creating {ads.length} ads</span>
           <span className="tabular-nums text-slate-500">
-            {elapsed(now - startedAt)} elapsed · usually about a minute
+            {elapsed(now - startedAt)} elapsed ·{" "}
+            {now - startedAt < CREATE_PROMISE_MS ? "usually under 1½ minutes" : "taking longer than usual, still going"}
           </span>
         </p>
         <div
@@ -134,6 +141,20 @@ export function CreateProgress({ ads, renderReady }: {
         <p aria-live="polite" className="sr-only">
           {ready ? `${ready} of ${ads.length} ads ready.` : ""}{failed ? ` ${failed} could not be finished.` : ""}
         </p>
+        {onUseSaved && saved >= 2 && saved < ads.length && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <button
+              type="button"
+              onClick={onUseSaved}
+              className="inline-flex min-h-11 items-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            >
+              Use these {saved} now
+            </button>
+            <span className="text-xs text-slate-500">
+              {ads.length - saved === 1 ? "The last one keeps going and is added when it's ready." : "The rest keep going and are added when they're ready."}
+            </span>
+          </div>
+        )}
       </div>
       <ul className="grid min-w-0 gap-3 sm:grid-cols-3">
         {ads.map((ad, index) => (

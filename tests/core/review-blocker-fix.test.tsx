@@ -205,6 +205,8 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     fireEvent.click(prepare);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Choose at least one ad to send to Meta.");
+    // #724 walk at 1440 px: below 11 ads the message sat ~440 px under the fold; it now leads the picker.
+    expect(alert.compareDocumentPosition(document.getElementById("campaign-ad-picker")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const firstAd = screen.getByRole("button", { name: creative.headline! });
     expect(firstAd).toHaveFocus();
     expect(firstAd).toHaveAttribute("aria-describedby", alert.id);
@@ -222,5 +224,19 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     expect(budget).toHaveFocus();
     expect(budget).toHaveAttribute("aria-describedby", alert.id);
     expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
+  // #741 item 4: the review says where the ads won't show.
+  it("the review names where the ads show and where they don't", async () => {
+    const reviewed = { ...runPreflight(productionInput()), serviceArea: { excludedCities: ["Ludhiana", "Amritsar"], keptStates: ["Punjab"], excludedStateCount: 33 } };
+    mocks.preflight.mockResolvedValue(reviewed);
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    const leadForm = screen.getByLabelText("Lead form");
+    await within(leadForm).findByRole("option", { name: "Enquiries" });
+    fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
+    const region = await screen.findByRole("region", { name: "Campaign review result" });
+    expect(await within(region).findByText(/Not shown in: Ludhiana, Amritsar \(outside your area in Punjab\) or the other 33 states and UTs\./)).toBeInTheDocument();
   });
 });

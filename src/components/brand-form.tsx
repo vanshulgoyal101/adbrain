@@ -1,5 +1,6 @@
 "use client";
 
+import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { useActionState, useRef, useState } from "react";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import Link from "next/link";
@@ -411,7 +412,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <Field label="USPs" hint="one per line">
+            <Field label={OWNER_WORDS.usps} hint="one per line">
               <Textarea
                 name="usps"
                 rows={3}
@@ -467,7 +468,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
               ))}
             </Select>
           </Field>
-          <Field label="Logo URL" error={errors.logo_url}>
+          <Field label={OWNER_WORDS.logoUrl} error={errors.logo_url}>
             <Input
               name="logo_url"
               type="url"
@@ -488,7 +489,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
-            Live context check
+            {OWNER_WORDS.preview}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-slate-950">
             What AdBrain will use
@@ -548,7 +549,7 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
       <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
         <Button type="submit" data-product-event="brand.save" disabled={pending || autofilling}>
           {pending ? <Spinner /> : <Save className="h-4 w-4" />}
-          Save Brand Brain
+          Save your business
         </Button>
         {state.ok && state.submittedRevision === revision && !pending && (
           <>

@@ -8,6 +8,7 @@
 //   node scripts/team-supervisor.mjs --install | --uninstall              the LaunchAgent (StartInterval 600 s)
 //   node scripts/team-supervisor.mjs --smoke                              prove the CLI runs headless here
 //   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
+// Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692).
 // Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -19,13 +20,14 @@ import { NAMES } from "./wait-for-work.mjs";
 import { probe } from "./team-status.mjs";
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst", "designer"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
 const SESSIONS = join(HOME, ".copilot", "session-state");
 const WT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = ["-y", "@github/copilot@1.0.103"];
+const REPO = "vanshulgoyal101/adbrain";
 
 /** Role named by a chat's first prompt ("You are AdBrain's Dev 2. …" → dev2); longest names first so "Dev 2" isn't "Dev". */
 export function roleFromPrompt(text) {
@@ -75,6 +77,13 @@ export function pickRole(statuses, live, roles = ORDER) {
   return null;
 }
 
+/** The run's final words (the CLI prints its last message), so the log shows what a short run decided (#573). */
+export function lastWords(output, max = 220) {
+  const paragraphs = String(output ?? "").trim().split(/\n\s*\n/).filter(Boolean);
+  const last = (paragraphs.at(-1) ?? "").replace(/\s+/g, " ").trim();
+  return last ? last.slice(0, max) : "(no output)";
+}
+
 /** Runs today, from the state log; the daily cap bounds cost. */
 export function runsToday(state, now = new Date()) {
   const day = now.toISOString().slice(0, 10);
@@ -105,6 +114,27 @@ export function restartPrompt(role) {
     `Work only in your own worktree under ~/Development/copilot/adbrain-wt/ (\`bash scripts/wt.sh <issue>\`). Run commands in the foreground only and never leave anything running. Sign your comments "${name}:".`,
     `When idle, run \`node scripts/wait-for-work.mjs --me ${role}\` in the foreground from a worktree on current origin/main; stop only when it times out.`,
   ].join("\n");
+}
+
+/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` ago and none is waiting or running. */
+export function scheduledJobsDue(latest, now = Date.now(), staleMin = 14) {
+  if (!latest) return true;
+  if (latest.status && latest.status !== "completed") return false;
+  const started = Date.parse(latest.createdAt);
+  return !Number.isFinite(started) || now - started > staleMin * 60_000;
+}
+
+/** At most one dispatch per tick; a gh failure is logged and never stops the tick. */
+function dispatchScheduledJobs(dry) {
+  try {
+    const [latest] = JSON.parse(execFileSync("gh", ["run", "list", "-R", REPO, "-w", "scheduled-jobs.yml", "-L", "1", "--json", "createdAt,status"], { encoding: "utf8" }));
+    if (!scheduledJobsDue(latest)) return;
+    if (dry) return console.log(`would dispatch scheduled-jobs.yml (last run ${latest?.createdAt ?? "none"})`);
+    execFileSync("gh", ["workflow", "run", "scheduled-jobs.yml", "-R", REPO, "--ref", "main"], { stdio: "ignore" });
+    log(`dispatched scheduled-jobs.yml (last run ${latest?.createdAt ?? "none"})`);
+  } catch (error) {
+    log(`scheduled-jobs dispatch failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  }
 }
 
 function log(line) {
@@ -203,6 +233,7 @@ async function main() {
     return console.log(`${result}: ${readFileSync(out, "utf8").trim().split("\n").pop()}`);
   }
   if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
+  dispatchScheduledJobs(values["dry-run"]);
   const state = readState();
   if (runsToday(state) >= Number(values["max-runs-day"])) return log(`tick skipped: daily cap ${values["max-runs-day"]} reached`);
   if (!values["dry-run"]) refresh();
@@ -219,10 +250,13 @@ async function main() {
   log(`waking ${pick.role}: ${run.item} (${summary})`);
   state.runs = [...(state.runs ?? []), run];
   writeState(state);
-  run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, join(STATE_DIR, `run-${pick.role}.log`));
+  const runLog = join(STATE_DIR, `run-${pick.role}.log`);
+  writeFileSync(runLog, "");
+  run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, runLog);
+  run.summary = lastWords(readFileSync(runLog, "utf8"));
   run.end = new Date().toISOString();
   writeState(state);
-  log(`run ${pick.role} ended: ${run.result}`);
+  log(`run ${pick.role} ended: ${run.result} · ${run.summary}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

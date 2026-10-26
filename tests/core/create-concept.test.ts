@@ -73,11 +73,21 @@ describe("core: Create concept validation on a recorded production concept", () 
 // Real Groq drafts for the run 5/6 input that were rejected for "heal" inside "health"
 // or for a cited price followed by punctuation ("For $49, get...").
 describe("core: Create claim checks on recorded Groq drafts", () => {
+  // #738: recorded drafts that ask about or name the reader's condition now also break
+  // personal-attribute (Meta's Personal Attributes policy); the rest keep their recorded rules.
+  const ASKS_ABOUT_CONDITION = [
+    "Ready to address back pain or posture strain?", "Tired of desk-job stiffness?", "Tired of fighting desk-day stiffness?",
+    "If your back aches after a long day at a desk or weekend game", "See what’s causing your pain",
+  ];
+  const asks = (concept: { headline: string; primary_text: string; description?: string | null }) =>
+    ASKS_ABOUT_CONDITION.some((phrase) => [concept.headline, concept.primary_text, concept.description].join("\n").includes(phrase));
+  const expectedRules = (draft: { rules: string[]; concept: { headline: string; primary_text: string; description?: string | null } }) =>
+    [...draft.rules, ...(asks(draft.concept) ? ["personal-attribute"] : [])].sort();
   const draftRules = (angleId: string, concept: unknown) => {
     const angle = AD_ANGLES.find((candidate) => candidate.id === angleId)!;
     const result = validateConcept(concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
-    // These drafts pin claim rules; offer placement (#194) is asserted on its own below.
-    return result.success ? [] : conceptValidationRules(result.issues).filter((rule) => rule !== "offer-below-fold");
+    // These drafts pin claim rules; offer placement (#194) and the empty-scene check (#760) are asserted on their own.
+    return (result.success ? [] : conceptValidationRules(result.issues).filter((rule) => rule !== "offer-below-fold" && rule !== "no-subject")).sort();
   };
 
   it("flags only the recorded drafts whose $49 offer starts after Meta's 125-character fold (#194)", () => {
@@ -89,23 +99,40 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
     expect(flagged.map((draft) => draft.concept.primary_text.indexOf("$49"))).toEqual([128, 142, 147]);
   });
 
+  // #760 (CPO walk): one image was an empty waiting room. This recorded Groq draft directs exactly that
+  // ("No people are present", an armchair as the focal point); no other recorded direction trips the check.
+  it("refuses a visual with no subject, like the recorded empty waiting room, and keeps the rest", () => {
+    const emptyRoom = groq.drafts.filter((draft) => draft.concept.visual.direction.includes("waiting area"));
+    expect(emptyRoom).toHaveLength(1);
+    const rules = (draft: (typeof groq.drafts)[number]) => {
+      const angle = AD_ANGLES.find((candidate) => candidate.id === draft.angle)!;
+      const result = validateConcept(draft.concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
+      return result.success ? [] : conceptValidationRules(result.issues);
+    };
+    expect(rules(emptyRoom[0])).toContain("no-subject");
+    for (const draft of [...groq.drafts, ...groqFields.drafts].filter((candidate) => !emptyRoom.includes(candidate as never))) {
+      expect(rules(draft as (typeof groq.drafts)[number])).not.toContain("no-subject");
+    }
+  });
+
   it("saves drafts that mention health or punctuate a cited price, keeping real claim failures", () => {
     // One draft's only "claim" was the layout note "The top 40% of the image is uncluttered" (#202).
     expect(groq.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(7);
+    expect(groq.drafts.filter((draft) => asks(draft.concept))).toHaveLength(3);
     for (const draft of groq.drafts) {
       expect(draft.rulesOnMain.length).toBeGreaterThan(0);
-      expect(draftRules(draft.angle, draft.concept)).toEqual(draft.rules);
+      expect(draftRules(draft.angle, draft.concept)).toEqual(expectedRules(draft));
     }
   });
 
   it("still rejects healing claims and amounts the facts do not state", () => {
     const [health] = groq.drafts.filter((draft) => draft.rules.length === 0 && draft.concept.primary_text.includes("spinal health"));
     const healing = health.concept.primary_text.replace("spinal health", "spinal healing");
-    expect(draftRules(health.angle, { ...health.concept, primary_text: healing })).toEqual(["banned-claim"]);
+    expect(draftRules(health.angle, { ...health.concept, primary_text: healing })).toEqual([...expectedRules(health), "banned-claim"].sort());
     const [price] = groq.drafts.filter((draft) => draft.rules.length === 0 && draft.concept.primary_text.includes("For $49,"));
     for (const amount of ["$4", "$490", "$49.99"]) {
       const primary_text = price.concept.primary_text.replace("For $49,", `For ${amount},`);
-      expect(draftRules(price.angle, { ...price.concept, primary_text }), amount).toEqual(["unsupported-commercial-claim"]);
+      expect(draftRules(price.angle, { ...price.concept, primary_text }), amount).toEqual([...expectedRules(price), "unsupported-commercial-claim"].sort());
     }
   });
 
@@ -114,7 +141,7 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
     expect(groqFields.drafts.filter((draft) => draft.rules.length === 0)).toHaveLength(3);
     for (const draft of groqFields.drafts) {
       expect(draft.rulesOnMain).not.toEqual(draft.rules);
-      expect(draftRules(draft.angle, draft.concept)).toEqual(draft.rules);
+      expect(draftRules(draft.angle, draft.concept)).toEqual(expectedRules(draft));
     }
     const [left] = groqFields.drafts.filter((draft) => draft.concept.visual.textPlacement === "left" && !draft.rules.length && draft.concept.primary_text.indexOf("$49") < 125);
     const angle = AD_ANGLES.find((candidate) => candidate.id === left.angle)!;

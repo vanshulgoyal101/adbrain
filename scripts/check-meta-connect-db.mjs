@@ -32,8 +32,10 @@ const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
+const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
 const metaDeletionMigration = await readFile(join(root, "db/migrations/20261026_meta_deletion_requests.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
+const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1150,6 +1152,28 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+async function verifyConnectionReauth(db, database) {
+  await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
+    const owner = randomUUID(), business = randomUUID();
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Reauth')", [business, owner]);
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,5,'connected','act_1','page_1')", [business]);
+      const mark = async (generation) => (await db.query("select public.meta_connection_mark_reauth($1,$2) as changed", [business, generation])).rows[0].changed;
+      assert.equal(await mark(4), false, "a stale generation must not touch a reconnected row");
+      assert.equal((await db.query("select authorization_status from public.meta_connections where business_id = $1", [business])).rows[0].authorization_status, "connected");
+      assert.equal(await mark(5), true);
+      assert.equal(await mark(5), false, "already marked");
+      const row = (await db.query("select authorization_status, generation from public.meta_connections where business_id = $1", [business])).rows[0];
+      assert.deepEqual(row, { authorization_status: "reauth_required", generation: "5" });
+      const fn = (await db.query(`select p.proconfig, has_function_privilege('authenticated', p.oid, 'execute') as customer
+        from pg_proc p where p.proname = 'meta_connection_mark_reauth'`)).rows[0];
+      assert.deepEqual(fn, { proconfig: ['search_path=""'], customer: false });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyMetaDeletionRequests(db, database) {
   await check(`${database}: Meta's deletion callback records one open request per owner and code, or one unbound, and owners can't forge one (#730)`, async () => {
     const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
@@ -1239,6 +1263,35 @@ async function verifyLeadCampaignLink(db, database) {
     assert.equal(third.imported, 1);
     const links = Object.fromEntries((await db.query("select meta_lead_id, campaign_id from public.leads where business_id=$1", [business])).rows.map(row => [row.meta_lead_id, row.campaign_id]));
     assert.deepEqual(links, { "ad-lead": campaign, "test-lead": null, foreign: null, "late-link": campaign, "new-lead": campaign, twice: campaign });
+  });
+}
+
+async function verifyWhatsAppTemplate(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Template')", [business, owner]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: WhatsApp template: owner saves an object, other owners can't, bounded shape (#840)`, async () => {
+    const template = JSON.stringify({ greeting: "Hi! Thanks for messaging Solaride.", opening: { kind: "prefill", prefill: "Can I get more info on this", callButton: true }, language: "en" });
+    await as("authenticated", owner, async (session) => {
+      assert.equal((await session.query("update public.businesses set whatsapp_template=$2::jsonb where id=$1", [business, template])).rowCount, 1);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("update public.businesses set whatsapp_template='[]'::jsonb where id=$1", [business]), { code: "23514" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.businesses set whatsapp_template=jsonb_build_object('greeting', repeat('x', 5000)) where id=$1", [business]), { code: "23514" });
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("update public.businesses set whatsapp_template='{}'::jsonb where id=$1", [business])).rowCount, 0);
+    });
   });
 }
 
@@ -2191,6 +2244,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(tokenSearchPathMigration);
       await db.query(tokenSearchPathMigration);
       await verifyTokenSearchPath(db,database);
+      await db.query(whatsappTemplateMigration);
+      await db.query(whatsappTemplateMigration);
+      await verifyWhatsAppTemplate(db,database);
       if ((await db.query("select to_regclass('public.privacy_requests') is not null as installed")).rows[0].installed) {
         await db.query(metaDeletionMigration);
         await db.query(metaDeletionMigration);
@@ -2199,6 +2255,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(hardeningMigration);
       await db.query(hardeningMigration);
       await verifyLegacyCredentialsAndBuckets(db,database);
+      await db.query(reauthMigration);
+      await db.query(reauthMigration);
+      await verifyConnectionReauth(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);

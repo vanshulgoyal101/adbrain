@@ -176,6 +176,7 @@ export interface Database {
           logo_url: string | null;
           phone: string | null;
           email: string | null;
+          whatsapp_template: Json | null;
           address: string | null;
           created_at: string;
           updated_at: string;
@@ -199,6 +200,7 @@ export interface Database {
           logo_url?: string | null;
           phone?: string | null;
           email?: string | null;
+          whatsapp_template?: Json | null;
           address?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -940,6 +942,10 @@ export interface Database {
       meta_revoke_subject: {
         Args: { p_subject_id: string };
         Returns: number;
+      };
+      meta_connection_mark_reauth: {
+        Args: { p_business_id: string; p_generation: number };
+        Returns: boolean;
       };
       meta_deletion_request_record: {
         Args: { p_subject_id: string; p_code: string };

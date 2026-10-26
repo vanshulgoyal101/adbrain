@@ -759,7 +759,7 @@ describe("<Studio> edit words on the picture (#280)", () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/api/creatives/c1/picture", expect.objectContaining({ method: "POST" })));
     const [, init] = (global.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([url]) => url === "/api/creatives/c1/picture")!;
-    expect(JSON.parse(String(init.body))).toEqual({ headline: "Diwali: free site visit", subhead: "Two short lines.", phone: "+91 98290 12345", ctaLabel: "Get Quote" });
+    expect(JSON.parse(String(init.body))).toEqual({ headline: "Diwali: free site visit", subhead: "Two short lines.", phone: "+91 98290 12345", ctaLabel: "Get Quote", showCta: true });
     expect(global.fetch).not.toHaveBeenCalledWith("/api/creatives/c1/regenerate", expect.anything());
     await waitFor(() => expect(screen.queryByRole("form", { name: "Edit words on the picture" })).not.toBeInTheDocument());
     expect(document.querySelector('img[src*="redrawn"]')).not.toBeNull();
@@ -1095,9 +1095,23 @@ describe("<Studio> review board batches (#762)", () => {
     expect(board.getByRole("button", { name: "Ad new1 Needs review" })).toBeVisible();
     expect(board.getByRole("button", { name: "Ad new1 Needs review" })).toHaveAttribute("aria-pressed", "true");
     expect(board.getByRole("button", { name: "Ad new2 Needs review" })).toBeVisible();
-    expect(board.getByText(/23 Oct · 2 ads/)).toBeVisible();
+    expect(board.getByText(/23 Oct, [^·]+ · 2 ads/)).toBeVisible();
     expect(board.getByRole("button", { name: "Ad old1 Needs review" })).not.toBeVisible();
     expect(screen.queryByText(/Variant \d of \d/)).not.toBeInTheDocument();
+  });
+
+  // #724 walk: six same-day batches all read "Made 26 Oct"; the header said Ads (88) beside All (78).
+  it("tells same-day batches apart by time, and the header counts what All shows", () => {
+    const at = (iso: string, id: string, group: string, over: Partial<Creative> = {}) => creative({ id, variant_group: group, headline: `Ad ${id}`, created_at: iso, ...over });
+    render(<Studio business={business} initialCreatives={[
+      at("2026-10-26T09:30:00Z", "late", "g-late"), at("2026-10-26T05:00:00Z", "early", "g-early"),
+      at("2026-10-14T05:00:00Z", "stale", "g-stale"),
+    ]} />);
+    const board = within(screen.getByRole("region", { name: "Ads" }));
+    expect(board.getByText(/26 Oct, 3:00\s?pm · 1 ad/i)).toBeVisible();
+    expect(board.getByText(/26 Oct, 10:30\s?am · 1 ad/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Ads \(2\)/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "All (2)" })).toBeInTheDocument();
   });
 
   it("sets unreviewed ads older than 7 days aside, out of the Needs review count", () => {
@@ -1107,6 +1121,6 @@ describe("<Studio> review board batches (#762)", () => {
     expect(board.getByText(/Older unreviewed ads \(1\)/)).toBeVisible();
     expect(board.getByRole("button", { name: "Ad stale Needs review" })).not.toBeVisible();
     // Approved ads are never set aside.
-    expect(board.getByText(/16 Oct · 1 ad\b/)).toBeVisible();
+    expect(board.getByText(/16 Oct, [^·]+ · 1 ad\b/)).toBeVisible();
   });
 });
