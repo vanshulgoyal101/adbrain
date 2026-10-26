@@ -178,6 +178,30 @@ describe("core: Create on recorded Claude Haiku 5.5 concepts", () => {
     expect(scanAdCopy("Visits from $49, $49.00 in 2026").map(({ rule }) => rule)).not.toContain("all-caps");
   });
 
+  // #687 item 3: Create refused any quote with a negation anywhere ("…, no referral needed"), so a real
+  // offer fact was read as an unsupported claim and the ad cost a full rewrite. Only a negation or
+  // withdrawal of the term itself refuses it, as in the Assistant (#613, shared claim-support.ts).
+  it("supports an offer whose fact has an unrelated negation, and still refuses a negated or withdrawn one", async () => {
+    const { parseJSON } = await import("@/lib/llm");
+    const { validateConcept } = await import("@/lib/creative/concept");
+    const { AD_ANGLES } = await import("@/lib/templates/ads");
+    const recorded = haiku.responses[0];
+    const angle = AD_ANGLES.find(({ name }) => name === recorded.angleName)!;
+    const reply = parseJSON<{ sourceQuotes: string[]; headline: string }>(recorded.content);
+    expect(reply.headline).toContain("$49");
+    const withFact = (offer: string) => ({ brand: { ...run4.brand, offers: [offer] }, brief: run4.brief, angle });
+    // The copy states $49 with no quote for it, so the validator cites the one fact that has it.
+    const uncited = { ...reply, sourceQuotes: reply.sourceQuotes.filter((quote) => !quote.includes("$49")) };
+
+    expect(validateConcept(uncited, withFact("$49 new-patient exam and consultation, no referral needed"))).toMatchObject({ success: true });
+    expect(validateConcept(uncited, withFact("$49 new-patient exam no longer offered"))).toMatchObject({
+      success: false, claims: ["claim:currency:negated-quote"],
+    });
+    expect(validateConcept({ ...reply, sourceQuotes: [...uncited.sourceQuotes, "Not $49 any more"] }, withFact("Not $49 any more"))).toMatchObject({
+      success: false, claims: ["claim:currency:negated-quote"],
+    });
+  });
+
   it("clips Haiku's over-long visual.medium label instead of discarding the concept", async () => {
     const { parseJSON } = await import("@/lib/llm");
     const { validateConcept } = await import("@/lib/creative/concept");
