@@ -1,0 +1,991 @@
+[
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Office+work&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6846709752153",
+          "name": "Government concepts and practices",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Government concepts and practices"
+          ],
+          "description": null,
+          "disambiguation_category": "Organization/Institution Type"
+        },
+        {
+          "id": "6009224102202",
+          "name": "Workplace relationships",
+          "audience_size_lower_bound": 32108,
+          "audience_size_upper_bound": 37760,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Workplace relationships"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Business and industry"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Parenting&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003232518610",
+          "name": "Parenting",
+          "audience_size_lower_bound": 284294627,
+          "audience_size_upper_bound": 334330482,
+          "path": [
+            "Interests",
+            "Parenting"
+          ],
+          "description": "",
+          "topic": "Family and relationships"
+        },
+        {
+          "id": "6003737012891",
+          "name": "Parenting (magazine)",
+          "audience_size_lower_bound": 67543146,
+          "audience_size_upper_bound": 79430740,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Parenting (magazine)"
+          ],
+          "description": null,
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003385772131",
+          "name": "Positive Parenting Solutions",
+          "audience_size_lower_bound": 1920331,
+          "audience_size_upper_bound": 2258310,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Positive Parenting Solutions"
+          ],
+          "description": null,
+          "disambiguation_category": "Education website",
+          "topic": "Education"
+        },
+        {
+          "id": "6004112046209",
+          "name": "Parenting styles",
+          "audience_size_lower_bound": 1109300,
+          "audience_size_upper_bound": 1304537,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Parenting styles"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Business and industry"
+        },
+        {
+          "id": "6004119881589",
+          "name": "DANCOW Parenting Center",
+          "audience_size_lower_bound": 1104113,
+          "audience_size_upper_bound": 1298438,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "DANCOW Parenting Center"
+          ],
+          "description": null,
+          "disambiguation_category": "Food & Beverage Company",
+          "topic": "Food and drink"
+        },
+        {
+          "id": "6762371333698",
+          "name": "Parenting magazines",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Parenting magazines"
+          ],
+          "description": null,
+          "disambiguation_category": "Magazine"
+        },
+        {
+          "id": "6015899862035",
+          "name": "Positive Parenting: Toddlers and Beyond",
+          "audience_size_lower_bound": 717304,
+          "audience_size_upper_bound": 843550,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Positive Parenting: Toddlers and Beyond"
+          ],
+          "description": null,
+          "disambiguation_category": "Education"
+        },
+        {
+          "id": "6012921170100",
+          "name": "Evolutionary Parenting",
+          "audience_size_lower_bound": 128979,
+          "audience_size_upper_bound": 151680,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Evolutionary Parenting"
+          ],
+          "description": null,
+          "topic": "Education"
+        },
+        {
+          "id": "6003427614170",
+          "name": "peaceful parenting",
+          "audience_size_lower_bound": 126445,
+          "audience_size_upper_bound": 148700,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "peaceful parenting"
+          ],
+          "description": null,
+          "disambiguation_category": "Education"
+        },
+        {
+          "id": "6014725234666",
+          "name": "Nurture ~ Natural Parenting Magazine",
+          "audience_size_lower_bound": 40688,
+          "audience_size_upper_bound": 47850,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Nurture ~ Natural Parenting Magazine"
+          ],
+          "description": null,
+          "disambiguation_category": "Magazine",
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003249820909",
+          "name": "Tampa Bay Parenting Magazine",
+          "audience_size_lower_bound": 26972,
+          "audience_size_upper_bound": 31720,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Tampa Bay Parenting Magazine"
+          ],
+          "description": null,
+          "disambiguation_category": "News & media website",
+          "topic": "Travel, places and events"
+        },
+        {
+          "id": "6003099882788",
+          "name": "Parenting Teenagers",
+          "audience_size_lower_bound": 18500,
+          "audience_size_upper_bound": 21757,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Parenting Teenagers"
+          ],
+          "description": null,
+          "topic": "People"
+        },
+        {
+          "id": "6003704126313",
+          "name": "Baby food",
+          "audience_size_lower_bound": 21027417,
+          "audience_size_upper_bound": 24728243,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Baby food"
+          ],
+          "description": null,
+          "topic": "Food and drink"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Physical+fitness&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003277229371",
+          "name": "Physical fitness",
+          "audience_size_lower_bound": 678866522,
+          "audience_size_upper_bound": 798347030,
+          "path": [
+            "Interests",
+            "Fitness and wellness",
+            "Physical fitness"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003384248805",
+          "name": "Fitness and wellness",
+          "audience_size_lower_bound": 1083752219,
+          "audience_size_upper_bound": 1274492610,
+          "path": [
+            "Interests",
+            "Fitness and wellness"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6004115167424",
+          "name": "Physical exercise",
+          "audience_size_lower_bound": 646978494,
+          "audience_size_upper_bound": 760846710,
+          "path": [
+            "Interests",
+            "Fitness and wellness",
+            "Physical exercise"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6011282595516",
+          "name": "Judge John Hodgman",
+          "audience_size_lower_bound": 70017,
+          "audience_size_upper_bound": 82340,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Judge John Hodgman"
+          ],
+          "description": null,
+          "disambiguation_category": "TV show",
+          "topic": "News and entertainment"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Running&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003397496347",
+          "name": "Running",
+          "audience_size_lower_bound": 295862363,
+          "audience_size_upper_bound": 347934139,
+          "path": [
+            "Interests",
+            "Fitness and wellness",
+            "Running"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003647202420",
+          "name": "Road running",
+          "audience_size_lower_bound": 36163690,
+          "audience_size_upper_bound": 42528500,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Road running"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003198391601",
+          "name": "Running club",
+          "audience_size_lower_bound": 17519447,
+          "audience_size_upper_bound": 20602870,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running club"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003343543428",
+          "name": "Trail running",
+          "audience_size_lower_bound": 16662241,
+          "audience_size_upper_bound": 19594796,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Trail running"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003363701193",
+          "name": "Running Man (TV series)",
+          "audience_size_lower_bound": 11921564,
+          "audience_size_upper_bound": 14019760,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running Man (TV series)"
+          ],
+          "description": null,
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6008199007172",
+          "name": "Long-distance running",
+          "audience_size_lower_bound": 9414829,
+          "audience_size_upper_bound": 11071840,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Long-distance running"
+          ],
+          "description": null,
+          "topic": "Sports and outdoors"
+        },
+        {
+          "id": "6003171771328",
+          "name": "Sprint (running)",
+          "audience_size_lower_bound": 8290790,
+          "audience_size_upper_bound": 9749970,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Sprint (running)"
+          ],
+          "description": null,
+          "disambiguation_category": "Work Position",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003504677595",
+          "name": "Cross country running",
+          "audience_size_lower_bound": 6609132,
+          "audience_size_upper_bound": 7772340,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Cross country running"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003746441104",
+          "name": "Running Scared (2006 film)",
+          "audience_size_lower_bound": 5425858,
+          "audience_size_upper_bound": 6380810,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running Scared (2006 film)"
+          ],
+          "description": null,
+          "disambiguation_category": "Movie",
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003290739856",
+          "name": "Freerunning",
+          "audience_size_lower_bound": 4541130,
+          "audience_size_upper_bound": 5340370,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Freerunning"
+          ],
+          "description": null,
+          "topic": "Lifestyle and culture"
+        },
+        {
+          "id": "6013339239507",
+          "name": "Brooks Running",
+          "audience_size_lower_bound": 3548035,
+          "audience_size_upper_bound": 4172490,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Brooks Running"
+          ],
+          "description": null,
+          "disambiguation_category": "Outdoor & Sporting Goods Company",
+          "topic": "Sports and outdoors"
+        },
+        {
+          "id": "6002971906374",
+          "name": "adidas Running",
+          "audience_size_lower_bound": 3067807,
+          "audience_size_upper_bound": 3607742,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "adidas Running"
+          ],
+          "description": null,
+          "disambiguation_category": "Company",
+          "topic": "Business and industry"
+        },
+        {
+          "id": "6004043826189",
+          "name": "Middle-distance running",
+          "audience_size_lower_bound": 2220654,
+          "audience_size_upper_bound": 2611490,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Middle-distance running"
+          ],
+          "description": null,
+          "topic": "Sports and outdoors"
+        },
+        {
+          "id": "1384103478584221",
+          "name": "런닝맨 RunningMan",
+          "audience_size_lower_bound": 1105093,
+          "audience_size_upper_bound": 1299590,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "런닝맨 RunningMan"
+          ],
+          "description": null,
+          "disambiguation_category": "TV show"
+        },
+        {
+          "id": "6797097486536",
+          "name": "Running, Track and Field news and content",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running, Track and Field news and content"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business"
+        },
+        {
+          "id": "6877566754728",
+          "name": "Running, Track and Field clubs",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running, Track and Field clubs"
+          ],
+          "description": null,
+          "disambiguation_category": "Sports team"
+        },
+        {
+          "id": "6777460011394",
+          "name": "Running, Track and Field equipment and apparel",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running, Track and Field equipment and apparel"
+          ],
+          "description": null,
+          "disambiguation_category": "Outdoor & Sporting Goods Company"
+        },
+        {
+          "id": "6806378023161",
+          "name": "Running races and events",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running races and events"
+          ],
+          "description": null
+        },
+        {
+          "id": "6003125416928",
+          "name": "Fell running",
+          "audience_size_lower_bound": 500323,
+          "audience_size_upper_bound": 588380,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Fell running"
+          ],
+          "description": null,
+          "topic": "Hobbies and activities"
+        },
+        {
+          "id": "6003472147894",
+          "name": "Running Wild (band)",
+          "audience_size_lower_bound": 354719,
+          "audience_size_upper_bound": 417150,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running Wild (band)"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003157800084",
+          "name": "Running shorts",
+          "audience_size_lower_bound": 310153,
+          "audience_size_upper_bound": 364740,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running shorts"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003166589449",
+          "name": "Women's Running Magazine",
+          "audience_size_lower_bound": 298690,
+          "audience_size_upper_bound": 351260,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Women's Running Magazine"
+          ],
+          "description": null,
+          "disambiguation_category": "Magazine",
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003218806411",
+          "name": "Running Shoes",
+          "audience_size_lower_bound": 283904,
+          "audience_size_upper_bound": 333872,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Running Shoes"
+          ],
+          "description": null,
+          "disambiguation_category": "Recreation & sports website",
+          "topic": "Business and industry"
+        },
+        {
+          "id": "6014345404751",
+          "name": "Altra Running",
+          "audience_size_lower_bound": 281399,
+          "audience_size_upper_bound": 330926,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Altra Running"
+          ],
+          "description": null,
+          "disambiguation_category": "Outdoor & Sporting Goods Company",
+          "topic": "Sports and outdoors"
+        },
+        {
+          "id": "6016479291175",
+          "name": "Mizuno Running North America",
+          "audience_size_lower_bound": 164277,
+          "audience_size_upper_bound": 193190,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Mizuno Running North America"
+          ],
+          "description": null,
+          "disambiguation_category": "Product/service",
+          "topic": "Shopping and fashion"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adinterest&q=Yoga&limit=25&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003306084421",
+          "name": "Yoga",
+          "audience_size_lower_bound": 382445073,
+          "audience_size_upper_bound": 449755406,
+          "path": [
+            "Interests",
+            "Fitness and wellness",
+            "Yoga"
+          ],
+          "description": "",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6004920030448",
+          "name": "Yoga pants",
+          "audience_size_lower_bound": 12172746,
+          "audience_size_upper_bound": 14315150,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga pants"
+          ],
+          "description": null,
+          "topic": "Shopping and fashion"
+        },
+        {
+          "id": "6003633125183",
+          "name": "Hatha yoga",
+          "audience_size_lower_bound": 10421982,
+          "audience_size_upper_bound": 12256251,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Hatha yoga"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003474973243",
+          "name": "Hot yoga",
+          "audience_size_lower_bound": 6524345,
+          "audience_size_upper_bound": 7672630,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Hot yoga"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003270863248",
+          "name": "Yoga Journal",
+          "audience_size_lower_bound": 5596058,
+          "audience_size_upper_bound": 6580965,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga Journal"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003656059678",
+          "name": "Kundalini yoga",
+          "audience_size_lower_bound": 5423074,
+          "audience_size_upper_bound": 6377536,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Kundalini yoga"
+          ],
+          "description": null,
+          "topic": "Lifestyle and culture"
+        },
+        {
+          "id": "6002934249459",
+          "name": "Ashtanga vinyasa yoga",
+          "audience_size_lower_bound": 4941513,
+          "audience_size_upper_bound": 5811220,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Ashtanga vinyasa yoga"
+          ],
+          "description": null,
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "417410215080330",
+          "name": "Yoga Alliance",
+          "audience_size_lower_bound": 4152677,
+          "audience_size_upper_bound": 4883549,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga Alliance"
+          ],
+          "description": null
+        },
+        {
+          "id": "6003352806719",
+          "name": "Rāja yoga",
+          "audience_size_lower_bound": 3434455,
+          "audience_size_upper_bound": 4038920,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Rāja yoga"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Lifestyle and culture"
+        },
+        {
+          "id": "946184228807782",
+          "name": "International Yoga Day",
+          "audience_size_lower_bound": 3303452,
+          "audience_size_upper_bound": 3884860,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "International Yoga Day"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business"
+        },
+        {
+          "id": "6003353168530",
+          "name": "Bikram Yoga",
+          "audience_size_lower_bound": 2944226,
+          "audience_size_upper_bound": 3462410,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Bikram Yoga"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003121551334",
+          "name": "Yin yoga",
+          "audience_size_lower_bound": 2055535,
+          "audience_size_upper_bound": 2417310,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yin yoga"
+          ],
+          "description": null,
+          "topic": "Hobbies and activities"
+        },
+        {
+          "id": "6003336001848",
+          "name": "Iyengar Yoga",
+          "audience_size_lower_bound": 1994022,
+          "audience_size_upper_bound": 2344971,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Iyengar Yoga"
+          ],
+          "description": null,
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "6003066013070",
+          "name": "Karma yoga",
+          "audience_size_lower_bound": 1895714,
+          "audience_size_upper_bound": 2229360,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Karma yoga"
+          ],
+          "description": null,
+          "topic": "Hobbies and activities"
+        },
+        {
+          "id": "6003345097805",
+          "name": "Yoga International",
+          "audience_size_lower_bound": 1880544,
+          "audience_size_upper_bound": 2211520,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga International"
+          ],
+          "description": null,
+          "disambiguation_category": "Health & wellness website",
+          "topic": "Education"
+        },
+        {
+          "id": "6003290905725",
+          "name": "Yoga mat",
+          "audience_size_lower_bound": 1711462,
+          "audience_size_upper_bound": 2012680,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga mat"
+          ],
+          "description": null,
+          "topic": "Travel, places and events"
+        },
+        {
+          "id": "6013731055813",
+          "name": "California Fitness & Yoga Centers Vietnam",
+          "audience_size_lower_bound": 1093367,
+          "audience_size_upper_bound": 1285800,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "California Fitness & Yoga Centers Vietnam"
+          ],
+          "description": null,
+          "disambiguation_category": "Gym/Physical Fitness Center",
+          "topic": "Fitness and wellness"
+        },
+        {
+          "id": "6003382152537",
+          "name": "Sahaja Yoga",
+          "audience_size_lower_bound": 910493,
+          "audience_size_upper_bound": 1070740,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Sahaja Yoga"
+          ],
+          "description": null,
+          "disambiguation_category": "Song",
+          "topic": "Lifestyle and culture"
+        },
+        {
+          "id": "6806132925069",
+          "name": "Yoga studios and instruction",
+          "audience_size_lower_bound": 850340,
+          "audience_size_upper_bound": 1000000,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga studios and instruction"
+          ],
+          "description": null,
+          "disambiguation_category": "Education website"
+        },
+        {
+          "id": "6003246524567",
+          "name": "Kriya Yoga",
+          "audience_size_lower_bound": 815807,
+          "audience_size_upper_bound": 959390,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Kriya Yoga"
+          ],
+          "description": null
+        },
+        {
+          "id": "6003278710076",
+          "name": "Yoga Sutras of Patanjali",
+          "audience_size_lower_bound": 787627,
+          "audience_size_upper_bound": 926250,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga Sutras of Patanjali"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "News and entertainment"
+        },
+        {
+          "id": "596277913862385",
+          "name": "CorePower Yoga",
+          "audience_size_lower_bound": 779649,
+          "audience_size_upper_bound": 916868,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "CorePower Yoga"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business"
+        },
+        {
+          "id": "6003839585452",
+          "name": "Bhakti yoga",
+          "audience_size_lower_bound": 743571,
+          "audience_size_upper_bound": 874440,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Bhakti yoga"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "Hobbies and activities"
+        },
+        {
+          "id": "6003195089298",
+          "name": "Yoga Lin",
+          "audience_size_lower_bound": 603120,
+          "audience_size_upper_bound": 709270,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Yoga Lin"
+          ],
+          "description": null,
+          "disambiguation_category": "Artist",
+          "topic": "People"
+        },
+        {
+          "id": "6015843178124",
+          "name": "Isha Yoga",
+          "audience_size_lower_bound": 540306,
+          "audience_size_upper_bound": 635400,
+          "path": [
+            "Interests",
+            "Additional interests",
+            "Isha Yoga"
+          ],
+          "description": null,
+          "disambiguation_category": "Local Business",
+          "topic": "News and entertainment"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=targetingoptionstatus&targeting_option_list=%5B%226003277229371%22%2C%226003397496347%22%2C%226003306084421%22%2C%226003232518610%22%5D",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "6003277229371",
+          "current_status": "NORMAL"
+        },
+        {
+          "id": "6003397496347",
+          "current_status": "NORMAL"
+        },
+        {
+          "id": "6003306084421",
+          "current_status": "NORMAL"
+        },
+        {
+          "id": "6003232518610",
+          "current_status": "NORMAL"
+        }
+      ]
+    }
+  }
+]

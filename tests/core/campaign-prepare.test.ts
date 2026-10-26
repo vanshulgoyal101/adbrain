@@ -3,6 +3,8 @@ import groqCityOnly from "./fixtures/planner/groq-audience-city-only.json";
 import fallbackReplies from "./fixtures/planner/fallback-replies.json";
 import { parseJSON } from "@/lib/llm";
 import chiropracticInterests from "./fixtures/meta/interests-chiropractic.json";
+import plannerV6Interests from "./fixtures/meta/interests-planner-v6.json";
+import groqMetaInterestNames from "./fixtures/planner/groq-meta-interest-names.json";
 import { MetaClient } from "@/lib/meta/client";
 import { rationaleForMatchedInterests } from "@/lib/campaign/planner-draft";
 
@@ -186,6 +188,22 @@ describe("core: Prepare audience", () => {
       { outcome: "partial", count: 2, failedCount: 2, errorCode: "PLAN_AUDIENCE_NO_META_INTERESTS" },
       { outcome: "partial", count: 2, failedCount: undefined, errorCode: "PLAN_AUDIENCE_INTEREST_LOOKUP_FAILED" },
     ]);
+  });
+
+  // #686: the planner names interests the way Meta does (recorded Groq reply on production's Cedar Ridge
+  // facts, Oct 26; before this prompt, 'Chiropractic', 'Back pain' and 'Physical therapy' matched nothing).
+  it("asks for Meta-named interests, and Meta's recorded search keeps four of the five suggested", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    mocks.complete.mockResolvedValue({ text: groqMetaInterestNames.text, provider: "groq", model: groqMetaInterestNames.model, usage });
+    replayMeta(plannerV6Interests);
+    const { status, body } = await prepare();
+    expect(status).toBe(200);
+    expect(body.fallback).toBeUndefined();
+    expect(body.targeting.audience.interestNames).toEqual(["Physical fitness", "Running", "Yoga", "Parenting"]);
+    const [messages] = mocks.complete.mock.calls[0] as [{ role: string; content: string }[]];
+    expect(messages[0].content).toContain("not professions, services, medical specialties, symptoms or conditions");
+    const plan = info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"campaign.plan"'));
+    expect(JSON.parse(plan!)).toMatchObject({ outcome: "success", attributes: { count: 5, failedCount: 1 } });
   });
 
   it("explains a broad audience when Meta has none of the interests", async () => {
