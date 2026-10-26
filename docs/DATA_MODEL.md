@@ -14,6 +14,10 @@ limits customer reads and inserts to the signed-in owner, permits no customer
 status changes, and prevents duplicate open requests of the same kind. Only the
 server-side service role can read the full queue or update status/handler, after
 the privacy operator check. The request itself does not export or delete data.
+Meta's data deletion callback also files a `delete` request (`source = 'meta_callback'`,
+with the status-URL `confirmation_code` and the Meta person id) through the service-only
+`meta_deletion_request_record`: one open request per AdBrain owner who connected that
+person, or one with no owner when none did. Meta retries never duplicate it (#730).
 In Production it is applied at SHA-256
 `02a409069475caff00872c9de31296771d0669bf852f5e5034f7f876a47d972c`, with one
 owner-confirmed operator registered and zero requests at readback. This does not
@@ -447,6 +451,7 @@ alone is not a safe deployment plan.
 | [20261026_campaign_learnings.sql](../db/migrations/20261026_campaign_learnings.sql) | #588 learning ledger: `campaign_learnings` (owner-read RLS, service-role writes) |
 | [20261026_meta_token_search_path.sql](../db/migrations/20261026_meta_token_search_path.sql) | #625: `meta_token_insert`/`get`/`delete` run with `search_path = ''` (#359 standard); bodies already fully qualified, behaviour unchanged |
 | [20261026_lead_campaign_link.sql](../db/migrations/20261026_lead_campaign_link.sql) | Same-signature `lead_sync_checkpoint` links synced leads to their campaign by Meta campaign id and backfills empty links (#680); either release order works (the old function ignores the new key) |
+| [20261026_meta_deletion_requests.sql](../db/migrations/20261026_meta_deletion_requests.sql) | #730: `privacy_requests` gains `source`, `confirmation_code`, `meta_subject_id` (nullable `owner_id` only for callback rows); service-only `meta_deletion_request_record` files the callback's deletion request, idempotent per open code and owner |
 
 Payment, allowance and quote migrations are described above. The map is not a
 replay script: a fresh database starts from the canonical schema, and
