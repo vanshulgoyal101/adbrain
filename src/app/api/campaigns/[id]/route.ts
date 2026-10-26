@@ -18,7 +18,7 @@ import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_MANAGER, reviewableCampaign } from "@/lib/campaign/activation";
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
-import { isOperatorFunded } from "@/lib/payments/operator-funding";
+import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
 import { formatMoney } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
@@ -45,7 +45,8 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
     const review = reviewableCampaign(campaign);
     if (!review) return apiError(RESUME_IN_ADS_MANAGER, 409);
     await recheckMetaConnection(context, review.generation);
-    const operatorFunded = await isOperatorFunded(campaign.business_id);
+    // #759: own-account and operator-funded runs are guarded on Meta, so the review shows Meta's funding.
+    const mode = await fundingMode(campaign.business_id);
     const [{ delivery, funding }, learning] = await Promise.all([withMetaConnection(context, {
       purpose: "activate",
       binding: { adAccountId: review.adAccountId, pageId: review.pageId },
@@ -54,10 +55,10 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
       delivery: await meta.readCampaignDelivery(review.metaCampaignId, {
         dailyBudgetRupees: review.dailyBudgetRupees, status: campaign.status, ...review.children,
       }),
-      funding: operatorFunded ? await meta.readAccountFunding() : null,
+      funding: mode !== "managed" ? await meta.readAccountFunding() : null,
     })), getActivationLearning(campaign)]);
     // #419 item 2: inputs for the learning-restart notes; not part of the confirmation digest.
-    return NextResponse.json({ delivery, ...(funding ? { funding } : {}), learning }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);
@@ -158,10 +159,11 @@ async function handlePATCH(
   if (action === "active" && !children) {
     return apiError("Campaign children need reconciliation before activation.", 409);
   }
-  let operatorFunded = false;
+  // #759: only a managed business spends an AdBrain-held allowance; the others are guarded by the cap on Meta.
+  let mode: FundingMode = "managed";
   if (action === "active") {
     try {
-      operatorFunded = await isOperatorFunded(campaign.business_id);
+      mode = await fundingMode(campaign.business_id);
     } catch {
       return apiError("Campaign funding could not be verified. Try again before activating.", 503);
     }
@@ -214,14 +216,15 @@ async function handlePATCH(
             throw new ConnectionAccessError("CONFLICT", "Campaign or child review changed; review the current Meta delivery settings again.");
           }
           const capPaise = capDays ? Math.round(campaign.daily_budget! * 100) * capDays : undefined;
-          if (operatorFunded) {
-            // #245: the operator pays Meta directly; Meta's account spending limit must cover the cap.
+          if (mode !== "managed") {
+            // #245 operator / #759 own account: paid on Meta directly; the run's total limit on Meta is the guard.
             if (!capDays || !capPaise) {
               throw new CustomerBalanceError("This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads in Meta and choose how many days to run.");
             }
             const funding = await meta.readAccountFunding();
-            if (funding.spendCapPaise <= 0) throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
-            if (funding.roomPaise < capPaise) {
+            // The operator must set an account spending limit; an owner's own limit, when set, must have room.
+            if (mode === "operator" && funding.spendCapPaise <= 0) throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
+            if (funding.spendCapPaise > 0 && funding.roomPaise < capPaise) {
               throw new CustomerBalanceError(`Meta has ${exactRupees.format(funding.roomPaise / 100)} left under the ad account's spending limit; this run needs ${exactRupees.format(capPaise / 100)}. Add funds on Meta or choose fewer days.`);
             }
           } else {
@@ -230,7 +233,7 @@ async function handlePATCH(
               campaignId: id, adAccountId: storedBinding.metaAdAccountId!, connectionGeneration: storedBinding.metaConnectionGeneration!, mediaPaise,
             })).catch(() => undefined);
           }
-          const reservation = operatorFunded ? null : await reserveCustomerCampaign(context, {
+          const reservation = mode !== "managed" ? null : await reserveCustomerCampaign(context, {
             campaignId: id, adAccountId: storedBinding.metaAdAccountId!,
             connectionGeneration: storedBinding.metaConnectionGeneration!, dailyBudgetRupees: campaign.daily_budget!,
             requestKey: parsed.data.confirmationDigest, lifetimeCapPaise: capPaise,

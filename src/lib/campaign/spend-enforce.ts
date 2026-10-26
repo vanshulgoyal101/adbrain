@@ -8,7 +8,7 @@ import { readStoredCampaignBinding } from "@/lib/campaign/binding";
 import { saveCampaign } from "./trusted-write";
 import { confirmCustomerCampaign, getCustomerBalance } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts } from "@/lib/payments/meta-cost-evidence";
-import { isOperatorFunded } from "@/lib/payments/operator-funding";
+import { fundingMode } from "@/lib/payments/operator-funding";
 import {
   getCampaigns,
   getSpendLimits,
@@ -32,15 +32,16 @@ export async function enforceAutoPauseWithStatus(businessId: string): Promise<{ 
     }
     // #245: an unreadable funding mode falls back to the customer rules (fail closed).
     let fundingVerified = true;
-    const operatorFunded = await isOperatorFunded(businessId).catch(() => { fundingVerified = false; return false; });
+    // #759: only a managed business has an AdBrain allowance to hold; operator and own-account runs are capped on Meta.
+    const metaFunded = await fundingMode(businessId).then(mode => mode !== "managed").catch(() => { fundingVerified = false; return false; });
     let customerBalance = null;
-    if (!operatorFunded) {
+    if (!metaFunded) {
       const initialBalance = await getCustomerBalance(context).catch(() => null);
       const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
       customerBalance = refresh.observed ? await getCustomerBalance(context).catch(() => null) : initialBalance;
     }
-    // #245: an operator-funded run is capped on Meta and has no customer allowance to hold.
-    const financialHold = !operatorFunded && (!customerBalance || customerBalance.held);
+    // #245/#759: a run funded on Meta (operator or own account) is capped there and has no customer allowance to hold.
+    const financialHold = !metaFunded && (!customerBalance || customerBalance.held);
     if (!financialHold && (!limits.autoPause || limits.weeklyCapRupees === null)) return { paused: [], confirmed: fundingVerified };
 
     const decision = financialHold

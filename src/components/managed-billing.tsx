@@ -55,3 +55,21 @@ export function ManagedBilling({ connection, testBusinessId, liveBusinessId, ini
     </section>
   );
 }
+/**
+ * #759 (CTO): payment appears only where AdBrain holds ad money (managed). An own-account owner pays Meta
+ * directly and an operator-funded business is paid by the operator, so neither is asked to pay; nor is anyone
+ * while the funding mode can't be read.
+ */
+export function BillingSection({ mode, ...billing }: { mode: "managed" | "own" | "operator" | null } & Parameters<typeof ManagedBilling>[0]) {
+  if (mode === "managed") return <ManagedBilling {...billing} />;
+  if (mode !== "own") return null;
+  return (
+    <section aria-labelledby="own-billing-title" className="space-y-2 border-t border-slate-200 pt-6">
+      <h2 id="own-billing-title" className="flex items-center gap-2 font-semibold text-slate-900">
+        <WalletCards aria-hidden="true" className="h-5 w-5 text-blue-600" />
+        Billing
+      </h2>
+      <p className="text-sm leading-6 text-slate-600">You pay Meta directly from your ad account. AdBrain&apos;s pilot is free.</p>
+    </section>
+  );
+}

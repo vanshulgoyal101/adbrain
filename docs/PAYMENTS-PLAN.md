@@ -215,8 +215,8 @@ guards to enable production or reinterpret existing test captures as real money.
   down and an explicit hold is never cleared. Final evidence, refunds and
   allocations stay with the financial operator. Stale non-final evidence holds
   the balance only while the campaign has an open reservation.
-- Funding modes (#245): a business is customer-funded (the allowance rules above)
-  unless a payment operator marks it **operator-funded**, meaning the operator pays
+- Funding modes (#245, #759): a business is **managed** (the allowance rules above;
+  AdBrain holds its ad money), **operator-funded**, or **own-account**. A payment operator marks it **operator-funded**, meaning the operator pays
   Meta directly and no AdBrain payment is involved (Solaride). Only
   `operator_funding_set` with a live operator grant sets or clears the mark, with a
   reason; every change is audited, and customers cannot set it. Such a business
@@ -224,7 +224,12 @@ guards to enable production or reinterpret existing test captures as real money.
   minus amount spent (both media paise, excluding GST, read live) covers the cap.
   It has no allowance, reservation, cost evidence or refund; the sweep and Refresh
   skip the allowance hold, and the weekly cap still applies. Clearing the mark
-  restores the customer gate and the sweep pauses its active runs.
+  restores the customer gate when the business is managed.
+- Own-account (#759, CTO; CEO ack on the issue): an owner on their own Meta ad account
+  pays Meta directly and AdBrain holds no ad money. Activation is capped only (the
+  lifetime budget × days on Meta), plus the weekly cap. The account spending limit is
+  checked only when the owner has set one. No allowance, reservation or sweep hold applies,
+  and Settings shows no checkout or balance (they appear only for managed businesses).
 - Managed child ad accounts (#522, 2-Tier, behind `MANAGED_ACCOUNTS_ENABLED`): each
   customer's child account also gets a Meta ad account spending limit
   (`src/lib/managed/spend-cap.ts`). Its media allowance is the customer's ad share net of
