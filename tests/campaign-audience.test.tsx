@@ -590,7 +590,7 @@ describe("campaign audience workflow", () => {
   });
 });
 describe("campaign review walkthrough dead ends (#158)", () => {
-  const websiteMessage = "Add your business website in Brand Brain. Meta lead ads must link to the advertiser's own website, not Facebook.";
+  const websiteMessage = "Add your business website on the Your business page. Meta lead ads must link to the advertiser's own website, not Facebook.";
 
   it("shows the small saved thumbnail in the ad picker and falls back to the original", () => {
     const base = "https://example.supabase.co/storage/v1/object/public/creatives/biz-1/group-1";
@@ -601,7 +601,7 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     expect(image).toHaveAttribute("src", `${base}/originals-v1/value-ad-1.png`);
   });
 
-  it("links the website blocker to Brand Brain", async () => {
+  it("links the website blocker to Your business", async () => {
     mocks.preflight.mockImplementation(async () => ({
       draftId: saved.draftId, draftVersion: saved.version, connectionGeneration: 1,
       canCreatePaused: false, blockers: [{ code: "PREFLIGHT_BLOCKED", message: websiteMessage, action: { kind: "open_brand" } }],
@@ -611,7 +611,7 @@ describe("campaign review walkthrough dead ends (#158)", () => {
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    expect(await screen.findByRole("link", { name: "Open Brand Brain" })).toHaveAttribute("href", "/brand");
+    expect(await screen.findByRole("link", { name: "Open your business details" })).toHaveAttribute("href", "/brand");
     expect(screen.getByText(websiteMessage)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send to Meta (paused)" })).toBeNull();
     // #637: a blocked review is a warning that names what to fix, not a success card.
