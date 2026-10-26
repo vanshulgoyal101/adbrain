@@ -3,6 +3,7 @@ import rebuildTape from "./fixtures/meta/edit-audience-rebuild.json";
 import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
+import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
 // #773: Graph responses recorded by scripts/record-meta-edit-audience.ts on PAUSED Solaride test
 // campaigns (archived afterwards): editing a launched ad set's audience, Chandigarh → Mohali, ages 30-60.
@@ -107,6 +108,24 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     const form = tape.sent.find(call => call.method === "POST")!.form;
     expect(form).toMatchObject({ lifetime_budget: "62000", end_time: end });
     expect(form).not.toHaveProperty("daily_budget");
+  });
+
+  // #741 (Reviewer and QA on #828): a new Indian service area without its out-of-area exclusions is refused.
+  it("refuses a new Indian area on a pre-#741 ad set when no out-of-area exclusions come with it, before any write", async () => {
+    // A campaign launched before #741: the recorded ad set read without its excluded_geo_locations.
+    const old = (rebuildTape as Exchange[]).map(exchange => {
+      const body = exchange.body as { targeting?: Record<string, unknown> };
+      if (!/fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event/.test(exchange.path) || !body.targeting) return exchange;
+      const targeting = { ...body.targeting };
+      delete targeting.excluded_geo_locations;
+      return { ...exchange, body: { ...body, targeting } };
+    });
+    const tape = replay(old);
+    const { campaignId, adSetId, adId } = ids(rebuildTape);
+    const india = { cities: [{ key: "1029599", name: "Mohali", country: "IN", radius: 25, distance_unit: "kilometer" }] };
+    await expect(new MetaClient(creds).editAdSetTargeting(campaignId, { adSetId, adIds: [adId], changes: { location: india as never } }, { validateOnly: true }))
+      .rejects.toBeInstanceOf(TargetingExclusionsMissingError);
+    expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
 
   it("refuses an ad set that isn't PAUSED, and empty or out-of-range changes, before any write", async () => {

@@ -7,7 +7,7 @@ import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
-import { mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
+import { lacksAreaExclusions, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 export type { CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -184,7 +184,8 @@ function hasInterests(targeting: Record<string, unknown>): boolean {
 function editedTargeting(source: Record<string, unknown>, changes: AudienceChanges): Record<string, unknown> {
   const next: Record<string, unknown> = { ...source };
   if (changes.location) next.geo_locations = { ...buildGeoLocations(changes.location, []), location_types: ["home", "recent"] };
-  if (changes.excludedLocation) next.excluded_geo_locations = buildGeoLocations(changes.excludedLocation, []);
+  // #741: exclusions only grow. A new exclusion is added to those already on the ad set, never instead of them.
+  if (changes.excludedLocation) next.excluded_geo_locations = unionGeo(source.excluded_geo_locations, buildGeoLocations(changes.excludedLocation, []));
   if (changes.age) {
     const advantage = (source.targeting_automation as { advantage_audience?: number } | undefined)?.advantage_audience === 1;
     const { min, max } = changes.age;
@@ -201,6 +202,20 @@ function editedTargeting(source: Record<string, unknown>, changes: AudienceChang
     if (changes.gender === "all") delete next.genders; else next.genders = [changes.gender === "men" ? 1 : 2];
   }
   return next;
+}
+
+/** Union of two Meta geo specs, list by list, de-duplicated by key (countries by code). */
+function unionGeo(current: unknown, added: Record<string, unknown>): Record<string, unknown> {
+  const base = (current && typeof current === "object" ? current : {}) as Record<string, unknown>;
+  const merged: Record<string, unknown> = { ...base };
+  for (const [kind, items] of Object.entries(added)) {
+    const existing = base[kind];
+    if (!Array.isArray(items) || !Array.isArray(existing)) { if (existing === undefined) merged[kind] = items; continue; }
+    const id = (item: unknown) => typeof item === "string" ? item : String((item as { key?: unknown }).key ?? JSON.stringify(item));
+    const seen = new Set(existing.map(id));
+    merged[kind] = [...existing, ...items.filter(item => !seen.has(id(item)))];
+  }
+  return merged;
 }
 
 /** Meta echoed the changed audience back (it may add defaults, so only what changed is compared). */
@@ -1712,6 +1727,8 @@ export class MetaClient {
     }
     if (source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
     const targeting = editedTargeting(source.targeting, changes);
+    // #741: a new service area must carry its out-of-area exclusions (Reviewer and QA on #828).
+    if (changes.location && lacksAreaExclusions(targeting)) throw new TargetingExclusionsMissingError();
     const rebuild = hasInterests(source.targeting);
     const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
     if (!rebuild) {
