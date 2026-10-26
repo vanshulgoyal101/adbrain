@@ -176,6 +176,7 @@ export interface Database {
           logo_url: string | null;
           phone: string | null;
           email: string | null;
+          whatsapp_template: Json | null;
           address: string | null;
           created_at: string;
           updated_at: string;
@@ -199,6 +200,7 @@ export interface Database {
           logo_url?: string | null;
           phone?: string | null;
           email?: string | null;
+          whatsapp_template?: Json | null;
           address?: string | null;
           created_at?: string;
           updated_at?: string;
