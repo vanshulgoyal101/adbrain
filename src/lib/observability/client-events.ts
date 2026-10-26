@@ -4,7 +4,7 @@ export const productPages = ["/dashboard", "/brand", "/create", "/studio", "/cam
 export const productActions = ["creative.generate", "creative.regenerate", "creative.edit", "creative.inspect", "creative.approve", "creative.unapprove", "creative.download", "creative.share",
   "campaign.create", "campaign.share_results", "campaign.review", "campaign.activate", "campaign.pause", "campaign.edit_audience", "campaign.edit_ad", "campaign.edit_budget", "campaign.sync", "brand.save", "asset.upload", "asset.delete",
   "lead.follow_up", "payment.checkout", "payment.quote", "meta.connect", "meta.access_request",
-  "whatsapp_ai.guide", "whatsapp_ai.done", "whatsapp_ai.unavailable"] as const;
+  "whatsapp_ai.guide", "whatsapp_ai.done", "whatsapp_ai.unavailable", "whatsapp_ai.later"] as const;
 export const viewportSchema = z.enum(["compact", "medium", "wide"]);
 const pageFields = { page: z.enum(productPages), viewport: viewportSchema.optional() };
 export const clientEventSchema = z.discriminatedUnion("name", [
