@@ -174,7 +174,7 @@ an application release.
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Groq model |
 | `OPENROUTER_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter text model; a comma list is tried in order. Oct 21 Create bake-off: Haiku 5.5 saved 6/6 at 13-15 s per concept; qwen3.8-max took 65-90 s |
 | `CREATIVE_MAX_TOKENS` | `6000` | Integer 1800-16000 |
-| `CREATIVE_REASONING_EFFORT` | `medium` | `minimal`, `low`, `medium`, `high` |
+| `CREATIVE_REASONING_EFFORT` | `medium` | `minimal`, `low`, `medium`, `high`. Haiku at `low` (#713, Oct 26): concept call 8.9–13.4 s vs 13.2–17.7 s at `medium`, judge copy 4.33 vs 4.39, first-try 8/9 |
 | `CREATIVE_ATTEMPT_TIMEOUT_MS` | `90000` | Integer 15000-120000; per Create concept attempt. The 90 s default fits qwen3.8-max (65-90 s). With a faster model set 60000: three concepts that each answer just before the limit, plus the last image, then fit the 270 s Create deadline (`test:core`) |
 | `CREATIVE_CONCEPT_SCHEDULE` | `serial` | `serial` or `parallel`. `parallel` starts all Create concept calls at once; each still validates against earlier concepts (repeated headline/opening → normal repair). #142 measure on Haiku, 3 briefs × 2: p50 60.1 s → 28.2 s, first-attempt pass 12/18 → 16/18, judge 3.88 → 4.39 |
 | `GEMINI_THINKING_HEADROOM` | `3000` | Nonnegative integer extra output headroom |
