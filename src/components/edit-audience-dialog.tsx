@@ -99,7 +99,7 @@ export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved 
         <div className="flex flex-col gap-5 px-5 py-4">
           <section className="flex flex-col gap-2">
             <h3 className="text-sm font-medium text-slate-900">New area</h3>
-            <p className="text-xs text-slate-600">Replaces where the ads show. The rest of India is left out automatically.</p>
+            <p className="text-xs text-slate-600">Replaces where the ads show. Places outside the new area are left out automatically.</p>
             <LocationPicker value={form.included} onChange={included => update({ included })} placeholder="Search a city or state" tone="include" />
           </section>
 
