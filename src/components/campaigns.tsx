@@ -178,6 +178,12 @@ async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promis
 
 type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
 
+/** Keep the chosen lead form while the Page still has it; with exactly one form, choose it (#667). */
+function keptLeadForm(current: string, forms: { id: string }[]): string {
+  if (forms.some(form => form.id === current)) return current;
+  return forms.length === 1 ? forms[0].id : "";
+}
+
 function needsAudiencePlan(input: AudiencePlanInput): boolean {
   return input.targeting.age?.mode === "ai" || !input.targeting.audience;
 }
@@ -246,6 +252,24 @@ function BusinessCampaigns({
   const [creating, setCreating] = useState(false);
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #667: a composer or review error shows beside the control that needs fixing, not in the page banner far above it.
+  const [placedError, setPlacedError] = useState<{ at: "leadform" | "composer" | "review"; message: string } | null>(null);
+  const placedErrorRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    if (placedError?.at === "leadform") {
+      const field = document.getElementById("leadform");
+      field?.scrollIntoView?.({ block: "center" });
+      field?.focus();
+    } else if (placedError) placedErrorRef.current?.scrollIntoView?.({ block: "center" });
+  }, [placedError]);
+  function failAt(at: "leadform" | "composer" | "review", message: string) {
+    setError(null);
+    setPlacedError({ at, message });
+  }
+  function clearErrors() {
+    setError(null);
+    setPlacedError(null);
+  }
   // #662: a card action's failure shows on that card, where the owner tapped (the page banner is off-screen on a phone).
   const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
@@ -383,7 +407,7 @@ function BusinessCampaigns({
     const forms = await fetchDraftForms(signal);
     if (signal?.aborted) return;
     setAvailableForms(forms);
-    setLeadFormId(current => forms.some(form => form.id === current) ? current : "");
+    setLeadFormId(current => keptLeadForm(current, forms));
   }
 
   useEffect(() => {
@@ -399,7 +423,7 @@ function BusinessCampaigns({
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
-      setLeadFormId(current => forms.some(form => form.id === current) ? current : "");
+      setLeadFormId(current => keptLeadForm(current, forms));
     }).catch(() => {
       if (!controller.signal.aborted) setFormsError("Page forms are temporarily unavailable.");
     }).finally(() => {
@@ -491,7 +515,7 @@ function BusinessCampaigns({
     if (preparing || creating) return;
     if (unresolvedRecovery()) { setError("Resolve the current campaign operation before opening another draft."); return; }
     setDraftBusy(draftId);
-    setError(null);
+    clearErrors();
     try {
       const draft = await createMetaConnectClient().draft(draftId);
       preparedDraftRef.current = draft;
@@ -536,7 +560,7 @@ function BusinessCampaigns({
     if (!(await askConfirm(reconciling
       ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you don't want it.", confirmLabel: "Start new campaign" }
       : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
-    setError(null);
+    clearErrors();
     preparedDraftRef.current = null;
     recoveryRef.current = null;
     operationRef.current = null;
@@ -622,7 +646,7 @@ function BusinessCampaigns({
 
   async function syncFromMeta() {
     setSyncing(true);
-    setError(null);
+    clearErrors();
     try {
       const cursor = syncCursorRef.current;
       const res = await fetch(`/api/campaigns/sync${cursor ? `?after=${encodeURIComponent(cursor)}` : ""}`, { method: "POST" });
@@ -767,7 +791,7 @@ function BusinessCampaigns({
 
   async function requestAudienceRecommendation(field?: "location" | "age") {
     if (unresolvedRecovery() || isPreparing()) return;
-    setError(null);
+    clearErrors();
     setNotice(null);
     setPrepareReview(null);
     const signal = beginPreparation();
@@ -784,7 +808,7 @@ function BusinessCampaigns({
       }
       await recommendAudience(input, signal);
     } catch (reason) {
-      if (!signal.aborted) setError(reason instanceof Error ? reason.message : "Could not recommend an audience.");
+      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "Could not recommend an audience.");
     } finally {
       finishPreparation(signal);
     }
@@ -793,18 +817,21 @@ function BusinessCampaigns({
   async function prepareManualCampaign(reviewAfterSave = true) {
     if (isPreparing()) return;
     if (unresolvedRecovery()) {
-      setError("Check the existing campaign operation before preparing another campaign.");
+      failAt("composer", "Check the existing campaign operation before preparing another campaign.");
       return;
     }
-    setError(null);
+    clearErrors();
     setNotice(null);
     setPrepareReview(null);
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
-      if (reviewAfterSave && connectedForDraft && input.destination !== "whatsapp" && !input.leadFormId) throw new Error("Choose a lead form before preparing campaign review.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Complete the campaign details first.");
+      failAt("composer", reason instanceof Error ? reason.message : "Complete the campaign details first.");
+      return;
+    }
+    if (reviewAfterSave && connectedForDraft && input.destination !== "whatsapp" && !input.leadFormId) {
+      failAt("leadform", "Choose a lead form before preparing campaign review.");
       return;
     }
     const signal = beginPreparation();
@@ -841,7 +868,7 @@ function BusinessCampaigns({
       setPreparationStage(signal, "Checking campaign readiness...");
       await loadPrepareReview(draft, connection, signal);
     } catch (reason) {
-      if (!signal.aborted) setError(reason instanceof Error ? reason.message : "Could not save the campaign draft.");
+      if (!signal.aborted) failAt("composer", reason instanceof Error ? reason.message : "Could not save the campaign draft.");
     } finally {
       finishPreparation(signal);
     }
@@ -871,11 +898,11 @@ function BusinessCampaigns({
         });
         if (controller.signal.aborted) return null;
       }
-      setError("Campaign creation is still processing. Check the operation status before taking another action.");
+      failAt("review", "Campaign creation is still processing. Check the operation status before taking another action.");
       return null;
     } catch (reason) {
       if (!controller.signal.aborted) {
-        setError(reason instanceof Error ? reason.message : "Campaign operation status is unavailable.");
+        failAt("review", reason instanceof Error ? reason.message : "Campaign operation status is unavailable.");
       }
       return null;
     } finally {
@@ -887,11 +914,11 @@ function BusinessCampaigns({
     if (!prepareReview || prepareReview.status !== "ready") return;
     const { draft, review } = prepareReview;
     if (!review.canCreatePaused || !review.planHash || !review.selected || review.blockers.length) {
-      setError("Resolve the campaign review blockers before creating.");
+      failAt("review", "Resolve the campaign review blockers before creating.");
       return;
     }
     if (!canStartCreate(operation)) return;
-    setError(null);
+    clearErrors();
     setNotice(null);
     setCreating(true);
     setSendingNew(!recoveryRef.current?.request);
@@ -912,13 +939,13 @@ function BusinessCampaigns({
         setNotice("Paused campaign created. Review it before activating spend.");
         setShowComposer(false);
       } else if (next.state === "needs_reconciliation") {
-        setError("Campaign creation needs reconciliation. Do not retry the create operation.");
+        failAt("review", "Campaign creation needs reconciliation. Do not retry the create operation.");
       } else if (next.state === "pending" || next.state === "running") {
         await pollOperation(next.operationId);
       }
     } catch (reason) {
       if (!controller.signal.aborted) {
-        setError(reason instanceof Error ? reason.message : "Campaign creation could not be started.");
+        failAt("review", reason instanceof Error ? reason.message : "Campaign creation could not be started.");
       }
     } finally {
       setCreating(false);
@@ -933,7 +960,7 @@ function BusinessCampaigns({
         const next = await createMetaConnectClient().operationForRequest(business.id, recoveryRef.current.request.idempotencyKey);
         if (next) acceptOperation(next);
         else { setRetryAllowed(true); setNotice("No operation is recorded yet. Retrying will reuse the original request."); }
-      } catch (reason) { setError(reason instanceof Error ? reason.message : "Operation status is unavailable."); }
+      } catch (reason) { failAt("review", reason instanceof Error ? reason.message : "Operation status is unavailable."); }
       finally { setOperationChecking(false); }
       return;
     }
@@ -954,7 +981,7 @@ function BusinessCampaigns({
     restoreDraft(draft);
     setOperation(null);
     operationRef.current = null;
-    setError(null);
+    clearErrors();
     try {
       const connection = await createMetaConnectClient().status(business.id);
       if (connection.authorization !== "connected" || !connection.selected) {
@@ -971,7 +998,7 @@ function BusinessCampaigns({
 
   async function refresh(id: string) {
     setRefreshingId(id);
-    setError(null);
+    clearErrors();
     setCardError(null);
     try {
       const res = await fetch(`/api/campaigns/${id}/refresh`, {
@@ -1076,7 +1103,7 @@ function BusinessCampaigns({
     // Activation is confirmed from the review panel at the top; a pause is tapped on the card.
     const fail = (message: string) => confirmed ? setError(message) : setCardError({ id: c.id, message });
     setStatusChangingId(c.id);
-    setError(null);
+    clearErrors();
     try {
       const res = await fetch(`/api/campaigns/${c.id}`, {
         method: "PATCH",
@@ -1116,7 +1143,7 @@ function BusinessCampaigns({
       return;
     }
     setDeletingId(c.id);
-    setError(null);
+    clearErrors();
     setCardError(null);
     try {
       const res = await fetch(`/api/campaigns/${c.id}`, { method: "DELETE" });
@@ -1144,6 +1171,7 @@ function BusinessCampaigns({
         </div>
       </div>
       {error && <Alert variant="error">{error}</Alert>}
+      {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
       {!connectedForDraft && (
         <div className="space-y-3">
@@ -1331,6 +1359,7 @@ function BusinessCampaigns({
             </>
           )}
         </Alert>
+        {placedError?.at === "review" && <p ref={placedErrorRef} role="alert" className="mt-2 scroll-mt-24 text-sm font-medium text-red-800">{placedError.message}</p>}
         </section>
       )}
       <MetaConnectDialog
@@ -1581,7 +1610,9 @@ function BusinessCampaigns({
                     <select
                       id="leadform"
                       value={leadFormId}
-                      onChange={(e) => setLeadFormId(e.target.value)}
+                      onChange={(e) => { setLeadFormId(e.target.value); if (placedError?.at === "leadform") setPlacedError(null); }}
+                      aria-invalid={placedError?.at === "leadform" || undefined}
+                      aria-describedby={placedError?.at === "leadform" ? "leadform-error" : undefined}
                       className="h-10 w-full min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none"
                     >
                       <option value="">{connectedForDraft ? "Choose a lead form" : "Connect Meta to choose a form"}</option>
@@ -1591,6 +1622,7 @@ function BusinessCampaigns({
                         </option>
                       ))}
                     </select>
+                    {placedError?.at === "leadform" && <p id="leadform-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
                   </div>}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
                     {whatsappOptions.length ? <>
@@ -1718,6 +1750,7 @@ function BusinessCampaigns({
                   />
                 </div>
 
+                {placedError?.at === "composer" && <p ref={placedErrorRef} role="alert" className="scroll-mt-24 text-sm font-medium text-red-800">{placedError.message}</p>}
                 <div className="flex flex-wrap items-center gap-3">
                   <Button variant="outline" onClick={() => void prepareManualCampaign(false)} disabled={preparing || creating}>
                     <Save className="h-4 w-4" aria-hidden="true" /> Save draft
