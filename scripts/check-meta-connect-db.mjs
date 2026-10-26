@@ -32,6 +32,7 @@ const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const hardeningMigration = await readFile(join(root, "db/migrations/20261026_legacy_credentials_bucket_limits.sql"), "utf8");
+const reauthMigration = await readFile(join(root, "db/migrations/20261026_meta_connection_reauth.sql"), "utf8");
 const leadCampaignLinkMigration = await readFile(join(root, "db/migrations/20261026_lead_campaign_link.sql"), "utf8");
 const managedWhatsAppMigration = await readFile(join(root, "db/migrations/20261025_managed_whatsapp_page_link.sql"), "utf8");
 const productRollupMigration = await readFile(join(root, "db/migrations/20260928_product_event_rollups.sql"), "utf8");
@@ -1148,6 +1149,28 @@ async function verifyTokenSearchPath(db, database) {
   });
 }
 
+async function verifyConnectionReauth(db, database) {
+  await check(`${database}: a Graph 190 marks only the failing connection generation reauth_required, service role only (#757)`, async () => {
+    const owner = randomUUID(), business = randomUUID();
+    await db.query("begin");
+    try {
+      await db.query("insert into auth.users(id) values ($1)", [owner]);
+      await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Reauth')", [business, owner]);
+      await db.query("insert into public.meta_connections(business_id,generation,authorization_status,ad_account_id,page_id) values ($1,5,'connected','act_1','page_1')", [business]);
+      const mark = async (generation) => (await db.query("select public.meta_connection_mark_reauth($1,$2) as changed", [business, generation])).rows[0].changed;
+      assert.equal(await mark(4), false, "a stale generation must not touch a reconnected row");
+      assert.equal((await db.query("select authorization_status from public.meta_connections where business_id = $1", [business])).rows[0].authorization_status, "connected");
+      assert.equal(await mark(5), true);
+      assert.equal(await mark(5), false, "already marked");
+      const row = (await db.query("select authorization_status, generation from public.meta_connections where business_id = $1", [business])).rows[0];
+      assert.deepEqual(row, { authorization_status: "reauth_required", generation: "5" });
+      const fn = (await db.query(`select p.proconfig, has_function_privilege('authenticated', p.oid, 'execute') as customer
+        from pg_proc p where p.proname = 'meta_connection_mark_reauth'`)).rows[0];
+      assert.deepEqual(fn, { proconfig: ['search_path=""'], customer: false });
+    } finally { await db.query("rollback"); }
+  });
+}
+
 async function verifyLegacyCredentialsAndBuckets(db, database) {
   await check(`${database}: browsers can't reach legacy meta_credentials, and buckets take only images within a size limit (#731)`, async () => {
     const legacy = (await db.query(`select case when to_regclass('public.meta_credentials') is null then false else
@@ -2101,6 +2124,9 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(hardeningMigration);
       await db.query(hardeningMigration);
       await verifyLegacyCredentialsAndBuckets(db,database);
+      await db.query(reauthMigration);
+      await db.query(reauthMigration);
+      await verifyConnectionReauth(db,database);
       if ((await db.query("select to_regclass('public.lead_sync_runs') is not null as installed")).rows[0].installed) {
         await db.query(leadCampaignLinkMigration);
         await db.query(leadCampaignLinkMigration);

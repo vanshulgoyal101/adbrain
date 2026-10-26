@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { apiError, readJson, serverError } from "@/lib/api";
 import { logEvent } from "@/lib/audit";
 import { wouldExceedCap } from "@/lib/campaign/spend";
-import { CampaignDeliveryError, MetaError, friendlyMetaError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
+import { CampaignDeliveryError, MetaError, friendlyMetaError, isMetaReauthError, type CampaignDeliverySnapshot, type CappedActivation, type PausedCampaignTree } from "@/lib/meta/client";
 import {
   ConnectionAccessError,
   recheckMetaConnection,
@@ -312,6 +312,13 @@ async function handlePATCH(
         err.message,
         err.code === "CONFLICT" ? 409 : err.code === "UNAUTHENTICATED" ? 401 : 400,
       );
+    }
+    if (isMetaReauthError(err)) {
+      // #757: a dead token can't stop delivery, so name the manual step first while the campaign may be running.
+      const message = action === "paused" || campaign.status === "active"
+        ? `Meta stopped accepting AdBrain's access, so we couldn't ${action === "paused" ? "pause" : "change"} this campaign. Pause it in Ads Manager now, then reconnect Facebook in Settings.`
+        : "Meta stopped accepting AdBrain's access. Reconnect Facebook in Settings, then try again.";
+      return NextResponse.json({ error: message, code: "META_REAUTH" }, { status: 409 });
     }
     if (err instanceof MetaError) {
       return apiError(friendlyMetaError(err), err.status && err.status >= 500 ? 502 : 400);

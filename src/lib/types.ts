@@ -941,6 +941,10 @@ export interface Database {
         Args: { p_subject_id: string };
         Returns: number;
       };
+      meta_connection_mark_reauth: {
+        Args: { p_business_id: string; p_generation: number };
+        Returns: boolean;
+      };
       razorpay_test_order_claim: {
         Args: { p_business_id: string; p_user_id: string; p_request_key: string; p_order_id: string; p_account_id: string; p_key_id: string };
         Returns: Json;

@@ -294,7 +294,8 @@ function BusinessCampaigns({
     setPlacedError(null);
   }
   // #662: a card action's failure shows on that card, where the owner tapped (the page banner is off-screen on a phone).
-  const [cardError, setCardError] = useState<{ id: string; message: string } | null>(null);
+  // #757: adsManager adds a direct link when AdBrain can't act for the owner (Meta refused its token).
+  const [cardError, setCardError] = useState<{ id: string; message: string; adsManager?: boolean } | null>(null);
   // #671: a refresh always answers on the card, even when Meta's numbers didn't move.
   const [cardNotice, setCardNotice] = useState<{ id: string; message: string } | null>(null);
   const activationReviewRef = useRef<HTMLDivElement>(null);
@@ -1154,7 +1155,7 @@ function BusinessCampaigns({
     const reviewedDigest = reviewedDays ? await buildActivationDigest(c, reviewConnection!, activationDelivery!, reviewedDays) : activationDigest;
     const reviewedConnection = reviewConnection;
     // Activation is confirmed from the review panel at the top; a pause is tapped on the card.
-    const fail = (message: string) => confirmed ? setError(message) : setCardError({ id: c.id, message });
+    const fail = (message: string, adsManager = false) => confirmed ? setError(message) : setCardError({ id: c.id, message, adsManager });
     setStatusChangingId(c.id);
     clearErrors();
     try {
@@ -1181,8 +1182,8 @@ function BusinessCampaigns({
           setReviewConnection(null);
         }
       } else {
-        const data = (await res.json()) as { error?: string };
-        fail(data.error ?? "Couldn't update the campaign.");
+        const data = (await res.json()) as { error?: string; code?: string };
+        fail(data.error ?? "Couldn't update the campaign.", data.code === "META_REAUTH" && Boolean(c.meta_campaign_id));
       }
     } catch {
       fail("Couldn't update the campaign — check your connection.");
@@ -2011,7 +2012,10 @@ function BusinessCampaigns({
                     </div>
                     {attention ? <p className="text-sm font-medium text-red-800">{attention}</p> : null}
                     {resumeElsewhere ? <p className="text-sm text-slate-600">{RESUME_IN_ADS_MANAGER}</p> : null}
-                    {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">{cardError.message}</p> : null}
+                    {cardError?.id === c.id ? <p role="alert" className="text-sm font-medium text-red-800">
+                      {cardError.message}
+                      {cardError.adsManager ? <> <a href={adsLink(c)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 underline underline-offset-4"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open in Ads Manager</a></> : null}
+                    </p> : null}
                     {cardNotice?.id === c.id && cardError?.id !== c.id ? <p role="status" className="text-sm text-slate-600">{cardNotice.message}</p> : null}
                     {!r && (
                       <p className="text-sm text-slate-500">

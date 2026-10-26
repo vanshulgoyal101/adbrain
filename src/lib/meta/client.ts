@@ -174,6 +174,11 @@ export class MetaError extends Error {
   }
 }
 
+/** #757: Graph 190 (any subcode: expired, password change, checkpoint, permission removed) means the token is dead. */
+export function isMetaReauthError(error: unknown): error is MetaError {
+  return error instanceof MetaError && error.code === 190;
+}
+
 export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };

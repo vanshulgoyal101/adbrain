@@ -62,6 +62,16 @@ describe("MetaConnectionPanel", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  // #757: warn a week ahead, while managing still works.
+  it("asks the owner to reconnect by the date the token stops working, only within 7 days", () => {
+    const at = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+    const { rerender } = render(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: true, tokenExpiresAt: at(6) })} oauthConfigured />);
+    const label = new Date(at(6)).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    expect(screen.getByText(`Reconnect Facebook by ${label} to keep managing your ads.`)).toBeInTheDocument();
+    rerender(<MetaConnectionPanel businessId="11111111-1111-4111-8111-111111111111" connection={connection({ source: "oauth", ready: true, tokenExpiresAt: at(10) })} oauthConfigured />);
+    expect(screen.queryByText(/Reconnect Facebook by/)).not.toBeInTheDocument();
+  });
+
   it("offers a prominent business connection without technical controls", () => {
     render(
       <MetaConnectionPanel
