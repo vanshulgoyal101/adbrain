@@ -36,6 +36,7 @@ label it for the owner instead of doing it.
 | **DevOps** | Migrations, money/tenant/config releases, secrets and production settings, rollback, scheduler, CI and the production guard | Feature work; priority (CEO) |
 | **Dev 4** | The pre-launch Review step (#681): every rejection says in plain words what to fix, with a one-tap path to fix it, plus issues assigned to you | Same as Dev |
 | **CPO** | Product: research and the ranked roadmap (#703), feature proposals with evidence, cost and the smallest test (#694), labelled `owner:cpo` | Building (CTO assigns); priority and money (CEO) |
+| **Analyst** | Market and competitor research (#750), evidence-backed lessons filed as `later` issues for the CPO to rank; picks its own research when empty, labelled `owner:analyst` | Product ranking (CPO); building (CTO assigns); priority and money (CEO) |
 
 Every worker: build, test, ship and smoke your own slice end to end (low-risk PRs
 auto-merge); hand off with the label and one `→ Role:` line.
@@ -50,7 +51,7 @@ who publishes them to the skills repo.
 Routine steps never wait for the CEO or the CTO.
 
 1. **Work lives in GitHub issues.** Labels say what matters and who acts next:
-   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`,
+   `core` or `later` (priority), `owner:dev`, `owner:dev2`, `owner:dev3`, `owner:qa`, `owner:cpo`, `owner:analyst`,
    `owner:devops`, `owner:cto` (who acts next), `ready-to-ship` (committed,
    waiting for DevOps), `blocked` (needs something outside the team; the issue says
    what), `waiting-owner` (blocked on the owner; the CEO asks him) and `decision`
