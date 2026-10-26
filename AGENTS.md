@@ -31,6 +31,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	posts. Need the CEO (priority, money rules, owner approval)? Open an issue
 	labelled `decision`. Need the CTO? Label `owner:cto`. Blocked on the owner? Label
 	`waiting-owner`; only the CEO asks the owner, in one batched list.
+- **GitHub queue first; direct chat messages rarely** (owner, Oct 26). Work and
+	handoffs go on GitHub: the `owner:<role>` label plus a `→ <Role>:` comment on the
+	issue or PR. The receiver's `wait-for-work` wakes on that. Messages sent straight
+	into another chat get folded into its running turn or sit unread, so they are not
+	a work channel.
+	Send a direct chat message (`send_message`, links in pinned #819) **only** to:
+	1. wake a chat that is idle (turn complete, no waiter running) when it has queued
+		work: one line pointing at the issue, `queue` delivery;
+	2. stop a chat doing something harmful or obsolete right now (P0), with `steer`.
+	Never stack messages; replace or cancel a pending one. **Never end a turn
+	silently:** before stopping, run your waiter or post `→ <Role>` for what's next.
 - Read [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) before editing or using
 	shared resources: read Current Dispatch, then your GitHub label queue
 	(`gh issue list -l core -l owner:<you>`), not historical receipts. When an issue
