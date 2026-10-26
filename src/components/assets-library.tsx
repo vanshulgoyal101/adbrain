@@ -206,8 +206,7 @@ export function AssetsLibrary({
         {brandAssets.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-slate-500">
-              No uploads yet. Add your logo and product photos on the Brand Brain
-              page.
+              No uploads yet. Add your logo and product photos under Your business.
             </CardContent>
           </Card>
         ) : (

@@ -115,7 +115,7 @@ export function BrandAssets({
           .eq("id", businessId)
           .select("id")
           .maybeSingle();
-        if (logoError || !updated) setError("Asset saved, but the brand logo could not be updated. Set the logo URL in Brand Brain before generating ads.");
+        if (logoError || !updated) setError("Asset saved, but the brand logo could not be updated. Set the logo link under Your business before generating ads.");
       }
     } catch (err) {
       setError((err as Error).message);

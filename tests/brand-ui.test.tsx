@@ -173,12 +173,21 @@ describe("<BrandForm> prefill", () => {
     expect(screen.getByRole("link", { name: "Add offer or proof point" })).toHaveAttribute("href", "#brand-creative");
   });
 
+  // #763: owners see plain words on the Brand page, not internal names.
+  it("uses plain words: Why customers choose you, Logo link, Preview, Save your business", () => {
+    render(<BrandForm business={null} />);
+    for (const label of [/^Why customers choose you/, /^Logo link/]) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByText("Preview")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save your business" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Brand Brain|USPs|Logo URL|Live context check/);
+  });
+
   it("on a phone, the fields come before the readiness panel, and area and offers before styling", () => {
     render(<BrandForm business={null} />);
     const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(screen.getByLabelText(/^Business name/), screen.getByRole("region", { name: "Live brand context" }))).toBe(true);
     for (const essential of [/^Locations served/, /^Offers/]) {
-      for (const optional of ["Brand voice", "Primary color", /^Font/, "Logo URL"]) {
+      for (const optional of ["Brand voice", "Primary color", /^Font/, "Logo link"]) {
         expect(follows(screen.getByText(essential, { selector: "span" }), screen.getAllByText(optional, { selector: "span" })[0]), `${essential} before ${optional}`).toBe(true);
       }
     }
@@ -208,7 +217,7 @@ describe("<BrandForm> prefill", () => {
 
   it("does not claim a newly edited brand is still saved", async () => {
     render(<BrandForm business={business()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect(saveBusiness).toHaveBeenCalledOnce();
 
@@ -226,7 +235,7 @@ describe("<BrandForm> prefill", () => {
   it("offers Create ads next to Saved, only while the save is current", async () => {
     render(<BrandForm business={business()} />);
     expect(screen.queryByRole("link", { name: "Next: Create ads" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     expect(await screen.findByRole("link", { name: "Next: Create ads" })).toHaveAttribute("href", "/create");
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "New unsaved description" } });
     expect(screen.queryByRole("link", { name: "Next: Create ads" })).not.toBeInTheDocument();
@@ -236,19 +245,19 @@ describe("<BrandForm> prefill", () => {
     let finishSave!: (result: { ok: boolean }) => void;
     saveBusiness.mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
     render(<BrandForm business={business()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     await waitFor(() => expect(saveBusiness).toHaveBeenCalledOnce());
     expect((saveBusiness.mock.calls[0][1] as FormData).get("description")).toBe("Rooftop solar");
 
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "Edited while saving" },
     });
-    expect(screen.getByRole("button", { name: "Save Brand Brain" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save your business" })).toBeDisabled();
     await act(async () => finishSave({ ok: true }));
     expect(screen.getByLabelText("Description")).toHaveValue("Edited while saving");
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Edited while saving");
   });
@@ -257,12 +266,12 @@ describe("<BrandForm> prefill", () => {
     saveBusiness.mockResolvedValueOnce({ ok: false, error: "Synthetic save failed" });
     render(<BrandForm business={business()} />);
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Draft description" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     expect(await screen.findByText("Synthetic save failed")).toBeInTheDocument();
     expect(screen.getByLabelText("Description")).toHaveValue("Draft description");
     expect(screen.queryByText("Saved")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Brand Brain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save your business" }));
     expect(await screen.findByText("Saved")).toBeInTheDocument();
     expect((saveBusiness.mock.calls[1][1] as FormData).get("description")).toBe("Draft description");
   });
@@ -383,7 +392,7 @@ describe("<BrandForm> autofill", () => {
     render(<BrandForm business={business()} />);
     fireEvent.click(screen.getByRole("button", { name: /autofill/i }));
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    expect(screen.getByRole("button", { name: /Save Brand Brain/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Save your business/ })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Target audience"), { target: { value: "Owner's new audience" } });
     finish({ ok: true, json: async () => ({ extraction: { description: "Extracted description", target_audience: "Website audience" } }) });
     await screen.findByDisplayValue("Extracted description");

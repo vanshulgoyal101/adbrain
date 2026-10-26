@@ -1,5 +1,6 @@
 "use client";
 
+import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,7 +12,7 @@ import styles from "./workspace-shell.module.css";
 
 const sections: Record<string, string> = {
   dashboard: "Overview", create: "Create", studio: "Review",
-  campaigns: "Campaigns", leads: "Enquiries", brand: "Brand Brain",
+  campaigns: "Campaigns", leads: "Enquiries", brand: OWNER_WORDS.business,
   assets: "Brand assets", settings: "Settings",
 };
 

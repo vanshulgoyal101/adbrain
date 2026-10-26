@@ -38,7 +38,7 @@ export function buildWorkQueue({
     return [
       {
         id: "brand",
-        title: "Set up your Brand Brain",
+        title: "Set up your business",
         detail: "Add your business, audience, voice, and service areas.",
         href: "/brand",
         action: "Set up brand",

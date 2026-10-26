@@ -25,11 +25,11 @@ export default async function AssetsPage() {
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your Brand Brain first — then everything you generate and
+              Set up your business first — then everything you generate and
               upload lives here.
             </p>
             <Link href="/brand">
-              <Button>Go to Brand Brain</Button>
+              <Button>Set up your business</Button>
             </Link>
           </CardContent>
         </Card>
