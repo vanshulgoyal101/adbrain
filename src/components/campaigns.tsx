@@ -426,7 +426,7 @@ function BusinessCampaigns({
         : "Choose an area"
       : business.locations.length
         ? `AdBrain decides from ${business.locations.join(", ")}`
-        : "AdBrain decides from your Brand Brain";
+        : "AdBrain decides from your business details";
 
   function restoreDraft(draft: DraftDTO) {
     const input = draft.input;
@@ -1376,7 +1376,7 @@ function BusinessCampaigns({
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
                   {prepareReview.review.blockers.map((blocker) => {
                     const fixes = [
-                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open Brand Brain", href: "/brand" } as const : null),
+                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open your business details", href: "/brand" } as const : null),
                       reviewBlockerAlternative(blocker.reason),
                     ].filter((fix) => fix !== null);
                     return <li key={`${blocker.code}:${blocker.message}`} className="mt-1 first:mt-0">
@@ -1741,7 +1741,7 @@ function BusinessCampaigns({
                       </select>
                     </> : <p role="status" className="text-sm text-slate-600">
                       {whatsappStatus?.state === "not_linked"
-                        ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Brand Brain</Link> shows how to link one.</>
+                        ? <>No WhatsApp number is linked yet. <Link href="/brand" className="font-medium text-blue-700 underline">Your business</Link> shows how to link one.</>
                         : connectedForDraft && !whatsappStatus ? "Checking your WhatsApp numbers..." : "AdBrain checks your WhatsApp number when you prepare the review."}
                     </p>}
                   </div>}

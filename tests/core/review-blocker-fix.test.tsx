@@ -122,6 +122,14 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     expect(reviewBlockerFix(reason)?.label).toMatch(/\w/);
   });
 
+  // #763: owners see "Your business", never AdBrain's internal names.
+  it.each(reviewBlockerReasons)("%s says it in the owner's words", (reason) => {
+    const input = productionInput();
+    breaks[reason](input);
+    const words = [...runPreflight(input).blockers.map((item) => item.message), reviewBlockerFix(reason)?.label, reviewBlockerAlternative(reason)?.label].join(" ");
+    expect(words).not.toMatch(/Brand Brain|USPs|Logo URL/);
+  });
+
   // The control each fix lands on, as the owner finds it in the composer.
   const fields: [ReviewBlockerReason, () => HTMLElement][] = [
     ["REVIEW_CREATIVES", () => screen.getByRole("button", { name: creative.headline! })],
@@ -154,7 +162,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     expect(screen.getByLabelText(field)).toHaveFocus();
   });
 
-  it.each(["REVIEW_NO_WEBSITE", "REVIEW_WHATSAPP_NOT_LINKED"] as const)("%s: the fix opens Brand Brain", async (reason) => {
+  it.each(["REVIEW_NO_WEBSITE", "REVIEW_WHATSAPP_NOT_LINKED"] as const)("%s: the fix opens Your business", async (reason) => {
     const region = await prepareBlockedOn(reason);
     expect(within(region).getByRole("link", { name: reviewBlockerFix(reason)!.label })).toHaveAttribute("href", "/brand");
   });

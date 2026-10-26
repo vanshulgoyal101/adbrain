@@ -79,7 +79,7 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 
-  it("keeps the lead form while no number is linked and points to the Brand Brain guide", async () => {
+  it("keeps the lead form while no number is linked and points to the Your business guide", async () => {
     whatsapp = async () => Response.json({ state: "not_linked" });
     view();
     await statusRead();
@@ -87,7 +87,7 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(screen.getByRole("radio", { name: "Instant form" })).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: "WhatsApp chat" }));
     expect(screen.getByText(/No WhatsApp number is linked yet/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Brand Brain" })).toHaveAttribute("href", "/brand");
+    expect(screen.getByRole("link", { name: "Your business" })).toHaveAttribute("href", "/brand");
     expect(screen.queryByLabelText("WhatsApp button number")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
