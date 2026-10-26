@@ -10,7 +10,7 @@ export type WhatsAppMessageCreative = { headline?: string | null; primary_text?:
 /**
  * #840: the WhatsApp message a campaign sends. Review shows it and launch sends it, from the same
  * inputs: this campaign's edit, else the saved message, else the greeting and prefill AdBrain
- * writes from the ads, areas and language (#493), with questions from the offers (#680).
+ * writes from the ads, areas and language (#493).
  */
 export function campaignWhatsAppMessage(input: { draft: DraftInput; business: WhatsAppMessageBusiness; creatives: WhatsAppMessageCreative[] }): ResolvedWhatsAppMessage {
   const { draft, business, creatives } = input;
@@ -23,7 +23,6 @@ export function campaignWhatsAppMessage(input: { draft: DraftInput; business: Wh
       draftAreaNames(draft, business.locations ?? []),
       creatives.map(creative => savedGenerationSettings(creative.generation).language),
       draft.whatsappLanguage ?? "ad",
-      true,
     ),
   });
 }
