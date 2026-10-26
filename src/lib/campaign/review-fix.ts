@@ -2,12 +2,14 @@ import type { ReviewBlockerReason } from "@/lib/meta/connect-contracts";
 
 /**
  * #723: the one-tap fix for a Review blocker. `page` opens the page that fixes it, `connect`
- * opens Connect Facebook, and `field` jumps to the first of `targets` (element ids) on screen.
+ * opens Connect Facebook, `field` jumps to the first of `targets` (element ids) on screen, and
+ * `destination` switches where the ad sends people.
  */
 export type ReviewFix =
   | { kind: "page"; label: string; href: string }
   | { kind: "connect"; label: string }
-  | { kind: "field"; label: string; targets: string[] };
+  | { kind: "field"; label: string; targets: string[] }
+  | { kind: "destination"; label: string; destination: "whatsapp" };
 
 const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
   REVIEW_NO_META_CONNECTION: { kind: "connect", label: "Connect Facebook" },
@@ -21,11 +23,16 @@ const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
   REVIEW_NO_AGE_RANGE: { kind: "field", label: "Set the age range", targets: ["age-min", "age-mode"] },
   REVIEW_RADIUS: { kind: "field", label: "Set the city radius", targets: ["city-radius", "location-include", "location-mode"] },
   REVIEW_CITY_RADIUS: { kind: "field", label: "Choose the locations again", targets: ["location-include", "location-mode"] },
-  REVIEW_AREAS_UNRESOLVED: { kind: "field", label: "Fix the areas", targets: ["location-include", "location-mode"] },
+  REVIEW_AREAS_UNRESOLVED: { kind: "field", label: "Fix the areas", targets: ["planned-areas", "location-include", "location-mode"] },
   REVIEW_NO_AUDIENCE: { kind: "field", label: "Go to Recommend audience", targets: ["recommend-audience"] },
   REVIEW_INTERESTS_UNRESOLVED: { kind: "field", label: "Edit the interests", targets: ["audience-interests", "recommend-audience"] },
 };
 
 export function reviewBlockerFix(reason: ReviewBlockerReason | undefined): ReviewFix | null {
   return reason ? FIXES[reason] : null;
+}
+
+/** #742: another way past a blocker. WhatsApp chat ads need no website, so a site-less owner isn't stuck. */
+export function reviewBlockerAlternative(reason: ReviewBlockerReason | undefined): ReviewFix | null {
+  return reason === "REVIEW_NO_WEBSITE" ? { kind: "destination", label: "Use WhatsApp chat instead (no website needed)", destination: "whatsapp" } : null;
 }

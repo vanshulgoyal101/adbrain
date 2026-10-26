@@ -414,6 +414,10 @@ Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,
 #723): it opens Brand Brain (website, WhatsApp), opens Connect Facebook (no
 connection, currency, access), or jumps to and focuses the composer control
 (ads, lead form, budget, age, radius, locations, Recommend audience, interests).
+The website blocker also offers **Use WhatsApp chat instead**, since chat ads need
+no website (#742). After a fix, **Check again** in the blocked review re-runs
+Review in place (#756). Prepare stays tappable while incomplete: with no ad or no
+budget it says so beside that control and focuses it (#772).
 
 The durable creation operation uses an idempotency key and checkpoints external
 IDs. Poll it after ambiguity; do not submit a new key to escape a pending or
