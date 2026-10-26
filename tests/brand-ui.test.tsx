@@ -136,20 +136,28 @@ describe("<BrandForm> prefill", () => {
 
   it("previews the context AdBrain will use and updates as fields change", () => {
     render(<BrandForm business={business()} />);
-    const preview = screen.getByRole("region", { name: "Live brand context" });
+    const preview = screen.getByRole("region", { name: "Preview" });
     expect(preview).toHaveTextContent("Free survey");
-    expect(preview).toHaveTextContent("For homeowners in Jaipur");
-    expect(preview).toHaveTextContent("warm voice");
+    expect(preview).toHaveTextContent("WhohomeownersWhereJaipur");
+    expect(preview).toHaveTextContent("Voicewarm");
 
     fireEvent.change(screen.getByLabelText("Target audience"), {
       target: { value: "apartment owners" },
     });
-    expect(preview).toHaveTextContent("For apartment owners in Jaipur");
+    expect(preview).toHaveTextContent("Whoapartment owners");
+  });
+
+  // #847: audience text that names the area read "…in Austin. in Austin" as one sentence.
+  it("lists each preview fact on its own line, never a joined sentence", () => {
+    render(<BrandForm business={business({ target_audience: "families in the Jaipur area", brand_voice: "Warm, plain-spoken." })} />);
+    const preview = screen.getByRole("region", { name: "Preview" });
+    expect(preview).not.toHaveTextContent(/area\. in|\. voice/);
+    expect(preview).toHaveTextContent("VoiceWarm, plain-spoken.");
   });
 
   it("updates brand readiness as missing context is supplied", () => {
     render(<BrandForm business={business({ offers: [], usps: [] })} />);
-    const preview = screen.getByRole("region", { name: "Live brand context" });
+    const preview = screen.getByRole("region", { name: "Preview" });
     expect(preview).toHaveTextContent("3 of 6 ready");
 
     fireEvent.change(screen.getByLabelText(/^Offers/), {
@@ -162,7 +170,7 @@ describe("<BrandForm> prefill", () => {
   // #681 (Dev 2's 390 px walk): a no-website owner who filled every essential read "1 of 6 ready".
   it("counts what ads need: name, area and an offer, without brand voice or audience text", () => {
     render(<BrandForm business={business({ website: null, brand_voice: null, target_audience: null, usps: [], languages: [] })} />);
-    const preview = screen.getByRole("region", { name: "Live brand context" });
+    const preview = screen.getByRole("region", { name: "Preview" });
     expect(preview).toHaveTextContent("3 of 6 ready");
     expect(screen.getByRole("link", { name: "Add website for lead ads" })).toHaveAttribute("href", "#brand-identity");
   });
@@ -185,7 +193,7 @@ describe("<BrandForm> prefill", () => {
   it("on a phone, the fields come before the readiness panel, and area and offers before styling", () => {
     render(<BrandForm business={null} />);
     const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(follows(screen.getByLabelText(/^Business name/), screen.getByRole("region", { name: "Live brand context" }))).toBe(true);
+    expect(follows(screen.getByLabelText(/^Business name/), screen.getByRole("region", { name: "Preview" }))).toBe(true);
     for (const essential of [/^Locations served/, /^Offers/]) {
       for (const optional of ["Brand voice", "Primary color", /^Font/, "Logo link"]) {
         expect(follows(screen.getByText(essential, { selector: "span" }), screen.getAllByText(optional, { selector: "span" })[0]), `${essential} before ${optional}`).toBe(true);
@@ -195,7 +203,7 @@ describe("<BrandForm> prefill", () => {
 
   it("is not ready for lead ads without a website, even with a phone number", () => {
     render(<BrandForm business={business({ website: null, phone: "+91 98765 43210" })} />);
-    const preview = screen.getByRole("region", { name: "Live brand context" });
+    const preview = screen.getByRole("region", { name: "Preview" });
     expect(preview).toHaveTextContent("3 of 6 ready");
 
     fireEvent.change(screen.getByPlaceholderText("example.com"), {
@@ -513,18 +521,18 @@ describe("<Instructions>", () => {
 
   it("explains what instruction files do", () => {
     render(<Instructions businessId="b1" instructions={[]} />);
-    expect(screen.getByText(/fed into every generation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ads use the ones marked Active/i)).toBeInTheDocument();
   });
 
   it("says when there are none", () => {
     render(<Instructions businessId="b1" instructions={[]} />);
-    expect(screen.getByText("No instruction files yet.")).toBeInTheDocument();
+    expect(screen.getByText("No instructions yet.")).toBeInTheDocument();
   });
 
   it("reveals an editor when adding", () => {
     render(<Instructions businessId="b1" instructions={[]} />);
     fireEvent.click(screen.getByRole("button", { name: /add/i }));
-    expect(screen.queryByText("No instruction files yet.")).toBeNull();
+    expect(screen.queryByText("No instructions yet.")).toBeNull();
     expect(screen.getByPlaceholderText(/title/i)).toBeInTheDocument();
   });
 
