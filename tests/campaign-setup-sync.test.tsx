@@ -495,7 +495,8 @@ describe("campaign sync feedback", () => {
     fireEvent.click(screen.getByRole("button", { name: "New campaign" }));
     await screen.findByRole("option", { name: "Fresh form" });
     expect(forms).toHaveBeenCalledTimes(3);
-    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
+    // #667: the Page's only form is preselected.
+    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-2");
   });
 
   it("reuses successful forms on reopen and refreshes after one minute", async () => {
@@ -611,7 +612,7 @@ describe("campaign sync feedback", () => {
     await screen.findByText(/Page forms are temporarily unavailable/);
     fireEvent.click(screen.getByRole("button", { name: "Retry lead forms" }));
     await screen.findByRole("option", { name: "New enquiry" });
-    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Lead form" })).toHaveValue("form-2");
     expect(forms).toHaveBeenCalledTimes(2);
     expect(urls).toEqual(["/api/campaigns/lead-forms", "/api/campaigns/lead-forms?fresh=1"]);
     fireEvent.click(screen.getByRole("button", { name: "Close campaign setup" }));
