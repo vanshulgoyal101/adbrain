@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { ManagedOnboardingLive } from "@/components/managed/managed-onboarding-live";
 import { managedAccountsEnabledFor } from "@/lib/meta/managed-account";
+import { canUseMetaConnect } from "@/lib/meta/pilot-access";
 import { createClient } from "@/lib/supabase/server";
 import { getPrimaryBusiness } from "@/lib/supabase/queries";
 
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
 /** #526 (2-Tier): from sign-up to 'Ready to advertise'. Off unless MANAGED_ACCOUNTS_ENABLED, or for internal accounts (#523). */
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ attemptId?: string }> }) {
   const { data: { user } } = await (await createClient()).auth.getUser();
-  if (!managedAccountsEnabledFor(user)) notFound();
+  // Same gate as the managed routes (#625), so the page never opens only to 403 from its API.
+  if (!managedAccountsEnabledFor(user) || (user && !canUseMetaConnect(user.id))) notFound();
   const business = await getPrimaryBusiness();
   if (!business) redirect("/brand");
   const attemptId = z.uuid().safeParse((await searchParams).attemptId);

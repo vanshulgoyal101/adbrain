@@ -93,4 +93,15 @@ describe("managed accounts for internal accounts only, until the flag is on (#52
     m.metaConnect = true;
     for (const [name, call] of Object.entries(calls)) expect(await call(), name).toBe(401);
   });
+
+  // Reviewer #657: the page follows the same gate, so it doesn't open and then 403 from its API.
+  it("/onboarding is a 404 for a user Meta Connect isn't open to", async () => {
+    vi.stubEnv("MANAGED_ACCOUNTS_ENABLED", "true");
+    const { default: OnboardingPage } = await import("@/app/(app)/onboarding/page");
+    m.user = customer;
+    m.metaConnect = false;
+    await expect(OnboardingPage({ searchParams: Promise.resolve({}) })).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
+    m.metaConnect = true;
+    await expect(OnboardingPage({ searchParams: Promise.resolve({}) })).resolves.toBeTruthy();
+  });
 });
