@@ -88,6 +88,18 @@ describe("<AdAssistant> next step after Create", () => {
     expect(screen.queryByRole("link", { name: /create campaign/i })).toBeNull();
   });
 
+  it("keeps the ad visible when saving throws", async () => {
+    setCreativeStatus.mockRejectedValueOnce(new Error("offline"));
+    doneDraft([ad("ad-1")]);
+    const user = userEvent.setup();
+    render(<AdAssistant business={business} />);
+    await user.click(await screen.findByRole("button", { name: "Use this ad" }));
+    expect(await screen.findByText("Couldn't save — try again.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use this ad" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Headline ad-1" })).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(key)!).turns[1].creatives[0].status).toBe("draft");
+  });
+
   it("links the selected ads to a new campaign in the Review format", async () => {
     setCreativeStatus.mockResolvedValue({ ok: true });
     doneDraft([ad("ad-1"), ad("ad-2"), ad("ad-3")]);
