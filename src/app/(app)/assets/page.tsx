@@ -25,8 +25,8 @@ export default async function AssetsPage() {
               <Building2 className="h-6 w-6" />
             </span>
             <p className="max-w-md text-slate-600">
-              Set up your business first — then everything you generate and
-              upload lives here.
+              Set up your business first. Every ad you make and every photo you
+              upload is saved here.
             </p>
             <Link href="/brand">
               <Button>Set up your business</Button>
@@ -47,10 +47,7 @@ export default async function AssetsPage() {
       <PageHeader
         title="Assets"
         description={
-          <p>
-            Every image AdBrain generates for <span className="font-medium">{business.name}</span> is saved here — reuse,
-            download, or share it any time.
-          </p>
+          <p>Every ad and upload for {business.name}, ready to download or share.</p>
         }
       />
       <div className="mt-6">

@@ -71,23 +71,32 @@ describe("<AssetsLibrary>", () => {
         brandAssets={[asset({})]}
       />,
     );
-    expect(screen.getByText("AI-generated creatives")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ads" })).toBeInTheDocument();
     expect(screen.getByText("(2)")).toBeInTheDocument();
-    expect(screen.getByText("Uploaded brand assets")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your uploads" })).toBeInTheDocument();
     expect(screen.getByText("(1)")).toBeInTheDocument();
-    expect(screen.getByText("Generated").nextSibling).toHaveTextContent("2");
-    expect(screen.getByText("Ready to launch").nextSibling).toHaveTextContent("1");
-    expect(screen.getByText("Brand uploads").nextSibling).toHaveTextContent("1");
+    // #847: the headings carry the counts; no separate stat strip.
+    expect(screen.queryByText("Ready to launch")).toBeNull();
   });
 
   it("shows a generated creative with its headline and reuse actions", () => {
     render(<AssetsLibrary creatives={[creative({})]} brandAssets={[]} />);
     expect(screen.getByText("Slash your power bill")).toBeInTheDocument();
-    expect(screen.getByText("savings")).toBeInTheDocument();
+    // #847: no internal angle chip over the ad's brand header; status is a dot and a word below.
+    expect(screen.queryByText("savings")).toBeNull();
     expect(screen.getByText("Approved")).toBeInTheDocument();
-    expect(screen.getByText("Download")).toBeInTheDocument();
-    expect(screen.getByText("Copy link")).toBeInTheDocument();
-    expect(screen.getByText("Open")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open" })).toBeInTheDocument();
+  });
+
+  it("shows 24 ads at a time with a Show more button", () => {
+    const many = Array.from({ length: 30 }, (_, i) => creative({ id: `c${i}`, headline: `Ad ${i}`, image_url: `https://example.com/${i}.jpg` }));
+    render(<AssetsLibrary creatives={many} brandAssets={[]} />);
+    expect(screen.getAllByRole("button", { name: "Download" })).toHaveLength(24);
+    fireEvent.click(screen.getByRole("button", { name: "Show more (6 left)" }));
+    expect(screen.getAllByRole("button", { name: "Download" })).toHaveLength(30);
+    expect(screen.queryByRole("button", { name: /Show more/ })).toBeNull();
   });
 
   it("shows the smaller versioned creative while preserving the original export URL", () => {
@@ -115,13 +124,13 @@ describe("<AssetsLibrary>", () => {
       />,
     );
     expect(
-      screen.getByText(/No generated images yet/i),
+      screen.getByText(/No ads yet/i),
     ).toBeInTheDocument();
   });
 
   it("shows empty states when there's nothing", () => {
     render(<AssetsLibrary creatives={[]} brandAssets={[]} />);
-    expect(screen.getByText(/No generated images yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No ads yet/i)).toBeInTheDocument();
     expect(screen.getByText(/No uploads yet/i)).toBeInTheDocument();
   });
 });
