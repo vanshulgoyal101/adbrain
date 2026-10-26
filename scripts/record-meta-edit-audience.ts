@@ -5,7 +5,9 @@
  *   - patch:   an ad set without interests
  *   - whatsapp: a click-to-WhatsApp ad set (Meta refuses any in-place targeting update there too, #912)
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp] [campaignId]
+ * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
+ * edited and archived instead of launched.
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
  */
@@ -73,6 +75,15 @@ async function archive(campaignId: string) {
   }).then(response => response.json());
 }
 
+/** The ad set and ad ids of an existing PAUSED test campaign. */
+async function existingCampaign(campaignId: string) {
+  const token = process.env.META_SYSTEM_USER_TOKEN!;
+  const read = async (edge: string) => (await (await realFetch(`${GRAPH}${campaignId}/${edge}?fields=id,status&access_token=${token}`)).json()) as { data?: Array<{ id: string; status: string }> };
+  const [adSets, ads] = await Promise.all([read("adsets"), read("ads")]);
+  if (!adSets.data?.length || !ads.data?.length || [...adSets.data, ...ads.data].some(item => item.status !== "PAUSED")) throw new Error("Use a PAUSED test campaign with an ad set and ads.");
+  return { campaignId, adSetIds: adSets.data.map(item => item.id), adIds: ads.data.map(item => item.id) };
+}
+
 async function main() {
   const imageUrl = process.argv[2];
   if (!imageUrl) throw new Error("Pass a public creative image URL.");
@@ -99,7 +110,8 @@ async function main() {
       if (only && only !== path) continue;
       const whatsapp = path === "whatsapp";
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
-      const launch = await meta.createLeadCampaign({
+      const existing = process.argv[4];
+      const launch = existing ? await existingCampaign(existing) : await meta.createLeadCampaign({
         name: `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
         dailyBudgetRupees: 200, leadFormId: forms[0].id, link: "https://adbrain.vanshul.com",
         creatives: [{ imageUrl, headline: "Lower electricity bills", message: "Rooftop solar for Tricity homes.", cta: "Learn More" }],

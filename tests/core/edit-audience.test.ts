@@ -90,6 +90,8 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(posts.some(call => call.path === adSetId && "targeting" in call.form)).toBe(false);
     expect(JSON.parse(posts[1].form.promoted_object ?? "{}")).toMatchObject({ page_id: creds.pageId });
     expect(posts[1].form).toMatchObject({ status: "PAUSED", destination_type: "WHATSAPP" });
+    // #906/#913: the rebuilt WhatsApp ad set leaves Audience Network out; Meta accepted it (re-recorded after #913).
+    expect(JSON.parse(posts[1].form.targeting).publisher_platforms).toEqual(["facebook", "instagram", "messenger"]);
     expect(posts.at(-1)).toEqual({ method: "POST", path: adSetId, form: { status: "ARCHIVED" } });
     expect(tape.sent.some(call => call.form.status === "ACTIVE")).toBe(false);
     expect(tape.pending).toEqual([]);
