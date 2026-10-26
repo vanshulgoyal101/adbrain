@@ -81,6 +81,7 @@ describe("<Campaigns> real enquiries on results (#335)", () => {
     const panels = screen.getAllByLabelText("Customers");
     expect(panels).toHaveLength(1);
     expect(within(panels[0]).getByText("Per customer")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("From customers you marked in Enquiries.")).toBeInTheDocument();
     expect(within(panels[0]).getByText("₹450")).toBeInTheDocument();
     expect(within(panels[0]).getByText("2")).toBeInTheDocument();
   });

@@ -2137,6 +2137,7 @@ function BusinessCampaigns({
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
                         <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
                         <Stat label="Per customer" value={formatMoney(costPerCustomer(r.spend, r.customers ?? 0) ?? 0)} />
+                        <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
                       </div>
                     )}
                     {r && outcome === "whatsapp" && (
