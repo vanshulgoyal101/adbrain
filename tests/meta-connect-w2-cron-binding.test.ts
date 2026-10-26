@@ -44,6 +44,7 @@ vi.mock("@/lib/payments/customer-balance", () => ({
 }));
 vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded: mocks.isOperatorFunded }));
 vi.mock("@/lib/managed/spend-cap-wiring", () => ({ sweepManagedSpendCaps: mocks.sweepManaged }));
+vi.mock("@/lib/meta/managed-account", async (original) => ({ ...await original<object>(), getManagedAccount: async () => null }));
 vi.mock("@/lib/meta/connection-access", () => ({
   ConnectionAccessError: class ConnectionAccessError extends Error {},
   requireScheduledBusiness: mocks.requireScheduledBusiness,
@@ -223,6 +224,26 @@ describe("scheduled spend binding boundary", () => {
     const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
     expect(response.status).toBe(502);
     expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("#758: one owner's dead token is listed by opaque key; the healthy business is still swept and the run stays green", async () => {
+    const { MetaError } = await import("@/lib/meta/client");
+    const { createHash } = await import("node:crypto");
+    const dead = { ...boundCampaign, id: "campaign-dead", business_id: "business-dead", meta_campaign_id: "meta-campaign-dead" };
+    configureAdmin([boundCampaign, dead], ["business-1", "business-dead"].map(business_id => ({ business_id, weekly_cap_rupees: 7000, alert_pct: 80, auto_pause: true })));
+    mocks.requireScheduledBusiness.mockImplementation(async (businessId: string) => ({ businessId, userId: "system" }));
+    // Meta's answer for a session invalidated by a password change (Graph 190/460), on every call for that owner.
+    const refused = () => new MetaError("Error validating access token: The session has been invalidated.", 400, 190, 460);
+    const healthy = mocks.withMetaConnection.getMockImplementation()!;
+    mocks.withMetaConnection.mockImplementation(async (context: { businessId: string }, options: unknown, execute: (...args: unknown[]) => unknown) =>
+      context.businessId === "business-dead" ? Promise.reject(refused()) : healthy(context, options, execute));
+    const { GET } = await import("@/app/api/cron/enforce-spend/route");
+    const response = await GET(new Request("http://localhost/api/cron/enforce-spend", { headers: { authorization: "Bearer cron-secret" } }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ ok: true, swept: [{ businessId: "business-1", paused: ["campaign-1"] }], unverified: [] });
+    expect(body.reauth).toEqual([{ key: createHash("sha256").update("business-dead").digest("hex").slice(0, 12), since: expect.any(String), activeCampaigns: 1 }]);
+    expect(JSON.stringify(body.reauth)).not.toContain("business-dead");
   });
 
   it("pauses but reports incomplete when the live weekly observation fails", async () => {

@@ -29,6 +29,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     },
   }),
 }));
+vi.mock("@/lib/meta/managed-account", () => ({ getManagedAccount: async () => null }));
 vi.mock("@/lib/campaign/trusted-write", () => ({
   saveCampaign: mocks.saveCampaign,
   saveCampaignResult: mocks.saveCampaignResult,
@@ -72,10 +73,34 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     expect(mocks.insights).not.toHaveBeenCalled();
   });
 
+  it("#758: a business on a dead Meta token is listed once by opaque key, and the run stays green", async () => {
+    const { MetaError } = await import("@/lib/meta/client");
+    const { createHash } = await import("node:crypto");
+    mocks.campaigns = [{ ...bound("dead-1", "m-dead-1"), business_id: "business-dead" }, { ...bound("dead-2", "m-dead-2"), business_id: "business-dead" }, bound("c1", "m1")];
+    // Meta's answer for a session invalidated by a password change (Graph 190/460).
+    mocks.insights.mockImplementation(async (id: string) => {
+      if (id.startsWith("m-dead")) throw new MetaError("Error validating access token: The session has been invalidated because the user changed their password.", 400, 190, 460);
+      return insights;
+    });
+    const { status, body } = await call();
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, refreshed: 1, failed: 0 });
+    expect(body.reauth).toEqual([{ key: createHash("sha256").update("business-dead").digest("hex").slice(0, 12), since: expect.any(String), activeCampaigns: 2 }]);
+    expect(JSON.stringify(body)).not.toContain("business-dead");
+    expect(mocks.saveCampaignResult).toHaveBeenCalledTimes(1);
+  });
+
+  it("still fails the run on a real Meta failure", async () => {
+    mocks.insights.mockRejectedValueOnce(new Error("Service temporarily unavailable"));
+    const { status, body } = await call();
+    expect(status).toBe(503);
+    expect(body).toMatchObject({ failed: 1, reauth: [] });
+  });
+
   it("saves a result row and health per campaign and never pauses or changes a campaign", async () => {
     const { status, body } = await call();
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, refreshed: 2, skipped: 0, failed: 0, hasMore: false, alerts: [] });
+    expect(body).toEqual({ ok: true, refreshed: 2, skipped: 0, failed: 0, hasMore: false, alerts: [], reauth: [] });
     expect(mocks.saveCampaignResult).toHaveBeenCalledWith({ businessId: "business-1", userId: "owner-1" }, expect.objectContaining({ campaign_id: "c1", impressions: 120, leads: 1 }));
     expect(mocks.saveCampaignHealth).toHaveBeenCalledWith(expect.anything(), "c1", expect.objectContaining({ flags: [] }));
     for (const write of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(write).not.toHaveBeenCalled();

@@ -63,13 +63,19 @@ vi.mock("@/lib/supabase/admin", () => ({
   }),
 }));
 
+vi.mock("@/lib/meta/managed-account", () => ({ getManagedAccount: async () => null }));
+const deadBusiness = "0b7f1d2e-0000-4000-8000-00000000dead";
+// #758: Meta's answer for a token whose session was invalidated (Graph 190/460).
+const graph190 = { error: { message: "Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons.", type: "OAuthException", code: 190, error_subcode: 460, fbtrace_id: "A1" } };
+
 vi.mock("@/lib/meta/connection-access", async () => {
   const { MetaClient } = await import("@/lib/meta/client");
   return {
     requireScheduledBusiness: async (id: string) => ({ businessId: id, userId: "owner-1" }),
-    withMetaConnection: async (_context: unknown, options: { purpose: string; signal?: AbortSignal }, execute: (meta: unknown, connection: unknown) => unknown) => {
+    withMetaConnection: async (context: { businessId: string }, options: { purpose: string; signal?: AbortSignal }, execute: (meta: unknown, connection: unknown) => unknown) => {
       expect(options.purpose).toBe("read_leads");
-      return execute(new MetaClient(creds, options.signal), { generation: 1, selected: { adAccountId: creds.adAccountId, pageId: creds.pageId } });
+      const accessToken = context.businessId === deadBusiness ? "dead-token" : creds.accessToken;
+      return execute(new MetaClient({ ...creds, accessToken }, options.signal), { generation: 1, selected: { adAccountId: creds.adAccountId, pageId: creds.pageId } });
     },
   };
 });
@@ -79,6 +85,7 @@ function replay(fail?: (path: string) => boolean, edit?: (path: string, body: un
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     expect(url.origin + url.pathname.slice(0, 7)).toBe("https://graph.facebook.com/v21.0/");
+    if (url.searchParams.get("access_token") === "dead-token") return Response.json(graph190, { status: 400 });
     expect(init?.method ?? "GET").toBe("GET");
     url.searchParams.delete("access_token");
     const path = url.pathname.replace("/v21.0/", "") + url.search;
@@ -162,6 +169,17 @@ describe("core: scheduled lead sync against recorded Graph pages (#165)", () => 
       expect([...db.leads.values()]).toEqual([expect.objectContaining({ meta_lead_id: testLead, meta_campaign_id: expected })]);
       vi.restoreAllMocks();
     }
+  });
+
+  it("#758: one owner's dead token is listed by opaque key; the healthy business still imports and the run stays green", async () => {
+    const { createHash } = await import("node:crypto");
+    db.connections = [{ business_id: deadBusiness }, { business_id: businessId }];
+    replay();
+    const result = await run();
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, imported: 1, businesses: [{ businessId, imported: 1 }] });
+    expect(result.body.reauth).toEqual([{ key: createHash("sha256").update(deadBusiness).digest("hex").slice(0, 12), since: expect.any(String), activeCampaigns: expect.any(Number) }]);
+    expect(JSON.stringify(result.body.reauth)).not.toContain(deadBusiness);
   });
 
   it("fails red with saved progress when Meta cannot be read, never a silent empty import", async () => {
