@@ -325,7 +325,8 @@ $2 for production after the cap (#449). `--repeat N` runs each case N times; bak
 `gemini-3.8-flash` (not production's Gemini model, so it never spends production's free quota) then
 Groq, one concept at a time; Pollinations images; no judge unless `--judge`. It runs the two gate
 cases (`cedar-ridge-en`, `solaride-factory-hi`) and compares only the deterministic copy checks with
-`tests/eval/baseline-free.json` (recorded after the next daily reset): copy saved (an ad whose free image failed
+`tests/eval/baseline-free.json` (2026-10-26, `885899c`: 5 of 6 copy saved, 60% first try, 67% offer
+in the fold, script 100%, 1 provider failure): copy saved (an ad whose free image failed
 still counts), first-try passes, offer in the first 125 characters, and script. Concepts no provider
 answered don't count; over a third of them makes the run inconclusive (exit 1, run again later), and
 such a run can't become the baseline. Free tiers are small (Gemini 20 requests per day per model,
