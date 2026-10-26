@@ -115,7 +115,7 @@ export function buildWorkQueue({
       id: "approved",
       title: `${unusedApproved} approved ${unusedApproved === 1 ? "ad is" : "ads are"} available`,
       detail:
-        "Not attached to a tracked campaign. Export the work or prepare a new campaign.",
+        "Not in a campaign yet. Put them in a campaign or export them.",
       href: metaReady ? "/campaigns" : "/studio?status=approved",
       action: metaReady ? "Prepare campaign" : "Export ads",
       tone: "work",

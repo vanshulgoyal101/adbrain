@@ -6,11 +6,11 @@
 const ACTION_LABELS: Record<string, string> = {
   "business.create": "Business details created",
   "business.update": "Business details updated",
-  "creatives.generate": "New creatives generated",
-  "creative.approve": "Creative approved",
-  "creative.unapprove": "Creative moved back to drafts",
-  "creative.delete": "Creative deleted",
-  "creative.regenerate": "Creative regenerated",
+  "creatives.generate": "New ads made",
+  "creative.approve": "Ad approved",
+  "creative.unapprove": "Ad moved back to drafts",
+  "creative.delete": "Ad deleted",
+  "creative.regenerate": "Ad made again",
   "creative.edit": "Ad text edited",
   "creative.edit_picture": "Words on the picture changed",
   "creative.change_background": "Picture background changed",
@@ -22,8 +22,8 @@ const ACTION_LABELS: Record<string, string> = {
   "campaign.pause": "Campaign paused",
   "campaign.resume": "Campaign resumed",
   "campaign.refresh": "Campaign results refreshed",
-  "campaigns.sync": "Campaigns synced from Meta",
-  "leads.sync": "Leads synced from Meta",
+  "campaigns.sync": "Campaigns updated from Meta",
+  "leads.sync": "Enquiries checked in Meta",
   "spend.limits_updated": "Spend guardrails updated",
   "spend.auto_paused": "Campaigns auto-paused at your cap",
   "meta.connected": "Meta account connected",
@@ -33,6 +33,13 @@ const ACTION_LABELS: Record<string, string> = {
   "instruction.update": "Ad instruction updated",
   "instruction.delete": "Ad instruction removed",
 };
+
+/** #763: background checks that run on their own; owners see what they did, not the log. */
+const BACKGROUND_ACTIONS = new Set(["campaigns.sync", "leads.sync", "meta.traffic.run"]);
+
+export function isBackgroundAuditAction(action: string): boolean {
+  return BACKGROUND_ACTIONS.has(action);
+}
 
 /** Reasons are meant to be one-line notes; longer text is internal detail. */
 const MAX_REASON_LENGTH = 90;
