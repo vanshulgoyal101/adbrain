@@ -2,9 +2,11 @@
  * #738: records real Claude Haiku replies for Create's "Solve a pain point" angle under the current
  * prompt, on the Cedar Ridge run-4 Brand and brief, with production's concept settings. Text only
  * (about $0.001 a reply); writes no data. Adds `painPointV738` to cedar-ridge-haiku.json.
+ * #713: `--all-angles` records three takes of each run-4 angle at CREATIVE_REASONING_EFFORT into
+ * `byEffort.<effort>` instead, for the Create p90 replay (tests/core/create-p90.test.ts).
  *
- *   CREATIVE_PROVIDER_ORDER=openrouter OPENROUTER_MODEL=anthropic/claude-haiku-5.5 \
- *     npx tsx --env-file=.env.local scripts/record-haiku-policy-fixture.ts
+ *   CREATIVE_PROVIDER_ORDER=openrouter OPENROUTER_MODEL=anthropic/claude-haiku-5.5 [CREATIVE_REASONING_EFFORT=low] \
+ *     npx tsx --env-file=.env.local scripts/record-haiku-policy-fixture.ts [--all-angles]
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,10 +18,13 @@ import run4 from "../tests/core/fixtures/create/cedar-ridge-run4.json";
 
 async function main() {
   const env = getEnv();
-  const angle = AD_ANGLES.find(({ id }) => id === "problem")!;
-  const input = { brand: run4.brand as BrandContext, brief: run4.brief, angle };
+  const allAngles = process.argv.includes("--all-angles");
+  const angles = allAngles
+    ? run4.angles.map(({ angleName }) => AD_ANGLES.find(({ name }) => name === angleName)!)
+    : [AD_ANGLES.find(({ id }) => id === "problem")!];
   const replies = [];
-  for (let run = 0; run < 3; run++) {
+  for (let run = 0; run < 3; run++) for (const angle of angles) {
+    const input = { brand: run4.brand as BrandContext, brief: run4.brief, angle };
     const started = Date.now();
     const reply = await complete(buildConceptMessages(input), {
       routing: "creative", json: true, responseSchema: creativeConceptSchema, temperature: 0.8,
@@ -35,7 +40,9 @@ async function main() {
   }
   const path = join(process.cwd(), "tests/core/fixtures/create/cedar-ridge-haiku.json");
   const fixture = JSON.parse(readFileSync(path, "utf8"));
-  fixture.painPointV738 = { recordedAt: new Date().toISOString(), model: replies.length ? env.OPENROUTER_MODEL : null, replies };
+  const recording = { recordedAt: new Date().toISOString(), model: replies.length ? env.OPENROUTER_MODEL : null, replies };
+  if (allAngles) fixture.byEffort = { ...fixture.byEffort, [env.CREATIVE_REASONING_EFFORT]: recording };
+  else fixture.painPointV738 = recording;
   writeFileSync(path, `${JSON.stringify(fixture, null, 2)}\n`);
 }
 

@@ -40,6 +40,22 @@ beforeEach(() => {
 });
 
 describe("Campaigns rows (#403 S5)", () => {
+  // #773: a paused AdBrain campaign's audience is edited from its More menu; a running one is paused first.
+  it("offers Edit audience on a paused campaign only, opening the edit dialog", async () => {
+    const user = userEvent.setup();
+    view();
+    const card = async (name: string) => within((await screen.findByRole("heading", { name })).closest("article") as HTMLElement);
+    (await card("Solar EMI")).getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /Edit audience/ })).toBeNull();
+    await user.keyboard("{Escape}");
+    (await card("Rooftop solar")).getByRole("button", { name: "More actions for Rooftop solar" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: /Edit audience/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit audience" });
+    expect(within(dialog).getByRole("button", { name: /Check with Meta/ }).className).toMatch(/\bh-11\b/);
+  });
+
   it("keeps Pause/Resume and Refresh visible at 44 px and folds the rest into one More menu", async () => {
     const user = userEvent.setup();
     view();

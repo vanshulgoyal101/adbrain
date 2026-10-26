@@ -187,8 +187,12 @@ async function main() {
   if (judgeCalibration) console.log(`judge ${judgeCalibration.model}: MAE ${judgeCalibration.mae} on ${judgeCalibration.cases} gold ads${judgeCalibration.mae > 0.15 ? " (above 0.15: do not trust its scores)" : ""}`);
 
   const results: CaseResult[] = [];
+  // Room kept for the next case: the costliest case so far (generation, repairs and judge), at least
+  // $0.12, a 3-concept case with every repair and its images. A flat $0.30 blocked small approved runs (#713).
+  let nextCaseUsd = 0.12;
   for (const item of cases.flatMap((entry) => Array.from({ length: REPEAT }, () => entry))) {
-    if (spentUsd + 0.3 > CAP_USD) { console.log(`stopping before ${item.id}: $${spentUsd.toFixed(2)} spent, cap $${CAP_USD}`); break; }
+    if (spentUsd + nextCaseUsd > CAP_USD) { console.log(`stopping before ${item.id}: $${spentUsd.toFixed(2)} spent, cap $${CAP_USD}`); break; }
+    const spentBefore = spentUsd;
     const ads: { ad: AdResult; png: Uint8Array }[] = [];
     const failures: CaseResult["failures"] = [];
     let failedCost = 0;
@@ -229,6 +233,7 @@ async function main() {
       if (judging) ad.judge = await judge(item, ad, png);
     }
     results.push({ id: item.id, language: item.language, saved: ads.length, expected: 3, failures, ads: ads.map(({ ad }) => ad), costUsd: Number(costUsd.toFixed(5)), wallMs });
+    nextCaseUsd = Math.max(nextCaseUsd, spentUsd - spentBefore);
     const scores = ads.map(({ ad }) => ad.judge ? `${ad.judge.copy}/${ad.judge.image}` : "-").join(" ");
     console.log(`${item.id}: ${ads.length}/3 in ${(wallMs / 1000).toFixed(0)} s, $${costUsd.toFixed(3)}, judge copy/image ${scores}${failures.length ? `, failed ${failures.map((failure) => `${failure.angle}:${failure.rules.join("+") || failure.stage}`).join(", ")}` : ""}`);
   }

@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import { LeadSyncError, syncMetaLeads } from "@/lib/leads/sync";
 import { friendlyMetaError } from "@/lib/meta/client";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
+import { isTokenFailure, reauthEntry, recordMetaErrors, type ReauthEntry } from "@/lib/meta/reauth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 
@@ -21,7 +22,8 @@ type Outcome = {
 /**
  * Scheduled lead import (#165). For each business with a connected Meta Page it
  * resumes (or starts) the same bounded lead sync as `/api/leads/sync`: at most
- * 24 Graph reads per business per run, deduplicated by Meta lead id.
+ * 24 Graph reads per business per run, deduplicated by Meta lead id. A business
+ * whose owner must reconnect Meta is listed in `reauth` and does not fail the run (#758).
  *
  * Called every 15 minutes by `.github/workflows/scheduled-jobs.yml` with
  * `Authorization: Bearer $CRON_SECRET`.
@@ -50,29 +52,36 @@ async function handleGET(request: Request) {
   }
 
   const businesses: Outcome[] = [];
+  const reauth: ReauthEntry[] = [];
   for (const { business_id: businessId } of connections) {
     if (deadline.aborted) {
       businesses.push({ businessId, imported: 0, failedForms: 0, error: "Skipped: run deadline reached." });
       continue;
     }
     const signal = AbortSignal.any([deadline, AbortSignal.timeout(20_000)]);
+    const metaErrors: unknown[] = [];
+    let outcome: Outcome;
     try {
       const context = await requireScheduledBusiness(businessId, request);
       const synced = await withMetaConnection(
         context,
         { purpose: "read_leads", signal },
-        (meta, connection) => syncMetaLeads(context, connection, meta, undefined, signal),
+        (meta, connection) => syncMetaLeads(context, connection, recordMetaErrors(meta, metaErrors), undefined, signal),
       );
-      businesses.push({
+      outcome = {
         businessId, imported: synced.imported, sync: synced.sync,
         failedForms: synced.failedForms.length, ...(synced.error ? { error: synced.error } : {}),
-      });
+      };
     } catch (error) {
-      businesses.push({
+      metaErrors.push(error);
+      outcome = {
         businessId, imported: 0, failedForms: 0,
         error: error instanceof LeadSyncError ? error.message : friendlyMetaError(error, "Could not sync leads."),
-      });
+      };
     }
+    const dead = outcome.error && metaErrors.some(isTokenFailure) ? await reauthEntry(businessId, metaErrors) : null;
+    if (dead) reauth.push(dead);
+    else businesses.push(outcome);
   }
 
   const ok = businesses.every(business => !business.error);
@@ -81,5 +90,6 @@ async function handleGET(request: Request) {
     at: new Date().toISOString(),
     imported: businesses.reduce((total, business) => total + business.imported, 0),
     businesses,
+    reauth,
   }, { status: ok ? 200 : 503 });
 }

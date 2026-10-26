@@ -68,3 +68,60 @@ export function targetingFromEditor(
     } } : {}),
   };
 }
+/** #773: the Manage → Edit audience form; blank fields keep what the campaign has. */
+export interface AudienceEditForm {
+  included: GeoPick[];
+  excluded: GeoPick[];
+  cityScope: "city_only" | "radius";
+  radiusKm: number;
+  ageMin: number | null;
+  ageMax: number | null;
+  gender: "keep" | "all" | "men" | "women";
+}
+
+type GeoSpec = {
+  cities?: Array<{ key: string; radius?: number; distance_unit?: "kilometer" }>;
+  regions?: Array<{ key: string }>;
+  countries?: string[];
+};
+
+/** The body `POST /api/campaigns/[id]/audience` takes as `change`. */
+export type AudienceChangeBody = {
+  location?: GeoSpec;
+  excludedLocation?: GeoSpec;
+  age?: { min: number; max: number };
+  gender?: "all" | "men" | "women";
+};
+
+export const emptyAudienceEdit: AudienceEditForm = { included: [], excluded: [], cityScope: "radius", radiusKm: 25, ageMin: null, ageMax: null, gender: "keep" };
+
+function geoSpec(places: GeoPick[], form: AudienceEditForm): GeoSpec | undefined {
+  const radius = Math.min(80, Math.max(1, Math.round(form.radiusKm)));
+  const seen = new Set<string>();
+  const spec: GeoSpec = {};
+  for (const place of places) {
+    if (!/^[A-Za-z0-9]+$/.test(place.key) || seen.has(`${place.type}:${place.key}`)) continue;
+    seen.add(`${place.type}:${place.key}`);
+    if (place.type === "city") (spec.cities ??= []).push({ key: place.key, ...form.cityScope === "radius" ? { radius, distance_unit: "kilometer" as const } : {} });
+    else if (place.type === "region") (spec.regions ??= []).push({ key: place.key });
+    else if (place.type === "country") (spec.countries ??= []).push(place.key.toUpperCase());
+  }
+  return Object.keys(spec).length ? spec : undefined;
+}
+
+/** The change to send, or why it can't be sent yet. */
+export function audienceChangeFromForm(form: AudienceEditForm): { change: AudienceChangeBody } | { error: string } {
+  const change: AudienceChangeBody = {};
+  const location = geoSpec(form.included, form);
+  const excludedLocation = geoSpec(form.excluded, form);
+  if (location) change.location = location;
+  if (excludedLocation) change.excludedLocation = excludedLocation;
+  if (form.ageMin !== null || form.ageMax !== null) {
+    const { ageMin: min, ageMax: max } = form;
+    if (min === null || max === null) return { error: "Enter both ages, or leave both blank to keep them." };
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 18 || max > 65 || min > max) return { error: "Ages go from 18 to 65, youngest first." };
+    change.age = { min, max };
+  }
+  if (form.gender !== "keep") change.gender = form.gender;
+  return Object.keys(change).length ? { change } : { error: "Change the area, an exclusion, the ages or who sees the ads." };
+}
