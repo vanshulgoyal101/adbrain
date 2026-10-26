@@ -91,7 +91,7 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }, { role: "designer", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }]);
   });
 
   it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
