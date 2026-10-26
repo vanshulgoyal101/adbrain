@@ -113,7 +113,7 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
         {message?.ok && <Alert>{message.text}</Alert>}
         {message && !message.ok && !message.field && <Alert variant="error">{message.text}</Alert>}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" disabled={pending} onClick={() => save(template())}>Save WhatsApp message</Button>
+          <Button type="button" variant="outline" disabled={pending} onClick={() => save(template())}>Save WhatsApp message</Button>
           {hasSaved && <Button type="button" variant="outline" disabled={pending} onClick={() => save(null)}>Reset to suggested</Button>}
         </div>
       </div>
