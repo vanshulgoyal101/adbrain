@@ -19,7 +19,7 @@ import { NAMES } from "./wait-for-work.mjs";
 import { probe } from "./team-status.mjs";
 
 /** Handoff bottlenecks first (reviews, releases), then builders. CTO/CEO coordinate through chat tools, so they're excluded. */
-export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "cpo"];
+export const ORDER = ["devops", "qa", "reviewer", "qa2", "dev3", "dev", "dev2", "dev4", "cpo", "analyst"];
 export const LABEL = "in.adbrain.team-supervisor";
 const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");

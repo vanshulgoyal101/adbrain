@@ -108,7 +108,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/campaigns/[id]` | Path ID -> `{delivery,funding?,learning}` | Owner-scoped, uncached Meta campaign/ad-set/ad review; no spend reservation or mutation. `learning` (`costPerResultRupees`, `pausedAt`, either null) feeds the learning-restart notes (#419) and is not part of the digest |
 | PATCH | `/api/campaigns/[id]` | Pause/activation input -> `{ok,status,delivery,pause}` | Live Meta mutation (pause: campaign, ad sets and ads) + local mirror; activation uses customer reservation |
 | DELETE | `/api/campaigns/[id]` | No body -> `{ok,metaDeleted}` | Live deletion then local deletion |
-| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed | Provider read, DB write, possible auto-pause |
+| POST | `/api/campaigns/[id]/refresh` | No body -> insights/result/summary/review/autoPaused/protectionConfirmed; **410** `{error,gone:"DELETED"\|"ARCHIVED",campaign}` when Meta deleted or archived it (the row becomes `completed` with `raw.metaStatus`, #721) | Provider read, DB write, possible auto-pause |
 | POST | `/api/campaigns/sync` | Optional `after` -> campaigns/skipped/skippedCampaigns/nextCursor/pageCursor | Provider read + local imports; `skippedCampaigns` names each campaign left unchanged with a reason (`not_running`, `other_account`, `other_page`, `other_connection`, `lifetime_budget`, `capped`, `unsupported`); `nextCursor` continues Meta discovery, `pageCursor` continues the bounded display list |
 | GET | `/api/campaigns/lead-forms` | No body -> `{forms}` | Active forms on bound Page; cached 10 min per business, Page and connection generation, `?fresh=1` re-reads Meta (#271) |
 | GET | `/api/campaigns/report` | No body -> Markdown attachment | Stored performance read |
@@ -143,7 +143,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/oauth/callback` | Provider callback | Signed/bound OAuth completion and redirect |
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |
 | POST | `/api/meta/connect` | Business/account/Page | Retired selection, 410 after validation |
-| POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections; returns Meta's `{url, confirmation_code}` (status at `/data-deletion?code=`) |
+| POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections and file a deletion request for the privacy operator; returns Meta's `{url, confirmation_code}` (live status at `/data-deletion?code=`) |
 | GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
 | POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
 | POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |
@@ -163,6 +163,7 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/cron/scheduler-health` | Cron Bearer auth | Read-only watchdog (#274): per job (`enforce-spend`, `sync-leads` every 15 min; `refresh-results` must succeed hourly) minutes since the last run and last successful run, from logged `http.request` events; `overdue` after twice the interval without a success; `ok:false` when any job is overdue |
 | GET | `/api/cron/meta-parent-health` | Cron Bearer auth | Read-only 2-Tier parent token check (#520): `GET /me` and the parent business with `META_PARENT_SYSTEM_TOKEN`; `{ok:true, configured:false}` when unset, `{configured, enabled, ok, businessVerified}` when it works, 503 with a Meta `errorCode` only when refused |
 | GET | `/api/cron/managed-health` | Cron Bearer auth | Read-only 2-Tier watchdog (#527): `{ok, accounts, byState, stuck:[{state, minutes, key}]}`; stuck = a non-final state (not `ready`/`offboarded`; `failed` included) unchanged for over 30 min; opaque 12-hex keys, no IDs |
+| GET | `/api/cron/campaign-reconciliation` | Cron Bearer auth | Read-only Launch watchdog (#734): `{ok, waiting, stuck:[{key, minutes}]}`; stuck = a `campaign_operations` row in `needs_reconciliation` for over 30 min; opaque 12-hex keys (sha256 of the id), no IDs; 503 without details |
 | GET | `/api/cron/access-requests` | Cron Bearer auth | Read-only (#692, #725): outside owners who asked for Facebook access in the last 7 days (the `meta.access_request` audit record, plus the older `ui.action` beacon), listed team ids excluded; at most 10 account lookups a run, newest first: `{ok, requests:[{key, hours}], more}` (`more` = outside requests left for the next run); one opaque 12-hex key per user (sha256 of the user id), no IDs |
 | POST | `/api/meta/access-request` | Signed-in owner | **Ask for Facebook access** (#725): `{businessId}` → writes a `meta.access_request` audit record (owner checked by `append_verified_audit_event`), once per user per UTC day → `{ok:true}`; the page says "Request sent" only after this; 400 bad body, 401, 404 not your business, 503 not recorded (retry) |
 | GET | `/api/cron/core-scoreboard` | Cron Bearer auth | Read-only daily core scoreboard (#681): `?hours=` 1–168 (default 24) -> `{ok, hours, since, until, excluded:{events, aiCalls}, rows:[{step, now, target, met}], markdown}`; smoke left out by `smokeUserIds` in `src/lib/internal-accounts.json` (user first, the businesses it owns for background rows); aggregates only, no IDs; 400 bad window, 503 without details |
@@ -818,7 +819,8 @@ It returns plain `{ok:true}`, not an envelope, and does not pause remote ads.
 
 Deauthorization is a Meta callback, not session-authenticated owner JSON. It accepts
 `signed_request` via form or JSON, verifies the signature, revokes the subject,
-and returns `{url:<data-deletion-page>}`. Invalid signature: 400; persistence: 503.
+records a deletion request under the confirmation code (#730), and returns
+`{url:<data-deletion-page>, confirmation_code}`. Invalid signature: 400; persistence: 503 (Meta retries).
 
 Retired routes are not compatibility creation paths: OAuth start returns 410;
 accounts requires an owned business before 410; connect validates nonempty

@@ -13,10 +13,12 @@ function ModeToggle({
   mode,
   onChange,
   aiLabel = "Let AdBrain decide",
+  manualId,
 }: {
   mode: "ai" | "manual";
   onChange: (m: "ai" | "manual") => void;
   aiLabel?: string;
+  manualId?: string;
 }) {
   return (
     <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-sm">
@@ -35,6 +37,7 @@ function ModeToggle({
         {aiLabel}
       </button>
       <button
+        id={manualId}
         type="button"
         aria-pressed={mode === "manual"}
         onClick={() => onChange("manual")}
@@ -187,6 +190,7 @@ function LocationPicker({
         </span>
         <Input
           ref={inputRef}
+          id={tone === "include" ? "location-include" : undefined}
           role="combobox"
           aria-label={tone === "include" ? "Search locations to include" : "Search locations to exclude"}
           aria-autocomplete="list"
@@ -372,6 +376,7 @@ export function TargetingControls({
             </InfoHint>
           </Label>
           <ModeToggle
+            manualId="location-mode"
             mode={value.locationMode}
             onChange={(mode) => mode === "ai" && onDecide ? onDecide("location") : set({ locationMode: mode })}
           />
@@ -459,6 +464,7 @@ export function TargetingControls({
             </Label>
             <input
               type="range"
+              id="city-radius"
               aria-label="City radius in kilometers"
               min={17}
               max={80}
@@ -482,6 +488,7 @@ export function TargetingControls({
             </InfoHint>
           </Label>
           <ModeToggle
+            manualId="age-mode"
             mode={value.ageMode}
             onChange={(mode) => mode === "ai" && onDecide ? onDecide("age") : set({ ageMode: mode })}
           />
@@ -492,6 +499,7 @@ export function TargetingControls({
               type="number"
               min={AGE_BOUNDS.min}
               max={AGE_BOUNDS.max}
+              id="age-min"
               aria-label="Minimum age"
               value={value.ageMin}
               // Settle on blur, not per keystroke, so typing "3" toward "30"

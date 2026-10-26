@@ -81,3 +81,57 @@ describe("core: launch preflight", () => {
   });
 });
 
+
+// #739: Review never read the ad wording, so an owner could edit an approved ad to "Cures back pain,
+// guaranteed" and send it to Meta. Cedar Ridge's vertical and an approved ad as saved in production (Oct 26).
+describe("core: Review checks the saved ad wording (#739)", () => {
+  const savedAd = {
+    headline: "Posture care for long desk days, Austin",
+    primaryText: "Long hours seated can wear on posture over time. At Cedar Ridge Chiropractic in Austin, new patients start with a digital posture scan, then a board-certified chiropractor reviews the results with you and talks through your options. The $49 new-patient exam and consultation is a set price, and same-day appointments are available. Book an appointment or call the clinic.",
+    description: null as string | null,
+  };
+  function reviewCopy(copy: Partial<typeof savedAd>, vertical: string | null = "chiropractic clinic") {
+    return runPreflight({
+      draft: { ...draft, destination: "instant_form" },
+      draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
+      draftVersion: 2,
+      connection: { generation: 1, canCreatePaused: true, selected: {
+        metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101",
+        pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
+      } },
+      creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", ...savedAd, ...copy }],
+      form: { id: "1732372914636573", businessId, active: true },
+      website: "https://cedarridgechiro.com",
+      vertical,
+      geo: { resolvedAreaLabel: "Austin, Texas", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6840321905207", name: "Wellness" }] },
+      hash: () => "a".repeat(64),
+    });
+  }
+
+  it("passes the clinic's real saved ad", () => {
+    expect(reviewCopy({}).blockers).toEqual([]);
+  });
+
+  it("blocks a clinic ad edited to promise a cure, naming the word and the ad", () => {
+    const result = reviewCopy({ headline: "Cures back pain, guaranteed" });
+    expect(result.canCreatePaused).toBe(false);
+    expect(result.blockers.map((item) => item.reason)).toEqual(["REVIEW_AD_POLICY"]);
+    expect(result.blockers[0].message).toMatch(/"cures".*"Cures back pain, guaranteed"/i);
+    expect(result.blockers[0].message).toMatch(/Edit the ad/);
+  });
+
+  it.each([
+    ["primaryText", "Our adjustments heal your spine in one visit."],
+    ["description", "Pain-free in a week"],
+  ] as const)("checks the %s too", (field, text) => {
+    expect(reviewCopy({ [field]: text }).blockers.map((item) => item.reason)).toEqual(["REVIEW_AD_POLICY"]);
+  });
+
+  it("doesn't read 'secure' or 'healthy' as a health promise", () => {
+    expect(reviewCopy({ headline: "Secure your $49 first visit for a healthy back" }).blockers).toEqual([]);
+  });
+
+  it("doesn't hold a non-health business to the clinic rules", () => {
+    expect(reviewCopy({ headline: "Guaranteed savings on your power bill" }, "solar energy").blockers).toEqual([]);
+  });
+});

@@ -35,13 +35,13 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | Next action, onboarding progress, activity, results | Uses stored state; not proof of live provider health |
+| `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected | Live Meta writes require verified binding and capability |
-| `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
+| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764), then sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
 | `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
@@ -142,6 +142,11 @@ failures rather than pretending every variant succeeded. A disconnected browser
 should check saved results using the same generation ID before starting another
 paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
+
+The Review board groups ads by Create batch (`variant_group`), newest batch first
+and open, older batches folded (#762). Unreviewed ads older than 7 days sit in a
+folded "Older unreviewed ads" section and leave the Needs review count; this is
+view-only, so approving one brings it back.
 
 Newly saved creatives use a smaller WebP for Review board and generated Assets
 tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
@@ -407,9 +412,20 @@ operation cannot be discarded to bypass its recovery identity; saved drafts
 remain available after clearing the local setup.
 
 Preflight validates ownership, approved creative content, active lead form,
-connection capability, INR currency, resolved targeting, and budget. Its hash
+connection capability, INR currency, resolved targeting, and budget. For health
+businesses it also reads each ad's saved wording with Create's banned-claim rule
+(whole words only), so an owner-edited "Cures back pain" is blocked before Meta
+(`REVIEW_AD_POLICY`, #739). Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
 Creation reruns preflight and rejects a stale draft, hash, or connection generation.
+Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,
+#723): it opens Brand Brain (website, WhatsApp), opens Connect Facebook (no
+connection, currency, access), or jumps to and focuses the composer control
+(ads, lead form, budget, age, radius, locations, Recommend audience, interests).
+The website blocker also offers **Use WhatsApp chat instead**, since chat ads need
+no website (#742). After a fix, **Check again** in the blocked review re-runs
+Review in place (#756). Prepare stays tappable while incomplete: with no ad or no
+budget it says so beside that control and focuses it (#772).
 
 The durable creation operation uses an idempotency key and checkpoints external
 IDs. Poll it after ambiguity; do not submit a new key to escape a pending or

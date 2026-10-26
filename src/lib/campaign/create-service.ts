@@ -5,10 +5,10 @@ import type { DraftRecord } from "./draft-store";
 import type { ReviewDTO } from "./connect-contracts";
 import { buildCreativeReviewPayload } from "./preflight";
 import { createOperationCheckpoint } from "./operation-store";
-import { executeOperation, OperationPhaseError, recordExternalId, type OperationRecord } from "./operations";
+import { executeOperation, OperationPhaseError, OperationRolledBackError, recordExternalId, type OperationRecord } from "./operations";
 import { effectiveDailyBudget } from "./spend";
 import { savedCreativeDescription } from "@/lib/creative/concept";
-import { splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
+import { MetaCreateRolledBackError, splitAgeRange, type CreateCampaignResult } from "@/lib/meta/client";
 import { withMetaConnection, type AuthorizedBusiness } from "@/lib/meta/connection-access";
 import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
@@ -136,6 +136,9 @@ export async function executeReviewedCampaign(input: {
             launchSnapshot = null;
           }
           return metaResult;
+        }).catch((error: unknown) => {
+          // #735: Meta confirmed the empty campaign is gone, so this attempt simply failed.
+          throw error instanceof MetaCreateRolledBackError ? new OperationRolledBackError(error.message) : error;
         });
         return { externalIds: [created.campaignId, ...created.adSetIds, ...created.adIds] };
       },

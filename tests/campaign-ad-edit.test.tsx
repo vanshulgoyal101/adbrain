@@ -116,7 +116,7 @@ describe("campaign ad picker: Edit (#280)", () => {
     await statusRead();
     await settle();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     await screen.findByText(/Destination: WhatsApp chat/);
     fireEvent.click(screen.getByRole("button", { name: `Edit ${creative.headline}` }));
     await act(async () => { fireEvent.click(within(screen.getByRole("region", { name: "Edit ad" })).getByRole("button", { name: "Save" })); });

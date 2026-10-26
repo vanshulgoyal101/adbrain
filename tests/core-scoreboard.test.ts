@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScoreboard, p90, type ScoreAiCall, type ScoreEvent } from "@/lib/observability/core-scoreboard";
+import { buildScoreboard, p90, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
 
 const until = new Date("2026-10-26T03:30:00Z");
 const since = new Date("2026-10-25T03:30:00Z");
@@ -13,8 +13,10 @@ const ev = (name: string, outcome = "success", extra: Partial<ScoreEvent> = {}):
 const call = (route: string, status = "success", extra: Partial<ScoreAiCall> = {}): ScoreAiCall => ({
   route, status, user_id: "real-user", business_id: "real-business", request_id: null, latency_ms: 1000, created_at: at(60), ...extra,
 });
-const board = (events: ScoreEvent[], aiCalls: ScoreAiCall[] = []) =>
-  buildScoreboard({ events, aiCalls, excludedUserIds: [SMOKE], excludedBusinessIds: [SMOKE_BIZ], since, until });
+const FREE = "internal-user";
+const launch = (state: string, business_id = "real-business"): ScoreLaunch => ({ business_id, state, created_at: at(60) });
+const board = (events: ScoreEvent[], aiCalls: ScoreAiCall[] = [], launches: ScoreLaunch[] = []) =>
+  buildScoreboard({ events, aiCalls, launches, freeImageUserIds: [FREE], excludedUserIds: [SMOKE], excludedBusinessIds: [SMOKE_BIZ], since, until });
 const row = (b: ReturnType<typeof board>, step: string) => b.rows.find((r) => r.step === step)!;
 
 describe("core scoreboard (#681)", () => {
@@ -31,9 +33,9 @@ describe("core scoreboard (#681)", () => {
       ev("meta.create_paused", "failed", { user_id: null, business_id: SMOKE_BIZ }),
       ev("meta.create_paused"),
       ev("meta.create_paused", "success", { business_id: SMOKE_BIZ }),
-    ], [call("creatives.regenerate", "error", { user_id: SMOKE })]);
+    ], [call("creatives.regenerate", "error", { user_id: SMOKE })], [launch("failed", SMOKE_BIZ), launch("succeeded")]);
     expect(b.excluded).toEqual({ events: 2, aiCalls: 1 });
-    expect(row(b, "Launch")).toMatchObject({ now: "2 Meta create calls: 100% succeeded", met: true });
+    expect(row(b, "Launch")).toMatchObject({ now: "1 launch: 100% succeeded; Meta calls under `create_paused` 0/2 failed", met: true });
     expect(row(b, "Regenerate")).toMatchObject({ now: "no requests", met: null });
   });
 
@@ -61,8 +63,23 @@ describe("core scoreboard (#681)", () => {
       call("creatives.generate", "error", { request_id: "r1", created_at: at(59.5), latency_ms: 2_000 }),
       call("creatives.generate", "success", { request_id: "r2", created_at: at(30), latency_ms: 12_000 }),
     ];
-    expect(row(board(batches, calls), "Create")).toMatchObject({ now: "2 batches: 50% gave 3 ads; AI calls 1/3 failed; p90 40 s", met: false });
-    expect(row(board([batches[0]], calls.slice(2)), "Create").met).toBe(true);
+    const customers = "Create (customers, paid images)";
+    expect(row(board(batches, calls), customers)).toMatchObject({ now: "2 batches: 50% gave 3 ads; AI calls 1/3 failed; p90 40 s", met: false });
+    expect(row(board([batches[0]], calls.slice(2)), customers).met).toBe(true);
+  });
+
+  it("splits Create by image path and holds only the customer path to the target", () => {
+    const b = board(
+      [ev("creative.batch", "success", { attributes: { count: 3 } }), ev("creative.batch", "success", { user_id: FREE, attributes: { count: 3 } })],
+      [call("creatives.generate", "success", { request_id: "c", latency_ms: 20_000 }), call("creatives.generate", "success", { user_id: FREE, request_id: "f", latency_ms: 110_000 })],
+    );
+    expect(row(b, "Create (customers, paid images)")).toMatchObject({ now: "1 batch: 100% gave 3 ads; AI calls 0/1 failed; p90 20 s", met: true });
+    expect(row(b, "Create (internal, free images)")).toEqual({
+      step: "Create (internal, free images)",
+      now: "1 batch: 100% gave 3 ads; AI calls 0/1 failed; p90 110 s",
+      target: "not a target: free Pollinations images, internal only",
+      met: null,
+    });
   });
 
   it("Regenerate and the assistant count a request as ok when any of its calls succeeded", () => {
@@ -83,9 +100,20 @@ describe("core scoreboard (#681)", () => {
     expect(row(b, "Brand")).toMatchObject({ now: "1 new business; autofill 1 call (1 failed)", met: null });
   });
 
-  it("Launch must be at least 99.5% and Manage needs fresh results with no failures", () => {
-    const launches = [...Array.from({ length: 199 }, () => ev("meta.create_paused")), ev("meta.create_paused", "failed", { attributes: { errorCode: "META_200" } })];
-    expect(row(board(launches), "Launch")).toMatchObject({ now: "200 Meta create calls: 99.5% succeeded (`META_200` ×1)", met: true });
+  it("Launch scores settled launches, not the reads that share the create_paused purpose (#615)", () => {
+    const reads = [ev("meta.create_paused"), ev("meta.create_paused", "failed", { attributes: { errorCode: "META_OPERATION_FAILED" } })];
+    expect(row(board(reads), "Launch")).toMatchObject({
+      now: "no launches; Meta calls under `create_paused` 1/2 failed (`META_OPERATION_FAILED` ×1)", met: null,
+    });
+    const ops = [...Array.from({ length: 199 }, () => launch("succeeded")), launch("needs_reconciliation"), launch("running")];
+    expect(row(board(reads, [], ops), "Launch")).toMatchObject({
+      now: "200 launches: 99.5% succeeded (needs_reconciliation ×1), 1 running; Meta calls under `create_paused` 1/2 failed (`META_OPERATION_FAILED` ×1)",
+      met: true,
+    });
+    expect(row(board([], [], [launch("succeeded"), launch("failed")]), "Launch").met).toBe(false);
+  });
+
+  it("Manage needs fresh results with no failures", () => {
     expect(row(board([ev("meta.read_insights", "success", { created_at: at(10) }), ev("campaign.refresh")]), "Manage"))
       .toMatchObject({ now: "1 sync, 1 results read (0 failed); last results read 10 min ago", met: true });
     expect(row(board([ev("meta.read_insights", "success", { created_at: at(40) })]), "Manage").met).toBe(false);
@@ -93,10 +121,10 @@ describe("core scoreboard (#681)", () => {
   });
 
   it("renders one public markdown table without identifiers", () => {
-    const b = board([ev("meta.create_paused"), ev("campaign.plan", "failed", { user_id: SMOKE })]);
+    const b = board([ev("campaign.plan", "failed", { user_id: SMOKE })], [], [launch("succeeded")]);
     expect(b.hours).toBe(24);
     expect(b.markdown).toContain("**Core scoreboard** (production, 24 h to 2026-10-26T03:30Z; smoke excluded: 1 events, 0 AI calls)");
-    expect(b.markdown).toContain("| Launch | 1 Meta create call: 100% succeeded | ≥ 99.5% | ✅ |");
+    expect(b.markdown).toContain("| Launch | 1 launch: 100% succeeded; Meta calls under `create_paused` 0/0 failed | ≥ 99.5% | ✅ |");
     expect(b.markdown).toContain("| Prepare | no runs | ≥ 95% success, p90 < 8 s | — |");
     expect(b.markdown).toContain("1 of 1 measured rows meet target");
     expect(b.markdown).not.toMatch(/real-user|real-business|smoke-user|smoke-business/);

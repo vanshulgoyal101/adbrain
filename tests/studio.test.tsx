@@ -922,37 +922,23 @@ describe("<Studio> empty state", () => {
 });
 
 describe("<Studio> review board", () => {
-  it("distinguishes duplicate headlines across keyboard selection, filtering and reorder", async () => {
+  it("keeps duplicate headlines selectable by keyboard and search", async () => {
     const user = userEvent.setup();
     const variants = [
       creative({ id: "c2", headline: "Same offer", primary_text: "Second concept copy." }),
       creative({ id: "c1", headline: "Same offer", primary_text: "First concept copy." }),
     ];
-    const { rerender } = render(<Studio key="first" business={business} initialCreatives={variants} />);
+    render(<Studio business={business} initialCreatives={variants} />);
     const board = within(screen.getByRole("region", { name: "Ads" }));
-    const first = board.getByRole("button", { name: "Same offer Needs review Variant 1 of 2" });
-    const second = board.getByRole("button", { name: "Same offer Needs review Variant 2 of 2" });
-    expect(board.getByText("Variant 1 of 2")).toBeVisible();
-    expect(board.getByText("Variant 2 of 2")).toBeVisible();
+    const [first, second] = board.getAllByRole("button", { name: "Same offer Needs review" });
     second.focus();
     await user.keyboard("{Enter}");
     expect(second).toHaveAttribute("aria-pressed", "true");
-    expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("Second concept copy.")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("First concept copy.")).toBeInTheDocument();
 
-    const search = screen.getByRole("searchbox", { name: "Search ads" });
-    await user.type(search, "First concept copy.");
+    await user.type(screen.getByRole("searchbox", { name: "Search ads" }), "Second concept copy.");
     expect(first).toHaveAttribute("aria-pressed", "true");
-    expect(board.queryByRole("button", { name: "Same offer Needs review Variant 2 of 2" })).not.toBeInTheDocument();
-    await user.clear(search);
-    expect(second).toHaveAttribute("aria-pressed", "true");
-
-    rerender(<Studio key="reordered" business={business} initialCreatives={[...variants].reverse()} />);
-    const reorderedBoard = within(screen.getByRole("region", { name: "Ads" }));
-    const reorderedSecond = reorderedBoard.getByRole("button", { name: "Same offer Needs review Variant 2 of 2" });
-    reorderedSecond.focus();
-    await user.keyboard("{Enter}");
-    expect(reorderedSecond).toHaveAttribute("aria-pressed", "true");
-    expect(within(screen.getByRole("region", { name: "Ad details" })).getByText("Second concept copy.")).toBeInTheDocument();
+    expect(board.getAllByRole("button", { name: "Same offer Needs review" })).toHaveLength(1);
   });
 
   it("opens a requested creative in the inspector", () => {
@@ -1090,5 +1076,37 @@ describe("<Studio> review board", () => {
     const steps = within(screen.getByRole("list", { name: "Steps to an ad" }));
     expect(steps.getByText("Review").closest("li")).toHaveAttribute("aria-current", "step");
     expect(screen.getByText("Image unavailable")).toBeInTheDocument();
+  });
+});
+
+// #762: CPO's first-time-owner walk (#681): 86 ads in one flat list, 75 "Needs review"; the owner
+// couldn't find the 2 just made. Ads now sit in their Create batch, newest first.
+describe("<Studio> review board batches (#762)", () => {
+  const now = Date.parse("2026-10-26T10:00:00Z");
+  const day = 24 * 60 * 60 * 1000;
+  const made = (id: string, group: string, daysAgo: number, over: Partial<Creative> = {}) =>
+    creative({ id, variant_group: group, headline: `Ad ${id}`, created_at: new Date(now - daysAgo * day).toISOString(), ...over });
+  beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(now); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("shows the newest batch first and open, with older batches folded", () => {
+    render(<Studio business={business} initialCreatives={[made("old1", "g-old", 3), made("new1", "g-new", 0), made("old2", "g-old", 3), made("new2", "g-new", 0)]} />);
+    const board = within(screen.getByRole("region", { name: "Ads" }));
+    expect(board.getByRole("button", { name: "Ad new1 Needs review" })).toBeVisible();
+    expect(board.getByRole("button", { name: "Ad new1 Needs review" })).toHaveAttribute("aria-pressed", "true");
+    expect(board.getByRole("button", { name: "Ad new2 Needs review" })).toBeVisible();
+    expect(board.getByText(/23 Oct · 2 ads/)).toBeVisible();
+    expect(board.getByRole("button", { name: "Ad old1 Needs review" })).not.toBeVisible();
+    expect(screen.queryByText(/Variant \d of \d/)).not.toBeInTheDocument();
+  });
+
+  it("sets unreviewed ads older than 7 days aside, out of the Needs review count", () => {
+    render(<Studio business={business} initialCreatives={[made("new1", "g-new", 0), made("stale", "g-stale", 10), made("kept", "g-stale", 10, { status: "approved" })]} />);
+    expect(screen.getByRole("radio", { name: "Needs review (1)" })).toBeInTheDocument();
+    const board = within(screen.getByRole("region", { name: "Ads" }));
+    expect(board.getByText(/Older unreviewed ads \(1\)/)).toBeVisible();
+    expect(board.getByRole("button", { name: "Ad stale Needs review" })).not.toBeVisible();
+    // Approved ads are never set aside.
+    expect(board.getByText(/16 Oct · 1 ad\b/)).toBeVisible();
   });
 });

@@ -116,7 +116,10 @@ interest counts, never the names (#686). The `creative.batch` event carries the
 batch's wall time (`durationMs`, from the request to the saved batch) and its image
 path (`provider`: `pollinations` for internal accounts, `paid` for customers), so
 Create speed is timed per path; usage rows are written when the batch ends and
-can't time it (#681).
+can't time it (#681). A refused commercial claim in Create adds a
+`claim:<class>:<reason>` validation rule to its usage row (class `free`/`percent`/
+`currency`/`guarantee`; reason `uncited`, or `negated-quote` when a quote cited it but a
+negation elsewhere in that quote refused it), never the term or the copy (#687).
 
 ### Orchestration Reuse
 

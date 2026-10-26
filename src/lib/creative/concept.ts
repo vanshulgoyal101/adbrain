@@ -1,3 +1,4 @@
+import { affirmedInFact, negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
@@ -118,6 +119,13 @@ matter, but never override factual constraints. Use the requested language for a
   ];
 }
 
+/** A refused claim's class for logs (#613, #687), never the term itself. */
+function claimClass(term: string): string {
+  if (/^(?:free|no[- ]cost)$/i.test(term)) return "free";
+  if (/^guaranteed?$/i.test(term)) return "guarantee";
+  return term.includes("%") ? "percent" : "currency";
+}
+
 export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
@@ -230,15 +238,6 @@ const COMMERCIAL_TERMS = new RegExp(
   "giu",
 );
 
-/**
- * "Not a guaranteed saving", "no guarantee", "गारंटी नहीं": a negated term is not a claim (#378).
- * Only a negation right next to the term counts, so "not just free installation" is still a claim.
- */
-export function negatedTerm(text: string, index: number, term: string): boolean {
-  return /\b(?:not|never|no|without)\s+(?:(?:a|an|any)\s+)?$/i.test(text.slice(Math.max(0, index - 24), index))
-    || /^\s*(?:नहीं|ਨਹੀਂ)(?![\p{L}\p{M}])/u.test(text.slice(index + term.length, index + term.length + 12));
-}
-
 /** The commercial terms text states, skipping negated ones. */
 function claimedTerms(text: string): string[] {
   return [...text.matchAll(COMMERCIAL_TERMS)].filter((match) => !negatedTerm(text, match.index, match[0])).map((match) => match[0]);
@@ -259,6 +258,20 @@ function citesTerm(quote: string, term: string): boolean {
   if (!/\d/.test(term)) return quote.toLowerCase().includes(term.toLowerCase()) || (/^guarantee/i.test(term) && GUARANTEE_WORD.test(quote));
   const amount = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\d.,])${amount}(?![\\d]|[.,]\\d)`, "i").test(quote) || spelledCurrency(term, quote);
+}
+
+/**
+ * #687: a quote supports a term when it states the term itself, not merely when it has no negation
+ * anywhere ("$49 exam, no referral needed" supports $49; "$49 exam no longer offered" doesn't).
+ * Forms found only by meaning (Hindi words, spelled amounts) keep the whole-quote negation check.
+ */
+function affirmedCitation(quote: string, term: string, negation: RegExp): boolean {
+  const pattern = /^(?:free|no[- ]cost)$/i.test(term) ? /free|no[- ]cost/gi
+    : /^guarantee/i.test(term) ? /guarantee/gi
+      : new RegExp(`(?<![\\d.,])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d]|[.,]\\d)`, "gi");
+  const matches = [...quote.matchAll(pattern)];
+  if (!matches.length) return !negation.test(quote);
+  return matches.some((match) => affirmedInFact(quote, match.index, match[0]));
 }
 
 /** A verbatim quote of `fact` for `term`: the whole fact when it fits a quote, else its sentence that cites it. */
@@ -350,7 +363,7 @@ export function validateConcept(
   input: ConceptInput,
 ):
   | { success: true; concept: CreativeConcept }
-  | { success: false; issues: string[] } {
+  | { success: false; issues: string[]; claims?: string[] } {
   const draft = normalizeDraft(value);
   const parsed = creativeConceptSchema.safeParse(draft);
   if (!parsed.success) {
@@ -435,7 +448,7 @@ export function validateConcept(
   ].join(" ").normalize("NFC");
   const supported = (term: string) => concept.sourceQuotes.some((quote) => {
     const text = quote.normalize("NFC");
-    return cites(text, term) && !negation.test(text);
+    return cites(text, term) && affirmedCitation(text, term, negation);
   });
   // #281 (CTO): an offer the copy states without citing it is cited with the one supplied fact that
   // contains it. None or several matching facts leave it uncited; nothing is invented.
@@ -447,11 +460,15 @@ export function validateConcept(
     const quote = matches.length === 1 && sameOffer(output, term, matches[0]) ? citationFor(matches[0], term) : null;
     if (quote && concept.sourceQuotes.length < 8) concept.sourceQuotes.push(quote);
   }
+  // #681/#687: why each claim was refused, for usage logs only (never the term or the copy).
+  const claims = new Set<string>();
   for (const term of claimed) {
     if (!supported(term)) {
       issues.push(
         `unsupported-commercial-claim: ${term}; remove it or cite a supplied positive fact supporting it`,
       );
+      const cited = concept.sourceQuotes.some((quote) => cites(quote.normalize("NFC"), term));
+      claims.add(`claim:${claimClass(term)}:${cited ? "negated-quote" : "uncited"}`);
     }
   }
   const primaryText = concept.primary_text.normalize("NFC");
@@ -462,7 +479,7 @@ export function validateConcept(
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
   }
   return issues.length
-    ? { success: false, issues }
+    ? { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) }
     : { success: true, concept };
 }
 

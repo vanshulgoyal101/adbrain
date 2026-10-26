@@ -91,7 +91,15 @@ describe("CTO queue watch", () => {
       issue("owner:dev3"), issue("owner:dev3"), issue("owner:dev3", "decision"),
       issue("owner:qa", "owner:dev"), issue("owner:qa"),
     ]);
-    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "qa2", count: 0 }, { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }]);
+    expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }]);
+  });
+
+  it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
+    const pool = (lane: string) => ({ labels: [{ name: "core" }, { name: "ready" }, { name: `lane:${lane}` }] });
+    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
+    expect(low).not.toContain("reviewer");
+    expect(low).toContain("dev4");
+    expect(low).toContain("qa");
   });
 });
 
@@ -160,7 +168,7 @@ describe("Reviewer and QA 2 roles (#575)", () => {
   it("counts their queues", () => {
     const low = lowQueues([{ labels: [{ name: "owner:qa2" }] }, { labels: [{ name: "owner:reviewer" }] }]).map((x) => x.role);
     expect(low).toContain("qa2");
-    expect(low).toContain("reviewer");
+    expect(low).not.toContain("reviewer"); // self-sourcing (#573)
   });
 });
 
@@ -194,5 +202,19 @@ describe("ready pool (#573)", () => {
     expect(readyPool(pool, "qa2").map((i) => i.number)).toEqual([13]);
     expect(readyPool(pool, "devops")).toEqual([]);
     expect(readyPool(pool, "cto")).toEqual([]);
+  });
+});
+
+describe("Dev 4 role", () => {
+  it("keeps Dev distinct from Dev 4, and routes Dev 4 handoffs", () => {
+    const dev = matchers("dev");
+    const dev4 = matchers("dev4");
+    expect(dev.writtenByMe("Dev 4: Review step plan")).toBe(false);
+    expect(dev4.writtenByMe("Dev 4: Review step plan")).toBe(true);
+    expect(waitingOnMe("CTO: → Dev 4: take #688.", dev)).toBe(false);
+    expect(waitingOnMe("CTO: → Dev 4: take #688.", dev4)).toBe(true);
+  });
+  it("counts Dev 4's queue", () => {
+    expect(lowQueues([]).map((x) => x.role)).toContain("dev4");
   });
 });

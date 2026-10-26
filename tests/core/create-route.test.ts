@@ -239,6 +239,9 @@ describe("core: Create route on recorded run 4", () => {
     const value = textCalls("openrouter").filter(({ body }) => body.includes("Save money / value"));
     expect(value).toHaveLength(2);
     expect(value[1].body).toContain("unsupported-commercial-claim");
+    // #687: the refused attempt's usage row says which kind of claim failed and why.
+    const refused = mocks.usage.find((row) => (row.metadata as { validationRules?: string[] } | undefined)?.validationRules?.includes("unsupported-commercial-claim"));
+    expect((refused!.metadata as { validationRules: string[] }).validationRules).toContain("claim:guarantee:uncited");
   });
 
   it("falls back to Gemini when OpenRouter is overloaded, without retrying OpenRouter's other keys", async () => {

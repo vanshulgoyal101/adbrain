@@ -8,6 +8,7 @@ import {
   getCampaigns,
   getCreativePreviews,
   getAuditLog,
+  getLatestResults,
   getPrimaryBusiness,
   getSpendEvaluation,
 } from "@/lib/supabase/queries";
@@ -32,12 +33,16 @@ export default async function DashboardPage() {
         getMetaConnection(business.id),
       ])
     : [[], [], null];
+  // #764: the Home results row; an unreadable result leaves the row out, never the page.
+  const launched = campaigns.filter((campaign) => campaign.meta_campaign_id).map((campaign) => campaign.id);
+  const results = launched.length ? await getLatestResults(launched).catch(() => ({})) : {};
 
   return (
     <WorkspaceHome
       business={business}
       creatives={creatives}
       campaigns={campaigns}
+      results={results}
       audit={[]}
       spend={null}
       spendStatus={spendStatus && (

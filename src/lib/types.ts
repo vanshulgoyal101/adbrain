@@ -67,7 +67,7 @@ export interface Database {
   public: {
     Tables: {
       privacy_requests: {
-        Row: { id: string; owner_id: string; kind: "export" | "delete"; status: "received" | "in_review" | "completed" | "declined"; handled_by: string | null; created_at: string; updated_at: string };
+        Row: { id: string; owner_id: string | null; kind: "export" | "delete"; status: "received" | "in_review" | "completed" | "declined"; handled_by: string | null; source: "owner" | "meta_callback"; confirmation_code: string | null; meta_subject_id: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; owner_id: string; kind: "export" | "delete"; status?: "received" | "in_review" | "completed" | "declined"; handled_by?: string | null; created_at?: string; updated_at?: string };
         Update: Partial<Database["public"]["Tables"]["privacy_requests"]["Insert"]>;
         Relationships: [];
@@ -224,36 +224,6 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["brand_assets"]["Insert"]>;
-        Relationships: [];
-      };
-      meta_credentials: {
-        Row: {
-          id: string;
-          business_id: string;
-          ad_account_id: string | null;
-          page_id: string | null;
-          access_token: string;
-          token_type: "system_user" | "oauth";
-          token_expires_at: string | null;
-          meta_user_id: string | null;
-          scopes: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          ad_account_id?: string | null;
-          page_id?: string | null;
-          access_token: string;
-          token_type?: "system_user" | "oauth";
-          token_expires_at?: string | null;
-          meta_user_id?: string | null;
-          scopes?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["meta_credentials"]["Insert"]>;
         Relationships: [];
       };
       meta_connections: {
@@ -969,6 +939,10 @@ export interface Database {
       };
       meta_revoke_subject: {
         Args: { p_subject_id: string };
+        Returns: number;
+      };
+      meta_deletion_request_record: {
+        Args: { p_subject_id: string; p_code: string };
         Returns: number;
       };
       razorpay_test_order_claim: {

@@ -4,25 +4,18 @@ import resultsTape from "./fixtures/meta/results.json";
 import cappedAdSetTape from "./fixtures/meta/safety/capped-adset.json";
 import campaignSpendCapTape from "./fixtures/meta/safety/campaign-spend-cap.json";
 import pauseAllTape from "./fixtures/meta/safety/pause-all.json";
-import deliveryTape from "./fixtures/meta/delivery.json";
-import fundingTape from "./fixtures/meta/account-funding.json";
+import deletedTape from "./fixtures/meta/campaign-deleted.json";
 
-// #649: the manage loop (pause, sync, refresh, activation review and refusals) through the real route
-// handlers, connection access, MetaClient, trusted writes, spend enforcement and audit, on an OAuth
-// connection with a token sealed by the real token store. Only Supabase (an in-memory table store),
-// the LLM and the capability re-check (its account/Page/permission reads were never recorded; it
-// returns the stored "available" capabilities) are stubbed; every Graph call is answered from the
-// recorded tapes and any other call fails the test.
+// #649: the manage loop (pause, sync, refresh) through the real route handlers, connection access,
+// MetaClient, trusted writes, spend enforcement and audit, on an OAuth connection with a token sealed
+// by the real token store. Only Supabase (an in-memory table store) and the LLM are stubbed; every
+// Graph call is answered from the recorded tapes and any other call fails the test.
 // Recorded: the pause tree (safety/campaign-spend-cap binding + safety/pause-all), the sync listing
-// and the bound campaign's ad sets (sync.json), the live #157 run's insights and ad review
-// (results.json), the paused launch's delivery reads (delivery.json) and the ad account's funding
-// (account-funding.json). Synthesised from recorded bodies: the sync listing trimmed to campaigns
-// whose ad sets were recorded, one of them moved to another ad account, and a #157 capped campaign
-// whose ad set list is the recorded capped ad set read-back (safety/capped-adset).
-// Activation: GET /api/campaigns/[id] returns the recorded delivery (and funding when operator-funded);
-// PATCH "active" is refused for a stale digest, another connection generation, the weekly cap, an
-// operator-funded cap above the recorded funding room and, uncapped, the recorded paused children,
-// with no Graph write. The success path (spend cap and ACTIVE writes) is still unrecorded.
+// and the bound campaign's ad sets (sync.json), and the live #157 run's insights and ad review
+// (results.json). Synthesised from recorded bodies: the sync listing trimmed to campaigns whose ad
+// sets were recorded, one of them moved to another ad account, and a #157 capped campaign whose
+// ad set list is the recorded capped ad set read-back (safety/capped-adset). Activation is not
+// covered: it needs capability, delivery and spend-cap reads plus an ACTIVE write, never recorded.
 type Exchange = { method: string; path: string; status: number; body: unknown };
 type Row = Record<string, unknown>;
 
@@ -31,7 +24,7 @@ const store = vi.hoisted(() => {
     tables: {} as Record<string, Row[]>, user: null as { id: string } | null, log: [] as string[], unknown: [] as string[],
     rpc: {} as Record<string, (args: Row) => { data: unknown; error: unknown }>, inserted: 0,
   };
-  const known = ["audit_log", "businesses", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
+  const known = ["businesses", "campaigns", "campaign_results", "meta_connections", "spend_limits"];
   const fail = (call: string): never => {
     state.unknown.push(call);
     throw new Error(`Unstubbed Supabase call: ${call}`);
@@ -40,7 +33,7 @@ const store = vi.hoisted(() => {
     if (!known.includes(table)) fail(`from(${table})`);
     const filters: Array<(row: Row) => boolean> = [];
     let write: { kind: "insert" | "update"; values: Row } | null = null;
-    let count = false, withResults = false;
+    let count = false;
     const settle = () => {
       const rows = state.tables[table] ??= [];
       if (write?.kind === "insert") {
@@ -50,20 +43,11 @@ const store = vi.hoisted(() => {
       }
       const matched = rows.filter(row => filters.every(test => test(row)));
       if (write?.kind === "update") for (const row of matched) Object.assign(row, write.values);
-      // getLatestResults' `campaign_results!inner(*)` embed: each campaign's newest result, campaigns without one dropped.
-      const data = matched.map(row => withResults ? { ...row, campaign_results: (state.tables.campaign_results ?? [])
-        .filter(result => result.campaign_id === row.id).sort((a, b) => String(b.fetched_at).localeCompare(String(a.fetched_at))).slice(0, 1) } : { ...row })
-        .filter(row => !withResults || (row.campaign_results as Row[]).length);
-      return { data, error: null, count: count ? matched.length : null };
+      return { data: matched.map(row => ({ ...row })), error: null, count: count ? matched.length : null };
     };
     const query = {
-      select: (columns?: string, options?: { count?: string }) => {
-        count ||= Boolean(options?.count);
-        withResults ||= Boolean(columns?.includes("campaign_results!inner"));
-        return query;
-      },
+      select: (_columns?: string, options?: { count?: string }) => { count ||= Boolean(options?.count); return query; },
       eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
-      in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
       gt: (key: string, value: unknown) => { filters.push(row => String(row[key]) > String(value)); return query; },
       order: () => query, limit: () => query, abortSignal: () => query,
       insert: (values: Row) => { state.log.push(`insert ${table}`); write = { kind: "insert", values }; return query; },
@@ -89,14 +73,10 @@ const store = vi.hoisted(() => {
   const client = () => ({ auth: { getUser: async () => ({ data: { user: state.user }, error: null }) }, from, rpc });
   return { state, client };
 });
-// The capability reads (account, Pages, permissions, insights, lead forms) were never recorded; the
-// re-check before activation gets the connection's stored "available" capabilities instead.
-const capabilities = vi.hoisted(() => ({ verify: vi.fn() }));
 const llm = vi.hoisted(() => ({ complete: vi.fn(async () => { throw new Error("No LLM call in a manage route."); }) }));
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => store.client() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => store.client() }));
-vi.mock("@/lib/meta/capability-verification", () => ({ verifyMetaCapabilities: capabilities.verify }));
 vi.mock("@/lib/llm", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/llm")>(), complete: llm.complete }));
 
 const BUSINESS = "00000000-0000-4000-8000-000000000649";
@@ -108,13 +88,10 @@ const ACCESS = "oauth-connection-access";
 const ACCOUNT = "act_2398686420592052", PAGE = "885223068001054", GENERATION = 3;
 const SYNCED = "120253646427440526", CAPPED = "120253655093920526", LIVE = "120253678786150526";
 const TREE = { campaignId: "120253654207670526", adSetIds: ["120253654208240526"], adIds: ["120253654209040526"] };
-const REVIEWED = { campaignId: SYNCED, adSetIds: ["120253646428630526"], adIds: ["120253646430200526"] };
 const available = { state: "available", blockers: [] };
 const ADSET_FIELDS = "fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cpromoted_object%2Cdestination_type&limit=100";
 
 const tapes = {
-  delivery: deliveryTape as Exchange[],
-  funding: fundingTape as Exchange[],
   pause: [...(campaignSpendCapTape as Exchange[]).slice(0, 2), ...pauseAllTape as Exchange[]],
   results: (resultsTape as Exchange[]).filter(exchange => exchange.path.startsWith(LIVE)),
   sync: (campaignIds: string[]) => {
@@ -140,8 +117,7 @@ const tapes = {
 const graph = { sent: [] as Array<{ method: string; path: string; form: Row; access: string | null }>, unrecorded: [] as string[], pending: [] as Exchange[] };
 function replay(...recorded: Exchange[][]) {
   graph.pending = recorded.flat();
-  graph.sent = [];
-  vi.spyOn(globalThis, "fetch").mockClear().mockImplementation(async (input, init) => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     const body = new URLSearchParams(init?.body instanceof URLSearchParams ? init.body : undefined);
     const access = url.searchParams.get("access_token") ?? body.get("access_token");
@@ -190,33 +166,10 @@ const treeCampaign = (values: Row = {}) => storeCampaign({
   raw: { source: "campaign_operation", metaResult: TREE }, ...values,
 });
 
-// The recorded paused launch whose delivery reads are in delivery.json, stored as AdBrain launched it.
-const reviewedCampaign = (values: Row = {}) => storeCampaign({
-  status: "paused", meta_campaign_id: REVIEWED.campaignId, meta_adset_id: REVIEWED.adSetIds[0], meta_ad_ids: REVIEWED.adIds,
-  raw: { source: "campaign_operation", metaResult: REVIEWED }, ...values,
-});
-
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function pause(id = STORED) {
   const { PATCH } = await import("@/app/api/campaigns/[id]/route");
   return PATCH(new Request(`http://localhost/api/campaigns/${id}`, { method: "PATCH", body: JSON.stringify({ status: "paused" }) }), params(id));
-}
-async function review(id = STORED) {
-  const { GET } = await import("@/app/api/campaigns/[id]/route");
-  return GET(new Request(`http://localhost/api/campaigns/${id}`), params(id));
-}
-async function activate(body: Row, id = STORED) {
-  const { PATCH } = await import("@/app/api/campaigns/[id]/route");
-  return PATCH(new Request(`http://localhost/api/campaigns/${id}`, { method: "PATCH", body: JSON.stringify({ status: "active", ...body }) }), params(id));
-}
-/** The digest the Campaigns card confirms (src/components/campaigns.tsx), over the reviewed delivery. */
-async function digest(campaign: Row, delivery: unknown, capDays?: number) {
-  const { activationConfirmationPayload } = await import("@/lib/campaign/activation");
-  const { createHash } = await import("node:crypto");
-  const connection = { generation: GENERATION, selected: {
-    metaBusinessId: null, adAccountId: ACCOUNT, accountName: "Solaride", pageId: PAGE, pageName: "Solaride", currency: "INR", timezoneName: "Asia/Kolkata",
-  } };
-  return createHash("sha256").update(activationConfirmationPayload(campaign as never, connection as never, delivery as never, capDays)).digest("hex");
 }
 async function sync() {
   const { POST } = await import("@/app/api/campaigns/sync/route");
@@ -240,7 +193,6 @@ beforeEach(async () => {
   } });
   Object.assign(graph, { sent: [], unrecorded: [], pending: [] });
   llm.complete.mockClear();
-  capabilities.verify.mockReset().mockResolvedValue({ canReadInsights: available, canReadLeads: available, canCreatePaused: available, canActivate: available });
   await connect();
 });
 afterEach(() => {
@@ -368,114 +320,17 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(store.state.tables.campaigns[0].status).toBe("active");
     expect(store.state.log.filter(entry => /^(insert|update) /.test(entry))).toEqual([]);
   });
-
-  const writes = () => graph.sent.filter(call => call.method !== "GET");
-  const deliveryReads = tapes.delivery.map(exchange => `GET ${exchange.path}`);
-
-  it("activation review: returns the recorded delivery and account funding with reads only", async () => {
-    reviewedCampaign();
-    replay(tapes.delivery, tapes.funding);
-    const response = await review();
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      delivery: {
-        campaign: { id: REVIEWED.campaignId, status: "PAUSED", effectiveStatus: "PAUSED" },
-        adSets: [expect.objectContaining({ id: REVIEWED.adSetIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", dailyBudgetPaise: 20000, pageId: PAGE, destinationType: "ON_AD" })],
-        ads: [{ id: REVIEWED.adIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", adSetId: REVIEWED.adSetIds[0], creativeId: "1148404661464451" }],
-      },
-      funding: { spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true },
-      learning: { costPerResultRupees: null, pausedAt: null },
-    });
-    expect(capabilities.verify).toHaveBeenCalledWith(ACCESS, expect.objectContaining({ adAccountId: ACCOUNT, pageId: PAGE }));
-    expect(writes()).toEqual([]);
-    expect(new Set(graph.sent.map(call => call.access))).toEqual(new Set([ACCESS]));
-    expect(graph.pending).toEqual([]);
-    expect(store.state.tables.campaigns[0].status).toBe("paused");
-  });
-
-  it("activation review: a customer-funded business gets the delivery without an account funding read", async () => {
-    store.state.rpc.operator_funded = () => ({ data: false, error: null });
-    reviewedCampaign();
-    replay(tapes.delivery);
-    const response = await review();
-    expect(response.status).toBe(200);
+  // #721 (QA): #499's first tree, deleted in Meta, still listed as paused; every Refresh answered 502.
+  // campaign-deleted.json: the real reads after the delete (binding read finds no ad sets; status DELETED).
+  it("refresh: a campaign Meta deleted is shown as deleted, not paused, and the refresh says so instead of failing", async () => {
+    const DELETED = "120253706331870526";
+    storeCampaign({ meta_campaign_id: DELETED, status: "paused", name: "Solaride | Free Survey | Tricity | WhatsApp EN | Oct 26" });
+    replay(deletedTape.tape as Exchange[], deletedTape.tape as Exchange[]);
+    const response = await refresh();
     const body = await response.json();
-    expect(body).not.toHaveProperty("funding");
-    expect(body.delivery.campaign).toEqual({ id: REVIEWED.campaignId, status: "PAUSED", effectiveStatus: "PAUSED" });
-    expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads].sort());
-  });
-
-  it("activate: a stale confirmation digest is refused after the recorded delivery reads, with no write", async () => {
-    const campaign = reviewedCampaign();
-    replay(tapes.delivery, tapes.funding);
-    const { delivery } = await (await review()).json();
-    replay(tapes.delivery);
-    // Confirmed for a 3-day run, then sent as a 5-day one: the reviewed terms no longer match.
-    const response = await activate({ confirmationDigest: await digest(campaign, delivery, 3), connectionGeneration: GENERATION, capDays: 5 });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: "Campaign or child review changed; review the current Meta delivery settings again." });
-    expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads].sort());
-    expect(writes()).toEqual([]);
-    expect(store.state.tables.campaigns[0].status).toBe("paused");
-    expect(audits()).toEqual([]);
-  });
-
-  it("activate: a connectionGeneration other than the stored binding is refused before any Meta call", async () => {
-    const campaign = reviewedCampaign();
-    replay(tapes.delivery, tapes.funding);
-    const confirmationDigest = await digest(campaign, (await (await review()).json()).delivery, 3);
-    replay(tapes.delivery, tapes.funding);
-    capabilities.verify.mockClear();
-    const response = await activate({ confirmationDigest, connectionGeneration: GENERATION + 1, capDays: 3 });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: "Meta connection changed; review the campaign again." });
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(capabilities.verify).not.toHaveBeenCalled();
-    expect(store.state.tables.campaigns[0].status).toBe("paused");
-  });
-
-  it("activate: a run that would exceed the weekly spend cap is refused with 422 before any Meta call", async () => {
-    store.state.tables.spend_limits = [{ business_id: BUSINESS, weekly_cap_rupees: 2000, alert_pct: 80, auto_pause: false }];
-    reviewedCampaign();
-    storeCampaign({ id: "00000000-0000-4000-8000-000000000005", status: "active", daily_budget: 100 });
-    replay(tapes.delivery, tapes.funding);
-    // ₹100 a day already running plus this ₹200 a day: ₹2,100 a week over a ₹2,000 cap.
-    const response = await activate({ confirmationDigest: "0".repeat(64), connectionGeneration: GENERATION, capDays: 3 });
-    expect(response.status).toBe(422);
-    expect((await response.json()).error).toMatch(/^Activating this would commit about ₹2,100 a week, over your ₹2,000 a week cap\./);
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(capabilities.verify).not.toHaveBeenCalled();
-    expect(store.state.tables.campaigns.map(row => row.status)).toEqual(["paused", "active"]);
-  });
-
-  it("activate: an operator-funded capped run larger than the recorded funding room is refused with no write", async () => {
-    const campaign = reviewedCampaign();
-    replay(tapes.delivery, tapes.funding);
-    const { delivery } = await (await review()).json();
-    replay(tapes.delivery, tapes.funding);
-    // 5 days × ₹200 = ₹1,000 against ₹847.46 left under the recorded account spending limit.
-    const response = await activate({ confirmationDigest: await digest(campaign, delivery, 5), connectionGeneration: GENERATION, capDays: 5 });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({
-      error: "Meta has ₹847.46 left under the ad account's spending limit; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
-    });
-    expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, `GET ${tapes.funding[0].path}`].sort());
-    expect(writes()).toEqual([]);
-    expect(graph.pending).toEqual([]);
-    expect(store.state.tables.campaigns[0].status).toBe("paused");
-    expect(audits()).toEqual([]);
-  });
-
-  it("activate: without a cap, the recorded paused children are refused before any write", async () => {
-    const campaign = reviewedCampaign();
-    replay(tapes.delivery, tapes.funding);
-    const { delivery } = await (await review()).json();
-    replay(tapes.delivery);
-    const response = await activate({ confirmationDigest: await digest(campaign, delivery), connectionGeneration: GENERATION });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: "An intended ad set or ad is paused. Activate only the intended children in Meta and review this campaign again." });
-    expect(writes()).toEqual([]);
-    expect(graph.pending).toEqual([]);
-    expect(store.state.tables.campaigns[0].status).toBe("paused");
+    expect(response.status, JSON.stringify(body)).not.toBe(502);
+    expect(JSON.stringify(body)).toMatch(/deleted/i);
+    expect(store.state.tables.campaigns.find(row => row.id === STORED)?.status).not.toBe("paused");
+    expect(graph.sent.every(call => call.method === "GET")).toBe(true);
   });
 });

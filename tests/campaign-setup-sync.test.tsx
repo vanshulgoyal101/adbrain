@@ -142,7 +142,7 @@ describe("unsaved campaign setup", () => {
     mocks.createCampaign.mockResolvedValue({ operationId: "44444444-4444-4444-8444-444444444444", state: "needs_reconciliation", checkpoints: [], externalIds: {}, error: null });
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await screen.findByText("Campaign creation needs reconciliation. Do not retry the create operation.");
     expect(screen.getByText(/Meta only partly created this campaign/)).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe("unsaved campaign setup", () => {
     mocks.createCampaign.mockRejectedValue(new Error("Network lost"));
     view();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     fireEvent.click(await screen.findByRole("button", { name: "Send to Meta (paused)" }));
     await screen.findByText("Network lost");
     fireEvent.click(screen.getByRole("button", { name: "Discard and start new" }));
