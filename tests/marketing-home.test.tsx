@@ -34,7 +34,9 @@ describe("public product example", () => {
     // Solaride appears only as a labelled example further down, never in the hero.
     expect(container.querySelector("#hero-title")!.closest("section")!.textContent).not.toMatch(/solar/i);
     expect(container.textContent).not.toMatch(/run ads|guaranteed customers/i);
-    expect(screen.getByRole("heading", { name: "Keep the conversation going" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "From your business to WhatsApp chats" })).toBeInTheDocument();
+    // #847: the loop is told once; no second numbered "From idea to enquiry" section or caps eyebrows.
+    expect(screen.queryByText(/FROM IDEA TO ENQUIRY|BEFORE YOU START/)).toBeNull();
   });
 
   it("keeps conversion, example, and legal navigation accessible", () => {
@@ -44,6 +46,7 @@ describe("public product example", () => {
     expect(screen.getByRole("link", { name: "See how it works" })).toHaveAttribute("href", "#cycle");
     expect(screen.getByRole("region", { name: "From your business to WhatsApp chats" })).toHaveAttribute("id", "cycle");
     expect(screen.getByRole("link", { name: "Campaign ideas" })).toHaveAttribute("href", "/ideas");
+    expect(screen.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "#cycle");
     expect(container.querySelector("#example")).toBeInTheDocument();
     expect(container.querySelector("a button")).toBeNull();
     for (const link of LEGAL_LINKS) expect(screen.getByRole("link", { name: link.label })).toHaveAttribute("href", link.href);
