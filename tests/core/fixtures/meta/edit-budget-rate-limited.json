@@ -1,0 +1,129 @@
+[
+  {
+    "method": "GET",
+    "path": "120253712447820526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253712447820526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712447820526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253712448520526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHNuaFM1Q1RQUzd3eXdwakVJQmd3c1dFWVRFd2VoYjM4SnF1U0w1SHlQU2FKRGNvRFQ5Wmx5YVZAlWU9KQ0Y5VklrM014dHBHeTdNczRxZAUdCSzRGSWVB",
+          "after": "QVFIVHNuaFM1Q1RQUzd3eXdwakVJQmd3c1dFWVRFd2VoYjM4SnF1U0w1SHlQU2FKRGNvRFQ5Wmx5YVZAlWU9KQ0Y5VklrM014dHBHeTdNczRxZAUdCSzRGSWVB"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712448520526?fields=id%2Ccampaign_id%2Cstatus%2Cpromoted_object%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253712448520526",
+      "campaign_id": "120253712447820526",
+      "status": "PAUSED",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false
+      },
+      "daily_budget": "20000",
+      "lifetime_budget": "0",
+      "budget_remaining": "3407"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253712448520526",
+    "form": {
+      "daily_budget": "25000",
+      "execution_options": "[\"validate_only\"]"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712447820526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253712447820526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712447820526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false
+          },
+          "destination_type": "ON_AD",
+          "id": "120253712448520526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVHNuaFM1Q1RQUzd3eXdwakVJQmd3c1dFWVRFd2VoYjM4SnF1U0w1SHlQU2FKRGNvRFQ5Wmx5YVZAlWU9KQ0Y5VklrM014dHBHeTdNczRxZAUdCSzRGSWVB",
+          "after": "QVFIVHNuaFM1Q1RQUzd3eXdwakVJQmd3c1dFWVRFd2VoYjM4SnF1U0w1SHlQU2FKRGNvRFQ5Wmx5YVZAlWU9KQ0Y5VklrM014dHBHeTdNczRxZAUdCSzRGSWVB"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253712448520526?fields=id%2Ccampaign_id%2Cstatus%2Cpromoted_object%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253712448520526",
+      "campaign_id": "120253712447820526",
+      "status": "PAUSED",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false
+      },
+      "daily_budget": "20000",
+      "lifetime_budget": "0",
+      "budget_remaining": "3407"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253712448520526",
+    "form": {
+      "daily_budget": "25000"
+    },
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "(#613) Calls to this API have exceeded the concurrent request rate limit of 1 calls per 30 seconds.",
+        "type": "OAuthException",
+        "code": 613,
+        "error_subcode": 4841018,
+        "fbtrace_id": "Al4eVHj5TD7cwiT42jMsVCW"
+      }
+    }
+  }
+]

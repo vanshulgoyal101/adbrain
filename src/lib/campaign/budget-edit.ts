@@ -6,7 +6,7 @@ import type { FundingMode } from "@/lib/payments/operator-funding";
 export type BudgetEditInput = {
   current: { status: string; dailyRupees: number; capRupees: number | null; endTime: string | null; spentRupees: number };
   /** What the owner last confirmed (activation or a previous edit). */
-  approved: { dailyRupees: number; capRupees: number | null };
+  approved: { dailyRupees: number; capRupees: number | null; capDays?: number | null };
   change: { dailyRupees?: number; capRupees?: number; endTime?: string };
   /** The business's other active campaigns, for the weekly limit in Settings. */
   otherActive: CampaignSpend[];
@@ -62,9 +62,36 @@ export function checkBudgetEdit(input: BudgetEditInput): BudgetEditCheck {
     if (short?.kind === "unverified") return refuse("AdBrain couldn't check the funding for this cap. Try again.");
   }
 
+  // A capped run spends what's left of its cap over the days left: a shorter end or a bigger cap speeds it up
+  // (Reviewer on #901). Above both the approved pace (cap / days) and today's pace it needs a confirmation and, while running, the weekly limit.
+  let fasterPace: number | null = null;
+  if (current.capRupees !== null && (cap !== undefined || end !== undefined)) {
+    const daysLeft = (iso: string | null) => iso === null ? null : Math.max((Date.parse(iso) - input.now) / 86_400_000, 1 / 24);
+    const pace = (capRupees: number, endIso: string | null) => {
+      const days = daysLeft(endIso);
+      return days === null ? null : Math.max(capRupees - current.spentRupees, 0) / days;
+    };
+    const after = pace(cap ?? current.capRupees, end ?? current.endTime);
+    // Only an edit that speeds spending up past both the approved pace and today's pace counts.
+    const before = pace(current.capRupees, current.endTime);
+    const approvedPace = approved.capRupees !== null && approved.capDays ? approved.capRupees / approved.capDays : before;
+    if (after !== null && before !== null && approvedPace !== null && after > Math.max(approvedPace, before) + 0.005) {
+      fasterPace = after;
+      if (current.status === "active") {
+        const guard = wouldExceedCap(input.otherActive, after, input.weeklyLimitRupees);
+        if (guard.exceeds) {
+          return refuse(!guard.verified || input.weeklyLimitRupees === null
+            ? "AdBrain couldn't check this against your weekly limit. Try again."
+            : `About ${formatMoney(Math.round(after))} a day would take your campaigns past your weekly limit of ${formatMoney(input.weeklyLimitRupees)} in Settings.`);
+        }
+      }
+    }
+  }
+
   // Running longer adds spend only when there's no cap to hold it (CTO on #833).
   const runsLonger = end !== undefined && current.capRupees === null && current.endTime !== null && Date.parse(end) > Date.parse(current.endTime);
-  const needsConfirmation = nextDaily > approved.dailyRupees || runsLonger || (cap !== undefined && (approved.capRupees === null || cap > approved.capRupees));
+  const needsConfirmation = nextDaily > approved.dailyRupees || runsLonger || fasterPace !== null || (cap !== undefined && (approved.capRupees === null || cap > approved.capRupees));
   const notices = daily !== undefined && current.dailyRupees > 0 && Math.abs(daily / current.dailyRupees - 1) >= LEARNING_CHANGE ? [LEARNING_NOTICE] : [];
+  if (fasterPace !== null) notices.push(`Meta will spend about ${formatMoney(Math.round(fasterPace))} a day to use the total by the end date.`);
   return { ok: true, needsConfirmation, notices };
 }
