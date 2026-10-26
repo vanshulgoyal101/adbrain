@@ -15,7 +15,7 @@
  *
  * Without --write-baseline it compares with its profile's baseline and exits 1 when a customer
  * would see something worse (the upgrade-only gate). Bake-off: set EVAL_TEXT_MODEL,
- * EVAL_IMAGE_MODEL or EVAL_JUDGE_MODEL. Report and rendered ads go to /tmp/adbrain-eval/<time>/.
+ * EVAL_IMAGE_MODEL or EVAL_JUDGE_MODEL; EVAL_SCHEDULE=serial runs the paid profile one concept at a time (#713). Report and rendered ads go to /tmp/adbrain-eval/<time>/.
  */
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
