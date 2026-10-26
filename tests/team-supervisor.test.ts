@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { firstPrompt, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue } from "../scripts/team-supervisor.mjs";
+import { firstPrompt, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -98,5 +98,20 @@ describe("scheduled-jobs dispatch (#692)", () => {
   it("logs a run's final words, so a short run shows what it decided", () => {
     expect(lastWords("I'll check #741.\n\nThe 24 h read isn't due until 2026-10-27T11:19Z; posted that on #741.\n")).toBe("The 24 h read isn't due until 2026-10-27T11:19Z; posted that on #741.");
     expect(lastWords("")).toBe("(no output)");
+  });
+});
+
+describe("nightly export (#884)", () => {
+  it("runs once a night, after 20:00Z", () => {
+    expect(exportDue(null, new Date("2026-10-26T19:59:00Z"))).toBe(false);
+    expect(exportDue(null, new Date("2026-10-26T20:05:00Z"))).toBe(true);
+    expect(exportDue("2026-10-25T20:10:00Z", new Date("2026-10-26T20:05:00Z"))).toBe(true);
+    expect(exportDue("2026-10-26T20:10:00Z", new Date("2026-10-26T23:00:00Z"))).toBe(false);
+    expect(exportDue("2026-10-26T20:10:00Z", new Date("2026-10-27T03:00:00Z"))).toBe(false);
+  });
+  it("keeps the newest 7 export folders and ignores anything else", () => {
+    const names = Array.from({ length: 9 }, (_, i) => `2026-10-${String(18 + i).padStart(2, "0")}T20-10Z`);
+    expect(exportsToPrune([...names, "notes.txt"])).toEqual(["2026-10-19T20-10Z", "2026-10-18T20-10Z"]);
+    expect(exportsToPrune(names.slice(0, 3))).toEqual([]);
   });
 });

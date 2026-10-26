@@ -8,9 +8,10 @@
 //   node scripts/team-supervisor.mjs --install | --uninstall              the LaunchAgent (StartInterval 600 s)
 //   node scripts/team-supervisor.mjs --smoke                              prove the CLI runs headless here
 //   node scripts/team-supervisor.mjs --restart-prompt <role|all>          the prompt to resend with create_session
-// Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692).
+// Each tick also dispatches scheduled-jobs.yml when GitHub's own schedule has lapsed (#692), and once a
+// night exports production to ~/.adbrain-backups and restore-drills it (#884).
 // Kill switch: touch ~/.adbrain-supervisor/OFF. Log: ~/.adbrain-supervisor/supervisor.log.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -151,6 +152,55 @@ export function scheduledJobsDue(latest, now = Date.now(), staleMin = 14) {
   return !Number.isFinite(started) || now - started > staleMin * 60_000;
 }
 
+export const BACKUP_DIR = join(HOME, ".adbrain-backups");
+const BACKUP_KEEP = 7;
+
+/** One export a night: after 20:00Z (01:30 IST), when the newest export is from before today's 20:00Z. */
+export function exportDue(newest, now = new Date()) {
+  const cutoff = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 20);
+  if (now.getTime() < cutoff) return false;
+  return !newest || Date.parse(newest) < cutoff;
+}
+
+/** Export folders are named by their ISO time; keep the newest `keep`. */
+export function exportsToPrune(names, keep = BACKUP_KEEP) {
+  return names.filter((n) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z$/.test(n)).sort().reverse().slice(keep);
+}
+
+const folderTime = (name) => `${name.slice(0, 13)}:${name.slice(14, 16)}:00Z`;
+
+/** Nightly free-plan backup (#884): export, restore-drill it, prune, and open one issue when it fails. */
+function nightlyExport(dry) {
+  mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
+  const names = readdirSync(BACKUP_DIR).filter((n) => /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}Z$/.test(n)).sort();
+  const newest = names.at(-1);
+  if (!exportDue(newest ? folderTime(newest) : null)) return;
+  if (dry) return console.log(`would export production to ${BACKUP_DIR} (newest ${newest ?? "none"})`);
+  const name = new Date().toISOString().slice(0, 16).replace(":", "-") + "Z";
+  const dir = join(BACKUP_DIR, name);
+  const run = (command) => spawnSync(process.execPath, ["scripts/db-export.mjs", command, dir], { cwd: WT, encoding: "utf8", timeout: 15 * 60_000 });
+  const exported = run("export");
+  const restored = exported.status === 0 ? run("restore") : null;
+  const ok = exported.status === 0 && restored?.status === 0;
+  const tail = (r) => (r ? `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").filter((l) => !/@|token|key/i.test(l)).slice(-3).join(" | ") : "not run");
+  if (ok) {
+    log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
+    for (const old of exportsToPrune([...names, name])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
+    return;
+  }
+  rmSync(dir, { recursive: true, force: true });
+  log(`nightly export ${name} FAILED: export ${exported.status}, restore ${restored?.status ?? "-"}`);
+  try {
+    const title = "Nightly production export failed";
+    const open = JSON.parse(execFileSync("gh", ["issue", "list", "-R", REPO, "--state", "open", "--search", `in:title "${title}"`, "--json", "number"], { encoding: "utf8" }));
+    if (open.length) return;
+    execFileSync("gh", ["issue", "create", "-R", REPO, "-l", "core", "-l", "bug", "-l", "owner:devops", "-t", title, "-b",
+      `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/OPERATIONS.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
+  } catch (error) {
+    log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  }
+}
+
 /** At most one dispatch per tick; a gh failure is logged and never stops the tick. */
 function dispatchScheduledJobs(dry) {
   try {
@@ -261,9 +311,10 @@ async function main() {
   }
   if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
   dispatchScheduledJobs(values["dry-run"]);
+  if (!values["dry-run"]) refresh();
+  nightlyExport(values["dry-run"]);
   const state = readState();
   if (runsToday(state) >= Number(values["max-runs-day"])) return log(`tick skipped: daily cap ${values["max-runs-day"]} reached`);
-  if (!values["dry-run"]) refresh();
 
   const live = liveRoles(SESSIONS, Number(values["idle-min"]));
   const statuses = {};
