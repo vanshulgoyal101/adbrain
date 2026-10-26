@@ -2,6 +2,7 @@ import { z } from "zod";
 import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
+import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
 import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
@@ -1233,27 +1234,32 @@ export class MetaClient {
     return { campaigns: result.data, nextCursor: result.paging?.next ? result.paging.cursors!.after! : null };
   }
 
-  async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }, cappedAdSetIds: readonly string[] = []) {
-    if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "") || Number(campaign.lifetime_budget ?? 0) !== 0
-      || !["ACTIVE", "PAUSED"].includes(campaign.status)) return null;
+  /** The campaign's daily-budget binding to this account and Page, or why sync must leave it unchanged (#671). */
+  async readBoundCampaign(campaign: MetaCampaignSummary & { account_id: string; lifetime_budget?: string }, cappedAdSetIds: readonly string[] = []): Promise<{ dailyBudgetRupees: number; adSetId: string; destination: CampaignDestination } | { skip: CampaignSkipReason }> {
+    if (campaign.account_id !== this.creds.adAccountId.replace(/^act_/, "")) return { skip: "other_account" };
+    if (!["ACTIVE", "PAUSED"].includes(campaign.status)) return { skip: "not_running" };
+    if (Number(campaign.lifetime_budget ?? 0) !== 0) return { skip: "lifetime_budget" };
     const response = await this.graph<{ data?: Array<{ id: string; status: string; destination_type?: string; daily_budget?: string; lifetime_budget?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
       `${campaign.id}/adsets?fields=id,status,daily_budget,lifetime_budget,promoted_object,destination_type&limit=100`,
     );
-    if (!response.data?.length || response.paging?.next) return null;
+    if (!response.data?.length || response.paging?.next) return { skip: "unsupported" };
     const daily = response.data.filter(adSet => !cappedAdSetIds.includes(adSet.id));
-    if (!daily.length) return null;
+    if (!daily.length) return { skip: "capped" };
     let adSetBudget = 0;
     for (const adSet of response.data) {
-      if (adSet.promoted_object?.page_id !== this.creds.pageId || !["ACTIVE", "PAUSED"].includes(adSet.status)
-        || !/^\d+$/.test(adSet.daily_budget ?? "0") || !/^\d+$/.test(adSet.lifetime_budget ?? "0")) return null;
+      if (adSet.promoted_object?.page_id !== this.creds.pageId) return { skip: "other_page" };
+      if (!["ACTIVE", "PAUSED"].includes(adSet.status)
+        || !/^\d+$/.test(adSet.daily_budget ?? "0") || !/^\d+$/.test(adSet.lifetime_budget ?? "0")) return { skip: "unsupported" };
       const capped = cappedAdSetIds.includes(adSet.id);
-      if (capped ? Number(adSet.daily_budget ?? 0) !== 0 || Number(adSet.lifetime_budget ?? 0) <= 0 : Number(adSet.lifetime_budget ?? 0) !== 0) return null;
+      if (capped ? Number(adSet.daily_budget ?? 0) !== 0 || Number(adSet.lifetime_budget ?? 0) <= 0 : Number(adSet.lifetime_budget ?? 0) !== 0) {
+        return { skip: capped ? "unsupported" : "lifetime_budget" };
+      }
       if (!capped) adSetBudget += Number(adSet.daily_budget ?? 0);
     }
-    if (!/^\d+$/.test(campaign.daily_budget ?? "0")) return null;
+    if (!/^\d+$/.test(campaign.daily_budget ?? "0")) return { skip: "unsupported" };
     const campaignBudget = Number(campaign.daily_budget ?? 0);
     const total = campaignBudget > 0 && adSetBudget === 0 ? campaignBudget : campaignBudget === 0 ? adSetBudget : Number.NaN;
-    if (!Number.isSafeInteger(total) || total <= 0) return null;
+    if (!Number.isSafeInteger(total) || total <= 0) return { skip: "unsupported" };
     return { dailyBudgetRupees: total / 100, adSetId: daily[0].id, destination: destinationFromAdSets(daily) };
   }
 

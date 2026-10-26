@@ -112,6 +112,19 @@ describe("core: Meta campaign half against recorded Graph responses", () => {
     expect(tape.pending).toEqual([]);
   });
 
+  // #671: sync names why it left a campaign unchanged, from the same recorded Graph reads.
+  it.each<{ reason: string; capped?: string[]; pageId?: string; campaign?: Record<string, string> }>([
+    { reason: "capped", capped: adSetIds },
+    { reason: "other_page", pageId: "1" },
+    { reason: "not_running", campaign: { status: "ARCHIVED" } },
+    { reason: "lifetime_budget", campaign: { lifetime_budget: "500000" } },
+  ])("says why sync skips a campaign: $reason", async ({ reason, capped = [], pageId = creds.pageId, campaign = {} }) => {
+    replay(syncTape);
+    const meta = new MetaClient({ ...creds, pageId });
+    const listed = (await meta.listCampaignsPage()).campaigns.find(listing => listing.id === campaignId)!;
+    expect(await meta.readBoundCampaign({ ...listed, ...campaign }, capped)).toEqual({ skip: reason });
+  });
+
   it("pauses only after verifying the account binding, and never sends ACTIVE", async () => {
     const tape = replay(pauseTape);
     await new MetaClient(creds).updateCampaignStatus(campaignId, "PAUSED");

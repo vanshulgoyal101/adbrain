@@ -321,7 +321,7 @@ describe("MetaClient.enforceCampaignSpendCap", () => {
 describe("MetaClient.updateCampaignStatus", () => {
   it("does not bind campaigns containing a different Page", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "set", status: "ACTIVE", daily_budget: "50000", promoted_object: { page_id: "other" } }] })));
-    expect(await new MetaClient(creds).readBoundCampaign({ id: "campaign", account_id: "123", name: "Other Page", status: "PAUSED", objective: "OUTCOME_LEADS" })).toBeNull();
+    expect(await new MetaClient(creds).readBoundCampaign({ id: "campaign", account_id: "123", name: "Other Page", status: "PAUSED", objective: "OUTCOME_LEADS" })).toEqual({ skip: "other_page" });
   });
 
   it("reads a verified Page binding and ad-set budget for sync", async () => {

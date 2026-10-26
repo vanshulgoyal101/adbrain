@@ -6,6 +6,7 @@ import { ConnectionAccessError, requireOwnedBusiness, withMetaConnection, getCon
 import { z } from "zod";
 import { saveCampaign } from "@/lib/campaign/trusted-write";
 import { storedCappedAdSetIds } from "@/lib/campaign/activation";
+import type { SkippedCampaign } from "@/lib/campaign/sync-skips";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,17 +35,17 @@ async function handlePOST(request?: Request) {
       if (!connection.selected || connection.selected.currency !== "INR") throw new Error("Unsupported connection currency.");
       const page = await meta.listCampaignsPage(cursor.data ?? undefined);
       const rows = [];
-      let skipped = 0;
+      const skippedCampaigns: SkippedCampaign[] = [];
       for (let offset = 0; offset < page.campaigns.length; offset += 5) {
         const batch = await Promise.all(page.campaigns.slice(offset, offset + 5).map(async (campaign) => {
-          if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") return { campaign, binding: null };
+          if (campaign.status !== "ACTIVE" && campaign.status !== "PAUSED") return { campaign, binding: { skip: "not_running" as const } };
           const { data: stored, error } = await supabase.from("campaigns").select("raw")
             .eq("business_id", context.businessId).eq("meta_campaign_id", campaign.id).maybeSingle();
           if (error) throw new Error("Campaign storage unavailable.");
           return { campaign, binding: await meta.readBoundCampaign(campaign, storedCappedAdSetIds(stored?.raw)) };
         }));
         for (const { campaign, binding } of batch) {
-          if (!binding) { skipped += 1; continue; }
+          if ("skip" in binding) { skippedCampaigns.push({ name: campaign.name ?? null, reason: binding.skip }); continue; }
           rows.push({
             business_id: context.businessId, name: campaign.name, objective: campaign.objective,
             destination: binding.destination,
@@ -62,11 +63,11 @@ async function handlePOST(request?: Request) {
           .eq("business_id", context.businessId).eq("meta_campaign_id", row.meta_campaign_id).maybeSingle();
         if (error) throw new Error("Campaign storage unavailable.");
         if ((existing?.meta_ad_account_id && existing.meta_ad_account_id !== row.meta_ad_account_id)
-          || (existing?.meta_page_id && existing.meta_page_id !== row.meta_page_id)) { skipped += 1; continue; }
+          || (existing?.meta_page_id && existing.meta_page_id !== row.meta_page_id)) { skippedCampaigns.push({ name: row.name ?? null, reason: "other_connection" }); continue; }
         const saved = await saveCampaign(context, row, existing?.id);
         if (saved.error) throw new Error("Campaign save failed.");
       }
-      return { skipped, nextCursor: page.nextCursor };
+      return { skipped: skippedCampaigns.length, skippedCampaigns, nextCursor: page.nextCursor };
     });
     const page = await getCampaignPage(business.id);
     return NextResponse.json({ campaigns: page.campaigns, pageCursor: page.nextCursor, ...result });
