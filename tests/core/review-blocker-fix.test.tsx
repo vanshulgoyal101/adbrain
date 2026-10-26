@@ -94,7 +94,7 @@ async function prepareBlockedOn(reason: ReviewBlockerReason) {
   await within(leadForm).findByRole("option", { name: "Enquiries" });
   fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
   fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
-  fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+  fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
   const region = await screen.findByRole("region", { name: "Campaign review result" });
   await within(region).findByText(/Fix 1 item before sending to Meta/);
   return region;
@@ -178,7 +178,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     const region = await prepareBlockedOn("REVIEW_BUDGET");
     mocks.preflight.mockResolvedValue(runPreflight(productionInput()));
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerFix("REVIEW_BUDGET")!.label }));
-    fireEvent.change(screen.getByLabelText("Daily budget (₹)"), { target: { value: "200" } });
+    fireEvent.change(screen.getByLabelText("Daily budget (₹)"), { target: { value: "300" } });
     fireEvent.click(within(screen.getByRole("region", { name: "Campaign review result" })).getByRole("button", { name: "Check again" }));
     expect(await screen.findByRole("button", { name: "Send to Meta (paused)" })).toBeInTheDocument();
     expect(mocks.preflight).toHaveBeenCalledTimes(2);
@@ -200,7 +200,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
 
   it("Prepare with no ad says so beside the ads and focuses the first one", async () => {
     await openComposer();
-    const prepare = screen.getByRole("button", { name: "Prepare campaign review" });
+    const prepare = screen.getByRole("button", { name: "Check my campaign (nothing spends)" });
     expect(prepare).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(prepare);
     const alert = await screen.findByRole("alert");
@@ -216,7 +216,7 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     const budget = screen.getByLabelText("Daily budget (₹)");
     fireEvent.change(budget, { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Set a daily budget above ₹0.");
     expect(budget).toHaveFocus();

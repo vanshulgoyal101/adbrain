@@ -244,7 +244,8 @@ function BusinessCampaigns({
   const [selected, setSelected] = useState<Set<string>>(() => initialSetup?.selected ?? new Set(
     newCampaign?.creativeIds.filter(id => approved.some(creative => creative.id === id)),
   ));
-  const [budget, setBudget] = useState(initialSetup?.budget ?? 200);
+  // #761: ₹300 a day is the core run (#334); less rarely gets Meta out of learning.
+  const [budget, setBudget] = useState(initialSetup?.budget ?? 300);
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
@@ -1763,6 +1764,10 @@ function BusinessCampaigns({
                     Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). */}
+                <p className="-mt-2 text-xs text-slate-500">
+                  What to expect: in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180. Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
                 {destination === "instant_form" && formsError && (
@@ -1825,7 +1830,7 @@ function BusinessCampaigns({
                     leadFormName={selectedLeadForm?.name}
                     destination={destination}
                     whatsappNumber={destination === "whatsapp" && chosenWhatsAppNumber ? chosenWhatsAppNumber : undefined}
-                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "age recommendation pending"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
+                    audience={`${audiencePreview}; ${targeting.ageMode === "manual" ? `ages ${targeting.ageMin}-${targeting.ageMax === 65 ? "65+" : targeting.ageMax}` : "ages picked by AdBrain when you check"}; ${{ all: "All genders", men: "Men", women: "Women" }[targeting.gender ?? "all"]}; ${targeting.cityScope === "city_only" ? "city only (no added radius)" : `city radius ${targeting.radiusKm} km`}${targeting.audience?.interestNames.length ? `; interests: ${targeting.audience.interestNames.join(", ")}` : ""}`}
                   />
                 </div>
 
@@ -1841,7 +1846,7 @@ function BusinessCampaigns({
                     ) : (
                       <CheckCircle2 className="h-4 w-4" />
                     )}
-                    Prepare campaign review
+                    Check my campaign (nothing spends)
                   </Button>
                 </div>
                 <details className="border-t border-slate-200 pt-3"><summary className="cursor-pointer text-xs font-medium text-slate-500">After campaign creation</summary><HowItWorks /></details>
