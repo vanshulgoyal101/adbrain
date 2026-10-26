@@ -14,7 +14,7 @@ vi.mock("next/link", async (importOriginal) => ({
 vi.mock("next/navigation", () => ({ usePathname: () => pathname() }));
 vi.mock("@/components/sign-out-button", () => ({ SignOutButton: () => null }));
 
-const ACTIVE = "bg-blue-50";
+const ACTIVE = "bg-white";
 
 beforeEach(() => { pathname.mockReturnValue("/dashboard"); linkState.pending = false; localStorage.clear(); });
 
@@ -129,7 +129,7 @@ describe("<Nav>", () => {
     render(<Nav />);
     const expected: [string, string][] = [
       ["Home", "/dashboard"],
-      ["Create", "/create"],
+      ["Create ads", "/create"],
       ["Your business", "/brand"],
       ["Review", "/studio"],
       ["Campaigns", "/campaigns"],
@@ -169,7 +169,7 @@ describe("<Nav>", () => {
     // "/create" must not light up "/campaigns" (or vice versa).
     pathname.mockReturnValue("/create");
     render(<Nav />);
-    expect(screen.getByRole("link", { name: "Create" })).toHaveClass(ACTIVE);
+    expect(screen.getByRole("link", { name: "Create ads" })).toHaveClass(ACTIVE);
     expect(screen.getByRole("link", { name: "Campaigns" })).not.toHaveClass(
       ACTIVE,
     );
@@ -178,8 +178,8 @@ describe("<Nav>", () => {
   it("switches to a horizontal layout for the mobile header", () => {
     const { container } = render(<Nav orientation="horizontal" />);
     expect(container.querySelector("nav")).toHaveClass("flex-row");
-    expect(screen.getByRole("link", { name: "Create" })).toHaveClass(
-      "text-slate-700",
+    expect(screen.getByRole("link", { name: "Create ads" })).toHaveClass(
+      "text-slate-600",
     );
     expect(screen.getByRole("navigation")).toHaveAttribute(
       "aria-label",
