@@ -86,8 +86,8 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
   const draftRules = (angleId: string, concept: unknown) => {
     const angle = AD_ANGLES.find((candidate) => candidate.id === angleId)!;
     const result = validateConcept(concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
-    // These drafts pin claim rules; offer placement (#194) is asserted on its own below.
-    return (result.success ? [] : conceptValidationRules(result.issues).filter((rule) => rule !== "offer-below-fold")).sort();
+    // These drafts pin claim rules; offer placement (#194) and the empty-scene check (#760) are asserted on their own.
+    return (result.success ? [] : conceptValidationRules(result.issues).filter((rule) => rule !== "offer-below-fold" && rule !== "no-subject")).sort();
   };
 
   it("flags only the recorded drafts whose $49 offer starts after Meta's 125-character fold (#194)", () => {
@@ -97,6 +97,22 @@ describe("core: Create claim checks on recorded Groq drafts", () => {
       return !result.success && conceptValidationRules(result.issues).includes("offer-below-fold");
     });
     expect(flagged.map((draft) => draft.concept.primary_text.indexOf("$49"))).toEqual([128, 142, 147]);
+  });
+
+  // #760 (CPO walk): one image was an empty waiting room. This recorded Groq draft directs exactly that
+  // ("No people are present", an armchair as the focal point); no other recorded direction trips the check.
+  it("refuses a visual with no subject, like the recorded empty waiting room, and keeps the rest", () => {
+    const emptyRoom = groq.drafts.filter((draft) => draft.concept.visual.direction.includes("waiting area"));
+    expect(emptyRoom).toHaveLength(1);
+    const rules = (draft: (typeof groq.drafts)[number]) => {
+      const angle = AD_ANGLES.find((candidate) => candidate.id === draft.angle)!;
+      const result = validateConcept(draft.concept, { brand: recorded.brand, brief: groq.brief, angle, recentCopy: [], sourceFacts: [] });
+      return result.success ? [] : conceptValidationRules(result.issues);
+    };
+    expect(rules(emptyRoom[0])).toContain("no-subject");
+    for (const draft of [...groq.drafts, ...groqFields.drafts].filter((candidate) => !emptyRoom.includes(candidate as never))) {
+      expect(rules(draft as (typeof groq.drafts)[number])).not.toContain("no-subject");
+    }
   });
 
   it("saves drafts that mention health or punctuate a cited price, keeping real claim failures", () => {
