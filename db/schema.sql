@@ -1381,13 +1381,19 @@ begin
     or jsonb_typeof(p_progress->'formsDone') is distinct from 'boolean' then
     raise exception 'Invalid sync checkpoint' using errcode = '22023';
   end if;
-  insert into public.leads(business_id, meta_lead_id, form_id, form_name, full_name, phone, email, city, field_data, created_time)
-    select p_business_id, incoming.meta_lead_id, incoming.form_id, incoming.form_name,
-      incoming.full_name, incoming.phone, incoming.email, incoming.city, coalesce(incoming.field_data, '{}'), incoming.created_time
-    from jsonb_to_recordset(p_rows) as incoming(meta_lead_id text, form_id text, form_name text,
-      full_name text, phone text, email text, city text, field_data jsonb, created_time timestamptz)
-    on conflict (business_id, meta_lead_id) do nothing;
-  get diagnostics inserted_count = row_count;
+  with upserted as (
+    insert into public.leads(business_id, campaign_id, meta_lead_id, form_id, form_name, full_name, phone, email, city, field_data, created_time)
+      select p_business_id, campaign.id, incoming.meta_lead_id, incoming.form_id, incoming.form_name,
+        incoming.full_name, incoming.phone, incoming.email, incoming.city, coalesce(incoming.field_data, '{}'), incoming.created_time
+      from jsonb_to_recordset(p_rows) as incoming(meta_lead_id text, meta_campaign_id text, form_id text, form_name text,
+        full_name text, phone text, email text, city text, field_data jsonb, created_time timestamptz)
+      left join public.campaigns campaign
+        on campaign.business_id = p_business_id and campaign.meta_campaign_id = incoming.meta_campaign_id
+      on conflict (business_id, meta_lead_id) do update set campaign_id = excluded.campaign_id
+        where leads.campaign_id is null and excluded.campaign_id is not null
+      returning (xmax = 0) as inserted
+  )
+  select count(*) filter (where inserted) into inserted_count from upserted;
   update public.lead_sync_runs set progress = p_progress, version = version + 1, updated_at = now(),
     state = case when (p_progress->>'formsDone')::boolean and jsonb_array_length(p_progress->'pending') = 0 then 'complete' else 'partial' end
     where id = current_run.id returning * into current_run;

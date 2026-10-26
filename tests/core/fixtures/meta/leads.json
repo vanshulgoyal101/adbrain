@@ -50,7 +50,7 @@
   },
   {
     "method": "GET",
-    "path": "2531491190682703/leads?fields=id%2Ccreated_time%2Cfield_data&limit=200",
+    "path": "2531491190682703/leads?fields=id%2Ccreated_time%2Cfield_data%2Ccampaign_id&limit=200",
     "status": 200,
     "body": {
       "data": []
@@ -58,7 +58,7 @@
   },
   {
     "method": "GET",
-    "path": "1732372914636573/leads?fields=id%2Ccreated_time%2Cfield_data&limit=200",
+    "path": "1732372914636573/leads?fields=id%2Ccreated_time%2Cfield_data%2Ccampaign_id&limit=200",
     "status": 200,
     "body": {
       "data": [
@@ -97,7 +97,7 @@
   },
   {
     "method": "GET",
-    "path": "1667547894289050/leads?fields=id%2Ccreated_time%2Cfield_data&limit=200",
+    "path": "1667547894289050/leads?fields=id%2Ccreated_time%2Cfield_data%2Ccampaign_id&limit=200",
     "status": 200,
     "body": {
       "data": []
@@ -105,7 +105,7 @@
   },
   {
     "method": "GET",
-    "path": "1206878731403456/leads?fields=id%2Ccreated_time%2Cfield_data&limit=200",
+    "path": "1206878731403456/leads?fields=id%2Ccreated_time%2Cfield_data%2Ccampaign_id&limit=200",
     "status": 200,
     "body": {
       "data": []
@@ -113,7 +113,7 @@
   },
   {
     "method": "GET",
-    "path": "851588111247082/leads?fields=id%2Ccreated_time%2Cfield_data&limit=200",
+    "path": "851588111247082/leads?fields=id%2Ccreated_time%2Cfield_data%2Ccampaign_id&limit=200",
     "status": 200,
     "body": {
       "data": []
