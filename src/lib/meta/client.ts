@@ -236,6 +236,19 @@ function editedTargeting(source: Record<string, unknown>, changes: AudienceChang
   return next;
 }
 
+/** A place (city, region or country) that is both in `geo_locations` and in `excluded_geo_locations`. */
+function excludesIncludedPlace(targeting: Record<string, unknown>): boolean {
+  const geo = (value: unknown) => (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const keys = (spec: Record<string, unknown>, type: string) => new Set((Array.isArray(spec[type]) ? spec[type] as unknown[] : [])
+    .map(item => typeof item === "string" ? item : String((item as { key?: unknown }).key)));
+  const included = geo(targeting.geo_locations);
+  const excluded = geo(targeting.excluded_geo_locations);
+  return ["cities", "regions", "countries"].some(type => {
+    const out = keys(excluded, type);
+    return [...keys(included, type)].some(key => out.has(key));
+  });
+}
+
 /** Meta echoed the changed audience back (it may add defaults, so only what changed is compared). */
 function sameAudience(targeting: Record<string, unknown> | undefined, sent: Record<string, unknown>, changes: AudienceChanges): boolean {
   if (!targeting) return false;
@@ -1744,7 +1757,13 @@ export class MetaClient {
       throw new CampaignDeliveryError("The ad set could not be verified. Keep the campaign paused.");
     }
     if (source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
+    // #741 (QA on #828): a new area must arrive with its own out-of-area exclusions ({} when it has none),
+    // so the old area's are replaced, and the result may never exclude a place it includes.
+    if (changes.location && !changes.excludedLocation) throw new TargetingExclusionsMissingError();
     const targeting = editedTargeting(source.targeting, changes);
+    if (excludesIncludedPlace(targeting)) {
+      throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
+    }
     const rebuild = hasInterests(source.targeting);
     const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
     if (!rebuild) {

@@ -3,6 +3,7 @@ import rebuildTape from "./fixtures/meta/edit-audience-rebuild.json";
 import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
+import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
 // #773: Graph responses recorded by scripts/record-meta-edit-audience.ts on PAUSED Solaride test
 // campaigns (archived afterwards): editing a launched ad set's audience, Chandigarh → Mohali, ages 30-60.
@@ -16,7 +17,8 @@ type Sent = { method: string; path: string; form: Record<string, string> };
 
 const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
 const mohali = { cities: [{ key: "1029599", name: "Mohali", radius: 25, distance_unit: "kilometer" }] };
-const changes = { location: mohali as never, age: { min: 30, max: 60 } };
+// A new area always arrives with its #741 out-of-area exclusions (the edit service computes them).
+const changes = { location: mohali as never, excludedLocation: { regions: [{ key: "1723" }] } as never, age: { min: 30, max: 60 } };
 
 function replay(tape: unknown[]) {
   const pending = [...tape] as Exchange[];
@@ -137,6 +139,19 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     it("a new area with no exclusions (country-wide) clears #741's and keeps the owner's", async () => {
       expect(await sentExclusions({ location: { countries: ["IN"] }, excludedLocation: {} })).toEqual({ regions: [{ key: "777" }], cities: [{ key: "555" }] });
     });
+  });
+
+  // #741 (QA on #828): the old area's exclusions can't be kept for a new area, nor a place included and excluded at once.
+  it("refuses a new area that comes without its own exclusions, or that the result would also exclude, before any write", async () => {
+    const rajasthan = { regions: [{ key: "1743" }] };
+    const tape = replay(patchTape);
+    const { campaignId, adSetId } = ids(patchTape);
+    const meta = new MetaClient(creds);
+    await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { location: rajasthan as never } }, { validateOnly: true }))
+      .rejects.toBeInstanceOf(TargetingExclusionsMissingError);
+    await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { location: rajasthan as never, excludedLocation: rajasthan as never } }, { validateOnly: true }))
+      .rejects.toBeInstanceOf(TargetingExclusionsMissingError);
+    expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
 
   it("refuses an ad set that isn't PAUSED, and empty or out-of-range changes, before any write", async () => {
