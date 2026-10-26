@@ -182,6 +182,15 @@ export function hasInterests(targeting: Record<string, unknown>): boolean {
     || (Array.isArray(flexible) && flexible.some(spec => spec && typeof spec === "object" && Object.keys(spec).length > 0));
 }
 
+/**
+ * #912: Meta refuses an in-place targeting update (100/1359202) on an ad set with interests, and on every
+ * WhatsApp (click-to-WhatsApp, Advantage+ audience) ad set even without them; those are rebuilt.
+ */
+export function needsRebuild(adSet: { targeting?: unknown; destination_type?: string | null }): boolean {
+  const targeting = adSet.targeting && typeof adSet.targeting === "object" ? adSet.targeting as Record<string, unknown> : {};
+  return hasInterests(targeting) || adSet.destination_type === "WHATSAPP";
+}
+
 const AUTO_EXCLUDED_REGIONS = new Set<string>(INDIA_REGION_KEYS);
 const AUTO_EXCLUDED_CITIES = new Set(EXCLUDABLE_CITIES.map(city => city.key));
 
@@ -1874,7 +1883,7 @@ export class MetaClient {
     if (excludesIncludedPlace(targeting)) {
       throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
     }
-    const rebuild = hasInterests(source.targeting);
+    const rebuild = needsRebuild(source);
     const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
     if (!rebuild) {
       const patched = await this.graph<{ success?: boolean }>(encodeURIComponent(adSetId), {

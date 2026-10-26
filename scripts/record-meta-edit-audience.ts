@@ -3,8 +3,9 @@
  * PAUSED test campaigns, then archives them. Never sets ACTIVE; nothing delivers or spends.
  *   - rebuild: an ad set with interests (Meta refuses an in-place targeting update, 100/1359202)
  *   - patch:   an ad set without interests
+ *   - whatsapp: a click-to-WhatsApp ad set (Meta refuses any in-place targeting update there too, #912)
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl>
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp]
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
  */
@@ -51,8 +52,14 @@ globalThis.fetch = async (input, init) => {
   return response;
 };
 
+// The business's real WhatsApp number never lands in a fixture.
+const PLACEHOLDER_PHONE = "+910000000000";
+let phone: string | null = null;
+
 function save(name: string) {
-  writeFileSync(join(OUT, `${name}.json`), `${JSON.stringify(tape, null, 2)}\n`);
+  let text = JSON.stringify(tape, null, 2);
+  if (phone) text = text.split(phone).join(PLACEHOLDER_PHONE).split(phone.slice(1)).join(PLACEHOLDER_PHONE.slice(1));
+  writeFileSync(join(OUT, `${name}.json`), `${text}\n`);
   console.log(`${name}: ${tape.length} exchanges`);
   tape = [];
 }
@@ -78,19 +85,26 @@ async function main() {
   const before = await meta.resolveGeoTargeting(["Chandigarh"], { cityScope: "city_only" });
   const after = await meta.resolveGeoTargeting(["Mohali"], { cityScope: "city_only" });
   const audience = await meta.resolveAudienceInterests(["Solar energy"]);
-  const changes = { location: after.targeting, age: { min: 30, max: 60 } };
+  // A new area always comes with its #741 out-of-area exclusions, as the edit service sends it.
+  const changes = { location: after.targeting, excludedLocation: (await meta.serviceAreaExclusionsFor(after.targeting)) ?? {}, age: { min: 30, max: 60 } };
+  const numbers = await meta.whatsappNumbers();
+  const whatsappNumber = numbers.page ?? numbers.business[0] ?? null;
+  phone = whatsappNumber;
   tape = [];
 
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []]] as const) {
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []]] as const) {
       if (only && only !== path) continue;
+      const whatsapp = path === "whatsapp";
+      if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
       const launch = await meta.createLeadCampaign({
         name: `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
         dailyBudgetRupees: 200, leadFormId: forms[0].id, link: "https://adbrain.vanshul.com",
         creatives: [{ imageUrl, headline: "Lower electricity bills", message: "Rooftop solar for Tricity homes.", cta: "Learn More" }],
-        ageMin: 25, ageMax: 55, gender: "all", interests: [...interests], location: before.targeting, destination: "instant_form",
+        ageMin: 25, ageMax: 55, gender: "all", interests: [...interests], location: before.targeting,
+        ...whatsapp ? { destination: "whatsapp" as const, whatsappNumber: whatsappNumber!, boundWhatsAppNumbers: [whatsappNumber!], link: `https://wa.me/${whatsappNumber!.slice(1)}` } : { destination: "instant_form" as const },
       });
       created.push(launch.campaignId);
       tape = [];

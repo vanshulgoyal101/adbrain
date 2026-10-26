@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import rebuildTape from "./fixtures/meta/edit-audience-rebuild.json";
 import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
+import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 
 // #773 2/3: POST /api/campaigns/[id]/audience through the real route, connection access, edit service,
 // MetaClient, trusted write and audit, on a token sealed by the real token store. Only Supabase (an
@@ -212,6 +213,18 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(writes()).toHaveLength(1);
     expect(mirror()).toMatchObject({ meta_adset_id: scene.adSetId });
     expect(operations()).toEqual([]);
+  });
+
+  // #912: a WhatsApp ad set has no interests but can't be patched; the service plans a rebuild and says so.
+  it("plans a rebuild for a WhatsApp ad set without interests", async () => {
+    const adId = (whatsappTape as Exchange[]).find(exchange => exchange.path.endsWith("/copies"))!.path.split("/")[0];
+    const scene = scenario(whatsappTape as Exchange[], adId);
+    stored(scene);
+    replay(scene.tape);
+    const { status, body } = await edit({ preview: true });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, preview: { adSets: [{ adSetId: scene.adSetId, mode: "rebuild", validated: true }], consequence: expect.stringContaining("restarts Meta's learning") } });
+    expect(writes()).toHaveLength(1);
   });
 
   it("patches an ad set without interests in place and keeps the ids", async () => {
