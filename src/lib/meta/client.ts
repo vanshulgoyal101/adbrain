@@ -209,6 +209,14 @@ export function metaErrorMessage(error: GraphErrorBody | undefined, status: numb
 
 export class CampaignDeliveryError extends MetaError {}
 
+/** #721: Meta deleted or archived the campaign, so it has no ad sets left to read. */
+export class CampaignGoneError extends MetaError {
+  constructor(readonly metaStatus: "DELETED" | "ARCHIVED") {
+    super(`This campaign was ${metaStatus === "DELETED" ? "deleted" : "archived"} in Meta, so it has no new results.`);
+    this.name = "CampaignGoneError";
+  }
+}
+
 export type CampaignDeliverySnapshot = {
   campaign: { id: string; status: string; effectiveStatus: string | null };
   adSets: Array<{ id: string; status: string; effectiveStatus: string | null; dailyBudgetPaise: number; pageId: string; destinationType: string | null; targeting: unknown }>;
@@ -1308,6 +1316,13 @@ export class MetaClient {
     const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
       `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
     );
+    if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
+      // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
+      // Best effort: if Meta can't say, the binding error below still blocks the read or write.
+      const state = await this.graph<{ status?: string; effective_status?: string }>(`${node}?fields=id,account_id,name,status,effective_status,configured_status`).catch(() => ({} as { status?: string; effective_status?: string }));
+      const gone = [state.effective_status, state.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+      if (gone === "DELETED" || gone === "ARCHIVED") throw new CampaignGoneError(gone);
+    }
     if (!Array.isArray(adSets.data) || !adSets.data.length || adSets.paging?.next
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");

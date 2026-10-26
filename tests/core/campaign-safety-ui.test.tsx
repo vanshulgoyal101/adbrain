@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import reviewAccountExamples from "./fixtures/meta/safety/review-account-examples.json";
 import reviewNewAd from "./fixtures/meta/safety/review-new-ad.json";
@@ -85,5 +85,27 @@ describe("Campaigns: a campaign with no spend says so once (#173)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
     expect(await screen.findByText(message)).toBeTruthy();
     expect(screen.queryAllByText(/spen[dt]|deliver|Next step/i)).toHaveLength(1);
+  });
+});
+
+// #721 (QA): #499's first tree was deleted in Meta, but its card stayed "paused" and every Refresh failed.
+// The refresh route now answers 410 with the ended row (manage-routes.test.ts drives it on the recorded reads).
+describe("core: a campaign deleted in Meta shows as deleted after Refresh (#721)", () => {
+  it("the card says Deleted in Meta, not paused, and explains why there are no new results", async () => {
+    const message = "This campaign was deleted in Meta, so it has no new results. AdBrain moved it to ended campaigns.";
+    const ended = { ...launched, status: "completed", raw: { ...(launched.raw as object), metaStatus: "DELETED" } };
+    let stored = launched;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (!String(input).endsWith("/refresh")) return Response.json({ campaigns: [stored], results: {}, nextCursor: null });
+      stored = ended as Campaign;
+      return Response.json({ error: message, gone: "DELETED", campaign: ended }, { status: 410 });
+    }));
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[launched]} initialResults={{}}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_2398686420592052" />);
+    const card = screen.getByRole("article", { name: "First lead campaign" });
+    fireEvent.click(within(card).getByRole("button", { name: /Refresh results/ }));
+    expect(await within(card).findByText("Deleted in Meta")).toBeTruthy();
+    expect(within(card).getByText(message)).toBeTruthy();
+    expect(within(card).queryByText("paused")).toBeNull();
   });
 });

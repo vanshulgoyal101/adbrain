@@ -105,6 +105,12 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-slate-100 text-slate-600",
 };
 
+/** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
+function goneInMeta(campaign: Campaign): string | null {
+  const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
+  return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
+}
+
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
 /** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
@@ -1062,8 +1068,13 @@ function BusinessCampaigns({
         review?: AdReview[] | null;
         error?: string;
         protectionConfirmed?: boolean;
+        gone?: string;
+        campaign?: Campaign | null;
       };
-      if (res.ok) {
+      if (res.status === 410 && data.gone) {
+        if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        setCardNotice({ id, message: data.error ?? "This campaign is no longer in Meta." });
+      } else if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         setCardNotice({ id, message: refreshNotice(previous, data.result) });
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
@@ -1931,7 +1942,7 @@ function BusinessCampaigns({
                             "bg-slate-100 text-slate-600"
                           }
                         >
-                          {c.status === "active" ? "Requested active" : c.status}
+                          {goneInMeta(c) ?? (c.status === "active" ? "Requested active" : c.status)}
                         </Badge>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}

@@ -1,0 +1,49 @@
+{
+  "note": "#721 (QA): real read-only Graph answers for #499's first tree 120253706331870526 after Dev 3 deleted it in Meta (Oct 26 ~08:30Z), recorded 09:02Z with the Meta test-account token (stripped; paging cursors dropped). The refresh path's binding read finds no ad sets; Meta's status read says DELETED.",
+  "tape": [
+    {
+      "method": "GET",
+      "path": "120253706331870526?fields=id%2Caccount_id",
+      "status": 200,
+      "body": {
+        "id": "120253706331870526",
+        "account_id": "2398686420592052"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253706331870526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "status": 200,
+      "body": {
+        "data": []
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253706331870526?fields=id%2Caccount_id%2Cname%2Cstatus%2Ceffective_status%2Cconfigured_status",
+      "status": 200,
+      "body": {
+        "id": "120253706331870526",
+        "name": "Solaride | Free Survey | Tricity | WhatsApp EN | Oct 26",
+        "account_id": "2398686420592052",
+        "status": "DELETED",
+        "configured_status": "DELETED",
+        "effective_status": "DELETED"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253706331870526/adsets?fields=id%2Cstatus%2Ceffective_status&limit=100&filtering=%5B%7B%22field%22%3A%22effective_status%22%2C%22operator%22%3A%22IN%22%2C%22value%22%3A%5B%22DELETED%22%2C%22ARCHIVED%22%2C%22PAUSED%22%2C%22ACTIVE%22%5D%7D%5D",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "120253706333570526",
+            "status": "DELETED",
+            "effective_status": "DELETED"
+          }
+        ]
+      }
+    }
+  ]
+}
