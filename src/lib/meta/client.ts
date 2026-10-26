@@ -336,6 +336,50 @@ export function whatsappWelcomeMessage(texts: { autofill: string; greeting: stri
   });
 }
 
+/** #775: the words an owner can change on a launched ad. Pictures and CTA come later (#744). */
+export type AdCopyEdit = {
+  headline?: string;
+  message?: string;
+  description?: string;
+  whatsappGreeting?: { autofill: string; greeting: string };
+};
+
+type StoredCreative = { name?: string; object_story_spec?: Record<string, unknown>; asset_feed_spec?: Record<string, unknown> };
+
+/**
+ * #775: the `adcreatives` form for an edited copy of a launched ad's creative. Starts from the
+ * creative exactly as Meta stores it (images, 9:16 rules, Page and Instagram ids are kept) and
+ * changes only the edited words, in whichever shape the ad was launched (single image or placement).
+ */
+export function editedCreativeForm(creative: StoredCreative, edit: AdCopyEdit): Record<string, string> {
+  const text = (value: string | undefined) => value?.trim() || undefined;
+  const headline = text(edit.headline), message = text(edit.message), description = text(edit.description);
+  if (!headline && !message && !description && !edit.whatsappGreeting) throw new MetaError("Change at least one part of the ad before saving.");
+  const welcome = edit.whatsappGreeting ? whatsappWelcomeMessage(edit.whatsappGreeting) : undefined;
+  const name = (headline ?? creative.name ?? "AdBrain creative").slice(0, 90);
+  if (creative.asset_feed_spec) {
+    const feed = structuredClone(creative.asset_feed_spec) as Record<string, unknown> & { additional_data?: Record<string, unknown> };
+    if (message) feed.bodies = [{ text: message }];
+    if (headline) feed.titles = [{ text: headline }];
+    if (description) feed.descriptions = [{ text: description }];
+    if (welcome) {
+      if (!feed.additional_data?.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
+      feed.additional_data = { ...feed.additional_data, page_welcome_message: welcome };
+    }
+    return { name, object_story_spec: JSON.stringify(creative.object_story_spec ?? {}), asset_feed_spec: JSON.stringify(feed) };
+  }
+  const story = structuredClone(creative.object_story_spec ?? {}) as { link_data?: Record<string, unknown> };
+  if (!story.link_data) throw new MetaError("This ad's format can't be edited in AdBrain yet.");
+  if (message) story.link_data.message = message;
+  if (headline) story.link_data.name = headline;
+  if (description) story.link_data.description = description;
+  if (welcome) {
+    if (!story.link_data.page_welcome_message) throw new MetaError("This ad has no WhatsApp message to change.");
+    story.link_data.page_welcome_message = welcome;
+  }
+  return { name, object_story_spec: JSON.stringify(story) };
+}
+
 /** The creative call-to-action for a lead destination. */
 export function destinationCTA(
   dest: AdDestination,
@@ -1301,6 +1345,29 @@ export class MetaClient {
       destination,
       creativeIds,
     };
+  }
+
+  /**
+   * #775: put edited words on a launched ad. A new creative is made from the current one (Meta
+   * keeps the old creative, so the change can be rolled back by swapping it back), then the ad is
+   * pointed at it. Each step is validated by Meta first; the ad goes back to Meta review.
+   */
+  async replaceAdCreative(adId: string, edit: AdCopyEdit): Promise<{ adId: string; previousCreativeId: string; creativeId: string }> {
+    const acct = this.creds.adAccountId;
+    const ad = await this.graph<{ id: string; account_id?: string; creative?: StoredCreative & { id?: string } }>(
+      `${encodeURIComponent(adId)}?fields=id,account_id,creative{id,name,object_story_spec,asset_feed_spec}`,
+    );
+    if (ad.account_id !== acct.replace(/^act_/, "") || !ad.creative?.id) throw new MetaError("This ad isn't in the connected ad account.");
+    const form = editedCreativeForm(ad.creative, edit);
+    const validate = JSON.stringify(["validate_only"]);
+    await this.graph(`${acct}/adcreatives`, { method: "POST", form: { ...form, execution_options: validate } });
+    const created = await this.graph<{ id: string }>(`${acct}/adcreatives`, { method: "POST", form });
+    const swap = { creative: JSON.stringify({ creative_id: created.id }) };
+    await this.graph(encodeURIComponent(adId), { method: "POST", form: { ...swap, execution_options: validate } });
+    await this.graph(encodeURIComponent(adId), { method: "POST", form: swap });
+    const after = await this.graph<{ creative?: { id?: string } }>(`${encodeURIComponent(adId)}?fields=creative{id}`);
+    if (after.creative?.id !== created.id) throw new MetaError("Meta didn't confirm the new ad text. Refresh and check the ad before trying again.");
+    return { adId, previousCreativeId: ad.creative.id, creativeId: created.id };
   }
 
   async listCampaigns(limit = 200): Promise<MetaCampaignSummary[]> {

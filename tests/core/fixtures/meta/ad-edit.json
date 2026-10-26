@@ -1,0 +1,168 @@
+{
+  "recordedAt": "2026-10-26T11:44:58.023Z",
+  "edit": {
+    "message": "Book your free solar site survey this week. Our Mohali team replies on WhatsApp within the hour."
+  },
+  "ad": {
+    "id": "AD",
+    "account_id": "2398686420592052",
+    "creative": {
+      "id": "1063395926728315",
+      "name": "Stop guessing if your roof is ready 2026-10-26-b4cc2f02b7f313437ccc699786e5196c",
+      "object_story_spec": {
+        "page_id": "885223068001054",
+        "instagram_user_id": "17841476237284383"
+      },
+      "asset_feed_spec": {
+        "images": [
+          {
+            "adlabels": [
+              {
+                "name": "adbrain_feed",
+                "id": "120253687465190526"
+              }
+            ],
+            "hash": "335ad0496aa203527ab68c7b643ebe6f"
+          },
+          {
+            "adlabels": [
+              {
+                "name": "adbrain_story",
+                "id": "120253687465200526"
+              }
+            ],
+            "hash": "1791143002b58aec38f9394dd912951a"
+          }
+        ],
+        "bodies": [
+          {
+            "text": "Stop guessing if your roof is ready. Book your free solar site survey today.\nOur local solar teams in Mohali and Hisar help with PM Surya Ghar subsidy and net metering.\nPotential to cut electricity bills by up to 98%. Message us on WhatsApp to start."
+          }
+        ],
+        "call_to_action_types": [
+          "WHATSAPP_MESSAGE"
+        ],
+        "descriptions": [
+          {
+            "text": "Message us on WhatsApp to book your free solar site survey in Chandigarh, Mohali or Panchkula."
+          }
+        ],
+        "link_urls": [
+          {
+            "website_url": "https://wa.me/917009764842"
+          }
+        ],
+        "titles": [
+          {
+            "text": "Stop guessing if your roof is ready"
+          }
+        ],
+        "ad_formats": [
+          "SINGLE_IMAGE"
+        ],
+        "asset_customization_rules": [
+          {
+            "customization_spec": {
+              "age_max": 65,
+              "age_min": 13,
+              "publisher_platforms": [
+                "facebook",
+                "instagram",
+                "messenger"
+              ],
+              "facebook_positions": [
+                "story",
+                "facebook_reels"
+              ],
+              "instagram_positions": [
+                "story",
+                "reels",
+                "profile_reels"
+              ],
+              "messenger_positions": [
+                "story"
+              ]
+            },
+            "image_label": {
+              "name": "adbrain_story",
+              "id": "120253687465200526"
+            },
+            "priority": 1
+          },
+          {
+            "customization_spec": {
+              "age_max": 65,
+              "age_min": 13,
+              "publisher_platforms": [
+                "facebook",
+                "instagram",
+                "audience_network",
+                "messenger"
+              ],
+              "facebook_positions": [
+                "feed",
+                "right_hand_column",
+                "video_feeds",
+                "instream_video",
+                "marketplace",
+                "search",
+                "biz_disco_feed",
+                "facebook_reels_overlay",
+                "profile_feed",
+                "notification"
+              ],
+              "instagram_positions": [
+                "stream",
+                "explore",
+                "explore_home",
+                "profile_feed",
+                "ig_search"
+              ],
+              "messenger_positions": [
+                "sponsored_messages",
+                "messenger_home"
+              ],
+              "audience_network_positions": [
+                "classic",
+                "instream_video",
+                "rewarded_video"
+              ]
+            },
+            "image_label": {
+              "name": "adbrain_feed",
+              "id": "120253687465190526"
+            },
+            "priority": 2
+          }
+        ],
+        "optimization_type": "PLACEMENT",
+        "additional_data": {
+          "multi_share_end_card": false,
+          "page_welcome_message": "{\"type\":\"VISUAL_EDITOR\",\"version\":2,\"landing_screen_type\":\"welcome_message\",\"media_type\":\"text\",\"text_format\":{\"customer_action_type\":\"autofill_message\",\"message\":{\"autofill_message\":{\"content\":\"Hi! I'd like a free solar site survey.\"},\"text\":\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\"}}}",
+          "is_click_to_message": false
+        },
+        "reasons_to_shop": false,
+        "shops_bundle": false
+      }
+    }
+  },
+  "form": {
+    "name": "Stop guessing if your roof is ready 2026-10-26-b4cc2f02b7f313437ccc699786e5196c",
+    "object_story_spec": "{\"page_id\":\"885223068001054\",\"instagram_user_id\":\"17841476237284383\"}",
+    "asset_feed_spec": "{\"images\":[{\"adlabels\":[{\"name\":\"adbrain_feed\",\"id\":\"120253687465190526\"}],\"hash\":\"335ad0496aa203527ab68c7b643ebe6f\"},{\"adlabels\":[{\"name\":\"adbrain_story\",\"id\":\"120253687465200526\"}],\"hash\":\"1791143002b58aec38f9394dd912951a\"}],\"bodies\":[{\"text\":\"Book your free solar site survey this week. Our Mohali team replies on WhatsApp within the hour.\"}],\"call_to_action_types\":[\"WHATSAPP_MESSAGE\"],\"descriptions\":[{\"text\":\"Message us on WhatsApp to book your free solar site survey in Chandigarh, Mohali or Panchkula.\"}],\"link_urls\":[{\"website_url\":\"https://wa.me/917009764842\"}],\"titles\":[{\"text\":\"Stop guessing if your roof is ready\"}],\"ad_formats\":[\"SINGLE_IMAGE\"],\"asset_customization_rules\":[{\"customization_spec\":{\"age_max\":65,\"age_min\":13,\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"],\"facebook_positions\":[\"story\",\"facebook_reels\"],\"instagram_positions\":[\"story\",\"reels\",\"profile_reels\"],\"messenger_positions\":[\"story\"]},\"image_label\":{\"name\":\"adbrain_story\",\"id\":\"120253687465200526\"},\"priority\":1},{\"customization_spec\":{\"age_max\":65,\"age_min\":13,\"publisher_platforms\":[\"facebook\",\"instagram\",\"audience_network\",\"messenger\"],\"facebook_positions\":[\"feed\",\"right_hand_column\",\"video_feeds\",\"instream_video\",\"marketplace\",\"search\",\"biz_disco_feed\",\"facebook_reels_overlay\",\"profile_feed\",\"notification\"],\"instagram_positions\":[\"stream\",\"explore\",\"explore_home\",\"profile_feed\",\"ig_search\"],\"messenger_positions\":[\"sponsored_messages\",\"messenger_home\"],\"audience_network_positions\":[\"classic\",\"instream_video\",\"rewarded_video\"]},\"image_label\":{\"name\":\"adbrain_feed\",\"id\":\"120253687465190526\"},\"priority\":2}],\"optimization_type\":\"PLACEMENT\",\"additional_data\":{\"multi_share_end_card\":false,\"page_welcome_message\":\"{\\\"type\\\":\\\"VISUAL_EDITOR\\\",\\\"version\\\":2,\\\"landing_screen_type\\\":\\\"welcome_message\\\",\\\"media_type\\\":\\\"text\\\",\\\"text_format\\\":{\\\"customer_action_type\\\":\\\"autofill_message\\\",\\\"message\\\":{\\\"autofill_message\\\":{\\\"content\\\":\\\"Hi! I'd like a free solar site survey.\\\"},\\\"text\\\":\\\"Hi! Thanks for messaging Solaride. Send this message and we'll reply here.\\\"}}}\",\"is_click_to_message\":false},\"reasons_to_shop\":false,\"shops_bundle\":false}"
+  },
+  "validated": {
+    "creative": {
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    },
+    "swap": {
+      "status": 200,
+      "body": {
+        "success": true
+      }
+    }
+  }
+}
