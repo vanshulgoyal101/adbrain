@@ -99,7 +99,7 @@ describe("CTO queue watch", () => {
     const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
     expect(low).not.toContain("reviewer");
     expect(low).toContain("dev4");
-    expect(low).not.toContain("qa");
+    expect(low).toContain("qa");
   });
 });
 
