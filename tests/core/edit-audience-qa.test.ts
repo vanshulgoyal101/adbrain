@@ -67,4 +67,21 @@ describe("audience edit keeps the launch guarantees (QA, PR #828)", () => {
     const regions = (JSON.parse(create.form.targeting).excluded_geo_locations?.regions ?? []) as { key: string }[];
     expect(regions.map(region => region.key)).toEqual(expect.arrayContaining(AREA.map(region => region.key)));
   });
+  it("moving the area into a state the old area excluded doesn't keep excluding it (stale #741 exclusions)", async () => {
+    // Tricity's exclusions include Rajasthan (1743); the owner moves the area to Rajasthan.
+    const RAJASTHAN = "1743";
+    const sent = replay(tapeWith((source) => {
+      (source.targeting as Record<string, unknown>).excluded_geo_locations = { regions: [...AREA, { key: RAJASTHAN }] };
+    }));
+    const { campaignId, adSetId } = ids();
+    await new MetaClient(creds).editAdSetTargeting(campaignId, {
+      adSetId, adIds: ["120253709601690526"], changes: { location: { regions: [{ key: RAJASTHAN }] } as never },
+    }, { validateOnly: true }).catch(() => undefined);
+    const create = sent.find(call => call.method === "POST" && call.path.endsWith("/adsets"));
+    if (create) {
+      const targeting = JSON.parse(create.form.targeting);
+      const excluded = ((targeting.excluded_geo_locations?.regions ?? []) as { key: string }[]).map(region => region.key);
+      expect(excluded).not.toContain(RAJASTHAN);
+    }
+  });
 });
