@@ -226,36 +226,6 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["brand_assets"]["Insert"]>;
         Relationships: [];
       };
-      meta_credentials: {
-        Row: {
-          id: string;
-          business_id: string;
-          ad_account_id: string | null;
-          page_id: string | null;
-          access_token: string;
-          token_type: "system_user" | "oauth";
-          token_expires_at: string | null;
-          meta_user_id: string | null;
-          scopes: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          business_id: string;
-          ad_account_id?: string | null;
-          page_id?: string | null;
-          access_token: string;
-          token_type?: "system_user" | "oauth";
-          token_expires_at?: string | null;
-          meta_user_id?: string | null;
-          scopes?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["meta_credentials"]["Insert"]>;
-        Relationships: [];
-      };
       meta_connections: {
         Row: {
           business_id: string;
