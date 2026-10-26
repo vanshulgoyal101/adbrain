@@ -109,6 +109,36 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(form).not.toHaveProperty("daily_budget");
   });
 
+  // Exclusions only grow: what the ad set already excludes stays; a state AdBrain's own #741 rule added
+  // that the new area now needs is the one thing dropped, and the owner's own exclusions never are.
+  describe("exclusions only grow", () => {
+    const withExclusions = () => (patchTape as Exchange[]).slice(0, 4).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
+      ? { ...exchange, body: { ...(exchange.body as { targeting: object }), targeting: { ...(exchange.body as { targeting: object }).targeting,
+        excluded_geo_locations: { regions: [{ key: "1723" }, { key: "1742" }, { key: "777" }], cities: [{ key: "555" }, { key: "1033379" }] } } } } : exchange);
+    const sentExclusions = async (edit: object) => {
+      const tape = replay(withExclusions());
+      const { campaignId, adSetId } = ids(patchTape);
+      await new MetaClient(creds).editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: edit as never }, { validateOnly: true });
+      return JSON.parse(tape.sent.find(call => call.method === "POST")!.form.targeting).excluded_geo_locations;
+    };
+
+    it("adds the new exclusions to the existing ones by key without removing any", async () => {
+      expect(await sentExclusions({ excludedLocation: { regions: [{ key: "1723" }, { key: "1724" }], cities: [{ key: "666" }] } })).toEqual({
+        regions: [{ key: "1723" }, { key: "1742" }, { key: "777" }, { key: "1724" }], cities: [{ key: "555" }, { key: "1033379" }, { key: "666" }],
+      });
+    });
+
+    it("when the area changes, drops only the #741 exclusions the new area no longer makes (never the owner's own)", async () => {
+      expect(await sentExclusions({ location: mohali, excludedLocation: { regions: [{ key: "1723" }, { key: "1724" }] } })).toEqual({
+        regions: [{ key: "1723" }, { key: "777" }, { key: "1724" }], cities: [{ key: "555" }],
+      });
+    });
+
+    it("a new area with no exclusions (country-wide) clears #741's and keeps the owner's", async () => {
+      expect(await sentExclusions({ location: { countries: ["IN"] }, excludedLocation: {} })).toEqual({ regions: [{ key: "777" }], cities: [{ key: "555" }] });
+    });
+  });
+
   it("refuses an ad set that isn't PAUSED, and empty or out-of-range changes, before any write", async () => {
     const running = (patchTape as Exchange[]).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
       ? { ...exchange, body: { ...(exchange.body as object), status: "ACTIVE" } } : exchange);
