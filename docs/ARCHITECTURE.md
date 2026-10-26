@@ -158,7 +158,11 @@ The creation `idempotencyKey` identifies the same intended operation. It cannot
 be reused for different inputs. Database claim/checkpoint/finish RPCs arbitrate
 competing workers. A transmitted/uncertain Meta write becomes
 `needs_reconciliation`, not an automatic replay. External-ID checkpoints are
-important even when a local campaign row has not been finalized.
+important even when a local campaign row has not been finalized. One exception
+(#735): if a create fails after Meta made the campaign but before any ad set, the
+client deletes that empty PAUSED campaign (sync can't import a campaign without ad
+sets); when Meta confirms, the operation is `failed` with nothing left in Meta, and
+when the delete fails it stays `needs_reconciliation`.
 
 Activation has its own digest and live verification; creation permission never
 implies permission to spend. Budget checks use the total daily commitment across

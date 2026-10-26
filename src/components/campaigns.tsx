@@ -583,7 +583,7 @@ function BusinessCampaigns({
     const reconciling = operation?.state === "needs_reconciliation";
     if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
     if (!(await askConfirm(reconciling
-      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you don't want it.", confirmLabel: "Start new campaign" }
+      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Everything it made is paused, so nothing can spend. Sync brings it into Your campaigns if it has an ad set; an empty campaign shows only in Ads Manager, where you can delete it.", confirmLabel: "Start new campaign" }
       : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
     clearErrors();
     preparedDraftRef.current = null;
@@ -1414,7 +1414,7 @@ function BusinessCampaigns({
                 {operation?.state === "failed" && <span className="text-sm font-normal">The operation failed before completion. Review the draft and start a new reviewed attempt.</span>}
                 {operation?.state === "needs_reconciliation" && (
                   <>
-                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Sync imports anything it made as paused.</span>
+                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Everything it made is paused, so nothing can spend. Sync brings it in if it has an ad set; an empty campaign shows only in Ads Manager.</span>
                     <Button size="sm" variant="outline" onClick={startNewCampaign}>Start a new campaign</Button>
                   </>
                 )}

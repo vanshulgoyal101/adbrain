@@ -1,0 +1,37 @@
+[
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adimages",
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Invalid parameter",
+        "type": "OAuthException",
+        "code": 100,
+        "error_data": {
+          "ad_account_id": 2398686420592052,
+          "file_size": 12
+        },
+        "error_subcode": 2446496,
+        "is_transient": false,
+        "error_user_title": "फ़ोटो का फ़ॉर्मेट अमान्य है",
+        "error_user_msg": "हम आपके द्वारा अपलोड की गई फ़ोटो को प्रोसेस नहीं कर सके. कृपया फिर से कोशिश करें या कोई दूसरी फ़ोटो अपलोड करें.",
+        "fbtrace_id": "AUhG135dFo0W7DKakeidQx8"
+      }
+    }
+  },
+  {
+    "method": "DELETE",
+    "path": "120000000000000000",
+    "status": 400,
+    "body": {
+      "error": {
+        "message": "Unsupported delete request. Object with ID '120000000000000000' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api",
+        "type": "GraphMethodException",
+        "code": 100,
+        "error_subcode": 33,
+        "fbtrace_id": "AVVrnWEbz3XX2JGV77qEwPi"
+      }
+    }
+  }
+]
