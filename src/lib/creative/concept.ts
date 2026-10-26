@@ -8,6 +8,7 @@ import {
 } from "@/lib/templates/ads";
 import { formatDimensions, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
+import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
 
 export const CONCEPT_VERSION = "creative-concept-v3";
@@ -130,7 +131,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-    "hook-length", "offer-below-fold",
+    "hook-length", "offer-below-fold", "no-subject",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -424,6 +425,10 @@ export function validateConcept(
     allowedCaps,
   }).map((finding) => `${finding.rule}: ${finding.detail}`));
   issues.push(...quoteIssues);
+  const empty = emptyScene(concept.visual.direction);
+  if (empty) {
+    issues.push(`no-subject: visual.direction shows an "${empty}" scene; give the image a clear subject (the people the business serves, its team at work, or its product), not an empty space`);
+  }
   const firstLine = concept.primary_text.split("\n", 1)[0].trim();
   if (firstLine.length > FOLD_CHARACTERS) {
     issues.push(`hook-length: the first line of primary_text is ${firstLine.length} characters; keep the hook and offer within ${FOLD_CHARACTERS} and move the rest to short lines after \n`);
