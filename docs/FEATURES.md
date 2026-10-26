@@ -41,7 +41,7 @@ ID are different identifiers. Never infer one from another.
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected | Live Meta writes require verified binding and capability |
-| `/leads` | Sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
+| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764), then sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
 | `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
