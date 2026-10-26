@@ -12,13 +12,19 @@ export function adResultsEnabled(env: Record<string, string | undefined> = proce
 
 type Store = Pick<SupabaseClient, "from">;
 
+/** Meta's status, or DELETED for an ad gone from the listing (#943), so the card keeps it as replaced. */
+function storedStatus(ad: AdResult): string | null {
+  if (ad.effectiveStatus && /^[A-Z_]{1,40}$/.test(ad.effectiveStatus)) return ad.effectiveStatus;
+  return ad.replaced ? "DELETED" : null;
+}
+
 /** One lifetime-to-date row per ad (null period). Best effort: a failure keeps the last rows. */
 export async function saveAdResults(database: Store, row: { businessId: string; campaignId: string; ads: AdResult[] }): Promise<boolean> {
   if (!row.ads.length) return true;
   const syncedAt = new Date().toISOString();
   const { error } = await database.from("ad_results").upsert(row.ads.map(ad => ({
     business_id: row.businessId, campaign_id: row.campaignId, meta_ad_id: ad.adId,
-    ad_name: ad.name?.slice(0, 400) ?? null, effective_status: ad.effectiveStatus && /^[A-Z_]{1,40}$/.test(ad.effectiveStatus) ? ad.effectiveStatus : null,
+    ad_name: ad.name?.slice(0, 400) ?? null, effective_status: storedStatus(ad),
     period_start: null, period_end: null, delivered: ad.delivered,
     impressions: ad.impressions, link_clicks: ad.whatsappOpens ?? ad.clicks,
     conversations: ad.whatsappOpens === undefined ? 0 : ad.results, leads: ad.whatsappOpens === undefined ? ad.results : 0,
@@ -45,7 +51,7 @@ export function adResultViews(rows: StoredAdResult[], whatsapp: boolean): { ads:
     return {
       adId: row.meta_ad_id, name: row.ad_name, effectiveStatus: row.effective_status, creativeId: null, delivered: row.delivered,
       impressions: row.impressions, clicks: row.link_clicks, spend, results, costPerResult: results > 0 ? spend / results : null,
-      replaced: row.effective_status === "ARCHIVED",
+      replaced: row.effective_status === "ARCHIVED" || row.effective_status === "DELETED",
     };
   });
   const best = bestAd(ads);
