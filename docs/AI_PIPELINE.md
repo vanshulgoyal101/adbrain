@@ -66,6 +66,10 @@ Brand context and explicitly selected campaign settings are supplied with histor
 Known single service areas/offers and manual settings do not need confirmation;
 exclusions default empty unless requested, and the planner recommends creatives
 and technical targeting rather than asking the owner for API IDs or ad jargon.
+`campaign-planner-v6` (#686) asks for interests named the way Meta names them
+(topics, hobbies, activities, life events), not professions, specialties or
+symptoms. On production's Cedar Ridge facts this took plans with no Meta match from
+1 in 5 to 0 in 5, and resolved interests from 30% to 84% (Solaride unchanged, 0 in 5).
 Goal interpretation remains model-driven, including natural-language city/radius
 requests; a prompt example is not a guarantee of correct interpretation.
 
