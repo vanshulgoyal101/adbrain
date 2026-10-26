@@ -67,7 +67,7 @@ export default async function CampaignsPage({
     <div>
       <PageHeader
         title="Campaigns"
-        description="Turn approved ads into Meta lead campaigns with the audience, budget, and destination reviewed before anything can spend."
+        description="Launch your approved ads on Meta, pause them and see what they bring in."
       />
       {/* #757: warn a week before the Facebook connection stops working, while managing still works. */}
       {reconnectBy && (

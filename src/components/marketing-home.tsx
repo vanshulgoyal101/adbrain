@@ -34,10 +34,12 @@ export function MarketingHome() {
       </header>
       <main id="main-content">
         <section className={styles.hero} aria-labelledby="hero-title">
+          <div className={styles.heroMedia}>
           <picture>
-            <source media="(max-width: 760px)" srcSet="/campaign-preview-mobile.webp" />
-            <Image src="/campaign-preview.webp" alt="Illustrative campaign creative for a coffee shop, fitness studio, and interior designer" fill sizes="100vw" loading="eager" fetchPriority="high" className={styles.heroPhoto} />
+            <source media="(max-width: 760px)" srcSet="/hero-ads-mobile.webp" />
+            <Image src="/hero-ads.webp" alt="AdBrain ads for local businesses, including a family restaurant and a boutique" fill sizes="100vw" loading="eager" fetchPriority="high" className={styles.heroPhoto} />
           </picture>
+          </div>
           <div className={styles.heroContent}>
             <h1 id="hero-title" className={styles.heroStatement}>Ads that bring customers to your WhatsApp.</h1>
             <p className={styles.hinglish} lang="hi-Latn">Ad banao, customers paao, seedha WhatsApp par.</p>
@@ -48,7 +50,7 @@ export function MarketingHome() {
             </div>
             <p className={styles.heroNote}>Making ads is free. You pay only when you choose to run one.</p>
           </div>
-          <p className={styles.heroCaption}>Illustrative examples</p>
+          <p className={styles.heroCaption}>Made by AdBrain for example businesses</p>
         </section>
 
         <section id="cycle" className={styles.cycle} aria-labelledby="cycle-title">
