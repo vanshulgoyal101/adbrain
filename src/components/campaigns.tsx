@@ -105,6 +105,12 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-slate-100 text-slate-600",
 };
 
+/** #721: Meta deleted or archived it; Refresh ended the row and kept why in `raw.metaStatus`. */
+function goneInMeta(campaign: Campaign): string | null {
+  const status = campaign.raw && typeof campaign.raw === "object" && !Array.isArray(campaign.raw) ? (campaign.raw as { metaStatus?: unknown }).metaStatus : null;
+  return status === "DELETED" ? "Deleted in Meta" : status === "ARCHIVED" ? "Archived in Meta" : null;
+}
+
 const LEAD_FORMS_FRESH_MS = 60_000;
 const CAMPAIGNS_FRESH_MS = 15 * 60_000;
 /** Two rows of three on a phone, so Campaign name and budget are one scroll away (#305). */
@@ -583,7 +589,7 @@ function BusinessCampaigns({
     const reconciling = operation?.state === "needs_reconciliation";
     if (unresolvedRecovery() && !reconciling) { setError("Resolve the current campaign operation before starting another campaign."); return; }
     if (!(await askConfirm(reconciling
-      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Sync imports anything it made as paused; delete it from Your campaigns if you don't want it.", confirmLabel: "Start new campaign" }
+      ? { title: "Start a new campaign?", description: "Meta only partly created the last campaign. Everything it made is paused, so nothing can spend. Sync brings it into Your campaigns if it has an ad set; an empty campaign shows only in Ads Manager, where you can delete it.", confirmLabel: "Start new campaign" }
       : { title: "Discard this setup?", description: "Start a new campaign instead. Saved drafts stay available.", confirmLabel: "Discard and start new", tone: "danger" }))) return;
     clearErrors();
     preparedDraftRef.current = null;
@@ -1062,8 +1068,13 @@ function BusinessCampaigns({
         review?: AdReview[] | null;
         error?: string;
         protectionConfirmed?: boolean;
+        gone?: string;
+        campaign?: Campaign | null;
       };
-      if (res.ok) {
+      if (res.status === 410 && data.gone) {
+        if (data.campaign) setCampaigns((list) => list.map((item) => (item.id === id ? data.campaign! : item)));
+        setCardNotice({ id, message: data.error ?? "This campaign is no longer in Meta." });
+      } else if (res.ok) {
         if (data.result) setResults((p) => ({ ...p, [id]: data.result! }));
         setCardNotice({ id, message: refreshNotice(previous, data.result) });
         if (data.summary) setSummaries((p) => ({ ...p, [id]: data.summary! }));
@@ -1414,7 +1425,7 @@ function BusinessCampaigns({
                 {operation?.state === "failed" && <span className="text-sm font-normal">The operation failed before completion. Review the draft and start a new reviewed attempt.</span>}
                 {operation?.state === "needs_reconciliation" && (
                   <>
-                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Sync imports anything it made as paused.</span>
+                    <span className="text-sm font-normal">Meta only partly created this campaign. Do not retry it. Everything it made is paused, so nothing can spend. Sync brings it in if it has an ad set; an empty campaign shows only in Ads Manager.</span>
                     <Button size="sm" variant="outline" onClick={startNewCampaign}>Start a new campaign</Button>
                   </>
                 )}
@@ -1931,7 +1942,7 @@ function BusinessCampaigns({
                             "bg-slate-100 text-slate-600"
                           }
                         >
-                          {c.status === "active" ? "Requested active" : c.status}
+                          {goneInMeta(c) ?? (c.status === "active" ? "Requested active" : c.status)}
                         </Badge>
                         {reviews[c.id]?.length ? <AdReviewBadge reviews={reviews[c.id]} /> : null}
                         {attention ? <Badge className="bg-red-50 text-red-800">Needs attention</Badge> : null}

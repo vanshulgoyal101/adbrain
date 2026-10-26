@@ -143,6 +143,11 @@ should check saved results using the same generation ID before starting another
 paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
 
+The Review board groups ads by Create batch (`variant_group`), newest batch first
+and open, older batches folded (#762). Unreviewed ads older than 7 days sit in a
+folded "Older unreviewed ads" section and leave the Needs review count; this is
+view-only, so approving one brings it back.
+
 Newly saved creatives use a smaller WebP for Review board and generated Assets
 tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
 Download, ZIP export, and campaign delivery retain the original image. If the
@@ -407,7 +412,10 @@ operation cannot be discarded to bypass its recovery identity; saved drafts
 remain available after clearing the local setup.
 
 Preflight validates ownership, approved creative content, active lead form,
-connection capability, INR currency, resolved targeting, and budget. Its hash
+connection capability, INR currency, resolved targeting, and budget. For health
+businesses it also reads each ad's saved wording with Create's banned-claim rule
+(whole words only), so an owner-edited "Cures back pain" is blocked before Meta
+(`REVIEW_AD_POLICY`, #739). Its hash
 binds the reviewed inputs, selected assets, resolved IDs, and creative content.
 Creation reruns preflight and rejects a stale draft, hash, or connection generation.
 Each Review blocker shows a one-tap fix under its message (`reviewBlockerFix`,

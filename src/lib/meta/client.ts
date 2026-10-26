@@ -174,6 +174,19 @@ export class MetaError extends Error {
   }
 }
 
+/**
+ * #735: a create that failed after Meta made the campaign but before any ad set, where AdBrain then
+ * deleted that empty PAUSED campaign and Meta confirmed it. Nothing is left in Meta.
+ */
+export class MetaCreateRolledBackError extends MetaError {
+  constructor(readonly campaignId: string, readonly original: unknown) {
+    super(`${original instanceof Error ? original.message : "Campaign creation failed"} (the empty paused campaign ${campaignId} was deleted; nothing is left in Meta)`,
+      original instanceof MetaError ? original.status : undefined, original instanceof MetaError ? original.code : undefined,
+      original instanceof MetaError ? original.subcode : undefined, original instanceof MetaError ? original.details : undefined);
+    this.name = "MetaCreateRolledBackError";
+  }
+}
+
 export type MetaErrorDetails = { userTitle?: string; fbtraceId?: string; path?: string };
 
 type GraphErrorBody = { message?: string; error_user_msg?: string; error_user_title?: string; code?: number; error_subcode?: number; fbtrace_id?: string };
@@ -195,6 +208,14 @@ export function metaErrorMessage(error: GraphErrorBody | undefined, status: numb
 }
 
 export class CampaignDeliveryError extends MetaError {}
+
+/** #721: Meta deleted or archived the campaign, so it has no ad sets left to read. */
+export class CampaignGoneError extends MetaError {
+  constructor(readonly metaStatus: "DELETED" | "ARCHIVED") {
+    super(`This campaign was ${metaStatus === "DELETED" ? "deleted" : "archived"} in Meta, so it has no new results.`);
+    this.name = "CampaignGoneError";
+  }
+}
 
 export type CampaignDeliverySnapshot = {
   campaign: { id: string; status: string; effectiveStatus: string | null };
@@ -1020,40 +1041,55 @@ export class MetaClient {
       },
     });
     await params.onCheckpoint?.({ phase: "campaign", externalId: campaign.id });
+    // #735: a failure before the first ad set would leave an empty PAUSED campaign sync can't import.
+    // Delete it; if Meta confirms, nothing is left. If the delete fails, the original error stands
+    // and the operation is reconciled as before.
+    const rollBack = async (error: unknown): Promise<never> => {
+      try {
+        await this.graph(encodeURIComponent(campaign.id), { method: "DELETE" });
+      } catch {
+        throw error;
+      }
+      throw new MetaCreateRolledBackError(campaign.id, error);
+    };
 
     // Upload each creative image once and reuse the hash across all ad sets.
     const prepared: { input: CreativeInput; imageHash: string; storyHash: string | null }[] = [];
     // Placement creatives must name the Page's Instagram account; without one, skip the 9:16 (#333).
     let instagramUserId: string | null = null;
-    if (params.destination === "whatsapp" && params.creatives.some((creative) => creative.storyImage)) {
-      instagramUserId = await this.getPageInstagramId().catch((error: unknown) => {
-        params.onStoryFallback?.("instagram", metaErrorCode(error));
-        return null;
-      });
-      if (!instagramUserId) params.onStoryFallback?.("instagram", "none");
-    }
-    for (let creativeIndex = 0; creativeIndex < params.creatives.length; creativeIndex++) {
-      const c = params.creatives[creativeIndex];
-      const imageHash = await this.uploadAdImage(c.imageUrl);
-      await params.onCheckpoint?.({
-        phase: "creative",
-        externalId: imageHash,
-        creativeIndex,
-      });
-      // Placement images are proven for WhatsApp ads that name the Page's Instagram (story-validate.json).
-      let storyHash: string | null = null;
-      const storyImage = instagramUserId ? await c.storyImage : null;
-      if (storyImage) {
-        storyHash = await this.uploadAdImageBytes(storyImage).catch((error: unknown) => {
-          params.onStoryFallback?.("upload", metaErrorCode(error));
+    try {
+      if (params.destination === "whatsapp" && params.creatives.some((creative) => creative.storyImage)) {
+        instagramUserId = await this.getPageInstagramId().catch((error: unknown) => {
+          params.onStoryFallback?.("instagram", metaErrorCode(error));
           return null;
         });
+        if (!instagramUserId) params.onStoryFallback?.("instagram", "none");
       }
-      prepared.push({
-        input: c,
-        imageHash,
-        storyHash,
-      });
+      for (let creativeIndex = 0; creativeIndex < params.creatives.length; creativeIndex++) {
+        const c = params.creatives[creativeIndex];
+        const imageHash = await this.uploadAdImage(c.imageUrl);
+        await params.onCheckpoint?.({
+          phase: "creative",
+          externalId: imageHash,
+          creativeIndex,
+        });
+        // Placement images are proven for WhatsApp ads that name the Page's Instagram (story-validate.json).
+        let storyHash: string | null = null;
+        const storyImage = instagramUserId ? await c.storyImage : null;
+        if (storyImage) {
+          storyHash = await this.uploadAdImageBytes(storyImage).catch((error: unknown) => {
+            params.onStoryFallback?.("upload", metaErrorCode(error));
+            return null;
+          });
+        }
+        prepared.push({
+          input: c,
+          imageHash,
+          storyHash,
+        });
+      }
+    } catch (error) {
+      await rollBack(error);
     }
 
     // One ad set per variant; the default is a single ad set from the params.
@@ -1113,13 +1149,13 @@ export class MetaClient {
         try {
           adSet = await makeAdSet(requested, variants[i], i);
         } catch (err) {
-          if (requested === "instant_form") throw err;
-          throw new MetaError(
+          if (requested === "instant_form") return rollBack(err);
+          return rollBack(new MetaError(
             requested === "whatsapp"
               ? "WhatsApp is not available for this Meta Page. Connect WhatsApp or choose an instant lead form."
               : "Call ads are not available for this Meta Page. Add a phone number or choose an instant lead form.",
             err instanceof MetaError ? err.status : undefined,
-          );
+          ));
         }
       } else {
         adSet = await makeAdSet(destination, variants[i], i);
@@ -1280,6 +1316,13 @@ export class MetaClient {
     const adSets = await this.graph<{ data?: Array<{ destination_type?: string; promoted_object?: { page_id?: string } }>; paging?: { next?: string } }>(
       `${node}/adsets?fields=promoted_object,destination_type&limit=100`,
     );
+    if (Array.isArray(adSets.data) && !adSets.data.length && !adSets.paging?.next) {
+      // #721: a campaign deleted in Meta still answers, but lists no ad sets; its own status says why.
+      // Best effort: if Meta can't say, the binding error below still blocks the read or write.
+      const state = await this.graph<{ status?: string; effective_status?: string }>(`${node}?fields=id,account_id,name,status,effective_status,configured_status`).catch(() => ({} as { status?: string; effective_status?: string }));
+      const gone = [state.effective_status, state.status].find((value) => value === "DELETED" || value === "ARCHIVED");
+      if (gone === "DELETED" || gone === "ARCHIVED") throw new CampaignGoneError(gone);
+    }
     if (!Array.isArray(adSets.data) || !adSets.data.length || adSets.paging?.next
       || adSets.data.some(adSet => adSet.promoted_object?.page_id !== this.creds.pageId)) {
       throw new MetaError("Campaign Page binding could not be verified. Review the campaign in Meta.");

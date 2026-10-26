@@ -20,7 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", cto: "CTO", ceo: "CEO" };
+export const NAMES = { dev: "Dev", dev2: "Dev 2", dev3: "Dev 3", dev4: "Dev 4", qa: "QA", qa2: "QA 2", reviewer: "Reviewer", devops: "DevOps", cpo: "CPO", analyst: "Analyst", cto: "CTO", ceo: "CEO" };
 // Items parked on someone outside the team never count as waiting on you.
 const PARKED = new Set(["waiting-owner", "blocked"]);
 
@@ -97,7 +97,7 @@ export function readyPool(issues, role, max = 3) {
     .slice(0, max);
 }
 
-export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo"];
+export const WORKERS = ["dev", "dev2", "dev3", "dev4", "qa", "qa2", "reviewer", "devops", "cpo", "analyst"];
 export const MIN_QUEUE = 2;
 
 /** Workers with fewer than MIN_QUEUE actionable open items (not parked or waiting on the CEO). The CTO refills these. */
@@ -112,8 +112,8 @@ export function queueCounts(issues) {
 }
 
 /** Ready-pool items in a worker's lane count as supply: the waiter offers them, so the queue isn't dry (#573). */
-/** The Reviewer clears audits in minutes and picks its own from #681's failing rows when empty, so it isn't refilled. */
-export const SELF_SOURCING = new Set(["reviewer"]);
+/** The Reviewer and the Analyst pick their own audits/research when empty (#681 rows, #703), so the CTO doesn't refill them. */
+export const SELF_SOURCING = new Set(["reviewer", "analyst"]);
 
 export function lowQueues(issues) {
   const counts = queueCounts(issues);
