@@ -66,7 +66,8 @@ describe("core: Meta campaign half against recorded Graph responses", () => {
       location: geo.targeting, destination: "instant_form",
     });
 
-    expect(created).toEqual({ campaignId, adSetId: adSetIds[0], adSetIds, adIds, destination: "instant_form" });
+    // #672: the creative id is Meta's recorded answer to the adcreatives POST.
+    expect(created).toEqual({ campaignId, adSetId: adSetIds[0], adSetIds, adIds, destination: "instant_form", creativeIds: ["1148404661464451"] });
     expect(tape.pending).toEqual([]);
     const posts = tape.sent.filter(call => call.method === "POST");
     expect(posts.map(call => call.path)).toEqual([

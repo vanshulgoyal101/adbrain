@@ -2,6 +2,8 @@
  * Daily core scoreboard (#681): one row per core step with the current number and its Nov 2 target,
  * from `product_events` and `llm_usage_events`, with the production smoke left out (by its auth user
  * id and the businesses it owns). Pure: the cron route fetches the rows, this turns them into numbers.
+ * Create is split by image path: internal accounts make free Pollinations images (spend-policy.ts),
+ * customers the paid route, and only the customer path is held to the target.
  * Output is aggregate only (counts, rates, seconds, error codes) because it is posted publicly.
  */
 
@@ -24,6 +26,9 @@ export type ScoreAiCall = {
   latency_ms: number | null;
   created_at: string;
 };
+
+/** One launch attempt (`campaign_operations`): the create itself, not the reads that share its Meta purpose. */
+export type ScoreLaunch = { business_id: string; state: string; created_at: string };
 
 export type ScoreRow = { step: string; now: string; target: string; met: boolean | null };
 
@@ -87,6 +92,9 @@ function requestOutcomes(calls: ScoreAiCall[]) {
 export function buildScoreboard(input: {
   events: ScoreEvent[];
   aiCalls: ScoreAiCall[];
+  launches: ScoreLaunch[];
+  /** Users whose ads use free images (`freeImagesOnly`): internal accounts not exempt. */
+  freeImageUserIds: string[];
   excludedUserIds: string[];
   excludedBusinessIds: string[];
   since: Date;
@@ -132,20 +140,22 @@ export function buildScoreboard(input: {
     });
   }
 
-  {
-    const batches = named("creative.batch");
+  const free = new Set(input.freeImageUserIds);
+  const onFreePath = (row: { user_id: string | null }) => Boolean(row.user_id && free.has(row.user_id));
+  for (const [step, freePath] of [["Create (customers, paid images)", false], ["Create (internal, free images)", true]] as const) {
+    const batches = named("creative.batch").filter((event) => onFreePath(event) === freePath);
     const full = batches.filter((event) => event.outcome === "success" && Number(event.attributes?.count ?? 0) >= 3).length;
     const rate = percent(full, batches.length);
-    const calls = ai("creatives.generate");
+    const calls = ai("creatives.generate").filter((call) => onFreePath(call) === freePath);
     const failedCalls = calls.filter((call) => call.status !== "success").length;
     const seconds = p90(requestOutcomes(calls).map((request) => (request.end - request.start) / 1000));
     rows.push({
-      step: "Create",
+      step,
       now: batches.length
         ? `${plural(batches.length, "batch", "batches")}: ${fmtPct(rate)} gave 3 ads; AI calls ${failedCalls}/${calls.length} failed; p90 ${seconds === null ? "n/a" : `${Math.round(seconds)} s`}`
         : "no batches",
-      target: "≥ 95% of batches give 3 usable ads, p90 < 30 s",
-      met: batches.length ? rate >= 95 && seconds !== null && seconds < 30 : null,
+      target: freePath ? "not a target: free Pollinations images, internal only" : "≥ 95% of batches give 3 usable ads, p90 < 30 s",
+      met: freePath || !batches.length ? null : rate >= 95 && seconds !== null && seconds < 30,
     });
   }
 
@@ -174,16 +184,22 @@ export function buildScoreboard(input: {
   }
 
   {
-    const launches = named("meta.create_paused");
-    const failed = launches.filter((event) => event.outcome !== "success");
-    const rate = percent(launches.length - failed.length, launches.length);
+    // Settled launches only: a running one is neither a success nor a failure yet.
+    const launches = input.launches.filter((launch) => !businesses.has(launch.business_id));
+    const settled = launches.filter((launch) => !["pending", "running"].includes(launch.state));
+    const succeeded = settled.filter((launch) => launch.state === "succeeded").length;
+    const states = new Map<string, number>();
+    for (const launch of settled) if (launch.state !== "succeeded") states.set(launch.state, (states.get(launch.state) ?? 0) + 1);
+    const rate = percent(succeeded, settled.length);
+    // `create_paused` is also the purpose of Prepare, lead-form, preflight and WhatsApp-status reads (#615): context, not the score.
+    const calls = named("meta.create_paused");
+    const failedCalls = calls.filter((event) => event.outcome !== "success");
+    const running = launches.length - settled.length;
     rows.push({
       step: "Launch",
-      now: launches.length
-        ? `${plural(launches.length, "Meta create call")}: ${fmtPct(rate)} succeeded${failed.length ? ` (${topCodes(failed)})` : ""}`
-        : "no Meta create calls",
+      now: `${settled.length ? `${plural(settled.length, "launch", "launches")}: ${fmtPct(rate)} succeeded${states.size ? ` (${[...states].map(([state, n]) => `${state} ×${n}`).join(", ")})` : ""}` : "no launches"}${running ? `, ${running} running` : ""}; Meta calls under \`create_paused\` ${failedCalls.length}/${calls.length} failed${failedCalls.length ? ` (${topCodes(failedCalls)})` : ""}`,
       target: "≥ 99.5%",
-      met: launches.length ? rate >= 99.5 : null,
+      met: settled.length ? rate >= 99.5 : null,
     });
   }
 

@@ -21,10 +21,8 @@ const mocks = vi.hoisted(() => ({
   metaClientForBusiness: vi.fn(),
   updateCampaignStatus: vi.fn(),
   createLeadCampaign: vi.fn(),
-  legacyCallback: vi.fn(),
 }));
 
-vi.mock("@/lib/meta/legacy-callback", () => ({ completeLegacyMetaOAuth: mocks.legacyCallback }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -103,13 +101,13 @@ beforeEach(() => {
 });
 
 describe("W2-T11: OAuth completion never activates spending", () => {
-  it("keeps verified legacy OAuth on the existing callback path", async () => {
+  // #731: the legacy path stored a plaintext token in public.meta_credentials; a non-instant state is now refused.
+  it("refuses a verified non-instant state without exchanging the code or storing any token", async () => {
     mocks.verifyState.mockReturnValue({ businessId: "business-1", userId: "user-1", nonce: "nonce-1" });
-    mocks.legacyCallback.mockResolvedValue(new Response(null, { status: 302 }));
     const { GET } = await import("@/app/api/meta/oauth/callback/route");
     const response = await GET(new NextRequest("https://adbrain.example.com/api/meta/oauth/callback?code=code&state=state"));
-    expect(response.status).toBe(302);
-    expect(mocks.legacyCallback).toHaveBeenCalledOnce();
+    expect(response.headers.get("location")).toContain("error=invalid_state");
+    expect(mocks.exchangeCodeForToken).not.toHaveBeenCalled();
     expect(mocks.claimConnectionAttempt).not.toHaveBeenCalled();
     expect(mocks.saveEncryptedMetaToken).not.toHaveBeenCalled();
   });
@@ -118,7 +116,6 @@ describe("W2-T11: OAuth completion never activates spending", () => {
     const { GET } = await import("@/app/api/meta/oauth/callback/route");
     const response = await GET(new NextRequest("https://adbrain.example.com/api/meta/oauth/callback?code=code&state=state"));
     expect(response.headers.get("location")).toContain("error=invalid_attempt");
-    expect(mocks.legacyCallback).not.toHaveBeenCalled();
     expect(mocks.exchangeCodeForToken).not.toHaveBeenCalled();
     expect(mocks.saveEncryptedMetaToken).not.toHaveBeenCalled();
   });

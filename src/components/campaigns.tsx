@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
 import { targetingFromEditor, targetingToEditor } from "@/lib/campaign/editor-targeting";
@@ -263,18 +265,29 @@ function BusinessCampaigns({
   const [sendingNew, setSendingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // #667: a composer or review error shows beside the control that needs fixing, not in the page banner far above it.
-  const [placedError, setPlacedError] = useState<{ at: "leadform" | "composer" | "review"; message: string } | null>(null);
+  const [placedError, setPlacedError] = useState<{ at: "leadform" | "budget" | "ads" | "composer" | "review"; message: string } | null>(null);
   const placedErrorRef = useRef<HTMLParagraphElement | null>(null);
   useEffect(() => {
-    if (placedError?.at === "leadform") {
-      const field = document.getElementById("leadform");
+    // #772: field errors focus their control; the ads error focuses the first ad.
+    const fieldId = placedError?.at === "leadform" || placedError?.at === "budget" ? placedError.at : placedError?.at === "ads" ? "campaign-ad-picker" : null;
+    if (fieldId) {
+      const target = document.getElementById(fieldId);
+      const field = fieldId === "campaign-ad-picker" ? target?.querySelector<HTMLElement>("button") : target;
       field?.scrollIntoView?.({ block: "center" });
       field?.focus();
     } else if (placedError) placedErrorRef.current?.scrollIntoView?.({ block: "center" });
   }, [placedError]);
-  function failAt(at: "leadform" | "composer" | "review", message: string) {
+  function failAt(at: "leadform" | "budget" | "ads" | "composer" | "review", message: string) {
     setError(null);
     setPlacedError({ at, message });
+  }
+  // #723: a Review blocker's fix opens the composer and jumps to the first of its controls on screen.
+  function jumpToFix(targets: string[]) {
+    flushSync(() => setShowComposer(true));
+    const target = targets.map((id) => document.getElementById(id)).find((element) => element !== null);
+    const control = target?.matches("button, input, select, textarea") ? target : target?.querySelector<HTMLElement>("button, input, select, textarea");
+    control?.scrollIntoView?.({ block: "center" });
+    control?.focus();
   }
   function clearErrors() {
     setError(null);
@@ -625,6 +638,20 @@ function BusinessCampaigns({
     return Boolean(recoveryRef.current?.request && (!operation || !["succeeded", "failed"].includes(operation.state)));
   }
 
+  function switchDestination(value: "instant_form" | "whatsapp") {
+    if (unresolvedRecovery()) { setError("Check the existing campaign operation before changing the destination."); return; }
+    destinationChosenRef.current = true;
+    flushSync(() => { setDestination(value); setPrepareReview(null); });
+    jumpToFix([`destination-${value}`]);
+  }
+
+  function openConnect() {
+    if (unresolvedRecovery()) { setError("Check the existing campaign operation before connecting again."); return; }
+    setConnectionIntent({ kind: "setup" });
+    setPrepareReview(null);
+    setConnectOpen(true);
+  }
+
   async function loadPrepareReview(
     draft: DraftDTO,
     connection: ConnectionDTO,
@@ -705,6 +732,7 @@ function BusinessCampaigns({
 
   function toggle(id: string) {
     if (!unresolvedRecovery()) setPrepareReview(null);
+    if (placedError?.at === "ads") setPlacedError(null);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -837,6 +865,14 @@ function BusinessCampaigns({
     clearErrors();
     setNotice(null);
     setPrepareReview(null);
+    if (reviewAfterSave && selected.size === 0) {
+      failAt("ads", "Choose at least one ad to send to Meta.");
+      return;
+    }
+    if (reviewAfterSave && budget <= 0) {
+      failAt("budget", "Set a daily budget above ₹0.");
+      return;
+    }
     let input: DraftInput;
     try {
       input = manualDraftInput(reviewAfterSave);
@@ -1196,12 +1232,7 @@ function BusinessCampaigns({
             Meta isn’t connected yet. Connect an existing business to continue, or keep this campaign as a draft.
           </Alert>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => {
-              if (unresolvedRecovery()) { setError("Check the existing campaign operation before connecting again."); return; }
-              setConnectionIntent({ kind: "setup" });
-              setPrepareReview(null);
-              setConnectOpen(true);
-            }}>
+            <Button onClick={openConnect}>
               <Link2 className="h-4 w-4" aria-hidden="true" /> Connect Business
             </Button>
             <Link href="/settings" className="inline-flex h-10 items-center rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
@@ -1315,14 +1346,29 @@ function BusinessCampaigns({
               </span>
               {prepareReview.review.blockers.length > 0 && (
                 <ul className="mt-2 list-disc pl-5 text-sm font-normal">
-                  {prepareReview.review.blockers.map((blocker) => <li key={`${blocker.code}:${blocker.message}`}>
-                    {blocker.message}
-                    {blocker.action?.kind === "open_brand" && <> <Link href="/brand" className="font-medium underline underline-offset-4">Open Brand Brain</Link></>}
-                  </li>)}
+                  {prepareReview.review.blockers.map((blocker) => {
+                    const fixes = [
+                      reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open Brand Brain", href: "/brand" } as const : null),
+                      reviewBlockerAlternative(blocker.reason),
+                    ].filter((fix) => fix !== null);
+                    return <li key={`${blocker.code}:${blocker.message}`} className="mt-1 first:mt-0">
+                      {blocker.message}
+                      {fixes.length > 0 && <span className="mt-1 flex flex-wrap items-center gap-x-3">
+                        {fixes.map((fix) => fix.kind === "page"
+                          ? <Link key={fix.label} href={fix.href} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</Link>
+                          : <button key={fix.label} type="button" onClick={() => fix.kind === "connect" ? openConnect() : fix.kind === "destination" ? switchDestination(fix.destination) : jumpToFix(fix.targets)} className="inline-flex min-h-10 items-center text-left font-medium underline underline-offset-4">{fix.label}</button>)}
+                      </span>}
+                    </li>;
+                  })}
                 </ul>
               )}
               {!prepareReview.review.canCreatePaused && (
-                <span className="mt-2 block text-sm font-normal">Send to Meta (paused) appears once this is fixed. Then prepare the review again.</span>
+                <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-normal">
+                  Send to Meta (paused) appears once this is fixed.
+                  <Button size="sm" variant="outline" onClick={() => void prepareManualCampaign()} disabled={preparing || creating} aria-disabled={selected.size === 0 || budget <= 0 || undefined}>
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />Check again
+                  </Button>
+                </span>
               )}
               <span className="mt-2 block text-sm font-normal">
                 Account: {prepareReview.review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"} · Page: {prepareReview.review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} · Currency: {prepareReview.review.currency}
@@ -1453,7 +1499,7 @@ function BusinessCampaigns({
           </fieldset>
           <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
-            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
+            {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}
@@ -1503,7 +1549,7 @@ function BusinessCampaigns({
               <>
                 <div>
                   <Label>Choose ads</Label>
-                  <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
+                  <div id="campaign-ad-picker" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
                     {pickerAds.map((c, index) => {
                       const isSel = selected.has(c.id);
                       return (
@@ -1513,6 +1559,7 @@ function BusinessCampaigns({
                           type="button"
                           onClick={() => toggle(c.id)}
                           aria-pressed={isSel}
+                          aria-describedby={placedError?.at === "ads" ? "ads-error" : undefined}
                           aria-label={c.headline || "Select ad"}
                           className={cn(
                             "group relative min-w-0 overflow-hidden rounded-md border-2 text-left transition-colors",
@@ -1566,6 +1613,7 @@ function BusinessCampaigns({
                       );
                     })}
                   </div>
+                  {placedError?.at === "ads" && <p id="ads-error" role="alert" className="mt-2 text-sm font-medium text-red-800">{placedError.message}</p>}
                   {!showAllAds && pickerAds.length > PHONE_PICKER_ADS && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 w-full sm:hidden">
                       Show all {pickerAds.length} ads
@@ -1619,8 +1667,11 @@ function BusinessCampaigns({
                       type="number"
                       min={50}
                       value={budget}
-                      onChange={(e) => setBudget(Number(e.target.value))}
+                      onChange={(e) => { setBudget(Number(e.target.value)); if (placedError?.at === "budget") setPlacedError(null); }}
+                      aria-invalid={placedError?.at === "budget" || undefined}
+                      aria-describedby={placedError?.at === "budget" ? "budget-error" : undefined}
                     />
+                    {placedError?.at === "budget" && <p id="budget-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
                   </div>
                   {destination === "instant_form" && <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="leadform">Lead form</Label>
@@ -1727,7 +1778,7 @@ function BusinessCampaigns({
                       <div><Label htmlFor="planned-exclusions">Excluded areas</Label><Textarea id="planned-exclusions" rows={2} placeholder="One place per line" value={excludedNames} onChange={(event) => { setExcludedNames(event.target.value); setPrepareReview(null); }} className="mt-1 rounded-md p-2" /></div>
                     </>}
                   />
-                  <Button variant="outline" onClick={() => void requestAudienceRecommendation()} disabled={preparing || selected.size === 0 || budget <= 0}>
+                  <Button id="recommend-audience" variant="outline" onClick={() => void requestAudienceRecommendation()} disabled={preparing || selected.size === 0 || budget <= 0}>
                     <Sparkles className="h-4 w-4" aria-hidden="true" /> Recommend audience
                   </Button>
                   {targeting.audience && <div className="space-y-3 border-t border-slate-200 pt-3">
@@ -1772,7 +1823,8 @@ function BusinessCampaigns({
                   <Button variant="outline" onClick={() => void prepareManualCampaign(false)} disabled={preparing || creating}>
                     <Save className="h-4 w-4" aria-hidden="true" /> Save draft
                   </Button>
-                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing || selected.size === 0 || budget <= 0}>
+                  {/* #772: incomplete stays tappable (aria-disabled, so telemetry skips it) and says what's missing beside the control. */}
+                  <Button data-product-event="campaign.review" onClick={() => void prepareManualCampaign()} disabled={preparing} aria-disabled={selected.size === 0 || budget <= 0 || undefined}>
                     {preparing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (

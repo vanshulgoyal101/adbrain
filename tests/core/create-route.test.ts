@@ -90,6 +90,8 @@ type Replay = {
   recordedLatency?: boolean;
   /** Overrides the text latency, in virtual milliseconds. */
   textLatency?: () => number;
+  /** The image endpoint answers with this HTTP status instead of an image. */
+  imageStatus?: number;
 };
 
 let png: string;
@@ -174,6 +176,9 @@ function stubProviders(replay: Replay = {}) {
         resolution: { values: ["1K", "2K"] }, output_format: { values: ["png", "jpeg", "webp"] }, input_references: { max: 16 },
       } }] });
     }
+    if (url === "https://openrouter.ai/api/v1/images" && replay.imageStatus) {
+      return Response.json({ error: { message: "Provider returned error", code: replay.imageStatus } }, { status: replay.imageStatus });
+    }
     if (url === "https://openrouter.ai/api/v1/images") {
       const angle = run4.angles.find((candidate) => body.includes(JSON.stringify(candidate.concept.visual.direction.slice(0, 80)).slice(1, -1)));
       if (replay.recordedLatency) {
@@ -234,6 +239,9 @@ describe("core: Create route on recorded run 4", () => {
     const value = textCalls("openrouter").filter(({ body }) => body.includes("Save money / value"));
     expect(value).toHaveLength(2);
     expect(value[1].body).toContain("unsupported-commercial-claim");
+    // #687: the refused attempt's usage row says which kind of claim failed and why.
+    const refused = mocks.usage.find((row) => (row.metadata as { validationRules?: string[] } | undefined)?.validationRules?.includes("unsupported-commercial-claim"));
+    expect((refused!.metadata as { validationRules: string[] }).validationRules).toContain("claim:guarantee:uncited");
   });
 
   it("falls back to Gemini when OpenRouter is overloaded, without retrying OpenRouter's other keys", async () => {
@@ -245,8 +253,33 @@ describe("core: Create route on recorded run 4", () => {
     expect(textCalls("groq")).toHaveLength(0);
   });
 
+  // #687: a failed ad's usage rows name what failed. Production had provider 503/429s logged as
+  // CreativeValidationError, and passed copy logged as CreativeImageError when only its image failed.
+  it("logs each refused provider attempt with its own code, never as a validation failure (#687)", async () => {
+    stubProviders({ down: { openrouter: 503, google: 429, groq: 429 } });
+    const response = await (await postCreate())();
+    expect(response.status).not.toBe(200);
+    expect(mocks.inserts).toHaveLength(0);
+    const text = mocks.usage.filter((row) => row.route === "creatives.generate" && row.usageKind !== "image");
+    expect(text.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(text.map((row) => row.errorCode))).toEqual(new Set(["LLM_HTTP_503", "LLM_HTTP_429"]));
+  });
+
+  it("leaves run 4's passed copy uncoded when only the image fails, and codes the image (#687)", async () => {
+    stubProviders({ imageStatus: 500 });
+    await (await postCreate())();
+    const rows = mocks.usage.filter((row) => row.route === "creatives.generate");
+    const text = rows.filter((row) => row.usageKind !== "image");
+    const images = rows.filter((row) => row.usageKind === "image");
+    expect(text.length).toBeGreaterThanOrEqual(3);
+    expect(text.map((row) => [row.status, row.errorCode])).toEqual(text.map(() => ["success", undefined]));
+    expect(images.length).toBeGreaterThanOrEqual(3);
+    for (const row of images) expect(row).toMatchObject({ status: "error", errorCode: expect.stringMatching(/^IMAGE_/) });
+  });
+
   it("fits the 270 s route deadline at run 4's recorded OpenRouter and image latencies", async () => {
     mocks.fastRaster = true;
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const post = await postCreate();
     const clock = useVirtualDeadlines();
     // Run 4 was answered by OpenRouter only; the fallbacks are down so a cut-off attempt fails here too.
@@ -265,6 +298,9 @@ describe("core: Create route on recorded run 4", () => {
     expect(elapsed).toBeLessThan(run4.routeDeadlineMs);
     // Value attempt 1 took 89 s in production; every attempt deadline must allow it.
     expect(Math.min(...clock.llmAttemptDeadlines)).toBeGreaterThan(value.textAttempts[0].latencyMs);
+    // #681: the batch event carries the run's own wall time and path, for the scoreboard.
+    const batch = info.mock.calls.map(([entry]) => String(entry)).find((entry) => entry.includes('"name":"creative.batch"'));
+    expect(JSON.parse(batch!)).toMatchObject({ outcome: "success", durationMs: elapsed, attributes: { count: 3, provider: "paid" } });
   });
 
   it("fits the 270 s route deadline at a 60 s attempt limit when every concept answers 1 ms before it", async () => {

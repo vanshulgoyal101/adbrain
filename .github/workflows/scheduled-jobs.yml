@@ -114,6 +114,44 @@ jobs:
               -b "$(printf 'A 2-Tier managed account has been in `%s` for %s min (over 30). Resume or fail it, then check its step log.\n\nFind it (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$state" "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
           done
           [ "$code" = 200 ]
+      - name: Facebook access requests (#692)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 30 -o access.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/access-requests") || code=000
+          [ "$code" = 404 ] && { echo "access-requests not deployed yet"; exit 0; }
+          # Public repo: an opaque key and hours only; the owner's name and number stay in the database.
+          echo "HTTP $code $(jq -c '{ok, requests: (.requests // [] | length), error}' access.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          for row in $(jq -r '.requests[]? | "\(.key):\(.hours)"' access.json 2>/dev/null); do
+            IFS=: read -r key hours <<<"$row"
+            [[ "$key" =~ ^[a-f0-9]{12}$ && "$hours" =~ ^[0-9]+$ ]] || continue
+            seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title $key" --json number --jq length)
+            [ "$seen" = 0 ] || continue
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l waiting-owner -t "Facebook access request ($key)" \
+              -b "$(printf 'An outside owner tapped **Ask for Facebook access** %s h ago. The app told them: we will WhatsApp you within a working day.\n\n→ CEO: ask the owner to add them as a Tester on the Meta app (#679), then WhatsApp them.\nFind their name, business and WhatsApp number (key %s): docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$hours" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done
+          [ "$code" = 200 ]
+      - name: Launch reconciliation (#734)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET is not set"; exit 1; }
+          code=$(curl -sS --max-time 30 -o recon.json -w '%{http_code}' -H "Authorization: Bearer $CRON_SECRET" "$BASE/api/cron/campaign-reconciliation") || code=000
+          [ "$code" = 404 ] && { echo "campaign-reconciliation not deployed yet"; exit 0; }
+          # Public repo: minutes and opaque keys only.
+          echo "HTTP $code $(jq -c '{ok, waiting, stuck: (.stuck // [] | length), error}' recon.json 2>/dev/null || echo '{"ok":false,"error":"no JSON body"}')"
+          for row in $(jq -r '.stuck[]? | "\(.key):\(.minutes)"' recon.json 2>/dev/null); do
+            IFS=: read -r key minutes <<<"$row"
+            [[ "$key" =~ ^[a-f0-9]{12}$ && "$minutes" =~ ^[0-9]+$ ]] || continue
+            seen=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title $key" --json number --jq length)
+            [ "$seen" = 0 ] || continue
+            gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:dev3 -t "Launch needs reconciliation ($key)" \
+              -b "$(printf 'A campaign launch has waited in `needs_reconciliation` for %s min: Meta may hold a campaign AdBrain does not track.\n\nRead what Meta holds (read-only): `node scripts/reconcile-operation.mjs --key %s`. If the verdict is `active`, pause it in Ads Manager first. `nothing_live`: rerun with `--apply` to close it. `paused`: import or delete the tree, then rerun.\nRunbook: docs/OPERATIONS.md#scheduled-jobs\nRun: %s/%s/actions/runs/%s\n' "$minutes" "$key" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done
+          [ "$code" = 200 ]
       - name: Core scoreboard (#681, once a day after 03:00Z)
         if: always()
         env:
