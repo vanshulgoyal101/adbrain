@@ -93,6 +93,7 @@ import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
+import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
 import { formatMoney, formatNumber, formatPerDay } from "@/lib/format";
 
@@ -1451,6 +1452,7 @@ function BusinessCampaigns({
           )}
         </Alert>
         {placedError?.at === "review" && <p ref={placedErrorRef} role="alert" className="mt-2 scroll-mt-24 text-sm font-medium text-red-800">{placedError.message}</p>}
+        <p className="mt-2"><HelpOnWhatsApp label="Stuck? Help on WhatsApp" /></p>
         </section>
       )}
       <MetaConnectDialog
@@ -1521,6 +1523,7 @@ function BusinessCampaigns({
               </div>
             ))}
           </section>
+          {!connectedForDraft && <p className="-mt-1 mb-2"><HelpOnWhatsApp label="Stuck connecting Meta? Help on WhatsApp" /></p>}
           <fieldset disabled={preparing || creating} className="my-5 flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}

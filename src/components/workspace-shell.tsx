@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { Brain, Building2, ChevronRight, Menu, Plus, X } from "lucide-react";
 import { Nav } from "@/components/nav";
 import { SignOutButton } from "@/components/sign-out-button";
+import { HelpOnWhatsApp, SupportLinkProvider } from "@/components/support-link";
 import { LEGAL_LINKS } from "@/lib/legal-links";
 import styles from "./workspace-shell.module.css";
 
@@ -26,12 +27,13 @@ function saveViewedAt(key: string, time: string) {
 
 const UNSEEN_POLL_MS = 120_000;
 
-export function WorkspaceShell({ children, email, ownerId, businessId, businessName }: {
+export function WorkspaceShell({ children, email, ownerId, businessId, businessName, supportUrl = null }: {
   children: ReactNode;
   email: string | null;
   ownerId: string;
   businessId: string | null;
   businessName: string | null;
+  supportUrl?: string | null;
 }) {
   const pathname = usePathname();
   const drawer = useRef<HTMLDialogElement>(null);
@@ -84,9 +86,9 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
     <ChevronRight size={14} aria-hidden="true" />
   </Link>;
 
-  const account = <div className={styles.account}><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined}>{email || "Your account"}</span></div><SignOutButton /></div>;
+  const account = <div className={styles.account}><HelpOnWhatsApp className={styles.help} /><div><span className={styles.avatar} aria-hidden="true">{(email || "A").slice(0, 1).toUpperCase()}</span><span title={email || undefined}>{email || "Your account"}</span></div><SignOutButton /></div>;
 
-  return <div className={styles.shell}>
+  return <SupportLinkProvider url={supportUrl}><div className={styles.shell}>
     <a className={styles.skip} href="#workspace-main">Skip to workspace</a>
     <aside className={styles.sidebar} aria-label="Main sidebar">
       <Link href="/dashboard" className={styles.logo}><Brain size={23} aria-hidden="true" />AdBrain</Link>
@@ -112,5 +114,5 @@ export function WorkspaceShell({ children, email, ownerId, businessId, businessN
         {identity}<Nav unseenCount={unseenCount} />{account}
       </div>
     </dialog>
-  </div>;
+  </div></SupportLinkProvider>;
 }
