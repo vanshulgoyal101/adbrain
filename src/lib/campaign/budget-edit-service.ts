@@ -5,6 +5,7 @@ import { logEvent } from "@/lib/audit";
 import { cappedRunEnded, reviewableCampaign } from "@/lib/campaign/activation";
 import { checkBudgetEdit } from "@/lib/campaign/budget-edit";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
+import type { CampaignSpend } from "@/lib/campaign/spend";
 import { saveCampaignBudget } from "@/lib/campaign/trusted-write";
 import { formatMoney } from "@/lib/format";
 import { CampaignDeliveryError, MetaError, friendlyMetaError, type AdSetBudget, type AdSetBudgetChange } from "@/lib/meta/client";
@@ -12,6 +13,7 @@ import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } fr
 import { recordProductEvent } from "@/lib/observability/logger";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { CampaignEditError } from "./edit-service";
@@ -152,6 +154,13 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   if (!capped && status === "active" && change.dailyRupees !== undefined && change.dailyRupees !== review.dailyBudgetRupees) {
     throw new CampaignEditError(PAUSE_FOR_DAILY, 409);
   }
+  // A running capped run's pace (cap − spent over the days left) is checked against the weekly limit; unreadable fails closed.
+  let weekly: { otherActive: CampaignSpend[]; weeklyLimitRupees: number | null } = { otherActive: [], weeklyLimitRupees: null };
+  if (capped && status === "active" && (change.capRupees !== undefined || change.endTime !== undefined)) {
+    const loaded = await Promise.all([getSpendLimits(context.businessId), getCampaignSpend(context.businessId)]).catch(() => null);
+    if (!loaded) throw new CampaignEditError("Spend limits could not be verified. Try again.", 503, true);
+    weekly = { otherActive: loaded[1].filter(item => item.status === "active" && item.id !== campaignId), weeklyLimitRupees: loaded[0].weeklyCapRupees };
+  }
   const raisesCap = capped && change.capRupees !== undefined && change.capRupees > (cap!.lifetimeBudgetPaise / 100);
   let mode: FundingMode | null = null;
   if (raisesCap) {
@@ -186,7 +195,8 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
     await touch({ state, transmitted, sanitized_error: message.slice(0, 500) }).catch(() => undefined);
   };
   try {
-    const raisesSpend = (change.dailyRupees ?? 0) > review.dailyBudgetRupees || raisesCap || (change.endTime !== undefined && !capped);
+    // Any end-date change may speed a capped run up (a shorter end) or run an uncapped one longer.
+    const raisesSpend = (change.dailyRupees ?? 0) > review.dailyBudgetRupees || raisesCap || change.endTime !== undefined;
     const outcome = await withMetaConnection(context, {
       // A running campaign that may spend more needs Meta's activation access (and a managed account's spend-cap gate).
       purpose: status === "active" && raisesSpend ? "activate" : "create_paused",
@@ -203,9 +213,9 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
       const account = raisesCap ? await meta.readAccountFunding().catch(() => null) : null;
       const check = checkBudgetEdit({
         current: { status, ...before },
-        approved: { dailyRupees: review.dailyBudgetRupees, capRupees: cap ? cap.lifetimeBudgetPaise / 100 : null },
+        approved: { dailyRupees: review.dailyBudgetRupees, capRupees: cap ? cap.lifetimeBudgetPaise / 100 : null, capDays: cap?.days ?? null },
         change: { dailyRupees: change.dailyRupees, capRupees: change.capRupees, endTime: change.endTime },
-        otherActive: [], weeklyLimitRupees: null,
+        otherActive: weekly.otherActive, weeklyLimitRupees: weekly.weeklyLimitRupees,
         funding: { mode: mode ?? "own", account },
         now: Date.now(),
       });
@@ -273,7 +283,9 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
     });
     return { ...result, replay: false };
   } catch (error) {
-    const mapped = toBudgetEditError(error);
+    const converted = toBudgetEditError(error);
+    // A 613 on a later A/B ad set leaves the edit to reconcile, not to retry (Reviewer on #901).
+    const mapped = converted.retryable && transmitted ? new CampaignEditError(converted.message, converted.status, false) : converted;
     if (options.preview) throw mapped;
     if (!(error instanceof CampaignEditError && error.status === 502)) {
       await fail(transmitted ? "needs_reconciliation" : "failed", mapped.message);
