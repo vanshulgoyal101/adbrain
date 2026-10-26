@@ -18,4 +18,7 @@ regexes = [
   '''^0123456789ab$''',
   # A fake token-row UUID in #624's tests (commit cc662a4, renamed since); not a credential.
   '''^0c8e5f4a-1b2c-4d3e-8f9a-0b1c2d3e4f5a$''',
+  # A token-row UUID (a row id, not a credential) in #648's launch-routes test (commit 6610017,
+  # before the squash). Only full-history scans (the deploy train's dispatched CI) reach it (#786).
+  '''^5b0b8f8e-1f61-4f43-9d55-0d4e7c2b8a11$''',
 ]
