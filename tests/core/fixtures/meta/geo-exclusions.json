@@ -1,0 +1,440 @@
+[
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocation&location_types=%5B%22region%22%5D&country_code=IN&limit=100&locale=en_US",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "key": "1739",
+          "name": "Nagaland",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1740",
+          "name": "Odisha",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1748",
+          "name": "Arunachal Pradesh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1743",
+          "name": "Rajasthan",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1750",
+          "name": "Daman and Diu",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1751",
+          "name": "Goa",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1752",
+          "name": "Bihar",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1756",
+          "name": "Jharkhand",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1723",
+          "name": "Andaman and Nicobar Islands",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1742",
+          "name": "Punjab",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1741",
+          "name": "Puducherry",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1749",
+          "name": "Mizoram",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1731",
+          "name": "Himachal Pradesh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1734",
+          "name": "Lakshadweep",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1738",
+          "name": "Karnataka",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1733",
+          "name": "Kerala",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1747",
+          "name": "Sikkim",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1757",
+          "name": "Uttarakhand",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1736",
+          "name": "Manipur",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1729",
+          "name": "Gujarat",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "4100",
+          "name": "Telangana",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1745",
+          "name": "Tripura",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1730",
+          "name": "Haryana",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1753",
+          "name": "Madhya Pradesh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1732",
+          "name": "Jammu and Kashmir",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1755",
+          "name": "Chhattisgarh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1744",
+          "name": "Tamil Nadu",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1727",
+          "name": "Dadra and Nagar Haveli",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1735",
+          "name": "Maharashtra",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1746",
+          "name": "West Bengal",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1726",
+          "name": "Chandigarh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1728",
+          "name": "Delhi",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1724",
+          "name": "Andhra Pradesh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1754",
+          "name": "Uttar Pradesh",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1725",
+          "name": "Assam",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        },
+        {
+          "key": "1737",
+          "name": "Meghalaya",
+          "type": "region",
+          "country_code": "IN",
+          "country_name": "India",
+          "supports_region": true,
+          "supports_city": true
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "MAZDZD",
+          "after": "MzUZD"
+        },
+        "next": "https://graph.facebook.com/v26.0/search?type=adgeolocation&location_types=%5B%22region%22%5D&country_code=IN&limit=100&locale=en_US&access_token=REDACTED&after=MzUZD"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocationmeta&locale=en_US&cities=%5B%221021145%22%2C%221035473%22%2C%222676092%22%5D",
+    "status": 200,
+    "body": {
+      "data": {
+        "countries": {},
+        "regions": {},
+        "cities": {
+          "1021145": {
+            "key": "1021145",
+            "type": "city",
+            "name": "Chandigarh",
+            "region_id": 1726,
+            "region": "Chandigarh",
+            "country_code": "IN",
+            "country_name": "India",
+            "supports_city": true,
+            "supports_region": true
+          },
+          "1035473": {
+            "key": "1035473",
+            "type": "city",
+            "name": "Mohali",
+            "region_id": 1742,
+            "region": "Punjab region",
+            "country_code": "IN",
+            "country_name": "India",
+            "supports_city": true,
+            "supports_region": true
+          },
+          "2676092": {
+            "key": "2676092",
+            "type": "city",
+            "name": "Panchkula",
+            "region_id": 1730,
+            "region": "Haryana",
+            "country_code": "IN",
+            "country_name": "India",
+            "supports_city": true,
+            "supports_region": true
+          }
+        },
+        "zips": {},
+        "places": {},
+        "custom_locations": {},
+        "geo_markets": {},
+        "electoral_districts": {},
+        "country_groups": {},
+        "subneighborhoods": {},
+        "neighborhoods": {},
+        "subcities": {},
+        "metro_areas": {},
+        "small_geo_areas": {},
+        "medium_geo_areas": {},
+        "large_geo_areas": {},
+        "location_cluster_ids": {}
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "search?type=adgeolocationmeta&locale=en_US&cities=%5B%222525495%22%5D",
+    "status": 200,
+    "body": {
+      "data": {
+        "countries": {},
+        "regions": {},
+        "cities": {
+          "2525495": {
+            "key": "2525495",
+            "type": "city",
+            "name": "Austin",
+            "region_id": 3886,
+            "region": "Texas",
+            "country_code": "US",
+            "country_name": "United States",
+            "supports_city": true,
+            "supports_region": true
+          }
+        },
+        "zips": {},
+        "places": {},
+        "custom_locations": {},
+        "geo_markets": {},
+        "electoral_districts": {},
+        "country_groups": {},
+        "subneighborhoods": {},
+        "neighborhoods": {},
+        "subcities": {},
+        "metro_areas": {},
+        "small_geo_areas": {},
+        "medium_geo_areas": {},
+        "large_geo_areas": {},
+        "location_cluster_ids": {}
+      }
+    }
+  }
+]

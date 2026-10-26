@@ -256,8 +256,9 @@ const parentOf = pid => {
   try { return Number.parseInt(execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).trim(), 10); } catch { return null; }
 };
 const orphaned = () => process.ppid !== parent || process.ppid === 1 || !alive(parent) || parentOf(parent) === 1;
+// A probe is a one-shot read for the supervisor, whose parent is launchd (#573), so it never counts as orphaned.
 const exitIfOrphaned = () => {
-  if (!orphaned()) return;
+  if (values.probe || !orphaned()) return;
   console.log("The chat that started this waiter is gone; exiting.");
   process.exit(5);
 };

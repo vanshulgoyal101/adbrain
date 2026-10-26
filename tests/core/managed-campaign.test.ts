@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import prepareTape from "./fixtures/meta/prepare.json";
 import createTape from "./fixtures/meta/create.json";
+// #741: Meta's recorded region/country of each launched place (the service-area read).
+import geoTape from "./fixtures/meta/geo-exclusions.json";
 import syncTape from "./fixtures/meta/sync.json";
 import pauseTape from "./fixtures/meta/pause.json";
 
@@ -96,7 +98,7 @@ async function managedCustomer() {
 
 describe("core: a managed customer's campaign runs on their child account (#525)", () => {
   it("prepares and launches PAUSED with the child's own token, on the child ad account and Page only", async () => {
-    const tape = replay(prepareTape, createTape);
+    const tape = replay(prepareTape, createTape, geoTape.filter(exchange => exchange.path.includes("2525495")));
     const { context, withMetaConnection } = await managedCustomer();
     const created = await withMetaConnection(context, { purpose: "create_paused" }, async (meta, connection) => {
       expect(connection.generation).toBe(1);
