@@ -1984,7 +1984,10 @@ export class MetaClient {
     const written = await this.graph<{ success?: boolean }>(encodeURIComponent(adSetId), { method: "POST", form });
     if (written.success !== true) throw new CampaignDeliveryError("Meta did not accept the new budget. Nothing changed.");
     if (options.validateOnly) return before;
-    const after = await this.readAdSetBudget(campaignId, adSetId);
+    // Meta accepted the write: a failed read-back must never look like "nothing was sent".
+    const after = await this.readAdSetBudget(campaignId, adSetId).catch((error: unknown) => {
+      throw error instanceof CampaignDeliveryError ? error : new CampaignDeliveryError("Meta did not confirm the new budget. Check the campaign in Meta before changing it again.");
+    });
     if (after.status !== before.status
       || after.dailyBudgetPaise !== (change.dailyBudgetPaise ?? before.dailyBudgetPaise)
       || after.lifetimeBudgetPaise !== (change.lifetimeBudgetPaise ?? before.lifetimeBudgetPaise)

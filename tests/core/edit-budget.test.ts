@@ -7,7 +7,7 @@ import fundingTape from "./fixtures/meta/account-funding.json";
 
 // #774 3/3: POST /api/campaigns/[id]/budget through the real route, connection access, budget-edit service,
 // money rules, MetaClient, trusted write and audit, on a token sealed by the real token store. Only Supabase
-// (an in-memory table store), the spend-limit/funding-mode lookups and the capability re-check are stubbed;
+// (an in-memory table store), the funding-mode lookup and the capability re-check are stubbed;
 // every Graph call is answered from tapes recorded by scripts/record-meta-edit-budget.ts on one PAUSED
 // Solaride test campaign (archived) and any other call fails the test.
 // Recorded: binding checks, ad-set budget reads, validate_only and real writes, read-backs, Meta's minimum
@@ -64,16 +64,11 @@ const store = vi.hoisted(() => {
   return { state, client: () => ({ auth: { getUser: async () => ({ data: { user: state.user }, error: null }) }, from, rpc }) };
 });
 const capabilities = vi.hoisted(() => ({ verify: vi.fn() }));
-const money = vi.hoisted(() => ({ mode: "own" as string, weeklyCapRupees: null as number | null, others: [] as Row[] }));
+const money = vi.hoisted(() => ({ mode: "own" as string }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => store.client() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => store.client() }));
 vi.mock("@/lib/meta/capability-verification", () => ({ verifyMetaCapabilities: capabilities.verify }));
 vi.mock("@/lib/payments/operator-funding", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/payments/operator-funding")>(), fundingMode: async () => money.mode }));
-vi.mock("@/lib/supabase/queries", async importOriginal => ({
-  ...await importOriginal<typeof import("@/lib/supabase/queries")>(),
-  getSpendLimits: async () => ({ weeklyCapRupees: money.weeklyCapRupees, alertPct: 80, autoPause: false }),
-  getCampaignSpend: async () => money.others,
-}));
 
 const BUSINESS = "00000000-0000-4000-8000-000000000774";
 const OWNER = "00000000-0000-4000-8000-000000000001";
@@ -169,7 +164,7 @@ beforeEach(async () => {
   Object.assign(store.state, { tables: {}, user: { id: OWNER }, inserted: 0, rpc: {
     append_verified_audit_event: (args: Row) => { audit.push(args); return { data: null, error: null }; },
   } });
-  Object.assign(money, { mode: "own", weeklyCapRupees: null, others: [] });
+  money.mode = "own";
   audit.length = 0;
   capabilities.verify.mockImplementation(async (_meta: unknown, connection: Row) => connection.capabilities);
   await connect();
@@ -224,14 +219,26 @@ describe("core: edit a launched campaign's daily budget (#774)", () => {
     expect(mirror()).toMatchObject({ daily_budget: 150 });
   });
 
-  it("refuses a running campaign's raise past the weekly limit in Settings before any Meta write", async () => {
+  // Reviewer on #901: a running campaign's daily budget is held by its AdBrain reservation (customer_ad_campaign_guard).
+  it("refuses a running campaign's daily change before any Meta call", async () => {
     storedDaily({ status: "active" });
-    money.weeklyCapRupees = 1_000;
-    replay([daily[2]]);
+    replay([]);
     const { status, body } = await edit({ change: { dailyRupees: 250 }, preview: true });
-    expect(status).toBe(422);
-    expect(body.error).toContain("past your weekly limit");
-    expect(writes()).toEqual([]);
+    expect(status).toBe(409);
+    expect(body.error).toBe("Pause the campaign to change its daily budget; it resumes at the new amount after your review.");
+    expect(graph.sent).toEqual([]);
+  });
+
+  // Reviewer on #901: Meta accepted the write, so a failed read-back (a 4xx such as #17) is never "nothing sent".
+  it("keeps an edit whose read-back fails after Meta accepted the write as sent and to be reconciled", async () => {
+    storedDaily({ daily_budget: 250 });
+    const throttled: Exchange = { ...daily[13], status: 400, body: { error: { message: "User request limit reached", type: "OAuthException", code: 17 } } };
+    replay([daily[11], ...daily.slice(9, 13), throttled]);
+    const { status } = await edit({ change: { dailyRupees: 150 } });
+    expect(status).toBe(409);
+    expect(writes()).toEqual([expect.objectContaining({ form: { daily_budget: "15000" } })]);
+    expect(operations()).toMatchObject([{ state: "needs_reconciliation", transmitted: true }]);
+    expect(mirror()).toMatchObject({ daily_budget: 250 });
   });
 
   it("shows Meta's minimum budget in plain words (recorded 1885272, in the token user's Hindi)", async () => {

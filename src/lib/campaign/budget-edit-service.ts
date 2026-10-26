@@ -5,7 +5,6 @@ import { logEvent } from "@/lib/audit";
 import { cappedRunEnded, reviewableCampaign } from "@/lib/campaign/activation";
 import { checkBudgetEdit } from "@/lib/campaign/budget-edit";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
-import type { CampaignSpend } from "@/lib/campaign/spend";
 import { saveCampaignBudget } from "@/lib/campaign/trusted-write";
 import { formatMoney } from "@/lib/format";
 import { CampaignDeliveryError, MetaError, friendlyMetaError, type AdSetBudget, type AdSetBudgetChange } from "@/lib/meta/client";
@@ -13,7 +12,6 @@ import { ConnectionAccessError, withMetaConnection, type AuthorizedBusiness } fr
 import { recordProductEvent } from "@/lib/observability/logger";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCampaignSpend, getSpendLimits } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/types";
 import { CampaignEditError } from "./edit-service";
@@ -30,6 +28,7 @@ import { CampaignEditError } from "./edit-service";
  */
 
 export const BUDGET_RATE_LIMITED = "Meta needs 30 seconds between budget changes. Try again in a moment.";
+export const PAUSE_FOR_DAILY = "Pause the campaign to change its daily budget; it resumes at the new amount after your review.";
 export const CONFIRM_BUDGET = "Confirm the new amount first: it's more than you approved.";
 
 const rupees = (max: number) => z.number().finite().positive().max(max).refine(value => Number.isInteger(Math.round(value * 100 * 1e6) / 1e6), "Use at most two decimals.");
@@ -148,12 +147,10 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
   }
   const targets = capped ? [cap!.adSetId] : review.children.adSetIds.filter(id => !review.children.cappedAdSetIds.includes(id));
 
-  // The weekly limit in Settings applies to raising a running campaign's daily budget; unreadable fails closed.
-  let weekly: { otherActive: CampaignSpend[]; weeklyLimitRupees: number | null } = { otherActive: [], weeklyLimitRupees: null };
-  if (status === "active" && change.dailyRupees !== undefined && change.dailyRupees > review.dailyBudgetRupees) {
-    const loaded = await Promise.all([getSpendLimits(context.businessId), getCampaignSpend(context.businessId)]).catch(() => null);
-    if (!loaded) throw new CampaignEditError("Spend limits could not be verified. Try again.", 503, true);
-    weekly = { otherActive: loaded[1].filter(item => item.status === "active" && item.id !== campaignId), weeklyLimitRupees: loaded[0].weeklyCapRupees };
+  // A running campaign's daily budget is held by its AdBrain reservation (customer_ad_campaign_guard), so it
+  // changes only while paused; resuming re-reserves at the new amount and checks the weekly limit (Reviewer on #901).
+  if (!capped && status === "active" && change.dailyRupees !== undefined && change.dailyRupees !== review.dailyBudgetRupees) {
+    throw new CampaignEditError(PAUSE_FOR_DAILY, 409);
   }
   const raisesCap = capped && change.capRupees !== undefined && change.capRupees > (cap!.lifetimeBudgetPaise / 100);
   let mode: FundingMode | null = null;
@@ -208,7 +205,7 @@ export async function editCampaignBudget(context: AuthorizedBusiness, campaignId
         current: { status, ...before },
         approved: { dailyRupees: review.dailyBudgetRupees, capRupees: cap ? cap.lifetimeBudgetPaise / 100 : null },
         change: { dailyRupees: change.dailyRupees, capRupees: change.capRupees, endTime: change.endTime },
-        otherActive: weekly.otherActive, weeklyLimitRupees: weekly.weeklyLimitRupees,
+        otherActive: [], weeklyLimitRupees: null,
         funding: { mode: mode ?? "own", account },
         now: Date.now(),
       });
