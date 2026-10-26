@@ -19,7 +19,8 @@ import { CampaignEditError } from "./edit-service";
  * envelope as audience and budget edits (kind `ad_creative`), so one reader reconciles every edit.
  */
 
-export const BACK_TO_REVIEW = "Your ad goes back to Meta review (usually 5–10 minutes) and stops showing until it's approved.";
+export { BACK_TO_REVIEW } from "./ad-edit-copy";
+import { BACK_TO_REVIEW } from "./ad-edit-copy";
 export const AD_RATE_LIMITED = "Meta needs 30 seconds between ad changes. Try again in a moment.";
 
 const words = (max: number) => z.string().trim().min(1).max(max);

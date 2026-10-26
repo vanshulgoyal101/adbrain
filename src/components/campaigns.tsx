@@ -48,6 +48,7 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
+import { EditAdDialog } from "@/components/edit-ad-dialog";
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { CampaignLaunchReview } from "@/components/campaign-launch-review";
 import { WhatsAppEnquiries } from "@/components/whatsapp-enquiries";
@@ -1120,6 +1121,7 @@ function BusinessCampaigns({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // #773: the paused campaign whose audience is being edited.
   const [audienceEdit, setAudienceEdit] = useState<Campaign | null>(null);
+  const [adEdit, setAdEdit] = useState<Campaign | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, AdReview[]>>({});
 
@@ -1961,6 +1963,15 @@ function BusinessCampaigns({
                 onSaved={(message) => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
               />
             )}
+            {adEdit && (
+              <EditAdDialog
+                campaign={adEdit}
+                campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
+                creatives={approved}
+                onClose={() => setAdEdit(null)}
+                onSaved={(message) => { setCardNotice({ id: adEdit.id, message }); setAdEdit(null); }}
+              />
+            )}
             {visibleCampaigns.map((c) => {
               const r = results[c.id];
               const outcome = campaignDestination(c, r);
@@ -2054,6 +2065,11 @@ function BusinessCampaigns({
                             {c.meta_campaign_id && c.status === "paused" && reviewableCampaign(c) && (
                               <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
                                 <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
+                              </DropdownMenuItem>
+                            )}
+                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (c.meta_ad_ids?.length ?? 0) > 0 && (
+                              <DropdownMenuItem data-product-event="campaign.edit_ad" onSelect={() => setAdEdit(c)}>
+                                <Pencil className="h-4 w-4" aria-hidden="true" /> Edit ad words
                               </DropdownMenuItem>
                             )}
                             {c.meta_campaign_id && <DropdownMenuSeparator />}

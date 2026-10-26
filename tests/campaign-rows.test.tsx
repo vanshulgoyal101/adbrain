@@ -56,6 +56,18 @@ describe("Campaigns rows (#403 S5)", () => {
     expect(within(dialog).getByRole("button", { name: /Check with Meta/ }).className).toMatch(/\bh-11\b/);
   });
 
+  // #775: an AdBrain campaign's ad words are editable while it runs too (a new creative, back to review).
+  it("offers Edit ad words on a running AdBrain campaign, opening the ad editor with the review notice", async () => {
+    const user = userEvent.setup();
+    view();
+    const card = within((await screen.findByRole("heading", { name: "Solar EMI" })).closest("article") as HTMLElement);
+    card.getByRole("button", { name: "More actions for Solar EMI" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: /Edit ad words/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit ad words" });
+    expect(within(dialog).getByRole("note")).toHaveTextContent("goes back to Meta review");
+  });
+
   it("keeps Pause/Resume and Refresh visible at 44 px and folds the rest into one More menu", async () => {
     const user = userEvent.setup();
     view();
