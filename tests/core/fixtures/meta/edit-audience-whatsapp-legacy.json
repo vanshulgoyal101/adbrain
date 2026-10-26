@@ -1,0 +1,870 @@
+[
+  {
+    "method": "GET",
+    "path": "120253714081450526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253714081450526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714081450526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "910000000000"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253714088890526"
+        },
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "910000000000"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253714083640526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVDhHbU9wRmtPNWo3S3RGbDRGOWtranJ2LVhzSUFYYURlelZAhaWwxbl9nTlJNMVBLaXRJS25zYjY0RkdMY2NFT2p2d3I4dGFWeUJwTHVhUC1CUVp1RFVR",
+          "after": "QVFIVG9aR2xLME9zUlUwN0hlTlFMZAWJJTWdGdFZAYUXdfNUNhbUhDeGpHVjF0WEtvOE5TUGthS01GRHE0TEVVV0FwR25vSW5JTVhtY3RESVU0UjBHeWFaN0RB"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714088890526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253714088890526",
+      "campaign_id": "120253714081450526",
+      "status": "PAUSED",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "CONVERSATIONS",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "WHATSAPP",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false,
+        "whats_app_business_phone_number_id": "1113229925200671",
+        "whatsapp_phone_number": "910000000000"
+      },
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          25,
+          55
+        ],
+        "excluded_geo_locations": {
+          "regions": [
+            {
+              "key": "1723",
+              "name": "Andaman and Nicobar Islands",
+              "country": "IN"
+            },
+            {
+              "key": "1724",
+              "name": "Andhra Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1725",
+              "name": "Assam",
+              "country": "IN"
+            },
+            {
+              "key": "1727",
+              "name": "Dadra and Nagar Haveli",
+              "country": "IN"
+            },
+            {
+              "key": "1728",
+              "name": "Delhi",
+              "country": "IN"
+            },
+            {
+              "key": "1729",
+              "name": "Gujarat",
+              "country": "IN"
+            },
+            {
+              "key": "1730",
+              "name": "Haryana",
+              "country": "IN"
+            },
+            {
+              "key": "1731",
+              "name": "Himachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1732",
+              "name": "Jammu and Kashmir",
+              "country": "IN"
+            },
+            {
+              "key": "1733",
+              "name": "Kerala",
+              "country": "IN"
+            },
+            {
+              "key": "1734",
+              "name": "Lakshadweep",
+              "country": "IN"
+            },
+            {
+              "key": "1735",
+              "name": "Maharashtra",
+              "country": "IN"
+            },
+            {
+              "key": "1736",
+              "name": "Manipur",
+              "country": "IN"
+            },
+            {
+              "key": "1737",
+              "name": "Meghalaya",
+              "country": "IN"
+            },
+            {
+              "key": "1738",
+              "name": "Karnataka",
+              "country": "IN"
+            },
+            {
+              "key": "1739",
+              "name": "Nagaland",
+              "country": "IN"
+            },
+            {
+              "key": "1740",
+              "name": "Odisha",
+              "country": "IN"
+            },
+            {
+              "key": "1741",
+              "name": "Puducherry",
+              "country": "IN"
+            },
+            {
+              "key": "1742",
+              "name": "Punjab region",
+              "country": "IN"
+            },
+            {
+              "key": "1743",
+              "name": "Rajasthan",
+              "country": "IN"
+            },
+            {
+              "key": "1744",
+              "name": "Tamil Nadu",
+              "country": "IN"
+            },
+            {
+              "key": "1745",
+              "name": "Tripura",
+              "country": "IN"
+            },
+            {
+              "key": "1746",
+              "name": "West Bengal",
+              "country": "IN"
+            },
+            {
+              "key": "1747",
+              "name": "Sikkim",
+              "country": "IN"
+            },
+            {
+              "key": "1748",
+              "name": "Arunachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1749",
+              "name": "Mizoram",
+              "country": "IN"
+            },
+            {
+              "key": "1750",
+              "name": "Daman and Diu",
+              "country": "IN"
+            },
+            {
+              "key": "1751",
+              "name": "Goa",
+              "country": "IN"
+            },
+            {
+              "key": "1752",
+              "name": "Bihar",
+              "country": "IN"
+            },
+            {
+              "key": "1753",
+              "name": "Madhya Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1754",
+              "name": "Uttar Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1755",
+              "name": "Chhattisgarh",
+              "country": "IN"
+            },
+            {
+              "key": "1756",
+              "name": "Jharkhand",
+              "country": "IN"
+            },
+            {
+              "key": "1757",
+              "name": "Uttarakhand",
+              "country": "IN"
+            },
+            {
+              "key": "4100",
+              "name": "Telangana",
+              "country": "IN"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1021145",
+              "name": "Chandigarh",
+              "region": "Chandigarh",
+              "region_id": "1726"
+            }
+          ],
+          "location_types": [
+            "frequently_in",
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        },
+        "user_age_unknown": false
+      },
+      "daily_budget": "20000",
+      "lifetime_budget": "0",
+      "budget_remaining": "2030"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adsets",
+    "form": {
+      "name": "AdBrain audience 2026-10-26",
+      "campaign_id": "120253714081450526",
+      "status": "PAUSED",
+      "daily_budget": "20000",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "CONVERSATIONS",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "WHATSAPP",
+      "promoted_object": "{\"page_id\":\"885223068001054\",\"smart_pse_enabled\":false,\"whats_app_business_phone_number_id\":\"1113229925200671\",\"whatsapp_phone_number\":\"910000000000\"}",
+      "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[30,60],\"excluded_geo_locations\":{\"regions\":[{\"key\":\"1723\",\"name\":\"Andaman and Nicobar Islands\",\"country\":\"IN\"},{\"key\":\"1724\",\"name\":\"Andhra Pradesh\",\"country\":\"IN\"},{\"key\":\"1725\",\"name\":\"Assam\",\"country\":\"IN\"},{\"key\":\"1727\",\"name\":\"Dadra and Nagar Haveli\",\"country\":\"IN\"},{\"key\":\"1728\",\"name\":\"Delhi\",\"country\":\"IN\"},{\"key\":\"1729\",\"name\":\"Gujarat\",\"country\":\"IN\"},{\"key\":\"1730\",\"name\":\"Haryana\",\"country\":\"IN\"},{\"key\":\"1731\",\"name\":\"Himachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1732\",\"name\":\"Jammu and Kashmir\",\"country\":\"IN\"},{\"key\":\"1733\",\"name\":\"Kerala\",\"country\":\"IN\"},{\"key\":\"1734\",\"name\":\"Lakshadweep\",\"country\":\"IN\"},{\"key\":\"1735\",\"name\":\"Maharashtra\",\"country\":\"IN\"},{\"key\":\"1736\",\"name\":\"Manipur\",\"country\":\"IN\"},{\"key\":\"1737\",\"name\":\"Meghalaya\",\"country\":\"IN\"},{\"key\":\"1738\",\"name\":\"Karnataka\",\"country\":\"IN\"},{\"key\":\"1739\",\"name\":\"Nagaland\",\"country\":\"IN\"},{\"key\":\"1740\",\"name\":\"Odisha\",\"country\":\"IN\"},{\"key\":\"1741\",\"name\":\"Puducherry\",\"country\":\"IN\"},{\"key\":\"1742\",\"name\":\"Punjab region\",\"country\":\"IN\"},{\"key\":\"1743\",\"name\":\"Rajasthan\",\"country\":\"IN\"},{\"key\":\"1744\",\"name\":\"Tamil Nadu\",\"country\":\"IN\"},{\"key\":\"1745\",\"name\":\"Tripura\",\"country\":\"IN\"},{\"key\":\"1746\",\"name\":\"West Bengal\",\"country\":\"IN\"},{\"key\":\"1747\",\"name\":\"Sikkim\",\"country\":\"IN\"},{\"key\":\"1748\",\"name\":\"Arunachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1749\",\"name\":\"Mizoram\",\"country\":\"IN\"},{\"key\":\"1750\",\"name\":\"Daman and Diu\",\"country\":\"IN\"},{\"key\":\"1751\",\"name\":\"Goa\",\"country\":\"IN\"},{\"key\":\"1752\",\"name\":\"Bihar\",\"country\":\"IN\"},{\"key\":\"1753\",\"name\":\"Madhya Pradesh\",\"country\":\"IN\"},{\"key\":\"1754\",\"name\":\"Uttar Pradesh\",\"country\":\"IN\"},{\"key\":\"1755\",\"name\":\"Chhattisgarh\",\"country\":\"IN\"},{\"key\":\"1756\",\"name\":\"Jharkhand\",\"country\":\"IN\"},{\"key\":\"1757\",\"name\":\"Uttarakhand\",\"country\":\"IN\"},{\"key\":\"4100\",\"name\":\"Telangana\",\"country\":\"IN\"}],\"location_types\":[\"home\",\"recent\"]},\"geo_locations\":{\"cities\":[{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1021145\",\"name\":\"Chandigarh\",\"region\":\"Chandigarh\",\"region_id\":\"1726\"}],\"location_types\":[\"frequently_in\",\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1},\"user_age_unknown\":false,\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"]}",
+      "execution_options": "[\"validate_only\"]"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714081450526?fields=id%2Caccount_id",
+    "status": 200,
+    "body": {
+      "id": "120253714081450526",
+      "account_id": "2398686420592052"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714081450526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "910000000000"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253714088890526"
+        },
+        {
+          "promoted_object": {
+            "page_id": "885223068001054",
+            "smart_pse_enabled": false,
+            "whats_app_business_phone_number_id": "1113229925200671",
+            "whatsapp_phone_number": "910000000000"
+          },
+          "destination_type": "WHATSAPP",
+          "id": "120253714083640526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVDhHbU9wRmtPNWo3S3RGbDRGOWtranJ2LVhzSUFYYURlelZAhaWwxbl9nTlJNMVBLaXRJS25zYjY0RkdMY2NFT2p2d3I4dGFWeUJwTHVhUC1CUVp1RFVR",
+          "after": "QVFIVG9aR2xLME9zUlUwN0hlTlFMZAWJJTWdGdFZAYUXdfNUNhbUhDeGpHVjF0WEtvOE5TUGthS01GRHE0TEVVV0FwR25vSW5JTVhtY3RESVU0UjBHeWFaN0RB"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714088890526?fields=id%2Ccampaign_id%2Cstatus%2Cbilling_event%2Coptimization_goal%2Cbid_strategy%2Cdestination_type%2Cpromoted_object%2Ctargeting%2Cdaily_budget%2Clifetime_budget%2Cbudget_remaining%2Cend_time",
+    "status": 200,
+    "body": {
+      "id": "120253714088890526",
+      "campaign_id": "120253714081450526",
+      "status": "PAUSED",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "CONVERSATIONS",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "WHATSAPP",
+      "promoted_object": {
+        "page_id": "885223068001054",
+        "smart_pse_enabled": false,
+        "whats_app_business_phone_number_id": "1113229925200671",
+        "whatsapp_phone_number": "910000000000"
+      },
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          25,
+          55
+        ],
+        "excluded_geo_locations": {
+          "regions": [
+            {
+              "key": "1723",
+              "name": "Andaman and Nicobar Islands",
+              "country": "IN"
+            },
+            {
+              "key": "1724",
+              "name": "Andhra Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1725",
+              "name": "Assam",
+              "country": "IN"
+            },
+            {
+              "key": "1727",
+              "name": "Dadra and Nagar Haveli",
+              "country": "IN"
+            },
+            {
+              "key": "1728",
+              "name": "Delhi",
+              "country": "IN"
+            },
+            {
+              "key": "1729",
+              "name": "Gujarat",
+              "country": "IN"
+            },
+            {
+              "key": "1730",
+              "name": "Haryana",
+              "country": "IN"
+            },
+            {
+              "key": "1731",
+              "name": "Himachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1732",
+              "name": "Jammu and Kashmir",
+              "country": "IN"
+            },
+            {
+              "key": "1733",
+              "name": "Kerala",
+              "country": "IN"
+            },
+            {
+              "key": "1734",
+              "name": "Lakshadweep",
+              "country": "IN"
+            },
+            {
+              "key": "1735",
+              "name": "Maharashtra",
+              "country": "IN"
+            },
+            {
+              "key": "1736",
+              "name": "Manipur",
+              "country": "IN"
+            },
+            {
+              "key": "1737",
+              "name": "Meghalaya",
+              "country": "IN"
+            },
+            {
+              "key": "1738",
+              "name": "Karnataka",
+              "country": "IN"
+            },
+            {
+              "key": "1739",
+              "name": "Nagaland",
+              "country": "IN"
+            },
+            {
+              "key": "1740",
+              "name": "Odisha",
+              "country": "IN"
+            },
+            {
+              "key": "1741",
+              "name": "Puducherry",
+              "country": "IN"
+            },
+            {
+              "key": "1742",
+              "name": "Punjab region",
+              "country": "IN"
+            },
+            {
+              "key": "1743",
+              "name": "Rajasthan",
+              "country": "IN"
+            },
+            {
+              "key": "1744",
+              "name": "Tamil Nadu",
+              "country": "IN"
+            },
+            {
+              "key": "1745",
+              "name": "Tripura",
+              "country": "IN"
+            },
+            {
+              "key": "1746",
+              "name": "West Bengal",
+              "country": "IN"
+            },
+            {
+              "key": "1747",
+              "name": "Sikkim",
+              "country": "IN"
+            },
+            {
+              "key": "1748",
+              "name": "Arunachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1749",
+              "name": "Mizoram",
+              "country": "IN"
+            },
+            {
+              "key": "1750",
+              "name": "Daman and Diu",
+              "country": "IN"
+            },
+            {
+              "key": "1751",
+              "name": "Goa",
+              "country": "IN"
+            },
+            {
+              "key": "1752",
+              "name": "Bihar",
+              "country": "IN"
+            },
+            {
+              "key": "1753",
+              "name": "Madhya Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1754",
+              "name": "Uttar Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1755",
+              "name": "Chhattisgarh",
+              "country": "IN"
+            },
+            {
+              "key": "1756",
+              "name": "Jharkhand",
+              "country": "IN"
+            },
+            {
+              "key": "1757",
+              "name": "Uttarakhand",
+              "country": "IN"
+            },
+            {
+              "key": "4100",
+              "name": "Telangana",
+              "country": "IN"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1021145",
+              "name": "Chandigarh",
+              "region": "Chandigarh",
+              "region_id": "1726"
+            }
+          ],
+          "location_types": [
+            "frequently_in",
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        },
+        "user_age_unknown": false
+      },
+      "daily_budget": "20000",
+      "lifetime_budget": "0",
+      "budget_remaining": "2030"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "act_2398686420592052/adsets",
+    "form": {
+      "name": "AdBrain audience 2026-10-26",
+      "campaign_id": "120253714081450526",
+      "status": "PAUSED",
+      "daily_budget": "20000",
+      "billing_event": "IMPRESSIONS",
+      "optimization_goal": "CONVERSATIONS",
+      "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+      "destination_type": "WHATSAPP",
+      "promoted_object": "{\"page_id\":\"885223068001054\",\"smart_pse_enabled\":false,\"whats_app_business_phone_number_id\":\"1113229925200671\",\"whatsapp_phone_number\":\"910000000000\"}",
+      "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[30,60],\"excluded_geo_locations\":{\"regions\":[{\"key\":\"1723\",\"name\":\"Andaman and Nicobar Islands\",\"country\":\"IN\"},{\"key\":\"1724\",\"name\":\"Andhra Pradesh\",\"country\":\"IN\"},{\"key\":\"1725\",\"name\":\"Assam\",\"country\":\"IN\"},{\"key\":\"1727\",\"name\":\"Dadra and Nagar Haveli\",\"country\":\"IN\"},{\"key\":\"1728\",\"name\":\"Delhi\",\"country\":\"IN\"},{\"key\":\"1729\",\"name\":\"Gujarat\",\"country\":\"IN\"},{\"key\":\"1730\",\"name\":\"Haryana\",\"country\":\"IN\"},{\"key\":\"1731\",\"name\":\"Himachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1732\",\"name\":\"Jammu and Kashmir\",\"country\":\"IN\"},{\"key\":\"1733\",\"name\":\"Kerala\",\"country\":\"IN\"},{\"key\":\"1734\",\"name\":\"Lakshadweep\",\"country\":\"IN\"},{\"key\":\"1735\",\"name\":\"Maharashtra\",\"country\":\"IN\"},{\"key\":\"1736\",\"name\":\"Manipur\",\"country\":\"IN\"},{\"key\":\"1737\",\"name\":\"Meghalaya\",\"country\":\"IN\"},{\"key\":\"1738\",\"name\":\"Karnataka\",\"country\":\"IN\"},{\"key\":\"1739\",\"name\":\"Nagaland\",\"country\":\"IN\"},{\"key\":\"1740\",\"name\":\"Odisha\",\"country\":\"IN\"},{\"key\":\"1741\",\"name\":\"Puducherry\",\"country\":\"IN\"},{\"key\":\"1742\",\"name\":\"Punjab region\",\"country\":\"IN\"},{\"key\":\"1743\",\"name\":\"Rajasthan\",\"country\":\"IN\"},{\"key\":\"1744\",\"name\":\"Tamil Nadu\",\"country\":\"IN\"},{\"key\":\"1745\",\"name\":\"Tripura\",\"country\":\"IN\"},{\"key\":\"1746\",\"name\":\"West Bengal\",\"country\":\"IN\"},{\"key\":\"1747\",\"name\":\"Sikkim\",\"country\":\"IN\"},{\"key\":\"1748\",\"name\":\"Arunachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1749\",\"name\":\"Mizoram\",\"country\":\"IN\"},{\"key\":\"1750\",\"name\":\"Daman and Diu\",\"country\":\"IN\"},{\"key\":\"1751\",\"name\":\"Goa\",\"country\":\"IN\"},{\"key\":\"1752\",\"name\":\"Bihar\",\"country\":\"IN\"},{\"key\":\"1753\",\"name\":\"Madhya Pradesh\",\"country\":\"IN\"},{\"key\":\"1754\",\"name\":\"Uttar Pradesh\",\"country\":\"IN\"},{\"key\":\"1755\",\"name\":\"Chhattisgarh\",\"country\":\"IN\"},{\"key\":\"1756\",\"name\":\"Jharkhand\",\"country\":\"IN\"},{\"key\":\"1757\",\"name\":\"Uttarakhand\",\"country\":\"IN\"},{\"key\":\"4100\",\"name\":\"Telangana\",\"country\":\"IN\"}],\"location_types\":[\"home\",\"recent\"]},\"geo_locations\":{\"cities\":[{\"country\":\"IN\",\"distance_unit\":\"mile\",\"key\":\"1021145\",\"name\":\"Chandigarh\",\"region\":\"Chandigarh\",\"region_id\":\"1726\"}],\"location_types\":[\"frequently_in\",\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1},\"user_age_unknown\":false,\"publisher_platforms\":[\"facebook\",\"instagram\",\"messenger\"]}"
+    },
+    "status": 200,
+    "body": {
+      "id": "120253714095190526"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253714089750526/copies",
+    "form": {
+      "adset_id": "120253714095190526",
+      "status_option": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "copied_ad_id": "120253714097200526"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714095190526/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "120253714097200526",
+          "status": "PAUSED",
+          "adset_id": "120253714095190526"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before": "QVFIVFhpYnFYOGdnZAWpFbDllZAERtdkQ3SHJUdFRCQkhCVkZApX2VGRUduOTZAwdzdvdlBEMkFWWkxPczFfNTBfb0dXYW1TUy03V3ZA6ZAUhtczhvTWtPTE0xSjVR",
+          "after": "QVFIVFhpYnFYOGdnZAWpFbDllZAERtdkQ3SHJUdFRCQkhCVkZApX2VGRUduOTZAwdzdvdlBEMkFWWkxPczFfNTBfb0dXYW1TUy03V3ZA6ZAUhtczhvTWtPTE0xSjVR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "120253714095190526?fields=id%2Ccampaign_id%2Cstatus%2Ctargeting",
+    "status": 200,
+    "body": {
+      "id": "120253714095190526",
+      "campaign_id": "120253714081450526",
+      "status": "PAUSED",
+      "targeting": {
+        "age_max": 65,
+        "age_min": 25,
+        "age_range": [
+          30,
+          60
+        ],
+        "excluded_geo_locations": {
+          "regions": [
+            {
+              "key": "1723",
+              "name": "Andaman and Nicobar Islands",
+              "country": "IN"
+            },
+            {
+              "key": "1724",
+              "name": "Andhra Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1725",
+              "name": "Assam",
+              "country": "IN"
+            },
+            {
+              "key": "1727",
+              "name": "Dadra and Nagar Haveli",
+              "country": "IN"
+            },
+            {
+              "key": "1728",
+              "name": "Delhi",
+              "country": "IN"
+            },
+            {
+              "key": "1729",
+              "name": "Gujarat",
+              "country": "IN"
+            },
+            {
+              "key": "1730",
+              "name": "Haryana",
+              "country": "IN"
+            },
+            {
+              "key": "1731",
+              "name": "Himachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1732",
+              "name": "Jammu and Kashmir",
+              "country": "IN"
+            },
+            {
+              "key": "1733",
+              "name": "Kerala",
+              "country": "IN"
+            },
+            {
+              "key": "1734",
+              "name": "Lakshadweep",
+              "country": "IN"
+            },
+            {
+              "key": "1735",
+              "name": "Maharashtra",
+              "country": "IN"
+            },
+            {
+              "key": "1736",
+              "name": "Manipur",
+              "country": "IN"
+            },
+            {
+              "key": "1737",
+              "name": "Meghalaya",
+              "country": "IN"
+            },
+            {
+              "key": "1738",
+              "name": "Karnataka",
+              "country": "IN"
+            },
+            {
+              "key": "1739",
+              "name": "Nagaland",
+              "country": "IN"
+            },
+            {
+              "key": "1740",
+              "name": "Odisha",
+              "country": "IN"
+            },
+            {
+              "key": "1741",
+              "name": "Puducherry",
+              "country": "IN"
+            },
+            {
+              "key": "1742",
+              "name": "Punjab region",
+              "country": "IN"
+            },
+            {
+              "key": "1743",
+              "name": "Rajasthan",
+              "country": "IN"
+            },
+            {
+              "key": "1744",
+              "name": "Tamil Nadu",
+              "country": "IN"
+            },
+            {
+              "key": "1745",
+              "name": "Tripura",
+              "country": "IN"
+            },
+            {
+              "key": "1746",
+              "name": "West Bengal",
+              "country": "IN"
+            },
+            {
+              "key": "1747",
+              "name": "Sikkim",
+              "country": "IN"
+            },
+            {
+              "key": "1748",
+              "name": "Arunachal Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1749",
+              "name": "Mizoram",
+              "country": "IN"
+            },
+            {
+              "key": "1750",
+              "name": "Daman and Diu",
+              "country": "IN"
+            },
+            {
+              "key": "1751",
+              "name": "Goa",
+              "country": "IN"
+            },
+            {
+              "key": "1752",
+              "name": "Bihar",
+              "country": "IN"
+            },
+            {
+              "key": "1753",
+              "name": "Madhya Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1754",
+              "name": "Uttar Pradesh",
+              "country": "IN"
+            },
+            {
+              "key": "1755",
+              "name": "Chhattisgarh",
+              "country": "IN"
+            },
+            {
+              "key": "1756",
+              "name": "Jharkhand",
+              "country": "IN"
+            },
+            {
+              "key": "1757",
+              "name": "Uttarakhand",
+              "country": "IN"
+            },
+            {
+              "key": "4100",
+              "name": "Telangana",
+              "country": "IN"
+            }
+          ],
+          "location_types": [
+            "home",
+            "recent"
+          ]
+        },
+        "geo_locations": {
+          "cities": [
+            {
+              "country": "IN",
+              "distance_unit": "mile",
+              "key": "1021145",
+              "name": "Chandigarh",
+              "region": "Chandigarh",
+              "region_id": "1726"
+            }
+          ],
+          "location_types": [
+            "frequently_in",
+            "home",
+            "recent"
+          ]
+        },
+        "targeting_automation": {
+          "advantage_audience": 1
+        },
+        "publisher_platforms": [
+          "facebook",
+          "instagram",
+          "messenger"
+        ]
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "120253714088890526",
+    "form": {
+      "status": "ARCHIVED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]
