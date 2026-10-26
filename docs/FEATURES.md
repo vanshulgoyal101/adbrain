@@ -143,6 +143,11 @@ should check saved results using the same generation ID before starting another
 paid request. Browser recovery metadata is scoped to user/business in session
 storage; it is not cross-device durable generation idempotency.
 
+The Review board groups ads by Create batch (`variant_group`), newest batch first
+and open, older batches folded (#762). Unreviewed ads older than 7 days sit in a
+folded "Older unreviewed ads" section and leave the Needs review count; this is
+view-only, so approving one brings it back.
+
 Newly saved creatives use a smaller WebP for Review board and generated Assets
 tiles when the derivative is smaller and its upload succeeds. Inspect, Open,
 Download, ZIP export, and campaign delivery retain the original image. If the
