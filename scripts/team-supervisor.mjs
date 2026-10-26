@@ -77,6 +77,13 @@ export function pickRole(statuses, live, roles = ORDER) {
   return null;
 }
 
+/** The run's final words (the CLI prints its last message), so the log shows what a short run decided (#573). */
+export function lastWords(output, max = 220) {
+  const paragraphs = String(output ?? "").trim().split(/\n\s*\n/).filter(Boolean);
+  const last = (paragraphs.at(-1) ?? "").replace(/\s+/g, " ").trim();
+  return last ? last.slice(0, max) : "(no output)";
+}
+
 /** Runs today, from the state log; the daily cap bounds cost. */
 export function runsToday(state, now = new Date()) {
   const day = now.toISOString().slice(0, 10);
@@ -243,10 +250,13 @@ async function main() {
   log(`waking ${pick.role}: ${run.item} (${summary})`);
   state.runs = [...(state.runs ?? []), run];
   writeState(state);
-  run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, join(STATE_DIR, `run-${pick.role}.log`));
+  const runLog = join(STATE_DIR, `run-${pick.role}.log`);
+  writeFileSync(runLog, "");
+  run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, runLog);
+  run.summary = lastWords(readFileSync(runLog, "utf8"));
   run.end = new Date().toISOString();
   writeState(state);
-  log(`run ${pick.role} ended: ${run.result}`);
+  log(`run ${pick.role} ended: ${run.result} · ${run.summary}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
