@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   CheckCircle2,
+  ChevronRight,
   Download,
   Megaphone,
   Eye,
@@ -14,14 +15,16 @@ import {
   Pencil,
   RefreshCw,
   RotateCcw,
+  Search,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { deleteCreative, setCreativeStatus } from "@/app/(app)/studio/actions";
+import { Status } from "@/components/ui/status";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Badge, Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { AD_LANGUAGES } from "@/lib/languages";
@@ -155,7 +158,7 @@ export function Studio({
                 className={cn(
                   "w-full overflow-hidden rounded-md border text-left",
                   creative.id === selectedCreative?.id
-                    ? "border-blue-700 ring-1 ring-blue-700"
+                    ? "border-primary ring-1 ring-primary"
                     : "border-slate-200 hover:border-slate-400",
                 )}
               >
@@ -179,9 +182,9 @@ export function Studio({
                   <p className="line-clamp-2 min-h-10 text-sm font-medium text-slate-900">
                     {creative.headline || "Untitled ad"}
                   </p>
-                  <p className="mt-2 text-xs text-slate-600">
+                  <Status tone={creative.status === "approved" ? "live" : "review"} className="mt-2 text-xs text-slate-600">
                     {statusLabel}
-                  </p>
+                  </Status>
                 </div>
               </button>
             </li>
@@ -360,13 +363,10 @@ export function Studio({
       <Stepper
         current={AD_FLOW[workflowStep - 1]}
         details={{ Review: `${reviewCount} awaiting approval`, Launch: `${approvedCount} ready for a campaign` }}
-        className="border-y border-slate-200 bg-white px-2 py-1.5"
       />
-      <details
-        open={items.length === 0 || Boolean(pendingGeneration)}
-        className="border-b border-slate-200 pb-3"
-      >
-        <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-900">
+      <details open={items.length === 0 || Boolean(pendingGeneration)} className="group">
+        <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 text-sm font-medium text-blue-700 [&::-webkit-details-marker]:hidden">
+          <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
           Make more ads
         </summary>
         <div className="pt-4">
@@ -445,7 +445,7 @@ export function Studio({
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={exportApproved}
             data-product-event="creative.download"
@@ -457,7 +457,7 @@ export function Studio({
           {approvedCount > 0 ? (
             <Link
               href={`/campaigns?new=1&creatives=${items.filter((i) => i.status === "approved").map((i) => i.id).join(",")}`}
-              className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Megaphone className="h-4 w-4" aria-hidden="true" />
               Create campaign ({approvedCount})
@@ -474,43 +474,46 @@ export function Studio({
       {exportOk && <Alert variant="success">Ad pack downloaded.</Alert>}
 
       {items.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <fieldset className="flex flex-wrap gap-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <fieldset className="flex gap-1">
             <legend className="sr-only">Ad status</legend>
             {(
               [
-                ["all", `All (${items.length - setAsideCount})`],
-                ["draft", `Needs review (${reviewCount})`],
-                ["approved", `Approved (${approvedCount})`],
+                ["all", "All", items.length - setAsideCount],
+                ["draft", "Needs review", reviewCount],
+                ["approved", "Approved", approvedCount],
               ] as const
-            ).map(([value, label]) => (
+            ).map(([value, label, count]) => (
               <label
                 key={value}
                 className={cn(
-                  "flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-3 text-sm",
+                  "flex min-h-11 cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary",
                   filter === value
-                    ? "bg-blue-50 font-medium text-blue-800"
-                    : "text-slate-600 hover:bg-slate-100",
+                    ? "bg-slate-100 font-medium text-slate-900"
+                    : "text-slate-600 hover:bg-slate-50",
                 )}
               >
+                {/* The label is the control; the radio stays for keyboard and screen readers. */}
                 <input
                   type="radio"
                   name="creative-status"
                   checked={filter === value}
                   onChange={() => setFilter(value)}
-                  className="accent-blue-700"
+                  className="sr-only"
                 />
-                {label}
+                {label} <span className="font-normal text-slate-500">({count})</span>
               </label>
             ))}
           </fieldset>
-          <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-600">
-            Search ads
+          <label className="relative min-w-0">
+            <span className="sr-only">Search ads</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm sm:w-60"
+              placeholder="Search ads"
+              className="h-10 w-full rounded-md border border-slate-300 pl-9 pr-3 text-sm sm:w-60"
             />
           </label>
         </div>
@@ -773,20 +776,9 @@ function CreativeCard({
       </div>
       <CardContent className="flex flex-1 flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <Badge
-            className={
-              approved
-                ? "bg-blue-50 text-blue-700"
-                : "bg-amber-50 text-amber-700"
-            }
-          >
+          <Status tone={approved ? "live" : "review"} className="text-sm text-slate-600">
             {approved ? "Approved" : "Needs review"}
-          </Badge>
-          {creative.angle && (
-            <span className="truncate text-xs text-slate-400">
-              {creative.angle}
-            </span>
-          )}
+          </Status>
         </div>
         {unsaved && <UnsavedPreviewBadge />}
         <h3 className="font-semibold text-slate-900">{shown.headline}</h3>
@@ -798,11 +790,7 @@ function CreativeCard({
             <span className="font-medium">Description: </span>{shown.description}
           </p>
         )}
-        {shown.cta && (
-          <span className="mt-1 inline-flex w-fit rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">
-            {shown.cta}
-          </span>
-        )}
+        {shown.cta && <p className="text-sm text-slate-500">Button: {shown.cta}</p>}
         {editing ? (
           <div className="mt-2 border-t border-slate-100 pt-3">
             <CreativeEditor
@@ -992,15 +980,9 @@ function CreativePreview({
                   <p className="font-semibold text-slate-900">{businessName}</p>
                   <p className="text-xs text-slate-500">Sponsored</p>
                 </div>
-                <Badge
-                  className={
-                    creative.status === "approved"
-                      ? "bg-blue-50 text-blue-700"
-                      : "bg-amber-50 text-amber-700"
-                  }
-                >
+                <Status tone={creative.status === "approved" ? "live" : "review"} className="text-sm text-slate-600">
                   {creative.status === "approved" ? "Approved" : "Needs review"}
-                </Badge>
+                </Status>
               </div>
             </div>
             <div className="flex flex-1 flex-col gap-5 px-5 py-5 sm:px-6">

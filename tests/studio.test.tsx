@@ -257,10 +257,10 @@ describe("<Studio> generation", () => {
     expect(within(await screen.findByRole("dialog")).getByRole("img", { name: "Cut your power bill" })).toHaveAttribute("src", original);
   });
 
-  it("shows the angle chip under the picture, never over the logo (#367)", () => {
+  // #847: the internal angle name isn't shown, and nothing sits over the picture's logo edge (#367).
+  it("shows no angle tag and keeps the picture clear", () => {
     render(<Studio business={business} initialCreatives={[creative()]} />);
-    const chip = screen.getByText("savings");
-    expect(chip.closest(".aspect-square")).toBeNull();
+    expect(screen.queryByText("savings")).toBeNull();
     const picture = screen.getAllByRole("img", { name: "Cut your power bill" })[0].closest(".aspect-square")!;
     expect(picture.querySelector(".absolute.top-2, .absolute.left-2, .absolute.right-2")).toBeNull();
   });
@@ -651,7 +651,7 @@ describe("<Studio> live text preview while editing (#387)", () => {
     await user.type(screen.getByLabelText("Headline"), "Solar in 7 days");
     await user.selectOptions(screen.getByLabelText("Button"), "Call Now");
     expect(screen.getByRole("heading", { name: "Solar in 7 days" })).toBeInTheDocument();
-    expect(screen.getAllByText("Call Now").some((el) => el.tagName === "SPAN")).toBe(true);
+    expect(screen.getByText("Button: Call Now")).toBeInTheDocument();
     expect(screen.getByText("Preview · unsaved changes")).toBeInTheDocument();
     expect(h.updateCreativeCopy).not.toHaveBeenCalled();
 
