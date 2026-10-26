@@ -74,8 +74,8 @@ export function PreferenceSettings({ businessId, initialState = null }: { busine
       {confirmDialog}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 id="preferences-heading" className="text-lg font-semibold text-slate-900">Remembered preferences</h2>
-        <p className="text-sm text-slate-600">Your creative defaults, separate from required Brand instructions. Your current request always wins.</p>
+        <h2 id="preferences-heading" className="text-lg font-semibold text-slate-900">Ad preferences</h2>
+        <p className="text-sm text-slate-600">Styles AdBrain remembers from your choices. What you ask for in Create always wins.</p>
       </div>
       {state && <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" checked={state.enabled} disabled={busy} onChange={() => change(state.enabled ? "pause" : "enable")}

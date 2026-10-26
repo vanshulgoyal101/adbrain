@@ -118,8 +118,10 @@ describe("Home workspace", () => {
     const spendBoundary = boundary("SpendSettings");
     expect(connectionBoundary.type).toBe(Suspense);
     expect(spendBoundary.type).toBe(Suspense);
-    // #235: the WhatsApp status streams in its own boundary.
-    expect(boundary("WhatsAppStatusSection")).toBeDefined();
+    // #235: the WhatsApp status streams in its own boundary; #847 places it with the Meta connection, above Billing.
+    const whatsapp = connectionBoundary.props.children.props.whatsapp;
+    expect(whatsapp.type).toBe(Suspense);
+    expect(whatsapp.props.children.type.name).toBe("WhatsAppStatusSection");
     // #238: preferences and privacy requests load in their own server-rendered boundary.
     const privacyBoundary = boundaries.at(-1);
     expect(privacyBoundary.type).toBe(Suspense);
@@ -127,7 +129,7 @@ describe("Home workspace", () => {
     const spendSection = spendBoundary.props.children;
     const spend = spendSection.type(spendSection.props);
     const connectionSection = connectionBoundary.props.children;
-    render(await connectionSection.type(connectionSection.props));
+    render(await connectionSection.type({ ...connectionSection.props, whatsapp: null }));
     expect(screen.getByText("Connection loaded")).toBeInTheDocument();
     resolveSpend({ limits: {}, evaluation: {} });
     render(await spend);
