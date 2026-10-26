@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetaConnectionPanel } from "@/components/meta-connection";
-import { ManagedBilling } from "@/components/managed-billing";
+import { BillingSection } from "@/components/managed-billing";
+import { fundingMode } from "@/lib/payments/operator-funding";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
@@ -136,10 +137,12 @@ async function ConnectionSettings({ businessId, searchParams }: {
   businessId: string;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // #759: payment shows only where AdBrain holds ad money; an unreadable mode shows none.
+  const mode = await fundingMode(businessId).catch(() => null);
   const [result, params, initialBalance] = await Promise.all([
     getMetaConnection(businessId).then(connection => ({ connection })).catch(() => ({ connection: null })),
     searchParams,
-    isProductionPaymentConfigured()
+    mode === "managed" && isProductionPaymentConfigured()
       ? requireOwnedBusiness(businessId).then(getCustomerBalance).catch(() => null)
       : Promise.resolve(null),
   ]);
@@ -154,7 +157,7 @@ async function ConnectionSettings({ businessId, searchParams }: {
           <Link href="/settings" className="ml-1 font-medium underline">Try again</Link>
         </Alert>
       )}
-      <ManagedBilling connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
+      <BillingSection mode={mode} connection={result.connection} testBusinessId={isRazorpayTestEnabled() ? businessId : undefined}
         liveBusinessId={isProductionPaymentConfigured() ? businessId : undefined} initialBalance={initialBalance} />
     </>
   );

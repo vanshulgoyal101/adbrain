@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { confirmCustomerCampaign, getCustomerBalance, listSettlingBusinesses } from "@/lib/payments/customer-balance";
 import { refreshOpenRunCosts, settlePausedRuns } from "@/lib/payments/meta-cost-evidence";
-import { isOperatorFunded } from "@/lib/payments/operator-funding";
+import { fundingMode } from "@/lib/payments/operator-funding";
 import { cappedRunEnded } from "@/lib/campaign/activation";
 import {
   requireScheduledBusiness,
@@ -114,12 +114,13 @@ async function handleGET(request: Request) {
       continue;
     }
     // #245: an unreadable funding mode falls back to the customer rules (fail closed).
-    const operatorFunded = await isOperatorFunded(businessId).catch(() => {
+    // #759: only a managed business has an AdBrain allowance to hold; operator and own-account runs are capped on Meta.
+    const metaFunded = await fundingMode(businessId).then(mode => mode !== "managed").catch(() => {
       incomplete = true;
       return false;
     });
     let customerBalance = null;
-    if (!operatorFunded) {
+    if (!metaFunded) {
       const initialBalance = await getCustomerBalance(context).catch(() => null);
       const refresh = await refreshOpenRunCosts(context, campaigns, initialBalance);
       if (initialBalance && !refresh.complete) incomplete = true;
@@ -128,8 +129,8 @@ async function handleGET(request: Request) {
       if (!hasActive) continue;
       customerBalance = refresh.observed || settle.read ? await getCustomerBalance(context).catch(() => null) : initialBalance;
     } else if (!hasActive) continue;
-    // #245: an operator-funded run is capped on Meta and has no customer allowance to hold.
-    const financialHold = !operatorFunded && (!customerBalance || customerBalance.held);
+    // #245/#759: a run funded on Meta (operator or own account) is capped there and has no customer allowance to hold.
+    const financialHold = !metaFunded && (!customerBalance || customerBalance.held);
     const decision = financialHold
       ? { toPause: campaigns.filter(campaign => campaign.status === "active").map(campaign => campaign.id), verified: Boolean(customerBalance) }
       : await weeklySpendDecision(campaigns, limits, async campaign => {

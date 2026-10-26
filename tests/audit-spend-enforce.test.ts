@@ -25,9 +25,14 @@ const confirmCustomerCampaign = vi.fn();
 const observeCustomerCosts = vi.fn();
 const readLifetimeSpendPaise = vi.fn();
 const isOperatorFunded = vi.fn();
+const funding = { ownAccount: false };
 
 vi.mock("@/lib/payments/customer-balance", () => ({ getCustomerBalance, confirmCustomerCampaign, observeCustomerCosts }));
-vi.mock("@/lib/payments/operator-funding", () => ({ isOperatorFunded }));
+// #759: the allowance rules are the managed path; own-account sets funding.ownAccount.
+vi.mock("@/lib/payments/operator-funding", () => ({
+  isOperatorFunded,
+  fundingMode: async (id: string) => (await isOperatorFunded(id)) ? "operator" : funding.ownAccount ? "own" : "managed",
+}));
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: insert }) }));
 vi.mock("@/lib/campaign/trusted-write", () => ({ saveCampaign: (...args: unknown[]) => updateEq(...args) }));
@@ -63,6 +68,7 @@ const periodStart = monday.toISOString().slice(0, 10);
 beforeEach(() => {
   vi.clearAllMocks();
   isOperatorFunded.mockResolvedValue(false);
+  funding.ownAccount = false;
   getCustomerBalance.mockResolvedValue({ held: false, reservations: [] });
   confirmCustomerCampaign.mockResolvedValue(undefined);
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -317,6 +323,16 @@ describe("enforceAutoPause", () => {
     setup({ autoPause: false, cap: null, spend: 100 });
     isOperatorFunded.mockResolvedValue(true);
     getCustomerBalance.mockResolvedValue({ held: true, reservations: [] });
+    const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
+    await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: true });
+    expect(getCustomerBalance).not.toHaveBeenCalled();
+    expect(updateCampaignStatus).not.toHaveBeenCalled();
+  });
+
+  it("Refresh does not pause an own-account run for an AdBrain allowance it never had (#759)", async () => {
+    setup({ autoPause: false, cap: null, spend: 100 });
+    funding.ownAccount = true;
+    getCustomerBalance.mockResolvedValue(null);
     const { enforceAutoPauseWithStatus } = await import("@/lib/campaign/spend-enforce");
     await expect(enforceAutoPauseWithStatus("b1")).resolves.toEqual({ paused: [], confirmed: true });
     expect(getCustomerBalance).not.toHaveBeenCalled();
