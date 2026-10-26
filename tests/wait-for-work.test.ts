@@ -93,6 +93,14 @@ describe("CTO queue watch", () => {
     ]);
     expect(low).toEqual([{ role: "dev2", count: 1 }, { role: "dev4", count: 0 }, { role: "qa2", count: 0 }, { role: "reviewer", count: 0 }, { role: "devops", count: 0 }, { role: "cpo", count: 0 }]);
   });
+
+  it("counts the worker's lane pool as supply, so a reactive Reviewer with pool audits isn't low", () => {
+    const pool = (lane: string) => ({ labels: [{ name: "core" }, { name: "ready" }, { name: `lane:${lane}` }] });
+    const low = lowQueues([issue("owner:reviewer"), pool("review"), pool("dev")]).map((l) => l.role);
+    expect(low).not.toContain("reviewer");
+    expect(low).toContain("dev4");
+    expect(low).toContain("qa");
+  });
 });
 
 describe("wait-for-work handoffs", () => {
