@@ -30,6 +30,12 @@ async function launch(destination: AdDestination, onPlanned?: (plan: Omit<Planne
       if (url.pathname.endsWith("/PAGE") && fields === "id,has_whatsapp_business_number,whatsapp_number") {
         return Response.json({ id: "PAGE", has_whatsapp_business_number: true, whatsapp_number: inputs.phone });
       }
+      // #741: the service-area read, answered with Meta's recorded reply.
+      if (url.searchParams.get("type") === "adgeolocationmeta") {
+        url.searchParams.delete("access_token");
+        expect(url.pathname.replace("/v21.0/", "") + url.search).toBe(recorded.geoMeta.path);
+        return Response.json(recorded.geoMeta.body, { status: recorded.geoMeta.status });
+      }
       throw new Error(`Unexpected Graph read during launch: ${url.pathname}?fields=${fields}`);
     }
     const kind = url.pathname.split("/").pop()!;
@@ -40,7 +46,7 @@ async function launch(destination: AdDestination, onPlanned?: (plan: Omit<Planne
   const meta = new MetaClient({ adAccountId: "act_ACCOUNT", pageId: "PAGE", accessToken: "test-token" });
   await meta.createLeadCampaign({
     name: inputs.name, dailyBudgetRupees: inputs.dailyBudgetRupees, link: inputs.link,
-    ageMin: inputs.ageMin, ageMax: inputs.ageMax, gender: inputs.gender as "all", location: inputs.location,
+    ageMin: inputs.ageMin, ageMax: inputs.ageMax, gender: inputs.gender as "all", location: inputs.location, interests: inputs.interests,
     creatives: [{ imageUrl: "https://adbrain.vanshul.com/solar-example.jpg", ...inputs.creative }],
     destination,
     ...(destination === "whatsapp"

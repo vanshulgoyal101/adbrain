@@ -334,15 +334,17 @@ function BusinessCampaigns({
   const [activationDigest, setActivationDigest] = useState<string | null>(null);
   const [activationDelivery, setActivationDelivery] = useState<CampaignDeliverySnapshot | null>(null);
   const [activationFunding, setActivationFunding] = useState<AccountFunding | null>(null);
+  // #759: only an operator-funded business must set an account spending limit; an owner's own account needn't.
+  const [spendLimitRequired, setSpendLimitRequired] = useState(true);
   const [capDays, setCapDays] = useState(3);
   const [activationLearning, setActivationLearning] = useState<{ costPerResultRupees: number | null; pausedAt: string | null; now: number } | null>(null);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
-  // #245: an operator-funded business runs only capped, within Meta's account spending limit.
+  // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
-    || (activationCapped && activationFunding.spendCapPaise > 0 && activationFunding.roomPaise >= activationCapPaise);
+    || (activationCapped && (activationFunding.spendCapPaise > 0 ? activationFunding.roomPaise >= activationCapPaise : !spendLimitRequired));
   // #419 item 2: edits that restart Meta's learning (a capped run's new ad set, a long pause); never block.
   const learningWarnings = activationReview && activationLearning && activationDelivery
     ? activationWarnings({ capDays: activationCapped ? capDays : null, dailyBudgetRupees: activationReview.daily_budget ?? 0, ...activationLearning })
@@ -1115,7 +1117,7 @@ function BusinessCampaigns({
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO, refreshing = false) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
-      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
+      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; spendLimitRequired?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
       const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
@@ -1130,6 +1132,7 @@ function BusinessCampaigns({
       setActivationDigest(digest);
       setActivationDelivery(delivery);
       setActivationFunding(funding);
+      setSpendLimitRequired(review.spendLimitRequired !== false);
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
@@ -1287,7 +1290,9 @@ function BusinessCampaigns({
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
                     ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
-                    : "Funded on Meta: set a spending limit on the Meta ad account first."}
+                    : spendLimitRequired
+                      ? "Funded on Meta: set a spending limit on the Meta ad account first."
+                      : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
               </div>

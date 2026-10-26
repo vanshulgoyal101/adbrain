@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import prepareTape from "./fixtures/meta/prepare.json";
 import createTape from "./fixtures/meta/create.json";
+// #741: Meta's recorded region/country of each launched place (the service-area read).
+import geoTape from "./fixtures/meta/geo-exclusions.json";
 import deliveryTape from "./fixtures/meta/delivery.json";
 import syncTape from "./fixtures/meta/sync.json";
 import pauseTape from "./fixtures/meta/pause.json";
@@ -45,7 +47,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("core: Meta campaign half against recorded Graph responses", () => {
   it("prepares a lead form, location and interests, then launches everything PAUSED", async () => {
-    const tape = replay(prepareTape, createTape);
+    const tape = replay(prepareTape, createTape, geoTape.filter(exchange => exchange.path.includes("2525495")));
     const meta = new MetaClient(creds);
     const forms = await meta.listLeadForms();
     const geo = await meta.resolveGeoTargeting(["Austin, Texas"], { cityScope: "city_only" });

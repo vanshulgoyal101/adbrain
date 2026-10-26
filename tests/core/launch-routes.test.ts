@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import prepareTape from "./fixtures/meta/prepare.json";
 import leadFormTape from "./fixtures/meta/lead-form.json";
 import createTape from "./fixtures/meta/create.json";
+// #741: Meta's recorded region/country of each launched place (the service-area read).
+import geoTape from "./fixtures/meta/geo-exclusions.json";
 import interestsTape from "./fixtures/meta/interests-chiropractic.json";
 import refusals from "./fixtures/meta/create-cleanup-refusals.json";
 import deletedTape from "./fixtures/meta/safety/capped-adset-delete.json";
@@ -238,7 +240,7 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
 
   it("creates a reviewed campaign inline: only PAUSED objects on the connected account and Page, operation succeeded with the recorded campaign", async () => {
     await seed("https://adbrain.vanshul.com");
-    const tape = replay(...reviewReads, ...reviewReads, createTape);
+    const tape = replay(...reviewReads, ...reviewReads, createTape, geoTape);
     const review = await preflight();
     expect(review.status).toBe(200);
     expect(review.body.data).toMatchObject({ canCreatePaused: true, blockers: [], connectionGeneration: 1,
@@ -269,7 +271,7 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
         (refusals as Exchange[]).find((exchange) => exchange.method === "DELETE")!, "needs_reconciliation"],
     ])("%s", async (_case, answer, state) => {
       await seed("https://adbrain.vanshul.com");
-      const tape = replay(...reviewReads, ...reviewReads, [campaignPost, imageRefused, deleteAnswer(answer)]);
+      const tape = replay(...reviewReads, ...reviewReads, [campaignPost, imageRefused, deleteAnswer(answer)], geoTape);
       const review = await preflight();
       await post("create", createRequest(review.body.data));
       expect(tape.sent.map((call) => `${call.method} ${call.path}`)).toEqual(expect.arrayContaining([
@@ -299,7 +301,7 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
   it("queues the reviewed campaign and the worker creates it PAUSED with the recorded campaign", async () => {
     vi.stubEnv("CAMPAIGN_EXECUTION_MODE", "worker");
     await seed("https://adbrain.vanshul.com");
-    const tape = replay(...reviewReads, ...reviewReads, ...reviewReads, createTape);
+    const tape = replay(...reviewReads, ...reviewReads, ...reviewReads, createTape, geoTape);
     const review = await preflight();
     const queued = await post("create", createRequest(review.body.data));
     expect(queued).toMatchObject({ status: 202, body: { data: { state: "pending", campaignId: null } } });
