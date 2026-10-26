@@ -458,7 +458,7 @@ export function placementCreativeSpec(p: {
   link: string;
   destination: AdDestination;
   whatsappNumber?: string;
-  whatsappGreeting?: { autofill: string; greeting: string };
+  whatsappGreeting?: WhatsAppOpening;
   leadFormId?: string;
 }) {
   const cta = destinationCTA(p.destination, { leadFormId: p.leadFormId, phone: p.whatsappNumber });
@@ -1037,7 +1037,7 @@ export class MetaClient {
     whatsappNumber?: string;
     /** Numbers bound to this AdBrain business (#253); a non-Page number must be one of them. */
     boundWhatsAppNumbers?: readonly string[];
-    whatsappGreeting?: { autofill: string; greeting: string };
+    whatsappGreeting?: WhatsAppOpening;
     phone?: string;
     variants?: AdSetVariant[];
     onCheckpoint?: (checkpoint: CampaignMutationCheckpoint) => void | Promise<void>;

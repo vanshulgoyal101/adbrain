@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   creativeReads: 0,
   changeCreativeBeforeExecution: false,
   refuseExclusions: false,
+  whatsappTemplate: null as unknown,
   description: null as string | null,
   submittedCreative: vi.fn(),
 }));
@@ -200,7 +201,7 @@ vi.mock("@/lib/supabase/server", () => ({
       }
       if (table === "businesses") {
         return {
-          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: "Solaride", website: "https://example.com", locations: ["Jaipur"], offers: [] }, error: null }) }) }),
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { name: "Solaride", website: "https://example.com", locations: ["Jaipur"], offers: [], whatsapp_template: mocks.whatsappTemplate }, error: null }) }) }),
         };
       }
       if (table === "campaign_learnings") {
@@ -244,6 +245,7 @@ beforeEach(() => {
   mocks.creativeReads = 0;
   mocks.changeCreativeBeforeExecution = false;
   mocks.refuseExclusions = false;
+  mocks.whatsappTemplate = null;
   mocks.description = null;
   mocks.getUser.mockResolvedValue({ data: { user: { id: userId } } });
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId, userId });
@@ -309,6 +311,21 @@ describe("durable campaign create route", () => {
     expect(mocks.submittedCreative).toHaveBeenCalledWith(expect.objectContaining({
       creatives: [expect.objectContaining({ description: mocks.description })],
     }));
+  });
+
+  it("#840: a business's saved WhatsApp message is what the launch sends, and the ledger says so", async () => {
+    mocks.whatsappTemplate = { greeting: "Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.", opening: { kind: "prefill", prefill: "Can I get more info on this", callButton: true }, language: "en" };
+    mocks.learnings = [];
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null } });
+    const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => "+919876543210", createLeadCampaign: create, readActiveLeadForm: vi.fn(), resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    expect((await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewed.data.planHash, connectionGeneration, idempotencyKey }))).status).toBe(200);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ whatsappGreeting: {
+      greeting: "Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.", autofill: "Can I get more info on this", callButton: true } }));
+    expect(mocks.learnings).toEqual([expect.objectContaining({ snapshot: expect.objectContaining({ whatsapp: expect.objectContaining({ button: "call", source: "saved", prefill: "Can I get more info on this" }) }) })]);
   });
 
   it("sends the campaign's chosen WhatsApp language (#493)", async () => {
