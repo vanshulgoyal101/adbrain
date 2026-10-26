@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const save = vi.hoisted(() => vi.fn());
@@ -45,6 +45,41 @@ describe("WhatsApp message card (#840)", () => {
     expect(screen.queryByLabelText("Pre-typed message")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
     await waitFor(() => expect(save).toHaveBeenCalledWith({ businessId: "b1", template: expect.objectContaining({ opening: { kind: "ice_breakers", questions: ["Free site survey", "Price for my home"] } }) }));
+  });
+
+  it("editing a saved message says 'Unsaved changes' and keeps Reset (CPO, #840)", async () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={solaride} suggested={suggested} />);
+    expect(screen.queryByRole("option", { name: "Auto (follows each ad)" })).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Welcome message/), { target: { value: "Hi! Solaride here." } });
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset to suggested" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
+    expect(await screen.findByText("Your message")).toBeInTheDocument();
+  });
+
+  it("defaults to Auto until saved, and saves the words shown as English", async () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} />);
+    expect(screen.getByLabelText("Language")).toHaveValue("auto");
+    expect(screen.getByText(/Each campaign writes its message in its ad's language/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ businessId: "b1", template: expect.objectContaining({ language: "en", greeting: suggested.en.greeting }) }));
+    expect(await screen.findByText("Your message")).toBeInTheDocument();
+    expect(screen.getByLabelText("Language")).toHaveValue("en");
+  });
+
+  it("names the number Call now rings, and quick questions say there's no pre-typed message", async () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} firstOffer="Free solar site survey" callNumber={Promise.resolve("+91 ••••• 4842")} />);
+    await act(async () => { fireEvent.click(screen.getByLabelText("Call now")); });
+    expect(await screen.findByText("+91 ••••• 4842")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Quick questions"));
+    expect(screen.getByText("Customers tap a question; there's no pre-typed message.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Question 1")).toHaveAttribute("placeholder", "e.g. Free solar site survey");
+  });
+
+  it("uses a neutral example when there's no short offer", () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} firstOffer={"x".repeat(60)} />);
+    fireEvent.click(screen.getByLabelText("Quick questions"));
+    expect(screen.getByLabelText("Question 1")).toHaveAttribute("placeholder", "e.g. What's the price?");
   });
 
   it("shows a refusal next to the field it's about, and Reset goes back to the suggestion", async () => {
