@@ -115,7 +115,11 @@ export async function editAdCopy(
       if (readError || !fresh) return { error: readError ?? new Error("Campaign not found.") };
       const raw = fresh.raw && typeof fresh.raw === "object" && !Array.isArray(fresh.raw) ? fresh.raw as Record<string, Json | undefined> : {};
       const adCreatives = { ...(raw.adCreatives && typeof raw.adCreatives === "object" && !Array.isArray(raw.adCreatives) ? raw.adCreatives as Record<string, Json> : {}), [adId]: swapped.creativeId };
-      return saveCampaign({ businessId: context.businessId, userId: context.userId }, { raw: { ...raw, adCreatives } as Json }, campaignId);
+      // The ad's words now, so the next edit starts from them rather than the original creative's.
+      const words = raw.adWords && typeof raw.adWords === "object" && !Array.isArray(raw.adWords) ? raw.adWords as Record<string, Json> : {};
+      const previous = words[adId] && typeof words[adId] === "object" && !Array.isArray(words[adId]) ? words[adId] as Record<string, Json> : {};
+      const adWords = { ...words, [adId]: { ...previous, ...change } };
+      return saveCampaign({ businessId: context.businessId, userId: context.userId }, { raw: { ...raw, adCreatives, adWords } as Json }, campaignId);
     };
     const { error: mirrorError } = await mirror().catch(() => ({ error: new Error("Campaign storage unavailable.") }));
     if (mirrorError) {

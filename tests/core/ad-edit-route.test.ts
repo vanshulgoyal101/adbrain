@@ -158,6 +158,8 @@ describe("core: edit a launched ad's words through the route (#775)", () => {
     expect(operation()).toMatchObject({ kind: "ad_creative", state: "succeeded", phase: "complete", transmitted: true,
       before: { ad_id: AD, previous_creative_id: recorded.ad.creative.id }, change: recorded.edit });
     expect((store.state.tables.campaigns![0].raw as Row).adCreatives).toEqual({ [AD]: "NEW_CREATIVE" });
+    // The words the ad now carries, so the next edit starts from them, not the original creative.
+    expect((store.state.tables.campaigns![0].raw as Row).adWords).toEqual({ [AD]: recorded.edit });
   });
 
   it("keeps another writer's raw change made during the swap (only this ad's creative is merged)", async () => {
