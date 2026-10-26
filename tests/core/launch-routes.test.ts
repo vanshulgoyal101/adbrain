@@ -271,7 +271,8 @@ describe("core: the launch routes, preflight → create → worker, on recorded 
         (refusals as Exchange[]).find((exchange) => exchange.method === "DELETE")!, "needs_reconciliation"],
     ])("%s", async (_case, answer, state) => {
       await seed("https://adbrain.vanshul.com");
-      const tape = replay(...reviewReads, ...reviewReads, [campaignPost, imageRefused, deleteAnswer(answer)]);
+      // #741: the service-area read (recorded) runs before the campaign POST.
+      const tape = replay(...reviewReads, ...reviewReads, geoTape, [campaignPost, imageRefused, deleteAnswer(answer)]);
       const review = await preflight();
       await post("create", createRequest(review.body.data));
       expect(tape.sent.map((call) => `${call.method} ${call.path}`)).toEqual(expect.arrayContaining([
