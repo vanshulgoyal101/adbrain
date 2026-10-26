@@ -183,4 +183,38 @@ describe("core: every Review blocker has a one-tap fix (#723)", () => {
     fireEvent.click(within(region).getByRole("button", { name: reviewBlockerFix(reason)!.label }));
     expect(await screen.findByRole("dialog", { name: "Connect Facebook" })).toBeInTheDocument();
   });
+
+  // #772: Prepare was silently disabled until an ad and a budget were set; a tap did nothing.
+  async function openComposer() {
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady adAccountId="" />);
+    const leadForm = screen.getByLabelText("Lead form");
+    await within(leadForm).findByRole("option", { name: "Enquiries" });
+    fireEvent.change(leadForm, { target: { value: "1732372914636573" } });
+  }
+
+  it("Prepare with no ad says so beside the ads and focuses the first one", async () => {
+    await openComposer();
+    const prepare = screen.getByRole("button", { name: "Prepare campaign review" });
+    expect(prepare).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(prepare);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Choose at least one ad to send to Meta.");
+    const firstAd = screen.getByRole("button", { name: creative.headline! });
+    expect(firstAd).toHaveFocus();
+    expect(firstAd).toHaveAttribute("aria-describedby", alert.id);
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("Prepare with no budget says so beside Budget and focuses it", async () => {
+    await openComposer();
+    fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
+    const budget = screen.getByLabelText("Daily budget (₹)");
+    fireEvent.change(budget, { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare campaign review" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Set a daily budget above ₹0.");
+    expect(budget).toHaveFocus();
+    expect(budget).toHaveAttribute("aria-describedby", alert.id);
+    expect(mocks.saveDraft).not.toHaveBeenCalled();
+  });
 });
