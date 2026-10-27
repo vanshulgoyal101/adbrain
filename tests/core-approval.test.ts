@@ -51,3 +51,22 @@ describe("core-approval required check (#926)", () => {
     expect(coreApproval({ ...pr, labels: [], title: "Revert #914" }).state).toBe("pending");
   });
 });
+
+describe("money and migrations need QA and the CTO/Reviewer (#1083)", () => {
+  const pr = { files: ["src/lib/campaign/funding-check.ts", "src/lib/campaign/activation.ts"], head, headRef: "dev4/x" };
+  const cto = at("CTO review of 7612817: **approved** (money).", "2026-10-27T10:00:00Z");
+  const qaOk = at("QA verdict at 7612817: **approved**.", "2026-10-27T10:05:00Z");
+  const qaNo = at("QA verdict at 7612817: changes requested (2 items).", "2026-10-27T10:05:00Z");
+  it("holds a money PR on the CTO's approval alone, and passes with both", () => {
+    expect(coreApproval({ ...pr, comments: [cto] })).toMatchObject({ state: "pending", description: expect.stringMatching(/needs QA approval/) });
+    expect(coreApproval({ ...pr, comments: [qaOk] })).toMatchObject({ state: "pending", description: expect.stringMatching(/needs CTO\/Reviewer approval/) });
+    expect(coreApproval({ ...pr, comments: [cto, qaOk] }).state).toBe("success");
+  });
+  it("a QA 'changes requested' at the head holds any core PR, whoever else approved", () => {
+    expect(coreApproval({ ...pr, comments: [cto, qaNo] })).toMatchObject({ state: "pending", description: "QA requested changes at 7612817" });
+    expect(coreApproval({ files: ["src/lib/meta/client.ts"], head, headRef: "b", comments: [cto, qaNo] }).state).toBe("pending");
+  });
+  it("treats migrations like money", () => {
+    expect(coreApproval({ files: ["db/migrations/20261027_x.sql"], head, headRef: "b", comments: [cto] }).state).toBe("pending");
+  });
+});
