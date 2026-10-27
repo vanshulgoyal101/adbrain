@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdAssistant } from "@/components/ad-assistant";
 import type { Business, Creative } from "@/lib/types";
 
-// #858 (CPO step cut 1 on #681): a suggestion chip on a Brand that already has offer, area and phone
-// goes straight to Generate; anything missing, a question, or an edited goal keeps the brief review.
+// #858 (CPO step cut 1 on #681), widened by #1004: any goal, chip or typed, on a Brand that already has
+// offer, area and phone goes straight to Generate, with one line saying what the ads will use. Anything
+// missing, a question from the assistant, or the owner tapping 'Edit brief' keeps the brief review.
 vi.mock("@/app/(app)/studio/actions", () => ({ setCreativeStatus: vi.fn(), updateCreativeCopy: vi.fn() }));
 
 const complete = {
@@ -79,12 +80,29 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
     expect(second).not.toBe(first);
   });
 
-  it("keeps the review when the owner edited the chip's goal", async () => {
+  it("#1004: a typed goal on a complete Brand says what it will use, and 'Make 3 ads' generates at once", async () => {
+    const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
+    render(<AdAssistant business={complete} />);
+    fireEvent.change(await screen.findByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes, weekend visits" } });
+    expect(screen.getByText("For Mohali · offer: Free site survey")).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Make 3 ads" })); });
+    await waitFor(() => expect(generatePosts(fetchMock)).toHaveLength(1));
+    expect(screen.queryByRole("region", { name: "Review creative brief" })).not.toBeInTheDocument();
+    expect(screen.getByText("What I'll write about · Edit")).toBeInTheDocument();
+  });
+
+  it("#1004: an edited chip skips the review too, and 'Edit brief' keeps it", async () => {
     const fetchMock = mockApi(() => ({ ready: true, brief: BRIEF }));
     await startFromChip(complete, "Mention weekend slots.");
-    expect(screen.queryByRole("button", { name: /Make 3 ads/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(generatePosts(fetchMock)).toHaveLength(1));
+    cleanup();
+    sessionStorage.clear();
+    const second = mockApi(() => ({ ready: true, brief: BRIEF }));
+    render(<AdAssistant business={complete} />);
+    fireEvent.change(await screen.findByLabelText("Campaign goal"), { target: { value: "Rooftop solar for homes" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Edit brief" })); });
     expect(await screen.findByRole("region", { name: "Review creative brief" })).toBeInTheDocument();
-    expect(generatePosts(fetchMock)).toHaveLength(0);
+    expect(generatePosts(second)).toHaveLength(0);
   });
 
   it("keeps the review when the Brand is missing a phone", async () => {
@@ -92,6 +110,7 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
     render(<AdAssistant business={{ ...complete, phone: null } as Business} />);
     fireEvent.click(await screen.findByRole("button", { name: /Feature: Free site survey/ }));
     expect(screen.getByRole("button", { name: /Start creating/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit brief" })).not.toBeInTheDocument();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Start creating/ })); });
     expect(await screen.findByRole("region", { name: "Review creative brief" })).toBeInTheDocument();
     expect(generatePosts(fetchMock)).toHaveLength(0);
