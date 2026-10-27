@@ -41,10 +41,35 @@ jobs:
           openssl cms -encrypt -binary -aes256 -outform DER -in dump.sql.gz -out "$name.sql.gz.cms" .github/backup/backup-cert.crt
           rm -f dump.sql.gz
           sha256sum "$name.sql.gz.cms"
+      # Owners' uploads (logos, product photos) can't be regenerated; ad images in `creatives` can, so
+      # they're left out (#884 item 4). The bucket is public: names come from the database, files from
+      # their public URLs, so no Storage key is needed.
+      - name: Mirror brand uploads and encrypt
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          STORAGE: https://kmzuxrvfrwwpwmoovwcp.supabase.co/storage/v1/object/public/brand-assets
+        run: |
+          set -euo pipefail
+          mkdir -p uploads
+          docker run --rm -e DATABASE_URL postgres:17 psql "$DATABASE_URL" -AtXc "select name from storage.objects where bucket_id = 'brand-assets' order by name" > uploads.txt
+          count=0
+          while IFS= read -r object; do
+            [ -n "$object" ] || continue
+            path=$(jq -rn --arg p "$object" '$p | split("/") | map(@uri) | join("/")')
+            mkdir -p "uploads/$(dirname "$object")"
+            curl -fsS --max-time 60 -o "uploads/$object" "$STORAGE/$path"
+            count=$((count + 1))
+          done < uploads.txt
+          echo "uploads: $count of $(grep -c . uploads.txt || true)"
+          tar -czf uploads.tar.gz uploads uploads.txt
+          openssl cms -encrypt -binary -aes256 -outform DER -in uploads.tar.gz -out "$NAME.uploads.tar.gz.cms" .github/backup/backup-cert.crt
+          rm -rf uploads uploads.txt uploads.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.NAME }}
-          path: ${{ env.NAME }}.sql.gz.cms
+          path: |
+            ${{ env.NAME }}.sql.gz.cms
+            ${{ env.NAME }}.uploads.tar.gz.cms
           retention-days: 14
           if-no-files-found: error
       - name: Alert on failure
