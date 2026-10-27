@@ -6,6 +6,7 @@ import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
 import { reviewWarnings } from "@/lib/campaign/plan-check";
+import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 
 export interface PreflightCreative {
   id: string;
@@ -52,6 +53,9 @@ export interface PreflightInput {
   creatives: PreflightCreative[];
   form: PreflightForm | null;
   whatsappNumber?: string | null;
+  /** #840: the WhatsApp message launch will send, and why it can't (claims, links) if so. */
+  whatsappMessage?: ResolvedWhatsAppMessage | null;
+  whatsappMessageProblem?: string | null;
   /** The business's industry, for the health claim rules (#739). */
   vertical?: string | null;
   /** Business website; undefined when the caller does not check it. */
@@ -77,6 +81,7 @@ export type ReviewFreshnessResult =
 
 export interface CanonicalReviewPayload {
   whatsappLanguage?: "en" | "hi" | "hinglish" | "pa";
+  whatsappOpening?: ResolvedWhatsAppMessage["opening"];
   resolvedLocation?: ReviewDTO["resolvedLocation"];
   resolvedExcludedLocation?: ReviewDTO["resolvedExcludedLocation"];
   businessId: string;
@@ -100,6 +105,14 @@ type ReviewBlocker = ReviewDTO["blockers"][number];
 
 function blocker(code: ReviewBlocker["code"], reason: ReviewBlockerReason, message: string, action: ReviewBlocker["action"] = null): ReviewBlocker {
   return { code, reason, message, action };
+}
+
+function reviewedMessage({ source, opening, language }: ResolvedWhatsAppMessage): NonNullable<ReviewDTO["whatsappMessage"]> {
+  return {
+    source, language, greeting: opening.greeting, autofill: opening.autofill,
+    ...(opening.callButton ? { callButton: true } : {}),
+    ...(opening.iceBreakers?.length ? { iceBreakers: opening.iceBreakers } : {}),
+  };
 }
 
 /** #740: name what Meta didn't recognise, so the owner knows which line to fix. */
@@ -152,6 +165,10 @@ export function buildCanonicalReviewPayload(
     // #493: only when it changes what's sent, so plans reviewed before this field keep their hash.
     ...(input.draft.destination === "whatsapp" && input.draft.whatsappLanguage && input.draft.whatsappLanguage !== "ad"
       ? { whatsappLanguage: input.draft.whatsappLanguage } : {}),
+    // #840: an edited or saved message is fixed text, so a change to it needs a new review. A
+    // suggestion is derived from what's already here, so plans without one keep their hash.
+    ...(input.draft.destination === "whatsapp" && input.whatsappMessage && input.whatsappMessage.source !== "suggested"
+      ? { whatsappOpening: input.whatsappMessage.opening } : {}),
     dailyBudgetRupees: input.draft.dailyBudgetRupees,
     abTest: input.draft.abTest,
     targeting: input.draft.targeting,
@@ -206,6 +223,9 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
   if (draft.destination === "whatsapp") {
     if (!input.whatsappNumber || !/^\+[1-9]\d{6,14}$/.test(input.whatsappNumber)) {
       blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_NOT_LINKED", "Connect a WhatsApp Business number to the selected Facebook Page and verify access before reviewing."));
+    }
+    if (input.whatsappMessageProblem) {
+      blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_WHATSAPP_MESSAGE", `Your WhatsApp message: ${input.whatsappMessageProblem}`));
     }
   } else if (!draft.leadFormId || !input.form || input.form.id !== draft.leadFormId || input.form.businessId !== draft.businessId || !input.form.active) {
     blockers.push(blocker("PREFLIGHT_BLOCKED", "REVIEW_NO_LEAD_FORM", "Choose an active lead form from your Facebook Page in the Lead form field."));
@@ -279,6 +299,7 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     ...(input.geo.excludedLocation ? { resolvedExcludedLocation: input.geo.excludedLocation } : {}),
     ...(input.geo.audienceInterests ? { audienceInterests: [...input.geo.audienceInterests].sort((left, right) => left.id.localeCompare(right.id)) } : {}),
     ...(planWarnings.length ? { planWarnings } : {}),
+    ...(draft.destination === "whatsapp" && input.whatsappMessage ? { whatsappMessage: reviewedMessage(input.whatsappMessage) } : {}),
     ...(input.geo.areaExclusions ? { serviceArea: describeServiceArea(input.geo.areaExclusions) } : {}),
   };
 }

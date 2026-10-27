@@ -9,6 +9,7 @@ import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-stat
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
+import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
 export type { AdResult, CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -168,6 +169,8 @@ export type AudienceChanges = {
   excludedLocation?: GeoTargeting;
   age?: { min: number; max: number };
   gender?: "all" | "men" | "women";
+  /** Meta ad locale keys; an empty list removes the language limit. */
+  languages?: number[];
 };
 export type AudienceEdit = { mode: "patch" | "rebuild"; validated: boolean; adSetId: string; adIds: string[]; retiredAdSetId: string | null };
 /** #774: an ad set's budget as Meta reports it, in paise. A capped run has a lifetime budget and an end time. */
@@ -248,6 +251,9 @@ function editedTargeting(source: Record<string, unknown>, changes: AudienceChang
   if (changes.gender) {
     if (changes.gender === "all") delete next.genders; else next.genders = [changes.gender === "men" ? 1 : 2];
   }
+  if (changes.languages) {
+    if (changes.languages.length) next.locales = [...changes.languages]; else delete next.locales;
+  }
   return next;
 }
 
@@ -264,6 +270,8 @@ function excludesIncludedPlace(targeting: Record<string, unknown>): boolean {
   });
 }
 
+const numbers = (value: unknown): number[] => Array.isArray(value) ? value.map(Number).filter(Number.isInteger) : [];
+
 /** Meta echoed the changed audience back (it may add defaults, so only what changed is compared). */
 function sameAudience(targeting: Record<string, unknown> | undefined, sent: Record<string, unknown>, changes: AudienceChanges): boolean {
   if (!targeting) return false;
@@ -271,7 +279,8 @@ function sameAudience(targeting: Record<string, unknown> | undefined, sent: Reco
   return (!changes.location || targeting.geo_locations !== undefined)
     && (!changes.excludedLocation || sent.excluded_geo_locations === undefined || targeting.excluded_geo_locations !== undefined)
     && (!changes.age || ["age_min", "age_max", "age_range"].every(key => norm(targeting[key]) === norm(sent[key])))
-    && (!changes.gender || norm(targeting.genders) === norm(sent.genders));
+    && (!changes.gender || norm(targeting.genders) === norm(sent.genders))
+    && (!changes.languages || norm(storedLocales(numbers(targeting.locales))) === norm(storedLocales(numbers(sent.locales))));
 }
 
 export class MetaError extends Error {
@@ -1885,7 +1894,9 @@ export class MetaClient {
     const { adSetId, adIds, changes } = input;
     const validAge = !changes.age || (Number.isInteger(changes.age.min) && Number.isInteger(changes.age.max)
       && changes.age.min >= 18 && changes.age.max <= 65 && changes.age.min <= changes.age.max);
-    if (!(changes.location || changes.excludedLocation || changes.age || changes.gender) || !validAge
+    const validLanguages = !changes.languages || (changes.languages.length <= AD_LANGUAGE_KEYS.size
+      && new Set(changes.languages).size === changes.languages.length && changes.languages.every(key => AD_LANGUAGE_KEYS.has(key)));
+    if (!(changes.location || changes.excludedLocation || changes.age || changes.gender || changes.languages) || !validAge || !validLanguages
       || !adIds.length || new Set(adIds).size !== adIds.length) {
       throw new MetaError("Invalid audience change.");
     }

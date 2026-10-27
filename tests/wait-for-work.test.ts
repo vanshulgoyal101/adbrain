@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readyPool, boardRow, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
+import { readyPool, boardRow, systemicFailures, snoozedUntil, latestWord, linkedIssues, lowQueues, matchers, offTrack, roleCard, unsavedWork, waitingOnMe } from "../scripts/wait-for-work.mjs";
 
 describe("PR reviews count as the latest word (#423)", () => {
   it("picks a review posted after the last comment, and ignores empty approvals", () => {
@@ -216,5 +216,17 @@ describe("Dev 4 role", () => {
   });
   it("counts Dev 4's queue", () => {
     expect(lowQueues([]).map((x) => x.role)).toContain("dev4");
+  });
+});
+
+describe("systemic CI failures (CTO auto-track)", () => {
+  const run = (name: string, branch: string, conclusion = "failure", event = "pull_request") => ({ name, head_branch: branch, conclusion, event, html_url: `u-${branch}` });
+  it("flags one workflow failing on 2+ PR branches, not a single PR's red run or push runs", () => {
+    const lines = systemicFailures([
+      run("Core approval", "dev3/701"), run("Core approval", "designer/847"), run("Core approval", "dev3/701"),
+      run("CI", "dev2/773"), run("CI", "next", "failure", "push"), run("CI", "x", "success"),
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^CI systemic: Core approval failed on 2 PR branches \(dev3\/701, designer\/847\)/);
   });
 });

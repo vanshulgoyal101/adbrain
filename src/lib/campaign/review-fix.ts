@@ -27,6 +27,7 @@ const FIXES: Record<ReviewBlockerReason, ReviewFix> = {
   REVIEW_NO_AUDIENCE: { kind: "field", label: "Go to Recommend audience", targets: ["recommend-audience"] },
   REVIEW_AD_POLICY: { kind: "field", label: "Edit the ad's wording", targets: ["campaign-ad-picker"] },
   REVIEW_INTERESTS_UNRESOLVED: { kind: "field", label: "Edit the interests", targets: ["audience-interests", "recommend-audience"] },
+  REVIEW_WHATSAPP_MESSAGE: { kind: "field", label: "Edit the WhatsApp message", targets: ["whatsapp-message"] },
 };
 
 export function reviewBlockerFix(reason: ReviewBlockerReason | undefined): ReviewFix | null {

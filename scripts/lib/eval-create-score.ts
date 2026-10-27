@@ -15,6 +15,8 @@ export type AdResult = {
   firstTry: boolean;
   rejectedRules: string[];
   offerInFold: boolean | null;
+  /** #418 rule 1: the headline or first line names a Brand location; null for Indic-script copy or no locations. */
+  placeUpFront?: boolean | null;
   scriptOk: boolean;
   judge?: JudgeScore;
   costUsd: number;
@@ -26,7 +28,11 @@ export type CaseResult = {
   saved: number;
   expected: number;
   /** `issues` are the validator's messages, kept to explain a partial batch. */
-  failures: { angle: string; stage: string; rules: string[]; issues?: string[] }[];
+  failures: {
+    angle: string; stage: string; rules: string[]; issues?: string[];
+    /** The validated copy of a concept whose image failed. */
+    copy?: { headline: string; primaryText: string; supportingText: string | null; placeUpFront: boolean | null };
+  }[];
   ads: AdResult[];
   costUsd: number;
   wallMs: number;
@@ -44,6 +50,8 @@ export type Summary = {
   providerFailures?: number;
   firstTryRate: number;
   offerInFoldRate: number;
+  /** Absent in reports made before #418 rule 1. */
+  placeUpFrontRate?: number;
   scriptRate: number;
   judgeCopy: number;
   judgeImage: number;
@@ -64,6 +72,18 @@ export function offerInFold(primaryText: string, terms: string[]): boolean | nul
     const index = text.indexOf(term.toLowerCase());
     return index >= 0 && index < FOLD_CHARACTERS;
   });
+}
+
+/**
+ * #418 rule 1: whether the headline or the post's first line names one of the Brand's places. Null when
+ * there are no places or the copy is in an Indic script, where place names are transliterated.
+ */
+export function placeUpFront(headline: string, primaryText: string, locations: string[]): boolean | null {
+  const places = locations.flatMap((location) => location.split(/[,;]/)).map((place) => place.trim().toLowerCase()).filter(Boolean);
+  const top = `${headline}\n${primaryText.split("\n", 1)[0]}`;
+  if (!places.length || textScript(top) !== "latin") return null;
+  const lower = top.toLowerCase();
+  return places.some((place) => lower.includes(place));
 }
 
 /** The script most letters are written in; digits, currency and punctuation don't count. */
@@ -110,6 +130,8 @@ export function summarize(cases: CaseResult[]): Summary {
     providerFailures: cases.reduce((sum, result) => sum + result.failures.filter((failure) => failure.stage === "provider").length, 0),
     firstTryRate: round(rate(ads.map((ad) => ad.firstTry))),
     offerInFoldRate: round(rate(ads.flatMap((ad) => (ad.offerInFold === null ? [] : [ad.offerInFold])))),
+    placeUpFrontRate: round(rate([...ads.map((ad) => ad.placeUpFront), ...cases.flatMap((result) => result.failures.map((failure) => failure.copy?.placeUpFront))]
+      .flatMap((value) => (value == null ? [] : [value])))),
     scriptRate: round(rate(ads.map((ad) => ad.scriptOk))),
     judgeCopy: round(mean(judged.map((score) => score.copy)), 3),
     judgeImage: round(mean(judged.map((score) => score.image)), 3),
@@ -153,6 +175,7 @@ export function compareSummaries(before: Summary, after: Summary, options: Compa
     lower("copy saved", copySaved(before), copySaved(after));
     lower("first-try passes", before.firstTryRate, after.firstTryRate, 0.1);
     lower("offer in the first 125 characters", before.offerInFoldRate, after.offerInFoldRate);
+    if (before.placeUpFrontRate !== undefined && after.placeUpFrontRate !== undefined) lower("place in the headline or first line", before.placeUpFrontRate, after.placeUpFrontRate);
     lower("post text in the chosen script", before.scriptRate, after.scriptRate);
     return { verdict: regressions.length ? "fail" as const : "pass" as const, regressions };
   }
@@ -160,6 +183,7 @@ export function compareSummaries(before: Summary, after: Summary, options: Compa
   lower("ads saved", before.adsSaved / (before.adsExpected || 1), after.adsSaved / (after.adsExpected || 1));
   lower("first-try passes", before.firstTryRate, after.firstTryRate, 0.1);
   lower("offer in the first 125 characters", before.offerInFoldRate, after.offerInFoldRate);
+  if (before.placeUpFrontRate !== undefined && after.placeUpFrontRate !== undefined) lower("place in the headline or first line", before.placeUpFrontRate, after.placeUpFrontRate);
   lower("post text in the chosen script", before.scriptRate, after.scriptRate);
   if (after.judgeCopy < before.judgeCopy - 0.25) regressions.push(`judge copy ${before.judgeCopy} → ${after.judgeCopy}`);
   if (after.judgeImage < before.judgeImage - 0.25) regressions.push(`judge image ${before.judgeImage} → ${after.judgeImage}`);

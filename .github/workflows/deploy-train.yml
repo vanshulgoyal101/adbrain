@@ -90,7 +90,11 @@ jobs:
           echo "Promoting next at ${sha::7} ($ahead commits)."
           # Required checks must be green on that exact commit (CI runs on every push to next).
           for i in $(seq 1 60); do
-            states=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | "\(.name)=\(.conclusion // .status)"] | unique | join(" ")')
+            # A run GitHub cancelled (a newer run on the same commit replaced it) can still report test=failure
+            # from its always() aggregate job (#983); its suite is "cancelled", so leave it out.
+            runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | {name, state: (.conclusion // .status), suite: .check_suite.id}]')
+            cancelled=$(gh api "repos/$repo/commits/$sha/check-suites?per_page=100" --jq '[.check_suites[] | select(.conclusion == "cancelled") | .id]')
+            states=$(jq -rn --argjson runs "$runs" --argjson cancelled "$cancelled" '[$runs[] | . as $r | select($cancelled | index($r.suite) | not) | "\(.name)=\(.state)"] | unique | join(" ")')
             echo "checks: ${states:-none yet}"
             if grep -Eq '=(failure|cancelled|timed_out|action_required)' <<<"$states"; then echo "::error::next ${sha::7} is red; not promoting."; exit 1; fi
             [ "$(grep -o '=success' <<<"$states" | wc -l)" -eq 4 ] && break
