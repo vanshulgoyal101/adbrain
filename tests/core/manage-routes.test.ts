@@ -124,7 +124,8 @@ const ADSET_FIELDS = "fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cprom
 
 const tapes = {
   delivery: deliveryTape as Exchange[],
-  funding: fundingTape as Exchange[],
+  // Scrubbed (#1094): its fake ad account is mapped onto this file's recorded account.
+  funding: JSON.parse(JSON.stringify(fundingTape.tape).replaceAll(fundingTape.adAccountId, ACCOUNT)) as Exchange[],
   pause: [...(campaignSpendCapTape as Exchange[]).slice(0, 2), ...pauseAllTape as Exchange[]],
   results: (resultsTape as Exchange[]).filter(exchange => exchange.path.startsWith(LIVE)),
   sync: (campaignIds: string[]) => {
