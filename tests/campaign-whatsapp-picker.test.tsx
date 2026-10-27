@@ -74,7 +74,7 @@ describe("campaign WhatsApp button number (#235)", () => {
     expect(screen.getByText("WhatsApp chat +91 ••••• 4842")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    await screen.findByText(/Destination: WhatsApp chat \+919800004842/);
+    await screen.findByText("WhatsApp chat +919800004842");
     expect(saved.input).toMatchObject({ destination: "whatsapp", whatsappNumber: "+91 ••••• 4842", leadFormId: null });
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });

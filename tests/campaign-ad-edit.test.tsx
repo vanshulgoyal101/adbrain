@@ -118,10 +118,10 @@ describe("campaign ad picker: Edit (#280)", () => {
     await settle();
     fireEvent.click(screen.getByRole("button", { name: creative.headline! }));
     fireEvent.click(screen.getByRole("button", { name: "Check my campaign (nothing spends)" }));
-    await screen.findByText(/Destination: WhatsApp chat/);
+    within(await screen.findByRole("region", { name: "Campaign review result" })).getByText(/^WhatsApp chat/);
     fireEvent.click(screen.getByRole("button", { name: `Edit ${creative.headline}` }));
     await act(async () => { fireEvent.click(within(screen.getByRole("region", { name: "Edit ad" })).getByRole("button", { name: "Save" })); });
-    await waitFor(() => expect(screen.queryByText(/Destination: WhatsApp chat/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Campaign review result" })).not.toBeInTheDocument());
     expect(mocks.createCampaign).not.toHaveBeenCalled();
   });
 });
