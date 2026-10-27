@@ -11,7 +11,7 @@ const C = "33333333-3333-4333-8333-333333333333";
 const draft: DraftInput = {
   businessId: "44444444-4444-4444-8444-444444444444", name: "Solaride — leads", goal: "Free site surveys in Mohali",
   mode: "manual", creativeIds: [A, B, C], dailyBudgetRupees: 300, leadFormId: null, destination: "whatsapp",
-  whatsappLanguage: "hinglish", whatsappMessage: { greeting: "Namaste!", opening: { kind: "prefill", prefill: "Free site survey", callButton: false } },
+  whatsappLanguage: "hinglish", whatsappMessage: { greeting: "Namaste!", opening: { kind: "prefill", prefill: "Free site survey", callButton: false }, language: "hinglish" },
   targeting: { location: { includedNames: ["Mohali", "Panchkula"], excludedNames: ["Shimla"] } } as DraftInput["targeting"], abTest: false,
 };
 const campaign = { name: "Solaride — leads", creative_ids: [A, B, C], daily_budget: 300, destination: "whatsapp" };
