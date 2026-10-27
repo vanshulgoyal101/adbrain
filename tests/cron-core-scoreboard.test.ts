@@ -21,7 +21,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       const query: Filter = { table, ops: [] };
       mocks.queries.push(query);
       const builder: Record<string, unknown> = {};
-      for (const op of ["select", "in", "gte", "eq", "order", "range"]) {
+      for (const op of ["select", "in", "gte", "eq", "not", "order", "range"]) {
         builder[op] = (...args: unknown[]) => { query.ops.push([op, args]); return builder; };
       }
       builder.abortSignal = async () => {
@@ -64,6 +64,11 @@ beforeEach(() => {
       { route: "creatives.generate", status: "success", user_id: "team-user", business_id: "b2", request_id: "r2", latency_ms: 100_000, created_at: now },
     ],
     campaign_operations: [{ business_id: "b1", state: "succeeded", created_at: now }, { business_id: "smoke-business", state: "failed", created_at: now }],
+    campaigns: [{ id: "c1", business_id: "b1" }, { id: "c2", business_id: "smoke-business" }],
+    campaign_results: [
+      { campaign_id: "c1", fetched_at: new Date(Date.now() - 40 * 60_000).toISOString() },
+      { campaign_id: "c1", fetched_at: new Date(Date.now() - 5 * 60_000).toISOString() },
+    ],
   };
   mocks.users = {
     "real-user": { id: "real-user", email: "owner@shop.example", email_confirmed_at: now },
@@ -93,6 +98,11 @@ describe("GET /api/cron/core-scoreboard (#681)", () => {
     expect(step("Create (customers, paid images)").now).toContain("p90 20 s");
     expect(step("Create (internal, free images)").now).toContain("p90 100 s");
     expect(mocks.queries.find((q) => q.table === "campaign_operations")!.ops).toContainEqual(["eq", ["kind", "campaign_create"]]);
+    // #992: Manage is the newest result's age on active, Meta-bound campaigns (the smoke's left out).
+    expect(step("Manage")).toMatchObject({ now: expect.stringMatching(/^1 active campaign: oldest results 5 min old;/), met: true });
+    const campaigns = mocks.queries.find((q) => q.table === "campaigns")!;
+    expect(campaigns.ops).toEqual(expect.arrayContaining([["eq", ["status", "active"]], ["not", ["meta_campaign_id", "is", null]]]));
+    expect(mocks.queries.find((q) => q.table === "campaign_results")!.ops).toContainEqual(["in", ["campaign_id", ["c1", "c2"]]]);
     expect(JSON.stringify(body)).not.toMatch(/real-user|team-user|smoke-business|"b1"|example/);
     const businesses = mocks.queries.find((q) => q.table === "businesses")!;
     expect(businesses.ops).toContainEqual(["in", ["owner_id", ["smoke-user"]]]);

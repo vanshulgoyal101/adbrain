@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScoreboard, p90, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
+import { buildScoreboard, newestResults, p90, type ScoreActiveResult, type ScoreAiCall, type ScoreEvent, type ScoreLaunch } from "@/lib/observability/core-scoreboard";
 
 const until = new Date("2026-10-26T03:30:00Z");
 const since = new Date("2026-10-25T03:30:00Z");
@@ -15,8 +15,8 @@ const call = (route: string, status = "success", extra: Partial<ScoreAiCall> = {
 });
 const FREE = "internal-user";
 const launch = (state: string, business_id = "real-business"): ScoreLaunch => ({ business_id, state, created_at: at(60) });
-const board = (events: ScoreEvent[], aiCalls: ScoreAiCall[] = [], launches: ScoreLaunch[] = []) =>
-  buildScoreboard({ events, aiCalls, launches, freeImageUserIds: [FREE], excludedUserIds: [SMOKE], excludedBusinessIds: [SMOKE_BIZ], since, until });
+const board = (events: ScoreEvent[], aiCalls: ScoreAiCall[] = [], launches: ScoreLaunch[] = [], activeResults: ScoreActiveResult[] = []) =>
+  buildScoreboard({ events, aiCalls, launches, activeResults, freeImageUserIds: [FREE], excludedUserIds: [SMOKE], excludedBusinessIds: [SMOKE_BIZ], since, until });
 const row = (b: ReturnType<typeof board>, step: string) => b.rows.find((r) => r.step === step)!;
 
 describe("core scoreboard (#681)", () => {
@@ -119,11 +119,25 @@ describe("core scoreboard (#681)", () => {
     expect(row(board([], [], [launch("succeeded"), launch("failed")]), "Launch").met).toBe(false);
   });
 
-  it("Manage needs fresh results with no failures", () => {
-    expect(row(board([ev("meta.read_insights", "success", { created_at: at(10) }), ev("campaign.refresh")]), "Manage"))
-      .toMatchObject({ now: "1 sync, 1 results read (0 failed); last results read 10 min ago", met: true });
-    expect(row(board([ev("meta.read_insights", "success", { created_at: at(40) })]), "Manage").met).toBe(false);
-    expect(row(board([]), "Manage")).toMatchObject({ now: "0 syncs, 0 results reads (0 failed); last results read none", met: null });
+  it("#992: Manage scores the age of active campaigns' newest results, not when someone last read them", () => {
+    const live = (minAgo: number | null, business_id = "real-business"): ScoreActiveResult => ({ business_id, fetched_at: minAgo === null ? null : at(minAgo) });
+    expect(row(board([ev("meta.read_insights"), ev("campaign.refresh")], [], [], [live(3), live(15)]), "Manage"))
+      .toMatchObject({ now: "2 active campaigns: oldest results 15 min old; 1 sync, 1 results read (0 failed)", met: true });
+    // A fresh read event can't hide stale data: the scoreboard follows fetched_at.
+    expect(row(board([ev("meta.read_insights", "success", { created_at: at(1) })], [], [], [live(40)]), "Manage"))
+      .toMatchObject({ now: "1 active campaign: oldest results 40 min old; 0 syncs, 1 results read (0 failed)", met: false });
+    expect(row(board([], [], [], [live(2), live(null)]), "Manage"))
+      .toMatchObject({ now: "2 active campaigns: 1 with no results in 24 h; 0 syncs, 0 results reads (0 failed)", met: false });
+    // The smoke's own campaign is left out; no active campaign means no score.
+    expect(row(board([], [], [], [live(90, SMOKE_BIZ)]), "Manage"))
+      .toMatchObject({ now: "no active campaigns; 0 syncs, 0 results reads (0 failed)", met: null });
+  });
+
+  it("newestResults keeps the newest fetched_at per active campaign", () => {
+    expect(newestResults(
+      [{ id: "c1", business_id: "b1" }, { id: "c2", business_id: "b2" }],
+      [{ campaign_id: "c1", fetched_at: at(30) }, { campaign_id: "c1", fetched_at: at(5) }, { campaign_id: "other", fetched_at: at(1) }],
+    )).toEqual([{ business_id: "b1", fetched_at: at(5) }, { business_id: "b2", fetched_at: null }]);
   });
 
   it("renders one public markdown table without identifiers", () => {

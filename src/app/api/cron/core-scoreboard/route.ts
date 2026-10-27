@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import { isExemptFromFreeProviders, isInternalUser } from "@/lib/internal-accounts";
 import {
   buildScoreboard,
+  newestResults,
   SCOREBOARD_AI_ROUTES,
   SCOREBOARD_EVENT_NAMES,
   SCOREBOARD_PLAN_ROUTE,
@@ -18,6 +19,7 @@ export const runtime = "nodejs";
 
 const PAGE = 1000;
 const MAX_PAGES = 30;
+const PAGE_IDS = 100;
 
 /**
  * Daily core scoreboard (#681), read-only: each core step's number against its target, smoke
@@ -61,7 +63,7 @@ async function handleGET(request: Request) {
     const smokeUsers = internal.smokeUserIds;
     const { data: owned, error } = await db.from("businesses").select("id").in("owner_id", smokeUsers).abortSignal(signal());
     if (error || !Array.isArray(owned)) throw new Unavailable();
-    const [events, planRequests, aiCalls, launches] = await Promise.all([
+    const [events, planRequests, aiCalls, launches, active] = await Promise.all([
       pages<ScoreEvent>((from, to) => db.from("product_events").select(eventColumns)
         .gte("created_at", since).in("name", [...SCOREBOARD_EVENT_NAMES])
         .order("created_at").range(from, to).abortSignal(signal())),
@@ -74,7 +76,18 @@ async function handleGET(request: Request) {
       pages<ScoreLaunch>((from, to) => db.from("campaign_operations").select("business_id, state, created_at")
         .gte("created_at", since).eq("kind", "campaign_create")
         .order("created_at").range(from, to).abortSignal(signal())),
+      // The campaigns refresh-results keeps fresh: active and bound to a Meta campaign (#992).
+      pages<{ id: string; business_id: string }>((from, to) => db.from("campaigns").select("id, business_id")
+        .eq("status", "active").not("meta_campaign_id", "is", null)
+        .order("id").range(from, to).abortSignal(signal())),
     ]);
+    const results: Array<{ campaign_id: string; fetched_at: string }> = [];
+    for (let i = 0; i < active.length; i += PAGE_IDS) {
+      const ids = active.slice(i, i + PAGE_IDS).map((campaign) => campaign.id);
+      results.push(...await pages<{ campaign_id: string; fetched_at: string }>((from, to) => db.from("campaign_results")
+        .select("campaign_id, fetched_at").in("campaign_id", ids).gte("fetched_at", since)
+        .order("fetched_at").range(from, to).abortSignal(signal())));
+    }
     // Same rule as `freeImagesOnly` (spend-policy.ts): internal and not exempt means free images.
     const createUsers = [...new Set([
       ...events.filter((event) => event.name === "creative.batch").map((event) => event.user_id),
@@ -90,6 +103,7 @@ async function handleGET(request: Request) {
       events: [...events, ...planRequests],
       aiCalls,
       launches,
+      activeResults: newestResults(active, results),
       freeImageUserIds,
       excludedUserIds: smokeUsers,
       excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
