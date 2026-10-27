@@ -16,7 +16,7 @@ export function metaScrubber() {
     return hashes.get(hash)!;
   };
   const scrub = (text: string) => text
-    .replace(/\+91[\d\s-]{10,14}/g, (phone) => `+91XXXXXX${phone.replace(/\D/g, "").slice(-4)}`)
+    .replace(/\+91[\d\s-]{10,14}/g, (phone) => `+91 99999 9${phone.replace(/\D/g, "").slice(-4)}`)
     .replace(/"whatsapp_phone_number":\s*"\+?(\d+)"/g, (_all, digits: string) => `"whatsapp_phone_number":"+91XXXXXX${digits.slice(-4)}"`)
     .replace(/"(before|after)":\s*"[^"]+"/g, '"$1":"CURSOR"')
     .replace(/(?<![a-f0-9])[a-f0-9]{32}(?![a-f0-9])/g, fakeHash)
