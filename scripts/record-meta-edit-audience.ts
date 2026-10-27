@@ -10,8 +10,10 @@
  *   - running (#765, CEO-approved on #765): the patch change on an ACTIVE ad set under a campaign that stays PAUSED
  *     (Meta reports the ad set CAMPAIGN_PAUSED, so nothing delivers), minimum budget, a one-day campaign cap and
  *     end time as second guards; the tree is DELETED afterwards and the GET proving it is printed.
+ *   - switch (#765 b): the same guards on a click-to-WhatsApp tree: ad set A ACTIVE → PAUSED copy B (copy tape) →
+ *     switch A → B (switch tape) → copy C of B → cancel C (cancel tape). One scrubber per run, so ids join up.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running] [campaignId]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running|switch] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *
@@ -70,13 +72,19 @@ const MIN_CAMPAIGN_CAP_RUPEES = 5_000;
 const PLACEHOLDER_PHONE = "+910000000000";
 let phone: string | null = null;
 
+let shared: ReturnType<typeof metaScrubber> | null = null;
+/** One scrubber per run: the account and the Page get the first fakes, and an id keeps its fake across tapes. */
+function scrubber() {
+  if (shared) return shared;
+  shared = metaScrubber();
+  for (const id of [process.env.META_AD_ACCOUNT_ID, process.env.META_PAGE_ID]) if (id) shared.fakeId(id.replace(/^act_/, ""));
+  return shared;
+}
+
 function save(name: string) {
   let text = JSON.stringify(tape, null, 2);
   if (phone) text = text.split(phone).join(PLACEHOLDER_PHONE).split(phone.slice(1)).join(PLACEHOLDER_PHONE.slice(1));
-  const { scrub, fakeId } = metaScrubber();
-  // The account and the Page get the first fakes, so every tape names them the same way.
-  for (const id of [process.env.META_AD_ACCOUNT_ID, process.env.META_PAGE_ID]) if (id) fakeId(id.replace(/^act_/, ""));
-  text = scrub(text);
+  text = scrubber().scrub(text);
   writeFileSync(join(OUT, `${name}.json`), `${text}\n`);
   console.log(`${name}: ${tape.length} exchanges`);
   tape = [];
@@ -144,14 +152,14 @@ async function main() {
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []], ["running", []]] as const) {
-      if (only ? only !== path : path === "running") continue;
-      const running = path === "running";
-      const whatsapp = path.startsWith("whatsapp");
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []], ["running", []], ["switch", []]] as const) {
+      if (only ? only !== path : path === "running" || path === "switch") continue;
+      const running = path === "running" || path === "switch";
+      const whatsapp = path.startsWith("whatsapp") || path === "switch";
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
       const existing = process.argv[4];
       const launch = existing ? await existingCampaign(existing) : await meta.createLeadCampaign({
-        name: running ? "AdBrain test — #765 recording, do not run" : `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
+        name: path === "switch" ? "AdBrain test — #765 switch recording, do not run" : running ? "AdBrain test — #765 recording, do not run" : `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
         dailyBudgetRupees: running ? MIN_DAILY_RUPEES : 200, leadFormId: forms[0].id, link: "https://adbrain.vanshul.com",
         creatives: [{ imageUrl, headline: "Lower electricity bills", message: "Rooftop solar for Tricity homes.", cta: "Learn More" }],
         ageMin: 25, ageMax: 55, gender: "all", interests: [...interests], location: before.targeting,
@@ -181,6 +189,10 @@ async function main() {
         console.log(`ad set before: ${JSON.stringify(await raw(`${launch.adSetIds[0]}?fields=status,effective_status,end_time`))}`);
         await new Promise(resolve => setTimeout(resolve, 31_000));
       }
+      if (path === "switch") {
+        await recordSwitch(meta, launch.campaignId, launch.adSetIds[0], launch.adIds, changes);
+        continue;
+      }
       tape = [];
       // As the edit service does: the area's exclusions come from the ad set's own current area.
       const areaChanges = path === "area-exclusions" ? { excludedLocation: (await meta.serviceAreaExclusionsFor(before.targeting))! } : null;
@@ -202,11 +214,39 @@ async function main() {
     if (tape.length) save("edit-audience-failed");
     throw error;
   } finally {
-    const remove = process.argv[3] === "running" ? "DELETED" : "ARCHIVED";
+    const remove = process.argv[3] === "running" || process.argv[3] === "switch" ? "DELETED" : "ARCHIVED";
     for (const campaignId of created) await archive(campaignId, remove).catch(error => console.error(`${remove} failed for ${campaignId}: ${error}`));
     tape = [];
     console.log(`${remove.toLowerCase()} ${created.length} test campaign(s)`);
   }
+}
+
+/** #765 (b): copy → switch → copy → cancel on a tree whose campaign stays PAUSED (asserted around every step). */
+async function recordSwitch(meta: NonNullable<ReturnType<typeof metaClientFromEnv>>, campaignId: string, adSetId: string, adIds: string[], changes: Parameters<NonNullable<ReturnType<typeof metaClientFromEnv>>["editAdSetTargeting"]>[1]["changes"]) {
+  tape = [];
+  await assertCampaignPaused(campaignId);
+  await meta.editAdSetTargeting(campaignId, { adSetId, adIds, changes }, { validateOnly: true, copyOnly: true });
+  const copy = await meta.editAdSetTargeting(campaignId, { adSetId, adIds, changes }, { copyOnly: true });
+  save("edit-audience-copy");
+  console.log(`copy: ${JSON.stringify(copy)} source: ${JSON.stringify(await raw(`${adSetId}?fields=status,effective_status`))}`);
+  await assertCampaignPaused(campaignId);
+  await new Promise(resolve => setTimeout(resolve, 31_000));
+
+  tape = [];
+  const switched = await meta.switchAdSet(campaignId, { fromAdSetId: adSetId, toAdSetId: copy.adSetId, toAdIds: copy.adIds });
+  save("edit-audience-switch");
+  await assertCampaignPaused(campaignId);
+  console.log(`switch: ${JSON.stringify(switched)} old: ${JSON.stringify(await raw(`${adSetId}?fields=status,effective_status`))} new: ${JSON.stringify(await raw(`${copy.adSetId}?fields=status,effective_status`))}`);
+  await new Promise(resolve => setTimeout(resolve, 31_000));
+
+  tape = [];
+  const second = await meta.editAdSetTargeting(campaignId, { adSetId: copy.adSetId, adIds: copy.adIds, changes: { age: { min: 35, max: 60 } } }, { copyOnly: true });
+  await meta.deleteAdSetCopy(campaignId, second.adSetId);
+  const gone = await realFetch(`${GRAPH}${second.adSetId}?fields=id,status&access_token=${process.env.META_SYSTEM_USER_TOKEN}`).then(response => response.json());
+  save("edit-audience-cancel");
+  await assertCampaignPaused(campaignId);
+  console.log(`cancel: GET deleted copy → ${JSON.stringify(scrub(gone))}; running ad set: ${JSON.stringify(await raw(`${copy.adSetId}?fields=status,effective_status`))}`);
+  console.log(`campaign insights: ${JSON.stringify(await raw(`${campaignId}/insights?fields=spend,impressions`))}`);
 }
 
 main().catch((error) => {
