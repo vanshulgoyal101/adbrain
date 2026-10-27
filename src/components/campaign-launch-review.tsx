@@ -27,26 +27,18 @@ export function CampaignLaunchReview({
     audience !== "Choose an area";
 
   return (
-    <section aria-labelledby="launch-review-title" className="flex min-w-0 flex-col gap-4 border-y border-slate-200 bg-slate-50 p-4 sm:p-5">
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            "flex h-9 w-9 flex-none items-center justify-center rounded-lg",
-            isReady ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700",
-          )}
-        >
-          <LockKeyhole className="h-4 w-4" />
-        </span>
-        <div>
-          <p id="launch-review-title" className="font-semibold text-slate-950">
-            {isReady ? "Ready for campaign review" : "Review before creation"}
-          </p>
-          <p className="mt-0.5 text-sm text-slate-600">
-            {isReady
-              ? "AdBrain creates this campaign paused. Nothing spends until you activate it. Review these settings; Meta eligibility and audience checks still apply."
-              : "AdBrain creates this campaign paused. Nothing spends until you activate it."}
-          </p>
-        </div>
+    <section aria-labelledby="launch-review-title" className="flex min-w-0 flex-col gap-4">
+      {/* #847 T6: a plain summary, not a tinted box with an icon tile; the words carry the "paused" promise. */}
+      <div>
+        <p id="launch-review-title" className="flex items-center gap-2 font-semibold text-slate-950">
+          <LockKeyhole className={cn("h-4 w-4 flex-none", isReady ? "text-emerald-700" : "text-slate-500")} aria-hidden="true" />
+          {isReady ? "Ready for campaign review" : "Review before creation"}
+        </p>
+        <p className="mt-0.5 text-sm text-slate-600">
+          {isReady
+            ? "AdBrain creates this campaign paused. Nothing spends until you activate it. Review these settings; Meta eligibility and audience checks still apply."
+            : "AdBrain creates this campaign paused. Nothing spends until you activate it."}
+        </p>
       </div>
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
