@@ -2288,7 +2288,8 @@ function BusinessCampaigns({
                         <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
                       </div>
                     )}
-                    {r && outcome === "whatsapp" && (
+                    {/* #847: no chats, enquiries or customers yet means nothing to log; the block appears with the first chat. */}
+                    {r && outcome === "whatsapp" && (r.conversations !== 0 || (r.real_enquiries ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
                         onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
                         onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />
