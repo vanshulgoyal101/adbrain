@@ -379,6 +379,13 @@ describe("Home results row (#764)", () => {
     expect(within(row).getByRole("link", { name: /See campaigns/ })).toHaveAttribute("href", "/campaigns");
   });
 
+  it("#1049: says how fast the owner replies to enquiries, when there's a reply to measure", () => {
+    const { rerender } = render(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={12.4} now={now} />);
+    expect(screen.getByText(/You reply to an enquiry in/)).toHaveTextContent("You reply to an enquiry in 12 min (median, last 30 days).");
+    rerender(<WorkspaceHome {...empty} business={business} campaigns={[chats, forms]} results={results} replyMinutes={null} now={now} />);
+    expect(screen.queryByText(/You reply to an enquiry in/)).not.toBeInTheDocument();
+  });
+
   it("shows no results row before any campaign has results", () => {
     render(<WorkspaceHome {...empty} business={business} campaigns={[chats]} results={{}} now={now} />);
     expect(screen.queryByRole("region", { name: "Results so far" })).not.toBeInTheDocument();
