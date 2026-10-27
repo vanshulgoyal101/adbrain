@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import { Studio } from "@/components/studio";
@@ -117,6 +117,27 @@ describe("Review to campaign (#134)", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(mocks.saveDraft).not.toHaveBeenCalled();
       expect(document.getElementById("campaign-composer")!.hidden).toBe(false);
+    });
+
+    // QA 2 on #1004: several forms and none chosen left the owner on the composer with no hint.
+    it("with several forms, says choosing one opens Review, and choosing it does (no Check tap); the choice is remembered", async () => {
+      forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }, { id: "1732372914636574", name: "Callbacks", status: "ACTIVE" }];
+      open(true);
+      expect(await screen.findByText("Choose the form for these enquiries, and Review opens.")).toBeTruthy();
+      expect(mocks.saveDraft).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "1732372914636574" } });
+      await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
+      expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ creativeIds: [approvedB.id], leadFormId: "1732372914636574" });
+      await waitFor(() => expect(localStorage.getItem(`campaign-lead-form:${business.owner_id}:${business.id}`)).toBe("1732372914636574"));
+      expect(screen.queryByText("Choose the form for these enquiries, and Review opens.")).toBeNull();
+    });
+
+    it("preselects the lead form used last time when the Page still has it, so Review opens by itself", async () => {
+      forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }, { id: "1732372914636574", name: "Callbacks", status: "ACTIVE" }];
+      localStorage.setItem(`campaign-lead-form:${business.owner_id}:${business.id}`, "1732372914636574");
+      open(true);
+      await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
+      expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ leadFormId: "1732372914636574" });
     });
 
     it("never prepares on its own without the flag", async () => {

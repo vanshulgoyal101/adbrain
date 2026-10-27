@@ -100,10 +100,17 @@ describe("core scoreboard (#681)", () => {
   });
 
   it("Review and Brand are reported but judged by walks", () => {
-    const b = board([ev("campaign.review"), ev("campaign.review", "rejected", { attributes: { errorCode: "PREFLIGHT_BLOCKED" } }), ev("business.create")],
-      [call("brand.autofill", "error")]);
+    const b = board([ev("campaign.review"), ev("campaign.review", "rejected", { attributes: { errorCode: "PREFLIGHT_BLOCKED" } }), ev("business.create"),
+      ev("brand.autofill", "failed", { attributes: { errorCode: "http.502" } })]);
     expect(row(b, "Review")).toMatchObject({ now: "2 reviews: 1 passed, 1 rejected (`PREFLIGHT_BLOCKED` ×1)", met: null });
     expect(row(b, "Brand")).toMatchObject({ now: "1 new business; autofill 1 call (1 failed)", met: null });
+  });
+
+  // #1025: first-setup autofill has no business, so no usage row; the route's own event counts it, with its p90.
+  it("Brand counts autofill from the route's event, with how long successful ones took", () => {
+    const runs = [1200, 2800, 3100, 9000].map((ms) => ev("brand.autofill", "success", { duration_ms: ms, business_id: null }));
+    const b = board([ev("business.create"), ...runs, ev("brand.autofill", "failed", { attributes: { errorCode: "http.502" } })], [call("brand.autofill")]);
+    expect(row(b, "Brand")).toMatchObject({ now: "1 new business; autofill 5 calls (1 failed, p90 9.0 s)", met: null });
   });
 
   it("Launch scores settled launches, not the reads that share the create_paused purpose (#615)", () => {

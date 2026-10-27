@@ -144,6 +144,16 @@ function saveCampaignSyncTime(key: string, completedAt: number) {
   try { localStorage.setItem(key, String(completedAt)); } catch { return; }
 }
 
+/** #1004: the lead form this owner last prepared a Review with, preselected while the Page still has it. */
+function readLeadFormMemory(key: string): string {
+  try { return localStorage.getItem(key) ?? ""; } catch { return ""; }
+}
+
+function saveLeadFormMemory(key: string, formId: string | null | undefined) {
+  if (!formId) return;
+  try { localStorage.setItem(key, formId); } catch { return; }
+}
+
 type PrepareReviewState =
   | { status: "checking"; draft: DraftDTO; connection: ConnectionDTO }
   | { status: "ready"; draft: DraftDTO; connection: ConnectionDTO; review: ReviewDTO }
@@ -211,9 +221,10 @@ async function fetchAudiencePlan(input: DraftInput, signal: AbortSignal): Promis
 
 type AudiencePlanInput = Pick<DraftInput, "goal" | "creativeIds" | "targeting" | "destination">;
 
-/** Keep the chosen lead form while the Page still has it; with exactly one form, choose it (#667). */
-function keptLeadForm(current: string, forms: { id: string }[]): string {
+/** Keep the chosen lead form while the Page still has it; else the last one used (#1004); with exactly one form, choose it (#667). */
+function keptLeadForm(current: string, forms: { id: string }[], lastUsed = ""): string {
   if (forms.some(form => form.id === current)) return current;
+  if (lastUsed && forms.some(form => form.id === lastUsed)) return lastUsed;
   return forms.length === 1 ? forms[0].id : "";
 }
 
@@ -293,6 +304,7 @@ function BusinessCampaigns({
   })) as Suggested;
   const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
+  const leadFormMemoryKey = `campaign-lead-form:${business.owner_id}:${business.id}`;
   const [availableForms, setAvailableForms] = useState(leadForms);
   const [formsLoading, setFormsLoading] = useState(false);
   const [formsError, setFormsError] = useState(leadFormError);
@@ -499,7 +511,7 @@ function BusinessCampaigns({
     const forms = await fetchDraftForms(signal);
     if (signal?.aborted) return;
     setAvailableForms(forms);
-    setLeadFormId(current => keptLeadForm(current, forms));
+    setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
   }
 
   useEffect(() => {
@@ -515,14 +527,14 @@ function BusinessCampaigns({
       if (controller.signal.aborted) return;
       formsFreshnessRef.current = { ownerId: business.owner_id, businessId: business.id, retry: formsRetry, fetchedAt: Date.now() };
       setAvailableForms(forms);
-      setLeadFormId(current => keptLeadForm(current, forms));
+      setLeadFormId(current => keptLeadForm(current, forms, readLeadFormMemory(leadFormMemoryKey)));
     }).catch(() => {
       if (!controller.signal.aborted) setFormsError("Page forms are temporarily unavailable.");
     }).finally(() => {
       if (!controller.signal.aborted) setFormsLoading(false);
     });
     return () => controller.abort();
-  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination]);
+  }, [showComposer, connectedForDraft, business.id, business.owner_id, formsRetry, destination, leadFormMemoryKey]);
 
   useEffect(() => {
     if (!showComposer || !connectedForDraft) return;
@@ -969,6 +981,7 @@ function BusinessCampaigns({
         : await client.saveDraft(input, signal);
       signal.throwIfAborted();
       saveRecovery({ draft, request: null, operationId: null });
+      if (reviewAfterSave && input.destination !== "whatsapp") saveLeadFormMemory(leadFormMemoryKey, input.leadFormId);
       setOperation(null);
       operationRef.current = null;
       setRecoveryPending(false);
@@ -995,10 +1008,12 @@ function BusinessCampaigns({
   // #1004: from Create's 'Review this ad', the same prepare as the Review button runs once, after the
   // WhatsApp check has picked the destination and (for a form) a lead form is chosen or its error shown.
   const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
+  const [autoReviewPending, setAutoReviewPending] = useState(Boolean(newCampaign?.review) && !initialSetup);
   const autoReview = useEffectEvent(() => {
     if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
     if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
     autoReviewRef.current = false;
+    setAutoReviewPending(false);
     void prepareManualCampaign();
   });
   useEffect(() => {
@@ -1798,6 +1813,8 @@ function BusinessCampaigns({
                       ))}
                     </select>
                     {placedError?.at === "leadform" && <p id="leadform-error" role="alert" className="text-sm font-medium text-red-800">{placedError.message}</p>}
+                    {/* #1004: from Create, choosing the form is the last step before Review opens. */}
+                    {autoReviewPending && !leadFormId && !formsLoading && availableForms.length > 1 && <p role="status" className="text-sm text-slate-600">Choose the form for these enquiries, and Review opens.</p>}
                   </div>}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
                     {whatsappOptions.length ? <>
