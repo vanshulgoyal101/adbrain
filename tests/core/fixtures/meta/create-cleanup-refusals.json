@@ -1,7 +1,7 @@
 [
   {
     "method": "POST",
-    "path": "act_2398686420592052/adimages",
+    "path": "act_9000000000000001/adimages",
     "status": 400,
     "body": {
       "error": {
@@ -9,7 +9,7 @@
         "type": "OAuthException",
         "code": 100,
         "error_data": {
-          "ad_account_id": 2398686420592052,
+          "ad_account_id": 9000000000000001,
           "file_size": 12
         },
         "error_subcode": 2446496,

@@ -1,7 +1,7 @@
 [
   {
     "method": "POST",
-    "path": "act_2398686420592052/campaigns",
+    "path": "act_9000000000000001/campaigns",
     "form": {
       "name": "AdBrain core fixture 2026-10-21T15:54 (PAUSED test)",
       "objective": "OUTCOME_LEADS",
@@ -16,7 +16,7 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/adimages",
+    "path": "act_9000000000000001/adimages",
     "form": {
       "bytes": "<image bytes>"
     },
@@ -39,7 +39,7 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/adsets",
+    "path": "act_9000000000000001/adsets",
     "form": {
       "name": "AdBrain core fixture 2026-10-21T15:54 (PAUSED test) — Ad set",
       "campaign_id": "120253646427440526",
@@ -49,7 +49,7 @@
       "optimization_goal": "LEAD_GENERATION",
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
-      "promoted_object": "{\"page_id\":\"885223068001054\"}",
+      "promoted_object": "{\"page_id\":\"900000000000002\"}",
       "targeting": "{\"geo_locations\":{\"cities\":[{\"key\":\"2525495\"}],\"location_types\":[\"home\",\"recent\"]},\"age_min\":25,\"age_max\":55,\"targeting_automation\":{\"advantage_audience\":0}}"
     },
     "status": 200,
@@ -59,10 +59,10 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/adcreatives",
+    "path": "act_9000000000000001/adcreatives",
     "form": {
       "name": "Diwali Renewal, Starting With Your Spine",
-      "object_story_spec": "{\"page_id\":\"885223068001054\",\"link_data\":{\"image_hash\":\"7839ac3ef1c222d741cc3ca2ea664c20\",\"message\":\"A $49 new-patient exam with a digital posture scan. Same-day and Saturday appointments.\",\"name\":\"Diwali Renewal, Starting With Your Spine\",\"link\":\"https://adbrain.vanshul.com\",\"call_to_action\":{\"type\":\"LEARN_MORE\",\"value\":{\"lead_gen_form_id\":\"2531491190682703\"}}}}"
+      "object_story_spec": "{\"page_id\":\"900000000000002\",\"link_data\":{\"image_hash\":\"7839ac3ef1c222d741cc3ca2ea664c20\",\"message\":\"A $49 new-patient exam with a digital posture scan. Same-day and Saturday appointments.\",\"name\":\"Diwali Renewal, Starting With Your Spine\",\"link\":\"https://adbrain.vanshul.com\",\"call_to_action\":{\"type\":\"LEARN_MORE\",\"value\":{\"lead_gen_form_id\":\"2531491190682703\"}}}}"
     },
     "status": 200,
     "body": {
@@ -71,7 +71,7 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/ads",
+    "path": "act_9000000000000001/ads",
     "form": {
       "name": "Diwali Renewal, Starting With Your Spine",
       "adset_id": "120253646428630526",

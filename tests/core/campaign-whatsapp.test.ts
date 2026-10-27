@@ -11,7 +11,7 @@ vi.mock("@/lib/security/ssrf", () => ({
 import { MetaClient } from "@/lib/meta/client";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const exchange = (name: string) => recorded.tape.find((entry) => entry.name === name)!;
 const linkData = (name: string) => JSON.parse(exchange(name).form.creative!).object_story_spec.link_data;
 const approved = {

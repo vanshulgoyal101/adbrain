@@ -22,7 +22,7 @@ import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 type Sent = { method: string; path: string; form: Record<string, string> };
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 // metaScrubber() fakes (#1040) for the account and Page, rebound to these creds.
 const runningTape = JSON.parse(JSON.stringify(scrubbedRunningTape).replaceAll("9000000000000001", creds.adAccountId.slice(4)).replaceAll("900000000000002", creds.pageId)) as unknown[];
 const mohali = { cities: [{ key: "1029599", name: "Mohali", radius: 25, distance_unit: "kilometer" }] };

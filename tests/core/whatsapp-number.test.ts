@@ -12,7 +12,7 @@ import { readWhatsAppStatus } from "@/lib/meta/whatsapp-status";
 const access = vi.hoisted(() => ({ requireOwnedBusiness: vi.fn(), getConnectionStatus: vi.fn(), withMetaConnection: vi.fn() }));
 vi.mock("@/lib/meta/connection-access", () => access);
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 
 function replay(tape: { path: string; status: number; body: unknown }[] = recorded.tape) {
   const calls: string[] = [];

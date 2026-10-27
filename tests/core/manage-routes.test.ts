@@ -115,7 +115,7 @@ const STRANGER = "00000000-0000-4000-8000-000000000002";
 const SEAL_ID = "00000000-0000-4000-8000-000000000003";
 const STORED = "00000000-0000-4000-8000-000000000004";
 const ACCESS = "oauth-connection-access";
-const ACCOUNT = "act_2398686420592052", PAGE = "885223068001054", GENERATION = 3;
+const ACCOUNT = "act_9000000000000001", PAGE = "900000000000002", GENERATION = 3;
 const SYNCED = "120253646427440526", CAPPED = "120253655093920526", LIVE = "120253678786150526";
 const TREE = { campaignId: "120253654207670526", adSetIds: ["120253654208240526"], adIds: ["120253654209040526"] };
 const REVIEWED = { campaignId: SYNCED, adSetIds: ["120253646428630526"], adIds: ["120253646430200526"] };
@@ -136,7 +136,7 @@ const tapes = {
     const campaigns = [
       recorded.data.find(campaign => campaign.id === SYNCED)!,
       { ...recorded.data.find(campaign => campaign.id === "120253256980050526")!, account_id: "1000000000000001" },
-      { id: CAPPED, name: "#157 capped run", status: "PAUSED", objective: "OUTCOME_LEADS", account_id: "2398686420592052" },
+      { id: CAPPED, name: "#157 capped run", status: "PAUSED", objective: "OUTCOME_LEADS", account_id: "9000000000000001" },
     ].filter(campaign => campaignIds.includes(String(campaign.id)));
     return [
       { ...listing, body: { ...recorded, data: campaigns } }, adSets,

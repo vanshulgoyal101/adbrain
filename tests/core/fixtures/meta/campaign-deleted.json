@@ -7,7 +7,7 @@
       "status": 200,
       "body": {
         "id": "120253706331870526",
-        "account_id": "2398686420592052"
+        "account_id": "9000000000000001"
       }
     },
     {
@@ -25,7 +25,7 @@
       "body": {
         "id": "120253706331870526",
         "name": "Solaride | Free Survey | Tricity | WhatsApp EN | Oct 26",
-        "account_id": "2398686420592052",
+        "account_id": "9000000000000001",
         "status": "DELETED",
         "configured_status": "DELETED",
         "effective_status": "DELETED"

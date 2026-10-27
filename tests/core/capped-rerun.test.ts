@@ -9,7 +9,7 @@ import { MetaClient } from "@/lib/meta/client";
 // lifetime 60000), after the owner paused the capped run.
 type Exchange = { method: string; path: string; status: number; body: { data: Array<Record<string, unknown>> } };
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const campaignId = "120253646427440526";
 const adSetIds = ["120253646428630526"];
 const adIds = ["120253646430200526"];

@@ -25,8 +25,8 @@ function review(website: string | null | undefined, destination: "instant_form" 
     draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
     draftVersion: 2,
     connection: { generation: 1, canCreatePaused: true, selected: {
-      metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101",
-      pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
+      metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101",
+      pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
     } },
     creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: "New-Patient Exam with Posture Scan", storyReady: extra.storyReady }],
     costPerResultRupees: extra.costPerResultRupees,
@@ -96,8 +96,8 @@ describe("core: Review checks the saved ad wording (#739)", () => {
       draftId: "90d1d2bb-466c-4889-9af2-edb533e82531",
       draftVersion: 2,
       connection: { generation: 1, canCreatePaused: true, selected: {
-        metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101",
-        pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
+        metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101",
+        pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata",
       } },
       creatives: [{ id: creativeId, businessId, approved: true, imageUrl: "https://example.com/ad.png", ...savedAd, ...copy }],
       form: { id: "1732372914636573", businessId, active: true },
