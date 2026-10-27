@@ -223,11 +223,15 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    done, a named credential or a warranty; `proof.ts`); and a last line asking for one
    Brand offer in its own words, which is the offer the WhatsApp prefill names
    (`prefillOffer`). None is a validator rule, so none adds a repair (#713); the eval
-   reports each.
+   reports each. Each angle gets its own `lead` (a different Brand place, and an opening:
+   service and place, the problem as a question, the offer, or the proof) because parallel
+   concepts can't see each other: on Oct 27 all three opened "Rooftop solar for your home in
+   Chandigarh, Mohali & Panchkula" and two were lost. A `repeated-opening` or
+   `repeated-headline` repair now quotes the words to avoid.
 4. Generate an image from the validated concept and up to three reference images.
    When the concept's visual direction has no person in it, the image prompt adds one
    (a person from the business at work, or a customer getting the service; #418 rule 4),
-   with no repair.
+   with no repair. An owner's own background request (`background.ts`) is left as typed.
    When the business has uploaded product photos (Brand assets), the first ad
    uses the newest one as its image instead (#195): no image call or image cost,
    its concept is told the image is the owner's unseen photo, and the receipt
