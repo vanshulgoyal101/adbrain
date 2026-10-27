@@ -1900,9 +1900,11 @@ function BusinessCampaigns({
                     Total: {formatPerDay(totalDailyBudget)}{abTest ? " across 2 ad sets" : ""}
                   </span>
                 </div>
-                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). */}
+                {/* #761: what to expect, from AdBrain's own runs (#588 ledger). #1038: no lead-form figure until AdBrain has run lead forms. */}
                 <p className="-mt-2 text-xs text-slate-500">
-                  What to expect: in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180. Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
+                  What to expect: {destination === "whatsapp"
+                    ? <>in AdBrain&apos;s runs so far, a WhatsApp chat has cost about ₹150–180.</>
+                    : <>AdBrain hasn&apos;t run enough instant-form campaigns yet to quote a cost per enquiry.</>} Meta reviews new ads first, usually within 24 hours, and nothing spends until you activate.
                 </p>
 
                 {destination === "instant_form" && formsLoading && <p role="status" className="text-sm text-slate-500">Loading lead forms...</p>}
