@@ -448,7 +448,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     failSave = false;
     fireEvent.click(screen.getByRole("button", { name: "Save follow-up" }));
     expect(await screen.findByText("Follow-up saved.")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: /^Follow up Asha Verma,/ })).toHaveTextContent("booked"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Follow up Asha Verma,/ })).toHaveTextContent("Booked"));
     view.unmount();
     render(<LeadInbox businessName="Fixture" initialLeads={[stored]} metaReady />);
     fireEvent.click(screen.getByRole("button", { name: /^Follow up Asha Verma,/ }));
@@ -547,7 +547,7 @@ describe("<LeadInbox> saved enquiry workflow", () => {
     expect(oldSignal?.aborted).toBe(true);
     await act(async () => resolveOld({ ok: true, json: async () => ({ leads: [lead()], total: 1, nextCursor: null }) }));
     expect(screen.getByText("Late arrival")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Follow up Late arrival,/ })).toHaveTextContent("contacted");
+    expect(screen.getByRole("button", { name: /^Follow up Late arrival,/ })).toHaveTextContent("Contacted");
     expect(screen.queryByText("Asha Verma")).toBeNull();
   });
 
@@ -615,5 +615,34 @@ describe("<LeadInbox> on a phone (#376)", () => {
     const row = screen.getAllByRole("row").at(-1)!;
     const blanks = row.querySelectorAll("td > span:not([aria-hidden])");
     expect([...blanks].map((el) => el.textContent)).toEqual(["—", "—"]);
+  });
+
+  // #798: one tap marks an enquiry "Became a customer"; Undo puts its old status back.
+  it("marks an enquiry as a customer in one tap and undoes it", async () => {
+    const asha = lead({ workflow_status: "contacted", follow_up_note: "Called" });
+    const sent: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
+      if (options?.method === "PATCH") {
+        const body = JSON.parse(String(options.body)) as { workflow_status: string };
+        sent.push({ url, body });
+        return Response.json({ lead: { ...asha, workflow_status: body.workflow_status } });
+      }
+      return Response.json({ leads: [asha], total: 1, nextCursor: null });
+    }));
+    render(<LeadInbox businessName="Fixture" initialLeads={[asha]} metaReady={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Asha Verma became a customer" }));
+    expect(await screen.findByText("Asha Verma became a customer.")).toBeInTheDocument();
+    expect(sent).toEqual([{ url: "/api/leads/l1", body: { workflow_status: "customer" } }]);
+    expect(screen.getByRole("button", { name: /^Follow up Asha Verma, status Customer$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Asha Verma became a customer" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Asha Verma is back to contacted.")).toBeInTheDocument();
+    expect(sent.at(-1)).toEqual({ url: "/api/leads/l1", body: { workflow_status: "contacted" } });
+    expect(screen.getByRole("button", { name: /^Follow up Asha Verma, status Contacted$/ })).toBeInTheDocument();
+  });
+
+  it("offers no customer button for Meta's test lead", () => {
+    render(<LeadInbox businessName="Fixture" initialLeads={[lead({ full_name: "<test lead: dummy data for full_name>" })]} metaReady={false} />);
+    expect(screen.queryByRole("button", { name: /became a customer/ })).not.toBeInTheDocument();
   });
 });
