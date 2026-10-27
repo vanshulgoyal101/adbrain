@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   saveCampaign: vi.fn(),
   enforceCampaignSpendCap: vi.fn(),
   createCappedAdSet: vi.fn(),
+  adSources: vi.fn(async (adIds: string[]) => Object.fromEntries(adIds.map((adId) => [adId, adId]))),
   activateCappedTree: vi.fn(),
   recheckMetaConnection: vi.fn(),
   deleteCampaign: vi.fn(),
@@ -153,7 +154,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readAccountFunding: mocks.readAccountFunding, readLiveCappedRuns: mocks.readLiveCappedRuns }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, adSources: mocks.adSources, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readAccountFunding: mocks.readAccountFunding, readLiveCappedRuns: mocks.readLiveCappedRuns }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -519,6 +520,25 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
     mocks.readCampaignDelivery.mockResolvedValue(pausedDelivery);
     mocks.createCappedAdSet.mockResolvedValue(capped);
     mocks.activateCappedTree.mockResolvedValue({ campaign: { id: "meta-campaign-1", status: "ACTIVE", effectiveStatus: "ACTIVE" }, adSet: { ...capped, id: capped.adSetId, status: "ACTIVE", effectiveStatus: "IN_PROCESS", budgetRemainingPaise: 150_000 }, ads: [] });
+  });
+
+  // #1055 (Reviewer on #1048): an ad the owner paused from the card stays paused when the campaign is turned back on.
+  it("leaves an ad paused from the card out of the new capped copy, by its original", async () => {
+    mocks.storedAdIds = ["ad-1", "ad-2"];
+    mocks.storedCap = { adPauses: [{ adId: "copy-2", action: "paused", at: "t1" }, { adId: "ad-1", action: "paused", at: "t2" }, { adId: "ad-1", action: "resumed", at: "t3" }] };
+    mocks.adSources.mockResolvedValueOnce({ "copy-2": "ad-2" });
+    expect((await activate()).status).toBe(200);
+    expect(mocks.adSources).toHaveBeenCalledWith(["copy-2"]);
+    expect(mocks.createCappedAdSet).toHaveBeenCalledWith("meta-campaign-1", expect.objectContaining({ sourceAdIds: ["ad-1"] }));
+  });
+
+  it("refuses to turn on a campaign whose every ad is paused from the card, before creating or reserving anything", async () => {
+    mocks.storedCap = { adPauses: [{ adId: "ad-1", action: "paused", at: "t1" }] };
+    const response = await activate();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/Every ad in this campaign is paused from its card/);
+    expect(mocks.createCappedAdSet).not.toHaveBeenCalled();
+    expect(mocks.activateCappedTree).not.toHaveBeenCalled();
   });
 
   it("caps ₹500 × 3 days on Meta, records the capped children before anything turns on, and never uses the campaign spend cap", async () => {

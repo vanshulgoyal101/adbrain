@@ -398,6 +398,8 @@ function BusinessCampaigns({
   const [spendLimitRequired, setSpendLimitRequired] = useState(true);
   const [capDays, setCapDays] = useState(3);
   const [activationLearning, setActivationLearning] = useState<{ costPerResultRupees: number | null; pausedAt: string | null; now: number } | null>(null);
+  // #1055: ads the owner paused from the campaign card; they stay paused when it's turned back on.
+  const [keptPaused, setKeptPaused] = useState(0);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
   const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
@@ -1242,7 +1244,7 @@ function BusinessCampaigns({
   async function openActivationReview(campaign: Campaign, connection: ConnectionDTO, refreshing = false) {
     try {
       const deliveryResponse = await fetch(`/api/campaigns/${campaign.id}`, { cache: "no-store" });
-      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; spendLimitRequired?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; error?: string };
+      const review = await deliveryResponse.json() as { delivery?: unknown; funding?: unknown; spendLimitRequired?: unknown; learning?: { costPerResultRupees?: unknown; pausedAt?: unknown }; keptPaused?: unknown; error?: string };
       if (!deliveryResponse.ok) throw new Error(review.error ?? "Campaign delivery review is unavailable.");
       const delivery = campaignDeliverySnapshotSchema.parse(review.delivery);
       const funding = review.funding === undefined ? null : accountFundingSchema.parse(review.funding);
@@ -1258,6 +1260,7 @@ function BusinessCampaigns({
       setActivationDelivery(delivery);
       setActivationFunding(funding);
       setSpendLimitRequired(review.spendLimitRequired !== false);
+      setKeptPaused(typeof review.keptPaused === "number" && review.keptPaused > 0 ? Math.floor(review.keptPaused) : 0);
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
@@ -1421,6 +1424,7 @@ function BusinessCampaigns({
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
+                {keptPaused > 0 && <p className="mt-1">{keptPaused === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
               </div>
               : activationFunding
                 ? <p className="mt-2">This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads listed above in Meta, then refresh this review.</p>
