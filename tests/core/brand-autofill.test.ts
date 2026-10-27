@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import recorded from "./fixtures/brand/autofill-solaride.json";
+import withAreas from "./fixtures/brand/autofill-solaride-areas.json";
+import noAreas from "./fixtures/brand/autofill-no-areas.json";
 import { openAIReply, requestBody, requestUrl } from "./replay";
 
 // autofill-solaride.json: Solaride's real home page (solaride.in) and the real extraction reply
@@ -10,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   fetchPage: vi.fn(),
   persist: vi.fn(),
   owned: new Set<string>(),
+  metaClient: null as null | { resolveGeoTargeting: (names: string[]) => Promise<{ unresolved: string[] }> },
 }));
+vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: async () => mocks.metaClient }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: { id: "owner-1" } } }) },
@@ -47,6 +51,7 @@ beforeEach(() => {
   mocks.fetchPage.mockReset().mockResolvedValue(recorded.page);
   mocks.persist.mockReset().mockResolvedValue(true);
   mocks.owned = new Set([BUSINESS]);
+  mocks.metaClient = null;
 });
 
 afterEach(() => {
@@ -140,5 +145,38 @@ describe("core: Brand autofill reads a real site into the Brand (#650)", () => {
       businessId: null, route: "brand.autofill", provider: "groq", status: "success", cacheHit: true,
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     })]);
+  });
+});
+
+// #1037: the same pages recorded with the prompt that asks for service areas (2026-10-27): Solaride's
+// home page names Mohali and Hisar (and "North India"); example.com names no place.
+describe("core: Brand autofill proposes service areas (#1037)", () => {
+  const replay = (fixture: typeof withAreas) => {
+    mocks.fetchPage.mockResolvedValue(fixture.page);
+    return provider(() => openAIReply(fixture.reply.content, fixture.reply.model, { prompt: fixture.reply.usage!.promptTokens, completion: fixture.reply.usage!.completionTokens }));
+  };
+
+  it("proposes the places the page names, never a whole country or a compass region", async () => {
+    expect(JSON.parse(withAreas.reply.content.replace(/^[^{]*/, "").replace(/[^}]*$/, "")).locations).toEqual(["North India", "Mohali", "Hisar"]);
+    const llm = replay(withAreas);
+    const { status, body } = await autofill({ url: "solaride.in" });
+    expect(status).toBe(200);
+    expect(requestBody(llm.mock.calls[0][1])).toContain("areas we serve");
+    expect(body.extraction.locations).toEqual(["Mohali", "Hisar"]);
+  });
+
+  it("proposes none when the page names no place", async () => {
+    replay(noAreas as typeof withAreas);
+    const { status, body } = await autofill({ url: "example.com" });
+    expect(status).toBe(200);
+    expect(body.extraction).not.toHaveProperty("locations");
+  });
+
+  it("with a Meta connection, drops a place Meta's resolver can't find; without one, keeps the page's names", async () => {
+    const resolve = vi.fn(async () => ({ unresolved: ["Hisar"] }));
+    mocks.metaClient = { resolveGeoTargeting: resolve };
+    replay(withAreas);
+    expect((await autofill({ url: "solaride.in", businessId: BUSINESS })).body.extraction.locations).toEqual(["Mohali"]);
+    expect(resolve).toHaveBeenCalledWith(["Mohali", "Hisar"]);
   });
 });

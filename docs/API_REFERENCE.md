@@ -305,7 +305,9 @@ Supabase Auth client APIs rather than an invented `/api/login` endpoint.
 policy and redirect/DNS checks apply. Returns `{extraction}` with suggested brand
 fields; the caller must review and save separately. Blocked URL: 400; fetch/model
 failure: 502; no readable text: 422. Extraction is a model result, not a factual
-verification. `extraction.phone` comes only from the page's first `tel:` link in
+verification. `extraction.locations` (#1037): up to 5 service areas the page itself names (never a
+country or a compass region like "North India"); with a Meta connection, only ones Meta's location
+resolver can place. `extraction.phone` comes only from the page's first `tel:` link in
 international `+` format (never from the model). Website fetch deadline is 10 seconds; route duration setting is 30.
 Every provider attempt (and a response-cache hit, as a zero-token row) is logged as usage with
 route `brand.autofill` on `businessId` when the owner's session can read that business; on
