@@ -1,4 +1,5 @@
-import { currentRequestId, observeRoute } from "@/lib/observability/logger";
+import { currentRequestId, observeRoute, recordProductEvent } from "@/lib/observability/logger";
+import { observeIdentity } from "@/lib/observability/context";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { BRAND_EXTRACTION, extractPhone, extractWebsiteText } from "@/lib/brand/autofill";
@@ -16,7 +17,19 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-export const POST = observeRoute("/api/brand/autofill", "POST", handlePOST);
+export const POST = observeRoute("/api/brand/autofill", "POST", async (req: Request) => {
+  const started = Date.now();
+  const response = await handlePOST(req);
+  // #1025: one event per autofill the owner waited for (not refused input), with how long it took,
+  // for the scoreboard's Brand row. First setup has no business yet, so usage rows can't count it.
+  if (![400, 401, 429].includes(response.status)) {
+    recordProductEvent({
+      kind: "workflow", name: "brand.autofill", outcome: response.ok ? "success" : "failed", durationMs: Date.now() - started,
+      ...(response.ok ? {} : { attributes: { errorCode: `http.${response.status}` } }),
+    });
+  }
+  return response;
+});
 
 async function handlePOST(req: Request) {
   const supabase = await createClient();
@@ -26,6 +39,7 @@ async function handlePOST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  observeIdentity(user.id);
 
   const limited = await rateLimitResponse(`autofill:${user.id}`, {
     limit: 15,
