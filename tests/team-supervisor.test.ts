@@ -110,13 +110,14 @@ describe("team-supervisor (#573 A1)", () => {
 
 describe("scheduled-jobs dispatch (#692)", () => {
   const now = Date.parse("2026-10-26T12:00:00Z");
-  it("dispatches when GitHub's schedule has lapsed over 14 min, or there is no run yet", () => {
+  it("dispatches when GitHub's schedule has lapsed over 9 min, or there is no run yet", () => {
     expect(scheduledJobsDue({ createdAt: "2026-10-26T07:01:50Z", status: "completed" }, now)).toBe(true);
     expect(scheduledJobsDue({ createdAt: "2026-10-26T11:45:00Z", status: "completed" }, now)).toBe(true);
     expect(scheduledJobsDue(undefined, now)).toBe(true);
   });
   it("waits while a recent run exists or one is queued or running", () => {
-    expect(scheduledJobsDue({ createdAt: "2026-10-26T11:50:00Z", status: "completed" }, now)).toBe(false);
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T11:52:00Z", status: "completed" }, now)).toBe(false);
+    expect(scheduledJobsDue({ createdAt: "2026-10-26T11:50:00Z", status: "completed" }, now)).toBe(true);
     expect(scheduledJobsDue({ createdAt: "2026-10-26T07:00:00Z", status: "in_progress" }, now)).toBe(false);
     expect(scheduledJobsDue({ createdAt: "2026-10-26T07:00:00Z", status: "queued" }, now)).toBe(false);
   });
