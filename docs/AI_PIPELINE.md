@@ -319,7 +319,10 @@ and redirect handling; inline data URIs are base64 raster-only.
 The design spec contains brand lockup, headline/subhead, up to four benefits,
 the Brand phone (drawn large and bold with a call icon), a small contact line
 (website and first service area), CTA, colors, font, and angle-specific
-top/center/bottom placement.
+top/center/bottom placement. A subhead that states an offer (a ₹ price, "free …",
+"% off", a flat discount; `isOfferLine` in [ad-composite](../src/lib/creative/ad-composite.tsx))
+is drawn as a bold strip in the brand colour, as long-running local ads do (#967);
+any other subhead stays a quiet grey line. The editor preview uses the same composite.
 The [renderer](../src/lib/creative/render.tsx) receives validated inline media.
 It draws all text in Inter 400/600/700/800 ([fonts](../src/lib/creative/fonts/),
 OFL), so headlines are really bold; the brand's sans/serif/mono choice falls
