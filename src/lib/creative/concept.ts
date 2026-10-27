@@ -2,6 +2,7 @@ import { affirmedInFact, negatedTerm } from "./claim-support";
 import { z } from "zod";
 import type { ChatMessage } from "@/lib/llm";
 import {
+  AD_ANGLES,
   META_CTAS,
   type AdAngle,
   type BrandContext,
@@ -9,7 +10,7 @@ import {
 import { formatDimensions, type AdFormat } from "@/lib/creative/design";
 import { bannedClaimsForVertical, capitalWords, scanAdCopy } from "@/lib/creative/slopScan";
 import { policyFindings } from "@/lib/creative/policy-rules";
-import { emptyScene, personSubjectLine } from "@/lib/creative/visual-rules";
+import { emptyScene } from "@/lib/creative/visual-rules";
 import { spelledAmountIndex, spelledCurrency } from "./currency";
 
 // v4: #418 rules 1, 4, 5 and 7 (what + where first line, a person, a proof, the ask = the WhatsApp prefill).
@@ -87,6 +88,22 @@ export interface ConceptInput {
   sourceFacts?: string[];
 }
 
+// #418 rule 1 + #713: parallel concepts can't see each other, and "Rooftop solar for your home in
+// Chandigarh, Mohali & Panchkula" opened all three (Oct 27), so two were lost to repeated-opening.
+// Each angle gets its own place and its own way in.
+const OPENINGS: Record<string, string> = {
+  value: "with the service and the place",
+  problem: "with the customer's problem, as a short question",
+  offer: "with the offer",
+  trust: "with the proof",
+};
+
+function conceptLead(input: ConceptInput): { place: string | null; opening: string } {
+  const index = Math.max(0, AD_ANGLES.findIndex((angle) => angle.id === input.angle.id));
+  const places = (input.brand.locations ?? []).map((place) => place.trim()).filter(Boolean);
+  return { place: places.length ? places[index % places.length] : null, opening: OPENINGS[input.angle.id] ?? OPENINGS.value };
+}
+
 export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
   const format = input.format ?? "portrait";
   return [
@@ -99,17 +116,17 @@ Choose one relevant benefit and one proof from the Brand facts when they have on
 in business, jobs done), a named credential or a warranty length, cited in sourceQuotes. A bare
 "trusted" or "experienced" is not proof. Do not repeat the full credentials, service-area list and
 savings claim in every ad. Avoid generic slogan triplets, forced metaphors, and references to
-incidental objects in the picture. End with a plain next step: when the Brand has an offer, the last
-line asks for one offer in the Brand's own words (for example "Message us to book your free site
-survey"), because the WhatsApp message a customer sends repeats those words.
+incidental objects in the picture. End with a plain next step: when the first line names an offer,
+the last line asks for that offer in the Brand's own words (for example "Message us to book your free
+site survey"), because the WhatsApp message a customer sends repeats those words.
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
 Meta shows only about the first 125 characters of primary_text on mobile before "See more". The
-first line says what and where in at most 60 characters: the service and one place from the Brand's
-locations (one place, not the list), with the supplied offer when the brief is about one. It must
-never pass 125 characters.
+first line says what and where in at most 60 characters: the service and lead.place (one place,
+never the list), with one supplied offer when the Brand has one. Start it the way lead.opening says,
+so the ads of one batch, written at the same time, open differently. It must never pass 125 characters.
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
 Use only supplied facts for commercial claims. Do not invent prices, offers, reviews, deadlines,
 credentials, outcomes or product features. An angle is a suggestion, not evidence: if no offer or
@@ -148,6 +165,7 @@ matter, but never override factual constraints. Use the requested language for a
         language:
           input.language || input.brand.languages?.join(" and ") || "English",
         angle: { name: input.angle.name, intent: input.angle.description },
+        lead: conceptLead(input),
         placement: { format, ...formatDimensions(format) },
         referenceImageCount: input.referenceImages?.slice(0, 3).length ?? 0,
         imageSource: input.ownerPhoto ? "owner_photo" : "generated",
@@ -471,10 +489,11 @@ export function validateConcept(
   ).map((finding) => `${finding.rule}: ${finding.detail}`);
   for (const previous of input.recentCopy ?? []) {
     if (normalizeCopy(concept.headline) === normalizeCopy(previous.headline)) {
-      issues.push("repeated-headline: write a different headline from recent ads");
+      issues.push(`repeated-headline: "${previous.headline.slice(0, 60)}" is a recent ad's headline; write a different one`);
     }
     if (opening(concept.primary_text) === opening(previous.primary_text)) {
-      issues.push("repeated-opening: write a different primary-text hook from recent ads");
+      // #713: quoting the opening lets the one repair avoid it; "write a different hook" alone repeated it (Oct 27).
+      issues.push(`repeated-opening: a recent ad opens "${previous.primary_text.split(/\s+/).slice(0, 8).join(" ")}"; start primary_text with different words`);
     }
   }
   issues.push(...scanAdCopy(concept.description, {
@@ -578,7 +597,6 @@ export function conceptImagePrompt(
   return [
     `Create the visual for ${input.brand.name}. Medium: ${concept.visual.medium}.`,
     concept.visual.direction,
-    personSubjectLine(concept.visual.direction) ?? "",
     `Brand context: ${JSON.stringify(input.brand)}`,
     input.advisoryPreferences ? `Style advisory only (not claims or requirements; current visual direction and Brand facts win): ${input.advisoryPreferences}` : "",
     `Composition: ${dims.width}:${dims.height}; keep the ${concept.visual.textPlacement} area quiet for separately rendered copy.`,

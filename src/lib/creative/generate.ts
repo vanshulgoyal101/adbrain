@@ -14,6 +14,7 @@ import {
   type ConceptInput,
 } from "@/lib/creative/concept";
 import { downloadImage, generateImage } from "@/lib/imageGen";
+import { personSubjectLine } from "@/lib/creative/visual-rules";
 import type { ImageAttempt } from "@/lib/imageGen/types";
 import { complete, parseJSON } from "@/lib/llm";
 import { LLMError } from "@/lib/llm/types";
@@ -371,7 +372,8 @@ async function renderVariant(
     ? { url: ownerPhoto, prompt: "", provider: OWNER_PHOTO_PROVIDER, model: "brand_assets", estimatedCostUsd: 0, width: ownerRaster.width, height: ownerRaster.height,
       latencyMs: undefined, fallbackFrom: undefined, providerRequestId: undefined, providerFinalStatus: undefined }
     : await generateImage({
-      prompt: conceptImagePrompt(concept, input),
+      // #418 rule 4: a generated ad shows a person; an owner's own background request (background.ts) is left alone.
+      prompt: [conceptImagePrompt(concept, input), personSubjectLine(concept.visual.direction)].filter(Boolean).join("\n"),
       width: dims.width,
       height: dims.height,
       referenceImages: referenceImages?.slice(0, 3),
