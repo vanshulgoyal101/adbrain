@@ -105,6 +105,16 @@ describe("creative concept contract", () => {
     expect(messages[0].content).toContain("not visible to you");
   });
 
+  it("asks for a specific Brand proof when one exists", () => {
+    const messages = buildConceptMessages(input);
+    expect(messages[0].content).toContain(
+      'When the Brand facts include proof, include one specific proof in the ad: years in business, jobs done,',
+    );
+    expect(messages[0].content).toContain(
+      'a named credential or a warranty, in the Brand\'s own words. Never just say "trusted".',
+    );
+  });
+
   it("uses declared preferences as advisory concept and image style, never claim evidence", () => {
     const withMemory = { ...input, advisoryPreferences: "PAST DECLARED PREFERENCES: tone: punchy; free installation" };
     const messages = buildConceptMessages(withMemory);
