@@ -220,10 +220,11 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    The prompt (`creative-concept-v4`) also asks for #418 rules 1, 4, 5 and 7: a first line
    of at most 60 characters naming the service and one Brand place; a person giving or
    getting the service, not an empty product shot; one proof from the Brand (years, jobs
-   done, a named credential or a warranty; `proof.ts`); and a last line asking for one
-   Brand offer in its own words, which is the offer the WhatsApp prefill names
-   (`prefillOffer`). None is a validator rule, so none adds a repair (#713); the eval
-   reports each. Each angle gets its own `lead` (a different Brand place, and an opening:
+   done, a named credential or a warranty, as `proof-line.ts` reads them); and a last line
+   that quotes `lead.ask` in “ ”, the Brand's first free offer (`batchAsk`), the same in
+   every ad, so the WhatsApp pre-typed message becomes those words (`quotedAsk`, #1027).
+   None is a validator rule, so none adds a repair (#713); the eval reports each. Each
+   angle also gets its own `lead.place` and `lead.opening` (a different Brand place, and:
    service and place, the problem as a question, the offer, or the proof) because parallel
    concepts can't see each other: on Oct 27 all three opened "Rooftop solar for your home in
    Chandigarh, Mohali & Panchkula" and two were lost. A `repeated-opening` or

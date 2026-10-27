@@ -98,10 +98,27 @@ const OPENINGS: Record<string, string> = {
   trust: "with the proof",
 };
 
-function conceptLead(input: ConceptInput): { place: string | null; opening: string } {
+/**
+ * #418 rule 7: the words every ad of a batch quotes as its ask, so the WhatsApp pre-typed message (#1027,
+ * `quotedAsk`) is the same: the Brand's first free offer, else its first numbered one, else its first.
+ * "Diwali offer: 10% off …" asks for "10% off …", as the WhatsApp greeting names it.
+ */
+export function batchAsk(offers: string[] | undefined): string | null {
+  const phrases = (offers ?? []).map((offer) => {
+    const trimmed = offer.trim().replace(/:+$/, "").trim();
+    return ((trimmed.split(":").pop() ?? "").trim() || trimmed).slice(0, 60);
+  }).filter(Boolean);
+  return phrases.find((phrase) => /^free\b/i.test(phrase)) ?? phrases.find((phrase) => /\d/.test(phrase)) ?? phrases[0] ?? null;
+}
+
+function conceptLead(input: ConceptInput): { place: string | null; opening: string; ask: string | null } {
   const index = Math.max(0, AD_ANGLES.findIndex((angle) => angle.id === input.angle.id));
   const places = (input.brand.locations ?? []).map((place) => place.trim()).filter(Boolean);
-  return { place: places.length ? places[index % places.length] : null, opening: OPENINGS[input.angle.id] ?? OPENINGS.value };
+  return {
+    place: places.length ? places[index % places.length] : null,
+    opening: OPENINGS[input.angle.id] ?? OPENINGS.value,
+    ask: batchAsk(input.brand.offers),
+  };
 }
 
 export function buildConceptMessages(input: ConceptInput): ChatMessage[] {
@@ -116,16 +133,17 @@ Choose one relevant benefit and one proof from the Brand facts when they have on
 in business, jobs done), a named credential or a warranty length, cited in sourceQuotes. A bare
 "trusted" or "experienced" is not proof. Do not repeat the full credentials, service-area list and
 savings claim in every ad. Avoid generic slogan triplets, forced metaphors, and references to
-incidental objects in the picture. End with a plain next step: when the first line names an offer,
-the last line asks for that offer in the Brand's own words (for example "Message us to book your free
-site survey"), because the WhatsApp message a customer sends repeats those words.
+incidental objects in the picture. End with a plain next step. When lead.ask is given, the last line
+tells people exactly what to send by quoting it word for word in “ ” (for example: WhatsApp “Free site
+survey” to book); every ad of the batch quotes the same words, which become the customer's WhatsApp
+message.
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
 next step. It is separate from on-image supportingText and must not merely repeat the headline.
 Meta shows only about the first 125 characters of primary_text on mobile before "See more". The
 first line says what and where in at most 60 characters: the service and lead.place (one place,
-never the list), with one supplied offer when the Brand has one. Start it the way lead.opening says,
+never the list), with the offer in lead.ask when given. Start it the way lead.opening says,
 so the ads of one batch, written at the same time, open differently. It must never pass 125 characters.
 Write primary_text as 2-3 short lines separated by \n, about 220 characters in total, never one paragraph.
 Use only supplied facts for commercial claims. Do not invent prices, offers, reviews, deadlines,
@@ -147,7 +165,7 @@ copy that works with any genuine photo of the business and never describe or cla
 Typography and the brand logo will be composited separately: direct a text-free visual with a
 clear focal subject away from the selected textPlacement. Keep that area quiet enough for copy.
 Return only JSON, with this shape. Character limits include spaces and are hard limits:
-{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 60 characters naming the service, one Brand place and any offer","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
+{"headline":"up to 40 characters","primary_text":"2-3 short lines separated by \n, about 220 characters; first line up to 60 characters naming the service, lead.place and the offer; last line quotes lead.ask","description":"nonempty Meta link description up to 100 characters","cta":"${META_CTAS.join('" | "')}",
 "rationale":"why this message and visual belong together for this audience; up to 600 characters",
 "visual":{"medium":"chosen medium; up to 120 characters","direction":"specific subject, setting, action, composition, palette and exclusions; 20-2400 characters","textPlacement":"top | center | bottom"},
 "supportingText":"optional on-image supporting line up to 64 characters, or null",

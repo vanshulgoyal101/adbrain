@@ -1,6 +1,6 @@
 /** Pure scoring for scripts/eval-create.ts (#418): no network, unit-tested in CI. */
-import { askMatchesPrefill } from "../../src/lib/campaign/whatsapp-greeting";
-import { carriesProof } from "../../src/lib/creative/proof";
+import { quotedAsk, sameWords } from "../../src/lib/campaign/whatsapp-greeting";
+import { citedProofs, proofFacts } from "../../src/lib/creative/proof-line";
 
 const FOLD_CHARACTERS = 125;
 
@@ -25,8 +25,8 @@ export type AdResult = {
   firstLineShort?: boolean;
   /** #418 rule 5: the copy repeats a Brand proof (years, jobs, credential, warranty); null when the Brand has none. */
   proof?: boolean | null;
-  /** #418 rule 7: the last line asks for the offer the WhatsApp prefill names; null when the Brand has no offer. */
-  askMatchesPrefill?: boolean | null;
+  /** #418 rule 7: the words the last line quotes for customers to send (`quotedAsk`); null when it quotes none. */
+  ask?: string | null;
   visualDirection?: string;
   scriptOk: boolean;
   judge?: JudgeScore;
@@ -66,10 +66,13 @@ export type Summary = {
   placeUpFrontRate?: number;
   /** Reported only: a heuristic over the visual direction. */
   personInSceneRate?: number;
-  /** Reported only (#418 rules 1, 5, 7): first line within 60 characters, runs with a proof in at least one ad, last line = prefill offer. */
+  /**
+   * Reported only (#418 rules 1, 5, 7): first line within 60 characters; runs where at least one ad cites a
+   * Brand proof; runs whose ads all quote the same ask, which then becomes the WhatsApp pre-typed message.
+   */
   firstLineShortRate?: number;
   proofBatchRate?: number;
-  askMatchesPrefillRate?: number;
+  askBatchRate?: number;
   scriptRate: number;
   judgeCopy: number;
   judgeImage: number;
@@ -106,17 +109,16 @@ export function placeUpFront(headline: string, primaryText: string, locations: s
 
 export { personInScene } from "../../src/lib/creative/visual-rules";
 
-export type CopyRules = Pick<AdResult, "firstLineShort" | "proof" | "askMatchesPrefill">;
+export type CopyRules = Pick<AdResult, "firstLineShort" | "proof" | "ask">;
 type RuleBrand = { description?: string | null; usps?: string[]; offers?: string[] };
 
-/** #418 rules 1 (60 characters), 5 (a proof) and 7 (last line = WhatsApp prefill offer) for one ad's copy. */
+/** #418 rules 1 (60 characters), 5 (a Brand proof, `proof-line.ts`) and 7 (the quoted ask) for one ad's copy. */
 export function copyRules(brand: RuleBrand, sourceFacts: string[], headline: string, primaryText: string): CopyRules {
-  const text = [headline, primaryText].join("\n");
+  const proofs = proofFacts([brand.description, ...(brand.usps ?? []), ...(brand.offers ?? []), ...sourceFacts]);
   return {
     firstLineShort: primaryText.split("\n", 1)[0].trim().length <= 60,
-    proof: carriesProof(text, [brand.description, ...(brand.usps ?? []), ...(brand.offers ?? []), ...sourceFacts]),
-    // Brand offers are written in English: an Indic-script post can't repeat them word for word.
-    askMatchesPrefill: textScript(primaryText) === "latin" ? askMatchesPrefill(brand, headline, primaryText) : null,
+    proof: proofs.length ? citedProofs([headline, primaryText].join("\n"), proofs).length > 0 : null,
+    ask: quotedAsk(primaryText),
   };
 }
 
@@ -145,7 +147,7 @@ export function percentile(values: number[], p: number): number {
   return sorted[Math.min(sorted.length, Math.max(1, Math.ceil(p * sorted.length))) - 1];
 }
 
-function ruleRates(cases: CaseResult[]): Pick<Summary, "firstLineShortRate" | "proofBatchRate" | "askMatchesPrefillRate"> {
+function ruleRates(cases: CaseResult[]): Pick<Summary, "firstLineShortRate" | "proofBatchRate" | "askBatchRate"> {
   const copies = (result: CaseResult): Partial<CopyRules>[] => [...result.ads, ...result.failures.flatMap((failure) => (failure.copy ? [failure.copy] : []))];
   const all = cases.flatMap(copies);
   const known = <T,>(values: (T | null | undefined)[]) => values.flatMap((value) => (value == null ? [] : [value]));
@@ -153,10 +155,14 @@ function ruleRates(cases: CaseResult[]): Pick<Summary, "firstLineShortRate" | "p
     const proofs = known(copies(result).map((copy) => copy.proof));
     return proofs.length ? [proofs.some(Boolean)] : [];
   });
+  const asks = cases.flatMap((result) => {
+    const quoted = copies(result).map((copy) => copy.ask);
+    return quoted.length ? [quoted.every((ask) => ask && sameWords(ask, quoted[0]!))] : [];
+  });
   return {
     firstLineShortRate: round(share(known(all.map((copy) => copy.firstLineShort)))),
     proofBatchRate: round(share(batches)),
-    askMatchesPrefillRate: round(share(known(all.map((copy) => copy.askMatchesPrefill)))),
+    askBatchRate: round(share(asks)),
   };
 }
 

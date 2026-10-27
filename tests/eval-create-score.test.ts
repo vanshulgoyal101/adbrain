@@ -134,18 +134,18 @@ describe("Create eval scoring (#418)", () => {
     expect(summarize([run("a", [ad({ personInScene: true }), ad({ personInScene: false })])]).personInSceneRate).toBe(0.5);
   });
 
-  it("scores #418 rules 1, 5 and 7 per ad and rule 5 per batch", () => {
+  it("scores #418 rules 1, 5 and 7 per ad and rules 5 and 7 per batch", () => {
     const brand = { usps: ["Board-certified chiropractors with 15+ years combined experience"], offers: ["Free 15-minute spine check"] };
-    expect(copyRules(brand, [], "Austin chiropractor", "Austin chiropractic, 15+ years.\nBook your free 15-minute spine check."))
-      .toEqual({ firstLineShort: true, proof: true, askMatchesPrefill: true });
+    expect(copyRules(brand, [], "Austin chiropractor", "Austin chiropractic, 15+ years.\nWhatsApp “Free spine check” to book."))
+      .toEqual({ firstLineShort: true, proof: true, ask: "Free spine check" });
     expect(copyRules(brand, [], "Back pain?", `${"Long hook ".repeat(8)}\nCall us today.`))
-      .toEqual({ firstLineShort: false, proof: false, askMatchesPrefill: false });
-    expect(copyRules(brand, [], "दर्द?", "मुफ़्त जाँच बुक करें।").askMatchesPrefill).toBeNull();
+      .toEqual({ firstLineShort: false, proof: false, ask: null });
+    expect(copyRules({ offers: [] }, [], "x", "y").proof).toBeNull();
     const summary = summarize([
-      run("a", [ad({ proof: false, firstLineShort: true, askMatchesPrefill: true }), ad({ proof: true, firstLineShort: false, askMatchesPrefill: false })]),
-      run("b", [ad({ proof: false }), ad({ proof: false })]),
+      run("a", [ad({ proof: false, firstLineShort: true, ask: "Free check" }), ad({ proof: true, firstLineShort: false, ask: "free check." })]),
+      run("b", [ad({ proof: false, ask: "Free check" }), ad({ proof: false, ask: null })]),
       run("c", [ad({ proof: null })]),
     ]);
-    expect(summary).toMatchObject({ proofBatchRate: 0.5, firstLineShortRate: 0.5, askMatchesPrefillRate: 0.5 });
+    expect(summary).toMatchObject({ proofBatchRate: 0.5, firstLineShortRate: 0.5, askBatchRate: 0.3333 });
   });
 });

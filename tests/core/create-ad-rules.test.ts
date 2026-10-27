@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { askMatchesPrefill, whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
-import { buildConceptMessages, conceptImagePrompt, CONCEPT_VERSION, validateConcept, type CreativeConcept } from "@/lib/creative/concept";
-import { carriesProof, proofKeys } from "@/lib/creative/proof";
+import { quotedAsk, whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
+import { batchAsk, buildConceptMessages, conceptImagePrompt, CONCEPT_VERSION, validateConcept, type CreativeConcept } from "@/lib/creative/concept";
+import { citedProofs, proofFacts } from "@/lib/creative/proof-line";
 import { personInScene, personSubjectLine } from "@/lib/creative/visual-rules";
 import { AD_ANGLES, type BrandContext } from "@/lib/templates/ads";
 import baseline from "../eval/baseline.json";
@@ -44,7 +44,7 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(system).toMatch(/first\s+line says what and where in at most 60 characters: the service and lead\.place/);
     expect(system).toMatch(/person giving or getting the service/);
     expect(system).toMatch(/one proof from the Brand facts/);
-    expect(system).toMatch(/last line asks for that offer in the Brand's own words/);
+    expect(system).toMatch(/last line\s+tells people exactly what to send by quoting it word for word/);
     // The fold rule the validator enforces (hook-length) is unchanged, so no new repair.
     expect(system).toMatch(/never pass 125 characters/);
     expect(system).not.toMatch(/Do not default to stock people/);
@@ -72,7 +72,7 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     expect(new Set(leads.map((lead) => lead.opening)).size).toBe(3);
     const pune = caseById("dental-clinic-en");
     expect(JSON.parse(buildConceptMessages({ brand: pune.brand as BrandContext, brief: pune.brief, angle: AD_ANGLES[2] })[1].content as string).lead)
-      .toEqual({ place: "Pune", opening: "with the offer" });
+      .toEqual({ place: "Pune", opening: "with the offer", ask: "Check-up and cleaning for ₹499" });
     // Recorded Oct 27 14:00Z (generation b285b76f): all three opened like this and two ads were lost after the repair.
     const sibling = { headline: "Lower bills, starting with a free survey", primary_text: "Rooftop solar for your home in Chandigarh, Mohali & Panchkula. Start with a free site survey to see what you could save." };
     const reply = { ...JSON.parse(solarideReplies[0]), primary_text: `${sibling.primary_text}\nBook your free site survey.` };
@@ -82,33 +82,23 @@ describe("core: Create follows the long-running local ad rules (#418 rules 1, 4,
     ]);
   });
 
-  it("rule 5: finds the Brand's proof and whether an ad repeats it", () => {
-    expect(proofKeys("Board-certified chiropractors with 15+ years combined experience")).toEqual(["15 year", "board-certified"]);
-    expect(proofKeys("Backed by qualified engineering graduates from IIT Bombay and PEC Chandigarh")).toEqual(["IIT", "PEC"]);
-    for (const fact of ["Founder's 4,000 KM solo cycling journey for clean energy awareness", "Free 15-minute spine check", "Potential to cut electricity bills by up to 98%", "Assistance with PM Surya Ghar subsidy and net metering"]) {
-      expect(proofKeys(fact), fact).toEqual([]);
-    }
-    expect(carriesProof("Our team has 15+ years of experience.", factsOf(cedar))).toBe(true);
-    expect(carriesProof("Book a 15-minute spine check in Austin.", factsOf(cedar))).toBe(false);
-    expect(carriesProof("25-year warranty on every panel", ["Every install has a 25 year warranty"])).toBe(true);
-    expect(carriesProof("12 yrs in Mohali", ["Serving Mohali for 12 yrs"])).toBe(true);
-    expect(proofKeys("Licensed electricians for AC and LED work")).toEqual(["licensed"]);
-    expect(carriesProof("Same-day appointments", factsOf(caseById("dental-clinic-en")))).toBeNull();
-    // Recorded: every Solaride and Cedar Ridge batch already carries one; the rule keeps it.
-    for (const item of [solaride, cedar]) {
-      expect(recordedAds(item.id).some((ad) => carriesProof(`${ad.headline}\n${ad.primaryText}`, factsOf(item)))).toBe(true);
-    }
+  it("rule 5: the prompt asks for a Brand proof that proof-line.ts (#1029) recognises", () => {
+    expect(system).toMatch(/A bare\s+"trusted" or "experienced" is not proof/);
+    const cites = (item: typeof solaride) => recordedAds(item.id).map((ad) => citedProofs(`${ad.headline}\n${ad.primaryText}`, proofFacts(factsOf(item))).length > 0);
+    // Before: Solaride's ads name IIT Bombay and PEC; Cedar Ridge's say "board-certified" but never its 15+ years.
+    expect(cites(solaride).some(Boolean)).toBe(true);
+    expect(cites(cedar)).toEqual([false, false, false]);
   });
 
-  it("rule 7: the last line asks for the offer the WhatsApp prefill names", () => {
-    const brand = solaride.brand;
-    const ask = "Factory solar costs more after 31 December.\nBook your free site survey now.";
-    expect(askMatchesPrefill(brand, "Factory solar in Mohali", ask)).toBe(true);
-    expect(whatsappGreeting(brand, [ask]).autofill).toBe("Hi! I'd like a free site survey.");
-    expect(askMatchesPrefill(brand, "Factory solar", "A free site survey first.\nCall us today.")).toBe(false);
-    expect(askMatchesPrefill({ offers: [] }, "x", "y")).toBeNull();
-    // Recorded before: most asks name no Brand offer ("Message us on WhatsApp to book your family's check-up").
-    const latin = recordedRuns.filter((item) => !/-hi$/.test(item.id)).flatMap((item) => item.ads.map((ad) => askMatchesPrefill(caseById(item.id).brand, ad.headline, ad.primaryText)));
-    expect(latin.filter(Boolean).length / latin.length).toBeLessThan(0.25);
+  it("rule 7: every angle quotes the same ask, so the WhatsApp pre-typed message is those words (#1027)", () => {
+    const asks = AD_ANGLES.slice(0, 3).map((angle) => JSON.parse(buildConceptMessages({ brand: solaride.brand as BrandContext, brief: solaride.brief, angle })[1].content as string).lead.ask);
+    expect(asks).toEqual(["Free site survey", "Free site survey", "Free site survey"]);
+    expect(batchAsk(["Diwali offer: 10% off rooftop solar installation", "PM Surya Ghar subsidy help"])).toBe("10% off rooftop solar installation");
+    expect(batchAsk(["Check-up and cleaning for ₹499"])).toBe("Check-up and cleaning for ₹499");
+    expect(batchAsk([])).toBeNull();
+    const ads = ["Free solar site survey in Mohali.\nWhatsApp “Free site survey” to book.", "Factory solar in Chandigarh?\nWhatsApp “Free site survey” to book."];
+    expect(whatsappGreeting(solaride.brand, ads, [], [], "ad", ads.map(quotedAsk)).autofill).toBe("Free site survey");
+    // Recorded before: no ad on the paid baseline quotes an ask, so the prefill never matched an ad's words.
+    expect(recordedRuns.flatMap((item) => item.ads).filter((ad) => quotedAsk(ad.primaryText)).length).toBe(0);
   });
 });
