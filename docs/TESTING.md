@@ -329,7 +329,10 @@ Groq, one concept at a time; Pollinations images; no judge unless `--judge`. It 
 cases (`cedar-ridge-en`, `solaride-factory-hi`) and compares only the deterministic copy checks with
 `tests/eval/baseline-free.json` (2026-10-26, `885899c`: 5 of 6 copy saved, 60% first try, 67% offer
 in the fold, script 100%, 1 provider failure): copy saved (an ad whose free image failed
-still counts), first-try passes, offer in the first 125 characters, and script. Concepts no provider
+still counts), first-try passes, offer in the first 125 characters, and script. Both profiles also
+report and gate the share of Latin-script ads naming a Brand place in the headline or first line
+(#418 rule 1; skipped against baselines made before it), counting the copy of concepts whose free
+image failed. Concepts no provider
 answered don't count; over a third of them makes the run inconclusive (exit 1, run again later), and
 such a run can't become the baseline. Free tiers are small (Gemini 20 requests per day per model,
 Groq 8,000 tokens a minute, Pollinations ~1 image per 20–40 s), so run it after the daily reset
