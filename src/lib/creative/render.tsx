@@ -6,9 +6,9 @@ import sharp from "sharp";
 import type { AdDesignSpec } from "./design";
 import { downloadImage } from "@/lib/imageGen";
 import { INDIC_SCRIPT, shapeText } from "./shaped-text";
-import { AdComposite, adMetrics, logoTileWidth, type ShapedWords } from "./ad-composite";
+import { AdComposite, adMetrics, isOfferLine, logoTileWidth, offerStripStyle, type ShapedWords } from "./ad-composite";
 
-export { AdComposite, adMetrics, logoTileWidth, type ShapedWords };
+export { AdComposite, adMetrics, isOfferLine, logoTileWidth, type ShapedWords };
 
 /**
  * Rasterise an {@link AdDesignSpec} into a finished poster-style ad using the
@@ -38,7 +38,9 @@ export async function shapeIndicText(spec: AdDesignSpec, logoRatio = 1): Promise
   const fields: Field[] = [
     ["brand", spec.brandName, { size: m.brandSize, weight: 800, color: "#ffffff", maxWidth: m.contentWidth - logoTileWidth(logoRatio, m.s) - Math.round(18 * m.s) }],
     ["headline", spec.headline, { size: m.headlineSize, weight: 800, color: "#ffffff", maxWidth: m.contentWidth }],
-    ["subhead", spec.subhead, { size: m.subheadSize, weight: 400, color: "#e2e8f0", maxWidth: m.contentWidth }],
+    ["subhead", spec.subhead, isOfferLine(spec.subhead)
+      ? (({ size, weight, color, maxWidth }) => ({ size, weight, color, maxWidth }))(offerStripStyle(spec))
+      : { size: m.subheadSize, weight: 400, color: "#e2e8f0", maxWidth: m.contentWidth }],
     ...spec.benefits.map((benefit, i): Field => [`benefit:${i}`, benefit, { size: m.benefitSize, weight: 600, color: "#ffffff", maxWidth: m.contentWidth - Math.round(90 * m.s) }]),
     ["contact", spec.contactLine, { size: m.contactSize, weight: 400, color: "#cbd5e1", maxWidth: Math.round(m.contentWidth * 0.6) }],
   ];
