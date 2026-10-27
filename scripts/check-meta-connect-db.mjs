@@ -1488,7 +1488,7 @@ async function verifyOwnerAlertSends(db, database) {
       await assert.rejects(session.query("select 1 from public.owner_alert_sends"), { code: "42501" });
     });
   });
-  await check(`${database}: WhatsApp alert sends: 3 counted failures pause until a new START; cap, blocked template and STOP refuse (#701)`, async () => {
+  await check(`${database}: WhatsApp alert sends: 3 counted failures pause until a new START; the cap pauses only the daily line; blocked template and STOP refuse (#701)`, async () => {
     for (const key of ["f-1", "f-2"]) { const c = await claim(key); await settle(c.sendId, "failed", true, "131026"); }
     const notCounted = await claim("f-x"); await settle(notCounted.sendId, "failed", false, "132018");
     assert.deepEqual(await prefs(), { send_failures: 2, paused: false });
@@ -1497,8 +1497,12 @@ async function verifyOwnerAlertSends(db, database) {
     assert.deepEqual(await claim("f-4"), { claimed: false, reason: "paused" });
     await db.query("update public.owner_alert_prefs set verified_at = now() + interval '1 second' where business_id=$1", [business]);
     assert.deepEqual(await prefs(), { send_failures: 0, paused: false });
-    const used = (await db.query("select count(*)::int as n from public.owner_alert_sends where business_id=$1 and state in ('pending','sent','unknown')", [business])).rows[0].n;
-    assert.deepEqual(await claim("cap-1", { cap: used }), { claimed: false, reason: "cap" });
+    // The monthly cap (all businesses) pauses only the daily line; lead alerts keep going.
+    await db.query("update public.owner_alert_prefs set daily_results = true where business_id=$1", [business]);
+    const used = (await db.query("select count(*)::int as n from public.owner_alert_sends where state in ('pending','sent','unknown')")).rows[0].n;
+    assert.deepEqual(await claim("2026-10-27", { kind: "daily", cap: used }), { claimed: false, reason: "cap" });
+    assert.equal((await claim("2026-10-27", { kind: "daily", cap: used + 1 })).claimed, true);
+    assert.equal((await claim("cap-lead", { cap: 0 })).claimed, true);
     await as("service_role", null, (session) => session.query("select public.owner_alert_template_block('lead_alert_en','MARKETING')"));
     assert.deepEqual(await claim("blocked-1"), { claimed: false, reason: "template_blocked" });
     await as("service_role", null, (session) => session.query("select public.owner_alert_stop('+919800000009')"));

@@ -1,5 +1,6 @@
 -- #701 slice 2: the WhatsApp alert send log. One row per alert (a lead id, or a day for the
--- daily line), so a lead is never alerted twice; the monthly cap counts these rows. Three counted
+-- daily line), so a lead is never alerted twice. The monthly cap counts every send this IST month
+-- across all businesses; at the cap only the daily line pauses, lead alerts keep going (CPO §1). Three counted
 -- failures in a row pause an owner's alerts until they confirm their number again. A template Meta
 -- moves to MARKETING is blocked, so AdBrain stops sending it. Service-only writes through the
 -- functions below; owners read their own sends. Additive: one column pair on owner_alert_prefs.
@@ -26,7 +27,7 @@ create table if not exists public.owner_alert_sends (
   settled_at timestamptz,
   unique (business_id, kind, dedupe_key)
 );
-create index if not exists owner_alert_sends_month_idx on public.owner_alert_sends(business_id, created_at desc);
+create index if not exists owner_alert_sends_month_idx on public.owner_alert_sends(created_at);
 
 create table if not exists public.owner_alert_template_blocks (
   template text primary key check (length(template) between 1 and 512),
@@ -45,8 +46,8 @@ drop policy if exists "owner alert sends: read own" on public.owner_alert_sends;
 create policy "owner alert sends: read own" on public.owner_alert_sends
   for select to authenticated using (public.owns_business(business_id));
 
--- Claims one alert, or says why not. Locks the owner's prefs row so the cap and the pause hold
--- under concurrent sends. Returns the number to send to only when the alert is claimed.
+-- Claims one alert, or says why not. Locks the owner's prefs row so the pause holds under
+-- concurrent sends. p_month_cap applies to the daily line only. Returns the number only when claimed.
 create or replace function public.owner_alert_claim(p_business_id uuid, p_kind text, p_key text, p_template text, p_month_cap integer)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -64,10 +65,12 @@ begin
   if not (case p_kind when 'lead' then prefs.lead_alerts else prefs.daily_results end) then return jsonb_build_object('claimed', false, 'reason', 'off'); end if;
   if prefs.paused_at is not null then return jsonb_build_object('claimed', false, 'reason', 'paused'); end if;
   if exists (select 1 from public.owner_alert_template_blocks where template = p_template) then return jsonb_build_object('claimed', false, 'reason', 'template_blocked'); end if;
-  select count(*) into used from public.owner_alert_sends
-  where business_id = p_business_id and state in ('pending', 'sent', 'unknown')
-    and created_at >= date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata';
-  if used >= p_month_cap then return jsonb_build_object('claimed', false, 'reason', 'cap'); end if;
+  if p_kind = 'daily' then
+    select count(*) into used from public.owner_alert_sends
+    where state in ('pending', 'sent', 'unknown')
+      and created_at >= date_trunc('month', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata';
+    if used >= p_month_cap then return jsonb_build_object('claimed', false, 'reason', 'cap'); end if;
+  end if;
   insert into public.owner_alert_sends as sends(business_id, kind, dedupe_key, template)
   values (p_business_id, p_kind, p_key, p_template)
   on conflict (business_id, kind, dedupe_key) do update set state = 'pending', attempts = sends.attempts + 1, template = excluded.template, error_code = null, settled_at = null
