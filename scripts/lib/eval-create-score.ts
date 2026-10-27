@@ -17,6 +17,9 @@ export type AdResult = {
   offerInFold: boolean | null;
   /** #418 rule 1: the headline or first line names a Brand location; null for Indic-script copy or no locations. */
   placeUpFront?: boolean | null;
+  /** #418 rule 4: the picture's direction shows a person or someone at work (a text heuristic; reported, not gated). */
+  personInScene?: boolean;
+  visualDirection?: string;
   scriptOk: boolean;
   judge?: JudgeScore;
   costUsd: number;
@@ -31,7 +34,7 @@ export type CaseResult = {
   failures: {
     angle: string; stage: string; rules: string[]; issues?: string[];
     /** The validated copy of a concept whose image failed. */
-    copy?: { headline: string; primaryText: string; supportingText: string | null; placeUpFront: boolean | null };
+    copy?: { headline: string; primaryText: string; supportingText: string | null; placeUpFront: boolean | null; visualDirection?: string; personInScene?: boolean };
   }[];
   ads: AdResult[];
   costUsd: number;
@@ -52,6 +55,8 @@ export type Summary = {
   offerInFoldRate: number;
   /** Absent in reports made before #418 rule 1. */
   placeUpFrontRate?: number;
+  /** Reported only: a heuristic over the visual direction. */
+  personInSceneRate?: number;
   scriptRate: number;
   judgeCopy: number;
   judgeImage: number;
@@ -84,6 +89,19 @@ export function placeUpFront(headline: string, primaryText: string, locations: s
   if (!places.length || textScript(top) !== "latin") return null;
   const lower = top.toLowerCase();
   return places.some((place) => lower.includes(place));
+}
+
+const PERSON = /\b(?:owner|doctor|dentist|chiropractor|therapist|technician|installer|engineer|electrician|crew|team|staff|customer|client|patient|homeowner|couple|woman|man|men|women|adult|person|people|worker|stylist|teacher|student|bride|parent|child|hands?)\b/i;
+
+/**
+ * #418 rule 4: whether the visual direction puts a person in the picture. Sentences starting with
+ * avoid/no/without and "no …"/"free of …" spans are dropped, so "no people" doesn't count.
+ */
+export function personInScene(direction: string): boolean {
+  return direction.split(/(?<=[.;!?])\s+/)
+    .filter((sentence) => !/^(?:avoid|do not|don't|no|without|exclude|omit|never)\b/i.test(sentence.trim()))
+    .map((sentence) => sentence.replace(/\b(?:no|without|free of|devoid of|never)\b[^.;,]*/gi, ""))
+    .some((sentence) => PERSON.test(sentence));
 }
 
 /** The script most letters are written in; digits, currency and punctuation don't count. */
@@ -131,6 +149,8 @@ export function summarize(cases: CaseResult[]): Summary {
     firstTryRate: round(rate(ads.map((ad) => ad.firstTry))),
     offerInFoldRate: round(rate(ads.flatMap((ad) => (ad.offerInFold === null ? [] : [ad.offerInFold])))),
     placeUpFrontRate: round(rate([...ads.map((ad) => ad.placeUpFront), ...cases.flatMap((result) => result.failures.map((failure) => failure.copy?.placeUpFront))]
+      .flatMap((value) => (value == null ? [] : [value])))),
+    personInSceneRate: round(share([...ads.map((ad) => ad.personInScene), ...cases.flatMap((result) => result.failures.map((failure) => failure.copy?.personInScene))]
       .flatMap((value) => (value == null ? [] : [value])))),
     scriptRate: round(rate(ads.map((ad) => ad.scriptOk))),
     judgeCopy: round(mean(judged.map((score) => score.copy)), 3),
