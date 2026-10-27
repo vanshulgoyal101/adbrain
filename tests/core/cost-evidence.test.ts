@@ -8,7 +8,7 @@ import { decodeLifetimeSpendPaise } from "@/lib/meta/insights";
 
 type Exchange = { method: string; path: string; status: number; body: unknown };
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 
 function replay() {
   const pending = [...spendTape] as Exchange[];

@@ -20,7 +20,7 @@ const draft = {
 const message = (primaryText: string, saved?: unknown) => campaignWhatsAppMessage({ draft: draft as never, business: { ...solaride, whatsapp_template: saved }, creatives: [{ headline: story.inputs.headline, primary_text: primaryText }] });
 const review = (primaryText: string, saved?: unknown) => runPreflight({
   draft: draft as never, draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", draftVersion: 1,
-  connection: { generation: 1, canCreatePaused: true, selected: { metaBusinessId: null, adAccountId: "act_2398686420592052", accountName: "Solaride 101", pageId: "885223068001054", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata" } },
+  connection: { generation: 1, canCreatePaused: true, selected: { metaBusinessId: null, adAccountId: "act_9000000000000001", accountName: "Solaride 101", pageId: "900000000000002", pageName: "Solaride Energy", currency: "INR", timezoneName: "Asia/Kolkata" } },
   creatives: [{ id: "c1", businessId: draft.businessId, approved: true, imageUrl: "https://example.com/ad.png", headline: story.inputs.headline, primaryText, storyReady: true }],
   form: null, whatsappNumber: "+919999994842", whatsappMessage: message(primaryText, saved),
   geo: { resolvedAreaLabel: "Mohali", unresolvedNames: [], explicitlyNationwide: false, audienceInterests: [{ id: "6003384248805", name: "Solar energy" }] },

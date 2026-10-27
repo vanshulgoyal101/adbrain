@@ -42,7 +42,7 @@ describe("core: Stories and Reels get a 9:16 image (#333)", () => {
     const storyImage = params.storyImage === "after-campaign"
       ? new Promise<Uint8Array>(resolve => { campaignPosted = () => resolve(new Uint8Array([9])); })
       : params.storyImage;
-    const meta = new MetaClient({ adAccountId: "act_2398686420592052", pageId: inputs.pageId, accessToken: "core-token" });
+    const meta = new MetaClient({ adAccountId: "act_9000000000000001", pageId: inputs.pageId, accessToken: "core-token" });
     vi.spyOn(meta, "getWhatsAppNumber").mockResolvedValue("+919100000874");
     vi.spyOn(meta, "getPageInstagramId").mockResolvedValue(params.instagram === undefined ? inputs.instagramUserId : params.instagram);
     vi.spyOn(meta, "uploadAdImage").mockResolvedValue(inputs.feedHash);

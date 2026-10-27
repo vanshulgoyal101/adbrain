@@ -454,7 +454,7 @@ export function LeadInbox({
                         <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">Customer</Status> : STATUS_LABEL[statusOf(l)]}
                       </button>
                       {statusOf(l) !== "customer" && !isMetaTestLead(l) && (
-                        <Button type="button" size="sm" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
+                        <Button type="button" size="sm" variant="outline" className="h-auto min-h-11 max-w-full shrink whitespace-normal py-1.5 text-left" data-product-event="lead.customer" disabled={!!marking || saving}
                           aria-label={`${leadName(l) ?? "This enquiry"} became a customer`} onClick={() => void setCustomer(l, "customer", statusOf(l))}>
                           {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}Became a customer
                         </Button>

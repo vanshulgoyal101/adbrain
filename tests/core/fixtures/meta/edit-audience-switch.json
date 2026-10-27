@@ -1,0 +1,146 @@
+[
+  {
+    "method": "GET",
+    "path": "900000000000000007/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "900000000000000009",
+          "status": "PAUSED",
+          "adset_id": "900000000000000007"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before":"CURSOR",
+          "after":"CURSOR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "status": 200,
+    "body": {
+      "id": "900000000000000007",
+      "campaign_id": "900000000000000003",
+      "status": "PAUSED",
+      "lifetime_budget": "0",
+      "budget_remaining": "351"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000005?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "status": 200,
+    "body": {
+      "id": "900000000000000005",
+      "campaign_id": "900000000000000003",
+      "status": "ACTIVE",
+      "lifetime_budget": "0",
+      "budget_remaining": "362"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000007",
+    "form": {
+      "status": "ACTIVE",
+      "execution_options": "[\"validate_only\"]"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000005",
+    "form": {
+      "status": "PAUSED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000009",
+    "form": {
+      "status": "ACTIVE"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000007",
+    "form": {
+      "status": "ACTIVE"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000007?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "status": 200,
+    "body": {
+      "id": "900000000000000007",
+      "campaign_id": "900000000000000003",
+      "status": "ACTIVE",
+      "lifetime_budget": "0",
+      "budget_remaining": "351"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000007/ads?fields=id%2Cstatus%2Cadset_id&limit=100",
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "900000000000000009",
+          "status": "ACTIVE",
+          "adset_id": "900000000000000007"
+        }
+      ],
+      "paging": {
+        "cursors": {
+          "before":"CURSOR",
+          "after":"CURSOR"
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "900000000000000005?fields=id%2Ccampaign_id%2Cstatus%2Clifetime_budget%2Cbudget_remaining",
+    "status": 200,
+    "body": {
+      "id": "900000000000000005",
+      "campaign_id": "900000000000000003",
+      "status": "PAUSED",
+      "lifetime_budget": "0",
+      "budget_remaining": "362"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "900000000000000005",
+    "form": {
+      "status": "ARCHIVED"
+    },
+    "status": 200,
+    "body": {
+      "success": true
+    }
+  }
+]

@@ -5,7 +5,7 @@
     "status": 200,
     "body": {
       "id": "120253678786150526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -16,7 +16,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false,
             "whats_app_business_phone_number_id": "1113229925200671",
             "whatsapp_phone_number": "917009764842"
@@ -26,7 +26,7 @@
         },
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false,
             "whats_app_business_phone_number_id": "1113229925200671",
             "whatsapp_phone_number": "917009764842"
@@ -101,7 +101,7 @@
     "status": 200,
     "body": {
       "id": "120253678786150526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -112,7 +112,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false,
             "whats_app_business_phone_number_id": "1113229925200671",
             "whatsapp_phone_number": "917009764842"
@@ -122,7 +122,7 @@
         },
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false,
             "whats_app_business_phone_number_id": "1113229925200671",
             "whatsapp_phone_number": "917009764842"
@@ -172,7 +172,7 @@
     "status": 200,
     "body": {
       "id": "120253164673180526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -183,7 +183,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -212,7 +212,7 @@
     "status": 200,
     "body": {
       "id": "120253164673180526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -223,7 +223,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",

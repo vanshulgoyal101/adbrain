@@ -5,7 +5,7 @@
     "status": 200,
     "body": {
       "id": "120253712459000526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -16,7 +16,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -24,7 +24,7 @@
         },
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -48,7 +48,7 @@
       "campaign_id": "120253712459000526",
       "status": "PAUSED",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "daily_budget": "0",
@@ -76,7 +76,7 @@
     "status": 200,
     "body": {
       "id": "120253712459000526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -87,7 +87,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -95,7 +95,7 @@
         },
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -119,7 +119,7 @@
       "campaign_id": "120253712459000526",
       "status": "PAUSED",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "daily_budget": "0",
@@ -149,7 +149,7 @@
       "campaign_id": "120253712459000526",
       "status": "PAUSED",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "daily_budget": "0",
@@ -164,7 +164,7 @@
     "status": 200,
     "body": {
       "id": "120253712459000526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -175,7 +175,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -183,7 +183,7 @@
         },
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -207,7 +207,7 @@
       "campaign_id": "120253712459000526",
       "status": "PAUSED",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "daily_budget": "0",
@@ -236,7 +236,7 @@
       "campaign_id": "120253712459000526",
       "status": "PAUSED",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "daily_budget": "0",

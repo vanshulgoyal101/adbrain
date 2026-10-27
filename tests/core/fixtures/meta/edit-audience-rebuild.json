@@ -5,7 +5,7 @@
     "status": 200,
     "body": {
       "id": "120253709894480526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -16,7 +16,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -44,7 +44,7 @@
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "targeting": {
@@ -274,7 +274,7 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/adsets",
+    "path": "act_9000000000000001/adsets",
     "form": {
       "name": "AdBrain audience 2026-10-26",
       "campaign_id": "120253709894480526",
@@ -284,7 +284,7 @@
       "optimization_goal": "LEAD_GENERATION",
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
-      "promoted_object": "{\"page_id\":\"885223068001054\",\"smart_pse_enabled\":false}",
+      "promoted_object": "{\"page_id\":\"900000000000002\",\"smart_pse_enabled\":false}",
       "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[30,60],\"excluded_geo_locations\":{\"regions\":[{\"key\":\"1723\",\"name\":\"Andaman and Nicobar Islands\",\"country\":\"IN\"},{\"key\":\"1724\",\"name\":\"Andhra Pradesh\",\"country\":\"IN\"},{\"key\":\"1725\",\"name\":\"Assam\",\"country\":\"IN\"},{\"key\":\"1727\",\"name\":\"Dadra and Nagar Haveli\",\"country\":\"IN\"},{\"key\":\"1728\",\"name\":\"Delhi\",\"country\":\"IN\"},{\"key\":\"1729\",\"name\":\"Gujarat\",\"country\":\"IN\"},{\"key\":\"1730\",\"name\":\"Haryana\",\"country\":\"IN\"},{\"key\":\"1731\",\"name\":\"Himachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1732\",\"name\":\"Jammu and Kashmir\",\"country\":\"IN\"},{\"key\":\"1733\",\"name\":\"Kerala\",\"country\":\"IN\"},{\"key\":\"1734\",\"name\":\"Lakshadweep\",\"country\":\"IN\"},{\"key\":\"1735\",\"name\":\"Maharashtra\",\"country\":\"IN\"},{\"key\":\"1736\",\"name\":\"Manipur\",\"country\":\"IN\"},{\"key\":\"1737\",\"name\":\"Meghalaya\",\"country\":\"IN\"},{\"key\":\"1738\",\"name\":\"Karnataka\",\"country\":\"IN\"},{\"key\":\"1739\",\"name\":\"Nagaland\",\"country\":\"IN\"},{\"key\":\"1740\",\"name\":\"Odisha\",\"country\":\"IN\"},{\"key\":\"1741\",\"name\":\"Puducherry\",\"country\":\"IN\"},{\"key\":\"1742\",\"name\":\"Punjab region\",\"country\":\"IN\"},{\"key\":\"1743\",\"name\":\"Rajasthan\",\"country\":\"IN\"},{\"key\":\"1744\",\"name\":\"Tamil Nadu\",\"country\":\"IN\"},{\"key\":\"1745\",\"name\":\"Tripura\",\"country\":\"IN\"},{\"key\":\"1746\",\"name\":\"West Bengal\",\"country\":\"IN\"},{\"key\":\"1747\",\"name\":\"Sikkim\",\"country\":\"IN\"},{\"key\":\"1748\",\"name\":\"Arunachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1749\",\"name\":\"Mizoram\",\"country\":\"IN\"},{\"key\":\"1750\",\"name\":\"Daman and Diu\",\"country\":\"IN\"},{\"key\":\"1751\",\"name\":\"Goa\",\"country\":\"IN\"},{\"key\":\"1752\",\"name\":\"Bihar\",\"country\":\"IN\"},{\"key\":\"1753\",\"name\":\"Madhya Pradesh\",\"country\":\"IN\"},{\"key\":\"1754\",\"name\":\"Uttar Pradesh\",\"country\":\"IN\"},{\"key\":\"1755\",\"name\":\"Chhattisgarh\",\"country\":\"IN\"},{\"key\":\"1756\",\"name\":\"Jharkhand\",\"country\":\"IN\"},{\"key\":\"1757\",\"name\":\"Uttarakhand\",\"country\":\"IN\"},{\"key\":\"4100\",\"name\":\"Telangana\",\"country\":\"IN\"}],\"location_types\":[\"home\",\"recent\"]},\"flexible_spec\":[{\"interests\":[{\"id\":\"6003437140731\",\"name\":\"Solar energy\"}]}],\"geo_locations\":{\"cities\":[{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1}}",
       "execution_options": "[\"validate_only\"]"
     },
@@ -299,7 +299,7 @@
     "status": 200,
     "body": {
       "id": "120253709894480526",
-      "account_id": "2398686420592052"
+      "account_id": "9000000000000001"
     }
   },
   {
@@ -310,7 +310,7 @@
       "data": [
         {
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD",
@@ -338,7 +338,7 @@
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
       "promoted_object": {
-        "page_id": "885223068001054",
+        "page_id": "900000000000002",
         "smart_pse_enabled": false
       },
       "targeting": {
@@ -568,7 +568,7 @@
   },
   {
     "method": "POST",
-    "path": "act_2398686420592052/adsets",
+    "path": "act_9000000000000001/adsets",
     "form": {
       "name": "AdBrain audience 2026-10-26",
       "campaign_id": "120253709894480526",
@@ -578,7 +578,7 @@
       "optimization_goal": "LEAD_GENERATION",
       "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
       "destination_type": "ON_AD",
-      "promoted_object": "{\"page_id\":\"885223068001054\",\"smart_pse_enabled\":false}",
+      "promoted_object": "{\"page_id\":\"900000000000002\",\"smart_pse_enabled\":false}",
       "targeting": "{\"age_max\":65,\"age_min\":25,\"age_range\":[30,60],\"excluded_geo_locations\":{\"regions\":[{\"key\":\"1723\",\"name\":\"Andaman and Nicobar Islands\",\"country\":\"IN\"},{\"key\":\"1724\",\"name\":\"Andhra Pradesh\",\"country\":\"IN\"},{\"key\":\"1725\",\"name\":\"Assam\",\"country\":\"IN\"},{\"key\":\"1727\",\"name\":\"Dadra and Nagar Haveli\",\"country\":\"IN\"},{\"key\":\"1728\",\"name\":\"Delhi\",\"country\":\"IN\"},{\"key\":\"1729\",\"name\":\"Gujarat\",\"country\":\"IN\"},{\"key\":\"1730\",\"name\":\"Haryana\",\"country\":\"IN\"},{\"key\":\"1731\",\"name\":\"Himachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1732\",\"name\":\"Jammu and Kashmir\",\"country\":\"IN\"},{\"key\":\"1733\",\"name\":\"Kerala\",\"country\":\"IN\"},{\"key\":\"1734\",\"name\":\"Lakshadweep\",\"country\":\"IN\"},{\"key\":\"1735\",\"name\":\"Maharashtra\",\"country\":\"IN\"},{\"key\":\"1736\",\"name\":\"Manipur\",\"country\":\"IN\"},{\"key\":\"1737\",\"name\":\"Meghalaya\",\"country\":\"IN\"},{\"key\":\"1738\",\"name\":\"Karnataka\",\"country\":\"IN\"},{\"key\":\"1739\",\"name\":\"Nagaland\",\"country\":\"IN\"},{\"key\":\"1740\",\"name\":\"Odisha\",\"country\":\"IN\"},{\"key\":\"1741\",\"name\":\"Puducherry\",\"country\":\"IN\"},{\"key\":\"1742\",\"name\":\"Punjab region\",\"country\":\"IN\"},{\"key\":\"1743\",\"name\":\"Rajasthan\",\"country\":\"IN\"},{\"key\":\"1744\",\"name\":\"Tamil Nadu\",\"country\":\"IN\"},{\"key\":\"1745\",\"name\":\"Tripura\",\"country\":\"IN\"},{\"key\":\"1746\",\"name\":\"West Bengal\",\"country\":\"IN\"},{\"key\":\"1747\",\"name\":\"Sikkim\",\"country\":\"IN\"},{\"key\":\"1748\",\"name\":\"Arunachal Pradesh\",\"country\":\"IN\"},{\"key\":\"1749\",\"name\":\"Mizoram\",\"country\":\"IN\"},{\"key\":\"1750\",\"name\":\"Daman and Diu\",\"country\":\"IN\"},{\"key\":\"1751\",\"name\":\"Goa\",\"country\":\"IN\"},{\"key\":\"1752\",\"name\":\"Bihar\",\"country\":\"IN\"},{\"key\":\"1753\",\"name\":\"Madhya Pradesh\",\"country\":\"IN\"},{\"key\":\"1754\",\"name\":\"Uttar Pradesh\",\"country\":\"IN\"},{\"key\":\"1755\",\"name\":\"Chhattisgarh\",\"country\":\"IN\"},{\"key\":\"1756\",\"name\":\"Jharkhand\",\"country\":\"IN\"},{\"key\":\"1757\",\"name\":\"Uttarakhand\",\"country\":\"IN\"},{\"key\":\"4100\",\"name\":\"Telangana\",\"country\":\"IN\"}],\"location_types\":[\"home\",\"recent\"]},\"flexible_spec\":[{\"interests\":[{\"id\":\"6003437140731\",\"name\":\"Solar energy\"}]}],\"geo_locations\":{\"cities\":[{\"key\":\"1035473\"}],\"location_types\":[\"home\",\"recent\"]},\"targeting_automation\":{\"advantage_audience\":1}}"
     },
     "status": 200,
