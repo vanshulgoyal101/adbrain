@@ -107,6 +107,9 @@ exclude entire test directories or suppress uninvestigated findings.
 - **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
   QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
+- **Destructive migrations** (drop, delete, truncate, or a type change that rewrites data) need a fresh
+  export first, from the last 24 h (`~/.adbrain-backups`, or run `node scripts/db-export.mjs export`)
+  until Supabase backups exist (CEO, #884).
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required
