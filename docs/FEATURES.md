@@ -284,8 +284,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   pre-typed ask ("Hi! I'd like a free site survey.") naming one offer the ads
   mention (a free offer first) and the city when the campaign targets exactly
   one. Its language is a per-campaign choice in setup (**Message language**): Same
-  as the ad (default: the ads' saved language, else Devanagari → Hindi, Gurmukhi →
-  Punjabi, else English), English, Hindi, Hinglish or Punjabi. The choice is part
+  as the ad (default: the ads' saved language, where a plain "Hindi"/"Punjabi" follows
+  the script and reads as Hinglish in Roman letters; else Devanagari → Hindi, Gurmukhi →
+  Punjabi, Roman-script Hindi → Hinglish (#1081), else English), English, Hindi, Hinglish
+  or Punjabi. The welcome follows the same language. The choice is part
   of the reviewed plan.
 - Stories and Reels get a 9:16 version of each WhatsApp and lead-form ad (#333, #680): Prepare lays out
   the saved design and photo at 1080×1920 (no AI call; text kept out of the
