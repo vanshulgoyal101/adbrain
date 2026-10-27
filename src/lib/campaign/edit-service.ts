@@ -16,7 +16,9 @@ import type { Campaign, Json } from "@/lib/types";
 /** #773: the shared path for editing a launched campaign. Audience now; Dev 4 adds budgets (#774) as another kind. */
 
 export const RESTARTS_LEARNING = "This restarts Meta's learning; results may be slower for 2–3 days.";
-export const PAUSE_FIRST = "Pause the campaign first; editing a running campaign comes next.";
+export const PAUSE_FIRST = "Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.";
+/** #765: Meta refuses an in-place audience change on these ad sets, and copying a running one comes next. */
+export const RUNNING_NEEDS_COPY = "Meta doesn't allow this change on a running WhatsApp or interest-based campaign. Pause it first, then edit the audience.";
 export const NO_AREA_EXCLUSIONS = "This campaign covers a whole country, so there are no out-of-area places to leave out.";
 export const ALREADY_EXCLUDED = "Every ad set already leaves out the places outside its area. Nothing to change.";
 export const RATE_LIMITED = "Meta needs 30 seconds between audience changes. Try again in a moment.";
@@ -171,8 +173,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
   }
 
   const status = String(campaign.status).toLowerCase();
-  if (status === "active") throw new CampaignEditError(PAUSE_FIRST, 409);
-  if (status !== "paused") throw new CampaignEditError("Only a paused campaign can be edited.", 409);
+  if (status !== "paused" && status !== "active") throw new CampaignEditError("Only a paused or running campaign can be edited.", 409);
   const review = reviewableCampaign(campaign);
   if (!review) throw new CampaignEditError("AdBrain can only edit campaigns it launched.", 409);
 
@@ -206,11 +207,12 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
     }, async meta => {
       // The tree comes from Meta, not the mirror; a campaign whose children changed is refused here.
       const tree = await meta.readCampaignDelivery(review.metaCampaignId, {
-        dailyBudgetRupees: review.dailyBudgetRupees, status: "paused", adSetIds: review.children.adSetIds, adIds: review.children.adIds, cappedAdSetIds: review.children.cappedAdSetIds,
+        dailyBudgetRupees: review.dailyBudgetRupees, status, adSetIds: review.children.adSetIds, adIds: review.children.adIds, cappedAdSetIds: review.children.cappedAdSetIds,
       });
-      if (tree.adSets.some(adSet => adSet.status !== "PAUSED")) throw new CampaignEditError(PAUSE_FIRST, 409);
+      // A paused campaign's whole tree is paused (pauseCampaignTree); a running one may keep paused siblings (a capped run).
+      if (status === "paused" && tree.adSets.some(adSet => adSet.status !== "PAUSED")) throw new CampaignEditError(PAUSE_FIRST, 409);
       const treeTargets = tree.adSets.map(adSet => ({
-        adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id),
+        adSetId: adSet.id, adIds: tree.ads.filter(ad => ad.adSetId === adSet.id).map(ad => ad.id), running: adSet.status === "ACTIVE",
         mode: needsRebuild({ targeting: adSet.targeting, destination_type: adSet.destinationType }) ? "rebuild" as const : "patch" as const, targeting: adSet.targeting,
       }));
       if (treeTargets.some(target => !target.adIds.length)) throw new CampaignDeliveryError("An ad set has no ads. Reconcile the campaign in Meta first.");
@@ -235,6 +237,8 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
       }
       const targets = treeTargets.filter(target => changesFor.has(target.adSetId));
       if (!targets.length) throw new CampaignEditError(ALREADY_EXCLUDED, 409);
+      // #765: a running ad set is only patched in place; rebuilding one (new ad set, ads back to review) comes next.
+      if (targets.some(target => target.running && target.mode === "rebuild")) throw new CampaignEditError(RUNNING_NEEDS_COPY, 409);
       const changesOf = (adSetId: string) => changesFor.get(adSetId)!;
 
       const validated = new Map<string, boolean>();
@@ -242,7 +246,7 @@ export async function editCampaignAudience(context: AuthorizedBusiness, campaign
         await meta.editAdSetTargeting(review.metaCampaignId, { adSetId: target.adSetId, adIds: target.adIds, changes: changesOf(target.adSetId) }, { validateOnly: true });
         validated.set(target.adSetId, true);
       }
-      const consequence = targets.some(target => target.mode === "rebuild") ? RESTARTS_LEARNING : null;
+      const consequence = targets.some(target => target.mode === "rebuild" || target.running) ? RESTARTS_LEARNING : null;
       if (options.preview) return { preview: { adSets: targets.map(target => ({ adSetId: target.adSetId, mode: target.mode, validated: validated.has(target.adSetId) })), consequence } };
 
       await touch({ phase: "edit", transmitted: true, before: { adSets: targets.map(target => ({ id: target.adSetId, mode: target.mode, audience: audienceOf(target.targeting) })) } as unknown as Json });

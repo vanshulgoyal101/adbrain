@@ -6,6 +6,7 @@ import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import legacyWhatsAppTape from "./fixtures/meta/edit-audience-whatsapp-legacy.json";
 import languageTape from "./fixtures/meta/edit-audience-language.json";
 import whatsappLanguageTape from "./fixtures/meta/edit-audience-whatsapp-language.json";
+import scrubbedRunningTape from "./fixtures/meta/edit-audience-running.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
@@ -22,6 +23,8 @@ type Exchange = { method: string; path: string; form?: Record<string, string>; s
 type Sent = { method: string; path: string; form: Record<string, string> };
 
 const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+// metaScrubber() fakes (#1040) for the account and Page, rebound to these creds.
+const runningTape = JSON.parse(JSON.stringify(scrubbedRunningTape).replaceAll("9000000000000001", creds.adAccountId.slice(4)).replaceAll("900000000000002", creds.pageId)) as unknown[];
 const mohali = { cities: [{ key: "1029599", name: "Mohali", radius: 25, distance_unit: "kilometer" }] };
 // A new area always arrives with its #741 out-of-area exclusions (the edit service computes them).
 const changes = { location: mohali as never, excludedLocation: { regions: [{ key: "1723" }] } as never, age: { min: 30, max: 60 } };
@@ -138,6 +141,21 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(tape.pending).toEqual([]);
   });
 
+  // #765: recorded on an ACTIVE ad set under a PAUSED test campaign. Meta patches it in place and it stays ACTIVE.
+  it("patches a running ad set in place and keeps it running: no status write, read back ACTIVE", async () => {
+    const tape = replay(runningTape);
+    const { campaignId, adSetId } = ids(runningTape);
+    const meta = new MetaClient(creds);
+    const input = { adSetId, adIds: ["ad"], changes };
+    expect((await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).validated).toBe(true);
+    expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "patch", validated: false, adSetId, adIds: input.adIds, retiredAdSetId: null });
+    const posts = tape.sent.filter(call => call.method === "POST");
+    expect(posts.map(call => call.path)).toEqual([adSetId, adSetId]);
+    expect(posts.some(call => "status" in call.form)).toBe(false);
+    expect(((runningTape as Exchange[]).at(-1)!.body as { status: string }).status).toBe("ACTIVE");
+    expect(tape.pending).toEqual([]);
+  });
+
   it("Meta's 30-second limit on a second targeting update surfaces as code 613 with nothing else written", async () => {
     const tape = replay(rateLimitedTape);
     const { campaignId, adSetId } = ids(rateLimitedTape);
@@ -204,17 +222,25 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
 
-  it("refuses an ad set that isn't PAUSED, and empty or out-of-range changes, before any write", async () => {
-    const running = (patchTape as Exchange[]).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
-      ? { ...exchange, body: { ...(exchange.body as object), status: "ACTIVE" } } : exchange);
-    const tape = replay(running);
-    const { campaignId, adSetId } = ids(patchTape);
+  it("refuses a running ad set that needs a rebuild, an archived one, and empty or out-of-range changes, before any write", async () => {
+    const status = (recorded: unknown[], value: string) => (recorded as Exchange[]).map(exchange => /fields=id%2Ccampaign_id%2Cstatus/.test(exchange.path)
+      ? { ...exchange, body: { ...(exchange.body as object), status: value } } : exchange);
     const meta = new MetaClient(creds);
+    // #765: a running ad set is only changed in place; rebuilding it would leave the old one delivering.
+    const rebuilding = replay(status(rebuildTape, "ACTIVE"));
+    const rebuildIds = ids(rebuildTape);
+    await expect(meta.editAdSetTargeting(rebuildIds.campaignId, { adSetId: rebuildIds.adSetId, adIds: ["a"], changes })).rejects.toThrow("Pause the ad set before changing its audience.");
+    expect(rebuilding.sent.filter(call => call.method !== "GET")).toEqual([]);
+    vi.restoreAllMocks();
+
+    const tape = replay(status(patchTape, "ARCHIVED"));
+    const { campaignId, adSetId } = ids(patchTape);
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes })).rejects.toBeInstanceOf(CampaignDeliveryError);
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: {} })).rejects.toThrow("Invalid audience change.");
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { age: { min: 40, max: 30 } } })).rejects.toThrow("Invalid audience change.");
     expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
   });
+
   describe("language (#773)", () => {
     const languages = { languages: [1001, 46] };
 

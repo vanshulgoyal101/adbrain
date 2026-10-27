@@ -5,6 +5,7 @@ import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.js
 import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import languageTape from "./fixtures/meta/edit-audience-language.json";
 import areaTape from "./fixtures/meta/edit-audience-area-exclusions.json";
+import scrubbedRunningTape from "./fixtures/meta/edit-audience-running.json";
 import { lacksAreaExclusions } from "@/lib/meta/service-area";
 
 // #773 2/3: POST /api/campaigns/[id]/audience through the real route, connection access, edit service,
@@ -119,6 +120,10 @@ const rebuild = () => {
 const patch = () => scenario(patchTape as Exchange[], "120253709953000526", 4);
 const limited = () => scenario(rateLimitedTape as Exchange[], "120253709671200526", 4);
 const language = () => scenario(languageTape as Exchange[], "120253724289410526", 4);
+// #765: recorded on an ACTIVE ad set under a PAUSED test campaign (CEO-approved, deleted after). Its ids are
+// metaScrubber() fakes (#1040); the fake account and Page are rebound to this test's connection.
+const runningTape = JSON.parse(JSON.stringify(scrubbedRunningTape).replaceAll("9000000000000001", ACCOUNT.slice(4)).replaceAll("900000000000002", PAGE)) as Exchange[];
+const running = () => scenario(runningTape, "900000000000000005", 4);
 // The area tape starts with the #741 area lookup the service makes from the ad set's current area.
 const area = (tape = areaTape as Exchange[]) => {
   const scene = scenario(tape.slice(1), "120253724507960526", 4);
@@ -363,15 +368,47 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(mirror()).toEqual(before);
   });
 
-  it("refuses a running campaign before any Meta call", async () => {
-    const scene = patch();
+  // #765: a running campaign. The tree reads are synthesised with status ACTIVE; the running tape's ad set reads,
+  // patch and read-back are Meta's real answers for an ACTIVE ad set.
+  const live = (tape: Exchange[], scope: "tree" | "all" = "all", campaignToo = true) => structuredClone(tape).map((exchange, index) => {
+    const body = exchange.body as { status?: string; effective_status?: string; data?: Array<{ status?: string; effective_status?: string }> };
+    if (index === 0 && campaignToo) Object.assign(body, { status: "ACTIVE", effective_status: "ACTIVE" });
+    if (index === 1) body.data?.forEach(adSet => Object.assign(adSet, { status: "ACTIVE", effective_status: "ACTIVE" }));
+    if (scope === "all" && index > 2 && exchange.method === "GET" && body.status === "PAUSED") body.status = "ACTIVE";
+    return exchange;
+  });
+
+  it("patches a running lead-form campaign in place: it keeps running and learning restarts", async () => {
+    const scene = running();
+    expect(((runningTape as Exchange[])[6].body as { status: string }).status).toBe("ACTIVE");
+    expect(((runningTape as Exchange[]).at(-1)!.body as { status: string }).status).toBe("ACTIVE");
     stored(scene, { status: "active" });
-    replay([]);
+    replay(live(scene.tape, "tree"));
+    const { status, body } = await edit();
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ result: { count: 1, consequence: "This restarts Meta's learning; results may be slower for 2–3 days.", adSets: [{ adSetId: scene.adSetId, mode: "patch", previousAdSetId: null }] } });
+    expect(writes().map(call => call.path)).toEqual([scene.adSetId]);
+    expect(mirror()).toMatchObject({ status: "active", meta_adset_id: scene.adSetId, meta_ad_ids: [scene.adId] });
+  });
+
+  it("refuses to rebuild a running WhatsApp or interest-based ad set, before any write", async () => {
+    const scene = rebuild();
+    stored(scene, { status: "active" });
+    replay(live(scene.tape, "tree"));
     const { status, body } = await edit();
     expect(status).toBe(409);
-    expect(body.error).toBe("Pause the campaign first; editing a running campaign comes next.");
-    expect(graph.sent).toEqual([]);
-    expect(operations()).toEqual([]);
+    expect(body.error).toBe("Meta doesn't allow this change on a running WhatsApp or interest-based campaign. Pause it first, then edit the audience.");
+    expect(writes()).toEqual([]);
+  });
+
+  it("asks to pause first when a paused campaign still has a live ad set in Meta", async () => {
+    const scene = patch();
+    stored(scene);
+    replay(live(scene.tape, "tree", false));
+    const { status, body } = await edit();
+    expect(status).toBe(409);
+    expect(body.error).toBe("Part of this campaign is still running in Meta. Pause the campaign, then edit the audience.");
+    expect(writes()).toEqual([]);
   });
 
   it("replays a finished edit by its idempotency key without calling Meta again, and refuses the key for another change", async () => {

@@ -2079,6 +2079,7 @@ function BusinessCampaigns({
               <EditAudienceDialog
                 campaignId={audienceEdit.id}
                 campaignName={audienceEdit.name ?? `${business.name} — ${audienceEdit.objective}`}
+                running={audienceEdit.status === "active"}
                 onClose={() => setAudienceEdit(null)}
                 onSaved={(message) => { setCardNotice({ id: audienceEdit.id, message }); setAudienceEdit(null); }}
               />
@@ -2209,7 +2210,7 @@ function BusinessCampaigns({
                                 </a>
                               </DropdownMenuItem>
                             )}
-                            {c.meta_campaign_id && c.status === "paused" && reviewableCampaign(c) && (
+                            {c.meta_campaign_id && (c.status === "paused" || c.status === "active") && reviewableCampaign(c) && (
                               <DropdownMenuItem data-product-event="campaign.edit_audience" onSelect={() => setAudienceEdit(c)}>
                                 <Users className="h-4 w-4" aria-hidden="true" /> Edit audience
                               </DropdownMenuItem>
@@ -2254,7 +2255,7 @@ function BusinessCampaigns({
                       // #1003: always say how old the numbers are.
                       <p className="text-xs text-slate-500">{updatingIds.includes(c.id) ? "Updating results…" : `Updated ${timeAgo(new Date(r.fetched_at))}`}</p>
                     )}
-                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} />}
+                    {adResults && r && c.meta_campaign_id && <AdResults campaignId={c.id} whatsapp={outcome === "whatsapp"} />}
                     {r && outcome === "whatsapp" && r.whatsapp_opens != null && r.conversations != null && (
                       // #493: people reach WhatsApp and leave; show the drop-off plainly.
                       <p className="text-sm text-slate-700">

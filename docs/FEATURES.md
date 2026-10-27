@@ -35,13 +35,13 @@ ID are different identifiers. Never infer one from another.
 
 | Page | Job | Important boundary |
 | --- | --- | --- |
-| `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
+| `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764; the median time to first reply over 30 days, #1049), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
 | `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. Any goal, typed or from a suggestion, on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question. The start screen says what the ads will use ('Your 3 ads will use: Mohali · offer: Free site survey'; a proof point is labelled 'proof:', facts cut at 40 characters) above 'Make 3 ads', with 'About 2 minutes. Nothing is published.' under it and 'Edit brief' to keep the review; afterwards the brief shows as a collapsed 'What I'll write about · Edit' line (#858, #1004). After 'Use this ad', 'Review campaign' opens `/campaigns?…&review=1`, which prepares Review on its own (#1004) Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`) fill the goal in one tap; their wording asks for saved offers only and never asserts a sale, discount or deadline (#700) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected; `&review=1` (#1004, from Create) then prepares Review on its own once Meta is connected, the WhatsApp check has run and a form campaign has its lead form (the same prepare as the Review button; nothing is sent to Meta). The lead form used for the last Review is preselected while the Page still has it; with several forms and none chosen, the field says choosing one opens Review | Live Meta writes require verified binding and capability |
-| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764), then sync, search, and inspect enquiries; copy digest | No automated outreach is sent |
+| `/leads` | WhatsApp chats per campaign with **Add enquiry** (#764), then sync, search, and inspect enquiries; copy digest. Each enquiry with a phone has **WhatsApp them** (wa.me with a first reply in the business's first language, en/hi/Hinglish, naming the business and its first offer) and **Call**; the first tap records `first_contacted_at` ("Replied 12 min after the enquiry", #1049) | No automated outreach is sent: the owner sends the reply |
 | `/settings` | Meta connection, spend guardrails, declared preferences | Disconnect does not pause running ads; preferences cannot authorize spend |
 
 ## Workspace Responsiveness
@@ -304,6 +304,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
   enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
   more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
+  #1045: with at least 5 enquiries across the campaign, a running ad that costs ≥ 2× the best ad per enquiry
+  (or spent ≥ 2× the campaign's cost per enquiry with none) gets one line: "“B” costs ₹X per enquiry vs ₹Y
+  for “A”. Pause it?" [Pause this ad] [Keep]. Pause turns off only that ad (read back from Meta) and can be
+  undone on the card; Keep hides it for 3 days. Never automatic, never a budget change.
 - **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
   owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
   WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name

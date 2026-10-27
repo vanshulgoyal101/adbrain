@@ -17,4 +17,6 @@ export type LeadFilters = z.infer<typeof leadListSchema>;
 export const leadUpdateSchema = z.object({
   workflow_status: z.enum(workflowStatuses).optional(),
   follow_up_note: z.string().max(2000).optional(),
+  /** #1049: the owner tapped WhatsApp them or Call; the server records the time once. */
+  contacted: z.literal(true).optional(),
 }).strict().refine(update => Object.keys(update).length > 0);

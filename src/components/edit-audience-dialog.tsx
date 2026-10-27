@@ -35,12 +35,14 @@ async function send(campaignId: string, body: object): Promise<{ ok: true; data:
 }
 
 /**
- * #773: change a paused campaign's audience (area, extra exclusions, ages, gender, language). Meta checks the
+ * #773/#765: change a paused or running campaign's audience (area, extra exclusions, ages, gender, language). Meta checks the
  * change first (nothing is written), the owner reads the consequence, then saves. Exclusions only grow.
  */
-export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved }: {
+export function EditAudienceDialog({ campaignId, campaignName, running = false, onClose, onSaved }: {
   campaignId: string;
   campaignName: string;
+  /** #765: a running campaign keeps running; only ad sets Meta can change in place are edited. */
+  running?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -81,7 +83,7 @@ export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved 
     setBusy(null);
     if (!outcome.ok) { setError(outcome.message); return; }
     const result = outcome.data.result as { consequence?: string | null } | undefined;
-    onSaved(`Audience changed. The campaign stays paused.${result?.consequence ? ` ${result.consequence}` : ""}`);
+    onSaved(`Audience changed. The campaign ${running ? "keeps running" : "stays paused"}.${result?.consequence ? ` ${result.consequence}` : ""}`);
   };
 
   return (

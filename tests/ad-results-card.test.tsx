@@ -53,3 +53,63 @@ describe("<AdResults> (#783)", () => {
     await vi.waitFor(() => expect(off.container.querySelector("details")).toBeNull());
   });
 });
+
+describe("<AdResults> pause offer (#1045)", () => {
+  const ads = [
+    ad("1", { best: true, status: "ACTIVE", results: 6, spend: 600, costPerResult: 100 }),
+    ad("2", { status: "ACTIVE", results: 2, spend: 500, costPerResult: 250 }),
+  ];
+  const openWith = (answers: Response[], whatsapp = false) => {
+    const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (input) => String(input).endsWith("/ads") ? Response.json({ ok: true, syncedAt: null, ads }) : answers.shift()!);
+    vi.stubGlobal("fetch", fetch);
+    const view = render(<AdResults campaignId="c1" whatsapp={whatsapp} />);
+    const details = view.container.querySelector("details")!;
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    return fetch;
+  };
+  afterEach(() => window.localStorage.clear());
+
+  it("says chats on a WhatsApp campaign, with Pause as an outline button (Designer on #1048)", async () => {
+    openWith([], true);
+    expect(await screen.findByText("“Ad 2” costs ₹250 per chat vs ₹100 for “Ad 1”. Pause it?")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("per chat");
+    expect(screen.getByRole("button", { name: "Pause this ad" }).className).toContain("border-slate-300");
+    expect(screen.getByRole("button", { name: "Pause this ad" }).className).not.toContain("bg-slate-900");
+  });
+
+  it("names both ads and costs, pauses only on a tap, and offers Undo", async () => {
+    const fetch = openWith([Response.json({ ok: true, result: { adId: "2", status: "PAUSED" } }), Response.json({ ok: true, result: { adId: "2", status: "ACTIVE" } })]);
+    expect(await screen.findByText("“Ad 2” costs ₹250 per enquiry vs ₹100 for “Ad 1”. Pause it?")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Pause this ad" }));
+    expect(await screen.findByText(/Paused “Ad 2”\. The other ads keep running\./)).toBeInTheDocument();
+    expect(fetch.mock.calls[1]).toEqual(["/api/campaigns/c1/ads/2/status", expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "pause", reason: "expensive" }) })]);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("“Ad 2” is running again.")).toBeInTheDocument();
+    expect(JSON.parse(String(fetch.mock.calls[2][1]?.body))).toEqual({ action: "undo" });
+  });
+
+  it("Keep hides the offer for 3 days and changes nothing; a refusal is shown, not hidden", async () => {
+    const fetch = openWith([]);
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    expect(screen.queryByText(/Pause it\?/)).not.toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const until = Number(window.localStorage.getItem("adbrain.keepAd.c1.2"));
+    expect(until - Date.now()).toBeGreaterThan(3 * 24 * 3600 * 1000 - 5000);
+  });
+
+  it("says so, and offers no Undo, when the ad was already paused in Meta", async () => {
+    openWith([Response.json({ ok: true, result: { adId: "2", status: "PAUSED", changed: false } })]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause this ad" }));
+    expect(await screen.findByText("“Ad 2” is already paused in Meta. AdBrain didn't change it.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+  });
+
+  it("shows Meta's refusal and keeps the offer", async () => {
+    openWith([Response.json({ error: "Meta didn't change the ad. Nothing changed." }, { status: 502 })]);
+    fireEvent.click(await screen.findByRole("button", { name: "Pause this ad" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Meta didn't change the ad. Nothing changed.");
+    expect(screen.getByRole("button", { name: "Pause this ad" })).toBeEnabled();
+  });
+});
