@@ -31,7 +31,11 @@ export const accountFundingSchema = z.object({
   spendCapPaise: z.number().int().nonnegative(), amountSpentPaise: z.number().int().nonnegative(),
   roomPaise: z.number().int().nonnegative(), prepay: z.boolean(),
   /** #1058: lifetime budget still to spend on the account's running capped runs; Meta's room doesn't count it. */
-  committed: z.object({ runs: z.number().int().nonnegative(), remainingPaise: z.number().int().nonnegative() }).optional(),
+  committed: z.object({
+    runs: z.number().int().nonnegative(), remainingPaise: z.number().int().nonnegative(),
+    /** #1094: ACTIVE daily-budget ad sets have no total, so they're named, not subtracted. */
+    uncapped: z.object({ adSets: z.number().int().nonnegative(), dailyPaise: z.number().int().nonnegative() }).optional(),
+  }).optional(),
 });
 
 const storedCapsSchema = z.object({

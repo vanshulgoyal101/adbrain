@@ -1,6 +1,6 @@
 import { formatMoney } from "@/lib/format";
 import { wouldExceedCap, type CampaignSpend } from "@/lib/campaign/spend";
-import { fundingShortfall, type AccountFunding } from "@/lib/campaign/funding-check";
+import { committedWords, fundingShortfall, type AccountFunding } from "@/lib/campaign/funding-check";
 import type { FundingMode } from "@/lib/payments/operator-funding";
 
 export type BudgetEditInput = {
@@ -57,7 +57,7 @@ export function checkBudgetEdit(input: BudgetEditInput): BudgetEditCheck {
     const neededPaise = Math.round((cap - current.spentRupees) * 100);
     const short = fundingShortfall({ ...input.funding, neededPaise });
     if (short?.kind === "no_limit") return refuse("Set a spending limit on the Meta ad account before raising the cap.");
-    if (short?.kind === "short") return refuse(`Meta has ${formatMoney(short.roomPaise / 100)} left under the ad account's spending limit; this cap needs ${formatMoney(short.neededPaise / 100)}. Add funds on Meta or choose a lower cap.`);
+    if (short?.kind === "short") return refuse(`Meta has ${formatMoney(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed, formatMoney)}; this cap needs ${formatMoney(short.neededPaise / 100)}. Add funds on Meta or choose a lower cap.`);
     if (short?.kind === "allowance") return refuse("The new cap is more than the available advertising funds.");
     if (short?.kind === "unverified") return refuse("AdBrain couldn't check the funding for this cap. Try again.");
   }
