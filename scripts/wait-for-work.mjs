@@ -480,6 +480,6 @@ if (role === "cto") {
     if (lines.length) report(lines);
   } catch { /* fall through */ }
 }
-console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area.`);
+console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area. Then run this waiter again; don't stop (owner, Oct 27).`);
 process.exit(3);
 }
