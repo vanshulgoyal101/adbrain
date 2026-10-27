@@ -207,6 +207,10 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    rupaye per kW") counts like the same amount in ₹. `all-caps` ignores acronyms
    joined by "/" or "-" ("IIT/PEC", "नॉन-DCR") and capitals the owner's own facts use
    (a brand written "SOLARIDE") (#418).
+   Once a concept passes, the offer goes on the picture (#418 rule 2): when the copy
+   states a cited offer that neither the headline nor `supportingText` carries,
+   `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
+   it. No repair and no new words; Hindi and Punjabi copy keeps its own picture line.
 4. Generate an image from the validated concept and up to three reference images.
    When the business has uploaded product photos (Brand assets), the first ad
    uses the newest one as its image instead (#195): no image call or image cost,
