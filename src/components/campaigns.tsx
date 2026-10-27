@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   CheckCircle2,
+  ChevronRight,
   ExternalLink,
   FileText,
   Link2,
@@ -42,8 +43,6 @@ import {
   Badge,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import {
@@ -1580,9 +1579,14 @@ function BusinessCampaigns({
         }}
       />
 
-      {savedDrafts.length > 0 && <section aria-label="Saved drafts" className="border-y border-slate-200 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Saved drafts</h2>
-        <ul className="mt-2 divide-y divide-slate-100">
+      {/* #847 T6: while a setup is open, saved drafts fold to one line so the setup starts in the first screen. */}
+      {savedDrafts.length > 0 && <details key={showComposer ? "composing" : "list"} open={!showComposer} aria-label="Saved drafts" className="group border-y border-slate-200 py-3">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 text-sm font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90" aria-hidden="true" />
+          <h2>Saved drafts</h2>
+          <span className="font-normal text-slate-500">({savedDrafts.length})</span>
+        </summary>
+        <ul className="mt-1 divide-y divide-slate-100">
           {savedDrafts.map((draft) => <li key={draft.draftId} className="flex min-w-0 items-center justify-between gap-3 py-2">
             <button type="button" disabled={draftBusy !== null || creating || operationChecking} onClick={() => void reopenDraft(draft.draftId)} className="min-w-0 flex-1 text-left text-sm font-medium text-slate-800 hover:text-blue-700 disabled:opacity-50">
               <span className="block wrap-break-word">{draft.input.name}</span>
@@ -1591,11 +1595,17 @@ function BusinessCampaigns({
             <Button variant="ghost" size="sm" title={`Remove ${draft.input.name}`} aria-label={`Remove ${draft.input.name}`} disabled={draftBusy !== null || creating} onClick={() => void removeDraft(draft)}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
           </li>)}
         </ul>
-      </section>}
+      </details>}
       <div id="campaign-composer" hidden={!showComposer}>
       {(
         <>
-          <section
+          <h2 className="mb-1 text-[17px] font-semibold text-slate-950">New campaign</h2>
+          {approved.length > 0 && connectedForDraft ? (
+            <p aria-label="Launch preflight" className="flex items-start gap-2 pb-1 text-sm text-slate-600">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" aria-hidden="true" />
+              <span>{approved.length} approved {approved.length === 1 ? "ad" : "ads"}, Meta connected. Created paused: nothing spends until you activate.</span>
+            </p>
+          ) : <section
             aria-label="Launch preflight"
             className="grid gap-3 border-y border-slate-200 py-4 sm:grid-cols-3"
           >
@@ -1612,16 +1622,18 @@ function BusinessCampaigns({
                 </div>
               </div>
             ))}
-          </section>
+          </section>}
           {!connectedForDraft && <p className="-mt-1 mb-2"><HelpOnWhatsApp label="Stuck connecting Meta? Help on WhatsApp" /></p>}
-          <fieldset disabled={preparing || creating} className="my-5 flex flex-wrap gap-2">
+          <div className="my-4 flex flex-col gap-4 sm:flex-row sm:gap-8">
+          <fieldset disabled={preparing || creating} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Campaign setup</legend>
             {[["manual", "Choose settings"], ["guided", "Plan with AdBrain"]].map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", creationMode === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input ref={value === "guided" ? guidedModeRef : undefined} type="radio" name="creation-mode" value={value} checked={creationMode === value} onChange={() => setCreationMode(value)} className="accent-blue-600" />{label}</label>)}
           </fieldset>
-          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="mb-4 flex flex-wrap gap-2">
+          <fieldset disabled={preparing || creating || destinationRecoveryLocked} aria-describedby={showDestinationLock ? "destination-lock-reason" : undefined} className="flex flex-wrap gap-2">
             <legend className="mb-2 text-xs font-medium text-slate-500">Destination</legend>
             {([ ["instant_form", "Instant form"], ["whatsapp", "WhatsApp chat"] ] as const).map(([value, label]) => <label key={value} className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm", destination === value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200")}><input id={`destination-${value}`} type="radio" name="campaign-destination" value={value} checked={destination === value} onChange={() => { if (!unresolvedRecovery()) { destinationChosenRef.current = true; setDestination(value); setPrepareReview(null); } }} className="accent-blue-600" />{label}</label>)}
           </fieldset>
+          </div>
           {showDestinationLock && <p id="destination-lock-reason" role="status" className="mb-4 text-sm text-amber-800">Destination is locked until the previous campaign request is resolved.</p>}
           {showComposer && destination === "whatsapp" && <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>}
           {showComposer && creationMode === "guided" && <CampaignChat
@@ -1642,16 +1654,7 @@ function BusinessCampaigns({
 
       {(
         <Card hidden={creationMode !== "manual"} className="min-w-0 rounded-none border-0 bg-white" onChange={() => { if (!unresolvedRecovery()) setPrepareReview(null); }}>
-          <CardHeader className="border-b border-slate-200/80 bg-white/60">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle>New campaign</CardTitle>
-                <p className="mt-1 text-sm text-slate-500">Choose the approved work, audience, and budget to prepare a paused campaign.</p>
-              </div>
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Paused by default</span>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5">
+          <CardContent className="flex flex-col gap-5 px-0 pt-0">
             <fieldset disabled={preparing || creating} className="flex min-w-0 flex-col gap-5">
             {approved.length === 0 ? (
               <div className="flex flex-col items-start gap-3 py-2">
@@ -1677,7 +1680,7 @@ function BusinessCampaigns({
                       const isSel = selected.has(c.id);
                       return (
                         // #305: on a phone, ads after the first two rows wait behind "Show all" unless selected.
-                        <div key={c.id} className={cn("flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
+                        <div key={c.id} className={cn("relative flex min-w-0 flex-col gap-1.5", !showAllAds && index >= PHONE_PICKER_ADS && !isSel && "max-sm:hidden")}>
                         <button
                           type="button"
                           onClick={() => toggle(c.id)}
@@ -1728,15 +1731,16 @@ function BusinessCampaigns({
                             setAdEditNotes(null);
                             setEditingAdId(c.id);
                           }}
-                          className="h-8 w-full sm:h-9"
+                          className="h-9 w-full max-sm:absolute max-sm:bottom-1.5 max-sm:left-1.5 max-sm:h-9 max-sm:w-9 max-sm:rounded-full max-sm:bg-white/95 max-sm:p-0"
                         >
-                          <Pencil className="h-3.5 w-3.5" /> Edit
+                          {/* #847 T6: on a phone, Edit is a corner icon so a row of ads isn't followed by a row of buttons. */}
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" /><span className="max-sm:sr-only">Edit</span>
                         </Button>
                         </div>
                       );
                     })}
                   </div>
-                  {!showAllAds && pickerAds.length > PHONE_PICKER_ADS && (
+                  {!showAllAds && pickerAds.some((c, index) => index >= PHONE_PICKER_ADS && !selected.has(c.id)) && (
                     <Button type="button" size="sm" variant="ghost" onClick={() => setShowAllAds(true)} className="mt-2 w-full sm:hidden">
                       Show all {pickerAds.length} ads
                     </Button>
