@@ -13,16 +13,18 @@ type Loaded = { ads: AdResultView[]; syncedAt: string | null };
 /** One quiet row: the ad, its enquiries and ₹ per enquiry ("—" before the first one, never ₹0). */
 function Row({ ad }: { ad: AdResultView }) {
   return (
-    <li className="flex items-start justify-between gap-3 py-2 text-xs">
+    <li className="flex min-h-14 items-center justify-between gap-4 py-2.5 text-sm">
       <span className="min-w-0 wrap-break-word text-slate-900">
-        {ad.best && <span className="mr-1.5 font-semibold text-primary">Best</span>}
-        {ad.name ?? "Ad"}
-        {ad.replaced && <span className="ml-1.5 text-slate-500">(replaced)</span>}
-        {!ad.delivered && <span className="block text-slate-500">Meta hasn&apos;t shown this ad yet</span>}
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-medium">{ad.name ?? "Ad"}</span>
+          {ad.best && <span className="rounded-full bg-lime-wash px-2 py-0.5 text-xs font-medium text-slate-800">Best</span>}
+          {ad.replaced && <span className="text-xs text-slate-500">(replaced)</span>}
+        </span>
+        {!ad.delivered && <span className="mt-0.5 block text-xs text-slate-500">Meta hasn&apos;t shown this ad yet</span>}
       </span>
       <span className="shrink-0 text-right tabular-nums text-slate-700">
         {formatNumber(ad.results)} {ad.results === 1 ? "enquiry" : "enquiries"}
-        <span className="block text-slate-500">{ad.costPerResult === null ? "—" : formatMoney(ad.costPerResult)} per enquiry</span>
+        <span className="mt-0.5 block text-xs text-slate-500">{ad.costPerResult === null ? "—" : formatMoney(ad.costPerResult)} per enquiry</span>
       </span>
     </li>
   );
@@ -57,27 +59,29 @@ export function AdResults({ campaignId }: { campaignId: string }) {
   const hasBest = loaded?.ads.some(ad => ad.best) ?? false;
 
   return (
-    <details className="group text-sm" onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) void load(); }}>
-      <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 py-2 font-medium text-slate-900 [&::-webkit-details-marker]:hidden">
+    <details className="group border-t border-slate-200 pt-2 text-sm" onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) void load(); }}>
+      <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 py-2 font-medium text-slate-900 [&::-webkit-details-marker]:hidden">
         <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
-        Which ad worked
+        <span>Which ad worked</span>
       </summary>
-      {state === "loading" && <p className="flex items-center gap-2 text-slate-500"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Loading ads…</p>}
+      <div className="pb-1 pl-6">
+      {state === "loading" && <p className="flex min-h-11 items-center gap-2 text-slate-500"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Loading ads…</p>}
       {state === "error" && <p role="alert" className="text-danger">Couldn&apos;t load the ads. <button type="button" className="min-h-11 underline" onClick={() => void load()}>Try again</button></p>}
       {loaded && (loaded.ads.length === 0 ? (
         <p className="text-slate-500">No ad results yet. They appear after the next refresh.</p>
       ) : (
         <div>
-          {!hasBest && <p className="text-slate-500">{anyResults ? "Early: too few enquiries to pick a winner." : "No enquiries yet, so no winner."}</p>}
-          <ul className="divide-y divide-slate-100">
+          {!hasBest && <p className="pb-1 text-xs text-slate-500">{anyResults ? "Early: too few enquiries to pick a winner." : "No enquiries yet, so no winner."}</p>}
+          <ul className="divide-y divide-slate-100 border-b border-slate-100">
             {shown.map(ad => <Row key={ad.adId} ad={ad} />)}
           </ul>
           {loaded.ads.length > SHOWN && !all && (
-            <button type="button" className="min-h-11 font-medium text-blue-700" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
+            <button type="button" className="mt-1 min-h-11 font-medium text-blue-700 underline-offset-4 hover:underline" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
           )}
-          {loaded.syncedAt && <p className="text-xs text-slate-500">Updated {relativeAge(loaded.syncedAt, new Date()) || "just now"}</p>}
+          {loaded.syncedAt && <p className="pt-2 text-xs text-slate-500">Updated {relativeAge(loaded.syncedAt, new Date()) || "just now"}</p>}
         </div>
       ))}
+      </div>
     </details>
   );
 }
