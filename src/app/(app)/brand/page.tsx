@@ -2,6 +2,7 @@ import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
 import { WhatsAppMessageCard } from "@/components/whatsapp-message-card";
+import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 import { Instructions } from "@/components/instructions";
 import { PageHeader } from "@/components/ui/page-header";
@@ -70,6 +71,7 @@ export default async function BrandPage() {
                 {/* #840: suggestions are today's generated text, per language, from the Brand's offers and areas. */}
                 <WhatsAppMessageCard businessId={business.id} businessName={business.name} saved={business.whatsapp_template}
                   firstOffer={business.offers?.[0]}
+                  suggestedQuestions={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => [language, suggestedQuestions(business, language)])) as Record<"en" | "hi" | "hinglish" | "pa", string[]>}
                   callNumber={whatsappStatus?.then((status) => status.state === "ready" ? status.numbers.find((number) => number.source === "page")?.masked ?? null : null)}
                   suggested={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => {
                     const text = whatsappGreeting(business, business.offers ?? [], business.locations ?? [], [], language);

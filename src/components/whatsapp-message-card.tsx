@@ -19,11 +19,13 @@ const LIMIT = 300;
  * #840: the business's WhatsApp message, the opening a customer sees after tapping an ad. Not the
  * WhatsApp Business app's own greeting. Saving never touches a running campaign.
  */
-export function WhatsAppMessageCard({ businessId, businessName, saved, suggested, firstOffer, callNumber }: {
+export function WhatsAppMessageCard({ businessId, businessName, saved, suggested, suggestedQuestions, firstOffer, callNumber }: {
   businessId: string;
   businessName: string;
   saved: unknown;
   suggested: Suggested;
+  /** #905: quick questions from the Brand, per language; they fill the empty boxes and send nothing until saved. */
+  suggestedQuestions?: Record<Language, string[]>;
   firstOffer?: string | null;
   /** The masked number the Call now button rings (the Page's WhatsApp), read from Meta after the card shows. */
   callNumber?: Promise<string | null>;
@@ -36,6 +38,8 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
   const [prefill, setPrefill] = useState(savedTemplate?.opening.kind === "prefill" ? savedTemplate.opening.prefill : suggested.en.prefill);
   const [button, setButton] = useState<Button>(savedTemplate?.opening.kind === "ice_breakers" ? "questions" : savedTemplate?.opening.kind === "prefill" && savedTemplate.opening.callButton ? "call" : "none");
   const [questions, setQuestions] = useState<string[]>(savedTemplate?.opening.kind === "ice_breakers" ? [...savedTemplate.opening.questions, "", "", ""].slice(0, 3) : ["", "", ""]);
+  // #905: true while the boxes hold AdBrain's suggestion, so it follows the language until the owner edits it.
+  const [questionsSuggested, setQuestionsSuggested] = useState(false);
   const [hasSaved, setHasSaved] = useState(Boolean(savedTemplate));
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string; field?: string } | null>(null);
@@ -47,12 +51,21 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
     opening: button === "questions" ? { kind: "ice_breakers", questions: filled } : { kind: "prefill", prefill, callButton: button === "call" },
   });
   const edit = (apply: () => void) => { apply(); setDirty(true); setMessage(null); };
+  const suggestionFor = (next: Language | "auto") => [...(suggestedQuestions?.[next === "auto" ? "en" : next] ?? []), "", "", ""].slice(0, 3);
+  const pickButton = (value: Button) => edit(() => {
+    setButton(value);
+    if (value === "questions" && suggestedQuestions && questions.every((question) => !question.trim())) {
+      setQuestions(suggestionFor(language));
+      setQuestionsSuggested(true);
+    }
+  });
   const pickLanguage = (next: Language | "auto") => {
     setLanguage(next);
     setMessage(null);
     // A suggested message follows the language; the owner's own words stay as typed.
     const words = suggested[next === "auto" ? "en" : next];
     if (!hasSaved) { setGreeting(words.greeting); setPrefill(words.prefill); }
+    if (questionsSuggested) setQuestions(suggestionFor(next));
     if (hasSaved) setDirty(true);
   };
   const save = (value: WhatsAppTemplate | null) => startTransition(async () => {
@@ -60,9 +73,10 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
     const result = await saveWhatsAppTemplate({ businessId, template: value })
       .catch((): WhatsAppTemplateResult => ({ ok: false, error: "Couldn't save your WhatsApp message. Try again." }));
     if (!result.ok) { setMessage({ ok: false, text: result.error ?? "Couldn't save.", field: result.field }); return; }
-    if (!value) { setLanguage("auto"); setGreeting(suggested.en.greeting); setPrefill(suggested.en.prefill); setButton("none"); setQuestions(["", "", ""]); }
+    if (!value) { setLanguage("auto"); setGreeting(suggested.en.greeting); setPrefill(suggested.en.prefill); setButton("none"); setQuestions(["", "", ""]); setQuestionsSuggested(false); }
     if (value) setLanguage(value.language);
     setHasSaved(Boolean(value));
+    setQuestionsSuggested(false);
     setDirty(false);
     setMessage({ ok: true, text: value ? "Saved. New WhatsApp campaigns will use it." : "Back to the suggested message." });
   });
@@ -95,14 +109,14 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
           <legend className="text-sm font-medium text-slate-800">Button</legend>
           <div className="flex flex-wrap gap-2">
             {([["none", "None"], ["call", "Call now"], ["questions", "Quick questions"]] as const).map(([value, label]) =>
-              <label key={value} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input type="radio" name="whatsapp-button" checked={button === value} onChange={() => edit(() => setButton(value))} className="accent-blue-600" />{label}</label>)}
+              <label key={value} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 text-sm"><input type="radio" name="whatsapp-button" checked={button === value} onChange={() => pickButton(value)} className="accent-blue-600" />{label}</label>)}
           </div>
           {button === "call" && <p className="text-xs text-slate-600">
             <Suspense fallback="Calls go to the WhatsApp number on your ads.">{callNumber ? <CallsGoTo number={callNumber} /> : "Calls go to the WhatsApp number on your ads."}</Suspense>
             {" "}Pick up during ad hours, or a missed call costs you the enquiry.</p>}
           {button === "questions" && <div className="grid gap-2">
             {questions.map((question, index) => <input key={index} value={question} maxLength={ICE_BREAKER_LIMITS.chars} aria-label={`Question ${index + 1}`} placeholder={index === 0 ? `e.g. ${questionExample}` : "Optional"}
-              onChange={(event) => edit(() => setQuestions((current) => current.map((value, i) => i === index ? event.target.value : value)))} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />)}
+              onChange={(event) => edit(() => { setQuestionsSuggested(false); setQuestions((current) => current.map((value, i) => i === index ? event.target.value : value)); })} className="h-10 rounded-lg border border-slate-300 px-3 text-sm" />)}
             <span className="text-xs text-slate-500">Customers tap a question; there&apos;s no pre-typed message.</span>
             {fieldError("questions") && <span role="alert" className="text-xs text-red-700">{fieldError("questions")}</span>}
           </div>}
