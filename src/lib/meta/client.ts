@@ -1622,14 +1622,19 @@ export class MetaClient {
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
   }
 
-  /** #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only. */
-  async getAdResults(campaignId: string): Promise<AdResult[]> {
+  /**
+   * #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only.
+   * #1022: `day` (YYYY-MM-DD, the ad account's own calendar day) reads that one day instead.
+   */
+  async getAdResults(campaignId: string, options?: { day?: string }): Promise<AdResult[]> {
+    if (options?.day !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(options.day)) throw new MetaError("Invalid results day.");
     const destination = await this.verifyCampaignBinding(campaignId);
     const node = encodeURIComponent(campaignId);
+    const period = options?.day ? `time_range=${encodeURIComponent(JSON.stringify({ since: options.day, until: options.day }))}` : "date_preset=maximum";
     const [ads, insights] = await Promise.all([
       // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
       this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
-      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&${period}&limit=100`),
     ]);
     return decodeAdResults(ads, insights, destination);
   }

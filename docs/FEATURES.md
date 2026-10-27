@@ -296,6 +296,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
   enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
   more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
+- **Daily results on WhatsApp** (#1022, dark behind `OWNER_ALERTS_ENABLED`): from 09:00 IST, each opted-in
+  owner gets one `adbrain_daily_results` line for yesterday (IST): ₹ spent, enquiries (form leads plus
+  WhatsApp chats, the same per-ad numbers as "Which ad worked"), ₹ each or "none yet", and the ad to name
+  (#783's best, else the most enquiries, else the most WhatsApp taps). No line on a day with no spend and
+  no enquiry; at the monthly cap only this line pauses.
 - WhatsApp and new lead-form ad sets run on Facebook, Instagram and Messenger only (#906, #680), so a
   WhatsApp vs lead-form A/B differs only in destination: `publisher_platforms`
   leaves Audience Network out (on #157 most of its WhatsApp taps were accidental); positions stay
