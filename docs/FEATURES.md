@@ -371,6 +371,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   book'), AdBrain's suggested pre-typed message is exactly those words (`quotedAsk`). When an ad
   quotes other words than the message WhatsApp will pre-type (a saved or edited one), Review warns
   (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”".
+  #418 rule 5: when the Brand has proof (years in business, jobs done, a named credential or a
+  warranty; `src/lib/creative/proof-line.ts`) and none of the chosen ads cites it, Review warns
+  (never blocks) and names one ("None of these ads has a proof line from your Brand…").
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the
