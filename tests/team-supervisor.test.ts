@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune } from "../scripts/team-supervisor.mjs";
+import { activeRun, didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -141,5 +141,14 @@ describe("nightly export (#884)", () => {
     const names = Array.from({ length: 9 }, (_, i) => `2026-10-${String(18 + i).padStart(2, "0")}T20-10Z`);
     expect(exportsToPrune([...names, "notes.txt"])).toEqual(["2026-10-19T20-10Z", "2026-10-18T20-10Z"]);
     expect(exportsToPrune(names.slice(0, 3))).toEqual([]);
+  });
+});
+
+describe("detached runs (#766)", () => {
+  it("treats the newest unfinished run with a live pid as busy, and a dead or finished one as free", () => {
+    const runs = [{ role: "qa", start: "a", pid: 11, end: "x" }, { role: "dev", start: "b", pid: 22 }];
+    expect(activeRun({ runs }, (pid: number) => pid === 22)?.role).toBe("dev");
+    expect(activeRun({ runs }, () => false)).toBeNull();
+    expect(activeRun({ runs: [{ role: "qa", start: "a" }] }, () => true)).toBeNull();
   });
 });

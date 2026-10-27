@@ -129,7 +129,8 @@ Each tick:
 2. For the first role in order DevOps, QA, Reviewer, QA 2, Dev 3, Dev, Dev 2 that has work
    (`wait-for-work --probe`) and isn't live, it starts **one** headless Copilot CLI run: the
    role card, the first queue item, the hard limits (no money, Meta writes, secrets,
-   production settings or force-push), signed "<Role> (headless):". One run at a time,
+   production settings or force-push), signed "<Role> (headless):". One run at a time, detached from the tick
+   so the 10-min ticks keep dispatching scheduled jobs while it works (#766),
    40 min cap, 150 AI credits per run, 8 runs a day that did work (a run with no signed
    "(headless):" comment, review or PR doesn't count), 30 runs a day hard ceiling (CEO sets the caps).
    A role with queued work not woken for an hour goes first, longest wait first, even past the daily cap.
