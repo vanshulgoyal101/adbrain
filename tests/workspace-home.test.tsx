@@ -28,6 +28,8 @@ vi.mock("@/lib/env", () => ({ getEnv: () => ({ DEMO_USER_EMAIL: "demo@example.te
 const operator = vi.hoisted(() => ({ allowed: true }));
 vi.mock("@/lib/privacy-requests", () => ({ privacyOperatorAllowed: async () => operator.allowed }));
 vi.mock("@/components/studio", () => ({ Studio: () => <div>Studio loaded</div> }));
+// #1003: Home refreshes stale live results in the background and re-renders through the router.
+vi.mock("next/navigation", async (actual) => ({ ...(await actual<typeof import("next/navigation")>()), useRouter: () => ({ refresh: () => {} }) }));
 vi.mock("@/components/campaigns", () => ({ Campaigns: () => <div>Campaigns loaded</div> }));
 vi.mock("@/components/meta-connection", () => ({ MetaConnectionPanel: () => <div>Connection loaded</div> }));
 vi.mock("@/components/spend-guardrails", () => ({ SpendGuardrails: () => <div>Guardrails loaded</div> }));

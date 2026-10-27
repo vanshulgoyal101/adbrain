@@ -13,6 +13,7 @@ import {
   withMetaConnection,
 } from "@/lib/meta/connection-access";
 import { readStoredCampaignBinding } from "@/lib/campaign/binding";
+import { resultsStale } from "@/lib/campaign/results-freshness";
 import { createClient } from "@/lib/supabase/server";
 import { saveCampaign, saveCampaignResult } from "@/lib/campaign/trusted-write";
 
@@ -22,7 +23,7 @@ export const maxDuration = 60;
 export const POST = observeRoute("/api/campaigns/[id]/refresh", "POST", handlePOST);
 
 async function handlePOST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -59,6 +60,13 @@ async function handlePOST(
       { error: "This campaign needs account reconciliation before it can refresh." },
       { status: 409 },
     );
+  }
+
+  // #1003: a background refresh (card or Home opening) answers from the stored row while it's fresh, with no Meta call.
+  if (new URL(req.url).searchParams.get("ifStale") === "1") {
+    const { data: latest } = await supabase.from("campaign_results").select("*")
+      .eq("campaign_id", id).order("fetched_at", { ascending: false }).limit(1).maybeSingle();
+    if (latest && !resultsStale(latest.fetched_at)) return NextResponse.json({ result: latest, fresh: true });
   }
 
   let insights;

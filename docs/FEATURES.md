@@ -499,7 +499,11 @@ Results refresh fetches insights and saves a snapshot before producing a
 plain-language summary or checking spend-limit auto-pause. Failed persistence
 returns 503 before summary and auto-pause; resolve storage availability before an
 explicit retry. A successful refresh can pause delivery, so it is not a
-read-only diagnostic. Reports
+read-only diagnostic. Every card with results says how old they are ("Updated
+4m ago"). When Campaigns or Home opens, a running campaign whose results are over
+10 minutes old (or missing) refreshes quietly, one campaign at a time and once per
+visit; under 10 minutes no Meta call is made. The 15-minute scheduled refresh
+stays the floor (#1003, #992). Reports
 are Markdown exports of stored performance, not a live refresh. They escape
 campaign names (including pipes/newlines), count impressions/clicks as delivery,
 and do not declare a lead winner when nobody has leads.
