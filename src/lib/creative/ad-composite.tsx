@@ -26,6 +26,22 @@ export function adMetrics(spec: AdDesignSpec) {
   };
 }
 
+/**
+ * #967 (#941 rule 2): long-running local ads put the offer on the picture as a bold strip. A picture line that
+ * states one (a ₹ price, "free …", "% off", a flat discount) is drawn that way instead of as a quiet subhead.
+ */
+const OFFER = /(?:₹|\brs\.?|\binr)\s?\d|\d\s?%\s?off\b|(?<![-‐])\bfree\b|\bflat\s+\d|\bdiscount\b|मुफ़्त|मुफ्त|फ्री|ਮੁਫ਼ਤ|ਮੁਫਤ|ਫ੍ਰੀ/iu;
+export function isOfferLine(text: string | null | undefined): boolean {
+  return Boolean(text && OFFER.test(text.normalize("NFC")));
+}
+
+/** The offer strip's text style, shared with the server's Indic shaping so both measure alike. */
+export function offerStripStyle(spec: AdDesignSpec) {
+  const { s, subheadSize, contentWidth } = adMetrics(spec);
+  const padX = Math.round(18 * s);
+  return { size: Math.round(subheadSize * 1.12), weight: 700 as const, color: spec.ctaTextColor, padX, padY: Math.round(10 * s), maxWidth: contentWidth - padX * 2 };
+}
+
 function Words({ shaped, children }: { shaped?: ShapedText; children: string }) {
   return shaped ? <img src={shaped.src} alt="" width={shaped.width} height={shaped.height} style={{ width: shaped.width, height: shaped.height }} /> : <>{children}</>;
 }
@@ -182,7 +198,29 @@ export function AdComposite({ spec, logoRatio = 1, shaped = {} }: { spec: AdDesi
           <Words shaped={shaped.headline}>{spec.headline}</Words>
         </div>
 
-        {spec.subhead ? (
+        {spec.subhead && isOfferLine(spec.subhead) ? (() => {
+          const strip = offerStripStyle(spec);
+          return (
+            <div
+              data-offer-strip=""
+              style={{
+                display: "flex",
+                alignSelf: "flex-start",
+                maxWidth: spec.width - pad * 2,
+                padding: `${strip.padY}px ${strip.padX}px`,
+                borderRadius: Math.round(10 * s),
+                background: spec.primaryColor,
+                color: strip.color,
+                fontSize: strip.size,
+                fontWeight: strip.weight,
+                lineHeight: 1.15,
+                wordBreak: "break-word",
+              }}
+            >
+              <Words shaped={shaped.subhead}>{spec.subhead}</Words>
+            </div>
+          );
+        })() : spec.subhead ? (
           <div
             style={{
               fontSize: subheadSize,

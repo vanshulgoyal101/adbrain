@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   logEvent: vi.fn(),
   saveResult: vi.fn(),
   readAdReview: vi.fn(),
+  getAdResults: vi.fn(),
+  upsert: vi.fn(),
 }));
 
 const campaign = {
@@ -56,6 +58,7 @@ vi.mock("@/lib/meta/credentials", () => ({ metaClientForBusiness: mocks.metaClie
 vi.mock("@/lib/creative/summary", () => ({ summarizeInsights: mocks.summarizeInsights }));
 vi.mock("@/lib/campaign/spend-enforce", () => ({ enforceAutoPauseWithStatus: mocks.enforceAutoPauseWithStatus }));
 vi.mock("@/lib/audit", () => ({ logEvent: mocks.logEvent }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({ upsert: (rows: unknown, options: unknown) => mocks.upsert(table, rows, options) }) }) }));
 
 function request(): Request {
   return new Request("http://localhost/api/campaigns/campaign-1/refresh", { method: "POST" });
@@ -69,8 +72,12 @@ beforeEach(() => {
     execute({
       getCampaignInsights: vi.fn().mockResolvedValue({ impressions: 1, clicks: 2, leads: 1, spend: 3, cpl: 3 }),
       readAdReview: mocks.readAdReview,
+      getAdResults: mocks.getAdResults,
     }),
   );
+  mocks.upsert.mockResolvedValue({ error: null });
+  mocks.getAdResults.mockResolvedValue([{ adId: "120253710068180526", name: "Lower bills", effectiveStatus: "ACTIVE", creativeId: "1", delivered: true, impressions: 1, clicks: 2, spend: 3, results: 1, costPerResult: 3, replaced: false }]);
+  vi.unstubAllEnvs();
   mocks.readAdReview.mockResolvedValue([{ adId: "ad-1", state: "in_review", effectiveStatus: "IN_PROCESS", reasons: [] }]);
   mocks.summarizeInsights.mockResolvedValue("Summary");
   mocks.enforceAutoPauseWithStatus.mockResolvedValue({ paused: [], confirmed: true });
@@ -158,5 +165,34 @@ describe("campaign refresh binding boundary", () => {
     expect(response.status).toBe(409);
     expect(mocks.withMetaConnection).not.toHaveBeenCalled();
     expect(mocks.metaClientForBusiness).not.toHaveBeenCalled();
+  });
+
+  // #783: per-ad results ride along on a refresh only behind AD_RESULTS_ENABLED, and never fail it.
+  it("stores per-ad results with the refresh when enabled, and never reads them when off", async () => {
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(mocks.getAdResults).not.toHaveBeenCalled();
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    const response = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.getAdResults).toHaveBeenCalledWith("meta-campaign-1");
+    expect(mocks.upsert).toHaveBeenCalledWith("ad_results", [expect.objectContaining({
+      business_id: "business-1", campaign_id: "campaign-1", meta_ad_id: "120253710068180526", ad_name: "Lower bills", effective_status: "ACTIVE",
+      period_start: null, period_end: null, delivered: true, leads: 1, spend_paise: 300,
+    })], { onConflict: "campaign_id,meta_ad_id,period_start,period_end" });
+  });
+
+  it("still refreshes the campaign when the per-ad read or save fails", async () => {
+    vi.stubEnv("AD_RESULTS_ENABLED", "true");
+    const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
+    mocks.getAdResults.mockRejectedValueOnce(new Error("Meta per-ad read failed"));
+    const failedRead = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(failedRead.status).toBe(200);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    mocks.upsert.mockResolvedValueOnce({ error: { message: "relation does not exist" } });
+    const failedSave = await POST(request(), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect(failedSave.status).toBe(200);
+    expect(await failedSave.json()).toMatchObject({ result: { id: "result-1" } });
   });
 });

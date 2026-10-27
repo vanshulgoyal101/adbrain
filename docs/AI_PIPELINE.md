@@ -210,6 +210,9 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    rupaye per kW") counts like the same amount in ₹. `all-caps` ignores acronyms
    joined by "/" or "-" ("IIT/PEC", "नॉन-DCR") and capitals the owner's own facts use
    (a brand written "SOLARIDE") (#418).
+   A price the Brand facts give only as a rate ("10,000 rupees per kilowatt") must keep
+   that unit in the ad (`price-unit`; kW, kilowatt and किलोवाट count as one); a flat
+   Brand price may be worded freely (#418 rule 3).
    Once a concept passes, the offer goes on the picture (#418 rule 2): when the copy
    states a cited offer that neither the headline nor `supportingText` carries,
    `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
@@ -316,7 +319,10 @@ and redirect handling; inline data URIs are base64 raster-only.
 The design spec contains brand lockup, headline/subhead, up to four benefits,
 the Brand phone (drawn large and bold with a call icon), a small contact line
 (website and first service area), CTA, colors, font, and angle-specific
-top/center/bottom placement.
+top/center/bottom placement. A subhead that states an offer (a ₹ price, "free …",
+"% off", a flat discount; `isOfferLine` in [ad-composite](../src/lib/creative/ad-composite.tsx))
+is drawn as a bold strip in the brand colour, as long-running local ads do (#967);
+any other subhead stays a quiet grey line. The editor preview uses the same composite.
 The [renderer](../src/lib/creative/render.tsx) receives validated inline media.
 It draws all text in Inter 400/600/700/800 ([fonts](../src/lib/creative/fonts/),
 OFL), so headlines are really bold; the brand's sans/serif/mono choice falls

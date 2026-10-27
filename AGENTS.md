@@ -49,6 +49,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	Proceed with useful work; do not return only an acknowledgement.
 - One writer per source/resource. Low-risk PRs (no migration, money, tenant/auth
 	or config change) auto-merge on green CI and the author smoke-tests production.
+	Auto-merge is only for low-risk PRs; the required `core-approval` check holds any
+	PR touching Meta/launch/money paths or migrations until QA, the Reviewer or the
+	CTO approves its head (#926). To hold a PR, `gh pr merge <n> --disable-auto`: a
+	hold comment can't stop auto-merge.
 	DevOps owns migrations, money/tenant releases, config and rollback. Talk directly
 	to another owner when needed; do not route routine
 	decisions through the CEO or CTO or ask the user to relay worker messages.
@@ -78,7 +82,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	survive a chat restart. Restart a chat with one line: `You are <Role> on AdBrain. Run
 	node scripts/wait-for-work.mjs --me <role> and continue.` It prints your role card, your
 	in-flight work and any unsaved worktree. After 30 minutes
-	with nothing new it exits: stop there (owner, Oct 25). Never end a turn with anything running in
+	with nothing new it exits: **run it again**, don't stop (owner, Oct 27: no idle team
+	members). Between waits, pull the next item from your board row or an unowned `core`
+	issue in your area. Stop only if the CEO says so or the Mac is shutting down. Never end a turn with anything running in
 	the background (waiters, dev servers, watchers, test databases), and close
 	finished terminals.
 - When you close an issue, add one `Lesson:` line if you learned something reusable

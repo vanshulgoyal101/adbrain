@@ -15,12 +15,19 @@ vi.mock("@/lib/supabase/server", () => ({
     from: (table: string) => {
       const visible = () => (table === "campaigns" ? db.campaigns : db.leads).filter((row) => row.business_id === "business");
       const filters: [string, unknown][] = [];
+      let deleting = false;
       const rows = () => visible().filter((row) => filters.every(([key, value]) => row[key] === value));
       const query = {
         select: () => query,
+        delete: () => { deleting = true; return query; },
         eq: (key: string, value: unknown) => { filters.push([key, value]); return query; },
         maybeSingle: async () => ({ data: rows()[0] ?? null, error: null }),
-        then: (resolve: (value: unknown) => void) => resolve({ count: rows().length, error: null }),
+        then: (resolve: (value: unknown) => void) => {
+          if (!deleting) return resolve({ count: rows().length, error: null });
+          const removed = rows();
+          db.leads = db.leads.filter((row) => !removed.includes(row));
+          return resolve({ data: removed.map((row) => ({ id: row.id })), error: null });
+        },
         insert: (row: Record<string, unknown>) => ({
           select: () => ({
             single: async () => {
@@ -67,18 +74,19 @@ beforeEach(() => {
 describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
   it("saves a real WhatsApp enquiry to Enquiries with its campaign and returns the campaign's count", async () => {
     expect(await add(WHATSAPP, { name: " Ravi Kumar ", phone: "+91 98140 12345", note: "Wants 50 kW for his factory" }))
-      .toEqual({ status: 201, body: { enquiries: 1 } });
+      .toEqual({ status: 201, body: { id: "lead-1", enquiries: 1, customers: 0 } });
     expect(db.leads).toEqual([expect.objectContaining({
       business_id: "business", campaign_id: WHATSAPP, source: "whatsapp_manual",
       full_name: "Ravi Kumar", phone: "+91 98140 12345", follow_up_note: "Wants 50 kW for his factory",
       created_time: expect.any(String),
     })]);
     expect(db.leads[0]).not.toHaveProperty("meta_lead_id");
+    expect(db.leads[0]).not.toHaveProperty("workflow_status");
   });
 
   it("counts a bare +1 with no details", async () => {
     await add(WHATSAPP);
-    expect(await add(WHATSAPP, {})).toEqual({ status: 201, body: { enquiries: 2 } });
+    expect(await add(WHATSAPP, {})).toEqual({ status: 201, body: { id: "lead-2", enquiries: 2, customers: 0 } });
     expect(db.leads[1]).toMatchObject({ full_name: null, phone: null, follow_up_note: "" });
   });
 
@@ -99,5 +107,24 @@ describe("POST /api/campaigns/[id]/enquiries (#335)", () => {
     db.limited = false;
     db.insertError = { message: "column source does not exist" };
     expect(await add(WHATSAPP)).toEqual({ status: 503, body: { error: "The enquiry could not be saved. Try again." } });
+  });
+
+  // #798: one tap logs a chat that became a customer; Undo removes only that logged enquiry.
+  it("logs a customer in one tap and undoes it, never deleting a Meta form enquiry", async () => {
+    const { status, body } = await add(WHATSAPP, { customer: true });
+    expect(status).toBe(201);
+    expect(body).toMatchObject({ id: "lead-1", enquiries: 1, customers: 1 });
+    expect(db.leads[0]).toMatchObject({ source: "whatsapp_manual", workflow_status: "customer", full_name: null, campaign_id: WHATSAPP });
+    const { DELETE } = await import("@/app/api/campaigns/[id]/enquiries/route");
+    const undo = (lead: string) => DELETE(new Request(`http://localhost/api/campaigns/${WHATSAPP}/enquiries?lead=${lead}`, { method: "DELETE" }), { params: Promise.resolve({ id: WHATSAPP }) });
+    db.leads.push({ id: "40000000-0000-4000-8000-000000000009", business_id: "business", campaign_id: WHATSAPP, source: "meta_form", workflow_status: "customer" });
+    expect((await undo("40000000-0000-4000-8000-000000000009")).status).toBe(404);
+    expect((await undo("not-a-uuid")).status).toBe(400);
+    db.leads[0].id = "40000000-0000-4000-8000-000000000001";
+    const removed = await undo("40000000-0000-4000-8000-000000000001");
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ enquiries: 0, customers: 1 });
+    expect(db.leads.map((row) => row.source)).toEqual(["meta_form"]);
+    expect((await add(WHATSAPP, { customer: false })).status).toBe(400);
   });
 });

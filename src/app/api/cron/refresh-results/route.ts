@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
@@ -13,14 +15,16 @@ import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const RESULT_INTERVAL_MS = 3_600_000;
+// pg_cron calls this every 15 min; 14 min lets every run refresh each live campaign, so results stay
+// ≤ 15 min old (#992). One read-only insights read per active campaign per run.
+const RESULT_INTERVAL_MS = 14 * 60_000;
 const START_BUDGET_MS = 40_000;
-// Problems first seen this recently are reported. pg_cron refreshes hourly (#274) but the issue-opening
+// Problems first seen this recently are reported. pg_cron runs every 15 min (#274) but the issue-opening
 // GitHub run can come hours later; it dedupes by key, so a wide window repeats nothing.
 const ALERT_WINDOW_MS = 24 * 3_600_000;
 
 /**
- * Scheduled results refresh (#258): at most hourly per active campaign, read Meta
+ * Scheduled results refresh (#258, #992): every 15-min run per active campaign, read Meta
  * insights and ad review read-only, save one result row and the campaign's health
  * flags. Never pauses or changes a campaign; enforcement stays in enforce-spend.
  * Alerts carry only a problem kind and an opaque key (public workflow logs). A business
@@ -63,13 +67,15 @@ async function handleGET(request: Request) {
     if (latest && Date.now() - Date.parse(latest.fetched_at) < RESULT_INTERVAL_MS) { skipped++; continue; }
     try {
       const context = await requireScheduledBusiness(campaign.business_id, request);
-      const { insights, review } = await withMetaConnection(context, {
+      const { insights, review, ads } = await withMetaConnection(context, {
         purpose: "read_insights",
         binding: { adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId },
         expectedGeneration: binding.metaConnectionGeneration,
       }, async meta => ({
         insights: await meta.getCampaignInsights(campaign.meta_campaign_id!),
         review: await meta.readAdReview(campaign.meta_campaign_id!).catch(() => null),
+        // #783: per-ad results ride along; a failure keeps the last stored rows.
+        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(() => null) : null,
       }));
       const { error: resultError } = await saveCampaignResult(context, {
         campaign_id: campaign.id,
@@ -84,6 +90,7 @@ async function handleGET(request: Request) {
         ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null, whatsapp_opens: insights.whatsappOpens ?? null } : {}),
       });
       if (resultError) throw new Error("Result storage unavailable.");
+      if (ads) await saveAdResults(admin as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: campaign.id, ads }).catch(() => false);
       const assessed = assessCampaignHealth({
         raw: campaign.raw, now: new Date(), impressions: insights.impressions, review,
         key: (kind, since) => createHash("sha256").update(`${campaign.id}:${kind}:${since}`).digest("hex").slice(0, 12),

@@ -147,6 +147,22 @@ export function offTrack({ issues, comments, prs, now }) {
 }
 
 /** One line from docs/ORCHESTRATION.md → Role cards ("Same as Dev" resolves to Dev's column). */
+/**
+ * Workflows failing on `min` or more distinct PR branches in the window: these never reach main/next pushes,
+ * so without this the CTO only hears about them from the owner's inbox (#926's core-approval, Oct 27).
+ */
+export function systemicFailures(runs, min = 2) {
+  const byName = new Map();
+  for (const run of runs) {
+    if (run.event !== "pull_request" || run.conclusion !== "failure") continue;
+    const entry = byName.get(run.name) ?? { branches: new Set(), url: run.html_url };
+    entry.branches.add(run.head_branch);
+    byName.set(run.name, entry);
+  }
+  return [...byName].filter(([, e]) => e.branches.size >= min)
+    .map(([name, e]) => `CI systemic: ${name} failed on ${e.branches.size} PR branches (${[...e.branches].slice(0, 4).join(", ")}); fix the check or the flaky test now ${e.url}`);
+}
+
 export function roleCard(markdown, role) {
   const rows = {};
   for (const line of markdown.split("\n")) {
@@ -338,11 +354,14 @@ function findWork() {
     for (const line of describeLow(low.filter(({ role: r }) => !startLow.has(r)))) found.push(line);
   }
   if (role === "cto" || role === "devops") {
-    for (const run of api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=30`).workflow_runs ?? []) {
+    const runs = api(`repos/${repo}/actions/runs?status=completed&created=${encodeURIComponent(`>=${since}`)}&per_page=100`).workflow_runs ?? [];
+    for (const run of runs) {
       if (run.conclusion === "failure" && run.event !== "pull_request") {
         found.push(`CI failed: ${run.name} on ${run.head_branch} (${run.head_sha.slice(0, 7)}) ${run.html_url}`);
       }
     }
+    // CTO only: one workflow failing across several PR branches is systemic (a broken check or flaky test), not one PR's bug.
+    if (role === "cto") for (const line of systemicFailures(runs)) found.push(line);
   }
   return found;
 }
@@ -461,6 +480,6 @@ if (role === "cto") {
     if (lines.length) report(lines);
   } catch { /* fall through */ }
 }
-console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area.`);
+console.log(`No new work for ${name} in ${values["max-min"]} min. Next: the next item in your worker-table row, then an unowned \`core\` issue in your area. Then run this waiter again; don't stop (owner, Oct 27).`);
 process.exit(3);
 }

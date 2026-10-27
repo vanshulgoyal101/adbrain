@@ -107,6 +107,11 @@ Routine steps never wait for the CEO or the CTO.
    worker that drops below 2, and the CTO refills that row the same hour. At the
    end of every wait it also reports workers with queued work but no signed comment
    in 90 minutes and PRs untouched for 60 minutes; the CTO checks and unblocks them.
+   **CI failures are the CTO's without being asked** (owner, Oct 27): the waiter reports
+   every red run on `main`/`next` and any workflow failing on 2+ PR branches (`CI systemic`).
+   The CTO fixes it the same hour: a broken check gets a fix PR, a flaky test a deflake PR
+   (or the test owner's `bug` issue if it needs product knowledge), a red `next` a rerun plus
+   the fix. New workflows must never fail before their script reaches the default branch.
    Whenever the CEO changes the priorities, the CTO re-slots every row and posts
    the queue map on the CEO's `decision` issue for confirmation.
    **Reviews have a 1-hour target:** a QA or CTO review requested on a PR is given
@@ -124,7 +129,8 @@ Each tick:
 2. For the first role in order DevOps, QA, Reviewer, QA 2, Dev 3, Dev, Dev 2 that has work
    (`wait-for-work --probe`) and isn't live, it starts **one** headless Copilot CLI run: the
    role card, the first queue item, the hard limits (no money, Meta writes, secrets,
-   production settings or force-push), signed "<Role> (headless):". One run at a time,
+   production settings or force-push), signed "<Role> (headless):". One run at a time, detached from the tick
+   so the 10-min ticks keep dispatching scheduled jobs while it works (#766),
    40 min cap, 150 AI credits per run, 8 runs a day that did work (a run with no signed
    "(headless):" comment, review or PR doesn't count), 30 runs a day hard ceiling (CEO sets the caps).
    A role with queued work not woken for an hour goes first, longest wait first, even past the daily cap.

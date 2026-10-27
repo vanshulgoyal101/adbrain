@@ -236,7 +236,7 @@ try {
       assert.equal(process.exitCode ?? 0, 0, "Read-only views failed; paid run was not started");
       await page.goto(`${origin}/create`);
       await page.getByRole("textbox", { name: "Campaign goal" }).fill("Introduce our team to local customers using only verified Brand Brain facts. Avoid unsupported claims.");
-      await page.getByRole("button", { name: "Start creating" }).click();
+      await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
       // Answer the assistant's questions until the brief is ready; it can also skip straight to it.
       const generate = page.getByRole("button", { name: "Generate 3 ads", exact: true });
       // Answer buttons only: not the conversation's own navigation (#284).

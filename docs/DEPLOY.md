@@ -243,8 +243,8 @@ boundary. A streamed loading shell is not successful hydration or working filter
 
 ## 6. Scheduled Jobs and Rollback
 
-Supabase `pg_cron` calls enforce-spend and lead sync every 15 minutes and the
-results refresh hourly; Vercel also runs keepalive and enforce-spend daily at
+Supabase `pg_cron` calls enforce-spend, lead sync and the results refresh every
+15 minutes; Vercel also runs keepalive and enforce-spend daily at
 06:00 UTC. Enforcement uses stored spend and can pause ads; keepalive can prune
 old product events.
 See [Operations](OPERATIONS.md#scheduled-jobs) for authentication, timing limits,

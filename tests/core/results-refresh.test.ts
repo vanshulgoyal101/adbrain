@@ -133,15 +133,18 @@ describe("core: live campaigns refresh their results and health by themselves (#
     expect(body.alerts).toEqual([{ kind: "not_delivering", key: healthOf(paused).flags[0].key }]);
   });
 
-  it("refreshes each campaign at most once an hour", async () => {
+  it("refreshes each campaign on every 15-min run, but not twice within 14 min (#992)", async () => {
     replay();
     await run();
     const sent = replay();
-    vi.setSystemTime(new Date("2026-10-23T17:59:00Z"));
+    vi.setSystemTime(new Date("2026-10-23T17:13:00Z"));
     const { body } = await run();
     expect(body).toMatchObject({ refreshed: 0, skipped: 2 });
     expect(sent).toEqual([]);
     expect(db.results).toHaveLength(2);
+    vi.setSystemTime(new Date("2026-10-23T17:15:00Z"));
+    expect((await run()).body).toMatchObject({ refreshed: 2, skipped: 0, failed: 0 });
+    expect(db.results).toHaveLength(4);
   });
 
   it("flags a rejected ad with Meta's reason and alerts once per occurrence", async () => {

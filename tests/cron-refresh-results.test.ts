@@ -106,11 +106,17 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     for (const write of [mocks.pause, mocks.updateStatus, mocks.saveCampaign]) expect(write).not.toHaveBeenCalled();
   });
 
-  it("skips a campaign refreshed within the hour and one without a stored binding", async () => {
-    mocks.latest = { fetched_at: new Date(Date.now() - 30 * 60_000).toISOString() };
+  it("skips a campaign refreshed in the last 14 min and one without a stored binding", async () => {
+    mocks.latest = { fetched_at: new Date(Date.now() - 13 * 60_000).toISOString() };
     mocks.campaigns = [bound("c1", "m1"), { ...bound("c2", "m2"), meta_ad_account_id: null }];
     expect((await call()).body).toMatchObject({ refreshed: 0, skipped: 2 });
     expect(mocks.insights).not.toHaveBeenCalled();
+  });
+
+  it("#992: refreshes a campaign last read by the previous 15-min run, so results stay ≤ 15 min old", async () => {
+    mocks.latest = { fetched_at: new Date(Date.now() - 15 * 60_000).toISOString() };
+    mocks.campaigns = [bound("c1", "m1")];
+    expect((await call()).body).toMatchObject({ refreshed: 1, skipped: 0 });
   });
 
   it("keeps refreshing other campaigns when one Meta read fails, and reports 503", async () => {
@@ -135,7 +141,7 @@ describe("GET /api/cron/refresh-results (#258)", () => {
     const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
     const recent = { kind: "not_delivering", reason: "No impressions yet.", since: hoursAgo(5), key: "bbbbbbbbbbbb" };
     const old = { kind: "rejected", reason: "Meta rejected an ad.", since: hoursAgo(25), key: "cccccccccccc" };
-    mocks.latest = { fetched_at: hoursAgo(0.5) };
+    mocks.latest = { fetched_at: hoursAgo(0.1) };
     mocks.campaigns = [
       bound("c1", "m1", { health: { checkedAt: hoursAgo(0.5), activeSince: hoursAgo(12), flags: [recent] } }),
       bound("c2", "m2", { health: { checkedAt: hoursAgo(0.5), activeSince: hoursAgo(48), flags: [old] } }),

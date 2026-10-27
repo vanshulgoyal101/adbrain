@@ -14,6 +14,7 @@ permissions:
   checks: read
   issues: write
   actions: write # dispatches the drift check; a GITHUB_TOKEN merge triggers no workflows
+  statuses: write # core-approval on the train PR (#1002)
 
 concurrency:
   # A newer push replaces a waiting run, so one promotion carries everything merged meanwhile.
@@ -52,6 +53,10 @@ jobs:
                 --body "Automatic: brings migrations and hotfixes on main into next before the next train (#461).")
               sync=${sync##*/}
             fi
+            # Like the train PR (#1002): no workflow runs on this GITHUB_TOKEN PR, and main's commits already
+            # passed core-approval to get there (#1020).
+            gh api -X POST "repos/$repo/statuses/$msha" -f state=success -f context=core-approval \
+              -f description="Train sync: main's commits were gated into main" >/dev/null
             merged=""
             for i in $(seq 1 20); do
               if gh pr merge "$sync" -R "$repo" --merge --match-head-commit "$msha"; then merged=1; break; fi
@@ -90,7 +95,11 @@ jobs:
           echo "Promoting next at ${sha::7} ($ahead commits)."
           # Required checks must be green on that exact commit (CI runs on every push to next).
           for i in $(seq 1 60); do
-            states=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | "\(.name)=\(.conclusion // .status)"] | unique | join(" ")')
+            # A run GitHub cancelled (a newer run on the same commit replaced it) can still report test=failure
+            # from its always() aggregate job (#983); its suite is "cancelled", so leave it out.
+            runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" --jq '[.check_runs[] | select(.name == "build" or .name == "test" or .name == "core" or .name == "secrets") | {name, state: (.conclusion // .status), suite: .check_suite.id}]')
+            cancelled=$(gh api "repos/$repo/commits/$sha/check-suites?per_page=100" --jq '[.check_suites[] | select(.conclusion == "cancelled") | .id]')
+            states=$(jq -rn --argjson runs "$runs" --argjson cancelled "$cancelled" '[$runs[] | . as $r | select($cancelled | index($r.suite) | not) | "\(.name)=\(.state)"] | unique | join(" ")')
             echo "checks: ${states:-none yet}"
             if grep -Eq '=(failure|cancelled|timed_out|action_required)' <<<"$states"; then echo "::error::next ${sha::7} is red; not promoting."; exit 1; fi
             [ "$(grep -o '=success' <<<"$states" | wc -l)" -eq 4 ] && break
@@ -103,6 +112,10 @@ jobs:
               --body "Automatic promotion of \`next\` (${sha::7}) to production (#461). Merged PRs: see the commits.")
             pr=${pr##*/}
           fi
+          # core-approval.yml never runs for this PR (a GITHUB_TOKEN-opened PR triggers no workflows), and
+          # its rule passes every next → main PR anyway: each PR was gated into next (#1002). Set it here.
+          gh api -X POST "repos/$repo/statuses/$sha" -f state=success -f context=core-approval \
+            -f description="Deploy train: its PRs were gated into next" >/dev/null
           # A merge commit keeps next's history, so the next train needs no rebase.
           # A just-created PR can briefly report its green checks as "expected" (#608). Its pull_request CI can
           # also fail with 0 jobs when the merge ref isn't ready yet (#878): that's GitHub, not a red build, so

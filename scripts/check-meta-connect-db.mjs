@@ -32,6 +32,8 @@ const whatsappBindingsMigration = await readFile(join(root, "db/migrations/20261
 const learningsMigration = await readFile(join(root, "db/migrations/20261026_campaign_learnings.sql"), "utf8");
 const editOperationsMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations.sql"), "utf8");
 const editAdCreativeMigration = await readFile(join(root, "db/migrations/20261026_campaign_edit_operations_ad_creative.sql"), "utf8");
+const adResultsMigration = await readFile(join(root, "db/migrations/20261026_campaign_ads_ad_results.sql"), "utf8");
+const ownerAlertsMigration = await readFile(join(root, "db/migrations/20261027_owner_whatsapp_alerts.sql"), "utf8");
 const leadCustomerMigration = await readFile(join(root, "db/migrations/20261026_lead_customer_status.sql"), "utf8");
 const tokenSearchPathMigration = await readFile(join(root, "db/migrations/20261026_meta_token_search_path.sql"), "utf8");
 const whatsappTemplateMigration = await readFile(join(root, "db/migrations/20261026_business_whatsapp_template.sql"), "utf8");
@@ -1362,6 +1364,66 @@ async function verifyLeadCustomerStatus(db, database) {
   });
 }
 
+async function verifyCampaignAdsAndResults(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID(), campaign = randomUUID(), otherCampaign = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Per ad'),($3,$4,'Other per ad')", [business, owner, otherBusiness, other]);
+  await db.query("insert into public.campaigns(id,business_id,daily_budget) values ($1,$2,300),($3,$4,300)", [campaign, business, otherCampaign, otherBusiness]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      return await run(session);
+    } finally { await session.query("rollback").catch(() => {}); await session.end(); }
+  };
+  await check(`${database}: per-ad results: owners read only their own, only the service role writes, rows stay on their campaign's business (#783)`, async () => {
+    await as("service_role", null, async (session) => {
+      await session.query("insert into public.campaign_ads(business_id,campaign_id,meta_ad_id,meta_creative_id,variant_index,position) values ($1,$2,'120253710068180526','2421940755245471',0,0),($3,$4,'120253710070870526',null,0,0)", [business, campaign, otherBusiness, otherCampaign]);
+      await session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id,ad_name,effective_status,period_start,period_end,delivered,impressions,link_clicks,conversations,spend_paise) values ($1,$2,'120253710068180526','Lower bills','ACTIVE','2026-10-26','2026-10-26',true,1100,9,1,7030),($1,$2,'120253710006390526',null,null,null,null,false,0,0,0,0),($3,$4,'120253710070870526',null,null,null,null,true,10,1,0,1510)", [business, campaign, otherBusiness, otherCampaign]);
+      // The refresh upserts the lifetime row; an undelivered ad (no dates) is still one row (nulls not distinct).
+      // The exact row saveAdResults upserts (src/lib/campaign/ad-results-store.ts), so a column drift fails here.
+      await session.query(`insert into public.ad_results(business_id,campaign_id,meta_ad_id,ad_name,effective_status,period_start,period_end,delivered,impressions,link_clicks,conversations,leads,spend_paise,synced_at)
+        values ($1,$2,'120253710006390526','Gone ad','DELETED',null,null,false,0,0,0,0,0,now())
+        on conflict (campaign_id,meta_ad_id,period_start,period_end) do update set ad_name=excluded.ad_name, effective_status=excluded.effective_status,
+          delivered=excluded.delivered, impressions=excluded.impressions, link_clicks=excluded.link_clicks, conversations=excluded.conversations,
+          leads=excluded.leads, spend_paise=excluded.spend_paise, synced_at=excluded.synced_at`, [business, campaign]);
+      assert.equal((await session.query("select effective_status from public.ad_results where campaign_id=$1 and meta_ad_id='120253710006390526'", [campaign])).rows[0].effective_status, "DELETED");
+      for (const [sql, params, code] of [
+        ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, otherCampaign], "23503"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'1')", [business, otherCampaign], "23503"],
+        ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'not-an-id')", [business, campaign], "23514"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,spend_paise) values ($1,$2,'2',-1)", [business, campaign], "23514"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,period_start,period_end) values ($1,$2,'3','2026-10-27','2026-10-26')", [business, campaign], "23514"],
+        ["insert into public.ad_results(business_id,campaign_id,meta_ad_id,effective_status) values ($1,$2,'4','archived; drop')", [business, campaign], "23514"],
+        ["insert into public.campaign_ads(business_id,campaign_id,meta_ad_id) values ($1,$2,'120253710068180526')", [business, campaign], "23505"],
+      ]) {
+        await session.query("savepoint s");
+        await assert.rejects(session.query(sql, params), { code });
+        await session.query("rollback to savepoint s");
+      }
+      assert.equal((await session.query("select count(*)::int as n from public.ad_results where campaign_id=$1", [campaign])).rows[0].n, 2);
+      await session.query("commit");
+    });
+    await as("authenticated", owner, async (session) => {
+      assert.deepEqual((await session.query("select meta_ad_id from public.campaign_ads order by meta_ad_id")).rows, [{ meta_ad_id: "120253710068180526" }]);
+      assert.deepEqual((await session.query("select meta_ad_id, spend_paise::int from public.ad_results order by meta_ad_id")).rows,
+        [{ meta_ad_id: "120253710006390526", spend_paise: 0 }, { meta_ad_id: "120253710068180526", spend_paise: 7030 }]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("insert into public.ad_results(business_id,campaign_id,meta_ad_id) values ($1,$2,'9')", [business, campaign]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.campaign_ads set position=1"), { code: "42501" });
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.ad_results"), { code: "42501" });
+    });
+    await db.query("delete from public.campaigns where id=$1", [campaign]);
+    assert.equal((await db.query("select (select count(*) from public.campaign_ads where campaign_id=$1)::int + (select count(*) from public.ad_results where campaign_id=$1)::int as n", [campaign])).rows[0].n, 0);
+  });
+}
+
 async function verifyEditAdCreativeKind(db, database) {
   const owner = randomUUID(), business = randomUUID(), campaign = randomUUID();
   const hash = "c".repeat(64);
@@ -1373,6 +1435,81 @@ async function verifyEditAdCreativeKind(db, database) {
       [business, campaign, hash, JSON.stringify({ ad_id: "120253710068180526", previous_creative_id: "2421940755245471" }), JSON.stringify({ message: "New words" })]);
     await assert.rejects(db.query("insert into public.campaign_edit_operations(business_id,campaign_id,kind,idempotency_key,request_hash) values ($1,$2,'other','ad-edit-key-2',$3)", [business, campaign, hash]), { code: "23514" });
     assert.equal((await db.query("select count(*)::int as n from public.campaign_edit_operations where campaign_id=$1 and kind='ad_creative'", [campaign])).rows[0].n, 1);
+  });
+}
+
+async function verifyOwnerWhatsAppAlerts(db, database) {
+  const owner = randomUUID(), other = randomUUID(), business = randomUUID(), otherBusiness = randomUUID();
+  await db.query("insert into auth.users(id) values ($1),($2)", [owner, other]);
+  await db.query("insert into public.businesses(id,owner_id,name) values ($1,$2,'Alerts'),($3,$4,'Other alerts')", [business, owner, otherBusiness, other]);
+  const as = async (role, user, run) => {
+    const session = client(database);
+    await session.connect();
+    try {
+      await session.query("begin");
+      await session.query(`set local role ${role}`);
+      if (user) await session.query("select set_config('request.jwt.claim.sub',$1,true)", [user]);
+      const result = await run(session);
+      await session.query("commit");
+      return result;
+    } catch (error) { await session.query("rollback").catch(() => {}); throw error; } finally { await session.end(); }
+  };
+  await check(`${database}: WhatsApp alerts: owners change only their own switches through the function, and every change is logged (#701)`, async () => {
+    await as("authenticated", owner, async (session) => {
+      await session.query("select public.owner_alert_prefs_set($1,true,false,'hi')", [business]);
+      await session.query("savepoint s");
+      await assert.rejects(session.query("select public.owner_alert_prefs_set($1,true,true,'en')", [otherBusiness]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.owner_alert_prefs_set($1,true,true,'fr')", [business]), { code: "22023" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("update public.owner_alert_prefs set verified_at=now(), phone_e164='+919800000001' where business_id=$1", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("select public.owner_alert_confirm('ABCDEF1234','+919800000001')"), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      await assert.rejects(session.query("insert into public.owner_alert_consent_events(business_id,event,method) values ($1,'verified','settings')", [business]), { code: "42501" });
+      await session.query("rollback to savepoint s");
+      assert.deepEqual((await session.query("select lead_alerts, daily_results, language, verified_at from public.owner_alert_prefs")).rows, [{ lead_alerts: true, daily_results: false, language: "hi", verified_at: null }]);
+    });
+    await as("authenticated", other, async (session) => {
+      assert.equal((await session.query("select count(*)::int as n from public.owner_alert_prefs")).rows[0].n, 0);
+      assert.equal((await session.query("select count(*)::int as n from public.owner_alert_consent_events")).rows[0].n, 0);
+    });
+    await as("anon", null, async (session) => {
+      await assert.rejects(session.query("select 1 from public.owner_alert_prefs"), { code: "42501" });
+    });
+    assert.deepEqual((await db.query("select event, method, detail from public.owner_alert_consent_events where business_id=$1", [business])).rows,
+      [{ event: "preferences", method: "settings", detail: { lead_alerts: true, daily_results: false, language: "hi" } }]);
+  });
+  await check(`${database}: WhatsApp alerts: START <code> binds the sender's number once, an expired code binds nothing, STOP turns both off and only a new START lifts it (#701)`, async () => {
+    const code = await as("authenticated", owner, async (session) => (await session.query("select public.owner_alert_start_verification($1) as code", [business])).rows[0].code);
+    assert.match(code, /^[A-F0-9]{10}$/);
+    await as("service_role", null, async (session) => {
+      assert.equal((await session.query("select public.owner_alert_confirm('0000000000','+919800000001') as id")).rows[0].id, null);
+      assert.equal((await session.query("select public.owner_alert_confirm($1,'+919800000001') as id", [code])).rows[0].id, business);
+      assert.equal((await session.query("select public.owner_alert_confirm($1,'+919800000002') as id", [code])).rows[0].id, null);
+    });
+    assert.deepEqual((await db.query("select phone_e164, verify_code, verified_at is not null as verified from public.owner_alert_prefs where business_id=$1", [business])).rows,
+      [{ phone_e164: "+919800000001", verify_code: null, verified: true }]);
+    const stale = await as("authenticated", owner, async (session) => (await session.query("select public.owner_alert_start_verification($1) as code", [business])).rows[0].code);
+    await db.query("update public.owner_alert_prefs set verify_expires_at = now() - interval '1 second' where business_id=$1", [business]);
+    await as("service_role", null, async (session) => {
+      assert.equal((await session.query("select public.owner_alert_confirm($1,'+919800000003') as id", [stale])).rows[0].id, null);
+      assert.equal((await session.query("select public.owner_alert_stop('+919800000001') as n")).rows[0].n, 1);
+      assert.equal((await session.query("select public.owner_alert_stop('+919800000001') as n")).rows[0].n, 0);
+    });
+    assert.deepEqual((await db.query("select lead_alerts, daily_results, phone_e164, opted_out_at is not null as out from public.owner_alert_prefs where business_id=$1", [business])).rows,
+      [{ lead_alerts: false, daily_results: false, phone_e164: "+919800000001", out: true }]);
+    assert.deepEqual((await db.query("select event, method, detail from public.owner_alert_consent_events where business_id=$1 order by id", [business])).rows.map((row) => [row.event, row.method, row.detail.phone_last4 ?? null]),
+      [["preferences", "settings", null], ["verified", "whatsapp_start", "0001"], ["opted_out", "whatsapp_stop", "0001"]]);
+    // Settings can't lift a STOP: only a fresh START <code> from the phone does.
+    await as("authenticated", owner, async (session) => session.query("select public.owner_alert_prefs_set($1,true,true,'en')", [business]));
+    assert.deepEqual((await db.query("select lead_alerts, daily_results, opted_out_at is not null as out from public.owner_alert_prefs where business_id=$1", [business])).rows,
+      [{ lead_alerts: true, daily_results: true, out: true }]);
+    const again = await as("authenticated", owner, async (session) => (await session.query("select public.owner_alert_start_verification($1) as code", [business])).rows[0].code);
+    await as("service_role", null, async (session) => {
+      assert.equal((await session.query("select public.owner_alert_confirm($1,'+919800000001') as id", [again])).rows[0].id, business);
+    });
+    assert.equal((await db.query("select opted_out_at from public.owner_alert_prefs where business_id=$1", [business])).rows[0].opted_out_at, null);
   });
 }
 
@@ -2286,6 +2423,12 @@ async function verify(database, source, integrityMigration, customerOnly = false
       await db.query(editAdCreativeMigration);
       await db.query(editAdCreativeMigration);
       await verifyEditAdCreativeKind(db,database);
+      await db.query(adResultsMigration);
+      await db.query(adResultsMigration);
+      await verifyCampaignAdsAndResults(db,database);
+      await db.query(ownerAlertsMigration);
+      await db.query(ownerAlertsMigration);
+      await verifyOwnerWhatsAppAlerts(db,database);
       await db.query(leadCustomerMigration);
       await db.query(leadCustomerMigration);
       if ((await db.query("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='leads' and column_name='workflow_status') as installed")).rows[0].installed) {

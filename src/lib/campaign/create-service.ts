@@ -15,10 +15,8 @@ import { boundWhatsAppNumbers } from "@/lib/meta/whatsapp-bindings";
 import type { CampaignSupabase } from "./preflight-runtime";
 import type { Json } from "@/lib/types";
 import { saveCampaign } from "./trusted-write";
-import { whatsappGreeting } from "./whatsapp-greeting";
-import { templateOpening } from "./whatsapp-template";
+import { campaignWhatsAppMessage } from "./campaign-whatsapp-message";
 import { draftAreaNames } from "./draft-targeting";
-import { savedGenerationSettings } from "@/lib/creative/receipt";
 import { normalizeWebsite } from "@/lib/brand/validation";
 import { checkPlan, planCheckEvent } from "./plan-check";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -82,7 +80,7 @@ export async function executeReviewedCampaign(input: {
           const storyFallback = (stage: "render" | "instagram" | "upload" | "creative" | "ad", errorCode: string) => recordProductEvent({
             kind: "workflow", name: "campaign.story_fallback", outcome: "partial", businessId: actor.businessId, attributes: { errorCode: `${stage}:${errorCode}` },
           });
-          const storyImages = draft.input.destination === "whatsapp"
+          const storyImages = draft.input.destination === "whatsapp" || draft.input.destination === "instant_form"
             ? renderStoriesWithin(creativeInputs.map(creative => creative.generation), STORY_RENDER_BUDGET_MS, code => storyFallback("render", code))
             : creativeInputs.map(() => null);
           let storyRendered = false;
@@ -90,15 +88,9 @@ export async function executeReviewedCampaign(input: {
           for (const story of storyImages) void Promise.resolve(story).then(image => { if (image) storyRendered = true; });
           // #493: the ask names the city only when the campaign targets one (same areas as targeting).
           const areas = draftAreaNames(draft.input, business.locations ?? []);
-          // #840: the business's saved WhatsApp message wins; without one, AdBrain writes it as before.
-          const savedOpening = draft.input.destination === "whatsapp" ? templateOpening(business.whatsapp_template) : null;
-          const prefill = draft.input.destination !== "whatsapp" ? null : savedOpening ?? whatsappGreeting(
-            business,
-            creativeInputs.flatMap(creative => [creative.headline ?? "", creative.primary_text ?? ""]),
-            areas,
-            creativeInputs.map(creative => savedGenerationSettings(creative.generation).language),
-            draft.input.whatsappLanguage ?? "ad",
-          );
+          // #840: this campaign's edit, else the saved message, else AdBrain's suggestion: what Review showed.
+          const message = draft.input.destination === "whatsapp" ? campaignWhatsAppMessage({ draft: draft.input, business, creatives: creativeInputs }) : null;
+          const prefill = message?.opening ?? null;
           metaResult = await meta.createLeadCampaign({
             name: draft.input.name, dailyBudgetRupees: draft.input.dailyBudgetRupees,
             leadFormId: draft.input.destination === "whatsapp" ? undefined : draft.input.leadFormId ?? undefined,
@@ -136,7 +128,7 @@ export async function executeReviewedCampaign(input: {
               dailyBudgetRupees: draft.input.dailyBudgetRupees, adSetCount: metaResult.adSetIds.length || 1, abTest: Boolean(draft.input.abTest),
               areas, ageMin: targeting.age?.min, ageMax: targeting.age?.max, gender: targeting.gender ?? "all",
               interests: (review.audienceInterests ?? []).map(interest => interest.name),
-              whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: savedOpening ? "saved" : "suggested",
+              whatsappLanguage: draft.input.whatsappLanguage ?? null, prefill, prefillSource: message?.source,
               storyFormat: storyRendered, sentTargetings, metaCreativeIds: metaResult.creativeIds,
               creatives: creativeInputs.map(creative => ({ id: creative.id, angle: creative.angle ?? null, generation: creative.generation })),
             });

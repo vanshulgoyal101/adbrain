@@ -4,6 +4,7 @@ import { clientCreative } from "@/lib/creative/client-receipt";
 import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
+import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -88,8 +89,9 @@ export default async function CampaignsPage({
           leadForms={[]}
           leadFormError={null}
           metaReady={metaReady}
+          adResults={adResultsEnabled()}
           adAccountId={connection.adAccountId ?? ""}
-          newCampaign={params.new === "1" ? { creativeIds: requested } : undefined}
+          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1" } : undefined}
         />}
       </div>
     </div>

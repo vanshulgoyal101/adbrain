@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { LocationPicker } from "@/components/targeting-controls";
 import { audienceChangeFromForm, emptyAudienceEdit, type AudienceEditForm } from "@/lib/campaign/editor-targeting";
+import { AD_LANGUAGES } from "@/lib/meta/locales";
 
 type Preview = { adSets: Array<{ mode: "patch" | "rebuild" }>; consequence: string | null };
 
@@ -34,7 +35,7 @@ async function send(campaignId: string, body: object): Promise<{ ok: true; data:
 }
 
 /**
- * #773: change a paused campaign's audience (area, extra exclusions, ages, gender). Meta checks the
+ * #773: change a paused campaign's audience (area, extra exclusions, ages, gender, language). Meta checks the
  * change first (nothing is written), the owner reads the consequence, then saves. Exclusions only grow.
  */
 export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved }: {
@@ -48,7 +49,7 @@ export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved 
   const [busy, setBusy] = React.useState<"check" | "save" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const key = React.useRef<string | null>(null);
-  const ids = { minAge: React.useId(), maxAge: React.useId(), gender: React.useId(), scope: React.useId() };
+  const ids = { minAge: React.useId(), maxAge: React.useId(), gender: React.useId(), scope: React.useId(), language: React.useId() };
 
   const update = (patch: Partial<AudienceEditForm>) => {
     setForm(current => ({ ...current, ...patch }));
@@ -107,6 +108,15 @@ export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved 
             <h3 className="text-sm font-medium text-slate-900">Also leave out</h3>
             <p className="text-xs text-slate-600">Added to the places already left out. Nothing left out is ever put back.</p>
             <LocationPicker value={form.excluded} onChange={excluded => update({ excluded })} placeholder="Search a place to leave out" tone="exclude" />
+            {!form.included.length && (
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 text-sm text-slate-800">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={form.areaExclusions} onChange={event => update({ areaExclusions: event.target.checked })} />
+                <span>
+                  <span className="font-medium">Leave out places outside the area</span>
+                  <span className="block text-xs text-slate-600">Adds the states and far-off cities outside where the ads show now, as new campaigns do. Needed before an older campaign can be turned on.</span>
+                </span>
+              </label>
+            )}
           </section>
 
           {hasCities && (
@@ -148,6 +158,32 @@ export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved 
               <option value="women">Women</option>
               <option value="men">Men</option>
             </Select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor={ids.language} className="text-sm font-medium text-slate-900">Language</label>
+            <Select id={ids.language} value={form.languageMode} onChange={event => update({ languageMode: event.target.value as AudienceEditForm["languageMode"] })} className="h-11">
+              <option value="keep">Keep as it is</option>
+              <option value="any">Any language</option>
+              <option value="only">Only people who use…</option>
+            </Select>
+            {form.languageMode === "only" && (
+              <>
+                <p className="text-xs text-slate-600">The language people use Facebook and Instagram in. Most people in India use English, so pick it too unless you mean otherwise.</p>
+                <div className="flex flex-wrap gap-2">
+                  {AD_LANGUAGES.map(language => {
+                    const on = form.languages.includes(language.key);
+                    return (
+                      <label key={language.key} className={`flex h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm ${on ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-800"}`}>
+                        <input type="checkbox" className="h-4 w-4" checked={on}
+                          onChange={() => update({ languages: on ? form.languages.filter(key => key !== language.key) : [...form.languages, language.key] })} />
+                        {language.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {error && <p role="alert" className="text-sm font-medium text-red-800">{error}</p>}

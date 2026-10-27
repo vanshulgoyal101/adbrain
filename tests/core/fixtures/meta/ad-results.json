@@ -1,0 +1,340 @@
+{
+  "recordedAt": "2026-10-26T16:56:24.115Z",
+  "campaignId": "120253709994100526",
+  "tape": [
+    {
+      "method": "GET",
+      "path": "120253709994100526?fields=id%2Caccount_id",
+      "status": 200,
+      "body": {
+        "id": "120253709994100526",
+        "account_id": "2398686420592052"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "promoted_object": {
+              "page_id": "885223068001054",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "1113229925200671",
+              "whatsapp_phone_number": "910000000000"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "120253710066230526"
+          },
+          {
+            "promoted_object": {
+              "page_id": "885223068001054",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "1113229925200671",
+              "whatsapp_phone_number": "910000000000"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "120253709998340526"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVE9RLV83NVFBT0ljS2RkZADNQdzhRZA3djeEVxZAjF1STJud09hRkR0UXhra1ZAFUHFwS1FERjVVZA2p2OC1tUXhIUTBseTM5NjNoZAHc4MTdHVVNaRXdNNEpn",
+            "after": "QVFIVEtya2JCUUdBQUluemNJLTB4VUU4OXdxdWU2MVpabkRQMXJzMmx0WVBWcHpFdlppNGV1TXN5RkkyeUc2eUgwOWFvS3llcWNLekY1WnJRTFBPMGZAxS1NB"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526/ads?fields=id%2Cname%2Ceffective_status%2Ccreative%7Bid%7D&limit=100&effective_status=%5B%22ACTIVE%22%2C%22PAUSED%22%2C%22ARCHIVED%22%2C%22CAMPAIGN_PAUSED%22%2C%22ADSET_PAUSED%22%2C%22IN_PROCESS%22%2C%22WITH_ISSUES%22%2C%22PENDING_REVIEW%22%2C%22DISAPPROVED%22%2C%22PREAPPROVED%22%2C%22PENDING_BILLING_INFO%22%5D",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "120253710070870526",
+            "name": "Know Your Roof's Solar Fit First - कॉपी",
+            "effective_status": "ACTIVE",
+            "creative": {
+              "id": "1511263240841581"
+            }
+          },
+          {
+            "id": "120253710069440526",
+            "name": "Find Out Before You Commit - कॉपी",
+            "effective_status": "ACTIVE",
+            "creative": {
+              "id": "1148942410893531"
+            }
+          },
+          {
+            "id": "120253710068180526",
+            "name": "Stop guessing if your roof is ready - कॉपी",
+            "effective_status": "ACTIVE",
+            "creative": {
+              "id": "2197951870788290"
+            }
+          },
+          {
+            "id": "120253710006390526",
+            "name": "Know Your Roof's Solar Fit First",
+            "effective_status": "PAUSED",
+            "creative": {
+              "id": "1637083214559034"
+            }
+          },
+          {
+            "id": "120253710005050526",
+            "name": "Find Out Before You Commit",
+            "effective_status": "PAUSED",
+            "creative": {
+              "id": "1633981928216547"
+            }
+          },
+          {
+            "id": "120253710001120526",
+            "name": "Stop guessing if your roof is ready",
+            "effective_status": "PAUSED",
+            "creative": {
+              "id": "1063395926728315"
+            }
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVHd2Qkg4X1YzVVh1ZA1ZAyLVZA1UDlPRFp4elpWSENtSTdYeEEwdUluODJOckI3X0hpaFB6ZAjA0aGtkRVJUYmNCZAmplaVRuV2xqR0tBRUc3VmU4T2QtNWln",
+            "after": "QVFIVHZAqYjVnSUxNSXJCaW9WNlhBODl0SFBjLUNHT19HSVdDQ2cwdzhyWWVRLThrb0R6b1NndnpFamZAoNXZAfZAWtNR0NYOTU2SUFyV0xWWlFlLW8zeXVmXzJn"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526/insights?level=ad&fields=ad_id%2Cimpressions%2Cclicks%2Cspend%2Cactions&date_preset=maximum&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "ad_id": "120253710068180526",
+            "impressions": "1487",
+            "clicks": "10",
+            "spend": "72.06",
+            "actions": [
+              {
+                "action_type": "link_click",
+                "value": "8"
+              },
+              {
+                "action_type": "post_reaction",
+                "value": "4"
+              },
+              {
+                "action_type": "onsite_conversion.total_messaging_connection",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_unlike",
+                "value": "1"
+              },
+              {
+                "action_type": "post_engagement",
+                "value": "13"
+              },
+              {
+                "action_type": "post_interaction_gross",
+                "value": "5"
+              },
+              {
+                "action_type": "page_engagement",
+                "value": "13"
+              },
+              {
+                "action_type": "post_interaction_net",
+                "value": "4"
+              },
+              {
+                "action_type": "onsite_conversion.messaging_first_reply",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_save",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_net_save",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_net_like",
+                "value": "3"
+              },
+              {
+                "action_type": "onsite_conversion.messaging_conversation_started_7d",
+                "value": "1"
+              }
+            ],
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          },
+          {
+            "ad_id": "120253710069440526",
+            "impressions": "164",
+            "clicks": "0",
+            "spend": "7.94",
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          },
+          {
+            "ad_id": "120253710070870526",
+            "impressions": "395",
+            "clicks": "2",
+            "spend": "15.3",
+            "actions": [
+              {
+                "action_type": "link_click",
+                "value": "2"
+              },
+              {
+                "action_type": "post_engagement",
+                "value": "2"
+              },
+              {
+                "action_type": "page_engagement",
+                "value": "2"
+              }
+            ],
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MgZDZD"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526?fields=id%2Caccount_id",
+      "status": 200,
+      "body": {
+        "id": "120253709994100526",
+        "account_id": "2398686420592052"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "promoted_object": {
+              "page_id": "885223068001054",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "1113229925200671",
+              "whatsapp_phone_number": "910000000000"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "120253710066230526"
+          },
+          {
+            "promoted_object": {
+              "page_id": "885223068001054",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "1113229925200671",
+              "whatsapp_phone_number": "910000000000"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "120253709998340526"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "QVFIVE9RLV83NVFBT0ljS2RkZADNQdzhRZA3djeEVxZAjF1STJud09hRkR0UXhra1ZAFUHFwS1FERjVVZA2p2OC1tUXhIUTBseTM5NjNoZAHc4MTdHVVNaRXdNNEpn",
+            "after": "QVFIVEtya2JCUUdBQUluemNJLTB4VUU4OXdxdWU2MVpabkRQMXJzMmx0WVBWcHpFdlppNGV1TXN5RkkyeUc2eUgwOWFvS3llcWNLekY1WnJRTFBPMGZAxS1NB"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "120253709994100526/insights?fields=impressions%2Cclicks%2Cspend%2Cactions%2Cdate_start%2Cdate_stop&date_preset=maximum",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "impressions": "2046",
+            "clicks": "12",
+            "spend": "95.3",
+            "actions": [
+              {
+                "action_type": "link_click",
+                "value": "10"
+              },
+              {
+                "action_type": "post_reaction",
+                "value": "4"
+              },
+              {
+                "action_type": "onsite_conversion.total_messaging_connection",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_unlike",
+                "value": "1"
+              },
+              {
+                "action_type": "post_engagement",
+                "value": "15"
+              },
+              {
+                "action_type": "post_interaction_gross",
+                "value": "5"
+              },
+              {
+                "action_type": "page_engagement",
+                "value": "15"
+              },
+              {
+                "action_type": "post_interaction_net",
+                "value": "4"
+              },
+              {
+                "action_type": "onsite_conversion.messaging_first_reply",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_save",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_net_save",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_net_like",
+                "value": "3"
+              },
+              {
+                "action_type": "onsite_conversion.messaging_conversation_started_7d",
+                "value": "1"
+              }
+            ],
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "MAZDZD",
+            "after": "MAZDZD"
+          }
+        }
+      }
+    }
+  ]
+}

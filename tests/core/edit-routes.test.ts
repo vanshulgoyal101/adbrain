@@ -3,6 +3,9 @@ import rebuildTape from "./fixtures/meta/edit-audience-rebuild.json";
 import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
 import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
+import languageTape from "./fixtures/meta/edit-audience-language.json";
+import areaTape from "./fixtures/meta/edit-audience-area-exclusions.json";
+import { lacksAreaExclusions } from "@/lib/meta/service-area";
 
 // #773 2/3: POST /api/campaigns/[id]/audience through the real route, connection access, edit service,
 // MetaClient, trusted write and audit, on a token sealed by the real token store. Only Supabase (an
@@ -78,16 +81,18 @@ const available = { state: "available", blockers: [] };
 const CHANGE = { age: { min: 30, max: 60 } };
 
 const audit: Row[] = [];
-const graph = { sent: [] as Array<{ method: string; path: string }>, pending: [] as Exchange[] };
+const graph = { sent: [] as Array<{ method: string; path: string }>, pending: [] as Exchange[], forms: [] as Array<Record<string, string>> };
 function replay(recorded: Exchange[]) {
   graph.pending = [...recorded];
   graph.sent = [];
+  graph.forms = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     url.searchParams.delete("access_token");
     const method = init?.method ?? "GET";
     const path = url.pathname.replace("/v21.0/", "") + url.search;
     graph.sent.push({ method, path });
+    if (init?.body instanceof URLSearchParams) graph.forms.push(Object.fromEntries([...init.body].filter(([key]) => key !== "access_token")));
     const index = graph.pending.findIndex(exchange => exchange.method === method && exchange.path === path);
     if (index < 0) throw new Error(`Unrecorded Graph call: ${method} ${path}`);
     const [exchange] = graph.pending.splice(index, 1);
@@ -113,6 +118,12 @@ const rebuild = () => {
 };
 const patch = () => scenario(patchTape as Exchange[], "120253709953000526", 4);
 const limited = () => scenario(rateLimitedTape as Exchange[], "120253709671200526", 4);
+const language = () => scenario(languageTape as Exchange[], "120253724289410526", 4);
+// The area tape starts with the #741 area lookup the service makes from the ad set's current area.
+const area = (tape = areaTape as Exchange[]) => {
+  const scene = scenario(tape.slice(1), "120253724507960526", 4);
+  return { ...scene, tape: [...scene.tape, tape[0]] };
+};
 
 async function connect() {
   const { encryptMetaToken, toPostgresBytea } = await import("@/lib/meta/token-store");
@@ -253,6 +264,54 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     expect(operations()).toMatchObject([{ state: "succeeded", transmitted: true }]);
   });
 
+  it("changes only the language through the route, patched in place and audited", async () => {
+    const scene = language();
+    stored(scene);
+    replay(scene.tape);
+    const { status, body } = await edit({ change: { languages: [1001, 46] } });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ result: { count: 1, consequence: null, adSets: [{ adSetId: scene.adSetId, mode: "patch" }] } });
+    expect(operations()).toMatchObject([{ state: "succeeded", transmitted: true, change: { languages: [1001, 46] } }]);
+    expect(JSON.stringify(audit)).toContain("(language)");
+    expect(graph.pending).toEqual([]);
+  });
+
+  // #746: a tree launched before #741 (no out-of-area exclusions) can't be turned on; this adds its area's exclusions.
+  it("adds the missing out-of-area exclusions from the ad set's own area, so activation's gate passes", async () => {
+    const scene = area();
+    stored(scene);
+    replay(scene.tape);
+    const source = (areaTape as Exchange[])[3].body as { targeting: unknown };
+    expect(lacksAreaExclusions(source.targeting)).toBe(true);
+    const { status, body } = await edit({ change: { areaExclusions: true } });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ result: { count: 1, consequence: null, adSets: [{ adSetId: scene.adSetId, mode: "patch" }] } });
+    expect(graph.forms).toHaveLength(1);
+    const sent = JSON.parse(graph.forms[0].targeting);
+    const readBack = (areaTape as Exchange[]).at(-1)!.body as { targeting: { excluded_geo_locations: { regions: Array<{ key: string }> } } };
+    expect(lacksAreaExclusions(readBack.targeting)).toBe(false);
+    // Chandigarh's own UT stays in; every other state and UT is left out.
+    expect(readBack.targeting.excluded_geo_locations.regions).toHaveLength(35);
+    expect(readBack.targeting.excluded_geo_locations.regions.map(region => region.key)).not.toContain("1726");
+    expect(sent.excluded_geo_locations.regions.map((region: { key: string }) => region.key))
+      .toEqual(readBack.targeting.excluded_geo_locations.regions.map(region => region.key));
+    expect(sent.geo_locations).toEqual((source.targeting as { geo_locations: unknown }).geo_locations);
+    expect(JSON.stringify(audit)).toContain("(out-of-area exclusions)");
+    expect(graph.pending).toEqual([]);
+  });
+
+  it("refuses to add area exclusions to a country-wide campaign before any write", async () => {
+    const tape = structuredClone(areaTape) as Exchange[];
+    (tape[3].body as { targeting: { geo_locations: unknown } }).targeting.geo_locations = { countries: ["IN"], location_types: ["home", "recent"] };
+    const scene = area(tape);
+    stored(scene);
+    replay(scene.tape);
+    const { status, body } = await edit({ change: { areaExclusions: true } });
+    expect(status).toBe(409);
+    expect(body.error).toBe("This campaign covers a whole country, so there are no out-of-area places to leave out.");
+    expect(writes()).toEqual([]);
+  });
+
   it("turns Meta's 613 on the patch into a retryable failure before any write, leaving the mirror alone", async () => {
     const scene = limited();
     stored(scene);
@@ -296,6 +355,9 @@ describe("core: edit a launched campaign's audience (#773)", () => {
     stored(scene);
     replay([]);
     expect((await edit({ change: {} })).status).toBe(400);
+    expect((await edit({ change: { languages: [9999] } })).status).toBe(400);
+    expect((await edit({ change: { languages: [46, 46] } })).status).toBe(400);
+    expect((await edit({ change: { areaExclusions: true, location: { countries: ["IN"] } } })).status).toBe(400);
     store.state.user = null;
     expect((await edit()).status).toBe(401);
     store.state.user = { id: OWNER };

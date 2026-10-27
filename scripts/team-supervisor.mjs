@@ -27,7 +27,8 @@ const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
 const SESSIONS = join(HOME, ".copilot", "session-state");
 const WT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const CLI = ["-y", "@github/copilot@1.0.103"];
+// ADBRAIN_SUPERVISOR_CLI (JSON array) swaps the CLI for a stub in the detach smoke test; never set it in the LaunchAgent.
+const CLI = process.env.ADBRAIN_SUPERVISOR_CLI ? JSON.parse(process.env.ADBRAIN_SUPERVISOR_CLI) : ["-y", "@github/copilot@1.0.103"];
 const REPO = "vanshulgoyal101/adbrain";
 
 /** Role named by a chat's first prompt ("You are AdBrain's Dev 2. …" → dev2); longest names first so "Dev 2" isn't "Dev". */
@@ -178,8 +179,8 @@ export function restartPrompt(role) {
   ].join("\n");
 }
 
-/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` ago and none is waiting or running. */
-export function scheduledJobsDue(latest, now = Date.now(), staleMin = 14) {
+/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` minutes ago (9: every 10-minute tick) and none is waiting or running. */
+export function scheduledJobsDue(latest, now = Date.now(), staleMin = 9) {
   if (!latest) return true;
   if (latest.status && latest.status !== "completed") return false;
   const started = Date.parse(latest.createdAt);
@@ -216,7 +217,13 @@ function nightlyExport(dry) {
   const exported = run("export");
   const restored = exported.status === 0 ? run("restore") : null;
   const ok = exported.status === 0 && restored?.status === 0;
-  const tail = (r) => (r ? `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").filter((l) => !/@|token|key/i.test(l)).slice(-3).join(" | ") : "not run");
+  // The error line first (stacks end in "Node.js vNN"), never anything that looks like a credential.
+  const tail = (r) => {
+    if (!r) return "not run";
+    const lines = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").map((l) => l.trim()).filter((l) => l && !/token|secret|password|apikey/i.test(l));
+    const error = lines.find((l) => /^(\w*Error|Error)\b|ERR_|failed/i.test(l));
+    return [error, ...lines.slice(-2)].filter(Boolean).join(" | ");
+  };
   if (ok) {
     log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
     for (const old of exportsToPrune([...names, name])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
@@ -232,6 +239,19 @@ function nightlyExport(dry) {
       `The supervisor's nightly export (#884) failed at ${name}. Export exit ${exported.status}; restore drill exit ${restored?.status ?? "not run"}.\nLast lines: ${tail(restored ?? exported).slice(0, 300)}\n\nRerun by hand: \`node scripts/db-export.mjs export ~/.adbrain-backups/<now>\` then \`restore\` (docs/OPERATIONS.md#data-safety-and-recovery). Until an export succeeds, no destructive migration.`], { stdio: "ignore" });
   } catch (error) {
     log(`nightly export alert failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  }
+}
+
+/** The nightly encrypted pg_dump (#884): GitHub's schedule is best effort, so dispatch it when its newest run is over 23 h old. */
+function dispatchBackup(dry) {
+  try {
+    const [latest] = JSON.parse(execFileSync("gh", ["run", "list", "-R", REPO, "-w", "db-backup.yml", "-L", "1", "--json", "createdAt,status"], { encoding: "utf8" }));
+    if (!scheduledJobsDue(latest, Date.now(), 23 * 60)) return;
+    if (dry) return console.log(`would dispatch db-backup.yml (last run ${latest?.createdAt ?? "none"})`);
+    execFileSync("gh", ["workflow", "run", "db-backup.yml", "-R", REPO, "--ref", "main"], { stdio: "ignore" });
+    log(`dispatched db-backup.yml (last run ${latest?.createdAt ?? "none"})`);
+  } catch (error) {
+    log(`db-backup dispatch failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
   }
 }
 
@@ -269,6 +289,16 @@ function refresh() {
   if (dirty) return log("refresh skipped: worktree has local changes");
   execFileSync("git", ["-C", WT, "fetch", "-q", "origin", "main"]);
   execFileSync("git", ["-C", WT, "checkout", "-q", "--detach", "origin/main"]);
+}
+
+/** The headless run still going, if any: runs are detached from the tick (#766), so a tick checks the recorded pid. */
+export function activeRun(state, alive = pidAlive) {
+  const run = (state.runs ?? []).findLast((r) => r.pid && !r.end);
+  return run && alive(run.pid) ? run : null;
+}
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
 function runCli(args, runMin, outFile) {
@@ -319,6 +349,8 @@ async function main() {
       "max-runs-hard": { type: "string", default: "30" },
       "overdue-min": { type: "string", default: "60" },
       credits: { type: "string", default: "150" },
+      "run-role": { type: "string" },
+      "run-start": { type: "string" },
     },
   });
   const roles = values.roles ? values.roles.split(",").map((r) => r.trim()).filter((r) => ORDER.includes(r)) : ORDER;
@@ -347,9 +379,15 @@ async function main() {
   }
   if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
   dispatchScheduledJobs(values["dry-run"]);
+  dispatchBackup(values["dry-run"]);
   if (!values["dry-run"]) refresh();
   nightlyExport(values["dry-run"]);
+  // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
+  if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
   const state = readState();
+  for (const r of state.runs ?? []) if (r.pid && !r.end && !pidAlive(r.pid)) Object.assign(r, { end: new Date().toISOString(), result: "lost (process gone)" });
+  const busy = activeRun(state);
+  if (busy) return log(`tick: ${busy.role} run still going (pid ${busy.pid}, since ${busy.start})`);
   // The hard ceiling bounds cost whatever the runs did; the daily cap counts only runs that did work.
   if (runsToday(state, new Date(), { all: true }) >= Number(values["max-runs-hard"])) return log(`tick skipped: hard ceiling ${values["max-runs-hard"]} runs reached`);
   const capped = runsToday(state) >= Number(values["max-runs-day"]);
@@ -362,18 +400,33 @@ async function main() {
   if (!pick) return log(capped ? `tick: daily cap ${values["max-runs-day"]} reached, nobody overdue (${summary})` : `tick: nothing to wake (${summary})`);
   if (values["dry-run"]) return console.log(`would wake ${NAMES[pick.role]}${pick.overdue ? " (overdue)" : ""} on: ${pick.items[0]}\n(${summary})`);
 
-  const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), start: new Date().toISOString() };
+  const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), items: pick.items.slice(0, 3), start: new Date().toISOString() };
   log(`waking ${pick.role}${pick.overdue ? " (overdue)" : ""}${capped ? " past the daily cap" : ""}: ${run.item} (${summary})`);
+  // Detached, so this tick returns and the next ones keep dispatching scheduled jobs on time (#766).
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--run-role", pick.role, "--run-start", run.start, "--run-min", String(runMin), "--credits", String(values.credits)],
+    { cwd: WT, detached: true, stdio: "ignore" });
+  child.unref();
+  run.pid = child.pid;
   state.runs = [...(state.runs ?? []), run];
   writeState(state);
-  const runLog = join(STATE_DIR, `run-${pick.role}.log`);
+}
+
+/** Runs one headless role run to the end and records it on its state entry (re-read: ticks may have written meanwhile). */
+async function finishRun(role, start, runMin, credits) {
+  const entry = readState().runs?.find((r) => r.role === role && r.start === start);
+  const items = entry?.items ?? (entry?.item ? [entry.item] : []);
+  const runLog = join(STATE_DIR, `run-${role}.log`);
   writeFileSync(runLog, "");
-  run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, runLog);
+  const result = await runCli(agentArgs(prompt(role, items, runMin), credits), runMin, runLog);
+  const state = readState();
+  const run = state.runs?.find((r) => r.role === role && r.start === start) ?? { role, start };
+  if (!state.runs?.includes(run)) state.runs = [...(state.runs ?? []), run];
+  run.result = result;
   run.summary = lastWords(readFileSync(runLog, "utf8"));
   run.end = new Date().toISOString();
-  run.worked = workSince(pick.role, run.start);
+  run.worked = workSince(role, start);
   writeState(state);
-  log(`run ${pick.role} ended: ${run.result}${run.worked ? "" : " (no signed GitHub work: not counted)"} · ${run.summary}`);
+  log(`run ${role} ended: ${run.result}${run.worked ? "" : " (no signed GitHub work: not counted)"} · ${run.summary}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

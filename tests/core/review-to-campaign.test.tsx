@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaigns } from "@/components/campaigns";
 import { Studio } from "@/components/studio";
 import { writeCampaignRecovery, recoveryStorageKey } from "@/lib/meta-connect-ui/recovery";
-import type { DraftDTO } from "@/lib/campaign/connect-contracts";
+import type { DraftDTO, DraftInput } from "@/lib/campaign/connect-contracts";
 import type { Business, Campaign, Creative } from "@/lib/types";
 
-const mocks = vi.hoisted(() => ({ drafts: vi.fn(), draft: vi.fn(), status: vi.fn(), operationForRequest: vi.fn() }));
+const mocks = vi.hoisted(() => ({ drafts: vi.fn(), draft: vi.fn(), status: vi.fn(), operationForRequest: vi.fn(), saveDraft: vi.fn(), updateDraft: vi.fn(), preflight: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/meta-connect/meta-connect-dialog", () => ({ MetaConnectDialog: () => null }));
 vi.mock("@/components/campaign-chat", () => ({ CampaignChat: () => null }));
@@ -81,5 +81,70 @@ describe("Review to campaign (#134)", () => {
     expect(mocks.draft).not.toHaveBeenCalled();
     expect(pressed("Back pain relief")).toBe("true");
     expect(pressed("Posture scan")).toBe("false");
+  });
+
+  // #1004: Create's one button lands on Review: the composer prepares it once it has settled, with no extra tap.
+  describe("from Create with review=1", () => {
+    const FORM = "1732372914636573";
+    let forms: Array<{ id: string; name: string; status: string }> = [];
+    const open = (review: boolean) => render(<Campaigns business={business} approved={[approvedA, approvedB]} initialCampaigns={[existing]} initialResults={{}}
+      leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" newCampaign={{ creativeIds: [approvedB.id], review }} />);
+    beforeEach(() => {
+      forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }];
+      mocks.status.mockResolvedValue({ authorization: "connected", generation: 1 });
+      mocks.saveDraft.mockImplementation(async (input: DraftInput): Promise<DraftDTO> => ({ draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", version: 1, expiresAt: "2099-01-01T00:00:00.000Z", input }));
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(String(url).startsWith("/api/meta/whatsapp")
+        ? { state: "unavailable" }
+        : String(url) === "/api/campaigns/plan" ? { ready: true, targeting: {
+          age: { mode: "manual", min: 25, max: 55 },
+          location: { mode: "ai", includedNames: ["Austin, Texas"], excludedNames: [], radiusKm: 25 },
+          audience: { interestNames: ["Wellness"], rationale: "Adults near the clinic." },
+        } } : { forms })));
+    });
+
+    it("prepares Review once with exactly the chosen ad, after the lead form has loaded", async () => {
+      open(true);
+      await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
+      expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ creativeIds: [approvedB.id], leadFormId: FORM, dailyBudgetRupees: 300 });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(mocks.saveDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits on the composer, without saving anything, while a form campaign has no lead form", async () => {
+      forms = [];
+      open(true);
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/meta/whatsapp"))).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(mocks.saveDraft).not.toHaveBeenCalled();
+      expect(document.getElementById("campaign-composer")!.hidden).toBe(false);
+    });
+
+    // QA 2 on #1004: several forms and none chosen left the owner on the composer with no hint.
+    it("with several forms, says choosing one opens Review, and choosing it does (no Check tap); the choice is remembered", async () => {
+      forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }, { id: "1732372914636574", name: "Callbacks", status: "ACTIVE" }];
+      open(true);
+      expect(await screen.findByText("Choose the form for these enquiries, and Review opens.")).toBeTruthy();
+      expect(mocks.saveDraft).not.toHaveBeenCalled();
+      fireEvent.change(screen.getByLabelText("Lead form"), { target: { value: "1732372914636574" } });
+      await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
+      expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ creativeIds: [approvedB.id], leadFormId: "1732372914636574" });
+      await waitFor(() => expect(localStorage.getItem(`campaign-lead-form:${business.owner_id}:${business.id}`)).toBe("1732372914636574"));
+      expect(screen.queryByText("Choose the form for these enquiries, and Review opens.")).toBeNull();
+    });
+
+    it("preselects the lead form used last time when the Page still has it, so Review opens by itself", async () => {
+      forms = [{ id: FORM, name: "Enquiries", status: "ACTIVE" }, { id: "1732372914636574", name: "Callbacks", status: "ACTIVE" }];
+      localStorage.setItem(`campaign-lead-form:${business.owner_id}:${business.id}`, "1732372914636574");
+      open(true);
+      await waitFor(() => expect(mocks.saveDraft).toHaveBeenCalledTimes(1));
+      expect(mocks.saveDraft.mock.calls[0][0]).toMatchObject({ leadFormId: "1732372914636574" });
+    });
+
+    it("never prepares on its own without the flag", async () => {
+      open(false);
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/meta/whatsapp"))).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(mocks.saveDraft).not.toHaveBeenCalled();
+    });
   });
 });

@@ -89,6 +89,19 @@ export function smokeCounts(log) {
   return { pass: (log.match(/\dZ PASS /g) ?? []).length, fail: (log.match(/\dZ FAIL /g) ?? []).length };
 }
 
+/** #884: a migration needs a database backup that finished less than an hour ago. */
+export const BACKUP_MAX_AGE_MS = 60 * 60_000;
+export function backupFresh(run, now = Date.now()) {
+  if (!run || run.status !== "completed" || run.conclusion !== "success") return false;
+  return now - Date.parse(run.updatedAt) < BACKUP_MAX_AGE_MS;
+}
+
+/** Commit statuses as check runs; the API lists newest first, and failingChecks takes the newest per name. */
+export function commitStatuses(statuses) {
+  return statuses.map((st) => ({ name: st.context, status: st.state === "pending" ? "in_progress" : "completed",
+    conclusion: st.state === "success" ? "success" : st.state, completedAt: st.created_at }));
+}
+
 export function failingChecks(required, checkRuns) {
   return required.filter((name) => {
     const latest = checkRuns.filter((run) => run.name === name).sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))[0];
@@ -124,6 +137,25 @@ const ledger = async (names) => names.length
   ? sql(`select name, checksum, applied_at from private.schema_migrations where name in (${names.map((n) => `'${n}'`).join(",")})`, { readOnly: true })
   : [];
 const activeSessions = async () => (await sql("select count(*)::int n from pg_stat_activity where state = 'active' and backend_type = 'client backend' and pid <> pg_backend_pid()", { readOnly: true }))[0].n;
+
+const latestBackup = () => ghJson("run", "list", "-R", repo, "--workflow", "db-backup.yml", "--limit", "1", "--json", "databaseId,status,conclusion,updatedAt,url")[0];
+
+/** No migration without a backup under an hour old (CEO, #884): dispatch one and wait if needed. */
+async function requireFreshBackup(dry) {
+  let run = latestBackup();
+  if (backupFresh(run)) return console.log(`    Database backup ${run.url} finished ${Math.round((Date.now() - Date.parse(run.updatedAt)) / 60_000)} min ago.`);
+  if (dry) return console.log("    No database backup under 1 h old; a real run dispatches db-backup.yml and waits for it.");
+  step("Take a fresh database backup (db-backup.yml)");
+  const started = Date.now();
+  gh("workflow", "run", "db-backup.yml", "-R", repo, "--ref", "main");
+  for (let i = 0; i < 60; i++) {
+    await sleep(20_000);
+    run = latestBackup();
+    if (run && Date.parse(run.updatedAt) >= started - 60_000 && run.status === "completed") break;
+  }
+  if (!backupFresh(run)) stop(`The database backup did not succeed (${run?.url ?? "no run"}). No migration without one (#884): fix the backup, then rerun this command.`);
+  console.log(`    Backup ${run.url} done.`);
+}
 
 async function waitForGuard(sha) {
   for (let hop = 0; hop < 3; hop++) {
@@ -178,6 +210,8 @@ async function main() {
     const [name, status, conclusion, completedAt] = l.split("\t");
     return { name, status, conclusion, completedAt };
   });
+  // core-approval (#926) is a commit status, not a check run; count statuses the same way.
+  checks.push(...commitStatuses(ghJson("api", `repos/${repo}/commits/${head}/statuses?per_page=100`)));
   const notGreen = failingChecks(required, checks);
   if (notGreen.length) stop(`Required checks not green on ${head.slice(0, 7)}: ${notGreen.join(", ")}. Wait for CI or fix it.`);
   console.log(`    CI: ${required.join(", ")} green`);
@@ -241,6 +275,7 @@ async function main() {
     if (!result?.some?.((row) => row.name === m.name && row.checksum === m.checksum)) stop(`Dry run of ${m.name} returned no ledger readback: ${JSON.stringify(result).slice(0, 300)}`);
     if ((await ledger([m.name])).length) stop(`Ledger has ${m.name} after a dry run. Investigate before anything else.`);
   }
+  if (pending.length) await requireFreshBackup(dry);
   if (dry) {
     const apply = pending.length ? `applies ${pending.map((m) => m.name).join(", ")}, reloads the schema,` : "applies no migration,";
     step(`Dry run complete. A real run ${apply} merges with --match-head-commit ${head} and waits for the guard.`);

@@ -56,6 +56,13 @@ function languageFrom(stored: (string | null | undefined)[]): Language | null {
   return null;
 }
 
+/** The message's language: the campaign's choice, else the ads' stored language, else their script. */
+export function whatsappLanguageFor(adCopy: string[], adLanguages: (string | null | undefined)[] = [], chosen: WhatsAppLanguage = "ad"): Language {
+  const copy = adCopy.join(" ");
+  return (chosen !== "ad" ? chosen : null) ?? languageFrom(adLanguages)
+    ?? (/\p{Script=Devanagari}/u.test(copy) ? "hi" : /\p{Script=Gurmukhi}/u.test(copy) ? "pa" : "en");
+}
+
 /**
  * Click-to-WhatsApp texts built only from Brand facts (#209). `autofill` is the message pre-typed
  * for the customer, `greeting` the business's welcome above it. #493: one short ask in the ad's own
@@ -73,8 +80,7 @@ export function whatsappGreeting(
 ): WhatsAppGreeting {
   const name = brand.name.trim();
   const copy = adCopy.join(" ");
-  const language: Language = (chosen !== "ad" ? chosen : null) ?? languageFrom(adLanguages)
-    ?? (/\p{Script=Devanagari}/u.test(copy) ? "hi" : /\p{Script=Gurmukhi}/u.test(copy) ? "pa" : "en");
+  const language = whatsappLanguageFor(adCopy, adLanguages, chosen);
   const rank = (offer: string) => (/^free\b/i.test(offer) ? 2 : /\d/.test(offer) ? 1 : 0);
   const offer = (brand.offers ?? [])
     .map(offerPhrase)

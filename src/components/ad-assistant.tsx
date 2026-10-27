@@ -126,6 +126,17 @@ function clearDraft(businessId: string): void {
   }
 }
 
+/** #1004 (CPO wording): the Brand facts the 3 ads will use (areas, then the offer or else a proof point), above 'Make 3 ads'. */
+function createFactsLine(business: Pick<Business, "locations" | "offers" | "usps">): string {
+  const first = (values?: string[] | null) => (values ?? []).map((value) => value.trim()).filter(Boolean);
+  const cut = (value: string) => (value.length > 40 ? `${value.slice(0, 39).trimEnd()}…` : value);
+  const places = first(business.locations).slice(0, 2).join(", ");
+  const offer = first(business.offers)[0];
+  const proof = offer ? undefined : first(business.usps)[0];
+  const facts = [places, offer && `offer: ${cut(offer)}`, proof && `proof: ${cut(proof)}`].filter(Boolean).join(" · ");
+  return `Your 3 ads will use: ${facts}`;
+}
+
 export function AdAssistant({ business, opening = null, occasions = [], onFlowStep }: {
   business: Business;
   opening?: OpeningLine | null;
@@ -163,8 +174,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
   const [stillMaking, setStillMaking] = useState(0);
   const movedOnRef = useRef(false);
   const useSavedRef = useRef<(() => void) | null>(null);
-  // #858: an unedited suggestion chip on a Brand with offer, area and phone skips the brief review.
-  const [chipGoal, setChipGoal] = useState<string | null>(null);
+  // #858/#1004: any goal on a Brand with offer, area and phone skips the brief review ('Edit brief' keeps it).
   const quickStartRef = useRef(false);
   const [quickBrief, setQuickBrief] = useState<string | null>(null);
 
@@ -547,11 +557,11 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
     step(next);
   }
 
-  function start() {
+  function start(reviewFirst = false) {
     if (loading) return;
     const g = goal.trim();
     if (!g) return;
-    quickStartRef.current = chipGoal?.trim() === g && hasCreateFacts(business);
+    quickStartRef.current = !reviewFirst && hasCreateFacts(business);
     setQuickBrief(null);
     followConversationRef.current = true;
     setStarted(true);
@@ -581,7 +591,6 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
     setReferenceBrief(nextReference);
     setGoal(nextGoal);
     setQuickBrief(null);
-    setChipGoal(null);
   }
 
   function editQuickBrief() {
@@ -594,6 +603,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
 
   if (!started) {
     const suggestions = creativeRecommendations(business, goal, recentGoals);
+    const quick = Boolean(goal.trim()) && hasCreateFacts(business);
     return (
       <section aria-label="Campaign brief" className="min-w-0 max-w-2xl">
         <div>
@@ -622,7 +632,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                   <CalendarDays size={15} aria-hidden="true" /> Coming up
                 </span>
                 {occasions.map((o) => (
-                  <Button key={o.id} size="sm" variant="outline" className="min-h-11" onClick={() => { setGoal(o.prompt); setChipGoal(o.prompt); setReferenceBrief(undefined); }}>
+                  <Button key={o.id} size="sm" variant="outline" className="min-h-11" onClick={() => { setGoal(o.prompt); setReferenceBrief(undefined); }}>
                     {o.label}
                   </Button>
                 ))}
@@ -648,7 +658,7 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => { setGoal(s.prompt); setChipGoal(s.prompt); }}
+                    onClick={() => setGoal(s.prompt)}
                     className="flex min-h-12 items-center justify-between gap-3 break-words py-3 text-left text-sm text-slate-600 hover:text-blue-700"
                   >
                     {s.label}<ArrowRight size={15} className="shrink-0" aria-hidden="true" />
@@ -658,11 +668,21 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
               <div className="mt-5">
                 <AdLanguagePicker value={language} onChange={pickLanguage} disabled={loading} />
               </div>
-              <div className="mt-5 flex justify-end">
-                <Button onClick={start} disabled={!goal.trim()}>
-                  {/* #858: this tap starts the 3 ads straight away, so it says so. */}
-                  {goal.trim() && chipGoal?.trim() === goal.trim() && hasCreateFacts(business) ? "Make 3 ads" : "Start creating"}
-                </Button>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                {quick ? (
+                  // #1004: the tap below starts the paid run, so say what it will use, with a way to check the brief first.
+                  <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-slate-600">
+                    <span className="min-w-0 break-words">{createFactsLine(business)}</span>
+                    <button type="button" onClick={() => start(true)} disabled={loading} className="min-h-11 font-medium text-blue-700 hover:underline">Edit brief</button>
+                  </p>
+                ) : <span aria-hidden="true" />}
+                <div className="flex flex-col items-end gap-1 self-end sm:self-auto">
+                  <Button onClick={() => start()} disabled={!goal.trim()}>
+                    {/* #858: this tap starts the 3 ads straight away, so it says so. */}
+                    {quick ? "Make 3 ads" : "Start creating"}
+                  </Button>
+                  {quick && <p className="text-xs text-slate-500">About 2 minutes. Nothing is published.</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -786,8 +806,9 @@ export function AdAssistant({ business, opening = null, occasions = [], onFlowSt
           // #847: one primary for the whole result, pinned where a phone's thumb is.
           <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_10px_30px_rgba(16,24,40,0.12)] backdrop-blur">
             <span className="text-sm text-slate-700">{selectedIds.length} selected</span>
-            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
-              Create campaign
+            {/* #1004: straight to Review; the composer prepares it once it has settled. */}
+            <Link href={`/campaigns?new=1&creatives=${selectedIds.join(",")}&review=1`} className="inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover">
+              Review campaign
             </Link>
           </div>
         )}

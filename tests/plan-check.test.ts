@@ -70,8 +70,9 @@ describe("plan check (#419)", () => {
     expect(reviewWarnings({ destination: "whatsapp", storyReady: false, perAdSetDailyBudgetRupees: 280, costPerResultRupees: 69 }))
       .toEqual([REVIEW_WARNINGS.story, REVIEW_WARNINGS.budget]);
     expect(reviewWarnings({ destination: "whatsapp", storyReady: true, perAdSetDailyBudgetRupees: 500, costPerResultRupees: 69 })).toEqual([]);
-    // Lead-form ads never get a 9:16 today (#333 is WhatsApp only).
-    expect(reviewWarnings({ destination: "instant_form", storyReady: true, perAdSetDailyBudgetRupees: 500, costPerResultRupees: null })).toEqual([REVIEW_WARNINGS.story]);
+    // #680: lead-form ads get the 9:16 too.
+    expect(reviewWarnings({ destination: "instant_form", storyReady: true, perAdSetDailyBudgetRupees: 500, costPerResultRupees: null })).toEqual([]);
+    expect(reviewWarnings({ destination: "instant_form", storyReady: false, perAdSetDailyBudgetRupees: 500, costPerResultRupees: null })).toEqual([REVIEW_WARNINGS.story]);
   });
 
   it("says nothing about the budget without the business's own cost per result", () => {
