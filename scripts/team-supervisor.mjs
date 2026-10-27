@@ -27,7 +27,8 @@ const HOME = homedir();
 export const STATE_DIR = join(HOME, ".adbrain-supervisor");
 const SESSIONS = join(HOME, ".copilot", "session-state");
 const WT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const CLI = ["-y", "@github/copilot@1.0.103"];
+// ADBRAIN_SUPERVISOR_CLI (JSON array) swaps the CLI for a stub in the detach smoke test; never set it in the LaunchAgent.
+const CLI = process.env.ADBRAIN_SUPERVISOR_CLI ? JSON.parse(process.env.ADBRAIN_SUPERVISOR_CLI) : ["-y", "@github/copilot@1.0.103"];
 const REPO = "vanshulgoyal101/adbrain";
 
 /** Role named by a chat's first prompt ("You are AdBrain's Dev 2. …" → dev2); longest names first so "Dev 2" isn't "Dev". */
@@ -178,8 +179,8 @@ export function restartPrompt(role) {
   ].join("\n");
 }
 
-/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` ago and none is waiting or running. */
-export function scheduledJobsDue(latest, now = Date.now(), staleMin = 14) {
+/** GitHub runs scheduled-jobs.yml every 2–5 h instead of every 15 min (#692): dispatch when its latest run started over `staleMin` minutes ago (9: every 10-minute tick) and none is waiting or running. */
+export function scheduledJobsDue(latest, now = Date.now(), staleMin = 9) {
   if (!latest) return true;
   if (latest.status && latest.status !== "completed") return false;
   const started = Date.parse(latest.createdAt);
@@ -290,6 +291,16 @@ function refresh() {
   execFileSync("git", ["-C", WT, "checkout", "-q", "--detach", "origin/main"]);
 }
 
+/** The headless run still going, if any: runs are detached from the tick (#766), so a tick checks the recorded pid. */
+export function activeRun(state, alive = pidAlive) {
+  const run = (state.runs ?? []).findLast((r) => r.pid && !r.end);
+  return run && alive(run.pid) ? run : null;
+}
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
 function runCli(args, runMin, outFile) {
   return new Promise((done) => {
     const out = openSync(outFile, "a");
@@ -338,6 +349,8 @@ async function main() {
       "max-runs-hard": { type: "string", default: "30" },
       "overdue-min": { type: "string", default: "60" },
       credits: { type: "string", default: "150" },
+      "run-role": { type: "string" },
+      "run-start": { type: "string" },
     },
   });
   const roles = values.roles ? values.roles.split(",").map((r) => r.trim()).filter((r) => ORDER.includes(r)) : ORDER;
@@ -369,7 +382,12 @@ async function main() {
   dispatchBackup(values["dry-run"]);
   if (!values["dry-run"]) refresh();
   nightlyExport(values["dry-run"]);
+  // A detached run (#766) finishes the run it was given and records it; the tick that started it has long returned.
+  if (values["run-role"]) return finishRun(values["run-role"], values["run-start"], runMin, values.credits);
   const state = readState();
+  for (const r of state.runs ?? []) if (r.pid && !r.end && !pidAlive(r.pid)) Object.assign(r, { end: new Date().toISOString(), result: "lost (process gone)" });
+  const busy = activeRun(state);
+  if (busy) return log(`tick: ${busy.role} run still going (pid ${busy.pid}, since ${busy.start})`);
   // The hard ceiling bounds cost whatever the runs did; the daily cap counts only runs that did work.
   if (runsToday(state, new Date(), { all: true }) >= Number(values["max-runs-hard"])) return log(`tick skipped: hard ceiling ${values["max-runs-hard"]} runs reached`);
   const capped = runsToday(state) >= Number(values["max-runs-day"]);
@@ -382,18 +400,33 @@ async function main() {
   if (!pick) return log(capped ? `tick: daily cap ${values["max-runs-day"]} reached, nobody overdue (${summary})` : `tick: nothing to wake (${summary})`);
   if (values["dry-run"]) return console.log(`would wake ${NAMES[pick.role]}${pick.overdue ? " (overdue)" : ""} on: ${pick.items[0]}\n(${summary})`);
 
-  const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), start: new Date().toISOString() };
+  const run = { role: pick.role, item: pick.items[0]?.slice(0, 160), items: pick.items.slice(0, 3), start: new Date().toISOString() };
   log(`waking ${pick.role}${pick.overdue ? " (overdue)" : ""}${capped ? " past the daily cap" : ""}: ${run.item} (${summary})`);
+  // Detached, so this tick returns and the next ones keep dispatching scheduled jobs on time (#766).
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "--run-role", pick.role, "--run-start", run.start, "--run-min", String(runMin), "--credits", String(values.credits)],
+    { cwd: WT, detached: true, stdio: "ignore" });
+  child.unref();
+  run.pid = child.pid;
   state.runs = [...(state.runs ?? []), run];
   writeState(state);
-  const runLog = join(STATE_DIR, `run-${pick.role}.log`);
+}
+
+/** Runs one headless role run to the end and records it on its state entry (re-read: ticks may have written meanwhile). */
+async function finishRun(role, start, runMin, credits) {
+  const entry = readState().runs?.find((r) => r.role === role && r.start === start);
+  const items = entry?.items ?? (entry?.item ? [entry.item] : []);
+  const runLog = join(STATE_DIR, `run-${role}.log`);
   writeFileSync(runLog, "");
-  run.result = await runCli(agentArgs(prompt(pick.role, pick.items, runMin), values.credits), runMin, runLog);
+  const result = await runCli(agentArgs(prompt(role, items, runMin), credits), runMin, runLog);
+  const state = readState();
+  const run = state.runs?.find((r) => r.role === role && r.start === start) ?? { role, start };
+  if (!state.runs?.includes(run)) state.runs = [...(state.runs ?? []), run];
+  run.result = result;
   run.summary = lastWords(readFileSync(runLog, "utf8"));
   run.end = new Date().toISOString();
-  run.worked = workSince(pick.role, run.start);
+  run.worked = workSince(role, start);
   writeState(state);
-  log(`run ${pick.role} ended: ${run.result}${run.worked ? "" : " (no signed GitHub work: not counted)"} · ${run.summary}`);
+  log(`run ${role} ended: ${run.result}${run.worked ? "" : " (no signed GitHub work: not counted)"} · ${run.summary}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

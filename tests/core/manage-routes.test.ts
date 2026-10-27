@@ -43,6 +43,7 @@ const store = vi.hoisted(() => {
     const filters: Array<(row: Row) => boolean> = [];
     let write: { kind: "insert" | "update"; values: Row } | null = null;
     let count = false, withResults = false;
+    let sort: { key: string; ascending: boolean } | null = null, take: number | null = null;
     const settle = () => {
       const rows = state.tables[table] ??= [];
       if (write?.kind === "insert") {
@@ -51,6 +52,11 @@ const store = vi.hoisted(() => {
         return { data: [{ ...row }], error: null, count: null };
       }
       const matched = rows.filter(row => filters.every(test => test(row)));
+      if (sort && !write) {
+        const { key, ascending } = sort;
+        matched.sort((a, b) => (ascending ? 1 : -1) * String(a[key]).localeCompare(String(b[key])));
+      }
+      if (take !== null && !write) matched.splice(take);
       if (write?.kind === "update") for (const row of matched) Object.assign(row, write.values);
       // getLatestResults' `campaign_results!inner(*)` embed: each campaign's newest result, campaigns without one dropped.
       const data = matched.map(row => withResults ? { ...row, campaign_results: (state.tables.campaign_results ?? [])
@@ -67,7 +73,9 @@ const store = vi.hoisted(() => {
       eq: (key: string, value: unknown) => { filters.push(row => row[key] === value); return query; },
       in: (key: string, values: unknown[]) => { filters.push(row => values.includes(row[key])); return query; },
       gt: (key: string, value: unknown) => { filters.push(row => String(row[key]) > String(value)); return query; },
-      order: () => query, limit: () => query, abortSignal: () => query,
+      order: (key: string, options?: { ascending?: boolean }) => { sort = { key, ascending: options?.ascending ?? true }; return query; },
+      limit: (n: number) => { take = n; return query; },
+      abortSignal: () => query,
       insert: (values: Row) => { state.log.push(`insert ${table}`); write = { kind: "insert", values }; return query; },
       update: (values: Row) => { state.log.push(`update ${table}`); write = { kind: "update", values }; return query; },
       maybeSingle: async () => {
@@ -224,9 +232,9 @@ async function sync() {
   const { POST } = await import("@/app/api/campaigns/sync/route");
   return POST(new Request("http://localhost/api/campaigns/sync", { method: "POST" }));
 }
-async function refresh(id = STORED) {
+async function refresh(id = STORED, query = "") {
   const { POST } = await import("@/app/api/campaigns/[id]/refresh/route");
-  return POST(new Request(`http://localhost/api/campaigns/${id}/refresh`, { method: "POST" }), params(id));
+  return POST(new Request(`http://localhost/api/campaigns/${id}/refresh${query}`, { method: "POST" }), params(id));
 }
 
 beforeEach(async () => {
@@ -360,6 +368,30 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     expect(graph.sent.every(call => call.method === "GET" && call.access === ACCESS)).toBe(true);
     expect(graph.pending).toEqual([]);
     expect(llm.complete).not.toHaveBeenCalled();
+    expect(audits()).toHaveLength(1);
+  });
+
+  it("#1003: a background refresh reads Meta once when results are stale, then answers from the stored row while fresh", async () => {
+    storeCampaign({ meta_campaign_id: LIVE, objective: "OUTCOME_ENGAGEMENT", destination: "whatsapp" });
+    const stale = new Date(Date.now() - 20 * 60_000).toISOString();
+    store.state.tables.campaign_results = [{ id: "r-old", campaign_id: STORED, fetched_at: stale, impressions: 1, clicks: 0, leads: 0, spend: 0 }];
+    replay(tapes.results);
+    const first = await refresh(STORED, "?ifStale=1");
+    expect(first.status).toBe(200);
+    const recorded = (tapes.results.find(exchange => exchange.path.includes("/insights?"))!.body as { data: Row[] }).data[0];
+    expect((await first.json()).result).toMatchObject({ campaign_id: STORED, impressions: Number(recorded.impressions), spend: Number(recorded.spend), conversations: 1 });
+    expect(graph.sent.length).toBeGreaterThan(0);
+    expect(graph.pending).toEqual([]);
+    expect(store.state.tables.campaign_results).toHaveLength(2);
+
+    // Fresh now: the next open gets the stored row back with no Graph call, no new row and no audit.
+    store.state.tables.campaign_results.find(row => row.id !== "r-old")!.fetched_at = new Date().toISOString();
+    replay();
+    const second = await refresh(STORED, "?ifStale=1");
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ fresh: true, result: { campaign_id: STORED, impressions: Number(recorded.impressions) } });
+    expect(graph.sent).toEqual([]);
+    expect(store.state.tables.campaign_results).toHaveLength(2);
     expect(audits()).toHaveLength(1);
   });
 

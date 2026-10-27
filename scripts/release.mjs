@@ -96,6 +96,12 @@ export function backupFresh(run, now = Date.now()) {
   return now - Date.parse(run.updatedAt) < BACKUP_MAX_AGE_MS;
 }
 
+/** Commit statuses as check runs; the API lists newest first, and failingChecks takes the newest per name. */
+export function commitStatuses(statuses) {
+  return statuses.map((st) => ({ name: st.context, status: st.state === "pending" ? "in_progress" : "completed",
+    conclusion: st.state === "success" ? "success" : st.state, completedAt: st.created_at }));
+}
+
 export function failingChecks(required, checkRuns) {
   return required.filter((name) => {
     const latest = checkRuns.filter((run) => run.name === name).sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))[0];
@@ -204,6 +210,8 @@ async function main() {
     const [name, status, conclusion, completedAt] = l.split("\t");
     return { name, status, conclusion, completedAt };
   });
+  // core-approval (#926) is a commit status, not a check run; count statuses the same way.
+  checks.push(...commitStatuses(ghJson("api", `repos/${repo}/commits/${head}/statuses?per_page=100`)));
   const notGreen = failingChecks(required, checks);
   if (notGreen.length) stop(`Required checks not green on ${head.slice(0, 7)}: ${notGreen.join(", ")}. Wait for CI or fix it.`);
   console.log(`    CI: ${required.join(", ")} green`);

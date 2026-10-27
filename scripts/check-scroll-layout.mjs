@@ -120,7 +120,7 @@ for (const [engineName, engine] of [["chromium", chromium], ["webkit", webkit]])
       }
       await page.screenshot({ path: `${output}/${engineName}-${width}-fields.png`, fullPage: true });
       await prompt.fill("Introduce our team");
-      await page.getByRole("button", { name: "Start creating" }).click();
+      await page.getByRole("button", { name: /^(Start creating|Edit brief)$/ }).click(); // #1004: a complete Brand offers "Edit brief" to keep the brief review
       const history = page.getByRole("region", { name: "Conversation history" });
       const bottomGap = () => history.evaluate(node => node.scrollHeight - node.clientHeight - node.scrollTop);
       async function respond(index) {
