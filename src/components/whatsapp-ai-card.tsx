@@ -75,18 +75,19 @@ export function WhatsAppAiCard({ businessId }: { businessId: string }) {
   const guide = GUIDE[language];
 
   return (
-    <section aria-labelledby="whatsapp-ai-title" className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 gap-3">
-        <MessageCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
-        <div className="min-w-0">
+    // #847: a quiet line beside "WhatsApp ready?", not a green panel with a second primary.
+    <section aria-labelledby="whatsapp-ai-title" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-200 py-2 first:border-t">
+      <div className="flex min-w-0 flex-1 basis-60 gap-2">
+        <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" aria-hidden="true" />
+        <div className="min-w-0 text-sm">
           <h3 id="whatsapp-ai-title" className="font-medium text-slate-900">Reply faster with WhatsApp&apos;s AI?</h3>
-          <p className="text-sm text-slate-700">It can answer people who message you from your ad, in your language, while you&apos;re busy.</p>
+          <p className="text-slate-600">It answers people from your ad while you&apos;re busy.</p>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button className="h-11" data-product-event="whatsapp_ai.guide" onClick={() => setOpen(true)}>Show me how</Button>
-        <Button variant="outline" className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>Already on</Button>
-        <Button variant="outline" className="h-11" data-product-event="whatsapp_ai.unavailable" onClick={() => answer("unavailable")}>Not available for me</Button>
+      <div className="-mx-3 flex flex-wrap items-center">
+        <Button variant="ghost" className="h-11 font-medium text-blue-700" data-product-event="whatsapp_ai.guide" onClick={() => setOpen(true)}>Show me how</Button>
+        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.done" onClick={() => answer("done")}>Already on</Button>
+        <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.unavailable" onClick={() => answer("unavailable")}>Not available for me</Button>
         <Button variant="ghost" className="h-11" data-product-event="whatsapp_ai.later" onClick={() => answer("later")}>Not now</Button>
       </div>
 
