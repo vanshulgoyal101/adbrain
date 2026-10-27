@@ -34,7 +34,12 @@ function Row({ ad }: { ad: AdResultView }) {
  * #783: "Which ad worked" on a campaign card. Loads the stored per-ad results the first time it opens;
  * hidden altogether while the feature is off (the route answers 404).
  */
-export function AdResults({ campaignId }: { campaignId: string }) {
+export function AdResults({ campaignId, onRunAgain, runAgainBusy = false }: {
+  campaignId: string;
+  /** #1050: with a Best ad, offer to copy the campaign into a new paused one. */
+  onRunAgain?: () => void;
+  runAgainBusy?: boolean;
+}) {
   const [state, setState] = useState<"idle" | "loading" | "off" | "error" | Loaded>("idle");
   const [all, setAll] = useState(false);
 
@@ -79,6 +84,16 @@ export function AdResults({ campaignId }: { campaignId: string }) {
             <button type="button" className="mt-1 min-h-11 font-medium text-blue-700 underline-offset-4 hover:underline" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
           )}
           {loaded.syncedAt && <p className="pt-2 text-xs text-slate-500">Updated {relativeAge(loaded.syncedAt, new Date()) || "just now"}</p>}
+          {hasBest && onRunAgain && (
+            <div className="pt-3">
+              <button type="button" disabled={runAgainBusy} onClick={onRunAgain}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60">
+                {runAgainBusy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                Run this again
+              </button>
+              <p className="pt-1 text-xs text-slate-500">Copies it into a new campaign, best ad first. Nothing goes to Meta until you review and send it, paused.</p>
+            </div>
+          )}
         </div>
       ))}
       </div>
