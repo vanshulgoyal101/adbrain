@@ -59,16 +59,24 @@ describe("<AdResults> pause offer (#1045)", () => {
     ad("1", { best: true, status: "ACTIVE", results: 6, spend: 600, costPerResult: 100 }),
     ad("2", { status: "ACTIVE", results: 2, spend: 500, costPerResult: 250 }),
   ];
-  const openWith = (answers: Response[]) => {
+  const openWith = (answers: Response[], whatsapp = false) => {
     const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (input) => String(input).endsWith("/ads") ? Response.json({ ok: true, syncedAt: null, ads }) : answers.shift()!);
     vi.stubGlobal("fetch", fetch);
-    const view = render(<AdResults campaignId="c1" />);
+    const view = render(<AdResults campaignId="c1" whatsapp={whatsapp} />);
     const details = view.container.querySelector("details")!;
     details.open = true;
     fireEvent(details, new Event("toggle"));
     return fetch;
   };
   afterEach(() => window.localStorage.clear());
+
+  it("says chats on a WhatsApp campaign, with Pause as an outline button (Designer on #1048)", async () => {
+    openWith([], true);
+    expect(await screen.findByText("“Ad 2” costs ₹250 per chat vs ₹100 for “Ad 1”. Pause it?")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")[0]).toHaveTextContent("per chat");
+    expect(screen.getByRole("button", { name: "Pause this ad" }).className).toContain("border-slate-300");
+    expect(screen.getByRole("button", { name: "Pause this ad" }).className).not.toContain("bg-slate-900");
+  });
 
   it("names both ads and costs, pauses only on a tap, and offers Undo", async () => {
     const fetch = openWith([Response.json({ ok: true, result: { adId: "2", status: "PAUSED" } }), Response.json({ ok: true, result: { adId: "2", status: "ACTIVE" } })]);
