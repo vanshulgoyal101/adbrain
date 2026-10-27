@@ -106,7 +106,8 @@ import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
-import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
@@ -394,7 +395,7 @@ function BusinessCampaigns({
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
   // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
-    || (activationCapped && (activationFunding.spendCapPaise > 0 ? activationFunding.roomPaise >= activationCapPaise : !spendLimitRequired));
+    || (activationCapped && (activationFunding.spendCapPaise > 0 ? freeRoomPaise(activationFunding) >= activationCapPaise : !spendLimitRequired));
   // #419 item 2: edits that restart Meta's learning (a capped run's new ad set, a long pause); never block.
   const learningWarnings = activationReview && activationLearning && activationDelivery
     ? activationWarnings({ capDays: activationCapped ? capDays : null, dailyBudgetRupees: activationReview.daily_budget ?? 0, ...activationLearning })
@@ -1383,7 +1384,7 @@ function BusinessCampaigns({
                 <p className="mt-1 font-medium">Total limit on Meta: {formatMoney((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
-                    ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
+                    ? `Funded on Meta: ${exactRupees.format(freeRoomPaise(activationFunding) / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap${committedWords(activationFunding.committed)}.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
                     : spendLimitRequired
                       ? "Funded on Meta: set a spending limit on the Meta ad account first."
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
