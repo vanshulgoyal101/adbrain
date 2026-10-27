@@ -21,7 +21,7 @@ export function parseProbe(status, stdout) {
 
 export function probe(role) {
   try {
-    const out = execFileSync(process.execPath, [waiter, "--me", role, "--probe"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const out = execFileSync(process.execPath, [waiter, "--me", role, "--probe"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, killSignal: "SIGKILL" });
     return parseProbe(0, out);
   } catch (error) {
     return parseProbe(error.status, String(error.stdout ?? ""));
