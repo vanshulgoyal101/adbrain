@@ -88,7 +88,9 @@ copy, image prompts, and campaign audience suggestions.
 Later edits, including edits made while a save is pending, require another save;
 failed saves leave the draft available for retry. There is no autosave.
 
-Website autofill fetches a public website and proposes extracted facts. It does
+Website autofill fetches a public website and proposes extracted facts. On a Brand with
+nothing filled in yet it runs by itself when the owner leaves the Website field (once per
+address, #1025); otherwise the "Autofill from website" button runs it. It does
 not prove those claims are true or authorize scraping private pages. The UI
 preserves fields edited during extraction, discards a response when the website
 changes, and prevents save while extraction is pending. Review suggestions before
