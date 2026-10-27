@@ -103,4 +103,35 @@ describe("WhatsApp message card (#840)", () => {
     expect(await screen.findByText("Suggested")).toBeInTheDocument();
     expect(within(preview()).getByText(suggested.en.greeting)).toBeInTheDocument();
   });
+
+  // #905: suggested quick questions fill the empty boxes, follow the language until edited, and send nothing until saved.
+  const questions = { en: ["Free site survey", "What's the price?", "Call me back"], hi: ["Free site survey", "कीमत क्या है?", "मुझे कॉल करें"],
+    hinglish: ["Free site survey", "Price kya hai?", "Mujhe call karein"], pa: ["Free site survey", "ਕੀਮਤ ਕੀ ਹੈ?", "ਮੈਨੂੰ ਕਾਲ ਕਰੋ"] };
+  const boxes = () => [1, 2, 3].map((n) => (screen.getByLabelText(`Question ${n}`) as HTMLInputElement).value);
+
+  it("fills suggested quick questions, swaps them with the language, and saves only on Save (#905)", async () => {
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} suggestedQuestions={questions} />);
+    fireEvent.click(screen.getByLabelText("Quick questions"));
+    expect(boxes()).toEqual(questions.en);
+    expect(within(preview()).getByText("Call me back")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "hi" } });
+    expect(boxes()).toEqual(questions.hi);
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ businessId: "b1",
+      template: { greeting: suggested.hi.greeting, language: "hi", opening: { kind: "ice_breakers", questions: questions.hi } } }));
+  });
+
+  it("keeps the owner's own questions: an edit stops the language swap, and saved questions aren't replaced (#905)", () => {
+    const { unmount } = render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={null} suggested={suggested} suggestedQuestions={questions} />);
+    fireEvent.click(screen.getByLabelText("Quick questions"));
+    fireEvent.change(screen.getByLabelText("Question 2"), { target: { value: "Price for my home" } });
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "hi" } });
+    expect(boxes()).toEqual(["Free site survey", "Price for my home", "Call me back"]);
+    unmount();
+    const own = { greeting: "Hi!", language: "en", opening: { kind: "ice_breakers", questions: ["Roof check"] } };
+    render(<WhatsAppMessageCard businessId="b1" businessName="Solaride" saved={own} suggested={suggested} suggestedQuestions={questions} />);
+    expect(boxes()).toEqual(["Roof check", "", ""]);
+  });
 });
+

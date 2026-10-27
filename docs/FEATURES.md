@@ -348,6 +348,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   prefill per campaign as before. Review returns the exact message (`whatsappMessage`) and
   launch sends that one; an edited or saved message is part of the plan hash. The ledger
   records the button and whether it was edited, saved or suggested.
+  Choosing "Quick questions" on Brand fills the empty boxes with 3 suggestions from the Brand
+  (`src/lib/campaign/whatsapp-questions.ts`, #905): the first offer in the owner's words (a long
+  one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),
+  "What's the price?" and "Call me back", per language. They are only suggestions: nothing is sent
+  until the owner saves, and saving runs the claim check.
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the
