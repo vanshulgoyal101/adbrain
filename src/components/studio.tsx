@@ -438,26 +438,29 @@ export function Studio({
 
       {error && <Alert variant="error">{error}</Alert>}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">
           Ads{" "}
           <span className="font-normal text-slate-400">({items.length - setAsideCount})</span>
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* #847: one row on a phone, so the first ad starts higher; Export is an icon there. */}
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="sm"
+            className="h-11 w-11 px-0 sm:h-9 sm:w-auto sm:px-3"
+            title={`Export approved (${approvedCount})`}
             onClick={exportApproved}
             data-product-event="creative.download"
             disabled={approvedCount === 0 || exporting}
           >
             {exporting ? <Spinner /> : <Download className="h-4 w-4" />}
-            Export approved ({approvedCount})
+            <span className="sr-only sm:not-sr-only">Export approved ({approvedCount})</span>
           </Button>
           {approvedCount > 0 ? (
             <Link
               href={`/campaigns?new=1&creatives=${items.filter((i) => i.status === "approved").map((i) => i.id).join(",")}`}
-              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm sm:min-h-10 font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <Megaphone className="h-4 w-4" aria-hidden="true" />
               Create campaign ({approvedCount})
