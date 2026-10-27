@@ -128,7 +128,10 @@ repairing once like any other rule: `personal-attribute` (in health verticals, a
 vertical, a question about the reader's money trouble such as debt or a bill that "feels heavy"),
 `unsupported-superlative` (#1, top-rated, leading, "Austin's best" unless a supplied fact says it)
 and `exaggerated-result` ("up to N%": refused in health verticals even when a fact states it;
-elsewhere allowed when a supplied fact states the same figure, refused when uncited). Health verticals also ban implied
+elsewhere allowed when a supplied fact states the same figure, refused when uncited; also, #941, a zero-cost
+claim ("zero investment", "₹0 down payment"), a result-or-refund promise ("no band, no fee", "money-back") and a
+timed result ("new teeth in days", "fluency in 30 days"), each refused unless a supplied fact states it, and a timed
+result always refused in health verticals). Health verticals also ban implied
 outcomes (lasting relief, eliminate, fix your, feel better…) and any guarantee, cited or not. Owner-typed
 copy only gets these as warnings.
 
