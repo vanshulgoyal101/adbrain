@@ -182,7 +182,13 @@ function nightlyExport(dry) {
   const exported = run("export");
   const restored = exported.status === 0 ? run("restore") : null;
   const ok = exported.status === 0 && restored?.status === 0;
-  const tail = (r) => (r ? `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").filter((l) => !/@|token|key/i.test(l)).slice(-3).join(" | ") : "not run");
+  // The error line first (stacks end in "Node.js vNN"), never anything that looks like a credential.
+  const tail = (r) => {
+    if (!r) return "not run";
+    const lines = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").map((l) => l.trim()).filter((l) => l && !/token|secret|password|apikey/i.test(l));
+    const error = lines.find((l) => /^(\w*Error|Error)\b|ERR_|failed/i.test(l));
+    return [error, ...lines.slice(-2)].filter(Boolean).join(" | ");
+  };
   if (ok) {
     log(`nightly export ${name}: ${tail(restored).slice(0, 200)}`);
     for (const old of exportsToPrune([...names, name])) rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });

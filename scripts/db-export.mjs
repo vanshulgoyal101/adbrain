@@ -10,7 +10,6 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import pg from "pg";
 import { buildSchema } from "./build-schema.mjs";
 import { readOnlyQuery } from "./lib/prod-query.mjs";
 
@@ -65,6 +64,8 @@ from (select ${columns} from ${name} order by ctid offset ${offset} limit ${PAGE
 
 async function restoreAll(dir) {
   const { tables } = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
+  // Loaded here so the export runs in a worktree without node_modules (the supervisor's, #973).
+  const { default: pg } = await import("pg");
   const bin = process.env.META_TEST_PG_BIN ?? "/opt/homebrew/opt/postgresql@17/bin";
   const work = await mkdtemp(join(tmpdir(), "adbrain-restore-"));
   const cluster = join(work, "data");
