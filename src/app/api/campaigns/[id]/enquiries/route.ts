@@ -75,6 +75,8 @@ export const DELETE = observeRoute("/api/campaigns/[id]/enquiries", "DELETE", as
   } catch {
     return NextResponse.json({ error: "Invalid enquiry." }, { status: 400 });
   }
+  const limited = await rateLimitResponse(`manual-enquiry:${user.id}`, { limit: 30, windowMs: 5 * 60_000 });
+  if (limited) return limited;
   const { data: removed, error } = await database.from("leads").delete()
     .eq("id", lead).eq("campaign_id", id).eq("source", "whatsapp_manual").select("id");
   if (error) return NextResponse.json({ error: "The enquiry could not be removed. Try again." }, { status: 503 });

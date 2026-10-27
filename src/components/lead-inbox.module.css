@@ -7,7 +7,7 @@
 .editor select, .editor textarea { width: 100%; min-width: 0; border: 1px solid var(--color-slate-300); border-radius: 6px; padding: 10px; background: white; font-weight: 400; }
 .editor textarea { resize: vertical; }
 .editorActions span { color: var(--color-slate-500); font-size: 13px; }
-.followUpButton { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: var(--color-blue-700); }
+.followUpButton { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--color-blue-700); }
 .followUpCell { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .inbox :is(button, a, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; }

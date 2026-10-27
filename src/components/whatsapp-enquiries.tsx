@@ -109,7 +109,7 @@ export function WhatsAppEnquiries({ campaignId, spend, enquiries, onLogged, onCu
           {customer && (
             <p role="status" className="flex items-center gap-2 text-sm text-slate-700">
               {customer.undone ? "Removed that customer." : "Added 1 customer."}
-              {!customer.undone && <button type="button" className="min-h-10 font-semibold text-blue-700 underline" disabled={customerBusy} onClick={() => void addCustomer(customer.id)}>Undo</button>}
+              {!customer.undone && <button type="button" className="min-h-11 font-medium text-blue-700" disabled={customerBusy} onClick={() => void addCustomer(customer.id)}>Undo</button>}
             </p>
           )}
           {saved && <p role="status" className="text-sm text-blue-700">Saved to Enquiries.</p>}
