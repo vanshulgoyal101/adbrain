@@ -97,6 +97,8 @@ Write a distinct hook and argument for this brief and angle, not a summary of th
 Choose one relevant benefit and one supporting fact; do not repeat the full credentials,
 service-area list and savings claim in every ad. Avoid generic slogan triplets, forced metaphors,
 and references to incidental objects in the picture. End with a plain, relevant next step.
+When the Brand facts include proof, include one specific proof in the ad: years in business, jobs done,
+a named credential or a warranty, in the Brand's own words. Never just say "trusted".
 Recent copy is supplied only to avoid repetition, not as evidence for claims. Change the opening,
 sentence structure and persuasion angle, not just synonyms. Do not reuse a recent headline or hook.
 Write a concise Meta link description that complements the headline with a supported detail or
