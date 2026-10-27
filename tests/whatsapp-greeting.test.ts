@@ -58,6 +58,27 @@ describe("whatsappGreeting (#209, #493)", () => {
     expect(whatsappGreeting(solaride, ["छत पर सोलर"], [], ["English"]).autofill).toBe("Hi! I'd like to know more about Solaride.");
   });
 
+  // #1081 (W2): the ask and the welcome follow the ad's language even when Create didn't store it precisely.
+  it("writes the ask and the welcome in the ad's language: en, hi, Hinglish, pa", () => {
+    const romanHindi = ["Bijli ka bill aadha karo", "Free site survey ke liye abhi WhatsApp karo"];
+    const hinglish = whatsappGreeting(solaride, romanHindi, ["Mohali"]);
+    expect(hinglish).toEqual({
+      autofill: "Namaste, mujhe Mohali mein Free site survey ke baare mein jaankari chahiye.",
+      greeting: "Namaste! Solaride ko message karne ke liye dhanyavaad. Yeh message bhejiye, hum yahin jawab denge.",
+    });
+    // Brand's plain "Hindi"/"Punjabi" follows the ad's script.
+    expect(whatsappGreeting(solaride, romanHindi, ["Mohali"], ["Hindi"])).toEqual(hinglish);
+    expect(whatsappGreeting(solaride, ["छत पर सोलर, Free site survey के साथ"], [], ["Hindi"]).greeting).toBe("नमस्ते! Solaride को मैसेज करने के लिए धन्यवाद। यह मैसेज भेजिए, हम यहीं जवाब देंगे।");
+    expect(whatsappGreeting(solaride, ["ਛੱਤ 'ਤੇ ਸੋਲਰ, Free site survey ਨਾਲ"], [], ["Punjabi"])).toEqual({
+      autofill: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਨੂੰ Free site survey ਬਾਰੇ ਜਾਣਕਾਰੀ ਚਾਹੀਦੀ ਹੈ।",
+      greeting: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! Solaride ਨੂੰ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ ਧੰਨਵਾਦ। ਇਹ ਸੁਨੇਹਾ ਭੇਜੋ, ਅਸੀਂ ਇੱਥੇ ਹੀ ਜਵਾਬ ਦੇਵਾਂਗੇ।",
+    });
+    // English copy stays English: one Hindi-looking word isn't enough, and a stored "English" wins.
+    expect(whatsappGreeting(solaride, run21Offer).greeting).toBe("Hi! Thanks for messaging Solaride. Send this message and we'll reply here.");
+    expect(whatsappGreeting(solaride, ["Solar hai the answer for Mohali homes"]).autofill).toBe("Hi! I'd like to know more about Solaride.");
+    expect(whatsappGreeting(solaride, romanHindi, [], ["English"]).autofill).toBe("Hi! I'd like a Free site survey.");
+  });
+
   it("matches offers as whole words and ignores an empty label (QA, PR #218)", () => {
     const brand = { name: "Acme", offers: ["EMI", "Diwali offer:", ":"] };
     expect(whatsappGreeting(brand, ["Premium panels."]).autofill).toBe("Hi! I'd like to know more about Acme.");

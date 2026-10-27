@@ -75,6 +75,17 @@ describe("core: WhatsApp Prepare payload against Meta's recorded validate_only a
     }
   });
 
+  // #1081 (W2): a Hinglish ad Create stored as plain "Hindi", or not at all, gets the Hinglish ask Meta accepted.
+  it("a Roman-script Hindi ad sends the recorded Hinglish ask and welcome, not English", () => {
+    const romanHindi = ["Bijli ka bill aadha karo", "Ghar par free site survey ke liye abhi WhatsApp karo"];
+    const accepted = JSON.parse(linkData("ad-wa-me-hinglish").page_welcome_message);
+    for (const stored of [[], ["Hindi"]]) {
+      const today = whatsappGreeting(solaride, romanHindi, ["Mohali"], stored);
+      expect(today).toEqual(recorded.variants.hinglish);
+      expect(accepted.text_format.message.autofill_message.content).toBe(today.autofill);
+    }
+  });
+
   it("keeps instant-form creatives free of the WhatsApp greeting", async () => {
     const forms = await sentForms("instant_form");
     const sent = JSON.parse(forms.find(({ url }) => url.endsWith("/adcreatives"))!.form.object_story_spec).link_data;
