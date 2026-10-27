@@ -103,6 +103,15 @@ describe("Campaigns rows (#403 S5)", () => {
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   });
 
+  it("shows saved drafts from the server in the first render, before any fetch answers (#847 CLS)", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    const draft = { draftId: "90d1d2bb-466c-4889-9af2-edb533e82531", version: 1, expiresAt: "2026-11-01T00:00:00.000Z",
+      input: { businessId: business.id, name: "Diwali leads", mode: "manual", creativeIds: [], dailyBudgetRupees: 300, abTest: false, destination: "instant_form", targeting: {} } };
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[paused]} initialResults={{}} initialDrafts={[draft] as never}
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_999" />);
+    expect(screen.getByText("Diwali leads")).toBeInTheDocument();
+  });
+
   it("says when a row has no results yet, and shows them when it has", async () => {
     view({ [active.id]: result });
     const pausedRow = (await screen.findByRole("heading", { name: "Rooftop solar" })).closest("article") as HTMLElement;
@@ -110,6 +119,8 @@ describe("Campaigns rows (#403 S5)", () => {
     // #847: one line for the list instead of a sentence on each row.
     expect(within(pausedRow).queryByText(/No results yet/)).toBeNull();
     expect(screen.getAllByText(/No results yet for 1 of these campaigns/)).toHaveLength(1);
+    // #847 CLS: the note follows the cards, so results arriving never push them down.
+    expect(activeRow.compareDocumentPosition(screen.getByText(/No results yet for 1 of these campaigns/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(activeRow).queryByText(/No results yet/)).toBeNull();
     expect(within(activeRow).getByText("1,200")).toBeInTheDocument();
   });

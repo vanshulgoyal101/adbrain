@@ -5,6 +5,10 @@ import Link from "next/link";
 import { Building2 } from "lucide-react";
 import { Campaigns } from "@/components/campaigns";
 import { adResultsEnabled } from "@/lib/campaign/ad-results-store";
+import { draftDtoSchema, type DraftDTO } from "@/lib/campaign/connect-contracts";
+import { listEditableDrafts } from "@/lib/campaign/draft-repository";
+import { requireOwnedBusiness } from "@/lib/meta/connection-access";
+import { createClient } from "@/lib/supabase/server";
 import { ReadyAdsNextStep } from "@/components/ready-ads-next-step";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +24,16 @@ import {
 } from "@/lib/supabase/queries";
 
 export const metadata = { title: "Campaigns" };
+
+/** #847: the owner's saved drafts in the first render, read as /api/campaign-drafts does; on any error the client loads them as before. */
+async function savedDrafts(businessId: string): Promise<DraftDTO[] | undefined> {
+  try {
+    const actor = await requireOwnedBusiness(businessId);
+    return draftDtoSchema.array().parse(await listEditableDrafts(await createClient(), actor));
+  } catch {
+    return undefined;
+  }
+}
 
 export default async function CampaignsPage({
   searchParams,
@@ -54,10 +68,11 @@ export default async function CampaignsPage({
     ...page,
     results: await getLatestResultsWithEnquiries(page.campaigns.map((campaign) => campaign.id)),
   }));
-  const [approved, page, connection] = await Promise.all([
+  const [approved, page, connection, drafts] = await Promise.all([
     getApprovedCreatives(business.id).then((rows) => rows.map(clientCreative)),
     campaignData,
     getMetaConnection(business.id),
+    savedDrafts(business.id),
   ]);
   const metaReady = connection.ready;
   const reconnectBy = connection.source === "oauth" && !connection.expired ? reconnectByLabel(connection.tokenExpiresAt) : null;
@@ -85,6 +100,7 @@ export default async function CampaignsPage({
           approved={approved}
           initialCampaigns={campaigns}
           initialNextCursor={page.nextCursor}
+          initialDrafts={drafts}
           initialResults={page.results}
           renderId={crypto.randomUUID()}
           leadForms={[]}
