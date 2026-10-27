@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { relativeAge } from "@/lib/leads/digest";
@@ -13,7 +13,7 @@ type Loaded = { ads: AdResultView[]; syncedAt: string | null };
 /** One quiet row: the ad, its enquiries and ₹ per enquiry ("—" before the first one, never ₹0). */
 function Row({ ad }: { ad: AdResultView }) {
   return (
-    <li className="flex items-start justify-between gap-3 py-2 text-[13px] leading-[15px]">
+    <li className="flex items-start justify-between gap-3 py-2 text-xs">
       <span className="min-w-0 wrap-break-word text-slate-900">
         {ad.best && <span className="mr-1.5 font-semibold text-primary">Best</span>}
         {ad.name ?? "Ad"}
@@ -57,10 +57,13 @@ export function AdResults({ campaignId }: { campaignId: string }) {
   const hasBest = loaded?.ads.some(ad => ad.best) ?? false;
 
   return (
-    <details className="text-sm" onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) void load(); }}>
-      <summary className="min-h-10 cursor-pointer py-2 font-medium text-slate-900">Which ad worked</summary>
+    <details className="group text-sm" onToggle={(event) => { if ((event.currentTarget as HTMLDetailsElement).open) void load(); }}>
+      <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 py-2 font-medium text-slate-900 [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={16} aria-hidden="true" className="transition-transform group-open:rotate-90" />
+        Which ad worked
+      </summary>
       {state === "loading" && <p className="flex items-center gap-2 text-slate-500"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Loading ads…</p>}
-      {state === "error" && <p role="alert" className="text-red-800">Couldn&apos;t load the ads. <button type="button" className="min-h-10 underline" onClick={() => void load()}>Try again</button></p>}
+      {state === "error" && <p role="alert" className="text-danger">Couldn&apos;t load the ads. <button type="button" className="min-h-11 underline" onClick={() => void load()}>Try again</button></p>}
       {loaded && (loaded.ads.length === 0 ? (
         <p className="text-slate-500">No ad results yet. They appear after the next refresh.</p>
       ) : (
@@ -70,7 +73,7 @@ export function AdResults({ campaignId }: { campaignId: string }) {
             {shown.map(ad => <Row key={ad.adId} ad={ad} />)}
           </ul>
           {loaded.ads.length > SHOWN && !all && (
-            <button type="button" className="min-h-10 font-medium text-blue-700 underline" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
+            <button type="button" className="min-h-11 font-medium text-blue-700" onClick={() => setAll(true)}>All ads ({loaded.ads.length})</button>
           )}
           {loaded.syncedAt && <p className="text-xs text-slate-500">Updated {relativeAge(loaded.syncedAt, new Date()) || "just now"}</p>}
         </div>
