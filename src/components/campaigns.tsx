@@ -84,6 +84,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
@@ -1517,6 +1518,8 @@ function BusinessCampaigns({
               {prepareReview.draft.input.destination === "whatsapp" && prepareReview.review.whatsappMessage && (
                 <WhenTheyTap message={prepareReview.review.whatsappMessage} businessName={business.name}
                   adsLanguage={adsLanguage(adsFor(prepareReview.draft.input.creativeIds))}
+                  handoff={handoffRate(campaigns.filter((c) => campaignDestination(c, results[c.id]) === "whatsapp").map((c) => results[c.id]).filter(Boolean))}
+                  offers={business.offers ?? []}
                   onEdit={() => { setMessageEditorOpen(true); document.getElementById("whatsapp-message")?.scrollIntoView({ block: "center" }); }} />
               )}
               {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}

@@ -380,6 +380,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   "WhatsApp message: Your saved message · Edit for this campaign" opens the same fields and
   preview ("Also save as my message" is off by default); Review's "When they tap" shows the
   message in one line and a preview, with a soft note when its language differs from the ads.
+  #1081: it also shows the business's past open → message rate across its WhatsApp campaigns
+  (from 10 opens), and a soft note when the pre-typed ask names no offer or number ("Hi, I want
+  info"); neither blocks the send (`src/lib/campaign/whatsapp-handoff.ts`).
   Choosing "Quick questions" on Brand fills the empty boxes with 3 suggestions from the Brand
   (`src/lib/campaign/whatsapp-questions.ts`, #905): the first offer in the owner's words (a long
   one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),
