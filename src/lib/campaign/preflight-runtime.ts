@@ -8,6 +8,8 @@ import type { PreflightLoaders } from "@/lib/campaign/preflight-service";
 import type { createClient } from "@/lib/supabase/server";
 import { resolveDraftTargeting } from "./draft-targeting";
 import { savedCreativeDescription } from "@/lib/creative/concept";
+import { campaignWhatsAppMessage } from "./campaign-whatsapp-message";
+import { whatsappTemplateProblem } from "./whatsapp-template-check";
 
 export type CampaignSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -66,6 +68,20 @@ export function buildCampaignPreflightLoaders(
       } catch {
         return null;
       }
+    },
+    findWhatsAppMessage: async (actor, draft) => {
+      const [{ data: business, error }, { data: creatives }] = await Promise.all([
+        supabase.from("businesses").select("name, offers, usps, description, vertical, locations, whatsapp_template").eq("id", actor.businessId).maybeSingle(),
+        supabase.from("creatives").select("id, image_url, headline, primary_text, generation").in("id", draft.creativeIds).eq("business_id", actor.businessId),
+      ]);
+      if (error || !business) return null;
+      // The same ads, in the same order, as launch writes the suggestion from.
+      const byId = new Map((creatives ?? []).map((creative) => [creative.id, creative]));
+      const used = draft.creativeIds.map((id) => byId.get(id)).filter((creative): creative is NonNullable<typeof creative> => Boolean(creative?.image_url && creative.headline));
+      const message = campaignWhatsAppMessage({ draft, business, creatives: used });
+      // A saved message was checked when it was saved; this campaign's edit is checked here.
+      const problem = draft.whatsappMessage ? whatsappTemplateProblem(draft.whatsappMessage, business)?.error ?? null : null;
+      return { message, problem };
     },
     findWebsite: async (actor) => {
       const { data } = await supabase.from("businesses").select("website").eq("id", actor.businessId).maybeSingle();

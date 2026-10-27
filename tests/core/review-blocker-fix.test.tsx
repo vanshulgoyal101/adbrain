@@ -68,6 +68,7 @@ const breaks: Record<ReviewBlockerReason, (input: PreflightInput) => void> = {
   REVIEW_NO_AUDIENCE: (input) => { delete input.draft.targeting.audience; },
   REVIEW_INTERESTS_UNRESOLVED: (input) => { input.geo.audienceInterests = []; input.geo.unresolvedInterests = ["Wellness"]; },
   REVIEW_AD_POLICY: (input) => { input.vertical = "chiropractic clinic"; input.creatives[0].headline = "Cures back pain, guaranteed"; },
+  REVIEW_WHATSAPP_MESSAGE: (input) => { input.draft.destination = "whatsapp"; input.whatsappMessageProblem = "\"guaranteed\" isn't in your business details. Reword it or add it there."; },
 };
 function reviewBlockedOn(reason: ReviewBlockerReason) {
   const input = productionInput();
