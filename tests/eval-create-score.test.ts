@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareSummaries, inconclusive, offerInFold, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
+import { compareSummaries, inconclusive, offerInFold, placeUpFront, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
 
 const ad = (overrides: Partial<CaseResult["ads"][number]> = {}): CaseResult["ads"][number] => ({
   angle: "offer", headline: "Book your $49 exam", primaryText: "New-patient exam for $49.\nBook today.", cta: "BOOK_NOW",
@@ -103,5 +103,25 @@ describe("Create eval scoring (#418)", () => {
     expect(inconclusive(limited)).toBe("inconclusive: 4 of 6 concepts hit free-tier provider limits; run again later");
     expect(inconclusive(oneLimited)).toBeNull();
   });
-});
 
+  it("checks a Brand place is in the headline or first line (#418 rule 1)", () => {
+    const places = ["Austin, Texas", "Round Rock"];
+    expect(placeUpFront("Back pain in Round Rock?", "Book a $49 exam.", places)).toBe(true);
+    expect(placeUpFront("Book a $49 exam", "Same-day visits in Austin.\nCall today.", places)).toBe(true);
+    expect(placeUpFront("Book a $49 exam", "Same-day visits.\nThree clinics across Austin.", places)).toBe(false);
+    expect(placeUpFront("छत पर सोलर", "चंडीगढ़ में मुफ़्त सर्वे", ["Chandigarh"])).toBeNull();
+    expect(placeUpFront("Anything", "Anything", [])).toBeNull();
+  });
+
+  it("counts the copy of image-failed concepts and gates on the place rate only when both runs have it", () => {
+    const failed = run("c", [ad({ placeUpFront: false })], { saved: 1, failures: [
+      { angle: "proof", stage: "image", rules: [], copy: { headline: "h", primaryText: "p", supportingText: null, placeUpFront: true } },
+    ] });
+    const after = summarize([failed]);
+    expect(after.placeUpFrontRate).toBe(0.5);
+    const before = summarize([run("c", [ad({ placeUpFront: true })])]);
+    expect(compareSummaries(before, after, { deterministic: true }).regressions).toContain("place in the headline or first line 100% → 50%");
+    const old = { ...before, placeUpFrontRate: undefined };
+    expect(compareSummaries(old, after, { deterministic: true }).regressions.join()).not.toMatch(/place/);
+  });
+});
