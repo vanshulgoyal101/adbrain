@@ -1,0 +1,221 @@
+{
+  "recordedAt": "2026-10-27T14:15:35.926Z",
+  "campaignId": "900000000000000001",
+  "day": "2026-10-26",
+  "creds": {
+    "adAccountId": "act_9000000000000002",
+    "pageId": "900000000000003"
+  },
+  "tape": [
+    {
+      "path": "900000000000000001?fields=id%2Caccount_id",
+      "status": 200,
+      "body": {
+        "id": "900000000000000001",
+        "account_id": "9000000000000002"
+      }
+    },
+    {
+      "path": "900000000000000001/adsets?fields=promoted_object%2Cdestination_type&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "promoted_object": {
+              "page_id": "900000000000003",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "9000000000000004",
+              "whatsapp_phone_number": "+91XXXXXX4842"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "900000000000000005"
+          },
+          {
+            "promoted_object": {
+              "page_id": "900000000000003",
+              "smart_pse_enabled": false,
+              "whats_app_business_phone_number_id": "9000000000000004",
+              "whatsapp_phone_number": "+91XXXXXX4842"
+            },
+            "destination_type": "WHATSAPP",
+            "id": "900000000000000006"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "path": "900000000000000001/ads?fields=id%2Cname%2Ceffective_status%2Ccreative%7Bid%7D&limit=100&effective_status=%5B%22ACTIVE%22%2C%22PAUSED%22%2C%22ARCHIVED%22%2C%22CAMPAIGN_PAUSED%22%2C%22ADSET_PAUSED%22%2C%22IN_PROCESS%22%2C%22WITH_ISSUES%22%2C%22PENDING_REVIEW%22%2C%22DISAPPROVED%22%2C%22PREAPPROVED%22%2C%22PENDING_BILLING_INFO%22%5D",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "900000000000000007",
+            "name": "Know Your Roof's Solar Fit First - कॉपी",
+            "effective_status": "ACTIVE",
+            "creative": {
+              "id": "9000000000000008"
+            }
+          },
+          {
+            "id": "900000000000000009",
+            "name": "Find Out Before You Commit - कॉपी",
+            "effective_status": "ACTIVE",
+            "creative": {
+              "id": "9000000000000010"
+            }
+          },
+          {
+            "id": "900000000000000011",
+            "name": "Stop guessing if your roof is ready - कॉपी",
+            "effective_status": "ACTIVE",
+            "creative": {
+              "id": "9000000000000012"
+            }
+          },
+          {
+            "id": "900000000000000013",
+            "name": "Know Your Roof's Solar Fit First",
+            "effective_status": "PAUSED",
+            "creative": {
+              "id": "9000000000000014"
+            }
+          },
+          {
+            "id": "900000000000000015",
+            "name": "Find Out Before You Commit",
+            "effective_status": "PAUSED",
+            "creative": {
+              "id": "9000000000000016"
+            }
+          },
+          {
+            "id": "900000000000000017",
+            "name": "Stop guessing if your roof is ready",
+            "effective_status": "PAUSED",
+            "creative": {
+              "id": "9000000000000018"
+            }
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    },
+    {
+      "path": "900000000000000001/insights?level=ad&fields=ad_id%2Cimpressions%2Cclicks%2Cspend%2Cactions&time_range=%7B%22since%22%3A%222026-10-26%22%2C%22until%22%3A%222026-10-26%22%7D&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "ad_id": "900000000000000011",
+            "impressions": "1922",
+            "clicks": "12",
+            "spend": "88.21",
+            "actions": [
+              {
+                "action_type": "link_click",
+                "value": "10"
+              },
+              {
+                "action_type": "post_reaction",
+                "value": "4"
+              },
+              {
+                "action_type": "onsite_conversion.total_messaging_connection",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_unlike",
+                "value": "1"
+              },
+              {
+                "action_type": "post_engagement",
+                "value": "15"
+              },
+              {
+                "action_type": "post_interaction_gross",
+                "value": "5"
+              },
+              {
+                "action_type": "page_engagement",
+                "value": "15"
+              },
+              {
+                "action_type": "post_interaction_net",
+                "value": "4"
+              },
+              {
+                "action_type": "onsite_conversion.messaging_first_reply",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_save",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_net_save",
+                "value": "1"
+              },
+              {
+                "action_type": "onsite_conversion.post_net_like",
+                "value": "3"
+              },
+              {
+                "action_type": "onsite_conversion.messaging_conversation_started_7d",
+                "value": "1"
+              }
+            ],
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          },
+          {
+            "ad_id": "900000000000000009",
+            "impressions": "167",
+            "clicks": "0",
+            "spend": "8.18",
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          },
+          {
+            "ad_id": "900000000000000007",
+            "impressions": "400",
+            "clicks": "2",
+            "spend": "15.39",
+            "actions": [
+              {
+                "action_type": "link_click",
+                "value": "2"
+              },
+              {
+                "action_type": "post_engagement",
+                "value": "2"
+              },
+              {
+                "action_type": "page_engagement",
+                "value": "2"
+              }
+            ],
+            "date_start": "2026-10-26",
+            "date_stop": "2026-10-26"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
+        }
+      }
+    }
+  ]
+}
