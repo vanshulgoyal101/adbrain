@@ -15,14 +15,16 @@ import { assessCampaignHealth, readCampaignHealth, type CampaignHealth } from "@
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const RESULT_INTERVAL_MS = 3_600_000;
+// pg_cron calls this every 15 min; 14 min lets every run refresh each live campaign, so results stay
+// ≤ 15 min old (#992). One read-only insights read per active campaign per run.
+const RESULT_INTERVAL_MS = 14 * 60_000;
 const START_BUDGET_MS = 40_000;
-// Problems first seen this recently are reported. pg_cron refreshes hourly (#274) but the issue-opening
+// Problems first seen this recently are reported. pg_cron runs every 15 min (#274) but the issue-opening
 // GitHub run can come hours later; it dedupes by key, so a wide window repeats nothing.
 const ALERT_WINDOW_MS = 24 * 3_600_000;
 
 /**
- * Scheduled results refresh (#258): at most hourly per active campaign, read Meta
+ * Scheduled results refresh (#258, #992): every 15-min run per active campaign, read Meta
  * insights and ad review read-only, save one result row and the campaign's health
  * flags. Never pauses or changes a campaign; enforcement stays in enforce-spend.
  * Alerts carry only a problem kind and an opaque key (public workflow logs). A business

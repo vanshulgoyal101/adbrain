@@ -11,6 +11,7 @@ import {
   SCOREBOARD_AI_ROUTES,
   SCOREBOARD_EVENT_NAMES,
   SCOREBOARD_PLAN_ROUTE,
+  type ScoreActiveResult,
   type ScoreAiCall,
   type ScoreEvent,
   type ScoreLaunch,
@@ -30,7 +31,7 @@ const inWindow = `created_at >= ${quote(since.toISOString())} and created_at <= 
 const smoke = internal.smokeUserIds;
 const iso = `to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at`;
 
-const [owned, events, aiCalls, launches, users] = await Promise.all([
+const [owned, events, aiCalls, launches, users, active] = await Promise.all([
   readOnlyQuery(`select id from public.businesses where owner_id in (${list(smoke)})`),
   readOnlyQuery(`select name, outcome, user_id, business_id, duration_ms, attributes,
   ${iso} from public.product_events
@@ -43,6 +44,10 @@ where ${inWindow} and route in (${list(SCOREBOARD_AI_ROUTES)})`),
   readOnlyQuery(`select u.id, u.email, u.email_confirmed_at from auth.users u where u.id in (
   select user_id from public.llm_usage_events where ${inWindow} and route = 'creatives.generate'
   union select user_id from public.product_events where ${inWindow} and name = 'creative.batch')`),
+  // #992: newest results per active, Meta-bound campaign (the ones refresh-results keeps fresh).
+  readOnlyQuery(`select c.business_id, (select to_char(max(r.fetched_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+  from public.campaign_results r where r.campaign_id = c.id and r.fetched_at >= ${quote(since.toISOString())}) as fetched_at
+from public.campaigns c where c.status = 'active' and c.meta_campaign_id is not null`),
 ]);
 type Identity = { id: string; email: string | null; email_confirmed_at: string | null };
 
@@ -50,6 +55,7 @@ const board = buildScoreboard({
   events: events as ScoreEvent[],
   aiCalls: aiCalls as ScoreAiCall[],
   launches: launches as ScoreLaunch[],
+  activeResults: active as ScoreActiveResult[],
   freeImageUserIds: (users as Identity[]).filter((user) => isInternalUser(user) && !isExemptFromFreeProviders(user)).map((user) => user.id),
   excludedUserIds: smoke,
   excludedBusinessIds: (owned as Array<{ id: string }>).map((row) => row.id),
