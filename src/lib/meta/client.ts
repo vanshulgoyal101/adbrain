@@ -4,13 +4,13 @@ import { fetchPublicUrl } from "@/lib/security/ssrf";
 import { readBoundedResponse } from "@/lib/imageGen/raster";
 import { destinationFromAdSets, type CampaignDestination } from "@/lib/campaign/outcomes";
 import type { CampaignSkipReason } from "@/lib/campaign/sync-skips";
-import { decodeCampaignInsights, decodeLifetimeSpendPaise, type CampaignInsights } from "./insights";
+import { decodeAdResults, decodeCampaignInsights, decodeLifetimeSpendPaise, type AdResult, type CampaignInsights } from "./insights";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern } from "./whatsapp-status-shared";
 import { graphEndpoint, graphEntity, graphErrorCode, graphOutcome } from "./graph-event";
 import { recordProductEvent } from "@/lib/observability/logger";
 import { EXCLUDABLE_CITIES, INDIA_REGION_KEYS, mergeExclusions, serviceAreaExclusions, TargetingExclusionsMissingError, type IncludedPlace } from "./service-area";
 import { AD_LANGUAGE_KEYS, storedLocales } from "./locales";
-export type { CampaignInsights } from "./insights";
+export type { AdResult, CampaignInsights } from "./insights";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -581,6 +581,9 @@ export function adSetTargeting(params: {
     targeting_automation: { advantage_audience: ADVANTAGE_AUDIENCE ? 1 : 0 },
   };
 }
+
+/** #783: every ad status Meta will list for a campaign's ads; DELETED can't be requested (1815001). */
+const LISTED_AD_STATUSES = ["ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED", "PENDING_BILLING_INFO"];
 
 /** #906: a WhatsApp ad set's targeting names its platforms without Audience Network. */
 export function withoutAudienceNetwork(targeting: Record<string, unknown>): Record<string, unknown> {
@@ -1610,6 +1613,18 @@ export class MetaClient {
     // #404: without a preset Meta reads last_30d, which leaves out today, so a new campaign read ₹0. Results are lifetime.
     const data = await this.graph<unknown>(`${encodeURIComponent(campaignId)}/insights?fields=impressions,clicks,spend,actions,date_start,date_stop&date_preset=${options?.weekly ? "this_week_mon_today" : "maximum"}`);
     return decodeCampaignInsights(data, destination, { requireSpend: options?.weekly });
+  }
+
+  /** #783: each ad's lifetime results; ads Meta hasn't delivered are listed with zeros (#789). Read-only. */
+  async getAdResults(campaignId: string): Promise<AdResult[]> {
+    const destination = await this.verifyCampaignBinding(campaignId);
+    const node = encodeURIComponent(campaignId);
+    const [ads, insights] = await Promise.all([
+      // Meta's default listing leaves out ARCHIVED ads (an audience rebuild archives them) and refuses DELETED (1815001).
+      this.graph<unknown>(`${node}/ads?fields=id,name,effective_status,creative{id}&limit=100&effective_status=${encodeURIComponent(JSON.stringify(LISTED_AD_STATUSES))}`),
+      this.graph<unknown>(`${node}/insights?level=ad&fields=ad_id,impressions,clicks,spend,actions&date_preset=maximum&limit=100`),
+    ]);
+    return decodeAdResults(ads, insights, destination);
   }
 
   /** Read-only lifetime spend (account currency, exact paise) for customer cost evidence (#216). */
