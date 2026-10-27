@@ -12,6 +12,24 @@ function offerPhrase(offer: string): string {
   return (trimmed.split(":").pop() ?? "").trim() || trimmed;
 }
 
+/** The Brand offer the prefill names: one the ads mention, a free (bookable) one first, then a numbered one. */
+export function prefillOffer(brand: { offers?: string[] | null }, adCopy: string[]): string | undefined {
+  const copy = adCopy.join(" ");
+  const rank = (offer: string) => (/^free\b/i.test(offer) ? 2 : /\d/.test(offer) ? 1 : 0);
+  return (brand.offers ?? [])
+    .map(offerPhrase)
+    .filter((phrase) => phrase && mentions(copy, phrase))
+    .sort((left, right) => rank(right) - rank(left))[0];
+}
+
+/** #418 rule 7: whether the post's last line asks for the offer the WhatsApp prefill names; null with no Brand offer. */
+export function askMatchesPrefill(brand: { offers?: string[] | null }, headline: string, primaryText: string): boolean | null {
+  if (!(brand.offers ?? []).some((offer) => offerPhrase(offer))) return null;
+  const lines = primaryText.split("\n").map((line) => line.trim()).filter(Boolean);
+  const offer = prefillOffer(brand, [headline, primaryText]);
+  return Boolean(offer && lines.length && mentions(lines[lines.length - 1], offer));
+}
+
 type Language = "en" | "hi" | "pa" | "hinglish";
 /** A campaign's choice for its WhatsApp message (#493): "ad" follows the ads' own language. */
 export type WhatsAppLanguage = "ad" | Language;
@@ -81,17 +99,13 @@ export function whatsappGreeting(
   const name = brand.name.trim();
   const copy = adCopy.join(" ");
   const language = whatsappLanguageFor(adCopy, adLanguages, chosen);
-  const rank = (offer: string) => (/^free\b/i.test(offer) ? 2 : /\d/.test(offer) ? 1 : 0);
-  const offer = (brand.offers ?? [])
-    .map(offerPhrase)
-    .filter((phrase) => phrase && mentions(copy, phrase))
-    .sort((left, right) => rank(right) - rank(left))[0];
+  const offer = prefillOffer(brand, adCopy);
   const places = areas.map((area) => area.trim()).filter(Boolean);
   const city = places.length === 1 ? places[0] : null;
   const text = TEXT[language];
   // Mid-sentence, follow the ad's own casing: "a free site survey" but "a Diwali offer".
   const lower = offer && offer[0].toLowerCase() + offer.slice(1);
-  const phrase = offer && lower !== offer && copy.includes(lower) ? lower : offer;
+  const phrase = lower && lower !== offer && copy.includes(lower) ? lower : offer;
   return {
     autofill: (phrase ? text.offer(phrase, city) : text.business(name, city)).slice(0, 300),
     greeting: text.greeting(name).slice(0, 300),

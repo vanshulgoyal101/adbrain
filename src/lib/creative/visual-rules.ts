@@ -15,3 +15,26 @@ export function emptyScene(direction: string): string | null {
   const empty = EMPTY_SCENE.exec(scene)?.[0];
   return empty && !SUBJECT.test(scene) ? empty : null;
 }
+
+const PERSON = /\b(?:owner|doctor|dentist|chiropractor|therapist|technician|installer|engineer|electrician|crew|team|staff|customer|client|patient|homeowner|couple|woman|man|men|women|adult|person|people|worker|stylist|teacher|student|bride|parent|child|hands?)\b/i;
+
+/**
+ * #418 rule 4: whether the visual direction puts a person in the picture. Sentences starting with
+ * avoid/no/without and "no …"/"free of …" spans are dropped, so "no people" doesn't count.
+ */
+export function personInScene(direction: string): boolean {
+  return direction.split(/(?<=[.;!?])\s+/)
+    .filter((sentence) => !/^(?:avoid|do not|don't|no|without|exclude|omit|never)\b/i.test(sentence.trim()))
+    .map((sentence) => sentence.replace(/\b(?:no|without|free of|devoid of|never)\b[^.;,]*/gi, ""))
+    .some((sentence) => PERSON.test(sentence));
+}
+
+/**
+ * #418 rule 4 (Analyst, #941): long-running local ads show a person or real work, not an empty product
+ * shot. When the concept's picture has no one in it, the image prompt adds one, at $0 and with no repair.
+ */
+export function personSubjectLine(direction: string): string | null {
+  return personInScene(direction)
+    ? null
+    : "Main subject (this overrides any \"no people\" note above): a person from the business doing the work, or a customer getting or using it, shown naturally and mid-task, not posed; no product-only or empty shot.";
+}

@@ -217,7 +217,17 @@ feedback to assess unnecessary questions, abandonment and time to a useful draft
    states a cited offer that neither the headline nor `supportingText` carries,
    `supportingText` becomes the one Brand offer fact (up to 64 characters) that states
    it. No repair and no new words; Hindi and Punjabi copy keeps its own picture line.
+   The prompt (`creative-concept-v4`) also asks for #418 rules 1, 4, 5 and 7: a first line
+   of at most 60 characters naming the service and one Brand place; a person giving or
+   getting the service, not an empty product shot; one proof from the Brand (years, jobs
+   done, a named credential or a warranty; `proof.ts`); and a last line asking for one
+   Brand offer in its own words, which is the offer the WhatsApp prefill names
+   (`prefillOffer`). None is a validator rule, so none adds a repair (#713); the eval
+   reports each.
 4. Generate an image from the validated concept and up to three reference images.
+   When the concept's visual direction has no person in it, the image prompt adds one
+   (a person from the business at work, or a customer getting the service; #418 rule 4),
+   with no repair.
    When the business has uploaded product photos (Brand assets), the first ad
    uses the newest one as its image instead (#195): no image call or image cost,
    its concept is told the image is the owner's unseen photo, and the receipt
