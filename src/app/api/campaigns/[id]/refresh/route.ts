@@ -1,6 +1,9 @@
 import { observeRoute } from "@/lib/observability/logger";
 import { NextResponse } from "next/server";
-import { CampaignGoneError, friendlyMetaError, type AdReview } from "@/lib/meta/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
+import { CampaignGoneError, friendlyMetaError, type AdResult, type AdReview } from "@/lib/meta/client";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/audit";
 import { summarizeInsights } from "@/lib/creative/summary";
 import { enforceAutoPauseWithStatus } from "@/lib/campaign/spend-enforce";
@@ -60,9 +63,10 @@ async function handlePOST(
 
   let insights;
   let review: AdReview[] | null = null;
+  let ads: AdResult[] | null = null;
   try {
     const context = await requireOwnedBusiness(campaign.business_id);
-    ({ insights, review } = await withMetaConnection(
+    ({ insights, review, ads } = await withMetaConnection(
       context,
       {
         purpose: "read_insights",
@@ -75,6 +79,8 @@ async function handlePOST(
       async (meta) => ({
         insights: await meta.getCampaignInsights(campaign.meta_campaign_id!),
         review: await meta.readAdReview(campaign.meta_campaign_id!).catch(() => null),
+        // #783: per-ad results ride along; a failure keeps the last stored rows.
+        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(() => null) : null,
       }),
     ));
   } catch (err) {
@@ -109,6 +115,8 @@ async function handlePOST(
   if (resultError || !result) {
     return NextResponse.json({ error: "Could not save refreshed results. Retry the refresh.", protectionConfirmed: false }, { status: 503 });
   }
+
+  if (ads) await saveAdResults(createAdminClient() as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: id, ads }).catch(() => false);
 
   const [summary, enforcement] = await Promise.all([
     summarizeInsights(campaign.name ?? "Your campaign", insights),
