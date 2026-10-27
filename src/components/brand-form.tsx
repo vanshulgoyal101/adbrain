@@ -85,6 +85,7 @@ const AUTOFILL_LABELS: Partial<Record<keyof FieldsState, string>> = {
   usps: "selling points",
   offers: "offers",
   languages: "languages",
+  locations: "service areas (check them)",
   phone: "phone number",
 };
 // Facts Create may only state when the Brand has them; a website rarely gives all of them.
@@ -253,6 +254,8 @@ export function BrandForm({ business, photoCount = 0 }: { business: Business | n
         usps: e.usps?.length ? e.usps.join("\n") : undefined,
         offers: e.offers?.length ? e.offers.join("\n") : undefined,
         languages: e.languages?.length ? e.languages.join("\n") : undefined,
+        // #1037: proposed as removable chips; nothing is saved until the owner taps Save.
+        locations: e.locations?.length ? e.locations.join("\n") : undefined,
         phone: e.phone,
       };
       setFields((current) => {

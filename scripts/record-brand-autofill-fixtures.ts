@@ -4,7 +4,7 @@
  * budget providers (free tiers) once; writes no data. Scripts, styles and SVGs are dropped from the
  * saved page: the route removes them before reading, and the script checks the text and phone match.
  *
- *   npx tsx --env-file=.env.local scripts/record-brand-autofill-fixtures.ts [url]
+ *   npx tsx --env-file=.env.local scripts/record-brand-autofill-fixtures.ts [url] [fixture name, default autofill-solaride]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,7 +36,7 @@ async function main() {
   const completion = (extraction as unknown as { __completion: CompletionResult }).__completion;
   const dir = join(process.cwd(), "tests/core/fixtures/brand");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "autofill-solaride.json"), `${JSON.stringify({
+  writeFileSync(join(dir, `${process.argv[3] ?? "autofill-solaride"}.json`), `${JSON.stringify({
     recordedAt: new Date().toISOString(), url: url.toString(), page,
     reply: { provider: completion.provider, model: completion.model, content: completion.text, usage: completion.usage },
     attempts,

@@ -1,0 +1,30 @@
+{
+  "recordedAt": "2026-10-27T14:23:15.342Z",
+  "url": "https://example.com/",
+  "page": "<!doctype html><html lang=en><head><meta charset=utf-8><link rel=icon href=data:,><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Example Domain</title></head><body><p>This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.</p></body></html>\n",
+  "reply": {
+    "provider": "groq",
+    "model": "qwen/qwen3.8-27b",
+    "content": "{\n  \"description\": \"A placeholder domain intended for use in documentation examples without requiring permission.\",\n  \"vertical\": \"Web Development / Documentation\",\n  \"brand_voice\": \"Informative, neutral, cautionary\",\n  \"target_audience\": \"Developers, writers, and technical users\",\n  \"usps\": [\n    \"No permission needed for use\",\n    \"Specifically designed for documentation examples\"\n  ],\n  \"languages\": [\n    \"English\"\n  ]\n}",
+    "usage": {
+      "promptTokens": 321,
+      "completionTokens": 110,
+      "totalTokens": 431
+    }
+  },
+  "attempts": [
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "usage": {
+        "promptTokens": 321,
+        "completionTokens": 110,
+        "totalTokens": 431
+      },
+      "providerRequestId": "chatcmpl-565eb8af-9d1b-4542-84e5-77bb8c1978ed",
+      "providerFinalStatus": "completed",
+      "status": "success",
+      "latencyMs": 627
+    }
+  ]
+}
