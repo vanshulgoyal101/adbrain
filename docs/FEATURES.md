@@ -302,7 +302,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
 - **Which ad worked** (#783, behind `AD_RESULTS_ENABLED`): a launched campaign card has a collapsed
   section that loads each ad's stored results on first open: enquiries and ₹ per enquiry ("—" before the
   first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
-  enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
+  enquiries to pick a winner". AdBrain's own ads show a 40 px picture and their headline; outside ads keep
+  Meta's name. A capped run lists its running copies; an earlier copy shows only if it delivered, marked
+  "(earlier run)". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
   more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
   #1045: with at least 5 enquiries across the campaign, a running ad that costs ≥ 2× the best ad per enquiry
   (or spent ≥ 2× the campaign's cost per enquiry with none) gets one line: "“B” costs ₹X per enquiry vs ₹Y
