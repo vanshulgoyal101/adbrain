@@ -1,6 +1,7 @@
 /**
  * Records the real Graph ad account funding read for the test:core operator-funding
- * fixture (#245). Read-only: no Meta writes.
+ * fixture (#245), and with --live-runs the funding read plus the account's running capped runs
+ * (#1058) at the same moment. Read-only: no Meta writes.
  *
  *   npx tsx --env-file=.env.local scripts/record-meta-funding-fixtures.ts
  *
@@ -31,10 +32,13 @@ globalThis.fetch = async (input, init) => {
 async function main() {
   const meta = metaClientFromEnv();
   if (!meta) throw new Error("Meta env credentials are missing.");
+  const liveRuns = process.argv.includes("--live-runs");
   console.log(JSON.stringify(await meta.readAccountFunding()));
+  if (liveRuns) console.log(JSON.stringify(await meta.readLiveCappedRuns()));
   if (JSON.stringify(tape).includes("access_token")) throw new Error("Token leaked into the tape.");
-  writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/account-funding.json"), `${JSON.stringify(tape, null, 2)}\n`);
-  console.log(`account-funding: ${tape.length} exchanges`);
+  const name = liveRuns ? "account-funding-live-runs" : "account-funding";
+  writeFileSync(join(process.cwd(), `tests/core/fixtures/meta/${name}.json`), `${JSON.stringify(tape, null, 2)}\n`);
+  console.log(`${name}: ${tape.length} exchanges`);
 }
 
 main().catch(error => {

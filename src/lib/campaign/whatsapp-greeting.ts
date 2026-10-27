@@ -1,3 +1,5 @@
+import { isRomanHindi } from "@/lib/creative/interview";
+
 export type WhatsAppGreeting = { autofill: string; greeting: string };
 
 /** Whole-word, case-insensitive: "EMI" must not match "Premium". */
@@ -63,22 +65,37 @@ const TEXT: Record<Language, {
   },
 };
 
-function languageFrom(stored: (string | null | undefined)[]): Language | null {
+/** Which script the copy is in, for a stored language that doesn't say ("Hindi", "Punjabi"). */
+function scriptOf(copy: string): "devanagari" | "gurmukhi" | "latin" {
+  return /\p{Script=Devanagari}/u.test(copy) ? "devanagari" : /\p{Script=Gurmukhi}/u.test(copy) ? "gurmukhi" : "latin";
+}
+
+function languageFrom(stored: (string | null | undefined)[], copy: string): Language | null {
   for (const value of stored) {
     if (!value) continue;
     if (/hinglish/i.test(value)) return "hinglish";
     if (/devanagari/i.test(value)) return "hi";
     if (/gurmukhi/i.test(value)) return "pa";
     if (/^english\b/i.test(value)) return "en";
+    // #1081: Brand's plain "Hindi"/"Punjabi" follows the ad's script; in Roman letters it reads as Hinglish.
+    if (/^(hindi|punjabi)\b/i.test(value)) {
+      const script = scriptOf(copy);
+      return script === "devanagari" ? "hi" : script === "gurmukhi" ? "pa" : "hinglish";
+    }
   }
   return null;
 }
 
-/** The message's language: the campaign's choice, else the ads' stored language, else their script. */
+/**
+ * The message's language: the campaign's choice, else the ads' stored language, else their script,
+ * else Hindi in Roman letters (#1081: a Hinglish ad gets a Hinglish ask, not English).
+ */
 export function whatsappLanguageFor(adCopy: string[], adLanguages: (string | null | undefined)[] = [], chosen: WhatsAppLanguage = "ad"): Language {
   const copy = adCopy.join(" ");
-  return (chosen !== "ad" ? chosen : null) ?? languageFrom(adLanguages)
-    ?? (/\p{Script=Devanagari}/u.test(copy) ? "hi" : /\p{Script=Gurmukhi}/u.test(copy) ? "pa" : "en");
+  if (chosen !== "ad") return chosen;
+  const script = scriptOf(copy);
+  return languageFrom(adLanguages, copy)
+    ?? (script === "devanagari" ? "hi" : script === "gurmukhi" ? "pa" : isRomanHindi(copy) ? "hinglish" : "en");
 }
 
 /**

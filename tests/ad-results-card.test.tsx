@@ -6,7 +6,7 @@ import { AdResults } from "@/components/ad-results";
 // #783: "Which ad worked" on the campaign card (CPO + Designer notes): one quiet row per ad, "Best" as a word,
 // "—" before an ad's first enquiry, "Early" while no winner, the rest behind "All ads", hidden while off.
 const ad = (adId: string, over: Record<string, unknown> = {}) => ({
-  adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, impressions: 100, results: 0, spend: 0, costPerResult: null, ...over,
+  adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, impressions: 100, results: 0, spend: 0, costPerResult: null, ...over,
 });
 const open = async (body: unknown, status = 200) => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json(body, { status })));
@@ -111,5 +111,24 @@ describe("<AdResults> pause offer (#1045)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Pause this ad" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Meta didn't change the ad. Nothing changed.");
     expect(screen.getByRole("button", { name: "Pause this ad" })).toBeEnabled();
+  });
+
+  // Designer on #783: AdBrain's own ads read by picture and headline; outside ads keep Meta's name.
+  it("shows an AdBrain ad's thumbnail and headline, and Meta's name for an outside ad", async () => {
+    const original = "https://p.supabase.co/storage/v1/object/public/creatives/b/c/originals-v1/value-ad.png";
+    await open({ ok: true, syncedAt: null, ads: [
+      ad("1", { name: "Solaride | Lever 2 | Ad 4", creative: { headline: "Your rooftop could cut power bills", imageUrl: original } }),
+      ad("2", { name: "Ad - कॉपी", earlier: true, creative: { headline: "Rooftop solar, planned before install", imageUrl: null } }),
+      ad("3", { name: "Outside ad" }),
+    ] });
+    const rows = await screen.findAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Your rooftop could cut power bills");
+    expect(rows[0]).not.toHaveTextContent("Lever 2");
+    const image = rows[0].querySelector("img")!;
+    expect(image.getAttribute("src")).toBe("https://p.supabase.co/storage/v1/object/public/creatives/b/c/thumbnails-v1/value-ad.webp");
+    expect(image).toHaveAttribute("width", "40");
+    expect(rows[1]).toHaveTextContent("Rooftop solar, planned before install(earlier run)");
+    expect(rows[1].querySelector("img")).toBeNull();
+    expect(rows[2]).toHaveTextContent("Outside ad");
   });
 });

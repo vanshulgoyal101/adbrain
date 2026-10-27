@@ -306,6 +306,30 @@ describe("campaign sync feedback", () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith("/api/payments/customer-balance"))).toBe(false);
   });
 
+  // #1058: Meta's room doesn't count what the account's other live capped runs may still spend.
+  it("subtracts the account's other live capped runs from Meta's room and says so", async () => {
+    const campaign = { id: "campaign-1", business_id: business.id, name: "Saved campaign", status: "paused", meta_campaign_id: "meta-1", daily_budget: 500, ...launched } as unknown as Campaign;
+    const delivery = {
+      campaign: { id: "meta-1", status: "PAUSED", effectiveStatus: "PAUSED" },
+      adSets: [{ id: "set-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", dailyBudgetPaise: 50000, pageId: "page_1", destinationType: "ON_AD", targeting: null }],
+      ads: [{ id: "ad-1", status: "PAUSED", effectiveStatus: "CAMPAIGN_PAUSED", adSetId: "set-1", creativeId: "creative-1" }],
+    };
+    const funding = { spendCapPaise: 204237, amountSpentPaise: 4237, roomPaise: 200000, prepay: true, committed: { runs: 1, remainingPaise: 50000 } };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/campaigns/campaign-1") return Response.json({ delivery, funding });
+      return Response.json({ campaigns: [], nextCursor: null });
+    }));
+    render(<Campaigns business={business} approved={[creative]} initialCampaigns={[campaign]} initialResults={{}} leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await act(async () => { mocks.dialog.current!.onConnected({ authorization: "connected", selected, generation: 1 } as ConnectionDTO); });
+    expect(await screen.findByText("Funded on Meta: ₹1,500.00 room for a ₹1,500.00 cap after ₹500.00 for your 1 other live run.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeEnabled();
+    // ₹2,000 fits Meta's ₹2,000 room but not the ₹1,500 left after the other run.
+    fireEvent.change(screen.getByLabelText("Run for"), { target: { value: "4" } });
+    expect(screen.getByText("Funded on Meta: ₹1,500.00 room for a ₹2,000.00 cap after ₹500.00 for your 1 other live run. Add funds on Meta or choose fewer days.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve total and activate" })).toBeDisabled();
+  });
+
   // #759: an owner on their own ad account needs no account spending limit; the total limit on Meta is the guard.
   it.each([
     [false, "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above.", true],

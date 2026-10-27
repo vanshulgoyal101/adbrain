@@ -1,5 +1,6 @@
 import type { ReviewDTO } from "@/lib/campaign/connect-contracts";
 import { WhatsAppPreview } from "@/components/whatsapp-message-card";
+import { handoffLine, isGenericAsk, type Handoff } from "@/lib/campaign/whatsapp-handoff";
 
 type Message = NonNullable<ReviewDTO["whatsappMessage"]>;
 type Language = "en" | "hi" | "hinglish" | "pa";
@@ -19,13 +20,22 @@ export function whenTheyTapLine(message: Message): string {
 /**
  * #840: Review's "When they tap": the WhatsApp message this launch sends, as a preview and one
  * line. A message in another language than the ads gets a soft note; it never blocks.
+ * #1081: the business's past open → message rate, and a note when the pre-typed ask is too general.
  */
-export function WhenTheyTap({ message, businessName, adsLanguage, onEdit }: { message: Message; businessName: string; adsLanguage: Language; onEdit: () => void }) {
+export function WhenTheyTap({ message, businessName, adsLanguage, onEdit, handoff = null, offers = [] }: {
+  message: Message; businessName: string; adsLanguage: Language; onEdit: () => void; handoff?: Handoff | null; offers?: string[];
+}) {
   const mismatch = message.language && message.language !== adsLanguage;
+  const generic = !message.iceBreakers?.length && isGenericAsk(message.autofill, offers);
   return <section aria-label="When they tap" className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-3 font-normal text-slate-800 sm:grid-cols-[1fr_220px]">
     <div className="min-w-0">
       <p className="text-sm font-semibold text-slate-950">When they tap <span className="font-normal text-slate-500">· {SOURCE[message.source]}</span></p>
       <p className="mt-1 break-words text-sm">{whenTheyTapLine(message)}</p>
+      {handoff && <p className="mt-1 text-sm text-slate-600">{handoffLine(handoff)}</p>}
+      {generic && <p className="mt-2 text-sm text-amber-800">
+        &lsquo;{message.autofill}&rsquo; is general. People send a concrete, local ask more often, like your offer and your city.
+        {!mismatch && <>{" "}<button type="button" onClick={onEdit} className="font-medium text-blue-700 underline">Edit</button></>}
+      </p>}
       {mismatch && <p className="mt-2 text-sm text-amber-800">
         Your ads are in {LANGUAGE_NAMES[adsLanguage]}; your WhatsApp message is in {LANGUAGE_NAMES[message.language!]}.{" "}
         <button type="button" onClick={onEdit} className="font-medium text-blue-700 underline">Edit</button>

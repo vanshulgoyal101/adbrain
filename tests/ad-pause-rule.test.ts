@@ -3,7 +3,7 @@ import { lastAdAction, pauseSuggestion } from "@/lib/campaign/ad-pause";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
 
 const ad = (adId: string, spend: number, results: number, over: Partial<AdResultView> = {}): AdResultView => ({
-  adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, status: "ACTIVE", impressions: 1000,
+  adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, status: "ACTIVE", impressions: 1000,
   results, spend, costPerResult: results > 0 ? spend / results : null, ...over,
 });
 
