@@ -23,7 +23,7 @@ jobs:
         with:
           sparse-checkout: .github/backup
           persist-credentials: false
-      # pg_dump of public and auth (data + schema) as the read-only backup_reader role, encrypted to the
+      # pg_dump of public, private and auth (data + schema) as the read-only backup_reader role, encrypted to the
       # public certificate in .github/backup; only DevOps's keychain holds the private key. The artifact
       # is therefore unreadable without it. Nothing from the dump reaches the log except counts.
       - name: Dump and encrypt
@@ -34,10 +34,10 @@ jobs:
           [ -n "$DATABASE_URL" ] || { echo "::error::BACKUP_DATABASE_URL is not set"; exit 1; }
           name="adbrain-db-$(date -u +%Y-%m-%dT%H-%MZ)"
           echo "NAME=$name" >> "$GITHUB_ENV"
-          docker run --rm -e DATABASE_URL postgres:17 sh -c 'pg_dump "$DATABASE_URL" --no-owner --no-privileges -n public -n auth -Fp' | gzip -9 > dump.sql.gz
+          docker run --rm -e DATABASE_URL postgres:17 sh -c 'pg_dump "$DATABASE_URL" --no-owner --no-privileges -n public -n private -n auth -Fp' | gzip -9 > dump.sql.gz
           tables=$(gzip -dc dump.sql.gz | grep -c '^COPY ' || true)
           echo "tables: $tables, compressed bytes: $(stat -c %s dump.sql.gz)"
-          [ "$tables" -ge 40 ] || { echo "::error::only $tables tables dumped"; exit 1; }
+          [ "$tables" -ge 50 ] || { echo "::error::only $tables tables dumped"; exit 1; }
           openssl cms -encrypt -binary -aes256 -outform DER -in dump.sql.gz -out "$name.sql.gz.cms" .github/backup/backup-cert.crt
           rm -f dump.sql.gz
           sha256sum "$name.sql.gz.cms"

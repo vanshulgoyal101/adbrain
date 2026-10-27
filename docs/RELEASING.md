@@ -182,7 +182,7 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
 
 The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our own (#884):
 - **Nightly encrypted dump:** [db-backup.yml](../.github/workflows/db-backup.yml) runs `pg_dump`
-  of the `public` and `auth` schemas (data and schema) as the read-only role `backup_reader`
+  of the `public`, `private` and `auth` schemas (data and schema; `private` holds the encrypted Meta tokens, payment orders and the migration ledger) as the read-only role `backup_reader`
   (`BYPASSRLS`, `default_transaction_read_only`). It connects through the session pooler using the
   Actions secret `BACKUP_DATABASE_URL` (the only place its password lives). The dump is gzipped
   and encrypted (openssl CMS, AES-256) to the public certificate
