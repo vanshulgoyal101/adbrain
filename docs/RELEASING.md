@@ -113,9 +113,8 @@ exclude entire test directories or suppress uninvestigated findings.
 - **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
   QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
-- **Destructive migrations** (drop, delete, truncate, or a type change that rewrites data) need a fresh
-  export first, from the last 24 h (`~/.adbrain-backups`, or run `node scripts/db-export.mjs export`)
-  until Supabase backups exist (CEO, #884).
+- **Every migration needs a fresh backup:** `release.mjs` refuses to apply one without a
+  successful [database backup](#backups-and-restore) from the last hour (CEO, #884).
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required
@@ -178,6 +177,50 @@ Vercel Hobby allows 100 production deploys a day, and every push to `main` is on
   that add `db/migrations/` (released to `main` by DevOps with `release.mjs`).
 - Hotfix: DevOps or CTO opens the PR to `main` with the `hotfix` label. It's one deploy,
   so use it for production breakage only. The next train merges it into `next`.
+
+## Backups and restore
+
+The Supabase free plan keeps no backups (owner, Oct 27: no Pro), so we keep our own (#884):
+- **Nightly encrypted dump:** [db-backup.yml](../.github/workflows/db-backup.yml) runs `pg_dump`
+  of the `public`, `private` and `auth` schemas (data and schema; `private` holds the encrypted Meta tokens, payment orders and the migration ledger) as the read-only role `backup_reader`
+  (`BYPASSRLS`, `default_transaction_read_only`). It connects through the session pooler using the
+  Actions secret `BACKUP_DATABASE_URL` (the only place its password lives). The dump is gzipped
+  and encrypted (openssl CMS, AES-256) to the public certificate
+  [.github/backup/backup-cert.crt](../.github/backup/backup-cert.crt), then kept as a 14-day
+  workflow artifact. Only the private key decrypts it; it lives in DevOps's keychain
+  (`security find-generic-password -a devops -s adbrain-backup-key -w`, base64 PEM). The artifact is
+  unreadable without it. A failed run opens one `Database backup failed` issue. GitHub's schedule
+  is best effort, so the team supervisor also dispatches the workflow when its newest run is
+  over 23 h old.
+- **Before every migration:** `scripts/release.mjs` requires a successful backup that finished
+  less than an hour ago, and dispatches one and waits if needed.
+- **Second copy:** the supervisor's nightly JSON export into `~/.adbrain-backups`
+  ([Operations](OPERATIONS.md#data-safety-and-recovery)).
+- **Storage:** the same run mirrors the owners' uploads (`brand-assets`: logos, product photos;
+  names from the database, files from their public URLs) into a separate `<name>-uploads` artifact, encrypted
+  the same way. Generated ad images (`creatives`, ~830 MB) are left out because they can be
+  regenerated.
+- **How much can be lost:** up to 24 h between nightly dumps, about 0 around migrations.
+
+**Weekly drill:** `node scripts/restore-drill.mjs --post` downloads the newest backup, decrypts it with
+the keychain key, restores it into a throwaway local Postgres 17 (Supabase's roles and `extensions`
+schema stubbed), checks every table's row count against the dump and posts PASS/FAIL on #884. It
+deletes everything afterwards. DevOps runs it every Monday.
+
+**Restore** (into a new Supabase project, never over production without the CEO):
+1. `gh run download <run id> -R vanshulgoyal101/adbrain` (latest:
+   `gh run list -w db-backup.yml --status success -L 1`).
+2. Decrypt in a private folder (`umask 077`):
+   `security find-generic-password -a devops -s adbrain-backup-key -w | base64 -d > key.pem`, then
+   `openssl cms -decrypt -binary -inform DER -inkey key.pem -in <name>.sql.gz.cms -out dump.sql.gz`,
+   then delete `key.pem`.
+3. On a fresh project (which already has Supabase's `auth`): `gunzip -c dump.sql.gz | psql "<new
+   project's session-pooler URL>" -v ON_ERROR_STOP=0`. The `auth` objects Supabase created already
+   exist; their rows load. Then compare row counts per table with production's last
+   `npm run stats`.
+4. Set Vercel's Supabase URL and keys to the new project, and keep `META_TOKEN_ENCRYPTION_KEY`
+   unchanged so stored Meta tokens still decrypt. Redeploy, then run the production smoke.
+5. Delete the decrypted files.
 
 ## Rollback and Incident Handling
 

@@ -108,6 +108,15 @@ export function EditAudienceDialog({ campaignId, campaignName, onClose, onSaved 
             <h3 className="text-sm font-medium text-slate-900">Also leave out</h3>
             <p className="text-xs text-slate-600">Added to the places already left out. Nothing left out is ever put back.</p>
             <LocationPicker value={form.excluded} onChange={excluded => update({ excluded })} placeholder="Search a place to leave out" tone="exclude" />
+            {!form.included.length && (
+              <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 text-sm text-slate-800">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={form.areaExclusions} onChange={event => update({ areaExclusions: event.target.checked })} />
+                <span>
+                  <span className="font-medium">Leave out places outside the area</span>
+                  <span className="block text-xs text-slate-600">Adds the states and far-off cities outside where the ads show now, as new campaigns do. Needed before an older campaign can be turned on.</span>
+                </span>
+              </label>
+            )}
           </section>
 
           {hasCities && (

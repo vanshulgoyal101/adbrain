@@ -32,6 +32,12 @@ describe("audienceChangeFromForm", () => {
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, ageMin: 30, ageMax: 60 })).toEqual({ change: { age: { min: 30, max: 60 } } });
   });
 
+  it("asks for the area's own exclusions only when the area stays", () => {
+    expect(audienceChangeFromForm({ ...emptyAudienceEdit, areaExclusions: true })).toEqual({ change: { areaExclusions: true } });
+    expect(audienceChangeFromForm({ ...emptyAudienceEdit, areaExclusions: true, included: [{ key: "1029599", name: "Mohali", type: "city" }], cityScope: "city_only" }))
+      .toEqual({ change: { location: { cities: [{ key: "1029599" }] } } });
+  });
+
   it("sends languages only when the owner changes them", () => {
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, languageMode: "any" })).toEqual({ change: { languages: [] } });
     expect(audienceChangeFromForm({ ...emptyAudienceEdit, languageMode: "only", languages: [1001, 46, 46] })).toEqual({ change: { languages: [1001, 46] } });
@@ -93,6 +99,14 @@ describe("EditAudienceDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
     expect(screen.getByRole("alert")).toHaveTextContent("Change the area, an exclusion, the ages, who sees the ads or the language.");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("offers the out-of-area exclusions for an older campaign", async () => {
+    open();
+    fireEvent.click(screen.getByLabelText(/Leave out places outside the area/));
+    fireEvent.click(screen.getByRole("button", { name: /Check with Meta/ }));
+    await screen.findByRole("status");
+    expect(sent(0)).toMatchObject({ change: { areaExclusions: true }, preview: true });
   });
 
   it("limits the ads to the languages ticked", async () => {
