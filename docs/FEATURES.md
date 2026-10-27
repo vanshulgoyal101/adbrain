@@ -287,6 +287,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   upload, or a creative or ad Meta refuses fall back to the single 4:5 image and
   log `campaign.story_fallback`. Lead-form ads keep the single image. Meta's real
   answers are recorded by `scripts/record-meta-story-fixtures.ts`.
+- **Which ad worked** (#783, behind `AD_RESULTS_ENABLED`): a launched campaign card has a collapsed
+  section that loads each ad's stored results on first open: enquiries and ₹ per enquiry ("—" before the
+  first one), "Best" only at ≥ 5 enquiries and ≥ 30% cheaper than the next ad, otherwise "Early: too few
+  enquiries to pick a winner". Ads Meta hasn't shown say so; ads replaced by an audience edit are marked;
+  more than 3 sit behind "All ads". Refreshes store the numbers (`ad_results`).
 - WhatsApp ad sets run on Facebook, Instagram and Messenger only (#906): `publisher_platforms`
   leaves Audience Network out (on #157 most of its WhatsApp taps were accidental); positions stay
   automatic within those. Review says "Shown on Facebook, Instagram and Messenger", the plan check
