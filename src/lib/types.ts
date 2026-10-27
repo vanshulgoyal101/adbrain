@@ -624,6 +624,7 @@ export interface Database {
           created_at: string;
           workflow_status: "new" | "contacted" | "qualified" | "booked" | "customer" | "closed";
           follow_up_note: string;
+          first_contacted_at: string | null;
         };
         Insert: {
           id?: string;
@@ -642,6 +643,7 @@ export interface Database {
           created_at?: string;
           workflow_status?: "new" | "contacted" | "qualified" | "booked" | "customer" | "closed";
           follow_up_note?: string;
+          first_contacted_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["leads"]["Insert"]>;
         Relationships: [];

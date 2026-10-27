@@ -13,6 +13,7 @@ import { timeAgo } from "@/lib/utils";
 import type { SpendEvaluation } from "@/lib/campaign/spend";
 import type { AuditLog, Business, Campaign, CampaignResult, CreativePreview } from "@/lib/types";
 import { campaignAttention } from "@/lib/campaign/health";
+import { formatReplyTime } from "@/lib/leads/first-reply";
 import { CAMPAIGN_STATUS, Status } from "@/components/ui/status";
 
 export interface WorkspaceHomeProps {
@@ -26,6 +27,8 @@ export interface WorkspaceHomeProps {
   activity?: ReactNode;
   /** Each launched campaign's latest result (#764). */
   results?: Record<string, CampaignResult>;
+  /** #1049: median minutes from enquiry to the owner's first reply over the last 30 days. */
+  replyMinutes?: number | null;
   now?: number;
 }
 
@@ -44,6 +47,7 @@ export function WorkspaceHome({
   spendStatus,
   activity,
   results = {},
+  replyMinutes = null,
   now,
 }: WorkspaceHomeProps) {
   const summary = business ? homeResults(campaigns, results) : null;
@@ -86,6 +90,10 @@ export function WorkspaceHome({
               </div>
             ))}
           </dl>
+          {replyMinutes !== null && <p className="mt-3 text-sm text-slate-700">
+            You reply to an enquiry in <strong className="font-medium">{formatReplyTime(replyMinutes)}</strong> (median, last 30 days).{" "}
+            <Link href="/leads" className={linkClass}>See enquiries</Link>
+          </p>}
           <p className="mt-3 text-xs text-slate-500">
             Updated {timeAgo(new Date(summary.oldestFetchedAt), now === undefined ? undefined : new Date(now))} ·{" "}
             <Link href="/campaigns" className={linkClass}>See campaigns</Link>

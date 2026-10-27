@@ -1,6 +1,7 @@
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { LeadInbox } from "@/components/lead-inbox";
+import { replyLanguage } from "@/lib/leads/first-reply";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -58,6 +59,8 @@ export default async function LeadsPage() {
         <LeadInbox
           key={`${business.owner_id}:${business.id}`}
           businessName={business.name}
+          offer={business.offers?.[0] ?? null}
+          language={replyLanguage(business.languages)}
           initialLeads={page.leads}
           initialTotal={page.total}
           initialNextCursor={page.nextCursor}
