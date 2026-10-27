@@ -332,7 +332,8 @@ in the fold, script 100%, 1 provider failure): copy saved (an ad whose free imag
 still counts), first-try passes, offer in the first 125 characters, and script. Both profiles also
 report and gate the share of Latin-script ads naming a Brand place in the headline or first line
 (#418 rule 1; skipped against baselines made before it), counting the copy of concepts whose free
-image failed. Concepts no provider
+image failed. They also report, without gating, the share whose visual direction puts a person in
+the picture (#418 rule 4; a text heuristic, about 20% of recorded Haiku concepts). Concepts no provider
 answered don't count; over a third of them makes the run inconclusive (exit 1, run again later), and
 such a run can't become the baseline. Free tiers are small (Gemini 20 requests per day per model,
 Groq 8,000 tokens a minute, Pollinations ~1 image per 20–40 s), so run it after the daily reset

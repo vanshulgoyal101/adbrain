@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareSummaries, inconclusive, offerInFold, placeUpFront, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
+import { compareSummaries, inconclusive, offerInFold, personInScene, placeUpFront, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
 
 const ad = (overrides: Partial<CaseResult["ads"][number]> = {}): CaseResult["ads"][number] => ({
   angle: "offer", headline: "Book your $49 exam", primaryText: "New-patient exam for $49.\nBook today.", cta: "BOOK_NOW",
@@ -123,5 +123,14 @@ describe("Create eval scoring (#418)", () => {
     expect(compareSummaries(before, after, { deterministic: true }).regressions).toContain("place in the headline or first line 100% → 50%");
     const old = { ...before, placeUpFrontRate: undefined };
     expect(compareSummaries(old, after, { deterministic: true }).regressions.join()).not.toMatch(/place/);
+  });
+
+  it("tells a picture with a person from an empty one (#418 rule 4)", () => {
+    expect(personInScene("A technician fits panels on a flat roof while the homeowner watches.")).toBe(true);
+    expect(personInScene("A chiropractor's hands hold a tablet showing a posture scan.")).toBe(true);
+    expect(personInScene("Rows of solar panels on a factory roof at dusk, with no people or vehicles.")).toBe(false);
+    expect(personInScene("An empty treatment room. No people.")).toBe(false);
+    expect(personInScene("A bright family home with a rooftop array.")).toBe(false);
+    expect(summarize([run("a", [ad({ personInScene: true }), ad({ personInScene: false })])]).personInSceneRate).toBe(0.5);
   });
 });
