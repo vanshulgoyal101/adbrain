@@ -76,6 +76,7 @@ export function WhatsAppMessageCard({ businessId, businessName, saved, suggested
     if (!value) { setLanguage("auto"); setGreeting(suggested.en.greeting); setPrefill(suggested.en.prefill); setButton("none"); setQuestions(["", "", ""]); setQuestionsSuggested(false); }
     if (value) setLanguage(value.language);
     setHasSaved(Boolean(value));
+    setQuestionsSuggested(false);
     setDirty(false);
     setMessage({ ok: true, text: value ? "Saved. New WhatsApp campaigns will use it." : "Back to the suggested message." });
   });

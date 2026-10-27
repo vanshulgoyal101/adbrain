@@ -120,6 +120,10 @@ describe("WhatsApp message card (#840)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
     await waitFor(() => expect(save).toHaveBeenCalledWith({ businessId: "b1",
       template: { greeting: suggested.hi.greeting, language: "hi", opening: { kind: "ice_breakers", questions: questions.hi } } }));
+    // Once saved, they're the owner's questions: a later language switch leaves them alone.
+    await screen.findByText("Saved. New WhatsApp campaigns will use it.");
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "pa" } });
+    expect(boxes()).toEqual(questions.hi);
   });
 
   it("keeps the owner's own questions: an edit stops the language swap, and saved questions aren't replaced (#905)", () => {
