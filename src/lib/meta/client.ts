@@ -1945,7 +1945,7 @@ export class MetaClient {
       || !source.billing_event || !source.optimization_goal || !source.targeting || typeof source.targeting !== "object") {
       throw new CampaignDeliveryError("The ad set could not be verified. Keep the campaign paused.");
     }
-    if (source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
+    if (source.status !== "PAUSED" && source.status !== "ACTIVE") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
     // #741 (QA on #828): a new area must arrive with its own out-of-area exclusions ({} when it has none),
     // so the old area's are replaced, and the result may never exclude a place it includes.
     if (changes.location && !changes.excludedLocation) throw new TargetingExclusionsMissingError();
@@ -1956,6 +1956,8 @@ export class MetaClient {
       throw new TargetingExclusionsMissingError("The new area is also excluded, so the ads would reach no one. Nothing changed.");
     }
     const rebuild = needsRebuild(source);
+    // #765: a running ad set is only changed in place; a rebuild would leave the old one delivering.
+    if (rebuild && source.status !== "PAUSED") throw new CampaignDeliveryError("Pause the ad set before changing its audience.");
     const validate: Record<string, string> = options.validateOnly ? { execution_options: JSON.stringify(["validate_only"]) } : {};
     if (!rebuild) {
       const patched = await this.graph<{ success?: boolean }>(encodeURIComponent(adSetId), {
@@ -1964,8 +1966,8 @@ export class MetaClient {
       if (patched.success !== true) throw new CampaignDeliveryError("Meta did not accept the new audience. Nothing changed.");
       if (options.validateOnly) return { mode: "patch", validated: true, adSetId, adIds, retiredAdSetId: null };
       const after = await this.graph<{ id?: string; status?: string; targeting?: Record<string, unknown> }>(`${encodeURIComponent(adSetId)}?fields=id,status,targeting`);
-      if (after.id !== adSetId || after.status !== "PAUSED" || !sameAudience(after.targeting, targeting, changes)) {
-        throw new CampaignDeliveryError("Meta did not confirm the new audience. Keep the campaign paused.");
+      if (after.id !== adSetId || after.status !== source.status || !sameAudience(after.targeting, targeting, changes)) {
+        throw new CampaignDeliveryError(source.status === "PAUSED" ? "Meta did not confirm the new audience. Keep the campaign paused." : "Meta did not confirm the new audience. Check the campaign in Meta.");
       }
       return { mode: "patch", validated: false, adSetId, adIds, retiredAdSetId: null };
     }

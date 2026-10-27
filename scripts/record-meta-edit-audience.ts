@@ -7,16 +7,21 @@
  *   - language: an ad set without interests, patched to English (All) + Hindi only (`locales`)
  *   - whatsapp-language: the same language change on a click-to-WhatsApp ad set (rebuilt)
  *   - area-exclusions: an ad set stripped of its exclusions (as built before #741), given its area's exclusions back
+ *   - running (#765, CEO-approved on #765): the patch change on an ACTIVE ad set under a campaign that stays PAUSED
+ *     (Meta reports the ad set CAMPAIGN_PAUSED, so nothing delivers), minimum budget, a one-day campaign cap and
+ *     end time as second guards; the tree is DELETED afterwards and the GET proving it is printed.
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions] [campaignId]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language|area-exclusions|running] [campaignId]
  * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
  * edited and archived instead of launched.
  *
- * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
+ * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped and every Meta id, hash
+ * and phone number is replaced with a stable fake by metaScrubber() (#1040); tests rebind the fake account and Page.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
+import { metaScrubber } from "./lib/scrub-meta";
 
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 
@@ -57,6 +62,10 @@ globalThis.fetch = async (input, init) => {
   return response;
 };
 
+// Meta's smallest daily budget for this account's lead-form campaigns (2446307 otherwise).
+const MIN_DAILY_RUPEES = 100;
+const MIN_CAMPAIGN_CAP_RUPEES = 5_000;
+
 // The business's real WhatsApp number never lands in a fixture.
 const PLACEHOLDER_PHONE = "+910000000000";
 let phone: string | null = null;
@@ -64,18 +73,44 @@ let phone: string | null = null;
 function save(name: string) {
   let text = JSON.stringify(tape, null, 2);
   if (phone) text = text.split(phone).join(PLACEHOLDER_PHONE).split(phone.slice(1)).join(PLACEHOLDER_PHONE.slice(1));
+  const { scrub, fakeId } = metaScrubber();
+  // The account and the Page get the first fakes, so every tape names them the same way.
+  for (const id of [process.env.META_AD_ACCOUNT_ID, process.env.META_PAGE_ID]) if (id) fakeId(id.replace(/^act_/, ""));
+  text = scrub(text);
   writeFileSync(join(OUT, `${name}.json`), `${text}\n`);
   console.log(`${name}: ${tape.length} exchanges`);
   tape = [];
 }
 
-async function archive(campaignId: string) {
+async function archive(campaignId: string, status: "ARCHIVED" | "DELETED" = "ARCHIVED") {
   const token = process.env.META_SYSTEM_USER_TOKEN!;
-  await fetch(`${GRAPH}${campaignId}`, {
+  await realFetch(`${GRAPH}${campaignId}`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ status: "ARCHIVED", access_token: token }),
+    body: new URLSearchParams({ status, access_token: token }),
   }).then(response => response.json());
+  if (status === "DELETED") {
+    const proof = await (await realFetch(`${GRAPH}${campaignId}?fields=id,name,status,effective_status&access_token=${token}`)).json();
+    const children = await (await realFetch(`${GRAPH}${campaignId}/adsets?fields=id,status,effective_status&access_token=${token}`)).json();
+    console.log(`GET after delete: ${JSON.stringify(scrub(proof))} adsets: ${JSON.stringify(scrub(children))}`);
+  }
+}
+
+/** Untaped Graph read or write with the system token (guards and status flips around the recording). */
+async function raw(path: string, form?: Record<string, string>) {
+  const token = process.env.META_SYSTEM_USER_TOKEN!;
+  const response = form
+    ? await realFetch(`${GRAPH}${path}`, { method: "POST", body: new URLSearchParams({ ...form, access_token: token }) })
+    : await realFetch(`${GRAPH}${path}${path.includes("?") ? "&" : "?"}access_token=${token}`);
+  const body = await response.json() as Record<string, unknown>;
+  if (!response.ok) throw new Error(`${form ? "POST" : "GET"} ${path.split("?")[0]}: ${JSON.stringify(scrub(body))}`);
+  return body;
+}
+
+/** The campaign must still be PAUSED, so the ACTIVE ad set can't deliver. */
+async function assertCampaignPaused(campaignId: string) {
+  const campaign = await raw(`${campaignId}?fields=status,effective_status`);
+  if (campaign.status !== "PAUSED" || campaign.effective_status !== "PAUSED") throw new Error(`Test campaign is not PAUSED: ${JSON.stringify(campaign)}`);
 }
 
 /** The ad set and ad ids of an existing PAUSED test campaign. */
@@ -109,14 +144,15 @@ async function main() {
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []]] as const) {
-      if (only && only !== path) continue;
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []], ["area-exclusions", []], ["running", []]] as const) {
+      if (only ? only !== path : path === "running") continue;
+      const running = path === "running";
       const whatsapp = path.startsWith("whatsapp");
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
       const existing = process.argv[4];
       const launch = existing ? await existingCampaign(existing) : await meta.createLeadCampaign({
-        name: `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
-        dailyBudgetRupees: 200, leadFormId: forms[0].id, link: "https://adbrain.vanshul.com",
+        name: running ? "AdBrain test — #765 recording, do not run" : `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
+        dailyBudgetRupees: running ? MIN_DAILY_RUPEES : 200, leadFormId: forms[0].id, link: "https://adbrain.vanshul.com",
         creatives: [{ imageUrl, headline: "Lower electricity bills", message: "Rooftop solar for Tricity homes.", cta: "Learn More" }],
         ageMin: 25, ageMax: 55, gender: "all", interests: [...interests], location: before.targeting,
         ...whatsapp ? { destination: "whatsapp" as const, whatsappNumber: whatsappNumber!, boundWhatsAppNumbers: [whatsappNumber!], link: `https://wa.me/${whatsappNumber!.slice(1)}` } : { destination: "instant_form" as const },
@@ -134,24 +170,42 @@ async function main() {
         if ((stripped as { success?: boolean }).success !== true) throw new Error(`Could not strip the exclusions: ${JSON.stringify(stripped)}`);
         await new Promise(resolve => setTimeout(resolve, 31_000));
       }
+      if (running) {
+        // Second guards (CEO, #765): a one-day end time (at most one day's minimum budget) and Meta's smallest
+        // campaign spending limit (₹5,000; a one-day cap is refused). Then only the ad set goes ACTIVE.
+        await assertCampaignPaused(launch.campaignId);
+        await meta.enforceCampaignSpendCap(launch.campaignId, MIN_CAMPAIGN_CAP_RUPEES * 100);
+        await raw(launch.adSetIds[0], { end_time: new Date(Date.now() + 86_400_000).toISOString() });
+        await raw(launch.adSetIds[0], { status: "ACTIVE" });
+        await assertCampaignPaused(launch.campaignId);
+        console.log(`ad set before: ${JSON.stringify(await raw(`${launch.adSetIds[0]}?fields=status,effective_status,end_time`))}`);
+        await new Promise(resolve => setTimeout(resolve, 31_000));
+      }
       tape = [];
       // As the edit service does: the area's exclusions come from the ad set's own current area.
       const areaChanges = path === "area-exclusions" ? { excludedLocation: (await meta.serviceAreaExclusionsFor(before.targeting))! } : null;
       const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes: areaChanges ?? (path.endsWith("language") ? { languages: [1001, 46] } : changes) };
+      if (running) await assertCampaignPaused(launch.campaignId);
       const validated = await meta.editAdSetTargeting(launch.campaignId, input, { validateOnly: true });
       // Meta allows one targeting update per ad set per 30 s (#613), validate_only included.
       await new Promise(resolve => setTimeout(resolve, 31_000));
       const edited = await meta.editAdSetTargeting(launch.campaignId, input);
       save(`edit-audience-${path}`);
+      if (running) {
+        await assertCampaignPaused(launch.campaignId);
+        console.log(`ad set after: ${JSON.stringify(await raw(`${launch.adSetIds[0]}?fields=status,effective_status`))}`);
+        console.log(`campaign insights: ${JSON.stringify(await raw(`${launch.campaignId}/insights?fields=spend,impressions`))}`);
+      }
       console.log(JSON.stringify({ path, campaignId: launch.campaignId, source: input.adSetId, validated, edited }));
     }
   } catch (error) {
     if (tape.length) save("edit-audience-failed");
     throw error;
   } finally {
-    for (const campaignId of created) await archive(campaignId).catch(() => undefined);
+    const remove = process.argv[3] === "running" ? "DELETED" : "ARCHIVED";
+    for (const campaignId of created) await archive(campaignId, remove).catch(error => console.error(`${remove} failed for ${campaignId}: ${error}`));
     tape = [];
-    console.log(`archived ${created.length} test campaign(s)`);
+    console.log(`${remove.toLowerCase()} ${created.length} test campaign(s)`);
   }
 }
 
