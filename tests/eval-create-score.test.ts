@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareSummaries, inconclusive, offerInFold, personInScene, placeUpFront, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
+import { compareSummaries, copyRules, inconclusive, offerInFold, personInScene, placeUpFront, summarize, textScript, type CaseResult } from "../scripts/lib/eval-create-score";
 
 const ad = (overrides: Partial<CaseResult["ads"][number]> = {}): CaseResult["ads"][number] => ({
   angle: "offer", headline: "Book your $49 exam", primaryText: "New-patient exam for $49.\nBook today.", cta: "BOOK_NOW",
@@ -132,5 +132,20 @@ describe("Create eval scoring (#418)", () => {
     expect(personInScene("An empty treatment room. No people.")).toBe(false);
     expect(personInScene("A bright family home with a rooftop array.")).toBe(false);
     expect(summarize([run("a", [ad({ personInScene: true }), ad({ personInScene: false })])]).personInSceneRate).toBe(0.5);
+  });
+
+  it("scores #418 rules 1, 5 and 7 per ad and rule 5 per batch", () => {
+    const brand = { usps: ["Board-certified chiropractors with 15+ years combined experience"], offers: ["Free 15-minute spine check"] };
+    expect(copyRules(brand, [], "Austin chiropractor", "Austin chiropractic, 15+ years.\nBook your free 15-minute spine check."))
+      .toEqual({ firstLineShort: true, proof: true, askMatchesPrefill: true });
+    expect(copyRules(brand, [], "Back pain?", `${"Long hook ".repeat(8)}\nCall us today.`))
+      .toEqual({ firstLineShort: false, proof: false, askMatchesPrefill: false });
+    expect(copyRules(brand, [], "दर्द?", "मुफ़्त जाँच बुक करें।").askMatchesPrefill).toBeNull();
+    const summary = summarize([
+      run("a", [ad({ proof: false, firstLineShort: true, askMatchesPrefill: true }), ad({ proof: true, firstLineShort: false, askMatchesPrefill: false })]),
+      run("b", [ad({ proof: false }), ad({ proof: false })]),
+      run("c", [ad({ proof: null })]),
+    ]);
+    expect(summary).toMatchObject({ proofBatchRate: 0.5, firstLineShortRate: 0.5, askMatchesPrefillRate: 0.5 });
   });
 });

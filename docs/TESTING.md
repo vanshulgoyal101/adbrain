@@ -333,7 +333,10 @@ still counts), first-try passes, offer in the first 125 characters, and script. 
 report and gate the share of Latin-script ads naming a Brand place in the headline or first line
 (#418 rule 1; skipped against baselines made before it), counting the copy of concepts whose free
 image failed. They also report, without gating, the share whose visual direction puts a person in
-the picture (#418 rule 4; a text heuristic, about 20% of recorded Haiku concepts). Concepts no provider
+the picture (#418 rule 4; a text heuristic, about 20% of recorded Haiku concepts; the image prompt
+adds one when it's missing), first lines of at most 60 characters (rule 1), runs where at least one
+ad repeats a Brand proof (rule 5), and Latin-script ads whose last line names the offer the WhatsApp
+prefill picks (rule 7). On the paid baseline's 17 ads (`8e21d29`) these were 0%, 60% and 15%. Concepts no provider
 answered don't count; over a third of them makes the run inconclusive (exit 1, run again later), and
 such a run can't become the baseline. Free tiers are small (Gemini 20 requests per day per model,
 Groq 8,000 tokens a minute, Pollinations ~1 image per 20–40 s), so run it after the daily reset
