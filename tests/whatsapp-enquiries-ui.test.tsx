@@ -20,6 +20,14 @@ afterEach(() => {
 });
 
 describe("<WhatsAppEnquiries> (#335)", () => {
+  it("explains what counts as a real enquiry only until the first one (#847)", () => {
+    const { unmount } = render(<WhatsAppEnquiries campaignId={CAMPAIGN} spend={140} enquiries={0} onLogged={() => {}} />);
+    expect(screen.getByText(/Not every chat is a customer/)).toBeInTheDocument();
+    unmount();
+    render(<WhatsAppEnquiries campaignId={CAMPAIGN} spend={140} enquiries={2} onLogged={() => {}} />);
+    expect(screen.queryByText(/Not every chat is a customer/)).toBeNull();
+  });
+
   it("logs a real enquiry with optional details and shows cost per real enquiry", async () => {
     const fetch = vi.fn(async () => Response.json({ enquiries: 2 }, { status: 201 }));
     vi.stubGlobal("fetch", fetch);
@@ -87,6 +95,17 @@ describe("<Campaigns> real enquiries on results (#335)", () => {
     const panels = screen.getAllByRole("region", { name: "Real enquiries" });
     expect(panels).toHaveLength(1);
     expect(within(panels[0]).getByText("₹140")).toBeInTheDocument();
+  });
+
+  // #847: a WhatsApp card with no chats, enquiries or customers has nothing to log, so the block waits for the first chat.
+  it("hides the real-enquiry block until there's a chat, an enquiry or a customer", () => {
+    localStorage.setItem(`campaign-sync:${business.owner_id}:${business.id}:act_1`, String(Date.now()));
+    const quiet = campaign("40000000-0000-4000-8000-000000000005", "whatsapp");
+    const unknown = campaign("40000000-0000-4000-8000-000000000006", "whatsapp");
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[quiet, unknown]}
+      initialResults={{ [quiet.id]: result(quiet.id, { conversations: 0, real_enquiries: 0, destination: "whatsapp" }), [unknown.id]: result(unknown.id, { conversations: null, destination: "whatsapp" }) }}
+      leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    expect(screen.getAllByRole("region", { name: "Real enquiries" })).toHaveLength(1);
   });
 
   // #798: ₹ per customer shows once an enquiry became a customer, on any destination.
