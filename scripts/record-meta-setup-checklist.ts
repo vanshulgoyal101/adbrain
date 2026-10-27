@@ -1,13 +1,14 @@
 /**
  * #1016: records the real Graph reads behind Settings' Meta setup checklist (`MetaClient.setupReads`)
  * on the internal Solaride account, for test:core. GETs only: any other method is refused before it
- * leaves the process. Tokens are dropped and WhatsApp numbers keep only their last 4 digits.
+ * leaves the process. Tokens are dropped; ids, hashes and numbers are scrubbed (scripts/lib/scrub-meta.ts).
  *
  *   npx tsx --env-file=<.env.local> scripts/record-meta-setup-checklist.ts
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MetaClient } from "@/lib/meta/client";
+import { metaScrubber } from "./lib/scrub-meta";
 
 const token = process.env.META_SYSTEM_USER_TOKEN!;
 const adAccountId = `act_${process.env.META_AD_ACCOUNT_ID!.replace(/^act_/, "")}`;
@@ -36,7 +37,8 @@ globalThis.fetch = async (input, init) => {
 async function main() {
   const reads = await new MetaClient({ adAccountId, pageId, accessToken: token }).setupReads();
   console.log("reads:", reads);
-  writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/setup-checklist.json"), `${JSON.stringify({ recordedAt: new Date().toISOString(), adAccountId, pageId, reads, tape }, null, 2)}\n`);
+  const recordedTape = { recordedAt: new Date().toISOString(), adAccountId, pageId, reads, tape };
+  writeFileSync(join(process.cwd(), "tests/core/fixtures/meta/setup-checklist.json"), `${JSON.stringify(JSON.parse(metaScrubber().scrub(JSON.stringify(recordedTape))), null, 2)}\n`);
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });

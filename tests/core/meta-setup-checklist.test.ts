@@ -4,7 +4,8 @@ import { MetaClient } from "@/lib/meta/client";
 import { setupChecklist, setupChecklistEnabled } from "@/lib/meta/setup-checklist";
 
 // #1016 (#795 slice 1): setup-checklist.json holds the real GET answers on the internal Solaride
-// account (scripts/record-meta-setup-checklist.ts; tokens dropped, numbers cut to the last 4 digits).
+// account (scripts/record-meta-setup-checklist.ts; tokens dropped, ids replaced by stable fake ones,
+// numbers cut to the last 4 digits).
 type Exchange = { path: string; status: number; body: unknown };
 const creds = { adAccountId: recorded.adAccountId, pageId: recorded.pageId, accessToken: "core-token" };
 
@@ -42,7 +43,7 @@ describe("core: Meta setup checklist after Connect (#1016)", () => {
     replay(recorded.tape as Exchange[]);
     const reads = await new MetaClient(creds).setupReads();
     expect(reads).toEqual(recorded.reads);
-    expect(reads).toEqual({ portfolio: { id: "1158100643072508", name: "Solaride" }, accountActive: true, currency: "INR", paymentMethod: true, pageListed: true, whatsapp: true });
+    expect(reads).toEqual({ portfolio: { id: recorded.reads.portfolio.id, name: "Solaride" }, accountActive: true, currency: "INR", paymentMethod: true, pageListed: true, whatsapp: true });
     const rows = setupChecklist(reads, creds);
     expect(rows.map((row) => [row.key, row.done])).toEqual([["portfolio", true], ["adAccount", true], ["page", true], ["whatsapp", true], ["payment", true]]);
     expect(rows.every((row) => !row.action)).toBe(true);
@@ -53,7 +54,7 @@ describe("core: Meta setup checklist after Connect (#1016)", () => {
     const rows = setupChecklist(await new MetaClient(creds).setupReads(), creds);
     expect(rows.filter((row) => !row.done).map((row) => row.key)).toEqual(["whatsapp", "payment"]);
     const payment = rows.find((row) => row.key === "payment")!;
-    expect(payment.action).toMatchObject({ label: "Add a card or UPI", href: "https://business.facebook.com/billing_hub/payment_settings/?asset_id=2398686420592052" });
+    expect(payment.action).toMatchObject({ label: "Add a card or UPI", href: `https://business.facebook.com/billing_hub/payment_settings/?asset_id=${recorded.adAccountId.replace(/^act_/, "")}` });
     expect(payment.action!.hi).toMatch(/[\u0900-\u097F]/);
     expect(rows.find((row) => row.key === "whatsapp")!.action!.label).toBe("Link WhatsApp");
   });
