@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireOwnedBusiness: vi.fn(), getConnectionStatus: vi.fn(), withMetaConnection: vi.fn(),
   listCampaignsPage: vi.fn(), readBoundCampaign: vi.fn(), insert: vi.fn(), update: vi.fn(),
   existing: null as Record<string, unknown> | null,
+  claims: [] as Array<Record<string, unknown>>, claimsError: null as unknown, claimsFor: vi.fn(),
   getCampaignPage: vi.fn(), getLatestResultsWithEnquiries: vi.fn(),
 }));
 const connection = { generation: 4, authorization: "connected", selected: { adAccountId: "act_123", pageId: "page_1", currency: "INR" } };
@@ -24,6 +25,16 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({
     return query;
   },
 }) }));
+// #1057: every business's rows for the listed Meta campaigns (service role: RLS hides other tenants).
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
+  from: () => {
+    const query = {
+      select: () => query,
+      in: async (_column: string, ids: string[]) => { mocks.claimsFor(ids); return { data: mocks.claimsError ? null : mocks.claims, error: mocks.claimsError }; },
+    };
+    return query;
+  },
+}) }));
 vi.mock("@/lib/supabase/queries", () => ({ getPrimaryBusiness: async () => ({ id: "business" }), getCampaignPage: mocks.getCampaignPage, getLatestResultsWithEnquiries: mocks.getLatestResultsWithEnquiries }));
 vi.mock("@/lib/meta/connection-access", () => ({
   requireOwnedBusiness: mocks.requireOwnedBusiness, getConnectionStatus: mocks.getConnectionStatus, withMetaConnection: mocks.withMetaConnection,
@@ -33,6 +44,8 @@ vi.mock("@/lib/meta/connection-access", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.existing = null;
+  mocks.claims = [];
+  mocks.claimsError = null;
   mocks.getCampaignPage.mockResolvedValue({ campaigns: [], nextCursor: null });
   mocks.getLatestResultsWithEnquiries.mockResolvedValue({});
   mocks.requireOwnedBusiness.mockResolvedValue({ businessId: "business", userId: "owner" });
@@ -134,6 +147,55 @@ describe("verified campaign sync", () => {
     const { POST } = await import("@/app/api/campaigns/sync/route");
     expect(await (await POST()).json()).toMatchObject({ skipped: 1 });
     expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  // #1057: two businesses on one ad account. A campaign another business launched (or imported first) is
+  // left to it, so the demo business can't pause Solaride's live spend or double-count its results.
+  it("skips a campaign another business launched, without reading or saving it", async () => {
+    mocks.claims = [{ business_id: "solaride", created_at: "2026-10-27T14:06:00Z", source: "campaign_operation" }].map(row => ({ ...row, meta_campaign_id: "campaign" }));
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect(await (await POST()).json()).toMatchObject({ skipped: 1, skippedCampaigns: [{ name: "Local leads", reason: "other_business" }] });
+    expect(mocks.claimsFor).toHaveBeenCalledWith(["campaign"]);
+    expect(mocks.readBoundCampaign).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("stops refreshing this business's imported copy when another business launched the campaign", async () => {
+    mocks.existing = { id: "stored", meta_ad_account_id: "act_123", meta_page_id: "page_1" };
+    mocks.claims = [
+      { meta_campaign_id: "campaign", business_id: "business", created_at: "2026-10-27T14:46:00Z", source: null },
+      { meta_campaign_id: "campaign", business_id: "solaride", created_at: "2026-10-27T14:06:00Z", source: "campaign_operation" },
+    ];
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect(await (await POST()).json()).toMatchObject({ skippedCampaigns: [{ reason: "other_business" }] });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps syncing a campaign this business launched, even if another business imported a copy first", async () => {
+    mocks.existing = { id: "stored", meta_ad_account_id: "act_123", meta_page_id: "page_1" };
+    mocks.update.mockResolvedValue({ error: null });
+    mocks.claims = [
+      { meta_campaign_id: "campaign", business_id: "demo", created_at: "2026-10-01T00:00:00Z", source: null },
+      { meta_campaign_id: "campaign", business_id: "business", created_at: "2026-10-27T14:06:00Z", source: "campaign_operation" },
+    ];
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect((await POST()).status).toBe(200);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({ meta_campaign_id: "campaign" }));
+  });
+
+  it("leaves a campaign made in Meta to the business that imported it first", async () => {
+    mocks.claims = [{ meta_campaign_id: "campaign", business_id: "demo", created_at: "2026-10-01T00:00:00Z", source: null }];
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect(await (await POST()).json()).toMatchObject({ skippedCampaigns: [{ reason: "other_business" }] });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when other businesses' claims can't be read", async () => {
+    mocks.claimsError = { code: "57014" };
+    const { POST } = await import("@/app/api/campaigns/sync/route");
+    expect((await POST()).status).toBe(502);
     expect(mocks.insert).not.toHaveBeenCalled();
   });
 
