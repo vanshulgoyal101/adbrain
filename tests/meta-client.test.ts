@@ -594,6 +594,7 @@ describe("MetaClient.createLeadCampaign checkpoints", () => {
       age_min: 25, age_max: 65, age_range: [28, 58],
       flexible_spec: [{ interests: [{ id: "12345", name: "Solar energy" }] }],
       targeting_automation: { advantage_audience: 1 },
+      publisher_platforms: ["facebook", "instagram", "messenger"],
     });
     expect(checkpoints).toEqual([
       "campaign:campaign-1",
