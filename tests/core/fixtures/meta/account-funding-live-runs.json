@@ -1,35 +1,39 @@
-[
-  {
-    "method": "GET",
-    "path": "act_2398686420592052?fields=id%2Cspend_cap%2Camount_spent%2Cis_prepay_account%2Ccurrency",
-    "status": 200,
-    "body": {
-      "id": "act_2398686420592052",
-      "spend_cap": "182204",
-      "amount_spent": "123717",
-      "is_prepay_account": true,
-      "currency": "INR"
-    }
-  },
-  {
-    "method": "GET",
-    "path": "act_2398686420592052/adsets?fields=id%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget&limit=100&effective_status=%5B%22ACTIVE%22%5D",
-    "status": 200,
-    "body": {
-      "data": [
-        {
-          "id": "120253729106020526",
-          "lifetime_budget": "45000",
-          "budget_remaining": "45000",
-          "daily_budget": "0"
-        }
-      ],
-      "paging": {
-        "cursors": {
-          "before": "QVFIVGRwZAjJvVkVzMGtsdlNxSWdXVU9zdjlKQU00V3ZANMEJoNnRMODQ1MnNMcVUzYnNEY21PMzZAXUTk4bGI2RDBBNEVOenpQVEhzQ3liUFdUOHhiUDNfYXZAR",
-          "after": "QVFIVGRwZAjJvVkVzMGtsdlNxSWdXVU9zdjlKQU00V3ZANMEJoNnRMODQ1MnNMcVUzYnNEY21PMzZAXUTk4bGI2RDBBNEVOenpQVEhzQ3liUFdUOHhiUDNfYXZAR"
+{
+  "adAccountId": "act_9000000000000001",
+  "tape": [
+    {
+      "method": "GET",
+      "path": "act_9000000000000001?fields=id%2Cspend_cap%2Camount_spent%2Cis_prepay_account%2Ccurrency",
+      "status": 200,
+      "body": {
+        "id": "act_9000000000000001",
+        "spend_cap": "182204",
+        "amount_spent": "123717",
+        "is_prepay_account": true,
+        "currency": "INR"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "act_9000000000000001/adsets?fields=id%2Ceffective_status%2Clifetime_budget%2Cbudget_remaining%2Cdaily_budget&limit=100&effective_status=%5B%22ACTIVE%22%2C%22IN_PROCESS%22%2C%22WITH_ISSUES%22%5D",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "900000000000000002",
+            "effective_status": "ACTIVE",
+            "lifetime_budget": "45000",
+            "budget_remaining": "45000",
+            "daily_budget": "0"
+          }
+        ],
+        "paging": {
+          "cursors": {
+            "before": "CURSOR",
+            "after": "CURSOR"
+          }
         }
       }
     }
-  }
-]
+  ]
+}

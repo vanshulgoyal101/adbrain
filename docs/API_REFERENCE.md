@@ -685,8 +685,8 @@ Businesses funded on Meta: operator-funded (#245) and own-account (#759, any
 business that is neither operator-funded nor managed). The review GET adds
 `funding:{spendCapPaise,amountSpentPaise,roomPaise,prepay,committed:{runs,remainingPaise,uncapped:{adSets,dailyPaise}}}` read live from
 `act_<id>?fields=id,spend_cap,amount_spent,is_prepay_account,currency` and, for `committed` (#1058),
-`act_<id>/adsets?fields=id,lifetime_budget,budget_remaining,daily_budget&effective_status=["ACTIVE"]` (the account's
-running capped runs' `budget_remaining`; ACTIVE daily-budget ad sets are named in `uncapped`, never subtracted;
+`act_<id>/adsets?fields=id,effective_status,lifetime_budget,budget_remaining,daily_budget&effective_status=["ACTIVE","IN_PROCESS","WITH_ISSUES"]`
+(the account's running capped runs' `budget_remaining`, counting ad sets Meta is processing or has flagged; daily-budget ad sets are named in `uncapped`, never subtracted;
 an unreadable or paged listing fails closed), and
 `spendLimitRequired` (true only for operator-funded), and the client skips the
 customer-balance review. Activation requires `capDays` (409 otherwise) and INR.

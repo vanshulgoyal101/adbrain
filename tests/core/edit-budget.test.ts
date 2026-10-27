@@ -15,8 +15,9 @@ import liveRunsTape from "./fixtures/meta/account-funding-live-runs.json";
 // budget refusal (1885272) and its 30 s limit (613, which counts validate_only). The service reads each ad
 // set before the edit, so that read is replayed from the tape's own read of the same state. The account
 // funding is recorded (₹847.46 of room); "no account limit" for the successful cap raise is synthesised.
-// #1094: the account's live ad sets are Solaride's real listing (recorded Oct 27, 17:52Z: the lever-2 WhatsApp
-// run, ₹450 left) with this campaign's own capped ad set added, so the raise excludes it and counts the other.
+// #1094: the account's live ad sets are Solaride's real listing (recorded and scrubbed Oct 27, 18:00Z: the lever-2
+// WhatsApp run, ₹450 left), mapped onto this account, with this campaign's own capped ad set added, so the raise
+// excludes it and counts the other.
 // The clock is the recording time, so the capped run's end dates stay in the future.
 type Exchange = { method: string; path: string; status: number; body: unknown };
 type Row = Record<string, unknown>;
@@ -91,9 +92,9 @@ const CAMPAIGN = "120253712459000526", DAILY_AD_SET = "120253712459810526", DAIL
 const CAPPED_AD_SET = "120253712571840526", CAPPED_AD = "120253712576640526";
 const recordedFunding = fundingTape[0] as Exchange;
 const noAccountLimit: Exchange = { ...recordedFunding, body: { ...recordedFunding.body as Row, spend_cap: "0" } };
-const recordedListing = (liveRunsTape as Exchange[])[1];
+const recordedListing = JSON.parse(JSON.stringify(liveRunsTape.tape[1]).replaceAll(liveRunsTape.adAccountId, ACCOUNT)) as Exchange;
 const listing = (others: boolean): Exchange => ({ ...recordedListing, body: { ...recordedListing.body as Row, data: [
-  { id: CAPPED_AD_SET, lifetime_budget: "60000", budget_remaining: "60000", daily_budget: "0" },
+  { id: CAPPED_AD_SET, effective_status: "ACTIVE", lifetime_budget: "60000", budget_remaining: "60000", daily_budget: "0" },
   ...others ? (recordedListing.body as { data: Row[] }).data : [],
 ] } });
 
@@ -349,7 +350,7 @@ describe("core: edit a capped run's total and end date (#774)", () => {
   it("counts the account's other live run against a raise, names it, and leaves out uncapped spend", async () => {
     storedCapped(launchCap);
     const withDaily = listing(true);
-    (withDaily.body as { data: Row[] }).data.push({ id: "120253700000000526", lifetime_budget: "0", budget_remaining: "0", daily_budget: "20000" });
+    (withDaily.body as { data: Row[] }).data.push({ id: "120253700000000526", effective_status: "ACTIVE", lifetime_budget: "0", budget_remaining: "0", daily_budget: "20000" });
     replay([capped[2], recordedFunding, withDaily]);
     const { status, body } = await edit({ change: { capRupees: 800 }, preview: true });
     expect(status).toBe(422);
