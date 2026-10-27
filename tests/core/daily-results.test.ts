@@ -7,8 +7,9 @@ import { deliverOwnerAlert, ownerAlertsConfig, type AlertStore } from "@/lib/ale
 import type { AdResult } from "@/lib/meta/insights";
 
 // #1022: daily-results.json is Meta's real one-day per-ad read (Oct 26, IST) of Solaride's live
-// English run, recorded by scripts/record-meta-daily-results.ts (GETs only, tokens dropped).
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "core-token" };
+// English run, recorded by scripts/record-meta-daily-results.ts (GETs only; tokens dropped, real ids
+// replaced by stable fake ones, the WhatsApp number cut to its last 4 digits).
+const creds = { ...recorded.creds, accessToken: "core-token" };
 
 function replay() {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
