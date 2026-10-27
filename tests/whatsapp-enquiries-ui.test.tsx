@@ -61,7 +61,7 @@ describe("<WhatsAppEnquiries> one-tap customer (#798)", () => {
       : Response.json({ id: "40000000-0000-4000-8000-000000000001", enquiries: 2, customers: 1 }, { status: 201 }));
     vi.stubGlobal("fetch", fetch);
     render(<WhatsAppEnquiries campaignId={CAMPAIGN} spend={140} enquiries={1} onLogged={vi.fn()} onCustomers={onCustomers} />);
-    fireEvent.click(screen.getByRole("button", { name: "Got a customer from this ad? Add 1 customer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Got a customer? +1 (adds 1 customer from this ad)" }));
     expect(await screen.findByText("Added 1 customer.")).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(`/api/campaigns/${CAMPAIGN}/enquiries`, expect.objectContaining({ method: "POST", body: JSON.stringify({ customer: true }) }));
     expect(onCustomers).toHaveBeenLastCalledWith(1, 2);
