@@ -30,6 +30,8 @@ export const campaignDeliverySnapshotSchema = z.object({
 export const accountFundingSchema = z.object({
   spendCapPaise: z.number().int().nonnegative(), amountSpentPaise: z.number().int().nonnegative(),
   roomPaise: z.number().int().nonnegative(), prepay: z.boolean(),
+  /** #1058: lifetime budget still to spend on the account's running capped runs; Meta's room doesn't count it. */
+  committed: z.object({ runs: z.number().int().nonnegative(), remainingPaise: z.number().int().nonnegative() }).optional(),
 });
 
 const storedCapsSchema = z.object({

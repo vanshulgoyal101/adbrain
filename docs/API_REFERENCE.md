@@ -683,12 +683,15 @@ child PAUSED (Pause first), then copies only the original ads into a new capped 
 set; earlier capped sets stay PAUSED.
 Businesses funded on Meta: operator-funded (#245) and own-account (#759, any
 business that is neither operator-funded nor managed). The review GET adds
-`funding:{spendCapPaise,amountSpentPaise,roomPaise,prepay}` read live from
-`act_<id>?fields=id,spend_cap,amount_spent,is_prepay_account,currency` and
+`funding:{spendCapPaise,amountSpentPaise,roomPaise,prepay,committed:{runs,remainingPaise}}` read live from
+`act_<id>?fields=id,spend_cap,amount_spent,is_prepay_account,currency` and, for `committed` (#1058),
+`act_<id>/adsets?fields=id,lifetime_budget,budget_remaining&effective_status=["ACTIVE"]` (the account's
+running capped runs' `budget_remaining`; an unreadable or paged listing fails closed), and
 `spendLimitRequired` (true only for operator-funded), and the client skips the
 customer-balance review. Activation requires `capDays` (409 otherwise) and INR.
 Operator-funded needs a spending limit above 0; for both, a set limit must have
-room (limit minus amount spent) of at least the cap. All checks run before any Meta write (409).
+room (limit minus amount spent, minus `committed.remainingPaise`) of at least the cap; the 409 names
+the other live runs. All checks run before any Meta write (409).
 Only managed businesses (AdBrain holds ad money) use the allowance reservation. It then runs the capped flow
 above with no reservation, cost evidence or confirmation; the compensating pause
 still applies. 503 when the funding mode cannot be read.

@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   isOperatorFunded: vi.fn(),
   ownAccount: false,
   readAccountFunding: vi.fn(),
+  readLiveCappedRuns: vi.fn(),
   dailyBudget: 500,
   storedAdSetIds: ["set-1"],
   storedAdIds: ["ad-1"],
@@ -142,6 +143,7 @@ beforeEach(() => {
   mocks.isOperatorFunded.mockResolvedValue(false);
   mocks.ownAccount = false;
   mocks.readAccountFunding.mockResolvedValue({ spendCapPaise: 88983, amountSpentPaise: 4237, roomPaise: 84746, prepay: true });
+  mocks.readLiveCappedRuns.mockResolvedValue({ runs: 0, remainingPaise: 0 });
   mocks.readCampaignDelivery.mockResolvedValue(reviewedDelivery);
   mocks.recheckMetaConnection.mockResolvedValue(undefined);
   mocks.getActivationLearning.mockResolvedValue({ costPerResultRupees: null, pausedAt: null });
@@ -151,7 +153,7 @@ beforeEach(() => {
   mocks.getSpendLimits.mockResolvedValue({ weeklyCapRupees: null, alertPct: 80, autoPause: false });
   mocks.getCampaignSpend.mockResolvedValue([]);
   mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) =>
-    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readAccountFunding: mocks.readAccountFunding }, {
+    execute({ updateCampaignStatus: mocks.updateCampaignStatus, pauseCampaignTree: mocks.pauseCampaignTree, verifyCampaignActivation: mocks.verifyCampaignActivation, readCampaignDelivery: mocks.readCampaignDelivery, enforceCampaignSpendCap: mocks.enforceCampaignSpendCap, createCappedAdSet: mocks.createCappedAdSet, activateCappedTree: mocks.activateCappedTree, readLifetimeSpendPaise: mocks.readLifetimeSpendPaise, readAccountFunding: mocks.readAccountFunding, readLiveCappedRuns: mocks.readLiveCappedRuns }, {
       generation: 4,
       selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" },
       capabilities: { canActivate: { state: "available", blockers: [] } },
@@ -751,7 +753,7 @@ describe("capped activation: the owner approves daily budget × days and Meta ho
       const { GET } = await import("@/app/api/campaigns/[id]/route");
       const review = () => GET(new Request("http://localhost/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
       const learning = { costPerResultRupees: null, pausedAt: null };
-      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: roomy, spendLimitRequired: true, learning });
+      expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, funding: { ...roomy, committed: { runs: 0, remainingPaise: 0 } }, spendLimitRequired: true, learning });
       mocks.isOperatorFunded.mockResolvedValue(false);
       expect(await (await review()).json()).toEqual({ delivery: pausedDelivery, learning });
       expect(mocks.readAccountFunding).toHaveBeenCalledTimes(1);

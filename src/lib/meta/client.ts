@@ -1691,6 +1691,24 @@ export class MetaClient {
   }
 
   /**
+   * #1058: the lifetime budget still to spend on this ad account's running capped runs. Meta's account
+   * room counts only what was spent, so each ACTIVE lifetime-budget ad set's `budget_remaining` is already
+   * promised. Read-only; an incomplete or unreadable listing fails closed.
+   */
+  async readLiveCappedRuns(): Promise<{ runs: number; remainingPaise: number }> {
+    const listing = await this.graph<{ data?: Array<{ id?: string; lifetime_budget?: string; budget_remaining?: string }>; paging?: { next?: string } }>(
+      `${encodeURIComponent(this.creds.adAccountId)}/adsets?fields=id,lifetime_budget,budget_remaining&limit=100&effective_status=${encodeURIComponent(JSON.stringify(["ACTIVE"]))}`,
+    );
+    const paise = /^\d{1,15}$/;
+    if (!Array.isArray(listing.data) || listing.paging?.next
+      || listing.data.some(adSet => !adSet.id || !paise.test(adSet.lifetime_budget ?? "0") || !paise.test(adSet.budget_remaining ?? "0"))) {
+      throw new MetaError("Meta ad account funding could not be verified.");
+    }
+    const capped = listing.data.filter(adSet => Number(adSet.lifetime_budget ?? 0) > 0);
+    return { runs: capped.length, remainingPaise: capped.reduce((sum, adSet) => sum + Number(adSet.budget_remaining ?? 0), 0) };
+  }
+
+  /**
    * Sets the ad account's spending limit (#522, managed child accounts) and reads it back. Meta takes
    * the limit in rupees and reports it in paise; 0 would mean no limit, so it is refused, and no
    * `spend_cap_action` (reset or delete) is ever sent. If writing the limit restarted Meta's spent
