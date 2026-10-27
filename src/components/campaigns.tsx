@@ -2269,9 +2269,9 @@ function BusinessCampaigns({
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <Stat label="Impressions" value={formatNumber(r.impressions)} />
                         <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label={outcome === "whatsapp" ? "WhatsApp conversations" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+                        <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
                         <Stat
-                          label={outcome === "whatsapp" ? "Cost / conversation" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
+                          label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
