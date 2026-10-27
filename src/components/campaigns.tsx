@@ -192,7 +192,11 @@ type CampaignsProps = {
   approved: Creative[];
   initialCampaigns: Campaign[];
   initialNextCursor?: string | null;
+  /** #847: drafts read on the server, so the Saved drafts line is in the first paint (no layout shift); the client still refreshes them. */
+  initialDrafts?: DraftDTO[];
   initialResults: Record<string, CampaignResult>;
+  /** #1003: one id per server render, so a replayed page (browser back) refetches its list. */
+  renderId?: string;
   leadForms: LeadForm[];
   leadFormError: string | null;
   metaReady: boolean;
@@ -266,7 +270,9 @@ function BusinessCampaigns({
   approved,
   initialCampaigns,
   initialNextCursor = null,
+  initialDrafts,
   initialResults,
+  renderId,
   leadForms,
   leadFormError,
   metaReady,
@@ -361,7 +367,7 @@ function BusinessCampaigns({
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
-    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
+    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, renderId, onError: setError,
   });
   const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? (fromReview || initialCampaigns.length === 0));
   const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
@@ -437,7 +443,7 @@ function BusinessCampaigns({
   const [recoveryPending, setRecoveryPending] = useState(false);
   const destinationRecoveryLocked = recoveryPending || Boolean(operation && !["succeeded", "failed"].includes(operation.state));
   const showDestinationLock = destinationRecoveryLocked && !sendingNew;
-  const [savedDrafts, setSavedDrafts] = useState<DraftDTO[]>([]);
+  const [savedDrafts, setSavedDrafts] = useState<DraftDTO[]>(initialDrafts ?? []);
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
@@ -764,7 +770,7 @@ function BusinessCampaigns({
     }
   }
 
-  async function syncFromMeta() {
+  async function syncFromMeta(background = false) {
     setSyncing(true);
     clearErrors();
     try {
@@ -790,7 +796,8 @@ function BusinessCampaigns({
         }
         const skippedNotice = syncSkippedRef.current.count
           ? ` ${describeSkippedCampaigns(syncSkippedRef.current.named, syncSkippedRef.current.count)}` : "";
-        setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
+        // #847: an automatic sync that finished with nothing to report stays quiet, so the list doesn't jump on load.
+        if (!background || data.nextCursor || skippedNotice) setNotice(`${data.nextCursor ? "More campaigns are available. Sync again to continue." : "Campaign sync completed."}${skippedNotice}`);
       } else {
         setError(data.error ?? "Couldn't sync from Meta. Your campaigns below are from the last sync; try Sync from Meta again.");
       }
@@ -801,7 +808,7 @@ function BusinessCampaigns({
     }
   }
 
-  const syncStaleCampaigns = useEffectEvent(() => { void syncFromMeta(); });
+  const syncStaleCampaigns = useEffectEvent(() => { void syncFromMeta(true); });
   useEffect(() => {
     if (!metaReady) return;
     const completedAt = readCampaignSyncTime(syncStorageKey);
@@ -2095,8 +2102,6 @@ function BusinessCampaigns({
           </Card>
         ) : visibleCampaigns.length === 0 ? <div className="flex flex-col items-center gap-3 border-y border-slate-200 py-12"><Search aria-hidden="true" className="text-slate-400" /><h3 className="font-semibold">No matching campaigns</h3><Button variant="outline" onClick={() => { setCampaignQuery(""); setStatusFilter("all"); }}>Clear filters</Button></div> : (
           <div className="flex flex-col border-t border-slate-200">
-            {/* #847: said once for the list, not on every row. */}
-            {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-3 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
             {audienceEdit && (
               <EditAudienceDialog
                 campaignId={audienceEdit.id}
@@ -2266,9 +2271,9 @@ function BusinessCampaigns({
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <Stat label="Impressions" value={formatNumber(r.impressions)} />
                         <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label={outcome === "whatsapp" ? "WhatsApp conversations" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+                        <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
                         <Stat
-                          label={outcome === "whatsapp" ? "Cost / conversation" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
+                          label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
@@ -2339,6 +2344,8 @@ function BusinessCampaigns({
                 </article>
               );
             })}
+            {/* #847: said once for the list, after it, so it never pushes the cards down when results arrive (CLS). */}
+            {(() => { const waiting = visibleCampaigns.filter((item) => !results[item.id]).length; return waiting ? <p className="pt-4 text-sm text-slate-500">No results yet for {waiting === visibleCampaigns.length ? (waiting === 1 ? "this campaign" : "these campaigns") : `${waiting} of these campaigns`}. Refresh a campaign to get Meta&apos;s latest numbers.</p> : null; })()}
           </div>
         )}
         {(nextListCursor || listLoading) && <div className="mt-4 flex justify-center">

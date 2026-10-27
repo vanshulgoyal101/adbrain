@@ -222,7 +222,8 @@ guards to enable production or reinterpret existing test captures as real money.
   reason; every change is audited, and customers cannot set it. Such a business
   activates only capped (`capDays`), and only when Meta's ad account spending limit
   minus amount spent (both media paise, excluding GST, read live), less what the account's other
-  running capped runs may still spend (their `budget_remaining`, #1058), covers the cap.
+  running capped runs may still spend (their `budget_remaining`, #1058), covers the cap. A cap raise in
+  Edit budget uses the same rule with the edited ad set left out; its need is the new cap minus spend (#1094).
   It has no allowance, reservation, cost evidence or refund; the sweep and Refresh
   skip the allowance hold, and the weekly cap still applies. Clearing the mark
   restores the customer gate when the business is managed.

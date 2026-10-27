@@ -13,6 +13,14 @@ describe("pause-this-ad rule (#1045)", () => {
     expect(pauseSuggestion([ad("A", 500, 5), ad("B", 900, 0)])?.ad.adId).toBe("B");
   });
 
+  // Designer on #783: the offer names ads like the rows under it, by headline, not Meta's ad name.
+  it("carries each ad's creative so the offer can name it by headline", () => {
+    const best = ad("A", 500, 5, { creative: { headline: "Your rooftop could cut power bills", imageUrl: null } });
+    const pick = pauseSuggestion([best, ad("B", 400, 2, { name: "Solaride | Lever 2 | WhatsApp | Ad 3", creative: { headline: "Free site survey", imageUrl: null } })]);
+    expect(pick?.ad.creative?.headline).toBe("Free site survey");
+    expect(pick?.reference.creative?.headline).toBe("Your rooftop could cut power bills");
+  });
+
   it("offers an ad at 2× the best ad's cost per enquiry, not at 1.99×", () => {
     const best = ad("A", 500, 5, { best: true }); // ₹100 each
     expect(pauseSuggestion([best, ad("B", 400, 2)])).toMatchObject({ ad: { adId: "B", costPerResult: 200 }, reference: { adId: "A", costPerResult: 100 }, reason: "expensive" });

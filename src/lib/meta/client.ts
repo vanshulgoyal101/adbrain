@@ -364,6 +364,8 @@ export type PausedCampaignTree = {
 };
 
 export type CappedAdSet = { adSetId: string; adIds: string[]; lifetimeBudgetPaise: number; endTime: string };
+/** #1058/#1094: ad set states that can still spend their budget; over-counting is the safe side for money. */
+const SPENDING_AD_SET_STATUSES = ["ACTIVE", "IN_PROCESS", "WITH_ISSUES"];
 export type AccountFunding = { spendCapPaise: number; amountSpentPaise: number; roomPaise: number; prepay: boolean };
 export type CappedActivation = {
   campaign: { id: string; status: "ACTIVE"; effectiveStatus: string | null };
@@ -1693,19 +1695,27 @@ export class MetaClient {
   /**
    * #1058: the lifetime budget still to spend on this ad account's running capped runs. Meta's account
    * room counts only what was spent, so each ACTIVE lifetime-budget ad set's `budget_remaining` is already
-   * promised. Read-only; an incomplete or unreadable listing fails closed.
+   * promised. #1094: `exclude` leaves out the ad sets being edited, and daily-budget ad sets are reported
+   * (not counted: they have no total). Ad sets Meta is still processing or flags keep their budget, so they
+   * count too (QA on #1083). Read-only; an incomplete or unreadable listing fails closed.
    */
-  async readLiveCappedRuns(): Promise<{ runs: number; remainingPaise: number }> {
-    const listing = await this.graph<{ data?: Array<{ id?: string; lifetime_budget?: string; budget_remaining?: string }>; paging?: { next?: string } }>(
-      `${encodeURIComponent(this.creds.adAccountId)}/adsets?fields=id,lifetime_budget,budget_remaining&limit=100&effective_status=${encodeURIComponent(JSON.stringify(["ACTIVE"]))}`,
+  async readLiveCappedRuns(exclude: string[] = []): Promise<{ runs: number; remainingPaise: number; uncapped: { adSets: number; dailyPaise: number } }> {
+    const listing = await this.graph<{ data?: Array<{ id?: string; effective_status?: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string }>; paging?: { next?: string } }>(
+      `${encodeURIComponent(this.creds.adAccountId)}/adsets?fields=id,effective_status,lifetime_budget,budget_remaining,daily_budget&limit=100&effective_status=${encodeURIComponent(JSON.stringify(SPENDING_AD_SET_STATUSES))}`,
     );
     const paise = /^\d{1,15}$/;
-    if (!Array.isArray(listing.data) || listing.paging?.next
-      || listing.data.some(adSet => !adSet.id || !paise.test(adSet.lifetime_budget ?? "0") || !paise.test(adSet.budget_remaining ?? "0"))) {
+    if (!Array.isArray(listing.data) || listing.paging?.next || listing.data.some(adSet => !adSet.id
+      || !paise.test(adSet.lifetime_budget ?? "0") || !paise.test(adSet.budget_remaining ?? "0") || !paise.test(adSet.daily_budget ?? "0"))) {
       throw new MetaError("Meta ad account funding could not be verified.");
     }
-    const capped = listing.data.filter(adSet => Number(adSet.lifetime_budget ?? 0) > 0);
-    return { runs: capped.length, remainingPaise: capped.reduce((sum, adSet) => sum + Number(adSet.budget_remaining ?? 0), 0) };
+    const others = listing.data.filter(adSet => !exclude.includes(adSet.id!) && SPENDING_AD_SET_STATUSES.includes(adSet.effective_status ?? ""));
+    const capped = others.filter(adSet => Number(adSet.lifetime_budget ?? 0) > 0);
+    const daily = others.filter(adSet => Number(adSet.lifetime_budget ?? 0) <= 0 && Number(adSet.daily_budget ?? 0) > 0);
+    return {
+      runs: capped.length,
+      remainingPaise: capped.reduce((sum, adSet) => sum + Number(adSet.budget_remaining ?? 0), 0),
+      uncapped: { adSets: daily.length, dailyPaise: daily.reduce((sum, adSet) => sum + Number(adSet.daily_budget ?? 0), 0) },
+    };
   }
 
   /**

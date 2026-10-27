@@ -60,7 +60,7 @@ export function releaseMigrations(files) {
 
 // Money code (dispatch item 5): these PRs, like migrations, need the CTO's review as well as QA's (#259).
 // lib/managed: 2-Tier child spend caps set from the customer's allowance (#522).
-export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget))/;
+export const moneyPath = /^src\/(lib\/payments\/|lib\/managed\/|app\/api\/payments\/|app\/api\/cron\/(enforce-spend|payment-health)\/|lib\/campaign\/(spend|activation|budget|funding))/;
 
 // "CTO review of <sha>", "CTO post-release review of <sha>" or the Reviewer's "Reviewer review of <sha>" (#575);
 // in "<old> → <new>" the last sha is the one reviewed.

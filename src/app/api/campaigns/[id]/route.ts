@@ -19,8 +19,7 @@ import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
-import { committedWords, fundingShortfall, type AccountFunding } from "@/lib/campaign/funding-check";
-import type { MetaClient } from "@/lib/meta/client";
+import { committedWords, fundingShortfall, readFunding } from "@/lib/campaign/funding-check";
 import { formatMoney } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
@@ -28,12 +27,6 @@ import { lacksAreaExclusions } from "@/lib/meta/service-area";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
-
-/** #1058: the account's room and what its running capped runs may still spend, read together. */
-async function readFunding(meta: Pick<MetaClient, "readAccountFunding" | "readLiveCappedRuns">): Promise<AccountFunding> {
-  const [funding, committed] = await Promise.all([meta.readAccountFunding(), meta.readLiveCappedRuns()]);
-  return { ...funding, committed };
-}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

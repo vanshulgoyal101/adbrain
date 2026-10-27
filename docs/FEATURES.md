@@ -290,8 +290,9 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   or Punjabi. The welcome follows the same language. The choice is part
   of the reviewed plan.
 - Stories and Reels get a 9:16 version of each WhatsApp and lead-form ad (#333, #680): Prepare lays out
-  the saved design and photo at 1080×1920 (no AI call; text kept out of the
-  Stories safe zones) and sends both images through `asset_feed_spec` placement
+  the saved design and photo at 1080×1920 (no AI call; words, logo and offer kept
+  inside the Stories/Reels safe zone, top 14%, bottom 35%, sides 6%, and with words on top the photo
+  starts at the top safe line so its subject stays on screen, #1077) and sends both images through `asset_feed_spec` placement
   rules: Facebook/Instagram/Messenger stories and reels get the 9:16, every other
   position (named explicitly; Meta needs exactly one rule per placement) the 4:5.
   The creative names the Page's Instagram account (`instagram_user_id`), without

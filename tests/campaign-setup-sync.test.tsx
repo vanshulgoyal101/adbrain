@@ -646,7 +646,7 @@ describe("campaign sync feedback", () => {
     expect(sync).toHaveBeenCalledTimes(1);
   });
 
-  it("syncs stale connected campaigns after rendering and remembers completion", async () => {
+  it("syncs stale connected campaigns after rendering, quietly, and remembers completion", async () => {
     const key = `campaign-sync:${business.owner_id}:${business.id}:`;
     const previousSync = String(Date.now() - 16 * 60_000);
     localStorage.setItem(key, previousSync);
@@ -659,8 +659,9 @@ describe("campaign sync feedback", () => {
     await waitFor(() => expect(sync).toHaveBeenCalledTimes(1));
     expect(localStorage.getItem(key)).toBe(previousSync);
     await act(async () => { complete(Response.json({ campaigns: [], nextCursor: null })); });
-    await screen.findByText("Campaign sync completed.");
-    expect(Number(localStorage.getItem(key))).toBeGreaterThan(Date.now() - 60_000);
+    await waitFor(() => expect(Number(localStorage.getItem(key))).toBeGreaterThan(Date.now() - 60_000));
+    // #847: the automatic sync is quiet when it has nothing to report, so the list doesn't jump on load (CLS).
+    expect(screen.queryByText("Campaign sync completed.")).not.toBeInTheDocument();
   });
 
   it("retries failed stale syncs and isolates freshness by Meta account", async () => {

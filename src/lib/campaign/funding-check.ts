@@ -12,10 +12,26 @@ export type FundingShortfall =
 
 const exactRupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
 
-/** #1058: " after ₹500.00 for your 2 other live runs", or "" when no other capped run is running. */
-export function committedWords(committed: AccountFunding["committed"]): string {
-  if (!committed?.runs) return "";
-  return ` after ${exactRupees.format(committed.remainingPaise / 100)} for your ${committed.runs} other live ${committed.runs === 1 ? "run" : "runs"}`;
+/**
+ * #1058/#1094: " after ₹500.00 for your 2 other live runs", plus what uncapped ad sets spend a day (named, never
+ * subtracted: they have no total), or "" with neither.
+ */
+export function committedWords(committed: AccountFunding["committed"], money: (rupees: number) => string = rupees => exactRupees.format(rupees)): string {
+  const runs = committed?.runs ? ` after ${money(committed.remainingPaise / 100)} for your ${committed.runs} other live ${committed.runs === 1 ? "run" : "runs"}` : "";
+  const uncapped = committed?.uncapped?.adSets
+    ? `${money(committed.uncapped.dailyPaise / 100)} a day also runs on ${committed.uncapped.adSets} uncapped ad ${committed.uncapped.adSets === 1 ? "set" : "sets"}`
+    : "";
+  if (!uncapped) return runs;
+  return runs ? `${runs}, and ${uncapped}` : ` (${uncapped})`;
+}
+
+/** #1058/#1094: the account's room and what its other running capped runs may still spend, read together. */
+export async function readFunding(
+  meta: { readAccountFunding(): Promise<Omit<AccountFunding, "committed">>; readLiveCappedRuns(exclude?: string[]): Promise<NonNullable<AccountFunding["committed"]>> },
+  exclude: string[] = [],
+): Promise<AccountFunding> {
+  const [funding, committed] = await Promise.all([meta.readAccountFunding(), meta.readLiveCappedRuns(exclude)]);
+  return { ...funding, committed };
 }
 
 /** #1058: Meta's room under the account limit, less what the account's running capped runs may still spend. */
@@ -38,7 +54,7 @@ export function fundingShortfall(input: { mode: FundingMode; neededPaise: number
   if (input.mode === "operator" && input.account.spendCapPaise <= 0) return { kind: "no_limit" };
   const room = freeRoomPaise(input.account);
   if (input.account.spendCapPaise > 0 && room < input.neededPaise) {
-    return { kind: "short", roomPaise: room, neededPaise: input.neededPaise, ...input.account.committed?.runs ? { committed: input.account.committed } : {} };
+    return { kind: "short", roomPaise: room, neededPaise: input.neededPaise, ...input.account.committed?.runs || input.account.committed?.uncapped?.adSets ? { committed: input.account.committed } : {} };
   }
   return null;
 }

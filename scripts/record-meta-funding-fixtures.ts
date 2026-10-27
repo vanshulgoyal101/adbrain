@@ -10,6 +10,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { metaClientFromEnv } from "./lib/meta-env";
+import { metaScrubber } from "./lib/scrub-meta";
 
 type Exchange = { method: string; path: string; status: number; body: unknown };
 
@@ -37,7 +38,11 @@ async function main() {
   if (liveRuns) console.log(JSON.stringify(await meta.readLiveCappedRuns()));
   if (JSON.stringify(tape).includes("access_token")) throw new Error("Token leaked into the tape.");
   const name = liveRuns ? "account-funding-live-runs" : "account-funding";
-  writeFileSync(join(process.cwd(), `tests/core/fixtures/meta/${name}.json`), `${JSON.stringify(tape, null, 2)}\n`);
+  // #1094 (QA): the live-runs tape is scrubbed (ids become stable fakes, cursors dropped); it carries its fake
+  // ad account so tests can replay it, or map it onto the account of another tape.
+  const scrubber = metaScrubber();
+  const fixture = liveRuns ? JSON.parse(scrubber.scrub(JSON.stringify({ adAccountId: process.env.META_AD_ACCOUNT_ID, tape }))) : tape;
+  writeFileSync(join(process.cwd(), `tests/core/fixtures/meta/${name}.json`), `${JSON.stringify(fixture, null, 2)}\n`);
   console.log(`${name}: ${tape.length} exchanges`);
 }
 

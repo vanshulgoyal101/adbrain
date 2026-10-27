@@ -120,13 +120,13 @@ jobs:
           # A just-created PR can briefly report its green checks as "expected" (#608). Its pull_request CI can
           # also fail with 0 jobs when the merge ref isn't ready yet (#878): that's GitHub, not a red build, so
           # rerun it once. A PR CI failure that ran jobs is a real failure and stops the train at once.
-          # Merging within seconds of opening the PR leaves its pull_request runs with 0 jobs, and each one
-          # fails and emails the owner. Let them start first (at most 90 s); they finish on their own.
-          for i in $(seq 1 18); do
-            pending=$(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=20" \
-              --jq '[.workflow_runs[] | select(.status == "queued" or .status == "pending" or .status == "requested" or .status == "waiting")] | length')
-            [ "${pending:-0}" = 0 ] && [ "$i" -gt 2 ] && break
-            sleep 5
+          # This PR's own pull_request runs (actor github-actions[bot]) never start jobs; when the PR merges they end
+          # as 0-job failures and email the owner every train. They add nothing (next's checks above are the gate),
+          # so cancel any that haven't started; a cancelled run sends no failure email.
+          sleep 10
+          for rid in $(gh api "repos/$repo/actions/runs?head_sha=$sha&event=pull_request&per_page=50" \
+              --jq '.workflow_runs[] | select(.status != "completed" and .actor.login == "github-actions[bot]") | .id'); do
+            gh run cancel "$rid" -R "$repo" >/dev/null 2>&1 || true
           done
           merged=""; rerun=""
           for i in $(seq 1 30); do

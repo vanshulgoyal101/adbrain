@@ -124,7 +124,8 @@ const ADSET_FIELDS = "fields=id%2Cstatus%2Cdaily_budget%2Clifetime_budget%2Cprom
 
 const tapes = {
   delivery: deliveryTape as Exchange[],
-  funding: fundingTape as Exchange[],
+  // Scrubbed (#1094): its fake ad account is mapped onto this file's recorded account.
+  funding: JSON.parse(JSON.stringify(fundingTape.tape).replaceAll(fundingTape.adAccountId, ACCOUNT)) as Exchange[],
   pause: [...(campaignSpendCapTape as Exchange[]).slice(0, 2), ...pauseAllTape as Exchange[]],
   results: (resultsTape as Exchange[]).filter(exchange => exchange.path.startsWith(LIVE)),
   sync: (campaignIds: string[]) => {
@@ -438,7 +439,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
         adSets: [expect.objectContaining({ id: REVIEWED.adSetIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", dailyBudgetPaise: 20000, pageId: PAGE, destinationType: "ON_AD" })],
         ads: [{ id: REVIEWED.adIds[0], status: "PAUSED", effectiveStatus: "IN_PROCESS", adSetId: REVIEWED.adSetIds[0], creativeId: "1148404661464451" }],
       },
-      funding: { spendCapPaise: 182204, amountSpentPaise: 123717, roomPaise: 58487, prepay: true, committed: { runs: 2, remainingPaise: 50000 } },
+      funding: { spendCapPaise: 182204, amountSpentPaise: 123717, roomPaise: 58487, prepay: true, committed: { runs: 1, remainingPaise: 45000, uncapped: { adSets: 0, dailyPaise: 0 } } },
       spendLimitRequired: true,
       learning: { costPerResultRupees: null, pausedAt: null },
     });
@@ -458,7 +459,7 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     const response = await review();
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toMatchObject({ funding: { spendCapPaise: 182204, roomPaise: 58487, committed: { runs: 2, remainingPaise: 50000 } }, spendLimitRequired: false });
+    expect(body).toMatchObject({ funding: { spendCapPaise: 182204, roomPaise: 58487, committed: { runs: 1, remainingPaise: 45000, uncapped: { adSets: 0, dailyPaise: 0 } } }, spendLimitRequired: false });
     expect(body.delivery.campaign).toEqual({ id: REVIEWED.campaignId, status: "PAUSED", effectiveStatus: "PAUSED" });
     expect(writes()).toEqual([]);
   });
@@ -511,12 +512,12 @@ describe("core: manage routes against recorded Graph responses (#649)", () => {
     replay(tapes.delivery, tapes.funding);
     const { delivery } = await (await review()).json();
     replay(tapes.delivery, tapes.funding);
-    // 5 days × ₹200 = ₹1,000 against ₹84.87: Meta's ₹584.87 room less ₹500 still promised to the account's two
-    // live ₹250 runs (#1058; Meta's room alone would have said ₹584.87).
+    // 5 days × ₹200 = ₹1,000 against ₹134.87: Meta's ₹584.87 room less ₹450 still promised to the account's
+    // live capped run (#1058; Meta's room alone would have said ₹584.87).
     const response = await activate({ confirmationDigest: await digest(campaign, delivery, 5), connectionGeneration: GENERATION, capDays: 5 });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
-      error: "Meta has ₹84.87 left under the ad account's spending limit after ₹500.00 for your 2 other live runs; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
+      error: "Meta has ₹134.87 left under the ad account's spending limit after ₹450.00 for your 1 other live run; this run needs ₹1,000.00. Add funds on Meta or choose fewer days.",
     });
     expect(graph.sent.map(call => `${call.method} ${call.path}`).sort()).toEqual([...deliveryReads, ...tapes.funding.map(exchange => `GET ${exchange.path}`)].sort());
     expect(writes()).toEqual([]);
