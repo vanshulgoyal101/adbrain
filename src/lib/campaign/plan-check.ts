@@ -42,14 +42,14 @@ export function checkPlan(plan: PlannedCampaign): PlanFinding[] {
   });
 
   const pinned = targetings.flatMap((t) => PLACEMENT_KEYS.filter((key) => key in t));
-  // #906: WhatsApp ad sets name only the platforms (no Audience Network); positions stay automatic.
+  // #906/#680: WhatsApp and lead-form ad sets name only the platforms (no Audience Network); positions stay automatic.
   const withoutAudienceNetwork = pinned.length > 0 && pinned.every((key) => key === "publisher_platforms")
     && targetings.every((t) => JSON.stringify(t.publisher_platforms) === JSON.stringify(WHATSAPP_PUBLISHER_PLATFORMS));
   findings.push({
     rule: "Advantage+ placements",
     status: pinned.length && !withoutAudienceNetwork ? "warn" : "pass",
     detail: withoutAudienceNetwork
-      ? "Automatic on Facebook, Instagram and Messenger; Audience Network is left out, where WhatsApp taps were mostly accidental (#906)."
+      ? "Automatic on Facebook, Instagram and Messenger; Audience Network is left out, where taps were mostly accidental (#906)."
       : pinned.length ? `Placements are pinned (${[...new Set(pinned)].join(", ")}); Meta can't move budget to the cheapest placement.` : "Automatic: Meta places the ad wherever results are cheapest.",
   });
 
@@ -122,7 +122,7 @@ export const REVIEW_WARNINGS = {
 } as const;
 
 /**
- * The Review warnings for a planned campaign. A 9:16 is made only for WhatsApp ads with a saved
+ * The Review warnings for a planned campaign. A 9:16 is made for WhatsApp and lead-form ads with a saved
  * design (#333). The budget warning needs the business's own cost per result; without one it says
  * nothing rather than guess.
  */
@@ -133,7 +133,7 @@ export function reviewWarnings(input: {
   costPerResultRupees?: number | null;
 }): string[] {
   const warnings: string[] = [];
-  if (!(input.destination === "whatsapp" && input.storyReady)) warnings.push(REVIEW_WARNINGS.story);
+  if (!input.storyReady) warnings.push(REVIEW_WARNINGS.story);
   const cost = input.costPerResultRupees;
   if (cost && cost > 0 && (input.perAdSetDailyBudgetRupees * 7) / cost < LEARNING_EVENTS_PER_WEEK) warnings.push(REVIEW_WARNINGS.budget);
   return warnings;

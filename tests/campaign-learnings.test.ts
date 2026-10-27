@@ -28,12 +28,15 @@ describe("learning ledger snapshot (#588)", () => {
     });
   });
 
-  it("#906: records the placements as sent: WhatsApp without Audience Network, lead forms automatic", () => {
+  it("#906/#680: records the placements as sent: WhatsApp and lead forms without Audience Network", () => {
     const sent = (destination: string) => (launchTape.tape as unknown as { destination: string; kind: string; form: Record<string, string> }[])
       .filter(e => e.destination === destination && e.kind === "adsets").map(e => e.form.targeting);
     expect(buildLaunchSnapshot({ ...base, sentTargetings: sent("whatsapp") }).placements).toBe("advantage:facebook,instagram,messenger");
-    expect(buildLaunchSnapshot({ ...base, sentTargetings: sent("instant_form") }).placements).toBe("advantage");
-    expect(buildLaunchSnapshot({ ...base, sentTargetings: [...sent("whatsapp"), ...sent("instant_form")] }).placements).toBe("mixed");
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: sent("instant_form") }).placements).toBe("advantage:facebook,instagram,messenger");
+    // A lead form built before #680 sent automatic placements.
+    const automatic = sent("instant_form").map((targeting) => { const { publisher_platforms: _dropped, ...rest } = JSON.parse(targeting); void _dropped; return JSON.stringify(rest); });
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: automatic }).placements).toBe("advantage");
+    expect(buildLaunchSnapshot({ ...base, sentTargetings: [...sent("whatsapp"), ...automatic] }).placements).toBe("mixed");
   });
 
   it("#672 v2: records Advantage+ as sent and Meta's creative ids from the recorded create tape", () => {
