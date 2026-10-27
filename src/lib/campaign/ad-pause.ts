@@ -11,8 +11,8 @@ export const PAUSE_COST_RATIO = 2;
 export const KEEP_HIDES_MS = 3 * 24 * 60 * 60 * 1000;
 
 export type PauseSuggestion = {
-  ad: Pick<AdResultView, "adId" | "name" | "spend" | "results" | "costPerResult">;
-  reference: Pick<AdResultView, "adId" | "name" | "costPerResult">;
+  ad: Pick<AdResultView, "adId" | "name" | "creative" | "spend" | "results" | "costPerResult">;
+  reference: Pick<AdResultView, "adId" | "name" | "creative" | "costPerResult">;
   /** "expensive": costs ≥ 2× the reference per enquiry; "no_enquiries": spent ≥ 2× the campaign's cost per enquiry with none. */
   reason: "expensive" | "no_enquiries";
 };
@@ -36,7 +36,7 @@ export function pauseSuggestion(ads: AdResultView[]): PauseSuggestion | null {
   // The one wasting the most: the highest cost per enquiry, an ad with none counting as its whole spend.
   const worst = (suggestion: PauseSuggestion) => suggestion.ad.costPerResult ?? suggestion.ad.spend;
   const pick = candidates.sort((left, right) => worst(right) - worst(left))[0];
-  return pick ? { ad: { adId: pick.ad.adId, name: pick.ad.name, spend: pick.ad.spend, results: pick.ad.results, costPerResult: pick.ad.costPerResult }, reference: { adId: reference.adId, name: reference.name, costPerResult: reference.costPerResult }, reason: pick.reason } : null;
+  return pick ? { ad: { adId: pick.ad.adId, name: pick.ad.name, creative: pick.ad.creative, spend: pick.ad.spend, results: pick.ad.results, costPerResult: pick.ad.costPerResult }, reference: { adId: reference.adId, name: reference.name, creative: reference.creative, costPerResult: reference.costPerResult }, reason: pick.reason } : null;
 }
 
 export type AdPauseEntry = { adId: string; action: "paused" | "resumed"; at: string; reason?: string };

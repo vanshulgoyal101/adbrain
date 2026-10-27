@@ -55,7 +55,7 @@ describe("<AdResults> (#783)", () => {
 });
 
 describe("<AdResults> pause offer (#1045)", () => {
-  const ads = [
+  const ads: (Omit<ReturnType<typeof ad>, "name" | "creative"> & { name: string; creative: { headline: string; imageUrl: string | null } | null })[] = [
     ad("1", { best: true, status: "ACTIVE", results: 6, spend: 600, costPerResult: 100 }),
     ad("2", { status: "ACTIVE", results: 2, spend: 500, costPerResult: 250 }),
   ];
@@ -69,6 +69,18 @@ describe("<AdResults> pause offer (#1045)", () => {
     return fetch;
   };
   afterEach(() => window.localStorage.clear());
+
+  it("names the ads in the offer by headline, like the rows (Designer on #783)", async () => {
+    ads[0] = { ...ads[0], creative: { headline: "Cut power bills", imageUrl: null } };
+    ads[1] = { ...ads[1], name: "Solaride | Lever 2 | WhatsApp | Ad 3", creative: { headline: "Free site survey", imageUrl: null } };
+    try {
+      openWith([], true);
+      expect(await screen.findByText("“Free site survey” costs ₹250 per chat vs ₹100 for “Cut power bills”. Pause it?")).toBeInTheDocument();
+    } finally {
+      ads[0] = { ...ads[0], creative: null };
+      ads[1] = { ...ads[1], name: "Ad 2", creative: null };
+    }
+  });
 
   it("says chats on a WhatsApp campaign, with Pause as an outline button (Designer on #1048)", async () => {
     openWith([], true);
