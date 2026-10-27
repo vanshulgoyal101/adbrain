@@ -98,14 +98,23 @@ describe("<Campaigns> real enquiries on results (#335)", () => {
   });
 
   // #847: a WhatsApp card with no chats, enquiries or customers has nothing to log, so the block waits for the first chat.
-  it("hides the real-enquiry block until there's a chat, an enquiry or a customer", () => {
+  it("hides the real-enquiry block on a stopped card with no chat, enquiry or customer; never on a running one", () => {
     localStorage.setItem(`campaign-sync:${business.owner_id}:${business.id}:act_1`, String(Date.now()));
-    const quiet = campaign("40000000-0000-4000-8000-000000000005", "whatsapp");
-    const unknown = campaign("40000000-0000-4000-8000-000000000006", "whatsapp");
-    render(<Campaigns business={business} approved={[]} initialCampaigns={[quiet, unknown]}
-      initialResults={{ [quiet.id]: result(quiet.id, { conversations: 0, real_enquiries: 0, destination: "whatsapp" }), [unknown.id]: result(unknown.id, { conversations: null, destination: "whatsapp" }) }}
+    const quiet = { ...campaign("40000000-0000-4000-8000-000000000005", "whatsapp"), name: "stopped run", status: "paused" } as Campaign;
+    const unknown = { ...campaign("40000000-0000-4000-8000-000000000006", "whatsapp"), name: "unknown run", status: "paused" } as Campaign;
+    const running = { ...campaign("40000000-0000-4000-8000-000000000007", "whatsapp"), name: "running run" } as Campaign;
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[quiet, unknown, running]}
+      initialResults={{
+        [quiet.id]: result(quiet.id, { conversations: 0, real_enquiries: 0, destination: "whatsapp" }),
+        [unknown.id]: result(unknown.id, { conversations: null, destination: "whatsapp" }),
+        [running.id]: result(running.id, { conversations: 0, real_enquiries: 0, destination: "whatsapp" }),
+      }}
       leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
-    expect(screen.getAllByRole("region", { name: "Real enquiries" })).toHaveLength(1);
+    const card = (name: string) => screen.getByRole("heading", { name }).closest("article") as HTMLElement;
+    expect(within(card("stopped run")).queryByRole("region", { name: "Real enquiries" })).toBeNull();
+    expect(within(card("unknown run")).getByRole("region", { name: "Real enquiries" })).toBeInTheDocument();
+    // A running campaign can have today's chat before Meta counts it.
+    expect(within(card("running run")).getByRole("button", { name: "Add enquiry" })).toBeInTheDocument();
   });
 
   // #798: ₹ per customer shows once an enquiry became a customer, on any destination.
