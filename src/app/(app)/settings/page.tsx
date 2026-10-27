@@ -11,6 +11,8 @@ import { fundingMode } from "@/lib/payments/operator-funding";
 import { SpendGuardrails } from "@/components/spend-guardrails";
 import { PreferenceSettings } from "@/components/preference-settings";
 import { PrivacyRequests } from "@/components/privacy-requests";
+import { WhatsAppAlerts } from "@/components/whatsapp-alerts";
+import { readAlertSettings } from "@/lib/alerts/settings-read";
 import { WhatsAppStatusSection } from "@/components/whatsapp-status-section";
 import { getMetaConnection } from "@/lib/meta/credentials";
 import { metaOAuthConfigured } from "@/lib/meta/oauth";
@@ -113,12 +115,15 @@ export default async function SettingsPage({
 
 // #238: read once in the server render; the panels refetch only after the owner acts.
 async function PreferenceAndPrivacySettings({ businessId }: { businessId: string }) {
-  const [preferences, requests, operator] = await Promise.all([
+  const [preferences, requests, operator, alerts] = await Promise.all([
     readPreferenceState(businessId).catch(() => null),
     listOwnPrivacyRequests().catch(() => null),
     privacyOperatorAllowed().catch(() => false),
+    readAlertSettings(businessId).catch(() => null),
   ]);
   return <>
+    {/* #701: shown once AdBrain's alerts number is set (ALERTS_WHATSAPP). */}
+    {alerts && <WhatsAppAlerts businessId={businessId} initial={alerts} />}
     <PreferenceSettings key={businessId} businessId={businessId} initialState={preferences} />
     <PrivacyRequests initialRequests={requests} initialOperatorAvailable={operator} />
   </>;

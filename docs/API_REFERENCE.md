@@ -147,6 +147,8 @@ same identity; do not change a key or clear local recovery data to force progres
 | GET | `/api/meta/accounts` | Owned `businessId` | Retired discovery, 410 after validation |
 | POST | `/api/meta/connect` | Business/account/Page | Retired selection, 410 after validation |
 | POST | `/api/meta/deauthorize` | Verified `signed_request` | Revoke subject's connections and file a deletion request for the privacy operator; returns Meta's `{url, confirmation_code}` (live status at `/data-deletion?code=`) |
+| GET | `/api/whatsapp/webhook` | `hub.verify_token` = `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Meta's subscribe handshake for AdBrain's alerts number (#701); echoes `hub.challenge`, else 403 |
+| POST | `/api/whatsapp/webhook` | `X-Hub-Signature-256` (HMAC with `META_APP_SECRET`) | #701: text messages to the alerts number. "START <10-hex code>" binds the sender's number to that business's alerts (`owner_alert_confirm`); "STOP"/"बंद" turns both off for that number (`owner_alert_stop`). Other messages are ignored; text is never logged. 401 bad signature, 503 if not recorded (Meta retries) |
 | GET/POST | `/api/payments/live/orders` | Owner-scoped order read / accepted terms and idempotent create | Requires enabled production collection; no ad activation |
 | POST | `/api/payments/live/verify` | Signed provider payment proof | Reconcile capture; no ad activation |
 | POST | `/api/payments/live/webhook` | Signed Razorpay event | Idempotent capture/refund reconciliation |
