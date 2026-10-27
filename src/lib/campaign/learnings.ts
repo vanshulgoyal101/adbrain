@@ -17,8 +17,8 @@ export type LaunchSnapshotInput = {
   interests: string[];
   whatsappLanguage: string | null;
   prefill: WhatsAppOpening | null;
-  /** #840: the business's saved WhatsApp message, or the one AdBrain suggested for this launch. */
-  prefillSource?: "saved" | "suggested";
+  /** #840: this campaign's edited WhatsApp message, the business's saved one, or AdBrain's suggestion. */
+  prefillSource?: "edited" | "saved" | "suggested";
   storyFormat: boolean;
   creatives: { id: string; angle: string | null; generation: unknown }[];
   /** #672: the ad sets' `targeting` forms as sent to Meta (from the plan check's payloads). */

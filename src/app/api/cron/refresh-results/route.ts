@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { observeRoute } from "@/lib/observability/logger";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { adResultsEnabled, saveAdResults } from "@/lib/campaign/ad-results-store";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readAllByCursor } from "@/lib/supabase/queries";
 import { requireScheduledBusiness, withMetaConnection } from "@/lib/meta/connection-access";
@@ -63,13 +65,15 @@ async function handleGET(request: Request) {
     if (latest && Date.now() - Date.parse(latest.fetched_at) < RESULT_INTERVAL_MS) { skipped++; continue; }
     try {
       const context = await requireScheduledBusiness(campaign.business_id, request);
-      const { insights, review } = await withMetaConnection(context, {
+      const { insights, review, ads } = await withMetaConnection(context, {
         purpose: "read_insights",
         binding: { adAccountId: binding.metaAdAccountId, pageId: binding.metaPageId },
         expectedGeneration: binding.metaConnectionGeneration,
       }, async meta => ({
         insights: await meta.getCampaignInsights(campaign.meta_campaign_id!),
         review: await meta.readAdReview(campaign.meta_campaign_id!).catch(() => null),
+        // #783: per-ad results ride along; a failure keeps the last stored rows.
+        ads: adResultsEnabled() ? await meta.getAdResults(campaign.meta_campaign_id!).catch(() => null) : null,
       }));
       const { error: resultError } = await saveCampaignResult(context, {
         campaign_id: campaign.id,
@@ -84,6 +88,7 @@ async function handleGET(request: Request) {
         ...(insights.conversations !== undefined ? { conversations: insights.conversations, cost_per_conversation: insights.costPerConversation ?? null, whatsapp_opens: insights.whatsappOpens ?? null } : {}),
       });
       if (resultError) throw new Error("Result storage unavailable.");
+      if (ads) await saveAdResults(admin as unknown as SupabaseClient, { businessId: campaign.business_id, campaignId: campaign.id, ads }).catch(() => false);
       const assessed = assessCampaignHealth({
         raw: campaign.raw, now: new Date(), impressions: insights.impressions, review,
         key: (kind, since) => createHash("sha256").update(`${campaign.id}:${kind}:${since}`).digest("hex").slice(0, 12),

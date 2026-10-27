@@ -2148,13 +2148,14 @@ function BusinessCampaigns({
                       // #798: what a real customer cost, beside the per-enquiry figures.
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
                         <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
-                        <Stat label="Per customer" value={formatMoney(costPerCustomer(r.spend, r.customers ?? 0) ?? 0)} />
+                        <Stat label="Per customer" value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
                         <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
                       </div>
                     )}
                     {r && outcome === "whatsapp" && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
-                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))} />
+                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
+                        onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="text-sm text-slate-600">

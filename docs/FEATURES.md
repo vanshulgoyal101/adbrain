@@ -343,9 +343,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   message kept), the ad goes back to review, and nothing else changes. Same claim checks as Studio.
 - A business's saved WhatsApp message (`businesses.whatsapp_template`, #840) is what every
   new WhatsApp campaign sends: the welcome, then a pre-typed message (optionally with a Call
-  now button) or up to 3 questions. With nothing saved, AdBrain writes the greeting and
-  prefill per campaign as before. The ledger records the button and whether it was saved
-  or suggested.
+  now button) or up to 3 questions. A campaign's own edit (draft `whatsappMessage`) wins over
+  it, with the same claim checks as a blocker. With neither, AdBrain writes the greeting and
+  prefill per campaign as before. Review returns the exact message (`whatsappMessage`) and
+  launch sends that one; an edited or saved message is part of the plan hash. The ledger
+  records the button and whether it was edited, saved or suggested.
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the

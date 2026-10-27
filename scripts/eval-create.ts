@@ -25,7 +25,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import type { BrandContext } from "@/lib/templates/ads";
 import {
-  compareSummaries, expectedScript, inconclusive, offerInFold, summarize, textScript,
+  compareSummaries, expectedScript, inconclusive, offerInFold, personInScene, placeUpFront, summarize, textScript,
   type AdResult, type CaseResult, type JudgeScore,
 } from "./lib/eval-create-score";
 import { evalProfile } from "./lib/eval-profile";
@@ -176,7 +176,7 @@ async function judge(item: EvalCase, ad: AdResult, png: Uint8Array): Promise<Jud
 
 async function main() {
   await loadPrices();
-  const { generateVariants, CreativeValidationError } = await import("@/lib/creative/generate");
+  const { generateVariants, CreativeValidationError, CreativeImageError } = await import("@/lib/creative/generate");
   const { renderCompositeAd } = await import("@/lib/creative/render");
   const { languagePromptName } = await import("@/lib/languages");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -210,6 +210,8 @@ async function main() {
           firstTry: answered.length === 1 && !variant.llmUsage.some((entry) => entry.validation),
           rejectedRules: variant.llmUsage.flatMap((entry) => entry.validation?.rules ?? []),
           offerInFold: offerInFold(variant.primaryText, item.offerTerms),
+          placeUpFront: placeUpFront(variant.headline, variant.primaryText, item.brand.locations ?? []),
+          visualDirection: variant.concept.visual.direction, personInScene: personInScene(variant.concept.visual.direction),
           scriptOk: textScript(variant.primaryText) === expectedScript(item.language),
           costUsd: Number(costUsd.toFixed(5)),
         } });
@@ -222,6 +224,12 @@ async function main() {
           stage: error instanceof CreativeValidationError ? error.stage : "image",
           rules: usage.flatMap((entry) => entry.validation?.rules ?? []),
           issues: (error instanceof CreativeValidationError ? error.issues : [error instanceof Error ? error.message : String(error)]).map((issue) => issue.slice(0, 200)),
+          // Free images often fail; the copy that passed is still scored (#418 rule 1).
+          ...(error instanceof CreativeImageError && error.concept ? { copy: {
+            headline: error.concept.headline, primaryText: error.concept.primary_text, supportingText: error.concept.supportingText,
+            placeUpFront: placeUpFront(error.concept.headline, error.concept.primary_text, item.brand.locations ?? []),
+            visualDirection: error.concept.visual.direction, personInScene: personInScene(error.concept.visual.direction),
+          } } : {}),
         });
       },
     });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runPreflight } from "@/lib/campaign/preflight";
+import { resolveWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 import type { DraftInput } from "@/lib/campaign/connect-contracts";
 
 const mocks = vi.hoisted(() => ({
@@ -106,6 +107,8 @@ function reviewPlanHash(): string {
   runPreflight({
     draft: input,
     whatsappNumber: input.destination === "whatsapp" ? "+919876543210" : null,
+    // #840: only an edited or saved message reaches the hash, so the suggestion's words don't matter here.
+    whatsappMessage: input.destination === "whatsapp" ? resolveWhatsAppMessage({ edited: input.whatsappMessage, saved: mocks.whatsappTemplate, suggest: () => ({ greeting: "", autofill: "" }) }) : null,
     draftId,
     draftVersion: 1,
     connection: {
@@ -326,6 +329,35 @@ describe("durable campaign create route", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ whatsappGreeting: {
       greeting: "Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.", autofill: "Can I get more info on this", callButton: true } }));
     expect(mocks.learnings).toEqual([expect.objectContaining({ snapshot: expect.objectContaining({ whatsapp: expect.objectContaining({ button: "call", source: "saved", prefill: "Can I get more info on this" }) }) })]);
+  });
+
+  it("#840: this campaign's edited message wins over the saved one, is in the plan hash, and the ledger says 'edited'", async () => {
+    mocks.whatsappTemplate = { greeting: "Hi! Thanks for messaging Solaride. This is your first step in getting free electricity.", opening: { kind: "prefill", prefill: "Can I get more info on this", callButton: true }, language: "en" };
+    mocks.learnings = [];
+    const edited = { greeting: "Namaste! Solaride here.", opening: { kind: "ice_breakers" as const, questions: ["Price for my home", "Book a site visit"] }, language: "hinglish" as const };
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, whatsappMessage: edited } });
+    const create = vi.fn().mockResolvedValue({ campaignId: "meta-campaign-1", adSetId: "meta-adset-1", adSetIds: ["meta-adset-1"], adIds: ["meta-ad-1"], destination: "whatsapp" });
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => "+919876543210", createLeadCampaign: create, readActiveLeadForm: vi.fn(), resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
+    expect(reviewed.data.whatsappMessage).toEqual({ source: "edited", language: "hinglish", greeting: "Namaste! Solaride here.", autofill: "", iceBreakers: ["Price for my home", "Book a site visit"] });
+    const savedOnly = { ...mocks.draftRow };
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null } });
+    expect(reviewPlanHash()).not.toBe(reviewed.data.planHash);
+    mocks.draftRow = savedOnly;
+    const { POST } = await import("@/app/api/campaigns/create/route");
+    expect((await POST(post({ businessId, draftId, draftVersion: 1, planHash: reviewed.data.planHash, connectionGeneration, idempotencyKey }))).status).toBe(200);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ whatsappGreeting: { greeting: "Namaste! Solaride here.", autofill: "", iceBreakers: ["Price for my home", "Book a site visit"] } }));
+    expect(mocks.learnings).toEqual([expect.objectContaining({ snapshot: expect.objectContaining({ whatsapp: expect.objectContaining({ source: "edited" }) }) })]);
+  });
+
+  it("#840: a claim in this campaign's edited message blocks Review, with a fix that opens the message", async () => {
+    mocks.draftRow = draftRow({ input: { ...draftInput, destination: "whatsapp", leadFormId: null, whatsappMessage: { greeting: "Guaranteed subsidy for every home!", opening: { kind: "prefill", prefill: "Tell me more", callButton: false }, language: "en" } } });
+    mocks.withMetaConnection.mockImplementation(async (_context, _options, execute) => execute({ getWhatsAppNumber: async () => "+919876543210", createLeadCampaign: vi.fn(), readActiveLeadForm: vi.fn(), resolveGeoTargeting: vi.fn(), resolveAudienceInterests: async () => ({ interests: [{ id: "12345", name: "Solar energy" }], unresolved: [] }) }, await mocks.getConnectionStatus()));
+    const { POST: preflight } = await import("@/app/api/campaigns/preflight/route");
+    const reviewed = await (await preflight(post({ businessId, draftId, draftVersion: 1 }))).json();
+    expect(reviewed.data.canCreatePaused).toBe(false);
+    expect(reviewed.data.blockers).toEqual([expect.objectContaining({ reason: "REVIEW_WHATSAPP_MESSAGE", message: expect.stringMatching(/^Your WhatsApp message: .*[Gg]uaranteed/) })]);
   });
 
   it("sends the campaign's chosen WhatsApp language (#493)", async () => {
