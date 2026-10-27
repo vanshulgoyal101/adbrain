@@ -45,7 +45,7 @@ describe("GET /api/campaigns/[id]/ads (#783)", () => {
     state.rows = [{ meta_ad_id: "1", ad_name: "Lower bills", effective_status: "ACTIVE", delivered: true, impressions: 900, link_clicks: 9, conversations: 1, leads: 0, spend_paise: 7030, synced_at: "2026-10-26T17:00:00.000Z" }];
     const { status, body } = await call();
     expect(status).toBe(200);
-    expect(body).toEqual({ ok: true, syncedAt: "2026-10-26T17:00:00.000Z", ads: [{ adId: "1", name: "Lower bills", delivered: true, replaced: false, best: false, impressions: 900, results: 1, spend: 70.3, costPerResult: 70.3 }] });
+    expect(body).toEqual({ ok: true, syncedAt: "2026-10-26T17:00:00.000Z", ads: [{ adId: "1", name: "Lower bills", delivered: true, replaced: false, best: false, status: "ACTIVE", impressions: 900, results: 1, spend: 70.3, costPerResult: 70.3 }] });
     expect(state.filters).toEqual(expect.arrayContaining(["ad_results.campaign_id=c1", "ad_results.period_start is null", "ad_results.period_end is null"]));
   });
 });
