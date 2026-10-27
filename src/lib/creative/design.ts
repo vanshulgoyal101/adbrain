@@ -13,6 +13,13 @@ import type { CreativeConcept } from "./concept";
 
 export type AdFormat = "portrait" | "square" | "story" | "landscape";
 
+/**
+ * #1077: where a 9:16 ad's words, logo and offer must stay. Meta asks to keep the top, bottom and sides free and
+ * shows the zone in Ads Manager's guardrail; one 9:16 image runs in both Stories and Reels (asset customization),
+ * so this is the stricter Reels zone: the profile bar on top, the caption, reply box and CTA at the bottom.
+ */
+export const STORY_SAFE = { top: 0.14, bottom: 0.35, side: 0.06 } as const;
+
 export interface AdDesignSpec {
   format: AdFormat;
   width: number;
