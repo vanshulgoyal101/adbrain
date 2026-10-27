@@ -241,6 +241,19 @@ function nightlyExport(dry) {
   }
 }
 
+/** The nightly encrypted pg_dump (#884): GitHub's schedule is best effort, so dispatch it when its newest run is over 23 h old. */
+function dispatchBackup(dry) {
+  try {
+    const [latest] = JSON.parse(execFileSync("gh", ["run", "list", "-R", REPO, "-w", "db-backup.yml", "-L", "1", "--json", "createdAt,status"], { encoding: "utf8" }));
+    if (!scheduledJobsDue(latest, Date.now(), 23 * 60)) return;
+    if (dry) return console.log(`would dispatch db-backup.yml (last run ${latest?.createdAt ?? "none"})`);
+    execFileSync("gh", ["workflow", "run", "db-backup.yml", "-R", REPO, "--ref", "main"], { stdio: "ignore" });
+    log(`dispatched db-backup.yml (last run ${latest?.createdAt ?? "none"})`);
+  } catch (error) {
+    log(`db-backup dispatch failed: ${String(error?.message ?? error).split("\n")[0].slice(0, 160)}`);
+  }
+}
+
 /** At most one dispatch per tick; a gh failure is logged and never stops the tick. */
 function dispatchScheduledJobs(dry) {
   try {
@@ -353,6 +366,7 @@ async function main() {
   }
   if (existsSync(join(STATE_DIR, "OFF"))) return log("tick skipped: OFF switch");
   dispatchScheduledJobs(values["dry-run"]);
+  dispatchBackup(values["dry-run"]);
   if (!values["dry-run"]) refresh();
   nightlyExport(values["dry-run"]);
   const state = readState();

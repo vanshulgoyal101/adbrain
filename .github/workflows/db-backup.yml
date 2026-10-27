@@ -1,0 +1,59 @@
+name: Database backup
+on:
+  # Nightly (#884). GitHub's schedule is best effort, so the team supervisor also dispatches this when
+  # the newest run is over 23 h old, and scripts/release.mjs dispatches it before any migration.
+  schedule:
+    - cron: "30 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write # the failure alert
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/backup
+          persist-credentials: false
+      # pg_dump of public and auth (data + schema) as the read-only backup_reader role, encrypted to the
+      # public certificate in .github/backup; only DevOps's keychain holds the private key. The artifact
+      # is therefore unreadable without it. Nothing from the dump reaches the log except counts.
+      - name: Dump and encrypt
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          [ -n "$DATABASE_URL" ] || { echo "::error::BACKUP_DATABASE_URL is not set"; exit 1; }
+          name="adbrain-db-$(date -u +%Y-%m-%dT%H-%MZ)"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+          docker run --rm -e DATABASE_URL postgres:17 sh -c 'pg_dump "$DATABASE_URL" --no-owner --no-privileges -n public -n auth -Fp' | gzip -9 > dump.sql.gz
+          tables=$(gzip -dc dump.sql.gz | grep -c '^COPY ' || true)
+          echo "tables: $tables, compressed bytes: $(stat -c %s dump.sql.gz)"
+          [ "$tables" -ge 40 ] || { echo "::error::only $tables tables dumped"; exit 1; }
+          openssl cms -encrypt -binary -aes256 -outform DER -in dump.sql.gz -out "$name.sql.gz.cms" .github/backup/backup-cert.crt
+          rm -f dump.sql.gz
+          sha256sum "$name.sql.gz.cms"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.NAME }}.sql.gz.cms
+          retention-days: 14
+          if-no-files-found: error
+      - name: Alert on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Database backup failed"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$title\"" --json number --jq length)
+          [ "$open" = 0 ] || exit 0
+          gh issue create -R "$GITHUB_REPOSITORY" -l core -l bug -l owner:devops -t "$title" \
+            -b "$(printf 'The nightly pg_dump (#884) failed. Until a backup succeeds, no migration (release.mjs refuses).\n\nRunbook: docs/RELEASING.md#backups-and-restore\nRun: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
