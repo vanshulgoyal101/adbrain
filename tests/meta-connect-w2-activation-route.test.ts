@@ -266,12 +266,42 @@ describe("campaign activation generation fence", () => {
     expect(response.status).toBe(200);
     expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
     expect(mocks.recheckMetaConnection).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, 4);
-    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"], cappedAdSetIds: [] });
+    expect(mocks.verifyCampaignActivation).toHaveBeenCalledWith("meta-campaign-1", { dailyBudgetRupees: 500, status: "paused", adSetIds: ["set-1"], adIds: ["ad-1"], cappedAdSetIds: [], keepPaused: [] });
     expect(mocks.reserveCustomerCampaign.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
     expect(mocks.enforceCampaignSpendCap).toHaveBeenCalledWith("meta-campaign-1", 677966);
     expect(mocks.enforceCampaignSpendCap.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateCampaignStatus.mock.invocationCallOrder[0]);
     expect(mocks.confirmCustomerCampaign).toHaveBeenCalledWith({ businessId: "business-1", userId: "user-1" }, "campaign-1", "reservation-1", "active");
     expect(mocks.reserveCustomerCampaign.mock.calls[0][1].lifetimeCapPaise).toBeUndefined();
+  });
+
+  // #1055 (Reviewer on #1060): an uncapped resume keeps a card-paused ad paused, before and after the write.
+  it("turns an uncapped campaign back on with the ad paused from the card still paused", async () => {
+    const withPausedAd = { ...reviewedDelivery, ads: [...reviewedDelivery.ads, { id: "ad-2", status: "PAUSED", effectiveStatus: "ADGROUP_PAUSED", adSetId: "set-1", creativeId: "creative-2" }] };
+    mocks.storedAdIds = ["ad-1", "ad-2"];
+    // MetaClient.verifyCampaignActivation's rule: every intended ad ACTIVE unless it is kept paused.
+    mocks.verifyCampaignActivation.mockImplementation(async (_id: string, expected: { status: string; keepPaused?: string[] }) => {
+      if (withPausedAd.ads.some(ad => ad.status !== "ACTIVE" && !(expected.keepPaused ?? []).includes(ad.id))) throw new CampaignDeliveryError("An intended ad set or ad is paused.");
+      return { ...withPausedAd, campaign: { ...withPausedAd.campaign, status: expected.status.toUpperCase() } };
+    });
+    const digest = createHash("sha256").update(activationConfirmationPayload(
+      { id: "campaign-1", meta_campaign_id: "meta-campaign-1", daily_budget: 500, status: "paused" },
+      { generation: 4, selected: { metaBusinessId: null, adAccountId: "act_123", accountName: "Account", pageId: "page_123", pageName: "Page", currency: "INR", timezoneName: "Asia/Kolkata" } },
+      withPausedAd,
+    )).digest("hex");
+    const { GET, PATCH } = await import("@/app/api/campaigns/[id]/route");
+    const resume = () => PATCH(patch({ status: "active", confirmationDigest: digest, connectionGeneration: 4 }), { params: Promise.resolve({ id: "campaign-1" }) });
+
+    expect((await resume()).status).toBe(409);
+    expect(mocks.updateCampaignStatus).not.toHaveBeenCalled();
+
+    mocks.storedCap = { adPauses: [{ adId: "ad-2", action: "paused", at: "t1" }] };
+    mocks.readCampaignDelivery.mockResolvedValue(withPausedAd);
+    const review = await GET(new Request("https://adbrain.vanshul.com/api/campaigns/campaign-1"), { params: Promise.resolve({ id: "campaign-1" }) });
+    expect((await review.json()).keptPaused).toEqual(["ad-2"]);
+    expect((await resume()).status).toBe(200);
+    for (const call of mocks.verifyCampaignActivation.mock.calls.slice(-2)) expect(call[1]).toMatchObject({ adIds: ["ad-1", "ad-2"], keepPaused: ["ad-2"] });
+    expect(mocks.updateCampaignStatus).toHaveBeenCalledWith("meta-campaign-1", "ACTIVE");
+    expect(mocks.createCappedAdSet).not.toHaveBeenCalled();
   });
 
   it("records Meta lifetime spend as cost evidence before reserving, without an operator (#216)", async () => {

@@ -399,10 +399,10 @@ function BusinessCampaigns({
   const [capDays, setCapDays] = useState(3);
   const [activationLearning, setActivationLearning] = useState<{ costPerResultRupees: number | null; pausedAt: string | null; now: number } | null>(null);
   // #1055: ads the owner paused from the campaign card; they stay paused when it's turned back on.
-  const [keptPaused, setKeptPaused] = useState(0);
+  const [keptPaused, setKeptPaused] = useState<string[]>([]);
   const deliveryChildren = (delivery: CampaignDeliverySnapshot) => [...delivery.adSets, ...delivery.ads];
   const activationCapped = !!activationDelivery && deliveryChildren(activationDelivery).every(child => child.status === "PAUSED");
-  const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE"));
+  const activationReady = !!activationDelivery && (activationCapped || deliveryChildren(activationDelivery).every(child => child.status === "ACTIVE" || keptPaused.includes(child.id)));
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
   // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
@@ -1260,7 +1260,7 @@ function BusinessCampaigns({
       setActivationDelivery(delivery);
       setActivationFunding(funding);
       setSpendLimitRequired(review.spendLimitRequired !== false);
-      setKeptPaused(typeof review.keptPaused === "number" && review.keptPaused > 0 ? Math.floor(review.keptPaused) : 0);
+      setKeptPaused(Array.isArray(review.keptPaused) ? review.keptPaused.filter((id): id is string => typeof id === "string" && /^\d+$/.test(id)) : []);
       setActivationLearning({
         costPerResultRupees: typeof review.learning?.costPerResultRupees === "number" ? review.learning.costPerResultRupees : null,
         pausedAt: typeof review.learning?.pausedAt === "string" ? review.learning.pausedAt : null,
@@ -1424,7 +1424,7 @@ function BusinessCampaigns({
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
                 </p>}
                 <p className="mt-1">The ad sets and ads listed above stay paused. Meta reviews the copied ads before they deliver.</p>
-                {keptPaused > 0 && <p className="mt-1">{keptPaused === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
+                {keptPaused.length > 0 && <p className="mt-1">{keptPaused.length === 1 ? "1 ad you paused from the card stays paused" : `${keptPaused.length} ads you paused from the card stay paused`}: AdBrain doesn&apos;t copy it back in.</p>}
               </div>
               : activationFunding
                 ? <p className="mt-2">This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads listed above in Meta, then refresh this review.</p>

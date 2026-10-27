@@ -61,8 +61,8 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
     })), getActivationLearning(campaign)]);
     // #419 item 2: inputs for the learning-restart notes; not part of the confirmation digest.
     // #1055: ads the owner paused from the card stay paused when the campaign is turned back on.
-    const keptPaused = pausedAdIds(campaign.raw).length;
-    return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning, ...(keptPaused ? { keptPaused } : {}) }, { headers: { "Cache-Control": "no-store" } });
+    const keptPaused = pausedAdIds(campaign.raw);
+    return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning, ...(keptPaused.length ? { keptPaused } : {}) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof CampaignDeliveryError) return apiError(error.message, 409);
     if (error instanceof ConnectionAccessError) return apiError(error.message, error.code === "UNAUTHENTICATED" ? 401 : 409);
@@ -203,10 +203,13 @@ async function handlePATCH(
             throw new ConnectionAccessError("UNAVAILABLE", "Campaign budget and currency must be verified before activation.");
           }
           const capDays = parsed.data.capDays;
+          // #1055: ads AdBrain paused from the card (and, for a capped copy, the reviewed ad it came from)
+          // stay out of what turns on, capped or not. Read before anything is reserved or created.
+          const pausedHere = pausedAdIds(campaign.raw);
           const delivery = capDays
             ? await meta.readCampaignDelivery(campaign.meta_campaign_id!, { dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children! })
             : await meta.verifyCampaignActivation(campaign.meta_campaign_id!, {
-              dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!,
+              dailyBudgetRupees: campaign.daily_budget!, status: campaign.status, ...children!, keepPaused: pausedHere,
             });
           // #741: a tree built before the out-of-area rule must be rebuilt, never activated.
           if (delivery.adSets.some(adSet => lacksAreaExclusions(adSet.targeting))) {
@@ -215,9 +218,6 @@ async function handlePATCH(
           if (capDays && (delivery.adSets.some(adSet => adSet.status !== "PAUSED") || delivery.ads.some(ad => ad.status !== "PAUSED"))) {
             throw new CampaignDeliveryError("Pause the reviewed ad sets and ads in Meta first. AdBrain turns on only the capped copy.");
           }
-          // #1055: ads AdBrain paused from the card (and, for a capped copy, the reviewed ad it came from)
-          // stay out of what turns on. Read before anything is reserved or created.
-          const pausedHere = pausedAdIds(campaign.raw);
           const keptPausedSources = new Set(pausedHere.length ? Object.values(await meta.adSources(pausedHere)) : []);
           const priorCappedAds = new Set(delivery.ads.filter(ad => children!.cappedAdSetIds.includes(ad.adSetId)).map(ad => ad.id));
           const cappedSourceAdIds = children!.adIds.filter(adId => !priorCappedAds.has(adId) && !keptPausedSources.has(adId));
