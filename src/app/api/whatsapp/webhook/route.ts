@@ -28,7 +28,7 @@ export const POST = observeRoute("/api/whatsapp/webhook", "POST", async (request
   let body: unknown = null;
   try { body = JSON.parse(raw); } catch { return NextResponse.json({ ok: true }); }
   const admin = createAdminClient();
-  for (const message of inboundTexts(body)) {
+  for (const message of inboundTexts(body, getEnv().ALERTS_WHATSAPP)) {
     const command = alertCommand(message.text);
     if (!command) continue;
     const { error } = command.kind === "start"

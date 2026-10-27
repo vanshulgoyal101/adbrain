@@ -48,8 +48,9 @@ describe("owner WhatsApp alerts: opt-in commands (#701)", () => {
 
   it("takes only text messages, with the sender as +E.164; delivery statuses and media are ignored", () => {
     const body = delivery([text("919811112222", "STOP"), { from: "919811112222", type: "image", image: { id: "1" } }], { statuses: [{ id: "wamid.x", status: "read" }] });
-    expect(inboundTexts(body)).toEqual([{ from: "+919811112222", text: "STOP" }]);
-    expect(inboundTexts({ object: "page", entry: [] })).toEqual([]);
+    expect(inboundTexts(body, "+91 98000 00000")).toEqual([{ from: "+919811112222", text: "STOP" }]);
+    expect(inboundTexts(body, "+91 98000 00001")).toEqual([]);
+    expect(inboundTexts({ object: "page", entry: [] }, "+91 98000 00000")).toEqual([]);
   });
 
   it("shows the number masked, and only once confirmed", () => {
@@ -68,6 +69,12 @@ describe("POST /api/whatsapp/webhook (#701)", () => {
       ["owner_alert_confirm", { p_code: "A1B2C3D4E5", p_phone: "+919811112222" }],
       ["owner_alert_stop", { p_phone: "+919833334444" }],
     ]);
+  });
+
+  it("ignores messages delivered to a different WhatsApp number", async () => {
+    const { POST } = await import("@/app/api/whatsapp/webhook/route");
+    expect((await POST(post(delivery([text("919811112222", "STOP")], { metadata: { display_phone_number: "919800000001" } })))).status).toBe(200);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("refuses an unsigned or wrongly signed delivery without touching the database", async () => {

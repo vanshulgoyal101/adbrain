@@ -33,7 +33,7 @@ describe("Settings → WhatsApp alerts (#701)", () => {
     expect(screen.getByText(/Reply STOP on WhatsApp anytime/)).toHaveTextContent("+91 ••••• 2222");
     unmount();
     render(<WhatsAppAlerts businessId="b1" initial={{ ...off, number: "+91 ••••• 2222", optedOut: true }} />);
-    expect(screen.getByText(/You replied STOP/)).toBeInTheDocument();
+    expect(screen.getByText(/Send START from your WhatsApp to turn them back on/)).toBeInTheDocument();
   });
 
   it("a failed save stays on the card with 'Try again' (#920)", async () => {

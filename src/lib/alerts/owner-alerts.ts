@@ -30,12 +30,16 @@ export function validWebhookSignature(rawBody: string, header: string | null, ap
 }
 
 /** Text messages in a WhatsApp Cloud API webhook body (entry → changes → value.messages), sender as +E.164. */
-export function inboundTexts(body: unknown): { from: string; text: string }[] {
+export function inboundTexts(body: unknown, alertsNumber: string): { from: string; text: string }[] {
+  const expectedNumber = alertsNumber.replace(/\D/g, "");
+  if (!expectedNumber) return [];
   const entries = (body as { object?: unknown; entry?: unknown } | null)?.object === "whatsapp_business_account"
     ? (body as { entry?: unknown }).entry : [];
   if (!Array.isArray(entries)) return [];
   return entries.flatMap((entry) => Array.isArray(entry?.changes) ? entry.changes : [])
     .filter((change) => change?.field === "messages")
+    .filter((change) => typeof change?.value?.metadata?.display_phone_number === "string"
+      && change.value.metadata.display_phone_number.replace(/\D/g, "") === expectedNumber)
     .flatMap((change) => Array.isArray(change?.value?.messages) ? change.value.messages : [])
     .flatMap((message) => message?.type === "text" && typeof message.from === "string" && /^\d{7,15}$/.test(message.from) && typeof message.text?.body === "string"
       ? [{ from: `+${message.from}`, text: message.text.body.slice(0, 200) }] : []);

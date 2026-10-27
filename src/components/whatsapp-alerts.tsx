@@ -59,7 +59,7 @@ export function WhatsAppAlerts({ businessId, initial }: { businessId: string; in
     <div className="mt-5 border-t border-slate-100 pt-4 text-sm text-slate-700">
       {settings.number && !settings.optedOut
         ? <p>Alerts go to <span className="whitespace-nowrap font-medium">{settings.number}</span>. Reply STOP on WhatsApp anytime to turn them off.</p>
-        : <p>{settings.optedOut ? "You replied STOP, so alerts are off. Turn them on above to start again." : "Confirm the WhatsApp number that should get alerts: send one message from it."}</p>}
+        : <p>{settings.optedOut ? "You replied STOP, so alerts are off. Send START from your WhatsApp to turn them back on." : "Confirm the WhatsApp number that should get alerts: send one message from it."}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {link
           ? <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700">Open WhatsApp and send START</a>
