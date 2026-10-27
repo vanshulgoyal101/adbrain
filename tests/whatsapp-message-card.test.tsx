@@ -98,7 +98,10 @@ describe("WhatsApp message card (#840)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save WhatsApp message" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("guaranteed");
     expect(screen.getByLabelText(/Welcome message/)).toHaveAttribute("aria-invalid", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Reset to suggested" }));
+    // #976: the refusal renders before the save transition ends, while Reset is still disabled.
+    const reset = screen.getByRole("button", { name: "Reset to suggested" });
+    await waitFor(() => expect(reset).toBeEnabled());
+    fireEvent.click(reset);
     await waitFor(() => expect(save).toHaveBeenLastCalledWith({ businessId: "b1", template: null }));
     expect(await screen.findByText("Suggested")).toBeInTheDocument();
     expect(within(preview()).getByText(suggested.en.greeting)).toBeInTheDocument();
