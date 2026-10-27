@@ -12,8 +12,14 @@ The release process ([AGENTS.md](../AGENTS.md)).
    `adbrain-wt/`, build a small complete slice and open a PR to `next` with
    auto-merge enabled. The branch need not be up to date. See [Deploy train](#deploy-train).
 2. Required checks are `build`, `test`, `core` and `secrets`
-   ([ci.yml](../.github/workflows/ci.yml)); `audit` and `docs` also run but do
-   not block. A change to generation, validation, prompts, models, timeouts, the
+   ([ci.yml](../.github/workflows/ci.yml)), plus `core-approval`
+   ([core-approval.yml](../.github/workflows/core-approval.yml), #926): a PR that
+   touches `src/lib/meta/`, `src/lib/campaign/`, the Meta, campaign, managed,
+   payments or spend-limit APIs, money paths or `db/migrations/` stays pending until
+   a QA verdict, `Reviewer review of <sha>: **approved**` or `CTO review of <sha>:
+   **approved**` names its head (or an earlier head with the same patch). The deploy
+   train and a revert labelled `rollback` pass. Hold with `gh pr merge <n>
+   --disable-auto`. `audit` and `docs` also run but do not block. A change to generation, validation, prompts, models, timeouts, the
    planner, Meta calls or CSP adds or updates a `test:core` test with recorded real
    responses. Update the matching doc in the same PR.
 3. Low-risk PRs (no migration, money, tenant/auth or config change) merge
@@ -107,6 +113,9 @@ exclude entire test directories or suppress uninvestigated findings.
 - **Tenant or money PRs without a migration target `next`** (#461): `release.mjs --pr <n>` runs the same
   QA (and, for money paths including `src/lib/managed/`, CTO) checks, merges into `next`, and prints
   a receipt; the next deploy train ships it and smokes it. Migrations still release to `main`.
+- **Destructive migrations** (drop, delete, truncate, or a type change that rewrites data) need a fresh
+  export first, from the last 24 h (`~/.adbrain-backups`, or run `node scripts/db-export.mjs export`)
+  until Supabase backups exist (CEO, #884).
 - **Release a money or migration PR (#228, DevOps):**
   `node scripts/release.mjs --pr <n> --dry-run`, then the same without `--dry-run`.
   Preflight is read-only: the PR targets `main` without conflicts, the required

@@ -49,6 +49,7 @@ import {
 } from "@/components/targeting-controls";
 import { CampaignChat } from "@/components/campaign-chat";
 import { AdResults } from "@/components/ad-results";
+import { WhatsAppAiCard } from "@/components/whatsapp-ai-card";
 import { EditAudienceDialog } from "@/components/edit-audience-dialog";
 import { EditBudgetDialog } from "@/components/edit-budget-dialog";
 import { applyBudget, budgetFormStart } from "@/lib/campaign/budget-edit-form";
@@ -87,7 +88,7 @@ import { parsePhone } from "@/lib/brand/countries";
 import type { LeadForm } from "@/lib/meta/client";
 import { maskWhatsAppNumber, maskedWhatsAppNumberPattern, parseWhatsAppStatus, type WhatsAppStatus } from "@/lib/meta/whatsapp-status-shared";
 import type { ConnectIntent, ConnectionDTO } from "@/lib/meta/connect-contracts";
-import type { Business, Campaign, CampaignResult, Creative } from "@/lib/types";
+import type { Business, Campaign, CampaignResult, Creative, Json } from "@/lib/types";
 import {
   BUDGET_PRESETS,
   campaignNarrative,
@@ -99,6 +100,7 @@ import { accountFundingSchema, activationConfirmationPayload, campaignDeliverySn
 import { activationWarnings } from "@/lib/campaign/plan-check";
 import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
+import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
 import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
@@ -1260,7 +1262,8 @@ function BusinessCampaigns({
       </div>
       {error && <Alert variant="error">{error}</Alert>}
       {placedError?.at === "review" && !prepareReview && <Alert variant="error">{placedError.message}</Alert>}
-      {notice && <Alert variant="success">{notice}</Alert>}
+      {/* #847: sync and save news is a quiet line, as on Enquiries, not a green box on every visit. */}
+      <p aria-live="polite" className={notice ? "text-sm text-slate-600" : "sr-only"}>{notice}</p>
       {!connectedForDraft && (
         <div className="space-y-3">
           <Alert variant="warning">
@@ -1938,11 +1941,14 @@ function BusinessCampaigns({
             </div>
           )}
         </div>
-        {!(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp") && (
-          <div className="mb-4"><WhatsAppReadyChecklist businessId={business.id} /></div>
-        )}
-        {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-3">
-          <div className="flex min-w-0 flex-1 basis-56 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
+        {(() => {
+          const ready = !(showComposer && destination === "whatsapp") && campaigns.some((c) => campaignDestination(c, results[c.id]) === "whatsapp");
+          // #794: once a WhatsApp campaign is out, point to WhatsApp's own AI reply; #847: as a line under "WhatsApp ready?".
+          const ai = campaigns.some(campaign => campaign.meta_campaign_id && campaignDestination(campaign) === "whatsapp");
+          return (ready || ai) && <div className="mb-4">{ready && <WhatsAppReadyChecklist businessId={business.id} />}{ai && <WhatsAppAiCard businessId={business.id} />}</div>;
+        })()}
+        {(campaigns.length > 0 || campaignQuery || statusFilter !== "all") && <div className="mb-5 flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2 rounded-md border border-slate-300 px-3"><Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" /><input type="search" aria-label="Search campaigns" placeholder="Search campaigns" value={campaignQuery} onChange={event => setCampaignQuery(event.target.value)} className="h-10 w-full min-w-0 bg-transparent text-sm outline-none" /></div>
           <select aria-label="Campaign status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">All statuses</option><option value="active">{OWNER_WORDS.running}</option><option value="paused">Paused</option><option value="draft">Draft</option><option value="completed">Completed</option></select>
         </div>}
         {campaigns.length === 0 && !campaignQuery && statusFilter === "all" ? (
@@ -1989,7 +1995,18 @@ function BusinessCampaigns({
                 campaignName={adEdit.name ?? `${business.name} — ${adEdit.objective}`}
                 creatives={approved}
                 onClose={() => setAdEdit(null)}
-                onSaved={(message) => { setCardNotice({ id: adEdit.id, message }); setAdEdit(null); }}
+                onSaved={(message, { adId, change }) => {
+                  // Mirror the server's raw.adWords, so reopening the editor shows the new words.
+                  setCampaigns((list) => list.map((item) => {
+                    if (item.id !== adEdit.id) return item;
+                    const raw = (item.raw && typeof item.raw === "object" && !Array.isArray(item.raw) ? item.raw : {}) as Record<string, Json>;
+                    const words = (raw.adWords && typeof raw.adWords === "object" && !Array.isArray(raw.adWords) ? raw.adWords : {}) as Record<string, Json>;
+                    const previous = (words[adId] && typeof words[adId] === "object" ? words[adId] : {}) as Record<string, Json>;
+                    return { ...item, raw: { ...raw, adWords: { ...words, [adId]: { ...previous, ...change } } } };
+                  }));
+                  setCardNotice({ id: adEdit.id, message });
+                  setAdEdit(null);
+                }}
               />
             )}
             {visibleCampaigns.map((c) => {
@@ -2132,9 +2149,18 @@ function BusinessCampaigns({
                         {formatNumber(r.whatsapp_opens)} opened WhatsApp, {formatNumber(r.conversations)} messaged you
                       </p>
                     )}
+                    {r && (r.customers ?? 0) > 0 && (
+                      // #798: what a real customer cost, beside the per-enquiry figures.
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Customers">
+                        <Stat label={r.customers === 1 ? "Customer" : "Customers"} value={formatNumber(r.customers ?? 0)} />
+                        <Stat label="Per customer" value={(() => { const cost = costPerCustomer(r.spend, r.customers ?? 0); return cost === null ? "—" : formatMoney(cost); })()} />
+                        <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
+                      </div>
+                    )}
                     {r && outcome === "whatsapp" && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
-                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))} />
+                        onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
+                        onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />
                     )}
                     {r && outcome === "instant_form" && !(r.spend > 0) && (
                       <p className="text-sm text-slate-600">

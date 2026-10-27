@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { firstPrompt, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue } from "../scripts/team-supervisor.mjs";
+import { didWork, firstPrompt, lastWakes, lastWords, liveRoles, pickRole, prompt, restartPrompt, roleFromPrompt, runsToday, scheduledJobsDue, exportDue, exportsToPrune } from "../scripts/team-supervisor.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "supervisor-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -53,8 +53,34 @@ describe("team-supervisor (#573 A1)", () => {
       qa: { state: "has-work", items: ["#643 review"] },
       reviewer: { state: "has-work", items: ["#673 audit"] },
     };
-    expect(pickRole(statuses, new Set(["qa"]))).toEqual({ role: "reviewer", items: ["#673 audit"] });
+    expect(pickRole(statuses, new Set(["qa"]))).toEqual({ role: "reviewer", items: ["#673 audit"], overdue: true });
     expect(pickRole(statuses, new Set(["qa", "reviewer"]))).toBeNull();
+  });
+
+  it("wakes an hour-overdue role first (longest wait, then bottleneck order), even past the daily cap (#573)", () => {
+    const statuses = {
+      devops: { state: "has-work", items: ["#884 backup"] },
+      qa: { state: "has-work", items: ["#952 verdict"] },
+      analyst: { state: "has-work", items: ["#750 research"] },
+    };
+    const now = Date.parse("2026-10-27T10:00:00Z");
+    const last = { devops: "2026-10-27T09:40:00Z", qa: "2026-10-27T08:30:00Z", analyst: "2026-10-27T07:00:00Z" };
+    expect(pickRole(statuses, new Set(), undefined, { last, now })?.role).toBe("analyst");
+    expect(pickRole(statuses, new Set(), undefined, { last: { devops: "2026-10-27T09:40:00Z" }, now })?.role).toBe("qa");
+    expect(pickRole(statuses, new Set(), undefined, { last, now, capped: true })?.role).toBe("analyst");
+    const fresh = { devops: "2026-10-27T09:40:00Z", qa: "2026-10-27T09:30:00Z", analyst: "2026-10-27T09:20:00Z" };
+    expect(pickRole(statuses, new Set(), undefined, { last: fresh, now })).toEqual({ role: "devops", items: ["#884 backup"], overdue: false });
+    expect(pickRole(statuses, new Set(), undefined, { last: fresh, now, capped: true })).toBeNull();
+    expect(lastWakes({ runs: [{ role: "qa", start: "2026-10-27T08:00:00Z" }, { role: "qa", start: "2026-10-27T09:00:00Z" }] })).toEqual({ qa: "2026-10-27T09:00:00Z" });
+  });
+
+  it("counts only runs that left signed GitHub work toward the daily cap; the hard ceiling counts all", () => {
+    const now = new Date("2026-10-27T12:00:00Z");
+    const state = { runs: [{ start: "2026-10-27T01:00:00Z", worked: true }, { start: "2026-10-27T02:00:00Z", worked: false }, { start: "2026-10-27T03:00:00Z" }] };
+    expect(runsToday(state, now)).toBe(2);
+    expect(runsToday(state, now, { all: true })).toBe(3);
+    expect(didWork(["QA (headless): #952 approved", "other"], "qa")).toBe(true);
+    expect(didWork(["QA: approved", "QA 2 (headless): read"], "qa")).toBe(false);
   });
 
   it("counts only today's runs toward the daily cap", () => {
@@ -98,5 +124,21 @@ describe("scheduled-jobs dispatch (#692)", () => {
   it("logs a run's final words, so a short run shows what it decided", () => {
     expect(lastWords("I'll check #741.\n\nThe 24 h read isn't due until 2026-10-27T11:19Z; posted that on #741.\n")).toBe("The 24 h read isn't due until 2026-10-27T11:19Z; posted that on #741.");
     expect(lastWords("")).toBe("(no output)");
+  });
+});
+
+describe("nightly export (#884)", () => {
+  it("runs once a night, after 20:00Z, and catches up after the Mac slept through it", () => {
+    expect(exportDue("2026-10-25T20:10:00Z", new Date("2026-10-26T19:59:00Z"))).toBe(false);
+    expect(exportDue("2026-10-26T16:38:00Z", new Date("2026-10-27T09:47:00Z"))).toBe(true);
+    expect(exportDue(null, new Date("2026-10-26T20:05:00Z"))).toBe(true);
+    expect(exportDue("2026-10-25T20:10:00Z", new Date("2026-10-26T20:05:00Z"))).toBe(true);
+    expect(exportDue("2026-10-26T20:10:00Z", new Date("2026-10-26T23:00:00Z"))).toBe(false);
+    expect(exportDue("2026-10-26T20:10:00Z", new Date("2026-10-27T03:00:00Z"))).toBe(false);
+  });
+  it("keeps the newest 7 export folders and ignores anything else", () => {
+    const names = Array.from({ length: 9 }, (_, i) => `2026-10-${String(18 + i).padStart(2, "0")}T20-10Z`);
+    expect(exportsToPrune([...names, "notes.txt"])).toEqual(["2026-10-19T20-10Z", "2026-10-18T20-10Z"]);
+    expect(exportsToPrune(names.slice(0, 3))).toEqual([]);
   });
 });

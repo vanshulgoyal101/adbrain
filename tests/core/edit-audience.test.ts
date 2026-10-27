@@ -4,6 +4,8 @@ import patchTape from "./fixtures/meta/edit-audience-patch.json";
 import rateLimitedTape from "./fixtures/meta/edit-audience-patch-rate-limited.json";
 import whatsappTape from "./fixtures/meta/edit-audience-whatsapp.json";
 import legacyWhatsAppTape from "./fixtures/meta/edit-audience-whatsapp-legacy.json";
+import languageTape from "./fixtures/meta/edit-audience-language.json";
+import whatsappLanguageTape from "./fixtures/meta/edit-audience-whatsapp-language.json";
 import { CampaignDeliveryError, MetaClient, MetaError } from "@/lib/meta/client";
 import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 
@@ -12,6 +14,7 @@ import { TargetingExclusionsMissingError } from "@/lib/meta/service-area";
 // - rebuild: the ad set has interests, which Meta won't patch in place (100/1359202)
 // - patch:   the ad set has none
 // - whatsapp: a click-to-WhatsApp ad set without interests, which Meta won't patch either (#912)
+// - language / whatsapp-language: English (All) + Hindi only, patched and rebuilt; Meta stores 1001 as [6, 24]
 // - rate-limited: Meta allows one targeting update per ad set per 30 s (#613), validate_only included
 //   (its ad set read's field list was extended with budget_remaining after recording; bodies unchanged)
 
@@ -90,6 +93,8 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     expect(posts.some(call => call.path === adSetId && "targeting" in call.form)).toBe(false);
     expect(JSON.parse(posts[1].form.promoted_object ?? "{}")).toMatchObject({ page_id: creds.pageId });
     expect(posts[1].form).toMatchObject({ status: "PAUSED", destination_type: "WHATSAPP" });
+    // #906/#913: the rebuilt WhatsApp ad set leaves Audience Network out; Meta accepted it (re-recorded after #913).
+    expect(JSON.parse(posts[1].form.targeting).publisher_platforms).toEqual(["facebook", "instagram", "messenger"]);
     expect(posts.at(-1)).toEqual({ method: "POST", path: adSetId, form: { status: "ARCHIVED" } });
     expect(tape.sent.some(call => call.form.status === "ACTIVE")).toBe(false);
     expect(tape.pending).toEqual([]);
@@ -209,5 +214,58 @@ describe("core: edit a launched ad set's audience (#773)", () => {
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: {} })).rejects.toThrow("Invalid audience change.");
     await expect(meta.editAdSetTargeting(campaignId, { adSetId, adIds: ["a"], changes: { age: { min: 40, max: 30 } } })).rejects.toThrow("Invalid audience change.");
     expect(tape.sent.filter(call => call.method !== "GET")).toEqual([]);
+  });
+  describe("language (#773)", () => {
+    const languages = { languages: [1001, 46] };
+
+    it("patches the ad set's locales and accepts Meta storing English (All) as US + UK", async () => {
+      const tape = replay(languageTape);
+      const { campaignId, adSetId, adId } = ids(languageTape);
+      const meta = new MetaClient(creds);
+      const input = { adSetId, adIds: [adId], changes: languages };
+      expect(await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).toMatchObject({ mode: "patch", validated: true });
+      expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "patch", validated: false, adSetId, adIds: [adId], retiredAdSetId: null });
+      const posts = tape.sent.filter(call => call.method === "POST");
+      expect(posts.map(call => call.form.execution_options)).toEqual(['["validate_only"]', undefined]);
+      const sent = JSON.parse(posts[1].form.targeting);
+      expect(sent.locales).toEqual([1001, 46]);
+      // Only the language changed: the area, exclusions and ages are sent back as Meta had them.
+      const source = (languageTape as Exchange[]).find(exchange => exchange.method === "GET" && exchange.path.startsWith(`${adSetId}?fields=id%2Ccampaign_id`))!.body as { targeting: Record<string, unknown> };
+      expect({ ...sent, locales: undefined }).toEqual({ ...source.targeting, locales: undefined });
+      const readBack = (languageTape as Exchange[]).at(-1)!.body as { targeting: { locales: number[] } };
+      expect(readBack.targeting.locales).toEqual([6, 24, 46]);
+      expect(tape.pending).toEqual([]);
+    });
+
+    it("rebuilds a WhatsApp ad set with the new locales", async () => {
+      const tape = replay(whatsappLanguageTape);
+      const { campaignId, adSetId, adId, copiedAdId, newAdSetId } = ids(whatsappLanguageTape);
+      const meta = new MetaClient(creds);
+      const input = { adSetId, adIds: [adId], changes: languages };
+      expect((await meta.editAdSetTargeting(campaignId, input, { validateOnly: true })).mode).toBe("rebuild");
+      expect(await meta.editAdSetTargeting(campaignId, input)).toEqual({ mode: "rebuild", validated: false, adSetId: newAdSetId, adIds: [copiedAdId], retiredAdSetId: adSetId });
+      const created = tape.sent.filter(call => call.method === "POST" && /^act_\d+\/adsets$/.test(call.path));
+      expect(created.map(call => JSON.parse(call.form.targeting).locales)).toEqual([[1001, 46], [1001, 46]]);
+      expect(created[1].form).toMatchObject({ status: "PAUSED", destination_type: "WHATSAPP" });
+      expect(tape.sent.some(call => call.form.status === "ACTIVE")).toBe(false);
+      expect(tape.pending).toEqual([]);
+    });
+
+    it("refuses a patch Meta read back without the new languages", async () => {
+      const tampered = structuredClone(languageTape) as Exchange[];
+      (tampered.at(-1)!.body as { targeting: { locales: number[] } }).targeting.locales = [6, 24];
+      replay(tampered);
+      const { campaignId, adSetId, adId } = ids(languageTape);
+      await expect(new MetaClient(creds).editAdSetTargeting(campaignId, { adSetId, adIds: [adId], changes: languages }))
+        .rejects.toThrow("Meta did not confirm the new audience.");
+    });
+
+    it("refuses an unlisted or repeated language before calling Meta", async () => {
+      const tape = replay([]);
+      const meta = new MetaClient(creds);
+      await expect(meta.editAdSetTargeting("1", { adSetId: "2", adIds: ["3"], changes: { languages: [9999] } })).rejects.toThrow("Invalid audience change.");
+      await expect(meta.editAdSetTargeting("1", { adSetId: "2", adIds: ["3"], changes: { languages: [46, 46] } })).rejects.toThrow("Invalid audience change.");
+      expect(tape.sent).toEqual([]);
+    });
   });
 });

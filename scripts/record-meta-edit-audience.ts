@@ -4,8 +4,12 @@
  *   - rebuild: an ad set with interests (Meta refuses an in-place targeting update, 100/1359202)
  *   - patch:   an ad set without interests
  *   - whatsapp: a click-to-WhatsApp ad set (Meta refuses any in-place targeting update there too, #912)
+ *   - language: an ad set without interests, patched to English (All) + Hindi only (`locales`)
+ *   - whatsapp-language: the same language change on a click-to-WhatsApp ad set (rebuilt)
  *
- *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp]
+ *   npx tsx --env-file=<path to .env.local> scripts/record-meta-edit-audience.ts <imageUrl> [rebuild|patch|whatsapp|language|whatsapp-language] [campaignId]
+ * With a campaignId, the PAUSED test campaign already exists (e.g. launched by older code, #912) and is
+ * edited and archived instead of launched.
  *
  * Uses META_SYSTEM_USER_TOKEN / META_AD_ACCOUNT_ID / META_PAGE_ID. Tokens are stripped from the fixtures.
  */
@@ -73,6 +77,15 @@ async function archive(campaignId: string) {
   }).then(response => response.json());
 }
 
+/** The ad set and ad ids of an existing PAUSED test campaign. */
+async function existingCampaign(campaignId: string) {
+  const token = process.env.META_SYSTEM_USER_TOKEN!;
+  const read = async (edge: string) => (await (await realFetch(`${GRAPH}${campaignId}/${edge}?fields=id,status&access_token=${token}`)).json()) as { data?: Array<{ id: string; status: string }> };
+  const [adSets, ads] = await Promise.all([read("adsets"), read("ads")]);
+  if (!adSets.data?.length || !ads.data?.length || [...adSets.data, ...ads.data].some(item => item.status !== "PAUSED")) throw new Error("Use a PAUSED test campaign with an ad set and ads.");
+  return { campaignId, adSetIds: adSets.data.map(item => item.id), adIds: ads.data.map(item => item.id) };
+}
+
 async function main() {
   const imageUrl = process.argv[2];
   if (!imageUrl) throw new Error("Pass a public creative image URL.");
@@ -95,11 +108,12 @@ async function main() {
   const created: string[] = [];
   try {
     const only = process.argv[3];
-    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []]] as const) {
+    for (const [path, interests] of [["rebuild", audience.interests], ["patch", []], ["whatsapp", []], ["language", []], ["whatsapp-language", []]] as const) {
       if (only && only !== path) continue;
-      const whatsapp = path === "whatsapp";
+      const whatsapp = path.startsWith("whatsapp");
       if (whatsapp && !whatsappNumber) throw new Error("No WhatsApp number on the Page or the business.");
-      const launch = await meta.createLeadCampaign({
+      const existing = process.argv[4];
+      const launch = existing ? await existingCampaign(existing) : await meta.createLeadCampaign({
         name: `AdBrain edit-audience fixture ${path} ${new Date().toISOString().slice(0, 16)} (PAUSED test)`,
         dailyBudgetRupees: 200, leadFormId: forms[0].id, link: "https://adbrain.vanshul.com",
         creatives: [{ imageUrl, headline: "Lower electricity bills", message: "Rooftop solar for Tricity homes.", cta: "Learn More" }],
@@ -107,8 +121,10 @@ async function main() {
         ...whatsapp ? { destination: "whatsapp" as const, whatsappNumber: whatsappNumber!, boundWhatsAppNumbers: [whatsappNumber!], link: `https://wa.me/${whatsappNumber!.slice(1)}` } : { destination: "instant_form" as const },
       });
       created.push(launch.campaignId);
+      // Meta's campaign → ad sets edge can list nothing for a few seconds after a launch.
+      if (!existing) await new Promise(resolve => setTimeout(resolve, 15_000));
       tape = [];
-      const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes };
+      const input = { adSetId: launch.adSetIds[0], adIds: launch.adIds, changes: path.endsWith("language") ? { languages: [1001, 46] } : changes };
       const validated = await meta.editAdSetTargeting(launch.campaignId, input, { validateOnly: true });
       // Meta allows one targeting update per ad set per 30 s (#613), validate_only included.
       await new Promise(resolve => setTimeout(resolve, 31_000));

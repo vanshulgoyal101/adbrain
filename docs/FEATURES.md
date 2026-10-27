@@ -37,7 +37,7 @@ ID are different identifiers. Never infer one from another.
 | --- | --- | --- |
 | `/dashboard` | Results so far first (enquiries, spent, per enquiry, oldest update; same latest results as the campaign cards, #764), next action, onboarding progress, activity | Uses stored state; not proof of live provider health |
 | `/brand` | Profile, assets, Markdown instructions | Saved business facts ground AI output |
-| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. An unedited suggestion on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question, and shows the brief as a collapsed 'What I'll write about · Edit' line instead (#858) |
+| `/create` | Guided creative interview and brief review | Reviewing a brief is distinct from paid generation; the Brand context panel names missing offers, service areas and phone before a run. An unedited suggestion on a Brand with an offer or proof point, an area and a phone skips the review when the interview needs no question, and shows the brief as a collapsed 'What I'll write about · Edit' line instead (#858). Up to two 'Coming up' occasion chips (festivals and seasons for today's date in IST, `src/lib/seasonal.ts`) fill the goal in one tap; their wording asks for saved offers only and never asserts a sale, discount or deadline (#700) |
 | `/studio` | Generate, inspect, approve, edit (ad text, words on picture, background), regenerate (asks first), delete, export, share approved ads (phone share sheet; desktop downloads and copies the text); "Create campaign (N)" links approved ads to Campaigns | Approval and sharing do not publish an ad on Meta |
 | `/assets` | Browse/reuse/download saved images | Download/clipboard failures are surfaced |
 | `/campaigns` | Draft, review, create paused, activate/pause, sync, report; `?new=1&creatives=<ids>` opens the composer with those approved ads selected | Live Meta writes require verified binding and capability |
@@ -348,9 +348,11 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   message kept), the ad goes back to review, and nothing else changes. Same claim checks as Studio.
 - A business's saved WhatsApp message (`businesses.whatsapp_template`, #840) is what every
   new WhatsApp campaign sends: the welcome, then a pre-typed message (optionally with a Call
-  now button) or up to 3 questions. With nothing saved, AdBrain writes the greeting and
-  prefill per campaign as before. The ledger records the button and whether it was saved
-  or suggested.
+  now button) or up to 3 questions. A campaign's own edit (draft `whatsappMessage`) wins over
+  it, with the same claim checks as a blocker. With neither, AdBrain writes the greeting and
+  prefill per campaign as before. Review returns the exact message (`whatsappMessage`) and
+  launch sends that one; an edited or saved message is part of the plan hash. The ledger
+  records the button and whether it was edited, saved or suggested.
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the
@@ -502,9 +504,12 @@ leads, not a broken campaign. WhatsApp conversations are not imported.
 
 The inbox searches, filters (follow-up status, contact details), sorts and pages
 saved enquiries on the server, with matching totals. Owners can record a
-follow-up status (`new`, `contacted`, `qualified`, `booked`, `closed`) and a
+follow-up status (`new`, `contacted`, `qualified`, `booked`, `customer`, `closed`) and a
 note up to 2000 characters; a failed save keeps the edits for retry. Follow-up is
-local record-keeping only and sends nothing.
+local record-keeping only and sends nothing. Each row also has a one-tap **Became a
+customer** button with Undo (#798). A campaign card then shows its customers and
+**Per customer** (Meta spend ÷ enquiries marked as customers, any source) once
+there is at least one.
 
 The copy-ready digest summarizes the last seven days of the currently loaded
 enquiries with at most ten contacts, including email where available. It is not

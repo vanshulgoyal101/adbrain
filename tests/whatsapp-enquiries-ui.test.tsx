@@ -53,6 +53,25 @@ describe("<WhatsAppEnquiries> (#335)", () => {
   });
 });
 
+describe("<WhatsAppEnquiries> one-tap customer (#798)", () => {
+  it("adds a customer in one tap and Undo removes it", async () => {
+    const onCustomers = vi.fn();
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => init?.method === "DELETE"
+      ? Response.json({ enquiries: 1, customers: 0 })
+      : Response.json({ id: "40000000-0000-4000-8000-000000000001", enquiries: 2, customers: 1 }, { status: 201 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<WhatsAppEnquiries campaignId={CAMPAIGN} spend={140} enquiries={1} onLogged={vi.fn()} onCustomers={onCustomers} />);
+    fireEvent.click(screen.getByRole("button", { name: "Got a customer from this ad? Add 1 customer" }));
+    expect(await screen.findByText("Added 1 customer.")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(`/api/campaigns/${CAMPAIGN}/enquiries`, expect.objectContaining({ method: "POST", body: JSON.stringify({ customer: true }) }));
+    expect(onCustomers).toHaveBeenLastCalledWith(1, 2);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Removed that customer.")).toBeInTheDocument();
+    expect(fetch).toHaveBeenLastCalledWith(`/api/campaigns/${CAMPAIGN}/enquiries?lead=40000000-0000-4000-8000-000000000001`, { method: "DELETE" });
+    expect(onCustomers).toHaveBeenLastCalledWith(0, 1);
+  });
+});
+
 describe("<Campaigns> real enquiries on results (#335)", () => {
   const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-1", name: "Solaride", locations: ["Mohali"] } as Business;
   const campaign = (id: string, destination: string) => ({ id, business_id: business.id, name: `${destination} run`, status: "active", objective: "engagement", destination, daily_budget: 280, created_at: "2026-10-23T00:00:00Z", meta_campaign_id: `meta-${id}`, creative_ids: [], raw: {} }) as unknown as Campaign;
@@ -68,5 +87,21 @@ describe("<Campaigns> real enquiries on results (#335)", () => {
     const panels = screen.getAllByRole("region", { name: "Real enquiries" });
     expect(panels).toHaveLength(1);
     expect(within(panels[0]).getByText("₹140")).toBeInTheDocument();
+  });
+
+  // #798: ₹ per customer shows once an enquiry became a customer, on any destination.
+  it("shows customers and the cost per customer only after the first one", () => {
+    localStorage.setItem(`campaign-sync:${business.owner_id}:${business.id}:act_1`, String(Date.now()));
+    const form = campaign("40000000-0000-4000-8000-000000000003", "instant_form");
+    const none = campaign("40000000-0000-4000-8000-000000000004", "instant_form");
+    render(<Campaigns business={business} approved={[]} initialCampaigns={[form, none]}
+      initialResults={{ [form.id]: result(form.id, { spend: 900, leads: 3, cpl: 300, customers: 2 }), [none.id]: result(none.id, { leads: 1, cpl: 140, customers: 0 }) }}
+      leadForms={[]} leadFormError={null} metaReady adAccountId="act_1" />);
+    const panels = screen.getAllByLabelText("Customers");
+    expect(panels).toHaveLength(1);
+    expect(within(panels[0]).getByText("Per customer")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("From customers you marked in Enquiries.")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("₹450")).toBeInTheDocument();
+    expect(within(panels[0]).getByText("2")).toBeInTheDocument();
   });
 });

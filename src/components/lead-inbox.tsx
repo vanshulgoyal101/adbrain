@@ -2,10 +2,11 @@
 
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Inbox, Loader2, MessageCircle, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Check, Copy, Inbox, Loader2, MessageCircle, RefreshCw, Search, X, Save, Pencil, ChevronDown, SlidersHorizontal, UserCheck } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Status } from "@/components/ui/status";
 import { buildLeadDigest, relativeAge } from "@/lib/leads/digest";
 import { formatDate } from "@/lib/format";
 import { useMounted } from "@/lib/use-mounted";
@@ -28,6 +29,11 @@ function saveLeadSyncTime(key: string, completedAt: number) {
 function isMetaTestLead(lead: Pick<Lead, "full_name">): boolean {
   return /^<test lead: dummy data/i.test(lead.full_name ?? "");
 }
+
+/** #798: follow-up statuses in owners' words; "customer" is an enquiry that became a customer. */
+const STATUS_LABEL: Record<WorkflowStatus, string> = {
+  new: "New", contacted: "Contacted", qualified: "Qualified", booked: "Booked", customer: "Customer", closed: "Closed",
+};
 
 function leadName(lead: Pick<Lead, "full_name">): string | null {
   return isMetaTestLead(lead) ? "Test enquiry from Meta" : lead.full_name;
@@ -69,6 +75,8 @@ export function LeadInbox({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [syncId, setSyncId] = useState<string | null>(null);
+  const [marking, setMarking] = useState<string | null>(null);
+  const [customerNotice, setCustomerNotice] = useState<{ lead: Lead; previous: WorkflowStatus; undone?: boolean } | null>(null);
   const syncStorageKey = syncScope ? `lead-sync:${syncScope}` : null;
   const editorField = useRef<HTMLSelectElement>(null);
   const editorTrigger = useRef<HTMLButtonElement>(null);
@@ -154,6 +162,30 @@ export function LeadInbox({
       setSaveError("Follow-up could not be saved. Your edits are still here; retry to save them.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  const statusOf = (lead: Lead): WorkflowStatus => confirmed[draftKey(lead)]?.status ?? lead.workflow_status ?? "new";
+
+  /** #798: one tap marks an enquiry as a customer (and Undo puts the old status back); notes are kept. */
+  async function setCustomer(lead: Lead, status: WorkflowStatus, previous: WorkflowStatus) {
+    if (marking) return;
+    setMarking(lead.id);
+    try {
+      const response = await fetch(`/api/leads/${lead.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow_status: status }),
+      });
+      const data = await response.json() as { lead?: Lead };
+      if (!response.ok || data.lead?.id !== lead.id || data.lead.business_id !== lead.business_id) throw new Error("Save failed");
+      const savedRow = { status: data.lead.workflow_status ?? status, note: data.lead.follow_up_note ?? "" };
+      setConfirmed(current => ({ ...current, [draftKey(lead)]: savedRow }));
+      if (selected?.id === lead.id) { setSelected(data.lead); setDraftStatus(savedRow.status); }
+      setCustomerNotice({ lead, previous, undone: status !== "customer" });
+      page.refresh();
+    } catch {
+      setError("Couldn't save that. Check your connection and try again.");
+    } finally {
+      setMarking(null);
     }
   }
 
@@ -276,6 +308,17 @@ export function LeadInbox({
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}
+      {customerNotice && (
+        <p role="status" className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+          {customerNotice.undone
+            ? `${leadName(customerNotice.lead) ?? "This enquiry"} is back to ${STATUS_LABEL[customerNotice.previous].toLowerCase()}.`
+            : `${leadName(customerNotice.lead) ?? "This enquiry"} became a customer.`}
+          {!customerNotice.undone && (
+            <button type="button" className="min-h-11 font-medium text-blue-700" disabled={!!marking}
+              onClick={() => void setCustomer(customerNotice.lead, customerNotice.previous, customerNotice.previous)}>Undo</button>
+          )}
+        </p>
+      )}
       {/* #847: sync results are news, not alarms; the list below stays usable either way. */}
       <p aria-live="polite" className={warning || notice ? "text-sm text-slate-600" : "sr-only"}>{warning ?? notice}</p>
       {page.error && <Alert variant="error">{page.error} <button type="button" onClick={page.refresh}>Retry list</button></Alert>}
@@ -296,7 +339,7 @@ export function LeadInbox({
           </select>
           <select aria-label="Workflow status" value={status} onChange={event => setStatus(event.target.value)}>
             <option value="all">All follow-up statuses</option>
-            {workflowStatuses.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
+            {workflowStatuses.map(value => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
           </select>
           <select aria-label="Sort enquiries" value={sort} onChange={event => setSort(event.target.value)}>
             <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option>
@@ -309,7 +352,7 @@ export function LeadInbox({
       {selected && <form className={styles.editor} aria-label="Enquiry follow-up" onSubmit={saveFollowUp}>
         <div className={styles.editorHeading}><div><h3>Follow up: {leadName(selected) ?? "Unnamed enquiry"}</h3>{dirty && <p role="status" className="text-xs text-amber-800">Unsaved changes</p>}</div><button type="button" aria-label="Close follow-up" title="Close follow-up" disabled={saving} onClick={closeEditor}><X size={18} /></button></div>
         <label>Follow-up status<select ref={editorField} value={draftStatus} disabled={saving} onChange={event => { setDraftStatus(event.target.value as WorkflowStatus); setSaved(false); }}>
-          {workflowStatuses.map(value => <option key={value} value={value}>{value[0].toUpperCase() + value.slice(1)}</option>)}
+          {workflowStatuses.map(value => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}
         </select></label>
         <label>Follow-up note<textarea rows={4} maxLength={2000} value={draftNote} disabled={saving} onChange={event => { setDraftNote(event.target.value); setSaved(false); }} /></label>
         <div className={styles.editorActions}><span>{draftNote.length}/2000</span><Button type="submit" data-product-event="lead.follow_up" size="sm" disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}Save follow-up</Button></div>
@@ -371,7 +414,19 @@ export function LeadInbox({
                     <span className={styles.mobileLabel} aria-hidden="true">Received</span>
                     {whenLabel(l.created_time) || <span className={styles.blank}>—</span>}
                   </td>
-                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span><button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}, status ${confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}><Pencil size={14} aria-hidden="true" />{confirmed[draftKey(l)]?.status ?? l.workflow_status ?? "new"}</button></td>
+                  <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">Follow-up</span>
+                    <div className={styles.followUpCell}>
+                      <button type="button" className={styles.followUpButton} title={`Follow up ${leadName(l) ?? "enquiry"}`} aria-label={`Follow up ${leadName(l) ?? "enquiry"}, status ${STATUS_LABEL[statusOf(l)]}`} disabled={saving} onClick={event => editLead(l, event.currentTarget)}>
+                        <Pencil size={14} aria-hidden="true" />{statusOf(l) === "customer" ? <Status tone="live">Customer</Status> : STATUS_LABEL[statusOf(l)]}
+                      </button>
+                      {statusOf(l) !== "customer" && !isMetaTestLead(l) && (
+                        <Button type="button" size="sm" variant="outline" className="min-h-11" data-product-event="lead.customer" disabled={!!marking || saving}
+                          aria-label={`${leadName(l) ?? "This enquiry"} became a customer`} onClick={() => void setCustomer(l, "customer", statusOf(l))}>
+                          {marking === l.id ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}Became a customer
+                        </Button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

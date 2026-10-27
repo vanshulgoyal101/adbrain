@@ -16,6 +16,38 @@ export const CONCEPT_VERSION = "creative-concept-v3";
 // Primary text Meta shows on mobile before "See more" (#194).
 const FOLD_CHARACTERS = 125;
 
+// #418 rule 3 (Analyst, #941): a price the Brand states as a rate ("10,000 rupees per kilowatt") keeps its unit.
+const PRICE_AMOUNT = /(?:[$£€₹]\s?|\brs\.?\s?)(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s?(?:rupees?|rupaye|रुपये|रुपए)/giu;
+const RATE_UNIT = /^\s*(?:(?:rupees?|rupaye|रुपये|रुपए)\s*)?(?:\/|\bper\s+|प्रति\s+)\s*([\p{L}\p{M}]+)/iu;
+
+function priceRates(text: string): { amount: string; unit: string | null; shown: string }[] {
+  const value = text.normalize("NFC");
+  return [...value.matchAll(PRICE_AMOUNT)].map((match) => {
+    const unit = RATE_UNIT.exec(value.slice(match.index + match[0].length))?.[1].toLowerCase() ?? null;
+    return {
+      amount: (match[1] ?? match[2]).replace(/,/g, ""),
+      unit: unit && (/^(?:kw|kilowatts?|किलोवाट)$/u.test(unit) ? "kw" : unit.replace(/s$/, "")),
+      shown: match[0].trim(),
+    };
+  });
+}
+
+/** Amounts every supplied fact gives only as a rate, mapped to that unit; an ad stating one must keep it. */
+function rateDropIssues(output: string, facts: string[]): string[] {
+  const rates = new Map<string, Set<string | null>>();
+  for (const fact of facts) {
+    for (const { amount, unit } of priceRates(fact)) rates.set(amount, (rates.get(amount) ?? new Set()).add(unit));
+  }
+  const issues = new Set<string>();
+  for (const { amount, unit, shown } of priceRates(output)) {
+    const units = rates.get(amount);
+    if (!units || units.has(null) || (unit && units.has(unit))) continue;
+    const factUnit = [...units][0];
+    issues.add(`price-unit: "${shown}" is per ${factUnit === "kw" ? "kW" : factUnit} in the Brand facts; keep "per ${factUnit === "kw" ? "kW" : factUnit}" next to it, never as a flat price`);
+  }
+  return [...issues];
+}
+
 export const creativeConceptSchema = z.object({
   headline: z.string().trim().min(1).max(40),
   primary_text: z.string().trim().min(1).max(900),
@@ -132,7 +164,7 @@ export function conceptValidationRules(issues: string[]): string[] {
   const allowedRules = new Set([
     "sourceQuotes", "unsupported-commercial-claim", "repeated-headline", "repeated-opening",
     "cliche", "em-dash-overuse", "exclamation-spam", "all-caps", "too-long", "banned-claim",
-    "hook-length", "offer-below-fold", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
+    "hook-length", "offer-below-fold", "price-unit", "personal-attribute", "unsupported-superlative", "exaggerated-result", "no-subject",
   ]);
   return [...new Set(issues.map((issue) => {
     if (issue.startsWith("schema:")) return issue.slice(0, issue.indexOf(": "));
@@ -170,15 +202,19 @@ function placement(value: unknown): unknown {
 const ctaKey = (value: string) => value.toLowerCase().replace(/[^a-z]/g, "");
 
 // One paragraph becomes sentence lines of at most FOLD_CHARACTERS, without changing a word.
+// #713: a line over the fold is rewrapped at its sentence ends, even when the text has other line breaks.
 function shortLines(value: unknown): unknown {
-  if (typeof value !== "string" || value.includes("\n") || value.trim().length <= FOLD_CHARACTERS) return value;
-  const lines: string[] = [];
-  for (const sentence of value.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
-    const last = lines.length - 1;
-    if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
-    else lines.push(sentence);
-  }
-  return lines.join("\n");
+  if (typeof value !== "string" || !value.split("\n").some((line) => line.trim().length > FOLD_CHARACTERS)) return value;
+  return value.trim().split("\n").map((paragraph) => {
+    if (paragraph.trim().length <= FOLD_CHARACTERS) return paragraph;
+    const lines: string[] = [];
+    for (const sentence of paragraph.trim().split(/(?<=[.!?])\s+(?=\S)/u)) {
+      const last = lines.length - 1;
+      if (last >= 0 && lines[last].length + 1 + sentence.length <= FOLD_CHARACTERS) lines[last] += ` ${sentence}`;
+      else lines.push(sentence);
+    }
+    return lines.join("\n");
+  }).join("\n");
 }
 
 // Fix cosmetic slips once; headline and primary text are never clipped, so they still fail when too long.
@@ -401,14 +437,15 @@ export function validateConcept(
     input.instructions ?? "",
     ...(input.sourceFacts ?? []),
   ].filter((value): value is string => typeof value === "string");
-  const quoteIssues: string[] = [];
+  const quotes = parsed.data.sourceQuotes.map((quote) => ({ quote, verbatim: verbatimQuote(quote, sources) }));
+  const verbatimQuotes = quotes.flatMap(({ verbatim }) => (verbatim === null ? [] : [verbatim]));
+  // #713: a stray quote beside verbatim ones is dropped, not repaired; claims are still checked against the rest.
+  const quoteIssues = verbatimQuotes.length
+    ? []
+    : quotes.map(({ quote }) => `sourceQuotes: quote not present in supplied facts: ${quote}`);
   const concept = {
     ...parsed.data,
-    sourceQuotes: parsed.data.sourceQuotes.map((quote) => {
-      const verbatim = verbatimQuote(quote, sources);
-      if (verbatim === null) quoteIssues.push(`sourceQuotes: quote not present in supplied facts: ${quote}`);
-      return verbatim ?? quote;
-    }),
+    sourceQuotes: verbatimQuotes.length ? verbatimQuotes : parsed.data.sourceQuotes,
   };
   const normalizeCopy = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
   const opening = (text: string) => normalizeCopy(text).split(" ").slice(0, 8).join(" ");
@@ -492,6 +529,7 @@ export function validateConcept(
       claims.add(`claim:${claimClass(term)}:${cited ? "negated-quote" : "uncited"}`);
     }
   }
+  issues.push(...rateDropIssues([concept.headline, concept.primary_text, concept.supportingText, concept.description].filter(Boolean).join("\n"), facts));
   const primaryText = concept.primary_text.normalize("NFC");
   const offer = new RegExp(commercialTerms.source, "iu").exec(primaryText);
   // "10,000 rupaye per kW" leading the first line is the same amount as "₹10,000/kW" (#418).
@@ -499,9 +537,28 @@ export function validateConcept(
   if (offer && offer.index >= FOLD_CHARACTERS && !(spelled >= 0 && spelled < FOLD_CHARACTERS)) {
     issues.push(`offer-below-fold: "${offer[0]}" starts at character ${offer.index + 1}; mobile readers only see the first ${FOLD_CHARACTERS}, so move the offer into the first line`);
   }
-  return issues.length
-    ? { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) }
-    : { success: true, concept };
+  if (issues.length) return { success: false, issues, ...(claims.size ? { claims: [...claims] } : {}) };
+  const pictureOffer = offerOnPicture(concept, input.brand.offers ?? []);
+  return { success: true, concept: pictureOffer ? { ...concept, supportingText: pictureOffer } : concept };
+}
+
+/**
+ * #418 rule 2 (Analyst, #941): the offer the copy states also goes on the picture. When neither the
+ * headline nor the picture line carries it, the picture line becomes the owner's own offer fact, so
+ * it costs no repair and invents nothing. Indic-script copy keeps its own line: an English fact on a
+ * Hindi or Punjabi picture would mix scripts, and those replies already put the offer there.
+ */
+function offerOnPicture(concept: CreativeConcept, offers: string[]): string | null {
+  const copy = concept.primary_text.normalize("NFC");
+  if (/[\u0900-\u0DFF]/u.test(copy)) return null;
+  const shown = [concept.headline, concept.supportingText ?? ""].join("\n").normalize("NFC");
+  const facts = [...new Set(offers.map((offer) => offer.normalize("NFC").trim()))];
+  for (const term of claimedTerms(copy)) {
+    if (citesTerm(shown, term)) return null;
+    const matches = facts.filter((fact) => fact.length <= 64 && citesTerm(fact, term) && sameOffer(copy, term, fact));
+    if (matches.length === 1) return matches[0];
+  }
+  return null;
 }
 
 export function conceptImagePrompt(

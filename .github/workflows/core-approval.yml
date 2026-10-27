@@ -1,0 +1,43 @@
+name: Core approval
+# Required check (#926): PRs touching core launch/Meta/money paths or migrations need a QA, Reviewer or
+# CTO approval of the current head. Sets the `core-approval` commit status on the PR head.
+# Never runs PR code: it checks out the default branch and only reads PR metadata through the API.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions: {}
+
+concurrency:
+  group: core-approval-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  verdict:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Set core-approval on the PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          # The script runs from the default branch; until the train promotes it there, skip quietly.
+          if [ ! -f scripts/core-approval.mjs ]; then echo "core-approval.mjs not on the default branch yet; skipping."; exit 0; fi
+          node scripts/core-approval.mjs --pr "$PR"
