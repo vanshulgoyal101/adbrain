@@ -12,15 +12,19 @@ type CampaignPage = {
 
 type CampaignPages = InfiniteData<CampaignPage, string | null>;
 
+/** #1003: server renders already shown in this tab. Back/forward replays a page's old render (Next reuses it). */
+const shownRenders = new Set<string>();
+
 export function useCampaignList(input: {
   ownerId: string;
   businessId: string;
   initialCampaigns: Campaign[];
   initialResults: Record<string, CampaignResult>;
   initialNextCursor: string | null;
+  renderId?: string;
   onError: (message: string) => void;
 }) {
-  const { ownerId, businessId, initialCampaigns, initialResults, initialNextCursor, onError } = input;
+  const { ownerId, businessId, initialCampaigns, initialResults, initialNextCursor, renderId, onError } = input;
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { gcTime: 60_000 } } });
     client.setQueryData<CampaignPages>(["campaign-list", ownerId, businessId, { query: "", status: "all" }], {
@@ -143,6 +147,16 @@ export function useCampaignList(input: {
     receivePage(initialPage);
   });
   useEffect(() => { receiveInitialPage(); }, [ownerId, businessId, initialCampaigns, initialNextCursor, initialResults]);
+
+  // #1003: a render shown before is a replay from before any pause or edit made since, so read the list again once.
+  const replayChecked = useRef(false);
+  const refetchReplay = useEffectEvent(() => { void queryClient.invalidateQueries({ queryKey, exact: true }); });
+  useEffect(() => {
+    if (!renderId || replayChecked.current) return;
+    replayChecked.current = true;
+    if (shownRenders.has(renderId)) refetchReplay();
+    shownRenders.add(renderId);
+  }, [renderId]);
 
   return { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage };
