@@ -5,7 +5,8 @@ import { effectiveDailyBudget } from "@/lib/campaign/spend";
 import type { DraftInput, ReviewDTO } from "@/lib/campaign/connect-contracts";
 import type { ReviewBlockerReason, SelectedAssets } from "@/lib/meta/connect-contracts";
 import { normalizeWebsite } from "@/lib/brand/validation";
-import { reviewWarnings } from "@/lib/campaign/plan-check";
+import { askMismatchWarning, reviewWarnings } from "@/lib/campaign/plan-check";
+import { quotedAsk, sameWords } from "@/lib/campaign/whatsapp-greeting";
 import type { ResolvedWhatsAppMessage } from "@/lib/campaign/whatsapp-template";
 
 export interface PreflightCreative {
@@ -278,6 +279,10 @@ export function runPreflight(input: PreflightInput): ReviewDTO {
     storyReady: input.creatives.length > 0 && input.creatives.every((creative) => creative.storyReady === true),
     perAdSetDailyBudgetRupees, costPerResultRupees: input.costPerResultRupees,
   });
+  // #418 rule 7: an ad that tells customers what to send should match what WhatsApp pre-types. Never a blocker.
+  const prefill = draft.destination === "whatsapp" ? input.whatsappMessage?.opening.autofill?.trim() : "";
+  const mismatch = prefill ? input.creatives.map((creative) => quotedAsk(creative.primaryText)).find((ask) => ask && !sameWords(ask, prefill)) : null;
+  if (mismatch) planWarnings.push(askMismatchWarning(mismatch, prefill!));
 
   return {
     draftId: input.draftId,

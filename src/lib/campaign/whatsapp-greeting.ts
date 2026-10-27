@@ -12,6 +12,24 @@ function offerPhrase(offer: string): string {
   return (trimmed.split(":").pop() ?? "").trim() || trimmed;
 }
 
+/**
+ * #418 rule 7: the words an ad's last line tells customers to send, when it quotes them
+ * ('WhatsApp “Free survey” to book'). Null when the last line quotes nothing.
+ */
+export function quotedAsk(primaryText: string | null | undefined): string | null {
+  const last = (primaryText ?? "").split(/\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? "";
+  // Paired quotes only: a plain apostrophe ("Solaride's", "it's") is not a quote.
+  const match = /“([^”]{2,80})”|"([^"]{2,80})"|«([^»]{2,80})»|‘([^’]{2,80})’/u.exec(last);
+  const words = match?.slice(1).find(Boolean)?.trim();
+  return words && /[\p{L}\p{N}]/u.test(words) ? words : null;
+}
+
+/** Same words, ignoring case, spacing and end punctuation. */
+export function sameWords(left: string, right: string): boolean {
+  const norm = (text: string) => text.toLowerCase().replace(/[\s]+/g, " ").replace(/[.!?।]+$/u, "").trim();
+  return norm(left) === norm(right);
+}
+
 type Language = "en" | "hi" | "pa" | "hinglish";
 /** A campaign's choice for its WhatsApp message (#493): "ad" follows the ads' own language. */
 export type WhatsAppLanguage = "ad" | Language;
@@ -77,8 +95,11 @@ export function whatsappGreeting(
   adLanguages: (string | null | undefined)[] = [],
   /** The campaign's choice; "ad" (default) follows the ads. */
   chosen: WhatsAppLanguage = "ad",
+  /** #418 rule 7: each ad's quoted ask (`quotedAsk`); when every ad quotes the same words, they are the pre-typed message. */
+  asks: (string | null)[] = [],
 ): WhatsAppGreeting {
   const name = brand.name.trim();
+  const ask = asks.length && asks.every((value) => value && sameWords(value, asks[0]!)) ? asks[0]! : null;
   const copy = adCopy.join(" ");
   const language = whatsappLanguageFor(adCopy, adLanguages, chosen);
   const rank = (offer: string) => (/^free\b/i.test(offer) ? 2 : /\d/.test(offer) ? 1 : 0);
@@ -93,7 +114,7 @@ export function whatsappGreeting(
   const lower = offer && offer[0].toLowerCase() + offer.slice(1);
   const phrase = offer && lower !== offer && copy.includes(lower) ? lower : offer;
   return {
-    autofill: (phrase ? text.offer(phrase, city) : text.business(name, city)).slice(0, 300),
+    autofill: (ask ?? (phrase ? text.offer(phrase, city) : text.business(name, city))).slice(0, 300),
     greeting: text.greeting(name).slice(0, 300),
   };
 }

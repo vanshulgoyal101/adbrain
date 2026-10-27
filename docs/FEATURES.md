@@ -367,6 +367,10 @@ remain instant-form campaigns. Call campaigns are not supported by this editor.
   one keeps the part after its label, never cut mid-claim; a free offer is never asked as a cost),
   "What's the price?" and "Call me back", per language. They are only suggestions: nothing is sent
   until the owner saves, and saving runs the claim check.
+  #418 rule 7: when every ad's last line quotes the words to send ('WhatsApp “Free site survey” to
+  book'), AdBrain's suggested pre-typed message is exactly those words (`quotedAsk`). When an ad
+  quotes other words than the message WhatsApp will pre-type (a saved or edited one), Review warns
+  (never blocks): "An ad asks customers to send “…”, but WhatsApp pre-types “…”".
 - Every Indian ad set also excludes everything outside the service area (#741):
   every state/UT with no included place (Tricity: all but Chandigarh, Punjab and
   Haryana), plus the larger cities in the kept states that lie further than the
