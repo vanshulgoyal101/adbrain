@@ -49,6 +49,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 	Proceed with useful work; do not return only an acknowledgement.
 - One writer per source/resource. Low-risk PRs (no migration, money, tenant/auth
 	or config change) auto-merge on green CI and the author smoke-tests production.
+	Auto-merge is only for low-risk PRs; the required `core-approval` check holds any
+	PR touching Meta/launch/money paths or migrations until QA, the Reviewer or the
+	CTO approves its head (#926). To hold a PR, `gh pr merge <n> --disable-auto`: a
+	hold comment can't stop auto-merge.
 	DevOps owns migrations, money/tenant releases, config and rollback. Talk directly
 	to another owner when needed; do not route routine
 	decisions through the CEO or CTO or ask the user to relay worker messages.
