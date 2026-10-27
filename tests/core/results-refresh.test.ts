@@ -9,7 +9,7 @@ type Exchange = { method: string; path: string; status: number; body: unknown };
 type Row = Record<string, unknown> & { id: string; status: string; raw: Record<string, unknown> };
 
 const SECRET = "cron-secret-value";
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const live = "120253678786150526", paused = "120253164673180526";
 
 const db = vi.hoisted(() => ({

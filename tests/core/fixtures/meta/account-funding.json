@@ -1,10 +1,10 @@
 [
   {
     "method": "GET",
-    "path": "act_2398686420592052?fields=id%2Cspend_cap%2Camount_spent%2Cis_prepay_account%2Ccurrency",
+    "path": "act_9000000000000001?fields=id%2Cspend_cap%2Camount_spent%2Cis_prepay_account%2Ccurrency",
     "status": 200,
     "body": {
-      "id": "act_2398686420592052",
+      "id": "act_9000000000000001",
       "spend_cap": "88983",
       "amount_spent": "4237",
       "is_prepay_account": true,

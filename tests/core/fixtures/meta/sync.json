@@ -1,7 +1,7 @@
 [
   {
     "method": "GET",
-    "path": "act_2398686420592052/campaigns?fields=id%2Cname%2Cstatus%2Cobjective%2Cdaily_budget%2Clifetime_budget%2Caccount_id&limit=20",
+    "path": "act_9000000000000001/campaigns?fields=id%2Cname%2Cstatus%2Cobjective%2Cdaily_budget%2Clifetime_budget%2Caccount_id&limit=20",
     "status": 200,
     "body": {
       "data": [
@@ -10,7 +10,7 @@
           "name": "AdBrain core fixture 2026-10-21T15:54 (PAUSED test)",
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         },
         {
           "id": "120253256980050526",
@@ -18,35 +18,35 @@
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
           "daily_budget": "20000",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         },
         {
           "id": "120253164673180526",
           "name": "new year",
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         },
         {
           "id": "120252972379040526",
           "name": "solar energy — leads",
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         },
         {
           "id": "120252255485900526",
           "name": "Solaride — leads",
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         },
         {
           "id": "120240970807630526",
           "name": "SOLARIDE | CHD-PKL | Lead forms | Jan",
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         },
         {
           "id": "120240969992630526",
@@ -54,7 +54,7 @@
           "status": "PAUSED",
           "objective": "OUTCOME_LEADS",
           "daily_budget": "17000",
-          "account_id": "2398686420592052"
+          "account_id": "9000000000000001"
         }
       ],
       "paging": {
@@ -77,7 +77,7 @@
           "daily_budget": "20000",
           "lifetime_budget": "0",
           "promoted_object": {
-            "page_id": "885223068001054",
+            "page_id": "900000000000002",
             "smart_pse_enabled": false
           },
           "destination_type": "ON_AD"

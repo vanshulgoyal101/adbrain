@@ -74,6 +74,9 @@ All automated production browser runs from the shared Mac come from one IP addre
 
 `npm run test:core` runs `tests/core` in seconds and must pass before any change to generation, validation, prompts, models, timeouts, the planner, Meta calls or CSP merges ([#110](https://github.com/vanshulgoyal101/adbrain/issues/110)). It drives the real routes, validator, LLM routing, AI SDK and `MetaClient` against recorded responses, with deadlines in virtual time. While no virtual timer is pending, `settleInVirtualTime` waits for real IO (sharp decoding on its thread pool) and reports a stall only after 5 s of real time (`replay-clock`, #449):
 
+Recorded Meta tapes go through `metaScrubber()` (`scripts/lib/scrub-meta.ts`, #1040) before they are committed: the ad account and Page are pinned to `act_9000000000000001` and `900000000000002`, the account and Page the tests connect as. `fixtures-no-real-ids` fails if any fixture holds a number that hashes to the real account or Page (#1101).
+
+
 - **Create** (`create-route`, `create-concept`): three ads saved from production run 4 through the production provider order, validator repair, OpenRouter overload falling back to Gemini without trying OpenRouter's other keys, and run 4's recorded OpenRouter and image latencies fitting the 270 s route deadline. Recorded and gold-labelled `evals/creative` concepts must be accepted or rejected as graded.
 - **Create interview** (`create-interview`, #284): real Solaride interview replies recorded by
   `scripts/record-interview-fixtures.ts`: after a "type it below" chip with nothing typed, the

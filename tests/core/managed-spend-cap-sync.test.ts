@@ -38,9 +38,9 @@ const CAMPAIGN_ROW = "0b8f4c1e-2d3a-4b5c-8d9e-0f1a2b3c4d5e";
 const PARENT_TOKEN = "parent-system-user-token";
 const CHILD_TOKEN = "child-system-user-token";
 const CHILD_ROW_ID = "00000000-0000-4000-8000-000000000624";
-const ACCOUNT = "act_2398686420592052";
+const ACCOUNT = "act_9000000000000001";
 const LEDGER = { business_id: BUSINESS, state: "ready", child_business_id: "1158100643072999", ad_account_id: ACCOUNT,
-  page_id: "885223068001054", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID };
+  page_id: "900000000000002", funding_state: "card_attached", generation: 1, manager_token_id: CHILD_ROW_ID };
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 const funding = (fundingTape as Exchange[])[0];
 const fundingBody = funding.body as Record<string, unknown>;

@@ -1,7 +1,7 @@
 [
   {
     "method": "GET",
-    "path": "act_2398686420592052/insights?level=campaign&fields=campaign_id%2Cspend%2Cimpressions%2Cclicks%2Cactions%2Caccount_currency%2Cdate_start%2Cdate_stop&date_preset=maximum&limit=25",
+    "path": "act_9000000000000001/insights?level=campaign&fields=campaign_id%2Cspend%2Cimpressions%2Cclicks%2Cactions%2Caccount_currency%2Cdate_start%2Cdate_stop&date_preset=maximum&limit=25",
     "status": 200,
     "body": {
       "data": [
@@ -118,7 +118,7 @@
   },
   {
     "method": "GET",
-    "path": "act_2398686420592052/insights?level=campaign&fields=campaign_id%2Cspend%2Caccount_currency%2Cdate_start%2Cdate_stop&time_increment=1&date_preset=last_30d&limit=25",
+    "path": "act_9000000000000001/insights?level=campaign&fields=campaign_id%2Cspend%2Caccount_currency%2Cdate_start%2Cdate_stop&time_increment=1&date_preset=last_30d&limit=25",
     "status": 200,
     "body": {
       "data": []

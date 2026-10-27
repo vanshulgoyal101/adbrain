@@ -22,7 +22,7 @@ import type { Campaign } from "@/lib/types";
 type Exchange = { method: string; path: string; form?: Record<string, string>; status: number; body: unknown };
 type Sent = { method: string; path: string; form: Record<string, string> };
 
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const campaignId = "120253654207670526";
 const adSetId = "120253654208240526";
 const lifetimeAdSetId = "120253654209590526";

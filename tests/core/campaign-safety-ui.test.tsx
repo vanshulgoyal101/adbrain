@@ -22,7 +22,7 @@ const business = { id: "11111111-1111-4111-8111-111111111111", owner_id: "owner-
 const launched = {
   id: "c1", business_id: business.id, name: "First lead campaign", status: "paused", daily_budget: 200, objective: "leads",
   meta_campaign_id: "120253654207670526", meta_adset_id: "120253654208240526", meta_ad_ids: ["120253654209040526"], creative_ids: [],
-  meta_ad_account_id: "act_2398686420592052", meta_page_id: "885223068001054", meta_connection_generation: 1,
+  meta_ad_account_id: "act_9000000000000001", meta_page_id: "900000000000002", meta_connection_generation: 1,
   raw: { source: "campaign_operation", metaResult: { campaignId: "120253654207670526", adSetIds: ["120253654208240526"], adIds: ["120253654209040526"] } },
 } as unknown as Campaign;
 
@@ -31,7 +31,7 @@ function showAfterRefresh(ads: Ad[]) {
     ? Response.json({ result: { id: "r1", campaign_id: "c1", impressions: 0, clicks: 0, leads: 0, spend: 0, cpl: null }, review: ads.map(adReviewState) })
     : Response.json({ campaigns: [launched], results: {}, nextCursor: null })));
   render(<Campaigns business={business} approved={[]} initialCampaigns={[launched]} initialResults={{}}
-    leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_2398686420592052" />);
+    leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_9000000000000001" />);
   fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
 }
 
@@ -81,7 +81,7 @@ describe("Campaigns: a campaign with no spend says so once (#173)", () => {
       })
       : Response.json({ campaigns: [campaign], results: { c1: result }, nextCursor: null })));
     render(<Campaigns business={business} approved={[]} initialCampaigns={[campaign]} initialResults={{}}
-      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_2398686420592052" />);
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_9000000000000001" />);
     // #1003: a running card first refreshes itself quietly; the owner's tap comes once that read is back.
     await waitFor(() => expect(screen.getByRole("button", { name: /Refresh results/ })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /Refresh results/ }));
@@ -103,7 +103,7 @@ describe("core: a campaign deleted in Meta shows as deleted after Refresh (#721)
       return Response.json({ error: message, gone: "DELETED", campaign: ended }, { status: 410 });
     }));
     render(<Campaigns business={business} approved={[]} initialCampaigns={[launched]} initialResults={{}}
-      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_2398686420592052" />);
+      leadForms={[]} leadFormError={null} metaReady={false} adAccountId="act_9000000000000001" />);
     const card = screen.getByRole("article", { name: "First lead campaign" });
     fireEvent.click(within(card).getByRole("button", { name: /Refresh results/ }));
     expect(await within(card).findByText("Deleted in Meta")).toBeTruthy();

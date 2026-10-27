@@ -9,7 +9,7 @@ type SyncRun = { id: string; version: number; state: "partial" | "complete"; pro
 
 const SECRET = "cron-secret-value";
 const businessId = "816aaafb-7ebc-4ad7-bbda-001beff172f8";
-const creds = { adAccountId: "act_2398686420592052", pageId: "885223068001054", accessToken: "test-token" };
+const creds = { adAccountId: "act_9000000000000001", pageId: "900000000000002", accessToken: "test-token" };
 const testLead = "1751001369523985";
 
 const db = vi.hoisted(() => ({
