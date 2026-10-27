@@ -183,8 +183,8 @@ type CampaignsProps = {
   leadFormError: string | null;
   metaReady: boolean;
   adAccountId: string;
-  /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored). */
-  newCampaign?: { creativeIds: string[] };
+  /** Opened from Review: start a new campaign with these ads (non-approved IDs are ignored); with `review` (#1004, from Create) Review opens on its own once the composer has settled. */
+  newCampaign?: { creativeIds: string[]; review?: boolean };
   /** #783: show "Which ad worked" on launched campaign cards (`AD_RESULTS_ENABLED`). */
   adResults?: boolean;
 };
@@ -970,6 +970,21 @@ function BusinessCampaigns({
       finishPreparation(signal);
     }
   }
+
+  // #1004: from Create's 'Review this ad', the same prepare as the Review button runs once, after the
+  // WhatsApp check has picked the destination and (for a form) a lead form is chosen or its error shown.
+  const autoReviewRef = useRef(Boolean(newCampaign?.review) && !initialSetup);
+  const autoReview = useEffectEvent(() => {
+    if (!autoReviewRef.current || recoveryPending || unresolvedRecovery() || isPreparing()) return;
+    if (selected.size === 0 || (destination === "instant_form" && !leadFormId && !formsError)) return;
+    autoReviewRef.current = false;
+    void prepareManualCampaign();
+  });
+  useEffect(() => {
+    if (!showComposer || !connectedForDraft || whatsappStatus === null) return;
+    const timer = window.setTimeout(autoReview, 0);
+    return () => window.clearTimeout(timer);
+  }, [showComposer, connectedForDraft, whatsappStatus, recoveryPending, selected, destination, leadFormId, formsError]);
 
   function stableIdempotencyKey(review: ReviewDTO): string {
     const next = stableOperationKey(operationRef.current, review, () => crypto.randomUUID());

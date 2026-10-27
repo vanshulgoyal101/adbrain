@@ -91,7 +91,7 @@ export default async function CampaignsPage({
           metaReady={metaReady}
           adResults={adResultsEnabled()}
           adAccountId={connection.adAccountId ?? ""}
-          newCampaign={params.new === "1" ? { creativeIds: requested } : undefined}
+          newCampaign={params.new === "1" ? { creativeIds: requested, review: params.review === "1" } : undefined}
         />}
       </div>
     </div>
