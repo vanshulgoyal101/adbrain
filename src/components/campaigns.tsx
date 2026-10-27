@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useCampaignList } from "@/lib/meta-connect-ui/use-campaign-list";
@@ -85,6 +86,7 @@ import type {
 } from "@/lib/campaign/connect-contracts";
 import { targetingInputSchema } from "@/lib/campaign/connect-contracts";
 import { campaignDestination } from "@/lib/campaign/outcomes";
+import { handoffRate } from "@/lib/campaign/whatsapp-handoff";
 import { reviewBlockerAlternative, reviewBlockerFix } from "@/lib/campaign/review-fix";
 import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 import { useCampaignPreparation } from "@/lib/meta-connect-ui/use-campaign-preparation";
@@ -107,7 +109,8 @@ import { campaignAttention } from "@/lib/campaign/health";
 import { campaignWhatsAppSummary } from "@/lib/campaign/results-summary";
 import { costPerCustomer } from "@/lib/campaign/real-enquiries";
 import { describeSkippedCampaigns, type SkippedCampaign } from "@/lib/campaign/sync-skips";
-import type { AccountFunding, AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import type { AdReview, CampaignDeliverySnapshot } from "@/lib/meta/client";
+import { committedWords, freeRoomPaise, type AccountFunding } from "@/lib/campaign/funding-check";
 import { readCampaignRecovery, recoveryStorageKey, writeCampaignRecovery, type CampaignRecovery } from "@/lib/meta-connect-ui/recovery";
 import { HelpOnWhatsApp } from "@/components/support-link";
 import { cn, timeAgo } from "@/lib/utils";
@@ -192,6 +195,8 @@ type CampaignsProps = {
   initialCampaigns: Campaign[];
   initialNextCursor?: string | null;
   initialResults: Record<string, CampaignResult>;
+  /** #1003: one id per server render, so a replayed page (browser back) refetches its list. */
+  renderId?: string;
   leadForms: LeadForm[];
   leadFormError: string | null;
   metaReady: boolean;
@@ -266,6 +271,7 @@ function BusinessCampaigns({
   initialCampaigns,
   initialNextCursor = null,
   initialResults,
+  renderId,
   leadForms,
   leadFormError,
   metaReady,
@@ -360,7 +366,7 @@ function BusinessCampaigns({
   const [askConfirm, confirmDialog] = useConfirm();
   const { campaigns, setCampaigns, results, setResults, campaignQuery, setCampaignQuery, statusFilter, setStatusFilter,
     nextListCursor, listLoading, loadCampaignPage, replaceCampaignPage } = useCampaignList({
-    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, onError: setError,
+    ownerId: business.owner_id, businessId: business.id, initialCampaigns, initialResults, initialNextCursor, renderId, onError: setError,
   });
   const [showComposer, setShowComposer] = useState(initialSetup?.showComposer ?? (fromReview || initialCampaigns.length === 0));
   const [creationMode, setCreationMode] = useState(initialSetup?.creationMode ?? "manual");
@@ -395,7 +401,7 @@ function BusinessCampaigns({
   const activationCapPaise = Math.round((activationReview?.daily_budget ?? 0) * 100) * capDays;
   // #245/#759: a business funded on Meta runs only capped, within the account's spending limit when it has one.
   const activationFunded = !activationFunding
-    || (activationCapped && (activationFunding.spendCapPaise > 0 ? activationFunding.roomPaise >= activationCapPaise : !spendLimitRequired));
+    || (activationCapped && (activationFunding.spendCapPaise > 0 ? freeRoomPaise(activationFunding) >= activationCapPaise : !spendLimitRequired));
   // #419 item 2: edits that restart Meta's learning (a capped run's new ad set, a long pause); never block.
   const learningWarnings = activationReview && activationLearning && activationDelivery
     ? activationWarnings({ capDays: activationCapped ? capDays : null, dailyBudgetRupees: activationReview.daily_budget ?? 0, ...activationLearning })
@@ -1206,7 +1212,7 @@ function BusinessCampaigns({
     try {
       void createBrowserClient().from("campaign_edit_operations").select("id,campaign_id,sanitized_error").eq("state", "awaiting_switch")
         .then(({ data }) => {
-          if (!live || !data) return;
+          if (!live || !Array.isArray(data)) return;
           const rows = data as Array<{ id: string; campaign_id: string; sanitized_error: string | null }>;
           setWaitingSwitch(Object.fromEntries(rows.map(row => [row.campaign_id, row.id])));
           setWaitingError(Object.fromEntries(rows.filter(row => row.sanitized_error).map(row => [row.campaign_id, row.sanitized_error!])));
@@ -1402,7 +1408,7 @@ function BusinessCampaigns({
                 <p className="mt-1 font-medium">Total limit on Meta: {formatMoney((activationReview.daily_budget ?? 0) * capDays)} over {capDays} {capDays === 1 ? "day" : "days"}. Meta stops delivery at that amount or the end date, whichever comes first.</p>
                 {activationFunding && <p className="mt-1 font-medium">
                   {activationFunding.spendCapPaise > 0
-                    ? `Funded on Meta: ${exactRupees.format(activationFunding.roomPaise / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
+                    ? `Funded on Meta: ${exactRupees.format(freeRoomPaise(activationFunding) / 100)} room for a ${exactRupees.format(activationCapPaise / 100)} cap${committedWords(activationFunding.committed)}.${activationFunded ? "" : " Add funds on Meta or choose fewer days."}`
                     : spendLimitRequired
                       ? "Funded on Meta: set a spending limit on the Meta ad account first."
                       : "Funded on your Meta ad account: no spending limit set; Meta stops at the total limit above."}
@@ -1460,70 +1466,89 @@ function BusinessCampaigns({
       {prepareReview && (
         <section ref={reviewPanelRef} tabIndex={-1} aria-label="Campaign review result" className="scroll-mt-24 outline-none">
         {/* #637: preflight answers 200 with blockers, so a blocked review must not read as success. */}
-        <Alert variant={prepareReview.status === "ready" ? (prepareReview.review.canCreatePaused ? "success" : "warning") : prepareReview.status === "blocked" ? "error" : "warning"}>
+        {prepareReview.status !== "ready" ? <Alert variant={prepareReview.status === "blocked" ? "error" : "warning"}>
           {prepareReview.status === "checking" && "Checking the saved campaign draft before review."}
           {prepareReview.status === "blocked" && (
             <>
               {prepareReview.message} No campaign create or activation request was sent.
             </>
           )}
-          {prepareReview.status === "ready" && (
+        </Alert> : (
+        // #847: the last screen before Meta is a plain panel: what it is, what to fix, the facts, then Send.
+        <div className={cn("rounded-lg border bg-white p-4 text-sm text-slate-700 sm:p-5", prepareReview.review.canCreatePaused ? "border-slate-200" : "border-amber-300")}>
+          {(
             <>
-              <span className="block font-medium">
+              <h3 className="flex items-start gap-2 text-[17px] font-semibold text-slate-950">
+                {prepareReview.review.canCreatePaused
+                  ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" aria-hidden="true" />
+                  : <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />}
                 {prepareReview.review.canCreatePaused ? "Campaign review"
                   : prepareReview.review.blockers.length ? `Fix ${prepareReview.review.blockers.length} ${prepareReview.review.blockers.length === 1 ? "item" : "items"} before sending to Meta`
                   : "This campaign can't be sent to Meta yet"}
-              </span>
+              </h3>
+              {prepareReview.review.canCreatePaused && <p className="mt-1 text-slate-600">Meta gets it paused. Nothing spends until you activate it.</p>}
               {prepareReview.review.blockers.length > 0 && (
-                <ul className="mt-2 list-disc pl-5 text-sm font-normal">
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-slate-800 marker:text-amber-700">
                   {prepareReview.review.blockers.map((blocker) => {
                     const fixes = [
                       reviewBlockerFix(blocker.reason) ?? (blocker.action?.kind === "open_brand" ? { kind: "page", label: "Open your business details", href: "/brand" } as const : null),
                       reviewBlockerAlternative(blocker.reason),
                     ].filter((fix) => fix !== null);
-                    return <li key={`${blocker.code}:${blocker.message}`} className="mt-1 first:mt-0">
+                    return <li key={`${blocker.code}:${blocker.message}`}>
                       {blocker.message}
                       {fixes.length > 0 && <span className="mt-1 flex flex-wrap items-center gap-x-3">
                         {fixes.map((fix) => fix.kind === "page"
-                          ? <Link key={fix.label} href={fix.href} className="inline-flex min-h-10 items-center font-medium underline underline-offset-4">{fix.label}</Link>
-                          : <button key={fix.label} type="button" onClick={() => fix.kind === "connect" ? openConnect() : fix.kind === "destination" ? switchDestination(fix.destination) : jumpToFix(fix.targets)} className="inline-flex min-h-10 items-center text-left font-medium underline underline-offset-4">{fix.label}</button>)}
+                          ? <Link key={fix.label} href={fix.href} className="inline-flex min-h-10 items-center font-medium text-blue-700 underline underline-offset-4">{fix.label}</Link>
+                          : <button key={fix.label} type="button" onClick={() => fix.kind === "connect" ? openConnect() : fix.kind === "destination" ? switchDestination(fix.destination) : jumpToFix(fix.targets)} className="inline-flex min-h-10 items-center text-left font-medium text-blue-700 underline underline-offset-4">{fix.label}</button>)}
                       </span>}
                     </li>;
                   })}
                 </ul>
               )}
               {!prepareReview.review.canCreatePaused && (
-                <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-normal">
+                <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-600">
                   Send to Meta (paused) appears once this is fixed.
                   <Button size="sm" variant="outline" onClick={() => void prepareManualCampaign()} disabled={preparing || creating} aria-disabled={selected.size === 0 || budget <= 0 || undefined}>
                     <RefreshCw className="h-4 w-4" aria-hidden="true" />Check again
                   </Button>
-                </span>
+                </p>
               )}
-              <span className="mt-2 block text-sm font-normal">
-                Account: {prepareReview.review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"} · Page: {prepareReview.review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} · Currency: {prepareReview.review.currency}
-                <br />
-                Destination: {prepareReview.draft.input.destination === "whatsapp" ? `WhatsApp chat ${prepareReview.review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}
-                <br />
-                {/* #906: WhatsApp ads leave Audience Network out. */}
-                {(prepareReview.draft.input.destination === "whatsapp" || prepareReview.draft.input.destination === "instant_form") && <>Shown on Facebook, Instagram and Messenger<br /></>}
-                Geography: {prepareReview.review.resolvedAreaLabel ?? "Needs review"} · Per ad set: {formatMoney(prepareReview.review.perAdSetDailyBudgetRupees)} · Effective daily total: {formatMoney(prepareReview.review.totalDailyBudgetRupees)}
-                <br />
-                {prepareReview.review.serviceArea && <>{serviceAreaLine(prepareReview.review.serviceArea)}<br /></>}
-                Ages: {prepareReview.draft.input.targeting.age?.min ?? "Unset"}-{prepareReview.draft.input.targeting.age?.max === 65 ? "65+" : prepareReview.draft.input.targeting.age?.max ?? "Unset"} · Gender: {{ all: "All genders", men: "Men", women: "Women" }[prepareReview.draft.input.targeting.gender ?? "all"]} · City coverage: {prepareReview.draft.input.targeting.location?.cityScope === "city_only" ? "City only (no added radius)" : `${prepareReview.draft.input.targeting.location?.radiusKm ?? 25} km radius`}
-                <br />
-                Interests: {prepareReview.review.audienceInterests?.map((interest) => interest.name).join(", ") || (prepareReview.draft.input.targeting.audience?.interestNames.length ? "Needs resolution" : "No interest narrowing")}
-                <br />
-                Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.
-              </span>
+              {(() => {
+                const review = prepareReview.review;
+                const input = prepareReview.draft.input;
+                const age = input.targeting.age;
+                const interests = review.audienceInterests?.map((interest) => interest.name).join(", ");
+                const fact = (label: string, value: ReactNode) => <div key={label} className="grid grid-cols-[5.75rem_1fr] gap-3 sm:grid-cols-[7.5rem_1fr] sm:gap-4"><dt className="text-slate-500">{label}</dt><dd className="min-w-0 wrap-break-word text-slate-900">{value}</dd></div>;
+                const facts = <>
+                  <dl className="grid gap-2.5">
+                    {fact("Budget", <>{formatMoney(review.totalDailyBudgetRupees)} a day{review.perAdSetDailyBudgetRupees !== review.totalDailyBudgetRupees && <span className="text-slate-600"> ({formatMoney(review.perAdSetDailyBudgetRupees)} per ad set)</span>}</>)}
+                    {fact("Where", <>{review.resolvedAreaLabel ?? "Needs review"}, {input.targeting.location?.cityScope === "city_only" ? "city only (no added radius)" : `${input.targeting.location?.radiusKm ?? 25} km radius`}{review.serviceArea && <span className="block text-slate-600">{serviceAreaLine(review.serviceArea)}</span>}</>)}
+                    {fact("Who", <>Ages {age?.min ?? "unset"}–{age?.max === 65 ? "65+" : age?.max ?? "unset"}, {{ all: "all genders", men: "men", women: "women" }[input.targeting.gender ?? "all"]}{interests ? `, interested in ${interests}` : input.targeting.audience?.interestNames.length ? ", interests need resolving" : ", no interest narrowing"}</>)}
+                    {fact("Destination", <>{input.destination === "whatsapp" ? `WhatsApp chat ${review.whatsappNumber ?? "(number not verified)"}` : "Instant lead form"}{/* #906: WhatsApp and lead-form ads leave Audience Network out. */}{(input.destination === "whatsapp" || input.destination === "instant_form") && <span className="block text-slate-600">Shown on Facebook, Instagram and Messenger</span>}</>)}
+                    {fact("Meta account", <>{review.selected?.accountName ?? prepareReview.connection.selected?.accountName ?? "Unavailable"}, Page {review.selected?.pageName ?? prepareReview.connection.selected?.pageName ?? "Unavailable"} ({review.currency})</>)}
+                  </dl>
+                  <p className="mt-3 text-xs text-slate-500">Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.</p>
+                </>;
+                // While something blocks the send, the fix leads and the facts wait one tap away.
+                return review.canCreatePaused
+                  ? <div className="mt-4 border-t border-slate-100 pt-4">{facts}</div>
+                  : <details className="group mt-4 border-t border-slate-100 pt-3">
+                    <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-2 font-medium text-slate-700 [&::-webkit-details-marker]:hidden">
+                      <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" aria-hidden="true" />What you&apos;re sending
+                    </summary>
+                    <div className="pt-2">{facts}</div>
+                  </details>;
+              })()}
               {prepareReview.draft.input.destination === "whatsapp" && prepareReview.review.whatsappMessage && (
                 <WhenTheyTap message={prepareReview.review.whatsappMessage} businessName={business.name}
                   adsLanguage={adsLanguage(adsFor(prepareReview.draft.input.creativeIds))}
+                  handoff={handoffRate(campaigns.filter((c) => campaignDestination(c, results[c.id]) === "whatsapp").map((c) => results[c.id]).filter(Boolean))}
+                  offers={business.offers ?? []}
                   onEdit={() => { setMessageEditorOpen(true); document.getElementById("whatsapp-message")?.scrollIntoView({ block: "center" }); }} />
               )}
               {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}
               {prepareReview.review.planWarnings?.length ? (
-                <ul className="mt-2 space-y-1 text-sm font-normal" aria-label="Before you send">
+                <ul className="mt-3 space-y-1 text-amber-800" aria-label="Before you send">
                   {prepareReview.review.planWarnings.map((warning) => (
                     <li key={warning} className="flex items-start gap-1.5">
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -1532,9 +1557,9 @@ function BusinessCampaigns({
                   ))}
                 </ul>
               ) : null}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 {prepareReview.review.canCreatePaused && prepareReview.review.planHash && !operation && (!recoveryPending || sendingNew) && (
-                  <Button size="sm" data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>
+                  <Button data-product-event="campaign.create" onClick={() => void createPreparedCampaign()} disabled={creating}>
                     {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
                     {creating ? "Sending to Meta…" : "Send to Meta (paused)"}
                   </Button>
@@ -1559,7 +1584,7 @@ function BusinessCampaigns({
               </div>
             </>
           )}
-        </Alert>
+        </div>)}
         {placedError?.at === "review" && <p ref={placedErrorRef} role="alert" className="mt-2 scroll-mt-24 text-sm font-medium text-red-800">{placedError.message}</p>}
         <p className="mt-2"><HelpOnWhatsApp label="Stuck? Help on WhatsApp" /></p>
         </section>
@@ -2276,9 +2301,9 @@ function BusinessCampaigns({
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <Stat label="Impressions" value={formatNumber(r.impressions)} />
                         <Stat label="Clicks" value={formatNumber(r.clicks)} />
-                        <Stat label={outcome === "whatsapp" ? "WhatsApp conversations" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
+                        <Stat label={outcome === "whatsapp" ? "WhatsApp chats" : outcome === "instant_form" ? "Leads" : "Results unavailable"} value={outcome === "whatsapp" ? (r.conversations != null ? formatNumber(r.conversations) : "—") : outcome === "instant_form" ? formatNumber(r.leads) : "—"} />
                         <Stat
-                          label={outcome === "whatsapp" ? "Cost / conversation" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
+                          label={outcome === "whatsapp" ? "Cost / chat" : outcome === "instant_form" ? "Cost / lead" : "Cost / result"}
                           value={outcome === "whatsapp" ? (r.conversations != null && r.cost_per_conversation != null ? formatMoney(r.cost_per_conversation) : "—") : outcome === "instant_form" && r.cpl != null ? formatMoney(r.cpl) : "—"}
                         />
                       </div>
@@ -2302,7 +2327,9 @@ function BusinessCampaigns({
                         <p className="col-span-2 -mt-2 text-xs text-slate-500 sm:col-span-4">From customers you marked in Enquiries.</p>
                       </div>
                     )}
-                    {r && outcome === "whatsapp" && (
+                    {/* #847: a stopped card with no chats, enquiries or customers has nothing to log. A running one always can:
+                        Meta's chat count lags and under-counts (#1003, #499). */}
+                    {r && outcome === "whatsapp" && (c.status === "active" || r.conversations !== 0 || (r.real_enquiries ?? 0) > 0 || (r.customers ?? 0) > 0) && (
                       <WhatsAppEnquiries campaignId={c.id} spend={r.spend} enquiries={r.real_enquiries ?? 0}
                         onLogged={(count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], real_enquiries: count } } : p))}
                         onCustomers={(customers, count) => setResults((p) => (p[c.id] ? { ...p, [c.id]: { ...p[c.id], customers, real_enquiries: count } } : p))} />

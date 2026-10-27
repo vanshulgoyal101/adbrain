@@ -7,6 +7,7 @@ import { KEEP_HIDES_MS, pauseSuggestion, type PauseSuggestion } from "@/lib/camp
 import { formatMoney, formatNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { relativeAge } from "@/lib/leads/digest";
+import { creativeThumbnailUrl } from "@/lib/creative/thumbnail";
 
 const SHOWN = 3;
 
@@ -15,17 +16,32 @@ type Loaded = { ads: AdResultView[]; syncedAt: string | null };
 type Unit = { one: string; many: string };
 const UNITS: Record<"whatsapp" | "form", Unit> = { whatsapp: { one: "chat", many: "chats" }, form: { one: "enquiry", many: "enquiries" } };
 
+/** An AdBrain ad reads by its headline (Designer, #783); an outside ad keeps Meta's name. */
+type Named = Pick<AdResultView, "name"> & { creative?: AdResultView["creative"] };
+const adLabel = (ad: Named) => ad.creative?.headline || ad.name || "Ad";
+
 /** One quiet row: the ad, its enquiries and ₹ per enquiry ("—" before the first one, never ₹0). */
 function Row({ ad, unit }: { ad: AdResultView; unit: Unit }) {
+  const image = ad.creative?.imageUrl;
   return (
     <li className="flex min-h-14 items-center justify-between gap-4 py-2.5 text-sm">
-      <span className="min-w-0 wrap-break-word text-slate-900">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="font-medium">{ad.name ?? "Ad"}</span>
-          {ad.best && <span className="rounded-full bg-lime-wash px-2 py-0.5 text-xs font-medium text-slate-800">Best</span>}
-          {ad.replaced && <span className="text-xs text-slate-500">(replaced)</span>}
+      <span className="flex min-w-0 items-center gap-3">
+        {image && (
+          <img
+            src={creativeThumbnailUrl(image)} alt="" width={40} height={40} loading="lazy"
+            className="h-10 w-10 shrink-0 rounded-sm bg-slate-100 object-cover"
+            onError={(event) => { if (event.currentTarget.src !== image) event.currentTarget.src = image; }}
+          />
+        )}
+        <span className="min-w-0 wrap-break-word text-slate-900">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="font-medium">{adLabel(ad)}</span>
+            {ad.best && <span className="rounded-full bg-lime-wash px-2 py-0.5 text-xs font-medium text-slate-800">Best</span>}
+            {ad.replaced && <span className="text-xs text-slate-500">(replaced)</span>}
+            {ad.earlier && !ad.replaced && <span className="text-xs text-slate-500">(earlier run)</span>}
+          </span>
+          {!ad.delivered && <span className="mt-0.5 block text-xs text-slate-500">Meta hasn&apos;t shown this ad yet</span>}
         </span>
-        {!ad.delivered && <span className="mt-0.5 block text-xs text-slate-500">Meta hasn&apos;t shown this ad yet</span>}
       </span>
       <span className="shrink-0 text-right tabular-nums text-slate-700">
         {formatNumber(ad.results)} {ad.results === 1 ? unit.one : unit.many}
@@ -36,7 +52,7 @@ function Row({ ad, unit }: { ad: AdResultView; unit: Unit }) {
 }
 
 const keepKey = (campaignId: string, adId: string) => `adbrain.keepAd.${campaignId}.${adId}`;
-const named = (name: string | null) => `“${name ?? "Ad"}”`;
+const named = (ad: Named) => `“${adLabel(ad)}”`;
 
 /**
  * #1045: one line offering to pause the ad that costs far more per enquiry than the best one.
@@ -67,12 +83,12 @@ export function PauseOffer({ campaignId, suggestion, unit = UNITS.form }: { camp
 
   if (state === "kept") return null;
   const busy = state === "busy";
-  if (state === "paused") return <p role="status" className="py-2 text-xs text-slate-700">Paused {named(ad.name)}. The other ads keep running. <button type="button" className="min-h-11 font-medium text-blue-700 underline" onClick={() => void send("undo")}>Undo</button></p>;
-  if (state === "already") return <p role="status" className="py-2 text-xs text-slate-700">{named(ad.name)} is already paused in Meta. AdBrain didn&apos;t change it.</p>;
-  if (state === "resumed") return <p role="status" className="py-2 text-xs text-slate-700">{named(ad.name)} is running again.</p>;
+  if (state === "paused") return <p role="status" className="py-2 text-xs text-slate-700">Paused {named(ad)}. The other ads keep running. <button type="button" className="min-h-11 font-medium text-blue-700 underline" onClick={() => void send("undo")}>Undo</button></p>;
+  if (state === "already") return <p role="status" className="py-2 text-xs text-slate-700">{named(ad)} is already paused in Meta. AdBrain didn&apos;t change it.</p>;
+  if (state === "resumed") return <p role="status" className="py-2 text-xs text-slate-700">{named(ad)} is running again.</p>;
   const line = suggestion.reason === "no_enquiries"
-    ? <>{named(ad.name)} has spent {formatMoney(ad.spend)} with no {unit.many}; {named(reference.name)} gets them at {formatMoney(reference.costPerResult ?? 0)} each. Pause it?</>
-    : <>{named(ad.name)} costs {formatMoney(ad.costPerResult ?? 0)} per {unit.one} vs {formatMoney(reference.costPerResult ?? 0)} for {named(reference.name)}. Pause it?</>;
+    ? <>{named(ad)} has spent {formatMoney(ad.spend)} with no {unit.many}; {named(reference)} gets them at {formatMoney(reference.costPerResult ?? 0)} each. Pause it?</>
+    : <>{named(ad)} costs {formatMoney(ad.costPerResult ?? 0)} per {unit.one} vs {formatMoney(reference.costPerResult ?? 0)} for {named(reference)}. Pause it?</>;
   return (
     <div className="my-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-slate-800">
       <p className="wrap-break-word">{line}</p>

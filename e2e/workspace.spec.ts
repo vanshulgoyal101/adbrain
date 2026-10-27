@@ -122,6 +122,9 @@ for (const width of [1440, 390, 320]) {
     await expect(page.getByRole("button", { name: "Explore another scene" })).toBeVisible();
     expect(recoveryIds).toEqual([identity]);
     expect(generationBodies).toHaveLength(1);
+    // #1034: on a phone the finished batch's "Make another" must take a real tap (nothing may sit over it).
+    await page.getByRole("button", { name: "Make another" }).click();
+    await expect(page.getByRole("textbox", { name: "Campaign goal" })).toBeVisible();
     expect(errors).toEqual([]);
   });
 }

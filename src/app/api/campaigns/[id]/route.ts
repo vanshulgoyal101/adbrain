@@ -19,7 +19,7 @@ import { activationConfirmationPayload, intendedCampaignChildren, RESUME_IN_ADS_
 import { saveCampaign, deleteVerifiedCampaign } from "@/lib/campaign/trusted-write";
 import { confirmCustomerCampaign, CustomerBalanceError, getCustomerBalance, observeCustomerCosts, reserveCustomerCampaign } from "@/lib/payments/customer-balance";
 import { fundingMode, type FundingMode } from "@/lib/payments/operator-funding";
-import { fundingShortfall } from "@/lib/campaign/funding-check";
+import { committedWords, fundingShortfall, readFunding } from "@/lib/campaign/funding-check";
 import { formatMoney } from "@/lib/format";
 import { getActivationLearning } from "@/lib/campaign/activation-learning";
 import { recordLaunchCap } from "@/lib/campaign/learnings";
@@ -56,7 +56,7 @@ export const GET = observeRoute("/api/campaigns/[id]", "GET", async (
       delivery: await meta.readCampaignDelivery(review.metaCampaignId, {
         dailyBudgetRupees: review.dailyBudgetRupees, status: campaign.status, ...review.children,
       }),
-      funding: mode !== "managed" ? await meta.readAccountFunding() : null,
+      funding: mode !== "managed" ? await readFunding(meta) : null,
     })), getActivationLearning(campaign)]);
     // #419 item 2: inputs for the learning-restart notes; not part of the confirmation digest.
     return NextResponse.json({ delivery, ...(funding ? { funding, spendLimitRequired: mode === "operator" } : {}), learning }, { headers: { "Cache-Control": "no-store" } });
@@ -222,12 +222,12 @@ async function handlePATCH(
             if (!capDays || !capPaise) {
               throw new CustomerBalanceError("This business is funded on Meta, so it runs only with a total limit. Pause the ad sets and ads in Meta and choose how many days to run.");
             }
-            const funding = await meta.readAccountFunding();
+            const funding = await readFunding(meta);
             // The operator must set an account spending limit; an owner's own limit, when set, must have room.
             const short = fundingShortfall({ mode, neededPaise: capPaise, account: funding });
             if (short?.kind === "no_limit") throw new CustomerBalanceError("Set a spending limit on the Meta ad account before activating.");
             if (short?.kind === "short") {
-              throw new CustomerBalanceError(`Meta has ${exactRupees.format(short.roomPaise / 100)} left under the ad account's spending limit; this run needs ${exactRupees.format(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
+              throw new CustomerBalanceError(`Meta has ${exactRupees.format(short.roomPaise / 100)} left under the ad account's spending limit${committedWords(short.committed)}; this run needs ${exactRupees.format(short.neededPaise / 100)}. Add funds on Meta or choose fewer days.`);
             }
           } else {
             // #216: AdBrain records Meta's lifetime spend itself; the reserve below stays the gate.

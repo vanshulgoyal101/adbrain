@@ -92,10 +92,21 @@ describe("<AdAssistant> skips the brief review when the Brand has the facts (#85
     expect(screen.getByText("What I'll write about · Edit")).toBeInTheDocument();
   });
 
+  // #1034 (CTO): Solaride's Brand lists Chandigarh, Panchkula and Mohali and Create uses all three; the line showed two.
+  it("#1034: names every Brand area Create will use, the first 3 and then how many more", () => {
+    const { unmount } = render(<AdAssistant business={{ ...complete, locations: ["Chandigarh", "Panchkula", "Mohali"] } as Business} />);
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Rooftop solar in the tricity" } });
+    expect(screen.getByText("Your 3 ads will use: Chandigarh, Panchkula, Mohali · offer: Free site survey")).toBeInTheDocument();
+    unmount();
+    render(<AdAssistant business={{ ...complete, locations: ["Chandigarh", "Panchkula", "Mohali", "Zirakpur", "Kharar"] } as Business} />);
+    fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Rooftop solar in the tricity" } });
+    expect(screen.getByText("Your 3 ads will use: Chandigarh, Panchkula, Mohali +2 more · offer: Free site survey")).toBeInTheDocument();
+  });
+
   it("#1004 (CPO): a proof point is labelled as proof, never as an offer, and long facts are cut at 40 characters", () => {
     render(<AdAssistant business={{ ...complete, offers: [], usps: ["Over 1,200 rooftops installed across Punjab since 2015"], locations: ["Mohali", "Kharar", "Zirakpur"] } as Business} />);
     fireEvent.change(screen.getByLabelText("Campaign goal"), { target: { value: "Rooftop solar" } });
-    expect(screen.getByText("Your 3 ads will use: Mohali, Kharar · proof: Over 1,200 rooftops installed across Pu…")).toBeInTheDocument();
+    expect(screen.getByText("Your 3 ads will use: Mohali, Kharar, Zirakpur · proof: Over 1,200 rooftops installed across Pu…")).toBeInTheDocument();
     expect(screen.queryByText(/offer:/)).not.toBeInTheDocument();
   });
 

@@ -86,6 +86,7 @@ export default async function CampaignsPage({
           initialCampaigns={campaigns}
           initialNextCursor={page.nextCursor}
           initialResults={page.results}
+          renderId={crypto.randomUUID()}
           leadForms={[]}
           leadFormError={null}
           metaReady={metaReady}

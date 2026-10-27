@@ -3,7 +3,7 @@ import { lastAdAction, pauseSuggestion } from "@/lib/campaign/ad-pause";
 import type { AdResultView } from "@/lib/campaign/ad-results-store";
 
 const ad = (adId: string, spend: number, results: number, over: Partial<AdResultView> = {}): AdResultView => ({
-  adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, status: "ACTIVE", impressions: 1000,
+  adId, name: `Ad ${adId}`, delivered: true, replaced: false, best: false, creative: null, earlier: false, status: "ACTIVE", impressions: 1000,
   results, spend, costPerResult: results > 0 ? spend / results : null, ...over,
 });
 
@@ -11,6 +11,14 @@ describe("pause-this-ad rule (#1045)", () => {
   it("needs 5 enquiries across the campaign, the same bar as 'Best'", () => {
     expect(pauseSuggestion([ad("A", 400, 4, { best: false }), ad("B", 900, 0)])).toBeNull();
     expect(pauseSuggestion([ad("A", 500, 5), ad("B", 900, 0)])?.ad.adId).toBe("B");
+  });
+
+  // Designer on #783: the offer names ads like the rows under it, by headline, not Meta's ad name.
+  it("carries each ad's creative so the offer can name it by headline", () => {
+    const best = ad("A", 500, 5, { creative: { headline: "Your rooftop could cut power bills", imageUrl: null } });
+    const pick = pauseSuggestion([best, ad("B", 400, 2, { name: "Solaride | Lever 2 | WhatsApp | Ad 3", creative: { headline: "Free site survey", imageUrl: null } })]);
+    expect(pick?.ad.creative?.headline).toBe("Free site survey");
+    expect(pick?.reference.creative?.headline).toBe("Your rooftop could cut power bills");
   });
 
   it("offers an ad at 2× the best ad's cost per enquiry, not at 1.99×", () => {

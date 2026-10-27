@@ -1695,6 +1695,31 @@ export class MetaClient {
   }
 
   /**
+   * #1058: the lifetime budget still to spend on this ad account's running capped runs. Meta's account
+   * room counts only what was spent, so each ACTIVE lifetime-budget ad set's `budget_remaining` is already
+   * promised. #1094: `exclude` leaves out the ad sets being edited, and ACTIVE daily-budget ad sets are
+   * reported (not counted: they have no total). Read-only; an incomplete or unreadable listing fails closed.
+   */
+  async readLiveCappedRuns(exclude: string[] = []): Promise<{ runs: number; remainingPaise: number; uncapped: { adSets: number; dailyPaise: number } }> {
+    const listing = await this.graph<{ data?: Array<{ id?: string; lifetime_budget?: string; budget_remaining?: string; daily_budget?: string }>; paging?: { next?: string } }>(
+      `${encodeURIComponent(this.creds.adAccountId)}/adsets?fields=id,lifetime_budget,budget_remaining,daily_budget&limit=100&effective_status=${encodeURIComponent(JSON.stringify(["ACTIVE"]))}`,
+    );
+    const paise = /^\d{1,15}$/;
+    if (!Array.isArray(listing.data) || listing.paging?.next || listing.data.some(adSet => !adSet.id
+      || !paise.test(adSet.lifetime_budget ?? "0") || !paise.test(adSet.budget_remaining ?? "0") || !paise.test(adSet.daily_budget ?? "0"))) {
+      throw new MetaError("Meta ad account funding could not be verified.");
+    }
+    const others = listing.data.filter(adSet => !exclude.includes(adSet.id!));
+    const capped = others.filter(adSet => Number(adSet.lifetime_budget ?? 0) > 0);
+    const daily = others.filter(adSet => Number(adSet.lifetime_budget ?? 0) <= 0 && Number(adSet.daily_budget ?? 0) > 0);
+    return {
+      runs: capped.length,
+      remainingPaise: capped.reduce((sum, adSet) => sum + Number(adSet.budget_remaining ?? 0), 0),
+      uncapped: { adSets: daily.length, dailyPaise: daily.reduce((sum, adSet) => sum + Number(adSet.daily_budget ?? 0), 0) },
+    };
+  }
+
+  /**
    * Sets the ad account's spending limit (#522, managed child accounts) and reads it back. Meta takes
    * the limit in rupees and reports it in paise; 0 would mean no limit, so it is refused, and no
    * `spend_cap_action` (reset or delete) is ever sent. If writing the limit restarted Meta's spent
