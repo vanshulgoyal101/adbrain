@@ -1205,7 +1205,10 @@ function BusinessCampaigns({
   // #765 (b): campaign id → the edit whose paused copy waits for the owner to turn it on or cancel it.
   const [waitingSwitch, setWaitingSwitch] = useState<Record<string, string>>({});
   const [waitingError, setWaitingError] = useState<Record<string, string>>({});
+  // Only a launched, running or paused AdBrain campaign can have a waiting copy; skip the read otherwise.
+  const switchable = campaigns.some(c => !!c.meta_campaign_id && (c.status === "active" || c.status === "paused") && !!reviewableCampaign(c));
   useEffect(() => {
+    if (!switchable) return;
     let live = true;
     // Owners read their own edit rows (RLS). If this read fails, the strip just doesn't show; the server still refuses
     // other edits while a copy waits.
@@ -1219,7 +1222,7 @@ function BusinessCampaigns({
         }, () => undefined);
     } catch { /* no browser Supabase config (tests) */ }
     return () => { live = false; };
-  }, []);
+  }, [switchable]);
   const [budgetEdit, setBudgetEdit] = useState<{ campaign: Campaign; start: NonNullable<ReturnType<typeof budgetFormStart>> } | null>(null);
   const [adEdit, setAdEdit] = useState<Campaign | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null);
