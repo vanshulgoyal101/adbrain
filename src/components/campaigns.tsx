@@ -30,7 +30,11 @@ import {
   X,
 } from "lucide-react";
 import { WhatsAppReadyChecklist } from "@/components/whatsapp-ready";
-import type { WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { whatsappGreeting, whatsappLanguageFor, type WhatsAppLanguage } from "@/lib/campaign/whatsapp-greeting";
+import { whatsappTemplateSchema, type WhatsAppTemplate } from "@/lib/campaign/whatsapp-template";
+import { CampaignWhatsAppMessageDialog } from "@/components/campaign-whatsapp-message-dialog";
+import { WhenTheyTap } from "@/components/when-they-tap";
+import { draftFromSuggestion, draftFromTemplate, type Suggested } from "@/components/whatsapp-message-card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -156,6 +160,8 @@ type ComposerSetup = {
   destination: "instant_form" | "whatsapp";
   whatsappNumber: string;
   whatsappLanguage?: WhatsAppLanguage;
+  /** #840: this campaign's own WhatsApp message ("Edit for this campaign"). */
+  whatsappMessage?: WhatsAppTemplate | null;
   leadFormId: string;
   name: string;
   targeting: TargetingValue;
@@ -266,11 +272,23 @@ function BusinessCampaigns({
   const [destination, setDestination] = useState<"instant_form" | "whatsapp">(initialSetup?.destination ?? "instant_form");
   const [whatsappNumber, setWhatsAppNumber] = useState(initialSetup?.whatsappNumber ?? "");
   const [whatsappLanguage, setWhatsAppLanguage] = useState<WhatsAppLanguage>(initialSetup?.whatsappLanguage ?? "ad");
+  const [whatsappMessage, setWhatsAppMessage] = useState<WhatsAppTemplate | null>(initialSetup?.whatsappMessage ?? null);
+  const [savedWhatsAppMessage, setSavedWhatsAppMessage] = useState<WhatsAppTemplate | null>(() => whatsappTemplateSchema.safeParse(business.whatsapp_template).data ?? null);
+  const [messageEditorOpen, setMessageEditorOpen] = useState(false);
   const [whatsappStatus, setWhatsAppStatus] = useState<WhatsAppStatus | null>(null);
   // #235: an India-based business starts new campaigns on WhatsApp once a number is ready; a choice or a restored draft wins.
   const destinationChosenRef = useRef(Boolean(initialSetup));
   const indiaBased = parsePhone(business.phone).countryCode === "IN";
   const whatsappOptions = whatsappStatus?.state === "ready" ? whatsappStatus.numbers : [];
+  // #840: the chosen ads' words and stored language, as launch reads them for the WhatsApp message.
+  const adsFor = (ids: Iterable<string>) => { const wanted = new Set(ids); return approved.filter((creative) => wanted.has(creative.id)); };
+  const adWords = (ads: Creative[]) => ads.flatMap((creative) => [creative.headline ?? "", creative.primary_text ?? ""]);
+  const adLanguages = (ads: Creative[]) => ads.map((creative) => { const stored = (creative.generation as { language?: unknown } | null)?.language; return typeof stored === "string" ? stored : null; });
+  const adsLanguage = (ads: Creative[]) => whatsappLanguageFor(adWords(ads), adLanguages(ads));
+  const suggestedMessages = (ads: Creative[]): Suggested => Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => {
+    const text = whatsappGreeting(business, adWords(ads), [], adLanguages(ads), language);
+    return [language, { greeting: text.greeting, prefill: text.autofill }];
+  })) as Suggested;
   const chosenWhatsAppNumber = whatsappOptions.some(({ masked }) => masked === whatsappNumber) ? whatsappNumber : whatsappOptions[0]?.masked ?? whatsappNumber;
   const [leadFormId, setLeadFormId] = useState(initialSetup?.leadFormId ?? leadForms[0]?.id ?? "");
   const [availableForms, setAvailableForms] = useState(leadForms);
@@ -407,8 +425,8 @@ function BusinessCampaigns({
   const [draftBusy, setDraftBusy] = useState<string | null>(null);
   const [retryAllowed, setRetryAllowed] = useState(false);
   useEffect(() => {
-    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
-  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
+    onSetupChange([scope, { selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer }]);
+  }, [selected, budget, destination, whatsappNumber, whatsappLanguage, whatsappMessage, leadFormId, name, targeting, draftGoal, includedNames, excludedNames, abTest, creationMode, showComposer, scope, onSetupChange]);
   const visibleCampaigns = campaigns.filter(campaign =>
     (statusFilter === "all" || campaign.status === statusFilter) &&
     (campaign.name ?? business.name).toLocaleLowerCase().includes(campaignQuery.trim().toLocaleLowerCase()),
@@ -445,6 +463,7 @@ function BusinessCampaigns({
     // The form names numbers by their mask; a full number from an older draft shows as its mask.
     setWhatsAppNumber(!input.whatsappNumber || maskedWhatsAppNumberPattern.test(input.whatsappNumber) ? input.whatsappNumber ?? "" : maskWhatsAppNumber(input.whatsappNumber));
     setWhatsAppLanguage(input.whatsappLanguage ?? "ad");
+    setWhatsAppMessage(input.whatsappMessage ?? null);
     destinationChosenRef.current = true;
     setAbTest(input.abTest);
     setCreationMode("manual");
@@ -782,6 +801,7 @@ function BusinessCampaigns({
       destination,
       ...(destination === "whatsapp" && chosenWhatsAppNumber ? { whatsappNumber: chosenWhatsAppNumber } : {}),
       ...(destination === "whatsapp" && whatsappLanguage !== "ad" ? { whatsappLanguage } : {}),
+      ...(destination === "whatsapp" && whatsappMessage ? { whatsappMessage } : {}),
       targeting: targetingFromEditor(targeting, plannedAreas, plannedExclusions),
       abTest,
     };
@@ -1426,6 +1446,11 @@ function BusinessCampaigns({
                 <br />
                 Location includes residents and recent visitors. Interest signals may expand under Meta lead optimization.
               </span>
+              {prepareReview.draft.input.destination === "whatsapp" && prepareReview.review.whatsappMessage && (
+                <WhenTheyTap message={prepareReview.review.whatsappMessage} businessName={business.name}
+                  adsLanguage={adsLanguage(adsFor(prepareReview.draft.input.creativeIds))}
+                  onEdit={() => { setMessageEditorOpen(true); document.getElementById("whatsapp-message")?.scrollIntoView({ block: "center" }); }} />
+              )}
               {/* #419 2(b): Meta's new-advertiser guidance, as plain notes; never blocks the send. */}
               {prepareReview.review.planWarnings?.length ? (
                 <ul className="mt-2 space-y-1 text-sm font-normal" aria-label="Before you send">
@@ -1760,6 +1785,30 @@ function BusinessCampaigns({
                     </p>}
                   </div>}
                   {destination === "whatsapp" && <div className="flex min-w-0 flex-col gap-1.5">
+                    {/* #840: which WhatsApp message this campaign sends; the language picker drives only the suggestion. */}
+                    <span className="text-sm font-medium leading-none text-slate-900">WhatsApp message</span>
+                    <p className="text-sm text-slate-700">
+                      {whatsappMessage ? "Edited for this campaign" : savedWhatsAppMessage ? "Your saved message" : "Suggested message"}
+                      {" · "}
+                      <button id="whatsapp-message" type="button" onClick={() => setMessageEditorOpen(true)} className="font-medium text-blue-700 underline">Edit for this campaign</button>
+                    </p>
+                    {messageEditorOpen && (() => {
+                      const ads = adsFor(selected);
+                      const suggested = suggestedMessages(ads);
+                      const language = whatsappLanguage !== "ad" ? whatsappLanguage : adsLanguage(ads);
+                      const current = whatsappMessage ?? savedWhatsAppMessage;
+                      return <CampaignWhatsAppMessageDialog businessId={business.id} businessName={business.name} firstOffer={business.offers?.[0]}
+                        initial={current ? draftFromTemplate(current) : draftFromSuggestion(suggested, language)} suggested={suggested}
+                        followsSuggestion={!current} edited={Boolean(whatsappMessage)} onClose={() => setMessageEditorOpen(false)}
+                        onUse={(template, saved) => {
+                          setWhatsAppMessage(template);
+                          if (saved) setSavedWhatsAppMessage(saved);
+                          setMessageEditorOpen(false);
+                          if (!unresolvedRecovery()) setPrepareReview(null);
+                        }} />;
+                    })()}
+                  </div>}
+                  {destination === "whatsapp" && !whatsappMessage && !savedWhatsAppMessage && <div className="flex min-w-0 flex-col gap-1.5">
                     <Label htmlFor="whatsapp-language">Message language</Label>
                     <select
                       id="whatsapp-language"

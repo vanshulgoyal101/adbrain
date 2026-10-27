@@ -1,7 +1,7 @@
 import { OWNER_WORDS } from "@/lib/copy/owner-words";
 import { BrandAssets } from "@/components/brand-assets";
 import { BrandForm } from "@/components/brand-form";
-import { WhatsAppMessageCard } from "@/components/whatsapp-message-card";
+import { WhatsAppMessageCard, type Suggested } from "@/components/whatsapp-message-card";
 import { suggestedQuestions } from "@/lib/campaign/whatsapp-questions";
 import { whatsappGreeting } from "@/lib/campaign/whatsapp-greeting";
 import { Instructions } from "@/components/instructions";
@@ -76,7 +76,7 @@ export default async function BrandPage() {
                   suggested={Object.fromEntries((["en", "hi", "hinglish", "pa"] as const).map((language) => {
                     const text = whatsappGreeting(business, business.offers ?? [], business.locations ?? [], [], language);
                     return [language, { greeting: text.greeting, prefill: text.autofill }];
-                  })) as Record<"en" | "hi" | "hinglish" | "pa", { greeting: string; prefill: string }>} />
+                  })) as Suggested} />
               </section>
             )}
             <section id="brand-guidance" className="scroll-mt-6">
