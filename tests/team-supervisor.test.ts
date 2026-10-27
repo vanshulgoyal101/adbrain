@@ -102,8 +102,9 @@ describe("scheduled-jobs dispatch (#692)", () => {
 });
 
 describe("nightly export (#884)", () => {
-  it("runs once a night, after 20:00Z", () => {
-    expect(exportDue(null, new Date("2026-10-26T19:59:00Z"))).toBe(false);
+  it("runs once a night, after 20:00Z, and catches up after the Mac slept through it", () => {
+    expect(exportDue("2026-10-25T20:10:00Z", new Date("2026-10-26T19:59:00Z"))).toBe(false);
+    expect(exportDue("2026-10-26T16:38:00Z", new Date("2026-10-27T09:47:00Z"))).toBe(true);
     expect(exportDue(null, new Date("2026-10-26T20:05:00Z"))).toBe(true);
     expect(exportDue("2026-10-25T20:10:00Z", new Date("2026-10-26T20:05:00Z"))).toBe(true);
     expect(exportDue("2026-10-26T20:10:00Z", new Date("2026-10-26T23:00:00Z"))).toBe(false);

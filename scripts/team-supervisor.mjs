@@ -155,10 +155,10 @@ export function scheduledJobsDue(latest, now = Date.now(), staleMin = 14) {
 export const BACKUP_DIR = join(HOME, ".adbrain-backups");
 const BACKUP_KEEP = 7;
 
-/** One export a night: after 20:00Z (01:30 IST), when the newest export is from before today's 20:00Z. */
+/** One export a night: due once the newest is older than the latest 20:00Z (01:30 IST). A Mac that slept through it catches up on wake. */
 export function exportDue(newest, now = new Date()) {
-  const cutoff = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 20);
-  if (now.getTime() < cutoff) return false;
+  let cutoff = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 20);
+  if (now.getTime() < cutoff) cutoff -= 24 * 3_600_000;
   return !newest || Date.parse(newest) < cutoff;
 }
 

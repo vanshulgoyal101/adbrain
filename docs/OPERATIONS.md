@@ -399,7 +399,7 @@ so Supabase can't restore anything (paid backups are a CEO call, #884). Our own 
 - **Nightly (#884):** the team supervisor's tick runs the export after 20:00Z (01:30 IST) into
   `~/.adbrain-backups/<UTC time>` (0700, the owner's Mac), restore-drills it and keeps the newest 7.
   A failure opens one `Nightly production export failed` `core` bug for DevOps; its log line is in
-  `~/.adbrain-supervisor/supervisor.log`. It runs only while the Mac is on.
+  `~/.adbrain-supervisor/supervisor.log`. If the Mac sleeps through 20:00Z, the export runs at the first tick after it wakes.
 - **Lost even with an export:** Auth passwords and sessions, Storage file bytes (ad images
   and brand uploads; regenerate or re-upload), and everything since the export ran.
 - Known drift, harmless: production still has the empty legacy tables `meta_credentials`,
